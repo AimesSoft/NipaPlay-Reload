@@ -258,14 +258,15 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           child: SizedBox(
             width: 80,
             height: 45,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    fit: BoxFit.cover,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(color: Colors.white),
+                  ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                    child: CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
                     errorWidget: (context, url, error) => Container(color: Colors.black12),
                   ),
                 ),
@@ -600,4 +601,3 @@ class _AnimatedTrashButtonState extends State<_AnimatedTrashButton> {
     );
   }
 }
-

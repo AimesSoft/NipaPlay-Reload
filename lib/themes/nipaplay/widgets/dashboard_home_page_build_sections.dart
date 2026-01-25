@@ -797,6 +797,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         return Stack(
           fit: StackFit.expand,
           children: [
+            Container(color: Colors.white),
             ImageFiltered(
               imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
               child: CachedNetworkImage(

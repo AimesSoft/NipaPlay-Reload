@@ -41,12 +41,13 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     
     debugPrint('DashboardHomePage: 开始加载数据');
     
-    // 并行加载推荐内容、最近内容和今日新番
+    // 并行加载推荐内容、最近内容、今日新番和随机推荐
     try {
       await Future.wait([
         _loadRecommendedContent(forceRefresh: true),
         _loadRecentContent(),
         _loadTodayAnimes(forceRefresh: true),
+        _loadRandomRecommendations(forceRefresh: true),
       ]);
     } catch (e) {
       debugPrint('DashboardHomePage: 并行加载数据时发生错误: $e');
@@ -55,6 +56,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         await _loadRecommendedContent(forceRefresh: true);
         await _loadRecentContent();
         await _loadTodayAnimes(forceRefresh: true);
+        await _loadRandomRecommendations(forceRefresh: true);
       } catch (e2) {
         debugPrint('DashboardHomePage: 串行加载数据也失败: $e2');
       }

@@ -45,6 +45,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     return fluent.FluentThemeData(
       brightness: brightness,
       accentColor: fluent.AccentColor.swatch({'normal': _accentColor}),
+      micaBackgroundColor: Colors.transparent,
       scaffoldBackgroundColor: Colors.transparent,
     );
   }

@@ -1053,7 +1053,7 @@ class MainPageState extends State<MainPage>
     debugPrint(
         '[MainPageState] initState: globalTabController listener ADDED.');
 
-    if (globals.winLinDesktop) {
+    if (globals.isDesktop) {
       windowManager.addListener(this);
     }
   }
@@ -1064,7 +1064,7 @@ class MainPageState extends State<MainPage>
         _handleLaunchFile(widget.launchFilePath!);
       }
 
-      if (globals.winLinDesktop) {
+      if (globals.isDesktop) {
         _checkWindowMaximizedState();
       }
 
@@ -1138,7 +1138,7 @@ class MainPageState extends State<MainPage>
 
   // 检查窗口是否已最大化
   Future<void> _checkWindowMaximizedState() async {
-    if (globals.winLinDesktop) {
+    if (globals.isDesktop) {
       final maximized = await windowManager.isMaximized();
       if (maximized != isMaximized) {
         setState(() {
@@ -1186,7 +1186,7 @@ class MainPageState extends State<MainPage>
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
-    if (globals.winLinDesktop) {
+    if (globals.isDesktop) {
       windowManager.removeListener(this);
     }
 
@@ -1219,7 +1219,7 @@ class MainPageState extends State<MainPage>
       } else {
         await windowManager.maximize();
       }
-      // 状态更新由windowManager的事件监听器处理
+      await _checkWindowMaximizedState();
     }
   }
 
@@ -1287,7 +1287,7 @@ class MainPageState extends State<MainPage>
         Positioned(
           top: 0,
           left: 0,
-          right: globals.isDesktop ? 120 : 0,
+          right: 0,
           child: SizedBox(
             height: 40,
             child: GestureDetector(
@@ -1304,67 +1304,58 @@ class MainPageState extends State<MainPage>
         Selector<VideoPlayerState, bool>(
           selector: (context, videoState) => videoState.shouldShowAppBar(),
           builder: (context, shouldShowAppBar, child) {
-            if (!globals.winLinDesktop || !shouldShowAppBar) {
+            if (!globals.isDesktop || !shouldShowAppBar) {
               return const SizedBox.shrink();
             }
             return Positioned(
               top: 0,
               right: 0,
-              child: Container(
-                width: 120,
-                height: globals.isPhone && globals.isMobile ? 55 : 40,
-                color: Colors.transparent,
-                child: WindowControlButtons(
-                  isMaximized: isMaximized,
-                  onMinimize: _minimizeWindow,
-                  onMaximizeRestore: _toggleWindowSize,
-                  onClose: _closeWindow,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SystemResourceDisplay(),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
+                      child: Image.asset(
+                        'assets/logo2.png',
+                        height: 24,
+                        fit: BoxFit.contain,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        colorBlendMode: BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
+                      child: _ThemeToggleButton(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
+                      child: _SettingsEntryButton(
+                        onPressed: () => _showSettingsWindow(context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  WindowControlButtons(
+                    isMaximized: isMaximized,
+                    onMinimize: _minimizeWindow,
+                    onMaximizeRestore: _toggleWindowSize,
+                    onClose: _closeWindow,
+                  ),
+                ],
               ),
             );
           },
         ),
-
-        if (!kIsWeb && Platform.isMacOS)
-          Positioned(
-            top: 10,
-            right: 20,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _SettingsEntryButton(onPressed: () => _showSettingsWindow(context)),
-                const SizedBox(width: 8),
-                Image.asset(
-                  'assets/logo2.png',
-                  height: 40,
-                  fit: BoxFit.contain,
-                  color: isDarkMode ? Colors.white : Colors.black,
-                  colorBlendMode: BlendMode.srcIn,
-                ),
-              ],
-            ),
-          ),
-
-        if (!kIsWeb && Platform.isMacOS)
-          Positioned(
-            top: 4,
-            right: globals.isPhone ? 10 : 130,
-            child: const SystemResourceDisplay(),
-          ),
-
-        if (!kIsWeb && !Platform.isMacOS)
-          Positioned(
-            top: 4,
-            right: globals.winLinDesktop ? 130 : 10,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SystemResourceDisplay(),
-                const SizedBox(width: 8),
-                _SettingsEntryButton(onPressed: () => _showSettingsWindow(context)),
-              ],
-            ),
-          ),
       ],
     );
   }
@@ -1377,6 +1368,65 @@ class _SettingsEntryButton extends StatefulWidget {
 
   @override
   State<_SettingsEntryButton> createState() => _SettingsEntryButtonState();
+}
+
+class _ThemeToggleButton extends StatefulWidget {
+  @override
+  State<_ThemeToggleButton> createState() => _ThemeToggleButtonState();
+}
+
+class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
+    }
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  void _toggleTheme() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    context.read<ThemeNotifier>().themeMode =
+        isDarkMode ? ThemeMode.light : ThemeMode.dark;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final Color iconColor = _isHovered
+        ? const Color(0xFFFF2E55)
+        : (isDarkMode ? Colors.white : Colors.black87);
+    final icon = isDarkMode ? Ionicons.moon_outline : Ionicons.sunny_outline;
+    final tooltip = isDarkMode ? '切换到日间模式' : '切换到夜间模式';
+
+    return Tooltip(
+      message: tooltip,
+      child: MouseRegion(
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTap: _toggleTheme,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: Icon(
+              icon,
+              size: 20,
+              color: iconColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SettingsEntryButtonState extends State<_SettingsEntryButton> {

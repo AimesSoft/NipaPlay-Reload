@@ -4,6 +4,8 @@ import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
+import 'package:nipaplay/pages/tab_labels.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 
 /// Fluent UI版本的用户活动记录组件
 class MaterialUserActivity extends StatefulWidget {
@@ -15,43 +17,15 @@ class MaterialUserActivity extends StatefulWidget {
 
 class _MaterialUserActivityState extends State<MaterialUserActivity> 
     with SingleTickerProviderStateMixin, UserActivityController {
-  int _selectedIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    tabController.addListener(_handleTabChange);
-  }
-
-  @override
-  void dispose() {
-    tabController.removeListener(_handleTabChange);
-    super.dispose();
-  }
-
-  void _handleTabChange() {
-    if (!mounted) return;
-    if (_selectedIndex != tabController.index) {
-      setState(() {
-        _selectedIndex = tabController.index;
-      });
-    }
-  }
-
-  void _onTabChanged(int index) {
-    if (_selectedIndex == index) return;
-    setState(() {
-      _selectedIndex = index;
-    });
-    tabController.animateTo(index);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = fluent.FluentTheme.of(context);
     final textPrimary = theme.resources.textFillColorPrimary;
     final textSecondary = theme.resources.textFillColorSecondary;
     final accent = theme.accentColor.defaultBrushFor(theme.brightness);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final unselectedLabelColor =
+        isDarkMode ? Colors.white60 : Colors.black54;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -81,33 +55,72 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
           ],
         ),
         const SizedBox(height: 8),
-        
+        TabBar(
+          controller: tabController,
+          isScrollable: true,
+          tabs: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: '观看(${recentWatched.length})',
+                fontSize: 18,
+                icon: const Icon(
+                  Ionicons.play_circle_outline,
+                  size: 18,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: '收藏(${favorites.length})',
+                fontSize: 18,
+                icon: const Icon(
+                  Ionicons.heart_outline,
+                  size: 18,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: '评分(${rated.length})',
+                fontSize: 18,
+                icon: const Icon(
+                  Ionicons.star_outline,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
+          labelColor: accent,
+          unselectedLabelColor: unselectedLabelColor,
+          labelPadding: const EdgeInsets.only(bottom: 12.0),
+          indicatorPadding: EdgeInsets.zero,
+          indicator: _CustomTabIndicator(
+            indicatorHeight: 3.0,
+            indicatorColor: accent,
+            radius: 30.0,
+          ),
+          tabAlignment: TabAlignment.start,
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: WidgetStateProperty.all(Colors.transparent),
+          dividerColor: Colors.transparent,
+          dividerHeight: 3.0,
+          indicatorSize: TabBarIndicatorSize.label,
+        ),
+        const SizedBox(height: 8),
         // 内容区域
         Expanded(
-          child: fluent.TabView(
-            currentIndex: _selectedIndex,
-            onChanged: _onTabChanged,
-            closeButtonVisibility: fluent.CloseButtonVisibilityMode.never,
-            tabWidthBehavior: fluent.TabWidthBehavior.sizeToContent,
-            tabs: [
-              fluent.Tab(
-                icon: const fluent.Icon(
-                  Ionicons.play_circle_outline,
-                  size: 16,
-                ),
-                text: Text('观看(${recentWatched.length})'),
-                body: _buildTabBody(0, accent, textSecondary),
-              ),
-              fluent.Tab(
-                icon: const fluent.Icon(Ionicons.heart_outline, size: 16),
-                text: Text('收藏(${favorites.length})'),
-                body: _buildTabBody(1, accent, textSecondary),
-              ),
-              fluent.Tab(
-                icon: const fluent.Icon(Ionicons.star_outline, size: 16),
-                text: Text('评分(${rated.length})'),
-                body: _buildTabBody(2, accent, textSecondary),
-              ),
+          child: SwitchableView(
+            enableAnimation: false,
+            keepAlive: true,
+            currentIndex: tabController.index,
+            controller: tabController,
+            children: [
+              _buildTabBody(0, accent, textSecondary),
+              _buildTabBody(1, accent, textSecondary),
+              _buildTabBody(2, accent, textSecondary),
             ],
           ),
         ),
@@ -393,6 +406,48 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
           ),
         ],
       ),
+    );
+  }
+}
+
+// 自定义Tab指示器
+class _CustomTabIndicator extends Decoration {
+  final double indicatorHeight;
+  final Color indicatorColor;
+  final double radius;
+
+  const _CustomTabIndicator({
+    required this.indicatorHeight,
+    required this.indicatorColor,
+    required this.radius,
+  });
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _CustomPainter(this, onChanged);
+  }
+}
+
+class _CustomPainter extends BoxPainter {
+  final _CustomTabIndicator decoration;
+
+  _CustomPainter(this.decoration, VoidCallback? onChanged) : super(onChanged);
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    assert(configuration.size != null);
+    // 将指示器绘制在TabBar的底部
+    final Rect rect = Offset(
+          offset.dx,
+          (configuration.size!.height - decoration.indicatorHeight),
+        ) &
+        Size(configuration.size!.width, decoration.indicatorHeight);
+    final Paint paint = Paint();
+    paint.color = decoration.indicatorColor;
+    paint.style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
+      paint,
     );
   }
 }

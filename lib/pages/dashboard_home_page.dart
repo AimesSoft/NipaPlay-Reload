@@ -17,10 +17,12 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/search_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
@@ -58,6 +60,7 @@ part '../themes/nipaplay/widgets/dashboard_home_page_build_sections.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_actions.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_image_helpers.dart';
 part '../themes/nipaplay/widgets/dashboard_home_page_models.dart';
+part '../themes/nipaplay/widgets/dashboard_home_page_random_recommendations.dart';
 
 class DashboardHomePage extends StatefulWidget {
   const DashboardHomePage({super.key});
@@ -125,6 +128,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   List<BangumiAnime> _todayAnimes = [];
   bool _isLoadingTodayAnimes = false;
   ScrollController? _todayAnimesScrollController;
+
+  // 随机推荐数据
+  List<RandomRecommendationItem> _randomRecommendations = [];
+  bool _isLoadingRandomRecommendations = false;
+  ScrollController? _randomRecommendationsScrollController;
 
   // 本地媒体库图片持久化缓存（与 MediaLibraryPage 复用同一前缀）
   final Map<int, String> _localImageCache = {};
@@ -774,6 +782,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       _localLibraryScrollController = null;
       _dandanplayScrollController?.dispose();
       _dandanplayScrollController = null;
+      _randomRecommendationsScrollController?.dispose();
+      _randomRecommendationsScrollController = null;
       
       debugPrint('DashboardHomePage: ScrollController已销毁');
     } catch (e) {
@@ -814,6 +824,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   _buildTodaySeriesSection(),
 
                   if (_todayAnimes.isNotEmpty || _isLoadingTodayAnimes)
+                    SizedBox(height: isPhone ? 16 : 32),
+
+                  // 随机推荐区域
+                  _buildRandomRecommendationsSection(),
+
+                  if (_randomRecommendations.isNotEmpty ||
+                      _isLoadingRandomRecommendations)
                     SizedBox(height: isPhone ? 16 : 32),
                   
                   // 继续播放区域
