@@ -11,11 +11,11 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/pages/media_library_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 
 enum SharedRemoteViewMode { mediaLibrary, libraryManagement }
@@ -38,6 +38,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _gridScrollController = ScrollController();
   final ScrollController _managementScrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   String? _managementLoadedHostId;
   Timer? _scanStatusTimer;
   bool _scanStatusRequestInFlight = false;
@@ -65,6 +66,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     _scanStatusTimer?.cancel();
     _gridScrollController.dispose();
     _managementScrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -73,42 +75,135 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     super.build(context);
     return Consumer<SharedRemoteLibraryProvider>(
       builder: (context, provider, child) {
-        final animeSummaries = provider.animeSummaries;
-        final hasHosts = provider.hosts.isNotEmpty;
+        final query = _searchController.text.toLowerCase().trim();
+        final List<SharedRemoteAnimeSummary> animeSummaries;
+        final List<SharedRemoteScannedFolder> scannedFolders;
 
-        return Stack(
+        if (query.isEmpty) {
+          animeSummaries = provider.animeSummaries;
+          scannedFolders = provider.scannedFolders;
+        } else {
+          animeSummaries = provider.animeSummaries.where((anime) {
+            return (anime.nameCn ?? '').toLowerCase().contains(query) ||
+                   anime.name.toLowerCase().contains(query);
+          }).toList();
+
+          scannedFolders = provider.scannedFolders.where((folder) {
+            return folder.name.toLowerCase().contains(query) ||
+                   folder.path.toLowerCase().contains(query);
+          }).toList();
+        }
+
+        final hasHosts = provider.hosts.isNotEmpty;
+        final isManagement = widget.mode == SharedRemoteViewMode.libraryManagement;
+        final managementBusy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.mode == SharedRemoteViewMode.mediaLibrary &&
-                    provider.errorMessage != null)
-                  _buildErrorChip(
-                    provider.errorMessage!,
-                    onClose: provider.clearError,
+            LocalLibraryControlBar(
+              searchController: _searchController,
+              onSearchChanged: (val) => setState(() {}),
+              showSort: false,
+              trailingActions: [
+                _buildActionIcon(
+                  icon: Ionicons.refresh_outline,
+                  tooltip: isManagement ? '刷新库管理' : '刷新共享媒体',
+                  onPressed: () {
+                    if (!provider.hasActiveHost) {
+                      BlurSnackBar.show(context, '请先添加并选择共享客户端');
+                      return;
+                    }
+                    if (isManagement) {
+                      provider.refreshManagement(userInitiated: true);
+                    } else {
+                      provider.refreshLibrary(userInitiated: true);
+                    }
+                  },
+                ),
+                if (isManagement) ...[
+                  _buildActionIcon(
+                    icon: Ionicons.add_circle_outline,
+                    tooltip: '添加文件夹',
+                    onPressed: managementBusy ? null : () => _openAddFolderDialog(context, provider),
                   ),
-                if (widget.mode == SharedRemoteViewMode.libraryManagement &&
-                    provider.managementErrorMessage != null)
-                  _buildErrorChip(
-                    provider.managementErrorMessage!,
-                    onClose: provider.clearManagementError,
+                  _buildActionIcon(
+                    icon: Ionicons.flash_outline,
+                    tooltip: '智能刷新',
+                    onPressed: managementBusy ? null : () async {
+                      await provider.rescanRemoteAll(skipPreviouslyMatchedUnwatched: true);
+                      _startScanStatusPolling();
+                    },
                   ),
-                Expanded(
-                  child: widget.mode == SharedRemoteViewMode.mediaLibrary
-                      ? _buildMediaBody(
-                          context,
-                          provider,
-                          animeSummaries,
-                          hasHosts,
-                        )
-                      : _buildManagementBody(context, provider, hasHosts),
+                ],
+                _buildActionIcon(
+                  icon: Ionicons.link_outline,
+                  tooltip: '切换共享客户端',
+                  onPressed: () => SharedRemoteHostSelectionSheet.show(context),
                 ),
               ],
             ),
-            _buildFloatingButtons(context, provider),
+            if (isManagement && provider.scanStatus?.isScanning == true)
+              _buildScanningIndicator(provider),
+            if (isManagement && provider.managementErrorMessage != null)
+              _buildErrorChip(
+                provider.managementErrorMessage!,
+                onClose: provider.clearManagementError,
+              ),
+            if (!isManagement && provider.errorMessage != null)
+              _buildErrorChip(
+                provider.errorMessage!,
+                onClose: provider.clearError,
+              ),
+            Expanded(
+              child: isManagement
+                  ? _buildManagementBody(context, provider, hasHosts, scannedFolders)
+                  : _buildMediaBody(
+                      context,
+                      provider,
+                      animeSummaries,
+                      hasHosts,
+                    ),
+            ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildScanningIndicator(SharedRemoteLibraryProvider provider) {
+    final status = provider.scanStatus;
+    final progress = (status?.progress ?? 0.0).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(status?.message ?? '正在扫描...', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Colors.white10,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionIcon({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    return IconButton(
+      icon: Icon(icon, size: 20),
+      color: iconColor,
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      onPressed: onPressed,
     );
   }
 
@@ -293,6 +388,11 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     String directoryPath,
     int depth,
   ) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+
     final entries = _expandedRemoteDirectories[directoryPath] ?? const [];
     final indent = EdgeInsets.only(left: 12.0 + depth * 16.0);
 
@@ -300,10 +400,10 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       return [
         Padding(
           padding: EdgeInsets.fromLTRB(indent.left, 6, 0, 6),
-          child: const Text(
+          child: Text(
             '（空文件夹）',
-            locale: Locale('zh', 'CN'),
-            style: TextStyle(color: Colors.white54, fontSize: 12),
+            locale: const Locale('zh', 'CN'),
+            style: TextStyle(color: secondaryTextColor, fontSize: 12),
           ),
         ),
       ];
@@ -322,23 +422,23 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             child: ListTile(
               dense: true,
               contentPadding: EdgeInsets.fromLTRB(indent.left, 0, 8, 0),
-              leading: const Icon(Ionicons.folder_outline, color: Colors.white70, size: 18),
+              leading: Icon(Ionicons.folder_outline, color: iconColor, size: 18),
               title: Text(
                 entryName,
                 locale: const Locale('zh', 'CN'),
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                style: TextStyle(color: textColor, fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               trailing: loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: iconColor),
                     )
                   : Icon(
                       expanded ? Ionicons.chevron_down_outline : Ionicons.chevron_forward,
-                      color: Colors.white54,
+                      color: secondaryTextColor,
                       size: 16,
                     ),
               onTap: () => _toggleRemoteDirectory(provider, entryPath),
@@ -357,15 +457,15 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.fromLTRB(indent.left, 0, 8, 0),
-            leading: const Icon(Icons.videocam_outlined, color: Colors.white70, size: 18),
+            leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
             title: Text(
               entryName,
               locale: const Locale('zh', 'CN'),
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: textColor, fontSize: 13),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            subtitle: _buildRemoteFileSubtitle(entry),
+            subtitle: _buildRemoteFileSubtitle(context, entry),
             onTap: () => _playRemoteFile(provider, entry),
           ),
         ),
@@ -411,7 +511,10 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
   }
 
-  Widget? _buildRemoteFileSubtitle(SharedRemoteFileEntry entry) {
+  Widget? _buildRemoteFileSubtitle(BuildContext context, SharedRemoteFileEntry entry) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color secondaryTextColor = isDark ? Colors.white54 : Colors.black54;
+
     final hasIds = (entry.animeId ?? 0) > 0 && (entry.episodeId ?? 0) > 0;
     if (!hasIds) {
       return null;
@@ -428,12 +531,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (parts.isEmpty) {
-      return const Text(
+      return Text(
         '已识别',
-        locale: Locale('zh', 'CN'),
+        locale: const Locale('zh', 'CN'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: Colors.white54, fontSize: 12),
+        style: TextStyle(color: secondaryTextColor, fontSize: 12),
       );
     }
 
@@ -442,7 +545,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       locale: const Locale('zh', 'CN'),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(color: Colors.white54, fontSize: 12),
+      style: TextStyle(color: secondaryTextColor, fontSize: 12),
     );
   }
 
@@ -481,6 +584,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     BuildContext context,
     SharedRemoteLibraryProvider provider,
     bool hasHosts,
+    List<SharedRemoteScannedFolder> folders,
   ) {
     if (provider.isInitializing) {
       return const Center(child: CircularProgressIndicator());
@@ -490,9 +594,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       return _buildEmptyHostsPlaceholder(context);
     }
 
-    if (provider.isManagementLoading &&
-        provider.scannedFolders.isEmpty &&
-        provider.scanStatus == null) {
+    if (provider.isManagementLoading && folders.isEmpty && provider.scanStatus == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -500,13 +602,11 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       return _buildEmptyManagementPlaceholder(
         context,
         title: '请选择一个共享客户端',
-        subtitle: '先在右下角切换共享客户端，然后再进入库管理。',
+        subtitle: '先在右侧切换共享客户端，然后再进入库管理。',
       );
     }
 
-    if (provider.managementErrorMessage != null &&
-        provider.scannedFolders.isEmpty &&
-        provider.scanStatus == null) {
+    if (provider.managementErrorMessage != null && folders.isEmpty && provider.scanStatus == null) {
       return _buildEmptyManagementPlaceholder(
         context,
         title: '库管理不可用',
@@ -514,102 +614,77 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       );
     }
 
-    final folders = provider.scannedFolders;
-    return ListView(
-      controller: _managementScrollController,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-      children: [
-        _buildScanStatusCard(context, provider),
-        const SizedBox(height: 12),
-        if (folders.isEmpty)
-          _buildEmptyManagementPlaceholder(
-            context,
-            title: '远程端未添加媒体文件夹',
-            subtitle: '可点击右下角按钮添加文件夹并触发扫描。',
-          )
-        else
-          ...folders.map((folder) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _buildRemoteFolderCard(context, provider, folder),
-              )),
-      ],
-    );
+    if (folders.isEmpty) {
+      return _buildEmptyManagementPlaceholder(
+        context,
+        title: '远程端未添加媒体文件夹',
+        subtitle: '可点击右侧按钮添加文件夹并触发扫描。',
+      );
+    }
+
+    // 响应式布局：手机使用单列，桌面/平板使用瀑布流
+    if (isPhone) {
+      return ListView.builder(
+        controller: _managementScrollController,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        itemCount: folders.length,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildRemoteFolderCard(context, provider, folders[index]),
+          );
+        },
+      );
+    } else {
+      return Scrollbar(
+        controller: _managementScrollController,
+        radius: const Radius.circular(4),
+        child: SingleChildScrollView(
+          controller: _managementScrollController,
+          padding: const EdgeInsets.all(16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return _buildWaterfallLayout(context, provider, folders, constraints.maxWidth);
+            },
+          ),
+        ),
+      );
+    }
   }
 
-  Widget _buildScanStatusCard(
+  Widget _buildWaterfallLayout(
     BuildContext context,
     SharedRemoteLibraryProvider provider,
+    List<SharedRemoteScannedFolder> folders,
+    double maxWidth,
   ) {
-    final status = provider.scanStatus;
-    final isScanning = status?.isScanning == true;
-    final title = isScanning ? '远程端正在扫描' : '远程端库管理就绪';
-    final message = status?.message ?? '尚未获取扫描状态';
-    final progress = (status?.progress ?? 0.0).clamp(0.0, 1.0);
+    const double minItemWidth = 300.0;
+    const double spacing = 16.0;
+    final availableWidth = maxWidth;
+    final crossAxisCount = (availableWidth / minItemWidth).floor().clamp(1, 3);
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isScanning ? Ionicons.refresh_outline : Ionicons.folder_open_outline,
-                color: Colors.white70,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  locale: const Locale('zh', 'CN'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              if (provider.isManagementLoading)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (isScanning)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 6,
-                backgroundColor: Colors.white.withOpacity(0.08),
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  Colors.lightBlueAccent,
-                ),
-              ),
+    final columnFolders = List.generate(crossAxisCount, (_) => <SharedRemoteScannedFolder>[]);
+    for (var i = 0; i < folders.length; i++) {
+      columnFolders[i % crossAxisCount].add(folders[i]);
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: List.generate(crossAxisCount, (colIndex) {
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: colIndex < crossAxisCount - 1 ? spacing : 0),
+            child: Column(
+              children: columnFolders[colIndex]
+                  .map((folder) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: _buildRemoteFolderCard(context, provider, folder),
+                      ))
+                  .toList(),
             ),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            locale: const Locale('zh', 'CN'),
-            style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.35),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '扫描文件夹：${provider.scannedFolders.length}',
-            locale: const Locale('zh', 'CN'),
-            style: const TextStyle(color: Colors.white60, fontSize: 12),
-          ),
-        ],
-      ),
+        );
+      }),
     );
   }
 
@@ -618,111 +693,114 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     SharedRemoteLibraryProvider provider,
     SharedRemoteScannedFolder folder,
   ) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    final Color borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
+    final Color bgColor = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
+
     final busy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
-    final statusColor = folder.exists ? Colors.greenAccent : Colors.orangeAccent;
+    final statusColor = folder.exists ? iconColor : Colors.orangeAccent;
     final title = folder.name.isNotEmpty ? folder.name : folder.path;
     final folderPath = folder.path;
     final expanded = _expandedRemoteDirectories.containsKey(folderPath);
     final loading = _loadingRemoteDirectories.contains(folderPath);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => _toggleRemoteDirectory(provider, folderPath),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        folder.exists
-                            ? Ionicons.folder_outline
-                            : Ionicons.warning_outline,
-                        color: statusColor,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          title,
-                          locale: const Locale('zh', 'CN'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      if (loading)
-                        const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        Icon(
-                          expanded
-                              ? Ionicons.chevron_down_outline
-                              : Ionicons.chevron_forward,
-                          color: Colors.white54,
-                          size: 16,
-                        ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        tooltip: '扫描',
-                        onPressed: busy
-                            ? null
-                            : () async {
-                                await provider.addRemoteFolder(
-                                  folderPath: folderPath,
-                                  scan: true,
-                                  skipPreviouslyMatchedUnwatched: false,
-                                );
-                                _startScanStatusPolling();
-                              },
-                        icon: const Icon(
-                          Ionicons.refresh_outline,
-                          color: Colors.white70,
-                          size: 18,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '移除',
-                        onPressed:
-                            busy ? null : () => provider.removeRemoteFolder(folderPath),
-                        icon: const Icon(
-                          Ionicons.trash_outline,
-                          color: Colors.redAccent,
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SelectableText(
-                    folderPath,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: borderColor,
+          width: 0.5,
+        ),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+          dividerColor: Colors.transparent,
+        ),
+        child: ExpansionTile(
+          key: PageStorageKey<String>(folderPath),
+          leading: Icon(
+            folder.exists ? Icons.folder_open_outlined : Ionicons.warning_outline,
+            color: statusColor,
+          ),
+          iconColor: iconColor,
+          collapsedIconColor: iconColor,
+          onExpansionChanged: (isExpanded) {
+            if (isExpanded != expanded) {
+              _toggleRemoteDirectory(provider, folderPath);
+            }
+          },
+          initiallyExpanded: expanded,
+          title: Text(
+            title,
+            style: TextStyle(color: textColor, fontSize: 16),
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Text(
+              folderPath,
+              locale: const Locale("zh-Hans", "zh"),
+              style: TextStyle(color: secondaryTextColor, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: '移除',
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: busy ? null : () => provider.removeRemoteFolder(folderPath),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                  size: 22,
+                ),
+              ),
+              IconButton(
+                tooltip: '扫描',
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                constraints: const BoxConstraints(),
+                onPressed: busy
+                    ? null
+                    : () async {
+                        await provider.addRemoteFolder(
+                          folderPath: folderPath,
+                          scan: true,
+                          skipPreviouslyMatchedUnwatched: false,
+                        );
+                        _startScanStatusPolling();
+                      },
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  color: iconColor,
+                  size: 22,
+                ),
+              ),
+              if (loading)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: iconColor),
+                  ),
+                ),
+            ],
+          ),
+          children: expanded
+              ? _buildRemoteDirectoryChildren(context, provider, folderPath, 1)
+              : [],
         ),
-        if (expanded) ..._buildRemoteDirectoryChildren(context, provider, folderPath, 1),
-      ],
+      ),
     );
   }
 
@@ -790,77 +868,6 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             locale: const Locale('zh', 'CN'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white60),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFloatingButtons(
-    BuildContext context,
-    SharedRemoteLibraryProvider provider,
-  ) {
-    final isManagement = widget.mode == SharedRemoteViewMode.libraryManagement;
-    final managementBusy =
-        provider.isManagementLoading || provider.scanStatus?.isScanning == true;
-
-    return Positioned(
-      right: 16,
-      bottom: 16,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionGlassButton(
-            iconData: Ionicons.refresh_outline,
-            description: isManagement
-                ? '刷新库管理\n同步扫描文件夹与状态'
-                : '刷新共享媒体\n重新同步番剧清单',
-            onPressed: () {
-              if (!provider.hasActiveHost) {
-                BlurSnackBar.show(context, '请先添加并选择共享客户端');
-                return;
-              }
-              if (isManagement) {
-                provider.refreshManagement(userInitiated: true);
-              } else {
-                provider.refreshLibrary(userInitiated: true);
-              }
-            },
-          ),
-          if (isManagement) ...[
-            const SizedBox(height: 16),
-            FloatingActionGlassButton(
-              iconData: Ionicons.add_circle,
-              description: '添加文件夹\n输入远程端路径',
-              onPressed: () {
-                if (managementBusy) {
-                  BlurSnackBar.show(context, '扫描进行中，请稍后操作');
-                  return;
-                }
-                _openAddFolderDialog(context, provider);
-              },
-            ),
-            const SizedBox(height: 16),
-            FloatingActionGlassButton(
-              iconData: Ionicons.refresh_outline,
-              description: '智能刷新\n扫描变化的文件夹',
-              onPressed: () async {
-                if (managementBusy) {
-                  BlurSnackBar.show(context, '扫描进行中，请稍后操作');
-                  return;
-                }
-                await provider.rescanRemoteAll(
-                  skipPreviouslyMatchedUnwatched: true,
-                );
-                _startScanStatusPolling();
-              },
-            ),
-          ],
-          const SizedBox(height: 16),
-          FloatingActionGlassButton(
-            iconData: Ionicons.link_outline,
-            description: '切换共享客户端\n从列表中选择远程主机',
-            onPressed: () => SharedRemoteHostSelectionSheet.show(context),
           ),
         ],
       ),
