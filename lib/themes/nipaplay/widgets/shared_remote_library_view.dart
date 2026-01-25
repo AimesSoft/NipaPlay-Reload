@@ -125,6 +125,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
               },
               showSort: widget.mode == SharedRemoteViewMode.mediaLibrary,
               trailingActions: [
+                _buildActionIcon(
                   icon: Ionicons.refresh_outline,
                   tooltip: isManagement ? '刷新库管理' : '刷新共享媒体',
                   onPressed: () {
