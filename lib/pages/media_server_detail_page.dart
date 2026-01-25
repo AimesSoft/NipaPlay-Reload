@@ -17,6 +17,7 @@ import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class MediaServerDetailPage extends StatefulWidget {
@@ -45,37 +46,10 @@ class MediaServerDetailPage extends StatefulWidget {
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;
     
-    return showGeneralDialog<WatchHistoryItem>(
+    return NipaplayWindow.show<WatchHistoryItem>(
       context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.transparent,
-      barrierLabel: '关闭详情页',
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return MediaServerDetailPage(mediaId: mediaId, serverType: serverType);
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        // 如果禁用动画，直接返回child
-        if (!enableAnimation) {
-          return FadeTransition(
-            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOut),
-            ),
-            child: child,
-          );
-        }
-        final curvedAnimation = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutBack,
-        );
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
-          child: FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-        );
-      },
+      enableAnimation: enableAnimation,
+      child: MediaServerDetailPage(mediaId: mediaId, serverType: serverType),
     );
   }
 }
@@ -683,7 +657,7 @@ style: TextStyle(color: secondaryTextColor)));
     final posterUrl = _getPosterUrl(width: 600);
     final hasBackdrop = backdropUrl.isNotEmpty;
 
-    return NipaplayAnimeDetailScaffold(
+    return NipaplayWindowScaffold(
       backgroundImageUrl: hasBackdrop ? backdropUrl : (posterUrl.isNotEmpty ? posterUrl : null),
       blurBackground: !hasBackdrop, // 如果没有横向图而使用竖向图，开启高斯模糊
       onClose: () => Navigator.of(context).pop(),

@@ -1,4 +1,5 @@
 // widgets/custom_scaffold.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -206,6 +207,11 @@ class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    // macOS下不显示Logo（移至右上角），其他平台显示
+    if (Platform.isMacOS) {
+      return tabBar;
+    }
+
     return Row(
       children: [
         const SizedBox(width: 16),

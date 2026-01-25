@@ -26,6 +26,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_skeleton.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/loading_placeholder.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
@@ -2497,14 +2498,50 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     final screenSize = MediaQuery.of(context).size;
     final shortestSide = math.min(screenSize.width, screenSize.height);
     final isPhone = shortestSide < 600;
-    final dialogHeight = screenSize.height * (isPhone ? 0.7 : 0.6);
 
-    BlurDialog.show(
+    NipaplayWindow.show(
       context: context,
-      title: '观看记录',
-      contentWidget: SizedBox(
-        height: dialogHeight,
-        child: const WatchHistoryPage(),
+      child: NipaplayWindowScaffold(
+        maxWidth: isPhone ? screenSize.width * 0.95 : 800,
+        maxHeightFactor: isPhone ? 0.85 : 0.7,
+        onClose: () => Navigator.of(context).pop(),
+        child: Column(
+          children: [
+            // 可拖动的标题栏
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (details) {
+                NipaplayWindowPositionProvider.of(context)?.onMove(details.delta);
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history_rounded, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      '观看记录',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.of(context).pop(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            const Expanded(
+              child: WatchHistoryPage(),
+            ),
+          ],
+        ),
       ),
     );
   }

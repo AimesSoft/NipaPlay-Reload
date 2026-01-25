@@ -472,10 +472,7 @@ void main(List<String> args) async {
       Future.value(),
 
     // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
-    if (!kIsWeb)
-      SMBProxyService.instance.initialize()
-    else
-      Future.value(),
+    if (!kIsWeb) SMBProxyService.instance.initialize() else Future.value(),
   ]).then((results) async {
     // BangumiService初始化完成后，检查并刷新缺少标签的缓存
     Future.microtask(() async {
@@ -954,8 +951,7 @@ class MainPageState extends State<MainPage>
             debugPrint('[MainPageState] 尝试切换到标签: $index');
             // 强制启用页面滑动动画
             globalTabController!.animateTo(index);
-            debugPrint(
-                '[MainPageState] 已切换到标签: $index');
+            debugPrint('[MainPageState] 已切换到标签: $index');
           } catch (e) {
             debugPrint('[MainPageState] 切换标签失败: $e');
           }
@@ -983,8 +979,7 @@ class MainPageState extends State<MainPage>
 
     final tabIndex = globalTabController?.index ?? -1;
 
-    final bool shouldBeRegistered =
-        tabIndex == 1 && videoState.hasVideo;
+    final bool shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
 
     //debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
 
@@ -1031,7 +1026,7 @@ class MainPageState extends State<MainPage>
   Future<void> _initializeController() async {
     final prefs = await SharedPreferences.getInstance();
     _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
-    
+
     // 强制启用页面滑动动画
     // ... (注释省略)
 
@@ -1323,6 +1318,18 @@ class MainPageState extends State<MainPage>
             );
           },
         ),
+
+        // macOS平台显示Logo在右上角
+        if (!kIsWeb && Platform.isMacOS)
+          Positioned(
+            top: 10,
+            right: 20,
+            child: Image.asset(
+              'assets/logo.png',
+              height: 40,
+              fit: BoxFit.contain,
+            ),
+          ),
 
         // 系统资源监控显示
         Positioned(

@@ -28,6 +28,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:meta/meta.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -70,45 +71,16 @@ class AnimeDetailPage extends StatefulWidget {
         Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;
 
-    return showGeneralDialog<WatchHistoryItem>(
+    return NipaplayWindow.show<WatchHistoryItem>(
       context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.transparent,
-      barrierLabel: '关闭详情页',
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return AnimeDetailPage(
-          animeId: animeId,
-          sharedSummary: sharedSummary,
-          sharedEpisodeLoader: sharedEpisodeLoader,
-          sharedEpisodeBuilder: sharedEpisodeBuilder,
-          sharedSourceLabel: sharedSourceLabel,
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        // 如果禁用动画，直接返回child
-        if (!enableAnimation) {
-          return FadeTransition(
-            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOut),
-            ),
-            child: child,
-          );
-        }
-
-        final curvedAnimation = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutBack,
-        );
-
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
-          child: FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-        );
-      },
+      enableAnimation: enableAnimation,
+      child: AnimeDetailPage(
+        animeId: animeId,
+        sharedSummary: sharedSummary,
+        sharedEpisodeLoader: sharedEpisodeLoader,
+        sharedEpisodeBuilder: sharedEpisodeBuilder,
+        sharedSourceLabel: sharedSourceLabel,
+      ),
     );
   }
 }
@@ -1815,7 +1787,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    return NipaplayAnimeDetailScaffold(
+    return NipaplayWindowScaffold(
       backgroundImageUrl: _getPosterUrl(),
       blurBackground: true, // Bangumi通常返回的是竖向封面，开启模糊以提升质感
       onClose: () => Navigator.of(context).pop(),
