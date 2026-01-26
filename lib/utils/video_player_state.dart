@@ -249,8 +249,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 多轨道弹幕系统
   final Map<String, Map<String, dynamic>> _danmakuTracks = {};
   final Map<String, bool> _danmakuTrackEnabled = {};
-  final String _controlBarHeightKey = 'control_bar_height';
-  double _controlBarHeight = 20.0; // 默认高度
+  final double _controlBarHeight = 20.0; // 固定高度
   final String _minimalProgressBarEnabledKey = 'minimal_progress_bar_enabled';
   bool _minimalProgressBarEnabled = false; // 默认关闭
   final String _minimalProgressBarColorKey = 'minimal_progress_bar_color';

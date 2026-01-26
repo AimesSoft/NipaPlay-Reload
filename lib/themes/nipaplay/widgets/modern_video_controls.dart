@@ -220,8 +220,43 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                               padding: EdgeInsets.symmetric(
                                 horizontal: globals.isPhone ? 6 : 20,
                               ),
-                              child: Row(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
+                                  VideoProgressBar(
+                                    videoState: videoState,
+                                    hoverTime: null,
+                                    isDragging: _isDragging,
+                                    onPositionUpdate: (position) {},
+                                    onDraggingStateChange: (isDragging) {
+                                      if (isDragging) {
+                                        // 开始拖动时，保存当前的播放状态
+                                        _wasPlayingBeforeDrag =
+                                            videoState.status == PlayerStatus.playing;
+                                        // 如果是暂停状态，开始拖动时恢复播放
+                                        if (videoState.status ==
+                                            PlayerStatus.paused) {
+                                          _playStateChangedByDrag = true;
+                                          videoState.togglePlayPause();
+                                        }
+                                      } else {
+                                        // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
+                                        if (_playStateChangedByDrag) {
+                                          videoState.togglePlayPause();
+                                          _playStateChangedByDrag = false;
+                                        }
+                                        _wasPlayingBeforeDrag = null;
+                                      }
+                                      setState(() {
+                                        _isDragging = isDragging;
+                                      });
+                                    },
+                                    formatDuration: _formatDuration,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
                                         // 上一话按钮
                                         Consumer<VideoPlayerState>(
                                           builder: (context, videoState, child) {
@@ -352,41 +387,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           },
                                         ),
                                       
-                                      const SizedBox(width: 20),
-                                      
-                                      // 进度条
-                                      Expanded(
-                                        child: VideoProgressBar(
-                                          videoState: videoState,
-                                          hoverTime: null,
-                                          isDragging: _isDragging,
-                                          onPositionUpdate: (position) {},
-                                          onDraggingStateChange: (isDragging) {
-                                            if (isDragging) {
-                                              // 开始拖动时，保存当前的播放状态
-                                              _wasPlayingBeforeDrag = videoState.status == PlayerStatus.playing;
-                                              // 如果是暂停状态，开始拖动时恢复播放
-                                              if (videoState.status == PlayerStatus.paused) {
-                                                _playStateChangedByDrag = true;
-                                                videoState.togglePlayPause();
-                                              }
-                                            } else {
-                                              // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
-                                              if (_playStateChangedByDrag) {
-                                                videoState.togglePlayPause();
-                                                _playStateChangedByDrag = false;
-                                              }
-                                              _wasPlayingBeforeDrag = null;
-                                            }
-                                            setState(() {
-                                              _isDragging = isDragging;
-                                            });
-                                          },
-                                          formatDuration: _formatDuration,
-                                        ),
-                                      ),
-                                      
-                                      const SizedBox(width: 6),
+                                      const Spacer(),
                                       
                                       // 时间显示
                                       DefaultTextStyle(
@@ -459,10 +460,12 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       ),
                                     ],
                                   ),
+                                ],
                                 ),
                               ),
                             ),
                           ),
+                        ),
                 ],
               ),
             ),
