@@ -20,6 +20,7 @@ class ModernVideoControls extends StatefulWidget {
 }
 
 class _ModernVideoControlsState extends State<ModernVideoControls> {
+  final GlobalKey _settingsButtonKey = GlobalKey();
   bool _isRewindPressed = false;
   bool _isForwardPressed = false;
   bool _isPlayPressed = false;
@@ -128,9 +129,18 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
   void _showSettingsMenu(BuildContext context) {
     _settingsOverlay?.remove();
-    
+
+    Rect? anchorRect;
+    final RenderBox? renderBox =
+        _settingsButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null) {
+      final position = renderBox.localToGlobal(Offset.zero);
+      anchorRect = position & renderBox.size;
+    }
+
     _settingsOverlay = OverlayEntry(
       builder: (context) => VideoSettingsMenu(
+        anchorRect: anchorRect,
         onClose: () {
           _settingsOverlay?.remove();
           _settingsOverlay = null;
@@ -410,22 +420,27 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       const SizedBox(width: 12),
                                       
                                       // 设置按钮
-                                      _buildControlButton(
-                                        icon: Icon(
-                                          Icons.tune_rounded,
-                                          key: const ValueKey('settings'),
-                                          color: Colors.white,
-                                          size: globals.isPhone ? 36 : 28,
+                                      KeyedSubtree(
+                                        key: _settingsButtonKey,
+                                        child: _buildControlButton(
+                                          icon: Icon(
+                                            Icons.tune_rounded,
+                                            key: const ValueKey('settings'),
+                                            color: Colors.white,
+                                            size: globals.isPhone ? 36 : 28,
+                                          ),
+                                          onTap: () {
+                                            _showSettingsMenu(context);
+                                          },
+                                          isPressed: _isSettingsPressed,
+                                          isHovered: _isSettingsHovered,
+                                          onHover: (value) =>
+                                              setState(() => _isSettingsHovered = value),
+                                          onPressed: (value) =>
+                                              setState(() => _isSettingsPressed = value),
+                                          tooltip: '设置',
+                                          useAnimatedSwitcher: true,
                                         ),
-                                        onTap: () {
-                                          _showSettingsMenu(context);
-                                        },
-                                        isPressed: _isSettingsPressed,
-                                        isHovered: _isSettingsHovered,
-                                        onHover: (value) => setState(() => _isSettingsHovered = value),
-                                        onPressed: (value) => setState(() => _isSettingsPressed = value),
-                                        tooltip: '设置',
-                                        useAnimatedSwitcher: true,
                                       ),
                                       
                                       // 全屏按钮（所有平台）或菜单栏切换按钮（平板）

@@ -23,11 +23,13 @@ import 'base_settings_menu.dart';
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
   final ValueChanged<bool>? onHoverChanged;
+  final Rect? anchorRect;
 
   const VideoSettingsMenu({
     super.key,
     required this.onClose,
     this.onHoverChanged,
+    this.anchorRect,
   });
 
   @override
@@ -46,6 +48,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     super.initState();
     videoState = Provider.of<VideoPlayerState>(context, listen: false);
     _currentKernelType = PlayerFactory.getKernelType();
+    videoState.setControlsHovered(true);
+  }
+
+  @override
+  void dispose() {
+    videoState.setControlsHovered(false);
+    super.dispose();
   }
 
   void _handleItemTap(PlayerMenuPaneId paneId) {
@@ -66,6 +75,20 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     setState(() {
       _activePaneId = null;
     });
+  }
+
+  SettingsMenuScope _wrapMenu({required bool showBackItem, required Widget child}) {
+    return SettingsMenuScope(
+      width: _menuWidth,
+      rightOffset: _menuRightOffset,
+      useBackButton: showBackItem,
+      showHeader: false,
+      showBackItem: showBackItem,
+      lockControlsVisible: true,
+      anchorRect: widget.anchorRect,
+      showPointer: widget.anchorRect != null,
+      child: child,
+    );
   }
 
   Widget _buildPane(PlayerMenuPaneId paneId) {
@@ -160,12 +183,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         break;
     }
 
-    return SettingsMenuScope(
-      width: _menuWidth,
-      rightOffset: _menuRightOffset,
-      useBackButton: true,
-      child: child,
-    );
+    return _wrapMenu(showBackItem: true, child: child);
   }
 
   @override
@@ -179,16 +197,19 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
           ),
         ).build();
         final Widget menuContent = _activePaneId == null
-            ? BaseSettingsMenu(
-                title: '设置',
-                width: _menuWidth,
-                rightOffset: _menuRightOffset,
-                onHoverChanged: widget.onHoverChanged,
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: menuItems
-                      .map((item) => _buildSettingsItem(item))
-                      .toList(),
+            ? _wrapMenu(
+                showBackItem: false,
+                child: BaseSettingsMenu(
+                  title: '设置',
+                  width: _menuWidth,
+                  rightOffset: _menuRightOffset,
+                  onHoverChanged: widget.onHoverChanged,
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: menuItems
+                        .map((item) => _buildSettingsItem(item))
+                        .toList(),
+                  ),
                 ),
               )
             : _buildPane(_activePaneId!);
