@@ -54,12 +54,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
   // 显示搜索模态框
   void _showSearchModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const TagSearchModal(),
-    );
+    TagSearchModal.show(context);
   }
 
   // 添加星期几的映射

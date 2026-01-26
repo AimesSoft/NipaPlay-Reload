@@ -17,21 +17,61 @@ import 'package:nipaplay/main.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 
 class TagSearchModal extends StatefulWidget {
   final String? prefilledTag;
   final List<String>? preselectedTags;
   final VoidCallback? onBeforeOpenAnimeDetail;
+  final bool useWindow;
 
   const TagSearchModal({
     super.key, 
     this.prefilledTag, 
     this.preselectedTags,
     this.onBeforeOpenAnimeDetail,
+    this.useWindow = false,
   });
 
   @override
   State<TagSearchModal> createState() => _TagSearchModalState();
+
+  static Future<void?> show(
+    BuildContext context, {
+    String? prefilledTag,
+    List<String>? preselectedTags,
+    VoidCallback? onBeforeOpenAnimeDetail,
+  }) {
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    return NipaplayWindow.show<void>(
+      context: context,
+      enableAnimation: enableAnimation,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.5),
+      child: Builder(
+        builder: (BuildContext dialogContext) {
+          final screenSize = MediaQuery.of(dialogContext).size;
+          final maxWidth = (screenSize.width * 0.95).clamp(320.0, 1100.0);
+
+          return NipaplayWindowScaffold(
+            maxWidth: maxWidth,
+            maxHeightFactor: 0.9,
+            onClose: () => Navigator.of(dialogContext).maybePop(),
+            child: TagSearchModal(
+              prefilledTag: prefilledTag,
+              preselectedTags: preselectedTags,
+              onBeforeOpenAnimeDetail: onBeforeOpenAnimeDetail,
+              useWindow: true,
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _TagSearchModalState extends State<TagSearchModal>
@@ -394,14 +434,20 @@ class _TagSearchModalState extends State<TagSearchModal>
 
   @override
   Widget build(BuildContext context) {
+    final borderRadius = widget.useWindow
+        ? BorderRadius.circular(20)
+        : const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          );
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
+      height: widget.useWindow
+          ? double.infinity
+          : MediaQuery.of(context).size.height * 0.85,
+      decoration: BoxDecoration(
         color: Colors.transparent,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
+        borderRadius: borderRadius,
       ),
       child: GlassmorphicContainer(
         width: double.infinity,
@@ -428,19 +474,21 @@ class _TagSearchModalState extends State<TagSearchModal>
         ),
         child: Column(
           children: [
-            // 拖拽指示器
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(2),
+            if (!widget.useWindow)
+              // 拖拽指示器
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                alignment: Alignment.center,
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
+            if (widget.useWindow) const SizedBox(height: 12),
 
             // 标题
             Padding(

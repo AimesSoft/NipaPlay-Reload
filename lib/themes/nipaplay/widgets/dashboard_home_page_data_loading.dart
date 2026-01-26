@@ -297,12 +297,25 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         debugPrint('从弹弹play媒体库收集到 ${selectedGroups.length} 个候选项目');
       }
 
-      // 第二步：从所有候选中随机选择7个
+      // 第二步：从所有候选中随机选择7个（去重）
       List<dynamic> selectedCandidates = [];
       if (allCandidates.isNotEmpty) {
         allCandidates.shuffle(math.Random());
-        selectedCandidates = allCandidates.take(7).toList();
-        debugPrint('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个');
+        final seenKeys = <String>{};
+        for (final candidate in allCandidates) {
+          final keys = _buildRecommendationDedupKeys(candidate);
+          if (keys.isNotEmpty && keys.any(seenKeys.contains)) {
+            continue;
+          }
+          selectedCandidates.add(candidate);
+          if (keys.isNotEmpty) {
+            seenKeys.addAll(keys);
+          }
+          if (selectedCandidates.length >= 7) {
+            break;
+          }
+        }
+        debugPrint('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个(去重后)');
       }
 
       // 第二点五步：预加载本地媒体项目的图片缓存，确保立即显示
@@ -536,6 +549,46 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         _checkPendingRefresh();
       }
     }
+  }
+
+  String _normalizeRecommendationTitle(String title) {
+    final trimmed = title.trim().toLowerCase();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    return trimmed.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  void _addTitleKey(List<String> keys, String? title) {
+    if (title == null || title.isEmpty) return;
+    final normalized = _normalizeRecommendationTitle(title);
+    if (normalized.isEmpty) return;
+    keys.add('title:$normalized');
+  }
+
+  List<String> _buildRecommendationDedupKeys(dynamic candidate) {
+    final keys = <String>[];
+
+    if (candidate is JellyfinMediaItem) {
+      _addTitleKey(keys, candidate.name);
+      _addTitleKey(keys, candidate.originalTitle);
+    } else if (candidate is EmbyMediaItem) {
+      _addTitleKey(keys, candidate.name);
+      _addTitleKey(keys, candidate.originalTitle);
+    } else if (candidate is WatchHistoryItem) {
+      if (_isValidAnimeId(candidate.animeId)) {
+        keys.add('anime:${candidate.animeId}');
+      }
+      _addTitleKey(keys, candidate.animeName);
+    } else if (candidate is DandanplayRemoteAnimeGroup) {
+      if (_isValidAnimeId(candidate.animeId)) {
+        keys.add('anime:${candidate.animeId}');
+      }
+      _addTitleKey(keys, candidate.title);
+    }
+
+    if (keys.length <= 1) return keys;
+    return keys.toSet().toList();
   }
 
   Future<void> _loadRecentContent() async {

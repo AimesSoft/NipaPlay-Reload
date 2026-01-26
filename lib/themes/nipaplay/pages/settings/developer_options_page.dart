@@ -7,10 +7,10 @@ import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 // 证书相关的主机快捷信任按钮应用户要求移除，仅保留全局开关
 
@@ -170,52 +170,30 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
   }
 
   void _openDebugLogViewer(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    showGeneralDialog(
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    NipaplayWindow.show<void>(
       context: context,
+      enableAnimation: enableAnimation,
       barrierDismissible: true,
       barrierColor: Colors.black.withOpacity(0.5),
-      barrierLabel: '关闭终端输出',
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(16),
-          child: GlassmorphicContainer(
-            width: MediaQuery.of(context).size.width * 0.95,
-            height: MediaQuery.of(context).size.height * 0.85,
-            borderRadius: 12,
-            blur: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
-            alignment: Alignment.center,
-            border: 1,
-            linearGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                colorScheme.surface.withOpacity(0.15),
-                colorScheme.surface.withOpacity(0.05),
-              ],
-            ),
-            borderGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                colorScheme.onSurface.withOpacity(0.5),
-                colorScheme.onSurface.withOpacity(0.2),
-              ],
-            ),
+      child: Builder(
+        builder: (BuildContext dialogContext) {
+          final colorScheme = Theme.of(dialogContext).colorScheme;
+          final screenSize = MediaQuery.of(dialogContext).size;
+          final maxWidth = (screenSize.width * 0.95).clamp(320.0, 1200.0);
+
+          return NipaplayWindowScaffold(
+            maxWidth: maxWidth,
+            maxHeightFactor: 0.85,
+            onClose: () => Navigator.of(dialogContext).maybePop(),
             child: Column(
               children: [
-                // 标题栏
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.onSurface.withOpacity(0.1),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
                   child: Row(
                     children: [
                       Icon(
@@ -226,27 +204,20 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                       const SizedBox(width: 12),
                       Text(
                         '终端输出',
-                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+                        locale: const Locale('zh', 'CN'),
+                        style: TextStyle(
                           color: colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: Icon(
-                          Icons.close,
-                          color: colorScheme.onSurface.withOpacity(0.7),
-                          size: 24,
-                        ),
-                        splashRadius: 20,
-                      ),
                     ],
                   ),
                 ),
-                // 日志查看器内容
+                Divider(
+                  height: 1,
+                  color: colorScheme.onSurface.withOpacity(0.12),
+                ),
                 const Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.only(
@@ -258,23 +229,9 @@ style: TextStyle(
                 ),
               ],
             ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curvedAnimation = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutBack,
-        );
-        
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
-          child: FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

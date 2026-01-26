@@ -1,6 +1,79 @@
 part of video_player_state;
 
+class _RawFrameSpec {
+  final int width;
+  final int height;
+  final int? rowStride;
+
+  const _RawFrameSpec({
+    required this.width,
+    required this.height,
+    this.rowStride,
+  });
+}
+
 extension VideoPlayerStateCapture on VideoPlayerState {
+  bool _isPngBytes(Uint8List bytes) {
+    return bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47 &&
+        bytes[4] == 0x0D &&
+        bytes[5] == 0x0A &&
+        bytes[6] == 0x1A &&
+        bytes[7] == 0x0A;
+  }
+
+  bool _isJpegBytes(Uint8List bytes) {
+    return bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF;
+  }
+
+  _RawFrameSpec? _matchRawFrameSpec(PlayerFrame frame) {
+    final byteLength = frame.bytes.length;
+    final candidates = <_RawFrameSpec>[];
+
+    void addCandidate(int width, int height) {
+      if (width > 0 && height > 0) {
+        candidates.add(_RawFrameSpec(width: width, height: height));
+      }
+    }
+
+    addCandidate(frame.width, frame.height);
+
+    final videoTracks = player.mediaInfo.video;
+    if (videoTracks != null && videoTracks.isNotEmpty) {
+      final codec = videoTracks.first.codec;
+      addCandidate(codec.width, codec.height);
+    }
+
+    for (final candidate in candidates) {
+      final expected = candidate.width * candidate.height * 4;
+      if (byteLength == expected) {
+        return candidate;
+      }
+    }
+
+    for (final candidate in candidates) {
+      if (byteLength % candidate.height != 0) {
+        continue;
+      }
+      final stride = byteLength ~/ candidate.height;
+      if (stride >= candidate.width * 4) {
+        return _RawFrameSpec(
+          width: candidate.width,
+          height: candidate.height,
+          rowStride: stride,
+        );
+      }
+    }
+
+    return null;
+  }
+
   // 触发图片缓存刷新，使新缩略图可见
   void _triggerImageCacheRefresh(String imagePath) {
     if (kIsWeb) return; // Web平台不支持文件操作
@@ -75,67 +148,73 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.png';
       final thumbnailFile = File(thumbnailPath);
 
-      // 检查截图数据是否已经是PNG格式 (检查PNG文件头 - 89 50 4E 47)
-      bool isPngFormat = false;
-      if (videoFrame.bytes.length > 8) {
-        isPngFormat = videoFrame.bytes[0] == 0x89 &&
-            videoFrame.bytes[1] == 0x50 &&
-            videoFrame.bytes[2] == 0x4E &&
-            videoFrame.bytes[3] == 0x47;
+      final frameBytes = videoFrame.bytes;
+
+      if (_isPngBytes(frameBytes)) {
+        debugPrint('检测到PNG格式的截图数据，直接保存');
+        await thumbnailFile.writeAsBytes(frameBytes);
+        debugPrint('成功保存PNG截图，大小: ${frameBytes.length} 字节');
+        return thumbnailPath;
       }
 
-      if (isPngFormat) {
-        // 如果已经是PNG格式，直接保存
-        debugPrint('检测到PNG格式的截图数据，直接保存');
-        await thumbnailFile.writeAsBytes(videoFrame.bytes);
-        debugPrint('成功保存PNG截图，大小: ${videoFrame.bytes.length} 字节');
+      if (_isJpegBytes(frameBytes)) {
+        debugPrint('检测到JPEG格式的截图数据，直接保存');
+        await thumbnailFile.writeAsBytes(frameBytes);
+        debugPrint('成功保存JPEG截图，大小: ${frameBytes.length} 字节');
         return thumbnailPath;
-      } else {
-        // 如果不是PNG格式，使用原有处理逻辑
-        debugPrint('检测到非PNG格式的截图数据，进行转换处理');
-        try {
-          // 确定图像尺寸
-          final width =
-              videoFrame.width > 0 ? videoFrame.width : 1920; // 如果宽度为0，使用默认宽度
-          final height =
-              videoFrame.height > 0 ? videoFrame.height : 1080; // 如果高度为0，使用默认高度
+      }
 
-          debugPrint('创建图像使用尺寸: ${width}x$height');
+      img.Image? decoded;
+      try {
+        decoded = img.decodeImage(frameBytes);
+      } catch (_) {}
 
-          // 从bytes创建图像
-          final image = img.Image.fromBytes(
-            width: width,
-            height: height,
-            bytes: videoFrame.bytes.buffer,
-            numChannels: 4, // RGBA
-          );
+      if (decoded != null) {
+        debugPrint('检测到已编码的截图数据，转换为PNG保存');
+        final pngBytes = img.encodePng(decoded);
+        await thumbnailFile.writeAsBytes(pngBytes);
+        debugPrint('成功保存转换后的截图，尺寸: ${decoded.width}x${decoded.height}');
+        return thumbnailPath;
+      }
 
-          // 检查图像是否成功创建
-          if (image.width != width || image.height != height) {
-            debugPrint(
-                '警告: 创建的图像尺寸(${image.width}x${image.height})与预期(${width}x$height)不符');
-          }
+      debugPrint('检测到原始像素格式的截图数据，尝试转换处理');
+      final rawSpec = _matchRawFrameSpec(videoFrame);
+      if (rawSpec == null) {
+        debugPrint('无法确定原始截图尺寸，跳过保存');
+        return null;
+      }
 
-          // 编码为PNG格式
-          final pngBytes = img.encodePng(image);
-          await thumbnailFile.writeAsBytes(pngBytes);
+      final expectedLength = rawSpec.width * rawSpec.height * 4;
+      if (frameBytes.length < expectedLength ||
+          (frameBytes.length != expectedLength && rawSpec.rowStride == null)) {
+        debugPrint(
+            '原始截图数据长度与尺寸不匹配: ${frameBytes.length} 字节, 期望: $expectedLength');
+        return null;
+      }
 
-          debugPrint('成功保存转换后的截图，保留了${width}x$height的原始比例');
-          return thumbnailPath;
-        } catch (e) {
-          debugPrint('处理图像数据时出错: $e');
+      try {
+        final channelOrder = player.getPlayerKernelName() == 'Media Kit'
+            ? img.ChannelOrder.bgra
+            : img.ChannelOrder.rgba;
+        final rawCopy = Uint8List.fromList(frameBytes);
+        final image = img.Image.fromBytes(
+          width: rawSpec.width,
+          height: rawSpec.height,
+          bytes: rawCopy.buffer,
+          numChannels: 4,
+          rowStride: rawSpec.rowStride,
+          order: channelOrder,
+        );
 
-          // 转换失败，尝试直接保存原始数据
-          try {
-            debugPrint('尝试直接保存原始截图数据');
-            await thumbnailFile.writeAsBytes(videoFrame.bytes);
-            debugPrint('成功保存原始截图数据');
-            return thumbnailPath;
-          } catch (e2) {
-            debugPrint('直接保存原始数据也失败: $e2');
-            return null;
-          }
-        }
+        final pngBytes = img.encodePng(image);
+        await thumbnailFile.writeAsBytes(pngBytes);
+
+        debugPrint(
+            '成功保存转换后的截图，保留了${rawSpec.width}x${rawSpec.height}的原始比例');
+        return thumbnailPath;
+      } catch (e) {
+        debugPrint('处理图像数据时出错: $e');
+        return null;
       }
     } catch (e) {
       debugPrint('无暂停截图时出错: $e');

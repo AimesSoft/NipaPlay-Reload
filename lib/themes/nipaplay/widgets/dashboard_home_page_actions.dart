@@ -2,12 +2,7 @@ part of dashboard_home_page;
 
 extension DashboardHomePageActions on _DashboardHomePageState {
   void _showTagSearchModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const TagSearchModal(),
-    );
+    TagSearchModal.show(context);
   }
 
   void _onRecommendedItemTap(RecommendedItem item) {

@@ -1,11 +1,12 @@
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/globals.dart' as globals; // 添加globals导入
-import 'typing_text.dart'; // 重新导入TypingText
-import 'dart:async'; // 添加Timer的导入
-import 'dart:math' as math; // 添加math导入用于max/min计算
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+
+import 'typing_text.dart';
 
 class LoadingOverlay extends StatefulWidget {
   final List<String> messages;
@@ -35,7 +36,7 @@ class LoadingOverlay extends StatefulWidget {
     this.height,
     this.blur = 20,
     this.borderWidth = 1.5,
-    this.borderRadius = 15,
+    this.borderRadius = 10,
     this.backgroundColor = Colors.black,
     this.backgroundOpacity = 0.3,
     this.textColor = Colors.white,

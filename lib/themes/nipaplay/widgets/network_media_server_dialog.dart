@@ -9,6 +9,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/multi_address_manager_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -141,11 +142,17 @@ class NetworkMediaServerDialog extends StatefulWidget {
     
     if (provider.isConnected) {
       // 如果已连接，显示设置对话框
-      return showDialog<bool>(
+      final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+        context,
+        listen: false,
+      ).enablePageAnimation;
+
+      return NipaplayWindow.show<bool>(
         context: context,
+        enableAnimation: enableAnimation,
         barrierDismissible: true,
         barrierColor: Colors.black.withOpacity(0.5),
-        builder: (dialogContext) => NetworkMediaServerDialog(serverType: serverType),
+        child: NetworkMediaServerDialog(serverType: serverType),
       );
     } else {
       // 如果未连接，显示登录对话框
@@ -483,14 +490,12 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
     final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
+    return NipaplayWindowScaffold(
+      maxWidth: dialogWidth,
+      maxHeightFactor: 0.9,
+      onClose: () => Navigator.of(context).maybePop(),
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: dialogWidth,
-          minHeight: 500,
-          maxHeight: screenSize.height * 0.9,
-        ),
+        constraints: const BoxConstraints(minHeight: 500),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
@@ -542,7 +547,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                       ],
                       _buildLibrariesSection(),
                       const SizedBox(height: 20),
-                      if (widget.serverType == MediaServerType.jellyfin || widget.serverType == MediaServerType.emby) ...[
+                      if (widget.serverType == MediaServerType.jellyfin ||
+                          widget.serverType == MediaServerType.emby) ...[
                         _buildTranscodeSection(),
                         const SizedBox(height: 20),
                       ],

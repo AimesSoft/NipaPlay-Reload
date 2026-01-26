@@ -1909,33 +1909,25 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     // 获取当前番剧的标签列表
     final currentTags = _detailedAnime?.tags ?? [];
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => TagSearchModal(
-        preselectedTags: currentTags,
-        onBeforeOpenAnimeDetail: () {
-          // 关闭当前的番剧详情页面
-          Navigator.of(context).pop();
-        },
-      ),
+    TagSearchModal.show(
+      context,
+      preselectedTags: currentTags,
+      onBeforeOpenAnimeDetail: () {
+        // 关闭当前的番剧详情页面
+        Navigator.of(context).pop();
+      },
     );
   }
 
   // 通过单个标签搜索
   void _searchByTag(String tag) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => TagSearchModal(
-        prefilledTag: tag,
-        onBeforeOpenAnimeDetail: () {
-          // 关闭当前的番剧详情页面
-          Navigator.of(context).pop();
-        },
-      ),
+    TagSearchModal.show(
+      context,
+      prefilledTag: tag,
+      onBeforeOpenAnimeDetail: () {
+        // 关闭当前的番剧详情页面
+        Navigator.of(context).pop();
+      },
     );
   }
 
