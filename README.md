@@ -64,7 +64,7 @@
     yay -S nipaplay-reload-bin
     ```
 
-- **Gentoo Linux(x86 64) **
+- **Gentoo Linux(x86 64)**
 
   ```bash
   ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
