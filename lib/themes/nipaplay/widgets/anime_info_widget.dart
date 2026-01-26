@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
-import 'package:provider/provider.dart';
 import 'control_shadow.dart';
 // import 'package:nipaplay/utils/globals.dart' as globals; // globals is not used in this snippet
 

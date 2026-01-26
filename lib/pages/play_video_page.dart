@@ -388,7 +388,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           setState(() => _isHoveringBackButton = false),
                       child: BackButtonWidget(videoState: videoState),
                     ),
-                    const SizedBox(width: 10.0),
+                    const SizedBox(width: 12.0),
+                    SendDanmakuButton(
+                      onPressed: () => _showSendDanmakuDialog(videoState),
+                    ),
+                    const SizedBox(width: 8.0),
+                    SkipButton(
+                      onPressed: () => videoState.skip(),
+                    ),
+                    const SizedBox(width: 12.0),
                     MouseRegion(
                       cursor: _isHoveringAnimeInfo
                           ? SystemMouseCursors.click
@@ -460,36 +468,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           },
                         ),
                       ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
-          top: 0,
-          bottom: 0,
-          child: Center(
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 150),
-              offset: Offset(videoState.showControls ? 0 : -0.1, 0),
-              child: AnimatedOpacity(
-                opacity: videoState.showControls ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 150),
-                child: IgnorePointer(
-                  ignoring: !videoState.showControls,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SendDanmakuButton(
-                        onPressed: () => _showSendDanmakuDialog(videoState),
-                      ),
-                      const SizedBox(height: 12),
-                      SkipButton(
-                        onPressed: () => videoState.skip(),
-                      ),
                     ],
                   ),
                 ),

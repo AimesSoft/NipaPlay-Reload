@@ -1,7 +1,11 @@
 part of dashboard_home_page;
 
 extension DashboardHomePageDataLoading on _DashboardHomePageState {
-  Future<void> _loadData() async {
+  Future<void> _loadData({
+    bool forceRefreshRecommended = false,
+    bool forceRefreshRandom = false,
+    bool forceRefreshToday = false,
+  }) async {
     final stopwatch = Stopwatch()..start();
     debugPrint('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
     _lastLoadTime = DateTime.now();
@@ -41,22 +45,26 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     
     debugPrint('DashboardHomePage: 开始加载数据');
     
+    final shouldForceRecommended = forceRefreshRecommended ||
+        _recommendedItems.isEmpty ||
+        _recommendedItems.every((item) => item.source == RecommendedItemSource.placeholder);
+
     // 并行加载推荐内容、最近内容、今日新番和随机推荐
     try {
       await Future.wait([
-        _loadRecommendedContent(forceRefresh: true),
+        _loadRecommendedContent(forceRefresh: shouldForceRecommended),
         _loadRecentContent(),
-        _loadTodayAnimes(forceRefresh: true),
-        _loadRandomRecommendations(forceRefresh: true),
+        _loadTodayAnimes(forceRefresh: forceRefreshToday),
+        _loadRandomRecommendations(forceRefresh: forceRefreshRandom),
       ]);
     } catch (e) {
       debugPrint('DashboardHomePage: 并行加载数据时发生错误: $e');
       // 如果并行加载失败，尝试串行加载
       try {
-        await _loadRecommendedContent(forceRefresh: true);
+        await _loadRecommendedContent(forceRefresh: shouldForceRecommended);
         await _loadRecentContent();
-        await _loadTodayAnimes(forceRefresh: true);
-        await _loadRandomRecommendations(forceRefresh: true);
+        await _loadTodayAnimes(forceRefresh: forceRefreshToday);
+        await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
       } catch (e2) {
         debugPrint('DashboardHomePage: 串行加载数据也失败: $e2');
       }
@@ -71,7 +79,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       debugPrint('DashboardHomePage: 忽略刷新请求，正在加载中');
       return;
     }
-    unawaited(_loadData());
+    unawaited(_loadData(
+      forceRefreshRecommended: true,
+      forceRefreshRandom: true,
+      forceRefreshToday: true,
+    ));
     final syncService = ServerHistorySyncService.instance;
     unawaited(syncService.syncJellyfinResume());
     unawaited(syncService.syncEmbyResume());
@@ -591,69 +603,76 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     return keys.toSet().toList();
   }
 
-  Future<void> _loadRecentContent() async {
+  Future<void> _loadRecentContent({bool includeRemote = true}) async {
+    if (_isLoadingRecentContent) {
+      debugPrint('DashboardHomePage: 最近内容正在加载，跳过本次调用');
+      return;
+    }
+    _isLoadingRecentContent = true;
     debugPrint('DashboardHomePage: 开始加载最近内容');
     try {
       DandanplayRemoteProvider? dandanProvider;
       try {
         dandanProvider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
       } catch (_) {}
-      // 从Jellyfin按媒体库获取最近添加（按库并行）
-  final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
-  if (jellyfinProvider.isConnected) {
-        final jellyfinService = JellyfinService.instance;
-        _recentJellyfinItemsByLibrary.clear();
-        final jfFutures = <Future<void>>[];
-        for (final library in jellyfinService.availableLibraries) {
-          if (jellyfinService.selectedLibraryIds.contains(library.id)) {
-            jfFutures.add(() async {
-              try {
-                final libraryItems = await jellyfinService.getLatestMediaItemsByLibrary(library.id, limit: 25);
-                if (libraryItems.isNotEmpty) {
-                  _recentJellyfinItemsByLibrary[library.name] = libraryItems;
-                  debugPrint('Jellyfin媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+      if (includeRemote) {
+        // 从Jellyfin按媒体库获取最近添加（按库并行）
+        final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+        if (jellyfinProvider.isConnected) {
+          final jellyfinService = JellyfinService.instance;
+          _recentJellyfinItemsByLibrary.clear();
+          final jfFutures = <Future<void>>[];
+          for (final library in jellyfinService.availableLibraries) {
+            if (jellyfinService.selectedLibraryIds.contains(library.id)) {
+              jfFutures.add(() async {
+                try {
+                  final libraryItems = await jellyfinService.getLatestMediaItemsByLibrary(library.id, limit: 25);
+                  if (libraryItems.isNotEmpty) {
+                    _recentJellyfinItemsByLibrary[library.name] = libraryItems;
+                    debugPrint('Jellyfin媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+                  }
+                } catch (e) {
+                  debugPrint('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
                 }
-              } catch (e) {
-                debugPrint('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
-              }
-            }());
+              }());
+            }
           }
+          if (jfFutures.isNotEmpty) {
+            await Future.wait(jfFutures, eagerError: false);
+          }
+        } else {
+          // 未连接时确保清空
+          _recentJellyfinItemsByLibrary.clear();
         }
-        if (jfFutures.isNotEmpty) {
-          await Future.wait(jfFutures, eagerError: false);
-        }
-      } else {
-        // 未连接时确保清空
-        _recentJellyfinItemsByLibrary.clear();
-      }
 
-      // 从Emby按媒体库获取最近添加（按库并行）
-  final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-  if (embyProvider.isConnected) {
-        final embyService = EmbyService.instance;
-        _recentEmbyItemsByLibrary.clear();
-        final emFutures = <Future<void>>[];
-        for (final library in embyService.availableLibraries) {
-          if (embyService.selectedLibraryIds.contains(library.id)) {
-            emFutures.add(() async {
-              try {
-                final libraryItems = await embyService.getLatestMediaItemsByLibrary(library.id, limit: 25);
-                if (libraryItems.isNotEmpty) {
-                  _recentEmbyItemsByLibrary[library.name] = libraryItems;
-                  debugPrint('Emby媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+        // 从Emby按媒体库获取最近添加（按库并行）
+        final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+        if (embyProvider.isConnected) {
+          final embyService = EmbyService.instance;
+          _recentEmbyItemsByLibrary.clear();
+          final emFutures = <Future<void>>[];
+          for (final library in embyService.availableLibraries) {
+            if (embyService.selectedLibraryIds.contains(library.id)) {
+              emFutures.add(() async {
+                try {
+                  final libraryItems = await embyService.getLatestMediaItemsByLibrary(library.id, limit: 25);
+                  if (libraryItems.isNotEmpty) {
+                    _recentEmbyItemsByLibrary[library.name] = libraryItems;
+                    debugPrint('Emby媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
+                  }
+                } catch (e) {
+                  debugPrint('获取Emby媒体库 ${library.name} 最近内容失败: $e');
                 }
-              } catch (e) {
-                debugPrint('获取Emby媒体库 ${library.name} 最近内容失败: $e');
-              }
-            }());
+              }());
+            }
           }
+          if (emFutures.isNotEmpty) {
+            await Future.wait(emFutures, eagerError: false);
+          }
+        } else {
+          // 未连接时确保清空
+          _recentEmbyItemsByLibrary.clear();
         }
-        if (emFutures.isNotEmpty) {
-          await Future.wait(emFutures, eagerError: false);
-        }
-      } else {
-        // 未连接时确保清空
-        _recentEmbyItemsByLibrary.clear();
       }
 
       // 从本地媒体库获取最近添加（优化：不做逐文件stat，按历史记录时间排序，图片懒加载+持久化）
@@ -767,6 +786,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       }
     } catch (e) {
       debugPrint('加载最近内容失败: $e');
+    } finally {
+      _isLoadingRecentContent = false;
     }
   }
 

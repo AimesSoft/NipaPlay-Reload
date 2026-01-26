@@ -87,6 +87,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // Provider 通知后的轻量防抖（覆盖库选择等状态变化）
   Timer? _jfDebounceTimer;
   Timer? _emDebounceTimer;
+  Timer? _watchHistoryDebounceTimer;
 
   bool _isHistoryAutoMatching = false;
   bool _historyAutoMatchDialogVisible = false;
@@ -98,6 +99,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 推荐内容数据
   List<RecommendedItem> _recommendedItems = [];
   bool _isLoadingRecommended = false;
+  bool _isLoadingRecentContent = false;
   
   // 待处理的刷新请求
   bool _pendingRefreshAfterLoad = false;
@@ -185,7 +187,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       
       // 🔥 在build完成后安全地加载数据，避免setState during build错误
       if (mounted) {
-        _loadData();
+        _loadData(
+          forceRefreshRecommended: true,
+          forceRefreshRandom: true,
+          forceRefreshToday: true,
+        );
       }
       
       // 延迟检查WatchHistoryProvider状态，如果已经加载完成但数据为空则重新加载
@@ -485,8 +491,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       // 延迟检查，避免快速状态切换时的误触发
       _playerStateCheckTimer = Timer(const Duration(milliseconds: 1500), () {
         if (mounted && !_isVideoPlayerActive()) {
-          debugPrint('DashboardHomePage: 确认播放器已退出，异步更新数据');
-          _loadData();
+          debugPrint('DashboardHomePage: 确认播放器已退出，刷新最近观看');
+          _scheduleWatchHistoryRefresh('播放器退出');
         } else {
           debugPrint('DashboardHomePage: 播放器状态已恢复活跃，取消更新');
         }
@@ -501,6 +507,24 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     // 更新播放器活跃状态记录
     _wasPlayerActive = isCurrentlyActive;
+  }
+
+  void _scheduleWatchHistoryRefresh(String reason) {
+    if (!mounted) return;
+    try {
+      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      if (!watchHistoryProvider.isLoaded) {
+        return;
+      }
+    } catch (_) {
+      return;
+    }
+    _watchHistoryDebounceTimer?.cancel();
+    _watchHistoryDebounceTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      debugPrint('DashboardHomePage: 触发最近观看刷新 - $reason');
+      unawaited(_loadRecentContent(includeRemote: false));
+    });
   }
   
   void _onJellyfinStateChanged() {
@@ -626,35 +650,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     if (!mounted) {
       return;
     }
-    
-    // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
-    if (_isVideoPlayerActive()) {
-      debugPrint('DashboardHomePage: 播放器活跃中，跳过WatchHistory状态变化处理');
-      return;
-    }
-    
+
     final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
     debugPrint('DashboardHomePage: WatchHistory加载状态变化 - isLoaded: ${watchHistoryProvider.isLoaded}, mounted: $mounted');
     
     if (watchHistoryProvider.isLoaded && mounted) {
-      if (_isLoadingRecommended) {
-        // 如果正在加载，记录待处理的刷新请求
-        _pendingRefreshAfterLoad = true;
-        _pendingRefreshReason = 'WatchHistory加载完成';
-        debugPrint('DashboardHomePage: 正在加载中，记录WatchHistory刷新请求待稍后处理');
-      } else {
-        // 如果未在加载，检查播放器状态后决定是否刷新
-        if (_isVideoPlayerActive()) {
-          debugPrint('DashboardHomePage: WatchHistory加载完成，但播放器活跃中，跳过刷新');
-        } else {
-          debugPrint('DashboardHomePage: WatchHistory加载完成，立即刷新数据');
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _loadData();
-            }
-          });
-        }
-      }
+      _scheduleWatchHistoryRefresh('WatchHistory变化');
     }
   }
   
@@ -706,6 +707,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     // 清理定时器和ValueNotifier
     _autoSwitchTimer?.cancel();
     _playerStateCheckTimer?.cancel();
+    _watchHistoryDebounceTimer?.cancel();
     _playerStateCheckTimer = null;
     
     // 重置播放器状态缓存，防止内存泄漏

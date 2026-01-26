@@ -117,13 +117,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
           child: BounceHoverScale(
             isHovered: isHovered,
             isPressed: isPressed,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: isHovered ? 1.0 : 0.6,
-              child: ControlShadow(
-                borderRadius: BorderRadius.circular(999),
-                child: iconWidget,
-              ),
+            child: ControlIconShadow(
+              child: iconWidget,
             ),
           ),
         ),
@@ -394,8 +389,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       const Spacer(),
                                       
                                       // 时间显示
-                                      ControlShadow(
-                                        borderRadius: BorderRadius.circular(4),
+                                      ControlTextShadow(
                                         child: DefaultTextStyle(
                                           style: const TextStyle(
                                             color: Colors.white60,

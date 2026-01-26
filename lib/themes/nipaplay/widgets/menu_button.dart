@@ -1,5 +1,6 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
+import 'control_shadow.dart';
 
 class WindowControlButtons extends StatelessWidget {
   final bool isMaximized;
@@ -114,7 +115,9 @@ class _WindowControlIconButtonState extends State<_WindowControlIconButton> {
           child: AnimatedScale(
             scale: scale,
             duration: const Duration(milliseconds: 120),
-            child: iconWidget,
+            child: ControlIconShadow(
+              child: iconWidget,
+            ),
           ),
         ),
       ),

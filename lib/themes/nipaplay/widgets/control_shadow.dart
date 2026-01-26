@@ -36,6 +36,31 @@ class ControlShadow extends StatelessWidget {
   }
 }
 
+class ControlIconShadow extends StatelessWidget {
+  final Widget child;
+  final List<Shadow> shadows;
+
+  const ControlIconShadow({
+    super.key,
+    required this.child,
+    this.shadows = const [
+      Shadow(
+        color: Color(0x99000000),
+        blurRadius: 6,
+        offset: Offset(0, 2),
+      ),
+    ],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconTheme.merge(
+      data: IconThemeData(shadows: shadows),
+      child: child,
+    );
+  }
+}
+
 class ControlTextShadow extends StatelessWidget {
   final Widget child;
   final List<Shadow> shadows;

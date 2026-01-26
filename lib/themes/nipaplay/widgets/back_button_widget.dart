@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'blur_snackbar.dart';
+import 'control_shadow.dart';
 
 class BackButtonWidget extends StatefulWidget {
   final VideoPlayerState videoState;
@@ -21,8 +19,15 @@ class BackButtonWidget extends StatefulWidget {
 }
 
 class _BackButtonWidgetState extends State<BackButtonWidget> {
-  bool _isBackButtonHovered = false;
   bool _isBackButtonPressed = false;
+  bool _isHovered = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
+    }
+    setState(() => _isHovered = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +43,12 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
         offset: Offset(widget.videoState.showControls ? 0 : -0.1, 0),
         child: MouseRegion(
           onEnter: (_) {
-            setState(() => _isBackButtonHovered = true);
             widget.videoState.setControlsHovered(true);
+            _setHovered(true);
           },
           onExit: (_) {
-            setState(() => _isBackButtonHovered = false);
             widget.videoState.setControlsHovered(false);
+            _setHovered(false);
           },
           child: TooltipBubble(
             text: '返回',
@@ -65,40 +70,14 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
                 }
               },
               onTapCancel: () => setState(() => _isBackButtonPressed = false),
-              child: GlassmorphicContainer(
-                width: 48,
-                height: 48,
-                borderRadius: 25,
-               blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-                alignment: Alignment.center,
-                border: 1,
-                linearGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFFffffff).withOpacity(0.1),
-                    const Color(0xFFFFFFFF).withOpacity(0.1),
-                  ],
-                ),
-                borderGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFFffffff).withOpacity(0.5),
-                    const Color((0xFFFFFFFF)).withOpacity(0.5),
-                  ],
-                ),
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: _isBackButtonHovered ? 1.0 : 0.6,
-                  child: AnimatedScale(
-                    duration: const Duration(milliseconds: 100),
-                    scale: _isBackButtonPressed ? 0.9 : 1.0,
-                    child: const Icon(
-                      Ionicons.chevron_back_outline,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 120),
+                scale: _isBackButtonPressed ? 0.9 : (_isHovered ? 1.1 : 1.0),
+                child: ControlIconShadow(
+                  child: const Icon(
+                    Ionicons.chevron_back_outline,
+                    color: Colors.white,
+                    size: 28,
                   ),
                 ),
               ),

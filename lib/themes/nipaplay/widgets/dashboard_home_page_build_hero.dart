@@ -154,6 +154,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     height: double.infinity,
                     delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                     blurIfLowRes: true,
+                    forceBlur: item.isLowRes,
                     lowResBlurSigma: 40,
                     lowResMinScale: 0.8,
                     errorBuilder: (context, error) => Container(
@@ -386,6 +387,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     width: double.infinity,
                     height: double.infinity,
                     blurIfLowRes: true,
+                    forceBlur: item.isLowRes,
                     lowResBlurSigma: 40,
                     lowResMinScale: 0.8,
                     errorBuilder: (context, error) => Container(
