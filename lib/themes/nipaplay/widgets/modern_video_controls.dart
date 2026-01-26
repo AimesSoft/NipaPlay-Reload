@@ -6,6 +6,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
 import 'video_progress_bar.dart';
+import 'control_shadow.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
@@ -107,11 +108,11 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => onHover(true),
         onExit: (_) => onHover(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => onPressed(true),
-          onTapUp: (_) => onPressed(false),
-          onTapCancel: () => onPressed(false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => onPressed(true),
+              onTapUp: (_) => onPressed(false),
+              onTapCancel: () => onPressed(false),
           onTap: onTap,
           child: BounceHoverScale(
             isHovered: isHovered,
@@ -119,7 +120,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 200),
               opacity: isHovered ? 1.0 : 0.6,
-              child: iconWidget,
+              child: ControlShadow(
+                borderRadius: BorderRadius.circular(999),
+                child: iconWidget,
+              ),
             ),
           ),
         ),
@@ -390,19 +394,22 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       const Spacer(),
                                       
                                       // 时间显示
-                                      DefaultTextStyle(
-                                        style: const TextStyle(
-                                          color: Colors.white60,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.normal,
-                                          height: 1.0,
-                                          textBaseline: TextBaseline.alphabetic,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                        child: Text(
-                                          '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
-                                          softWrap: false,
-                                          overflow: TextOverflow.visible,
+                                      ControlShadow(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: DefaultTextStyle(
+                                          style: const TextStyle(
+                                            color: Colors.white60,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.normal,
+                                            height: 1.0,
+                                            textBaseline: TextBaseline.alphabetic,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          child: Text(
+                                            '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
+                                            softWrap: false,
+                                            overflow: TextOverflow.visible,
+                                          ),
                                         ),
                                       ),
                                       

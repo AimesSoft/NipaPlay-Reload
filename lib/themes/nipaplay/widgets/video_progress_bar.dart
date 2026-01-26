@@ -8,6 +8,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'control_shadow.dart';
 
 class VideoProgressBar extends StatefulWidget {
   final VideoPlayerState videoState;
@@ -305,12 +306,17 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                     clipBehavior: Clip.none,
                     children: [
                       // 背景轨道
-                      Container(
-                        height: trackHeight,
-                        margin: EdgeInsets.symmetric(vertical: verticalMargin),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: verticalMargin),
+                        child: ControlShadow(
                           borderRadius: BorderRadius.circular(trackHeight / 2),
+                          child: Container(
+                            height: trackHeight,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(trackHeight / 2),
+                            ),
+                          ),
                         ),
                       ),
                       // 进度轨道
@@ -369,12 +375,17 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                     clipBehavior: Clip.none,
                     children: [
                       // 背景轨道
-                      Container(
-                        height: trackHeight,
-                        margin: EdgeInsets.symmetric(vertical: verticalMargin),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: verticalMargin),
+                        child: ControlShadow(
                           borderRadius: BorderRadius.circular(trackHeight / 2),
+                          child: Container(
+                            height: trackHeight,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(trackHeight / 2),
+                            ),
+                          ),
                         ),
                       ),
                       // 进度轨道
