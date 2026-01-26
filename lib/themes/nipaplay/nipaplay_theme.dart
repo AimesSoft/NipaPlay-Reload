@@ -34,6 +34,8 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: context.themeNotifier.themeMode,
+      themeAnimationDuration: const Duration(milliseconds: 420),
+      themeAnimationCurve: Curves.easeInOutCubic,
       localizationsDelegates: fluent.FluentLocalizations.localizationsDelegates,
       supportedLocales: fluent.FluentLocalizations.supportedLocales,
       navigatorKey: context.navigatorKey,

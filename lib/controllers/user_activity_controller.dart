@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -36,6 +37,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
 
   /// 加载用户活动数据
   Future<void> loadUserActivity() async {
+    final logService = DebugLogService();
     if (!DandanplayService.isLoggedIn) {
       if (mounted) {
         setState(() {
@@ -43,6 +45,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
           error = '未登录弹弹play账号';
         });
       }
+      logService.addWarning('用户活动加载失败: 未登录弹弹play账号', tag: 'UserActivity');
       return;
     }
 
@@ -52,6 +55,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
         error = null;
       });
     }
+    logService.addLog('开始加载用户活动记录', level: 'INFO', tag: 'UserActivity');
 
     try {
       // 并行获取所有数据
@@ -157,7 +161,14 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
           isLoading = false;
         });
       }
-    } catch (e) {
+      logService.addLog(
+        '用户活动加载完成: 观看${recentWatchedList.length}，收藏${favoriteList.length}，评分${ratedList.length}',
+        level: 'INFO',
+        tag: 'UserActivity',
+      );
+    } catch (e, stackTrace) {
+      logService.addError('用户活动加载失败: $e', tag: 'UserActivity');
+      logService.addError('用户活动异常堆栈: $stackTrace', tag: 'UserActivity');
       if (mounted) {
         setState(() {
           error = '加载失败: ${e.toString()}';

@@ -143,8 +143,18 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
               const SizedBox(width: 8),
               if (!isPhone &&
                   (_randomRecommendations.isNotEmpty ||
-                      _isLoadingRandomRecommendations))
+                      _isLoadingRandomRecommendations)) ...[
                 _buildScrollButtons(scrollController, 162),
+                const SizedBox(width: 12),
+                _buildScrollButton(
+                  icon: Icons.refresh_rounded,
+                  onTap: _isLoadingRandomRecommendations
+                      ? null
+                      : () => _loadRandomRecommendations(forceRefresh: true),
+                  message: '刷新',
+                  enabled: !_isLoadingRandomRecommendations,
+                ),
+              ],
             ],
           ),
         ),

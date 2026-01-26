@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -158,152 +157,146 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: SettingsCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Ionicons.create_outline,
-                          color: colorScheme.onSurface, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        '自定义服务器',
-                        style: TextStyle(
-                          color: colorScheme.onSurface,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '输入兼容弹弹play接口规范的弹幕服务器地址，例如 https://example.com',
-                    style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _customServerController,
-                    decoration: InputDecoration(
-                      hintText: 'https://your-danmaku-server.com',
-                      hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
-                      filled: true,
-                      fillColor: colorScheme.onSurface.withOpacity(0.1),
-                      border: const OutlineInputBorder(
-                        borderSide: BorderSide.none,
-                        borderRadius: BorderRadius.all(Radius.circular(8)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Ionicons.create_outline,
+                        color: colorScheme.onSurface, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      '自定义服务器',
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    style: TextStyle(color: colorScheme.onSurface),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: BlurButton(
-                      icon: _isSavingCustom ? null : Ionicons.checkmark_outline,
-                      text: _isSavingCustom ? '保存中...' : '使用该服务器',
-                      onTap: _isSavingCustom ? () {} : _saveCustomServer,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      fontSize: 13,
-                      iconSize: 16,
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '输入兼容弹弹play接口规范的弹幕服务器地址，例如 https://example.com',
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _customServerController,
+                  decoration: InputDecoration(
+                    hintText: 'https://your-danmaku-server.com',
+                    hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
+                    filled: true,
+                    fillColor: colorScheme.onSurface.withOpacity(0.1),
+                    border: const OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.all(Radius.circular(8)),
                     ),
                   ),
-                ],
-              ),
+                  style: TextStyle(color: colorScheme.onSurface),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: BlurButton(
+                    icon: _isSavingCustom ? null : Ionicons.checkmark_outline,
+                    text: _isSavingCustom ? '保存中...' : '使用该服务器',
+                    onTap: _isSavingCustom ? () {} : _saveCustomServer,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    fontSize: 13,
+                    iconSize: 16,
+                  ),
+                ),
+              ],
             ),
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
           // 显示当前服务器信息
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: SettingsCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Ionicons.information_circle_outline,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Ionicons.information_circle_outline,
+                      color: colorScheme.onSurface,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '当前服务器信息',
+                      style: TextStyle(
                         color: colorScheme.onSurface,
-                        size: 18,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '当前服务器信息',
-                        style: TextStyle(
-                          color: colorScheme.onSurface,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '服务器: ${_getServerDisplayName(_currentServer)}',
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.7),
-                      fontSize: 13,
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '服务器: ${_getServerDisplayName(_currentServer)}',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    fontSize: 13,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'URL: $_currentServer',
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.6),
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'URL: $_currentServer',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                    fontFamily: 'monospace',
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           // 服务器说明
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: SettingsCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Ionicons.help_circle_outline,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Ionicons.help_circle_outline,
+                      color: colorScheme.onSurface,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '服务器说明',
+                      style: TextStyle(
                         color: colorScheme.onSurface,
-                        size: 18,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '服务器说明',
-                        style: TextStyle(
-                          color: colorScheme.onSurface,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '• 主服务器：api.dandanplay.net（官方服务器，推荐使用）',
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.7),
-                      fontSize: 12,
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '• 主服务器：api.dandanplay.net（官方服务器，推荐使用）',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    fontSize: 12,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '• 备用服务器：139.217.235.62:16001（镜像服务器，主服务器无法访问时使用）',
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '• 备用服务器：139.217.235.62:16001（镜像服务器，主服务器无法访问时使用）',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    fontSize: 12,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],

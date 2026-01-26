@@ -1,12 +1,10 @@
 // about_page.dart
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
@@ -139,25 +137,24 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ),
             const SizedBox(height: 8),
-            Container(
+            SizedBox(
               width: double.infinity,
-              constraints: const BoxConstraints(maxHeight: 280),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.onSurface.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: colorScheme.onSurface.withOpacity(0.12)),
-              ),
-              child: SingleChildScrollView(
-                child: AdaptiveMarkdown(
-                  data: notes,
-                  brightness: Theme.of(context).brightness,
-                  baseTextStyle:
-                      TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
-                  linkColor: Colors.lightBlueAccent,
-                  onTapLink: (href) {
-                    _launchURL(href);
-                  },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SingleChildScrollView(
+                    child: AdaptiveMarkdown(
+                      data: notes,
+                      brightness: Theme.of(context).brightness,
+                      baseTextStyle:
+                          TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
+                      linkColor: Colors.lightBlueAccent,
+                      onTapLink: (href) {
+                        _launchURL(href);
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -246,7 +243,7 @@ class _AboutPageState extends State<AboutPage> {
     BlurDialog.show(
       context: context,
       title: '赞赏码',
-      contentWidget: Container(
+      contentWidget: ConstrainedBox(
         constraints: const BoxConstraints(
           maxWidth: 300,
           maxHeight: 400,
@@ -257,12 +254,8 @@ class _AboutPageState extends State<AboutPage> {
             'others/赞赏码.jpg',
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
-              return Container(
+              return Padding(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colorScheme.onSurface.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -325,8 +318,8 @@ class _AboutPageState extends State<AboutPage> {
           ),
           const SizedBox(height: 24),
           // 版本信息，点击跳转到releases页面（如果有更新）
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -353,29 +346,14 @@ class _AboutPageState extends State<AboutPage> {
                   Positioned(
                     top: -8,
                     right: -8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
+                    child: const Text(
+                      'NEW',
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
                         color: Colors.red,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Text(
-                        'NEW',
-                        locale: Locale("zh-Hans", "zh"),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
@@ -633,31 +611,23 @@ class _AboutPageState extends State<AboutPage> {
   Widget _buildAcknowledgementBadge(BuildContext context, String name) {
     final colorScheme = Theme.of(context).colorScheme;
     final accentColor = Colors.amberAccent[100] ?? Colors.amberAccent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.onSurface.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colorScheme.onSurface.withOpacity(0.12)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Ionicons.ribbon_outline,
-            size: 16,
-            color: accentColor,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            name,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Ionicons.ribbon_outline,
+          size: 16,
+          color: accentColor,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          name,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+      ],
     );
   }
 
@@ -668,24 +638,22 @@ class _AboutPageState extends State<AboutPage> {
     final colorScheme = Theme.of(context).colorScheme;
     return SizedBox(
       width: double.infinity,
-      child: SettingsCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (title != null) ...[
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onSurface,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 12),
-            ],
-            ...children,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (title != null) ...[
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 12),
           ],
-        ),
+          ...children,
+        ],
       ),
     );
   }

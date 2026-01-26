@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 
 /// Fluent UI版本的用户活动记录组件
@@ -44,13 +45,13 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
               ),
             ),
             const Spacer(),
-            fluent.IconButton(
-              onPressed: isLoading ? null : loadUserActivity,
-              icon: fluent.Icon(
-                Ionicons.refresh_outline,
-                color: isLoading ? textSecondary.withOpacity(0.5) : textSecondary,
-                size: 20,
-              ),
+            BlurButton(
+              icon: Ionicons.refresh_outline,
+              text: '刷新',
+              onTap: () {
+                if (isLoading) return;
+                loadUserActivity();
+              },
             ),
           ],
         ),
@@ -173,12 +174,10 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          fluent.Button(
-            onPressed: loadUserActivity,
-            child: const Text(
-              '重试',
-              locale: Locale("zh-Hans", "zh"),
-            ),
+          BlurButton(
+            icon: Ionicons.refresh_outline,
+            text: '重试',
+            onTap: loadUserActivity,
           ),
         ],
       ),

@@ -16,6 +16,9 @@ String backgroundImageUrl2 = (globals.isDesktop || globals.isTablet)
     ? 'assets/images/main_image2.png'
     : 'assets/images/main_image_mobile2.png';
 
+const _themeTransitionDuration = Duration(milliseconds: 420);
+const _themeTransitionCurve = Curves.easeInOutCubic;
+
 class BackgroundWithBlur extends StatelessWidget {
   final Widget child;
 
@@ -34,7 +37,9 @@ class BackgroundWithBlur extends StatelessWidget {
             // 自定义颜色遮罩
             if (themeNotifier.useCustomThemeColor)
               Positioned.fill(
-                child: Container(
+                child: AnimatedContainer(
+                  duration: _themeTransitionDuration,
+                  curve: _themeTransitionCurve,
                   color: themeNotifier.customOverlayColor,
                 ),
               ),
@@ -85,7 +90,9 @@ class BackgroundWithBlur extends StatelessWidget {
       return Stack(
         children: [
           Positioned.fill(
-            child: Container(
+            child: AnimatedContainer(
+              duration: _themeTransitionDuration,
+              curve: _themeTransitionCurve,
               color: baseColor,
             ),
           ),
@@ -100,7 +107,9 @@ class BackgroundWithBlur extends StatelessWidget {
     }
 
     if (globals.backgroundImageMode == '关闭') {
-      return Container(
+      return AnimatedContainer(
+        duration: _themeTransitionDuration,
+        curve: _themeTransitionCurve,
         color: baseColor,
       );
     } else if (globals.backgroundImageMode == '看板娘') {

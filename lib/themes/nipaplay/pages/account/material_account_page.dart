@@ -1,14 +1,11 @@
-import 'dart:ui';
-
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/pages/account/account_controller.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Fluent UI版本的账号页面
@@ -22,6 +19,7 @@ class MaterialAccountPage extends StatefulWidget {
 class _MaterialAccountPageState extends State<MaterialAccountPage>
     with AccountPageController {
   static const Color _accentColor = Color(0xFFFF2E55);
+  static const double _buttonHoverScale = 1.06;
 
   @override
   void showMessage(String message) {
@@ -47,41 +45,6 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
       accentColor: fluent.AccentColor.swatch({'normal': _accentColor}),
       micaBackgroundColor: Colors.transparent,
       scaffoldBackgroundColor: Colors.transparent,
-    );
-  }
-
-  fluent.ButtonStyle _buttonStyle({bool isCompact = false}) {
-    final padding = isCompact
-        ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
-        : const EdgeInsets.symmetric(horizontal: 16, vertical: 8);
-    return fluent.ButtonStyle(
-      padding: fluent.WidgetStatePropertyAll(padding),
-    );
-  }
-
-  fluent.ButtonStyle _destructiveButtonStyle(
-    BuildContext context, {
-    bool isCompact = false,
-  }) {
-    final theme = fluent.FluentTheme.of(context);
-    final padding = isCompact
-        ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
-        : const EdgeInsets.symmetric(horizontal: 16, vertical: 8);
-    return fluent.ButtonStyle(
-      padding: fluent.WidgetStatePropertyAll(padding),
-      backgroundColor: fluent.WidgetStateProperty.resolveWith((states) {
-        if (states.contains(fluent.WidgetState.disabled)) {
-          return theme.resources.controlFillColorDisabled;
-        }
-        if (states.contains(fluent.WidgetState.pressed)) {
-          return fluent.Colors.errorPrimaryColor.withOpacity(0.9);
-        }
-        if (states.contains(fluent.WidgetState.hovered)) {
-          return fluent.Colors.errorPrimaryColor.withOpacity(0.85);
-        }
-        return fluent.Colors.errorPrimaryColor;
-      }),
-      foregroundColor: const fluent.WidgetStatePropertyAll(fluent.Colors.white),
     );
   }
 
@@ -194,23 +157,25 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 ),
               ),
               actions: [
-                fluent.Button(
-                  onPressed:
-                      isLoading ? null : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('取消'),
+                BlurButton(
+                  icon: fluent.FluentIcons.cancel,
+                  text: '取消',
+                  flatStyle: true,
+                  hoverScale: _buttonHoverScale,
+                  onTap: () {
+                    if (isLoading) return;
+                    Navigator.of(dialogContext).pop();
+                  },
                 ),
-                fluent.FilledButton(
-                  onPressed: isLoading ? null : handleSubmit,
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: fluent.ProgressRing(
-                            strokeWidth: 2,
-                            activeColor: fluent.Colors.white,
-                          ),
-                        )
-                      : Text(actionText),
+                BlurButton(
+                  icon: fluent.FluentIcons.check_mark,
+                  text: isLoading ? '$actionText中...' : actionText,
+                  flatStyle: true,
+                  hoverScale: _buttonHoverScale,
+                  onTap: () {
+                    if (isLoading) return;
+                    handleSubmit();
+                  },
                 ),
               ],
             );
@@ -327,7 +292,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         return fluent.FluentTheme(
           data: _buildFluentThemeData(context),
           child: Builder(
-            builder: (fluentContext) {
+            builder: (_) {
               return fluent.ContentDialog(
                 title: const Text('账号注销确认'),
                 content: Column(
@@ -360,13 +325,19 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                   ],
                 ),
                 actions: [
-                  fluent.Button(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('取消'),
+                  BlurButton(
+                    icon: fluent.FluentIcons.cancel,
+                    text: '取消',
+                    flatStyle: true,
+                    hoverScale: _buttonHoverScale,
+                    onTap: () => Navigator.of(dialogContext).pop(),
                   ),
-                  fluent.FilledButton(
-                    style: _destructiveButtonStyle(fluentContext),
-                    onPressed: () async {
+                  BlurButton(
+                    icon: fluent.FluentIcons.delete,
+                    text: '继续注销',
+                    flatStyle: true,
+                    hoverScale: _buttonHoverScale,
+                    onTap: () async {
                       Navigator.of(dialogContext).pop();
                       try {
                         // Web和其他平台分别处理URL打开
@@ -389,7 +360,6 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                         showMessage('打开注销页面失败: $e');
                       }
                     },
-                    child: const Text('继续注销'),
                   ),
                 ],
               );
@@ -402,8 +372,6 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   Widget build(BuildContext context) {
-    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
-    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
     final colorScheme = Theme.of(context).colorScheme;
 
     return fluent.FluentTheme(
@@ -416,7 +384,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: _buildDandanplayPage(blurValue),
+                child: _buildDandanplayPage(),
               ),
               Container(
                 width: 1,
@@ -424,7 +392,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 color: colorScheme.onSurface.withOpacity(0.12),
               ),
               Expanded(
-                child: _buildBangumiPage(blurValue),
+                child: _buildBangumiPage(),
               ),
             ],
           ),
@@ -433,211 +401,156 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     );
   }
 
-  Widget _buildLoggedInView(double blurValue) {
+  Widget _buildLoggedInView() {
     final colorScheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: colorScheme.onSurface.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: colorScheme.onSurface.withOpacity(0.3),
-              width: 0.5,
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          // 头像
+          avatarUrl != null
+              ? ClipOval(
+                  child: Image.network(
+                    avatarUrl!,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return fluent.Icon(
+                        fluent.FluentIcons.contact,
+                        size: 48,
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                      );
+                    },
+                  ),
+                )
+              : fluent.Icon(
+                  fluent.FluentIcons.contact,
+                  size: 48,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+          const SizedBox(width: 16),
+          // 用户信息
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  username,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '已登录',
+                  locale:const Locale("zh-Hans","zh"),
+style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Row(
-            children: [
-              // 头像
-              avatarUrl != null
-                  ? ClipOval(
-                      child: Image.network(
-                        avatarUrl!,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return fluent.Icon(
-                            fluent.FluentIcons.contact,
-                            size: 48,
-                            color: colorScheme.onSurface.withOpacity(0.6),
-                          );
-                        },
-                      ),
-                    )
-                  : fluent.Icon(
-                      fluent.FluentIcons.contact,
-                      size: 48,
-                      color: colorScheme.onSurface.withOpacity(0.6),
-                    ),
-              const SizedBox(width: 16),
-              // 用户信息
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      username,
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '已登录',
-                      locale:const Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // 退出按钮
-              _buildActionButton(
-                '退出',
-                fluent.FluentIcons.sign_out,
-                performLogout,
-                isCompact: true,
-              ),
-              const SizedBox(width: 8),
-              // 账号注销按钮
-              _buildActionButton(
-                isLoading ? '处理中...' : '注销账号',
-                fluent.FluentIcons.delete,
-                isLoading ? null : startDeleteAccount,
-                isDestructive: true,
-                isCompact: true,
-                showProgress: isLoading,
-              ),
-            ],
+          // 退出按钮
+          _buildActionButton(
+            '退出',
+            fluent.FluentIcons.sign_out,
+            performLogout,
           ),
-        ),
+          const SizedBox(width: 8),
+          // 账号注销按钮
+          _buildActionButton(
+            isLoading ? '处理中...' : '注销账号',
+            fluent.FluentIcons.delete,
+            isLoading ? null : startDeleteAccount,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildLoggedOutView(double blurValue) {
+  Widget _buildLoggedOutView() {
     final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        fluent.ListTile(
-          title: Text(
-            "登录弹弹play账号",
-            locale:const Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
+    final subtitleStyle = TextStyle(
+      color: colorScheme.onSurface.withOpacity(0.7),
+      fontSize: 12,
+    );
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          BlurButton(
+            icon: fluent.FluentIcons.signin,
+            text: "登录弹弹play账号",
+            onTap: showLoginDialog,
           ),
-          subtitle: Text(
+          const SizedBox(height: 6),
+          Text(
             "登录后可以同步观看记录和个人设置",
             locale:const Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+style: subtitleStyle,
           ),
-          trailing: fluent.Icon(
-            fluent.FluentIcons.signin,
-            color: colorScheme.onSurface,
+          const SizedBox(height: 16),
+          BlurButton(
+            icon: fluent.FluentIcons.add_friend,
+            text: "注册弹弹play账号",
+            onTap: showRegisterDialog,
           ),
-          onPressed: showLoginDialog,
-        ),
-        fluent.Divider(
-          style: fluent.DividerThemeData(
-            thickness: 1,
-            horizontalMargin: EdgeInsets.zero,
-            verticalMargin: EdgeInsets.zero,
-            decoration: BoxDecoration(
-              color: colorScheme.onSurface.withOpacity(0.12),
-            ),
-          ),
-        ),
-        fluent.ListTile(
-          title: Text(
-            "注册弹弹play账号",
-            locale:const Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text(
+          const SizedBox(height: 6),
+          Text(
             "创建新的弹弹play账号，享受完整功能",
             locale:const Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+style: subtitleStyle,
           ),
-          trailing: fluent.Icon(
-            fluent.FluentIcons.add_friend,
-            color: colorScheme.onSurface,
-          ),
-          onPressed: showRegisterDialog,
-        ),
-        fluent.Divider(
-          style: fluent.DividerThemeData(
-            thickness: 1,
-            horizontalMargin: EdgeInsets.zero,
-            verticalMargin: EdgeInsets.zero,
-            decoration: BoxDecoration(
-              color: colorScheme.onSurface.withOpacity(0.12),
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildBangumiSyncSection(double blurValue) {
+  Widget _buildBangumiSyncSection() {
     final colorScheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: colorScheme.onSurface.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: colorScheme.onSurface.withOpacity(0.3),
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  fluent.Icon(
-                    fluent.FluentIcons.sync,
-                    color: colorScheme.onSurface,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Bangumi观看记录同步',
-                    locale: const Locale("zh-Hans", "zh"),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                ],
+              fluent.Icon(
+                fluent.FluentIcons.sync,
+                color: colorScheme.onSurface,
+                size: 24,
               ),
-              const SizedBox(height: 16),
-              
-              if (isBangumiLoggedIn) ...[
-                // 已登录状态
-                _buildBangumiLoggedInView(),
-              ] else ...[
-                // 未登录状态
-                _buildBangumiLoggedOutView(),
-              ],
+              const SizedBox(width: 8),
+              Text(
+                'Bangumi观看记录同步',
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 16),
+
+          if (isBangumiLoggedIn) ...[
+            // 已登录状态
+            _buildBangumiLoggedInView(),
+          ] else ...[
+            // 未登录状态
+            _buildBangumiLoggedOutView(),
+          ],
+        ],
       ),
     );
   }
@@ -760,7 +673,6 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
               '删除Bangumi令牌',
               fluent.FluentIcons.sign_out,
               clearBangumiToken,
-              isDestructive: true,
             ),
           ],
         ),
@@ -783,57 +695,48 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
         ),
         const SizedBox(height: 8),
 
-        // 可点击的URL链接
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              '需要在',
-              locale: const Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 12,
-              ),
-            ),
-            fluent.HyperlinkButton(
-              onPressed: () async {
-                const url = 'https://next.bgm.tv/demo/access-token';
-                try {
-                  if (kIsWeb) {
-                    // Web平台暂时显示URL让用户手动复制
-                    showMessage('请复制以下链接到浏览器中打开：$url');
-                  } else {
-                    // 移动端和桌面端使用url_launcher
-                    final uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
-                    } else {
-                      showMessage('无法打开链接');
-                    }
-                  }
-                } catch (e) {
-                  showMessage('打开链接失败：$e');
+        Text(
+          '需要在以下页面创建访问令牌',
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.7),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 8),
+        BlurButton(
+          icon: fluent.FluentIcons.link,
+          text: '打开访问令牌页面',
+          onTap: () async {
+            const url = 'https://next.bgm.tv/demo/access-token';
+            try {
+              if (kIsWeb) {
+                // Web平台暂时显示URL让用户手动复制
+                showMessage('请复制以下链接到浏览器中打开：$url');
+              } else {
+                // 移动端和桌面端使用url_launcher
+                final uri = Uri.parse(url);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                } else {
+                  showMessage('无法打开链接');
                 }
-              },
-              child: const Text(
-                'https://next.bgm.tv/demo/access-token',
-                locale: Locale("zh-Hans", "zh"),
-              ),
-            ),
-            Text(
-              '创建访问令牌',
-              locale: const Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 12,
-              ),
-            ),
-          ],
+              }
+            } catch (e) {
+              showMessage('打开链接失败：$e');
+            }
+          },
+        ),
+        const SizedBox(height: 4),
+        SelectableText(
+          'https://next.bgm.tv/demo/access-token',
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.7),
+            fontSize: 12,
+          ),
         ),
         const SizedBox(height: 16),
         
@@ -845,26 +748,14 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
         const SizedBox(height: 16),
 
         // 保存按钮
-        SizedBox(
-          width: double.infinity,
-          child: fluent.FilledButton(
-            onPressed: isLoading ? null : saveBangumiToken,
-            style: _buttonStyle(),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const fluent.Icon(
-                  fluent.FluentIcons.save,
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
-                const Text(
-                  '保存令牌',
-                  locale: Locale("zh-Hans", "zh"),
-                ),
-              ],
-            ),
-          ),
+        BlurButton(
+          icon: fluent.FluentIcons.save,
+          text: '保存令牌',
+          expandHorizontally: true,
+          onTap: () {
+            if (isLoading) return;
+            saveBangumiToken();
+          },
         ),
       ],
     );
@@ -873,60 +764,19 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
   Widget _buildActionButton(
     String text,
     IconData icon,
-    VoidCallback? onPressed, {
-    bool isDestructive = false,
-    bool isCompact = false,
-    bool showProgress = false,
-  }) {
-    return Builder(
-      builder: (context) {
-        final theme = fluent.FluentTheme.of(context);
-        final progressColor = isDestructive
-            ? fluent.Colors.white
-            : theme.resources.textFillColorPrimary;
-        final content = Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showProgress)
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: fluent.ProgressRing(
-                  strokeWidth: 2,
-                  activeColor: progressColor,
-                ),
-              )
-            else
-              fluent.Icon(
-                icon,
-                size: 16,
-              ),
-            const SizedBox(width: 6),
-            Text(
-              text,
-              locale: const Locale("zh-Hans", "zh"),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        );
-
-        if (isDestructive) {
-          return fluent.FilledButton(
-            onPressed: onPressed,
-            style: _destructiveButtonStyle(context, isCompact: isCompact),
-            child: content,
-          );
-        }
-
-        return fluent.Button(
-          onPressed: onPressed,
-          style: _buttonStyle(isCompact: isCompact),
-          child: content,
-        );
-      },
+    VoidCallback? onPressed,
+  ) {
+    final isDisabled = onPressed == null;
+    return IgnorePointer(
+      ignoring: isDisabled,
+      child: BlurButton(
+        icon: icon,
+        text: text,
+        onTap: () {
+          if (isDisabled) return;
+          onPressed?.call();
+        },
+      ),
     );
   }
 
@@ -946,44 +796,29 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
   }
 
   // 构建弹弹play页面内容
-  Widget _buildDandanplayPage(double blurValue) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _buildDandanplayPage() {
     return Column(
       children: [
         if (isLoggedIn) ...[
-          _buildLoggedInView(blurValue),
+          _buildLoggedInView(),
           const SizedBox(height: 16),
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.onSurface.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: colorScheme.onSurface.withOpacity(0.3),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: MaterialUserActivity(key: ValueKey(username)),
-                ),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: MaterialUserActivity(key: ValueKey(username)),
             ),
           ),
         ] else ...[
-          _buildLoggedOutView(blurValue),
+          _buildLoggedOutView(),
         ],
       ],
     );
   }
 
   // 构建Bangumi页面内容
-  Widget _buildBangumiPage(double blurValue) {
+  Widget _buildBangumiPage() {
     return SingleChildScrollView(
-      child: _buildBangumiSyncSection(blurValue),
+      child: _buildBangumiSyncSection(),
     );
   }
 }

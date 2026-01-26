@@ -1260,6 +1260,9 @@ class MainPageState extends State<MainPage>
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final bool isMac = !kIsWeb && Platform.isMacOS;
+    final double topPadding = isMac ? 10 : 4;
+    final double rightPadding = isMac ? 20 : 10;
     return Stack(
       children: [
         // 使用 Selector 只监听需要的状态
@@ -1308,8 +1311,8 @@ class MainPageState extends State<MainPage>
               return const SizedBox.shrink();
             }
             return Positioned(
-              top: 0,
-              right: 0,
+              top: topPadding,
+              right: rightPadding,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1345,11 +1348,16 @@ class MainPageState extends State<MainPage>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  WindowControlButtons(
-                    isMaximized: isMaximized,
-                    onMinimize: _minimizeWindow,
-                    onMaximizeRestore: _toggleWindowSize,
-                    onClose: _closeWindow,
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
+                      child: WindowControlButtons(
+                        isMaximized: isMaximized,
+                        onMinimize: _minimizeWindow,
+                        onMaximizeRestore: _toggleWindowSize,
+                        onClose: _closeWindow,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1401,7 +1409,7 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
     final Color iconColor = _isHovered
         ? const Color(0xFFFF2E55)
         : (isDarkMode ? Colors.white : Colors.black87);
-    final icon = isDarkMode ? Ionicons.moon_outline : Ionicons.sunny_outline;
+    final icon = isDarkMode ? Icons.nightlight_rounded : Icons.light_mode_rounded;
     final tooltip = isDarkMode ? '切换到日间模式' : '切换到夜间模式';
 
     return Tooltip(
@@ -1417,10 +1425,30 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
           child: AnimatedScale(
             scale: scale,
             duration: const Duration(milliseconds: 120),
-            child: Icon(
-              icon,
-              size: 20,
-              color: iconColor,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 320),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale:
+                        Tween<double>(begin: 0.85, end: 1.0).animate(animation),
+                    child: RotationTransition(
+                      turns: Tween<double>(begin: 0.9, end: 1.0)
+                          .animate(animation),
+                      child: child,
+                    ),
+                  ),
+                );
+              },
+              child: Icon(
+                icon,
+                key: ValueKey<bool>(isDarkMode),
+                size: 22,
+                color: iconColor,
+              ),
             ),
           ),
         ),
@@ -1464,8 +1492,8 @@ class _SettingsEntryButtonState extends State<_SettingsEntryButton> {
             scale: scale,
             duration: const Duration(milliseconds: 120),
             child: Icon(
-              Ionicons.settings_outline,
-              size: 20,
+              Icons.settings_rounded,
+              size: 22,
               color: iconColor,
             ),
           ),

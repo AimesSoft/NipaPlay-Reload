@@ -142,22 +142,28 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
           children: [
             // 背景图 - 使用高效缓存组件
             if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
-              CachedNetworkImageWidget(
-                key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
-                imageUrl: item.backgroundImageUrl!,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                blurIfLowRes: true,
-                lowResBlurSigma: 40,
-                lowResMinScale: 0.8,
-                errorBuilder: (context, error) => Container(
-                  color: Colors.white10,
-                  child: const Center(
-                    child: Icon(Icons.broken_image, color: Colors.white30),
+              Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(color: Colors.white),
+                  CachedNetworkImageWidget(
+                    key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
+                    imageUrl: item.backgroundImageUrl!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
+                    blurIfLowRes: true,
+                    lowResBlurSigma: 40,
+                    lowResMinScale: 0.8,
+                    errorBuilder: (context, error) => Container(
+                      color: Colors.white10,
+                      child: const Center(
+                        child: Icon(Icons.broken_image, color: Colors.white30),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               )
             else
               Container(
@@ -368,22 +374,28 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
           children: [
             // 背景图 - 使用高效缓存组件
             if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
-              CachedNetworkImageWidget(
-                key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
-                imageUrl: item.backgroundImageUrl!,
-                fit: BoxFit.cover,
-                delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                width: double.infinity,
-                height: double.infinity,
-                blurIfLowRes: true,
-                lowResBlurSigma: 40,
-                lowResMinScale: 0.8,
-                errorBuilder: (context, error) => Container(
-                  color: Colors.white10,
-                  child: const Center(
-                    child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
+              Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(color: Colors.white),
+                  CachedNetworkImageWidget(
+                    key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
+                    imageUrl: item.backgroundImageUrl!,
+                    fit: BoxFit.cover,
+                    delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
+                    width: double.infinity,
+                    height: double.infinity,
+                    blurIfLowRes: true,
+                    lowResBlurSigma: 40,
+                    lowResMinScale: 0.8,
+                    errorBuilder: (context, error) => Container(
+                      color: Colors.white10,
+                      child: const Center(
+                        child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               )
             else
               Container(

@@ -15,6 +15,10 @@ class BlurButton extends StatefulWidget {
   final double? width;
   final bool expandHorizontally;
   final BorderRadius? borderRadius;
+  final bool flatStyle;
+  final double hoverScale;
+  final Color? foregroundColor;
+  final Color? hoverForegroundColor;
 
   const BlurButton({
     super.key,
@@ -28,6 +32,10 @@ class BlurButton extends StatefulWidget {
     this.width,
     this.expandHorizontally = false,
     this.borderRadius,
+    this.flatStyle = false,
+    this.hoverScale = 1.0,
+    this.foregroundColor,
+    this.hoverForegroundColor,
   });
 
   @override
@@ -41,6 +49,16 @@ class _BlurButtonState extends State<BlurButton> {
   Widget build(BuildContext context) {
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
     final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
+    final theme = Theme.of(context);
+    final borderRadius = widget.borderRadius ?? BorderRadius.circular(8);
+    final baseForegroundColor = widget.foregroundColor ??
+        (widget.flatStyle
+            ? theme.colorScheme.onSurface
+            : Colors.white.withOpacity(0.8));
+    final hoverForegroundColor = widget.hoverForegroundColor ??
+        (widget.flatStyle ? const Color(0xFFFF2E55) : Colors.white);
+    final effectiveForegroundColor =
+        _isHovered ? hoverForegroundColor : baseForegroundColor;
 
     Widget buttonContent = MouseRegion(
       onEnter: (_) {
@@ -53,82 +71,10 @@ class _BlurButtonState extends State<BlurButton> {
           _isHovered = false;
         });
       },
-      child: ClipRRect(
-        borderRadius: widget.borderRadius ?? BorderRadius.circular(8),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-            padding: widget.padding,
-            width: widget.width,
-            decoration: BoxDecoration(
-              color: _isHovered
-                  ? Colors.white.withOpacity(0.4)
-                  : Colors.white.withOpacity(0.18),
-              borderRadius: widget.borderRadius ?? BorderRadius.circular(8),
-              border: Border.all(
-                color: _isHovered
-                    ? Colors.white.withOpacity(0.7)
-                    : Colors.white.withOpacity(0.25),
-                width: _isHovered ? 1.0 : 0.5,
-              ),
-              boxShadow: _isHovered
-                  ? [
-                      BoxShadow(
-                        color: Colors.white.withOpacity(0.25),
-                        blurRadius: 10,
-                        spreadRadius: 1,
-                      )
-                    ]
-                  : [],
-            ),
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 300),
-              style: TextStyle(
-                color: _isHovered
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.8),
-                fontSize: widget.fontSize,
-                fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
-              ),
-              child: Material(
-                type: MaterialType.transparency,
-                child: InkWell(
-                  onTap: widget.onTap,
-                  borderRadius:
-                      widget.borderRadius ?? BorderRadius.circular(8),
-                  child: Row(
-                    mainAxisSize: widget.expandHorizontally
-                        ? MainAxisSize.max
-                        : MainAxisSize.min,
-                    mainAxisAlignment: widget.expandHorizontally
-                        ? MainAxisAlignment.center
-                        : MainAxisAlignment.start,
-                    children: [
-                      if (widget.icon != null) ...[
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          child: Icon(
-                            widget.icon,
-                            size: _isHovered
-                                ? widget.iconSize + 1
-                                : widget.iconSize,
-                            color: _isHovered
-                                ? Colors.white
-                                : Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      Text(widget.text),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+      child: _buildButtonBody(
+        blurValue: blurValue,
+        borderRadius: borderRadius,
+        effectiveForegroundColor: effectiveForegroundColor,
       ),
     );
 
@@ -145,4 +91,95 @@ class _BlurButtonState extends State<BlurButton> {
       child: buttonContent,
     );
   }
-} 
+
+  Widget _buildButtonBody({
+    required double blurValue,
+    required BorderRadius borderRadius,
+    required Color effectiveForegroundColor,
+  }) {
+    final row = Row(
+      mainAxisSize:
+          widget.expandHorizontally ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisAlignment: widget.expandHorizontally
+          ? MainAxisAlignment.center
+          : MainAxisAlignment.start,
+      children: [
+        if (widget.icon != null) ...[
+          Icon(
+            widget.icon,
+            size: _isHovered ? widget.iconSize + 1 : widget.iconSize,
+            color: effectiveForegroundColor,
+          ),
+          const SizedBox(width: 4),
+        ],
+        Text(widget.text),
+      ],
+    );
+
+    final content = AnimatedDefaultTextStyle(
+      duration: const Duration(milliseconds: 200),
+      style: TextStyle(
+        color: effectiveForegroundColor,
+        fontSize: widget.fontSize,
+        fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: borderRadius,
+          child: Padding(
+            padding: widget.padding,
+            child: AnimatedScale(
+              scale: _isHovered ? widget.hoverScale : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: row,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (widget.flatStyle) {
+      if (widget.width == null) {
+        return content;
+      }
+      return SizedBox(width: widget.width, child: content);
+    }
+
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          width: widget.width,
+          decoration: BoxDecoration(
+            color: _isHovered
+                ? Colors.white.withOpacity(0.4)
+                : Colors.white.withOpacity(0.18),
+            borderRadius: borderRadius,
+            border: Border.all(
+              color: _isHovered
+                  ? Colors.white.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.25),
+              width: _isHovered ? 1.0 : 0.5,
+            ),
+            boxShadow: _isHovered
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.25),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    )
+                  ]
+                : [],
+          ),
+          child: content,
+        ),
+      ),
+    );
+  }
+}

@@ -5,7 +5,6 @@ import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
@@ -208,106 +207,96 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
 
   Widget _buildWebServerSection() {
     final colorScheme = Theme.of(context).colorScheme;
-    return SettingsCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Ionicons.globe_outline,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Ionicons.globe_outline,
+              color: colorScheme.onSurface,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '远程访问',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
                 color: colorScheme.onSurface,
-                size: 24,
               ),
-              const SizedBox(width: 12),
+            ),
+            const Spacer(),
+            if (_webServerEnabled)
               Text(
-                '远程访问',
+                '已启用',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
+                  color: colorScheme.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const Spacer(),
-              if (_webServerEnabled)
-                Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: colorScheme.onSurface.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colorScheme.onSurface, width: 1),
-                      ),
-                      child: Text(
-                        '已启用',
-                        style: TextStyle(
-                          color: colorScheme.onSurface,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
+          ],
+        ),
 
-              Text(
-                '启用后可供其他 NipaPlay 客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.7),
-                  fontSize: 14,
-                ),
-              ),
+        const SizedBox(height: 16),
 
-              const SizedBox(height: 16),
-              
-              // 启用/禁用开关
-              _buildSettingItem(
-                icon: Icons.power_settings_new,
-                title: '启用远程访问服务',
-                subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库',
-                trailing: FluentSettingsSwitch(
-                  value: _webServerEnabled,
-                  onChanged: _toggleWebServer,
-                ),
-              ),
+        Text(
+          '启用后可供其他 NipaPlay 客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.7),
+            fontSize: 14,
+          ),
+        ),
 
-              // 自动开启
-              _buildSettingItem(
-                icon: Icons.auto_awesome,
-                title: '软件打开自动开启远程访问',
-                subtitle: '启动 NipaPlay 时自动开启远程访问服务（不影响手动开关）',
-                trailing: FluentSettingsSwitch(
-                  value: _autoStartEnabled,
-                  onChanged: _toggleAutoStart,
-                ),
-              ),
-              
-              if (_webServerEnabled) ...[
-                const SizedBox(height: 8),
-                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                const SizedBox(height: 8),
-                
-                // 访问地址
-                _buildAccessAddressSection(),
-                
-                const SizedBox(height: 8),
-                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                const SizedBox(height: 8),
-                
-                // 端口设置
-                _buildSettingItem(
-                  icon: Icons.settings_ethernet,
-                  title: '端口设置',
-                  subtitle: '当前端口: $_currentPort',
-                  trailing: IconButton(
-                    icon: Icon(Icons.edit, color: colorScheme.onSurface),
-                    onPressed: _showPortDialog,
-                  ),
-                ),
-              ],
+        const SizedBox(height: 16),
+        
+        // 启用/禁用开关
+        _buildSettingItem(
+          icon: Icons.power_settings_new,
+          title: '启用远程访问服务',
+          subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库',
+          trailing: FluentSettingsSwitch(
+            value: _webServerEnabled,
+            onChanged: _toggleWebServer,
+          ),
+        ),
+
+        // 自动开启
+        _buildSettingItem(
+          icon: Icons.auto_awesome,
+          title: '软件打开自动开启远程访问',
+          subtitle: '启动 NipaPlay 时自动开启远程访问服务（不影响手动开关）',
+          trailing: FluentSettingsSwitch(
+            value: _autoStartEnabled,
+            onChanged: _toggleAutoStart,
+          ),
+        ),
+        
+        if (_webServerEnabled) ...[
+          const SizedBox(height: 8),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          const SizedBox(height: 8),
+          
+          // 访问地址
+          _buildAccessAddressSection(),
+          
+          const SizedBox(height: 8),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          const SizedBox(height: 8),
+          
+          // 端口设置
+          _buildSettingItem(
+            icon: Icons.settings_ethernet,
+            title: '端口设置',
+            subtitle: '当前端口: $_currentPort',
+            trailing: IconButton(
+              icon: Icon(Icons.edit, color: colorScheme.onSurface),
+              onPressed: _showPortDialog,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
   
@@ -394,9 +383,9 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     final type = RemoteAccessAddressUtils.classifyUrl(url);
     final label = RemoteAccessAddressUtils.labelZh(type);
     final (iconData, tagColor) = switch (type) {
-      RemoteAccessAddressType.local => (Icons.computer, Colors.blueAccent),
-      RemoteAccessAddressType.lan => (Icons.lan, Colors.greenAccent),
-      RemoteAccessAddressType.wan => (Icons.public, Colors.orangeAccent),
+      RemoteAccessAddressType.local => (Icons.computer, colorScheme.primary),
+      RemoteAccessAddressType.lan => (Icons.lan, colorScheme.secondary),
+      RemoteAccessAddressType.wan => (Icons.public, colorScheme.tertiary),
       RemoteAccessAddressType.unknown => (Icons.link, colorScheme.onSurface.withOpacity(0.38)),
     };
 
@@ -404,26 +393,14 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         children: [
-          Icon(
-            iconData,
-            color: colorScheme.onSurface.withOpacity(0.38),
-            size: 14,
-          ),
+          Icon(iconData, color: tagColor, size: 14),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: tagColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: tagColor.withOpacity(0.35)),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
+          Text(
+            label,
+            style: TextStyle(
+              color: tagColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(width: 8),
@@ -432,7 +409,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               url,
               style: TextStyle(
                 fontFamily: 'monospace',
-                color: colorScheme.onSurface.withOpacity(0.7)
+                color: colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
           ),
