@@ -1,10 +1,13 @@
 import 'dart:ui';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+
+const Color _fluentAccentColor = Color(0xFFFF2E55);
 
 /// 设置项的类型枚举
 enum SettingsItemType {
@@ -405,14 +408,22 @@ class SettingsItem extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Slider(
-                value: sliderValue ?? 0,
-                min: sliderMin ?? 0,
-                max: sliderMax ?? 1,
-                divisions: sliderDivisions,
-                onChanged: enabled ? onSliderChanged : null,
-                activeColor: colorScheme.primary,
-                inactiveColor: colorScheme.onSurface.withOpacity(0.38),
+              child: fluent.FluentTheme(
+                data: fluent.FluentThemeData(
+                  brightness: Theme.of(context).brightness,
+                  accentColor: fluent.AccentColor.swatch({
+                    'normal': _fluentAccentColor,
+                    'default': _fluentAccentColor,
+                  }),
+                ),
+                child: fluent.Slider(
+                  value: sliderValue ?? 0,
+                  min: sliderMin ?? 0,
+                  max: sliderMax ?? 1,
+                  divisions: sliderDivisions,
+                  onChanged: enabled ? onSliderChanged : null,
+                  label: sliderLabelFormatter?.call(sliderValue ?? 0),
+                ),
               ),
             ),
           ],

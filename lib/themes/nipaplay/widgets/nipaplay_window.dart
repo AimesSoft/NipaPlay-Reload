@@ -296,11 +296,13 @@ class NipaplayWindow {
     required BuildContext context,
     required Widget child,
     bool enableAnimation = true,
+    bool barrierDismissible = true,
+    Color barrierColor = Colors.transparent,
   }) {
     return showGeneralDialog<T>(
       context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.transparent,
+      barrierDismissible: barrierDismissible,
+      barrierColor: barrierColor,
       barrierLabel: 'Close',
       transitionDuration: const Duration(milliseconds: 250),
       pageBuilder: (context, animation, secondaryAnimation) => child,

@@ -104,6 +104,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   // 添加外观设置
   AppearanceSettingsProvider? _appearanceSettings;
   bool _isEpisodeListReversed = false;
+  bool _isSortButtonHovered = false;
 
   // 弹弹play观看状态相关
   /// 存储弹弹play的观看状态
@@ -1403,6 +1404,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final episodes = anime.episodeList!;
     final displayEpisodes =
         _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
+    final Color sortButtonColor =
+        _isSortButtonHovered ? const Color(0xFFFF2E55) : secondaryTextColor;
 
     return Column(
       children: [
@@ -1419,26 +1422,52 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
               ),
               const Spacer(),
-              TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _isEpisodeListReversed = !_isEpisodeListReversed;
-                  });
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: secondaryTextColor,
-                  backgroundColor: textColor.withOpacity(0.08),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                onEnter: (_) => setState(() => _isSortButtonHovered = true),
+                onExit: (_) => setState(() => _isSortButtonHovered = false),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isEpisodeListReversed = !_isEpisodeListReversed;
+                    });
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedScale(
+                    scale: _isSortButtonHovered ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 180),
+                      style: TextStyle(
+                        color: sortButtonColor,
+                        fontSize: 12,
+                      ),
+                      child: IconTheme(
+                        data: IconThemeData(
+                          color: sortButtonColor,
+                          size: 16,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Ionicons.swap_vertical_outline),
+                              const SizedBox(width: 4),
+                              Text(
+                                _isEpisodeListReversed ? '倒序' : '正序',
+                                locale: const Locale('zh-Hans', 'zh'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                icon: const Icon(Ionicons.swap_vertical_outline, size: 16),
-                label: Text(
-                  _isEpisodeListReversed ? '倒序' : '正序',
-                  locale: const Locale('zh-Hans', 'zh'),
-                  style: const TextStyle(fontSize: 12),
                 ),
               ),
             ],

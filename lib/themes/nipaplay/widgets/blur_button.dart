@@ -97,6 +97,16 @@ class _BlurButtonState extends State<BlurButton> {
     required BorderRadius borderRadius,
     required Color effectiveForegroundColor,
   }) {
+    final text = AnimatedDefaultTextStyle(
+      duration: const Duration(milliseconds: 200),
+      style: TextStyle(
+        color: effectiveForegroundColor,
+        fontSize: widget.fontSize,
+        fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
+      ),
+      child: Text(widget.text),
+    );
+
     final row = Row(
       mainAxisSize:
           widget.expandHorizontally ? MainAxisSize.max : MainAxisSize.min,
@@ -112,32 +122,24 @@ class _BlurButtonState extends State<BlurButton> {
           ),
           const SizedBox(width: 4),
         ],
-        Text(widget.text),
+        text,
       ],
     );
 
-    final content = AnimatedDefaultTextStyle(
-      duration: const Duration(milliseconds: 200),
-      style: TextStyle(
-        color: effectiveForegroundColor,
-        fontSize: widget.fontSize,
-        fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: borderRadius,
-          hoverColor: Colors.transparent,
-          focusColor: Colors.transparent,
-          child: Padding(
-            padding: widget.padding,
-            child: AnimatedScale(
-              scale: _isHovered ? widget.hoverScale : 1.0,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              child: row,
-            ),
+    final content = Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: borderRadius,
+        hoverColor: Colors.transparent,
+        focusColor: Colors.transparent,
+        child: Padding(
+          padding: widget.padding,
+          child: AnimatedScale(
+            scale: _isHovered ? widget.hoverScale : 1.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: row,
           ),
         ),
       ),

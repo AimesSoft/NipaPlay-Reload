@@ -1,4 +1,5 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +36,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   static const String _selectedDecodersKey = 'selected_decoders';
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
+  static const Color _fluentAccentColor = Color(0xFFFF2E55);
 
   List<String> _availableDecoders = [];
   List<String> _selectedDecoders = [];
@@ -522,297 +524,27 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
-        // 弹幕转换简体中文开关
-        Consumer<SettingsProvider>(
-          builder: (context, settingsProvider, child) {
-            return SettingsItem.toggle(
-              title: "弹幕转换简体中文",
-              subtitle: "开启后，繁体中文弹幕将转换为简体中文显示",
-              icon: Ionicons.language_outline,
-              value: settingsProvider.danmakuConvertToSimplified,
-              onChanged: (bool value) {
-                settingsProvider.setDanmakuConvertToSimplified(value);
-                if (context.mounted) {
-                  BlurSnackBar.show(
-                      context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
-                }
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            return SettingsItem.toggle(
-              title: "防剧透模式",
-              subtitle: "开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕",
-              icon: Ionicons.shield_outline,
-              value: videoState.spoilerPreventionEnabled,
-              onChanged: (bool value) async {
-                await videoState.setSpoilerPreventionEnabled(value);
-                if (!context.mounted) return;
-                BlurSnackBar.show(
-                  context,
-                  value ? '已开启防剧透模式' : '已关闭防剧透模式',
-                );
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            return SettingsItem.toggle(
-              title: "使用自定义 AI Key",
-              subtitle: "开启后将使用你填写的 URL/Key（支持 OpenAI 兼容 / Gemini）",
-              icon: Ionicons.key_outline,
-              enabled: videoState.spoilerPreventionEnabled,
-              value: videoState.spoilerAiUseCustomKey,
-              onChanged: (bool value) async {
-                await videoState.setSpoilerAiUseCustomKey(value);
-                if (!context.mounted) return;
-                BlurSnackBar.show(
-                  context,
-                  value ? '已开启自定义 AI Key' : '已关闭自定义 AI Key',
-                );
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            return SettingsItem.toggle(
-              title: "调试：打印 AI 返回内容",
-              subtitle: "开启后会在日志里打印 AI 返回的原始文本与命中弹幕",
-              icon: Ionicons.information_circle_outline,
-              enabled: videoState.spoilerPreventionEnabled,
-              value: videoState.spoilerAiDebugPrintResponse,
-              onChanged: (bool value) async {
-                await videoState.setSpoilerAiDebugPrintResponse(value);
-                if (!context.mounted) return;
-                BlurSnackBar.show(
-                  context,
-                  value ? '已开启 AI 调试打印' : '已关闭 AI 调试打印',
-                );
-              },
-            );
-          },
-        ),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            if (!videoState.spoilerPreventionEnabled ||
-                !videoState.spoilerAiUseCustomKey) {
-              return const SizedBox.shrink();
-            }
-
-            final bool isGemini =
-                _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
-            final urlHint = isGemini
-                ? 'https://generativelanguage.googleapis.com/v1beta/models'
-                : 'https://api.openai.com/v1/chat/completions';
-            final modelHint =
-                isGemini ? 'gemini-1.5-flash' : 'gpt-5';
-
-            return Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: SettingsCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Ionicons.settings_outline,
-                            color: colorScheme.onSurface, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          '防剧透 AI 设置',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      isGemini
-                          ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
-                          : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
-                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Text(
-                          '接口格式',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        BlurDropdown<SpoilerAiApiFormat>(
-                          dropdownKey: _spoilerAiApiFormatDropdownKey,
-                          items: [
-                            DropdownMenuItemData(
-                              title: 'OpenAI 兼容',
-                              value: SpoilerAiApiFormat.openai,
-                              isSelected: _spoilerAiApiFormatDraft ==
-                                  SpoilerAiApiFormat.openai,
-                            ),
-                            DropdownMenuItemData(
-                              title: 'Gemini',
-                              value: SpoilerAiApiFormat.gemini,
-                              isSelected: _spoilerAiApiFormatDraft ==
-                                  SpoilerAiApiFormat.gemini,
-                            ),
-                          ],
-                          onItemSelected: (format) {
-                            setState(() {
-                              _spoilerAiApiFormatDraft = format;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _spoilerAiUrlController,
-                      keyboardType: TextInputType.url,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: InputDecoration(
-                        labelText: '接口 URL',
-                        labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                        hintText: urlHint,
-                        hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
-                        filled: true,
-                        fillColor: colorScheme.onSurface.withOpacity(0.1),
-                        border: const OutlineInputBorder(
-                          borderSide: BorderSide.none,
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                        ),
-                      ),
-                      style: TextStyle(color: colorScheme.onSurface),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _spoilerAiModelController,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: InputDecoration(
-                        labelText: '模型',
-                        labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                        hintText: modelHint,
-                        hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
-                        filled: true,
-                        fillColor: colorScheme.onSurface.withOpacity(0.1),
-                        border: const OutlineInputBorder(
-                          borderSide: BorderSide.none,
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                        ),
-                      ),
-                      style: TextStyle(color: colorScheme.onSurface),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _spoilerAiApiKeyController,
-                      obscureText: true,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: InputDecoration(
-                        labelText: 'API Key',
-                        labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                        hintText: videoState.spoilerAiHasApiKey
-                            ? '已保存，留空表示不修改'
-                            : '请输入你的 API Key',
-                        hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
-                        filled: true,
-                        fillColor: colorScheme.onSurface.withOpacity(0.1),
-                        border: const OutlineInputBorder(
-                          borderSide: BorderSide.none,
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                        ),
-                      ),
-                      style: TextStyle(color: colorScheme.onSurface),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
-                      style:
-                          TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 13),
-                    ),
-                    Slider(
-                      min: 0.0,
-                      max: 2.0,
-                      divisions: 40,
-                      value: _spoilerAiTemperatureDraft.clamp(0.0, 2.0),
-                      onChanged: (value) {
-                        setState(() {
-                          _spoilerAiTemperatureDraft = value;
-                        });
-                      },
-                      activeColor: colorScheme.primary,
-                      inactiveColor: colorScheme.onSurface.withOpacity(0.24),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: BlurButton(
-                        icon: _isSavingSpoilerAiSettings
-                            ? null
-                            : Ionicons.checkmark_outline,
-                        text: _isSavingSpoilerAiSettings ? '保存中...' : '保存配置',
-                        onTap: _isSavingSpoilerAiSettings
-                            ? () {}
-                            : () => _saveSpoilerAiSettings(videoState),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
-                        fontSize: 13,
-                        iconSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<SettingsProvider>(
-          builder: (context, settingsProvider, child) {
-            return SettingsItem.toggle(
-              title: "哈希匹配失败自动匹配弹幕",
-              subtitle: "哈希匹配失败时，默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单",
-              icon: Ionicons.search_outline,
-              value: settingsProvider.autoMatchDanmakuFirstSearchResultOnHashFail,
-              onChanged: (bool value) {
-                settingsProvider
-                    .setAutoMatchDanmakuFirstSearchResultOnHashFail(value);
-                if (context.mounted) {
+        if (globals.isPhone) ...[
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
+                title: '后台自动暂停',
+                subtitle: '切到后台或锁屏时自动暂停播放（仅移动端）',
+                icon: Ionicons.pause_circle_outline,
+                value: videoState.pauseOnBackground,
+                onChanged: (bool value) async {
+                  await videoState.setPauseOnBackground(value);
+                  if (!context.mounted) return;
                   BlurSnackBar.show(
                     context,
-                    value ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
+                    value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
                   );
-                }
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+                },
+              );
+            },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -882,28 +614,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         ),
 
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        if (globals.isPhone) ...[
-          Consumer<VideoPlayerState>(
-            builder: (context, videoState, child) {
-              return SettingsItem.toggle(
-                title: '后台自动暂停',
-                subtitle: '切到后台或锁屏时自动暂停播放（仅移动端）',
-                icon: Ionicons.pause_circle_outline,
-                value: videoState.pauseOnBackground,
-                onChanged: (bool value) async {
-                  await videoState.setPauseOnBackground(value);
-                  if (!context.mounted) return;
-                  BlurSnackBar.show(
-                    context,
-                    value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
-                  );
-                },
-              );
-            },
-          ),
-          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-        ],
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -1052,6 +762,335 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 final String message =
                     value == CrtProfile.off ? '已关闭 CRT' : 'CRT 已切换为$option';
                 BlurSnackBar.show(context, message);
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        // 弹幕转换简体中文开关
+        Consumer<SettingsProvider>(
+          builder: (context, settingsProvider, child) {
+            return SettingsItem.toggle(
+              title: "弹幕转换简体中文",
+              subtitle: "开启后，繁体中文弹幕将转换为简体中文显示",
+              icon: Ionicons.language_outline,
+              value: settingsProvider.danmakuConvertToSimplified,
+              onChanged: (bool value) {
+                settingsProvider.setDanmakuConvertToSimplified(value);
+                if (context.mounted) {
+                  BlurSnackBar.show(
+                      context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
+                }
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final widgets = <Widget>[
+              SettingsItem.toggle(
+                title: "防剧透模式",
+                subtitle: "开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕",
+                icon: Ionicons.shield_outline,
+                value: videoState.spoilerPreventionEnabled,
+                onChanged: (bool value) async {
+                  await videoState.setSpoilerPreventionEnabled(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启防剧透模式' : '已关闭防剧透模式',
+                  );
+                },
+              ),
+            ];
+
+            if (videoState.spoilerPreventionEnabled) {
+              widgets.add(
+                Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12),
+                  height: 1,
+                ),
+              );
+              widgets.add(
+                SettingsItem.toggle(
+                  title: "使用自定义 AI Key",
+                  subtitle: "开启后将使用你填写的 URL/Key（支持 OpenAI 兼容 / Gemini）",
+                  icon: Ionicons.key_outline,
+                  value: videoState.spoilerAiUseCustomKey,
+                  onChanged: (bool value) async {
+                    await videoState.setSpoilerAiUseCustomKey(value);
+                    if (!context.mounted) return;
+                    BlurSnackBar.show(
+                      context,
+                      value ? '已开启自定义 AI Key' : '已关闭自定义 AI Key',
+                    );
+                  },
+                ),
+              );
+              widgets.add(
+                Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12),
+                  height: 1,
+                ),
+              );
+              widgets.add(
+                SettingsItem.toggle(
+                  title: "调试：打印 AI 返回内容",
+                  subtitle: "开启后会在日志里打印 AI 返回的原始文本与命中弹幕",
+                  icon: Ionicons.information_circle_outline,
+                  value: videoState.spoilerAiDebugPrintResponse,
+                  onChanged: (bool value) async {
+                    await videoState.setSpoilerAiDebugPrintResponse(value);
+                    if (!context.mounted) return;
+                    BlurSnackBar.show(
+                      context,
+                      value ? '已开启 AI 调试打印' : '已关闭 AI 调试打印',
+                    );
+                  },
+                ),
+              );
+            }
+
+            if (videoState.spoilerPreventionEnabled &&
+                videoState.spoilerAiUseCustomKey) {
+              final bool isGemini =
+                  _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
+              final urlHint = isGemini
+                  ? 'https://generativelanguage.googleapis.com/v1beta/models'
+                  : 'https://api.openai.com/v1/chat/completions';
+              final modelHint =
+                  isGemini ? 'gemini-1.5-flash' : 'gpt-5';
+
+              widgets.add(
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 12.0,
+                  ),
+                  child: SettingsCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Ionicons.settings_outline,
+                                color: colorScheme.onSurface, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              '防剧透 AI 设置',
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          isGemini
+                              ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
+                              : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Text(
+                              '接口格式',
+                              style: TextStyle(
+                                color: colorScheme.onSurface.withOpacity(0.7),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            BlurDropdown<SpoilerAiApiFormat>(
+                              dropdownKey: _spoilerAiApiFormatDropdownKey,
+                              items: [
+                                DropdownMenuItemData(
+                                  title: 'OpenAI 兼容',
+                                  value: SpoilerAiApiFormat.openai,
+                                  isSelected: _spoilerAiApiFormatDraft ==
+                                      SpoilerAiApiFormat.openai,
+                                ),
+                                DropdownMenuItemData(
+                                  title: 'Gemini',
+                                  value: SpoilerAiApiFormat.gemini,
+                                  isSelected: _spoilerAiApiFormatDraft ==
+                                      SpoilerAiApiFormat.gemini,
+                                ),
+                              ],
+                              onItemSelected: (format) {
+                                setState(() {
+                                  _spoilerAiApiFormatDraft = format;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _spoilerAiUrlController,
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          decoration: InputDecoration(
+                            labelText: '接口 URL',
+                            labelStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                            hintText: urlHint,
+                            hintStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.38),
+                            ),
+                            filled: true,
+                            fillColor: colorScheme.onSurface.withOpacity(0.1),
+                            border: const OutlineInputBorder(
+                              borderSide: BorderSide.none,
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8)),
+                            ),
+                          ),
+                          style: TextStyle(color: colorScheme.onSurface),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _spoilerAiModelController,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          decoration: InputDecoration(
+                            labelText: '模型',
+                            labelStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                            hintText: modelHint,
+                            hintStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.38),
+                            ),
+                            filled: true,
+                            fillColor: colorScheme.onSurface.withOpacity(0.1),
+                            border: const OutlineInputBorder(
+                              borderSide: BorderSide.none,
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8)),
+                            ),
+                          ),
+                          style: TextStyle(color: colorScheme.onSurface),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _spoilerAiApiKeyController,
+                          obscureText: true,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          decoration: InputDecoration(
+                            labelText: 'API Key',
+                            labelStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                            hintText: videoState.spoilerAiHasApiKey
+                                ? '已保存，留空表示不修改'
+                                : '请输入你的 API Key',
+                            hintStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.38),
+                            ),
+                            filled: true,
+                            fillColor: colorScheme.onSurface.withOpacity(0.1),
+                            border: const OutlineInputBorder(
+                              borderSide: BorderSide.none,
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8)),
+                            ),
+                          ),
+                          style: TextStyle(color: colorScheme.onSurface),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                            fontSize: 13,
+                          ),
+                        ),
+                        fluent.FluentTheme(
+                          data: fluent.FluentThemeData(
+                            brightness: Theme.of(context).brightness,
+                            accentColor: fluent.AccentColor.swatch({
+                              'normal': _fluentAccentColor,
+                              'default': _fluentAccentColor,
+                            }),
+                          ),
+                          child: fluent.Slider(
+                            min: 0.0,
+                            max: 2.0,
+                            divisions: 40,
+                            value:
+                                _spoilerAiTemperatureDraft.clamp(0.0, 2.0),
+                            onChanged: (value) {
+                              setState(() {
+                                _spoilerAiTemperatureDraft = value;
+                              });
+                            },
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: BlurButton(
+                            icon: _isSavingSpoilerAiSettings
+                                ? null
+                                : Ionicons.checkmark_outline,
+                            text: _isSavingSpoilerAiSettings ? '保存中...' : '保存配置',
+                            onTap: _isSavingSpoilerAiSettings
+                                ? () {}
+                                : () => _saveSpoilerAiSettings(videoState),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            fontSize: 13,
+                            iconSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: widgets,
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<SettingsProvider>(
+          builder: (context, settingsProvider, child) {
+            return SettingsItem.toggle(
+              title: "哈希匹配失败自动匹配弹幕",
+              subtitle: "哈希匹配失败时，默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单",
+              icon: Ionicons.search_outline,
+              value: settingsProvider.autoMatchDanmakuFirstSearchResultOnHashFail,
+              onChanged: (bool value) {
+                settingsProvider
+                    .setAutoMatchDanmakuFirstSearchResultOnHashFail(value);
+                if (context.mounted) {
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
+                  );
+                }
               },
             );
           },

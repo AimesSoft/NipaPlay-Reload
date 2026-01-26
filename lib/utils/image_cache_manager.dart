@@ -74,6 +74,15 @@ class ImageCacheManager {
     return '${url}_w${width ?? 0}_h${height ?? 0}';
   }
 
+  ui.Image? getCachedImage(String url, {int? targetWidth, int? targetHeight}) {
+    final cacheKey = _getCacheKeyWithDimensions(url, targetWidth, targetHeight);
+    final cachedImage = _cache[cacheKey];
+    if (cachedImage != null) {
+      _lastAccessed[cacheKey] = DateTime.now();
+    }
+    return cachedImage;
+  }
+
   Future<ui.Image> loadImage(String url, {int? targetWidth, int? targetHeight}) async {
     if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();

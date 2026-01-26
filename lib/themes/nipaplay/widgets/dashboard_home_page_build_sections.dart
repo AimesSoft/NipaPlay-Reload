@@ -219,6 +219,13 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       scrollController: _getTodayAnimesScrollController(),
       onItemTap: (item) => _showAnimeDetail(item as BangumiAnime),
       isLoading: _isLoadingTodayAnimes,
+      actionWidgets: [
+        _buildScrollButton(
+          icon: Icons.search_rounded,
+          onTap: _showTagSearchModal,
+          message: '搜索',
+        ),
+      ],
     );
   }
 
@@ -232,8 +239,19 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     required ScrollController scrollController,
     required Function(dynamic) onItemTap,
     bool isLoading = false,
+    List<Widget> actionWidgets = const [],
   }) {
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
+    final headerActions = <Widget>[];
+    if (!isPhone && (items.isNotEmpty || isLoading)) {
+      headerActions.add(_buildScrollButtons(scrollController, 162));
+    }
+    if (!isPhone && actionWidgets.isNotEmpty) {
+      if (headerActions.isNotEmpty) {
+        headerActions.add(const SizedBox(width: 12));
+      }
+      headerActions.addAll(actionWidgets);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -253,8 +271,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
                 ),
               ),
               const SizedBox(width: 8),
-              if (!isPhone && (items.isNotEmpty || isLoading))
-                _buildScrollButtons(scrollController, 162), 
+              ...headerActions,
             ],
           ),
         ),

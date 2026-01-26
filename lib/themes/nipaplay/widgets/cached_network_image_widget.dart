@@ -101,8 +101,18 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       return;
     }
 
-    // 混合模式：立即拉取基础图 + 异步加载高清图
-    _loadBasicImage();
+    final cachedImage = ImageCacheManager.instance.getCachedImage(
+      widget.imageUrl,
+      targetWidth: widget.memCacheWidth,
+      targetHeight: widget.memCacheHeight,
+    );
+
+    if (cachedImage != null) {
+      _basicImage = cachedImage;
+    } else {
+      // 混合模式：立即拉取基础图 + 异步加载高清图
+      _loadBasicImage();
+    }
     
     // 异步加载高清图片
     if (widget.shouldCompress) {
