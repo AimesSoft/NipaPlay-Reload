@@ -65,12 +65,12 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: ControlTextShadow(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Flexible(
+                      child: ControlTextShadow(
                         child: Text(
                           displayTitle,
                           style: const TextStyle(
@@ -82,25 +82,25 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (episodeTitle != null &&
-                          episodeTitle != displayTitle) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: MouseRegion(
-                            onEnter: (_) {
-                              setState(() => _isEpisodeHovered = true);
-                            },
-                            onExit: (_) {
-                              setState(() => _isEpisodeHovered = false);
-                            },
-                            child: AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 200),
-                              style: TextStyle(
-                                color: _isEpisodeHovered
-                                    ? Colors.white
-                                    : Colors.white70,
-                                fontSize: 14,
-                              ),
+                    ),
+                    if (episodeTitle != null &&
+                        episodeTitle != displayTitle) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: MouseRegion(
+                          onEnter: (_) {
+                            setState(() => _isEpisodeHovered = true);
+                          },
+                          onExit: (_) {
+                            setState(() => _isEpisodeHovered = false);
+                          },
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 200),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                            child: ControlTextShadow(
                               child: Text(
                                 episodeTitle,
                                 maxLines: 1,
@@ -109,9 +109,9 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                             ),
                           ),
                         ),
-                      ],
+                      ),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
