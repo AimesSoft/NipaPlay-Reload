@@ -28,6 +28,12 @@
   # 或
   yay -S nipaplay-reload-bin
   ```
+
+- Gentoo Linux (x86_64) :
+  ```bash
+  ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
+  ```
+  
 - 其他发行版：从 [Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载对应构建包并按常规方式安装/运行。
 
 ## Android
