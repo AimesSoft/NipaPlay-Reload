@@ -308,87 +308,12 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
     required String subtitle,
     Widget? trailing,
   }) {
-    final theme = fluent.FluentTheme.of(context);
-    final textPrimary = theme.resources.textFillColorPrimary;
-    final textSecondary = theme.resources.textFillColorSecondary;
-    final imageUrl = processImageUrl(item['imageUrl']);
-    const coverWidth = 48.0;
-    const coverHeight = 60.0;
-    const coverRadius = 4.0;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            color: theme.resources.cardBackgroundFillColorDefault,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.resources.cardStrokeColorDefault,
-              width: 0.5,
-            ),
-          ),
-          child: fluent.ListTile(
-            contentPadding: const EdgeInsets.all(12),
-            margin: EdgeInsets.zero,
-            onPressed: () => openAnimeDetail(item['animeId']),
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(coverRadius),
-              child: imageUrl != null
-                  ? Image.network(
-                      imageUrl,
-                      width: coverWidth,
-                      height: coverHeight,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: coverWidth,
-                          height: coverHeight,
-                          color: theme.resources.cardBackgroundFillColorSecondary,
-                          child: fluent.Icon(
-                            Ionicons.image_outline,
-                            color: textSecondary,
-                            size: 20,
-                          ),
-                        );
-                      },
-                    )
-                  : Container(
-                      width: coverWidth,
-                      height: coverHeight,
-                      color: theme.resources.cardBackgroundFillColorSecondary,
-                      child: fluent.Icon(
-                        Ionicons.image_outline,
-                        color: textSecondary,
-                        size: 20,
-                      ),
-                    ),
-            ),
-            title: Text(
-              item['animeTitle'] ?? '未知标题',
-              style: TextStyle(
-                color: textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              subtitle,
-              style: TextStyle(
-                color: textSecondary,
-                fontSize: 12,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: trailing,
-          ),
-        ),
-      ),
+    return _ActivityListItem(
+      item: item,
+      subtitle: subtitle,
+      trailing: trailing,
+      onPressed: () => openAnimeDetail(item['animeId']),
+      processImageUrl: processImageUrl,
     );
   }
 
@@ -413,6 +338,143 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActivityListItem extends StatefulWidget {
+  final Map<String, dynamic> item;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback onPressed;
+  final String? Function(String?) processImageUrl;
+
+  const _ActivityListItem({
+    required this.item,
+    required this.subtitle,
+    this.trailing,
+    required this.onPressed,
+    required this.processImageUrl,
+  });
+
+  @override
+  State<_ActivityListItem> createState() => _ActivityListItemState();
+}
+
+class _ActivityListItemState extends State<_ActivityListItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = fluent.FluentTheme.of(context);
+    final textPrimary = theme.resources.textFillColorPrimary;
+    final textSecondary = theme.resources.textFillColorSecondary;
+    final imageUrl = widget.processImageUrl(widget.item['imageUrl']);
+    const coverWidth = 48.0;
+    const coverHeight = 60.0;
+    const coverRadius = 4.0;
+    const accentColor = Color(0xFFFF2E55);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: theme.resources.cardBackgroundFillColorDefault,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _isHovered ? accentColor : theme.resources.cardStrokeColorDefault,
+            width: _isHovered ? 1.5 : 0.5,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: GestureDetector(
+              onTap: widget.onPressed,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    // Leading
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(coverRadius),
+                      child: imageUrl != null
+                          ? Image.network(
+                              imageUrl,
+                              width: coverWidth,
+                              height: coverHeight,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: coverWidth,
+                                  height: coverHeight,
+                                  color: theme.resources.cardBackgroundFillColorSecondary,
+                                  child: fluent.Icon(
+                                    Ionicons.image_outline,
+                                    color: textSecondary,
+                                    size: 20,
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              width: coverWidth,
+                              height: coverHeight,
+                              color: theme.resources.cardBackgroundFillColorSecondary,
+                              child: fluent.Icon(
+                                Ionicons.image_outline,
+                                color: textSecondary,
+                                size: 20,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Title and Subtitle
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.item['animeTitle'] ?? '未知标题',
+                            style: TextStyle(
+                              color: textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.subtitle,
+                            style: TextStyle(
+                              color: textSecondary,
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Trailing
+                    if (widget.trailing != null) ...[
+                      const SizedBox(width: 8),
+                      widget.trailing!,
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

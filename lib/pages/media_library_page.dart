@@ -642,9 +642,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     // 如果没有历史记录（理论上不应该，因为这里是媒体库），显示未观看
     if (allHistory.isEmpty) return '未观看';
 
-    // 统计已看完的集数
+    final watchedHistory = allHistory.where(_hasWatchProgress).toList();
+    if (watchedHistory.isEmpty) return '未观看';
+
+    // 统计已观看的集数
     final watchedIds = <int>{};
-    for (var h in allHistory) {
+    for (var h in watchedHistory) {
       if (h.episodeId != null && h.episodeId! > 0) {
         watchedIds.add(h.episodeId!);
       }
@@ -653,7 +656,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     int watchedCount = watchedIds.length;
     if (watchedCount == 0) {
       // 如果没有episodeId信息，按条目数估算（但不准确）
-      watchedCount = allHistory.length;
+      watchedCount = watchedHistory.length;
     }
 
     if (detail != null && detail.totalEpisodes != null && detail.totalEpisodes! > 0) {
@@ -664,6 +667,13 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     }
     
     return '已看 $watchedCount 集';
+  }
+
+  bool _hasWatchProgress(WatchHistoryItem item) {
+    if (item.watchProgress > 0.01) {
+      return true;
+    }
+    return item.lastPosition > 0;
   }
 
   Widget _buildLocalMediaLibrary() {

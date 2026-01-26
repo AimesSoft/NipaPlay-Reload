@@ -313,15 +313,18 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     
     if (allHistory.isEmpty) return '未观看';
 
+    final watchedHistory = allHistory.where(_hasWatchProgress).toList();
+    if (watchedHistory.isEmpty) return '未观看';
+
     final watchedIds = <int>{};
-    for (var h in allHistory) {
+    for (var h in watchedHistory) {
       if (h.episodeId != null && h.episodeId! > 0) {
         watchedIds.add(h.episodeId!);
       }
     }
     
     int watchedCount = watchedIds.length;
-    if (watchedCount == 0) watchedCount = allHistory.length;
+    if (watchedCount == 0) watchedCount = watchedHistory.length;
 
     if (totalEpisodes != null && totalEpisodes > 0) {
       if (watchedCount >= totalEpisodes) return '已看完';
@@ -329,6 +332,13 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     }
     
     return '已看 $watchedCount 集';
+  }
+
+  bool _hasWatchProgress(WatchHistoryItem item) {
+    if (item.watchProgress > 0.01) {
+      return true;
+    }
+    return item.lastPosition > 0;
   }
 
   Widget _buildMediaCard(dynamic item, Function(dynamic) onItemTap) {
