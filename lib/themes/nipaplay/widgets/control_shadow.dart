@@ -35,3 +35,28 @@ class ControlShadow extends StatelessWidget {
     );
   }
 }
+
+class ControlTextShadow extends StatelessWidget {
+  final Widget child;
+  final List<Shadow> shadows;
+
+  const ControlTextShadow({
+    super.key,
+    required this.child,
+    this.shadows = const [
+      Shadow(
+        color: Color(0x99000000),
+        blurRadius: 6,
+        offset: Offset(0, 2),
+      ),
+    ],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTextStyle.merge(
+      style: TextStyle(shadows: shadows),
+      child: child,
+    );
+  }
+}

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'control_shadow.dart';
 // import 'package:nipaplay/utils/globals.dart' as globals; // globals is not used in this snippet
 
 class AnimeInfoWidget extends StatefulWidget {
@@ -64,31 +63,9 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
               onExit: (_) {
                 widget.videoState.setControlsHovered(false);
               },
-              child: GlassmorphicContainer(
-                width: double.infinity,
-                height: 40,
-                borderRadius: 24,
-                blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-                alignment: Alignment.center,
-                border: 1,
-                linearGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFFFFFFFF).withOpacity(0.1),
-                    const Color(0xFFFFFFFF).withOpacity(0.1),
-                  ],
-                ),
-                borderGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFFffffff).withOpacity(0.5),
-                    const Color(0xFFFFFFFF).withOpacity(0.5),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: ControlTextShadow(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.start,
