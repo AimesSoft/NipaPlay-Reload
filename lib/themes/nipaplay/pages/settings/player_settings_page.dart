@@ -484,251 +484,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
-            return SettingsItem.button(
-              title: '截图保存位置',
-              subtitle: currentPath.isEmpty ? '默认：下载目录' : currentPath,
-              icon: Icons.camera_alt_outlined,
-              onTap: () async {
-                final selected = await FilePickerService().pickDirectory(
-                  initialDirectory: currentPath.isEmpty ? null : currentPath,
-                );
-                if (selected == null || selected.trim().isEmpty) return;
-                await videoState.setScreenshotSaveDirectory(selected);
-                if (!context.mounted) return;
-                BlurSnackBar.show(context, '截图保存位置已更新');
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            return SettingsItem.toggle(
-              title: '时间轴截图预览',
-              subtitle: '进度条悬停时显示缩略图（仅本地/WebDAV/SMB/共享媒体库生效）',
-              icon: Icons.photo_size_select_small_outlined,
-              value: videoState.timelinePreviewEnabled,
-              onChanged: (bool value) async {
-                await videoState.setTimelinePreviewEnabled(value);
-                if (!context.mounted) return;
-                BlurSnackBar.show(
-                  context,
-                  value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
-                );
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        if (globals.isDesktop) ...[
-          Consumer<VideoPlayerState>(
-            builder: (context, videoState, child) {
-              return SettingsItem.toggle(
-                title: '右侧悬浮设置菜单',
-                subtitle: '鼠标移到播放器最右侧显示设置菜单（桌面端）',
-                icon: Ionicons.settings_outline,
-                value: videoState.desktopHoverSettingsMenuEnabled,
-                onChanged: (bool value) async {
-                  await videoState.setDesktopHoverSettingsMenuEnabled(value);
-                  if (!context.mounted) return;
-                  BlurSnackBar.show(
-                    context,
-                    value ? '已开启右侧悬浮设置菜单' : '已关闭右侧悬浮设置菜单',
-                  );
-                },
-              );
-            },
-          ),
-          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-        ],
-
-        if (globals.isPhone) ...[
-          Consumer<VideoPlayerState>(
-            builder: (context, videoState, child) {
-              return SettingsItem.toggle(
-                title: '后台自动暂停',
-                subtitle: '切到后台或锁屏时自动暂停播放（仅移动端）',
-                icon: Ionicons.pause_circle_outline,
-                value: videoState.pauseOnBackground,
-                onChanged: (bool value) async {
-                  await videoState.setPauseOnBackground(value);
-                  if (!context.mounted) return;
-                  BlurSnackBar.show(
-                    context,
-                    value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
-                  );
-                },
-              );
-            },
-          ),
-          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-        ],
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            final Anime4KProfile currentProfile = videoState.anime4kProfile;
-            final bool supportsAnime4K = videoState.isAnime4KSupported;
-
-            final items = Anime4KProfile.values
-                .map(
-                  (profile) => DropdownMenuItemData(
-                    title: _getAnime4KProfileTitle(profile),
-                    value: profile,
-                    isSelected: profile == currentProfile,
-                    description: _getAnime4KProfileDescription(profile),
-                  ),
-                )
-                .toList();
-
-            if (_selectedKernelType != PlayerKernelType.mediaKit) {
-              return const SizedBox.shrink();
-            }
-
-            if (!supportsAnime4K) {
-              return const SizedBox.shrink();
-            }
-
-            return SettingsItem.dropdown(
-              title: 'Anime4K 超分辨率（实验性）',
-              subtitle: '使用 Anime4K GLSL 着色器提升二次元画面清晰度',
-              icon: Ionicons.color_wand_outline,
-              items: items,
-              onChanged: (dynamic value) async {
-                if (value is! Anime4KProfile) return;
-                await videoState.setAnime4KProfile(value);
-                if (!context.mounted) return;
-                final String option = _getAnime4KProfileTitle(value);
-                final String message = value == Anime4KProfile.off
-                    ? '已关闭 Anime4K'
-                    : 'Anime4K 已切换为$option';
-                BlurSnackBar.show(context, message);
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            final CrtProfile currentProfile = videoState.crtProfile;
-            final bool supportsCrt = videoState.isCrtSupported;
-
-            if (_selectedKernelType != PlayerKernelType.mediaKit) {
-              return const SizedBox.shrink();
-            }
-
-            if (!supportsCrt) {
-              return const SizedBox.shrink();
-            }
-
-            final items = CrtProfile.values
-                .map(
-                  (profile) => DropdownMenuItemData(
-                    title: _getCrtProfileTitle(profile),
-                    value: profile,
-                    isSelected: profile == currentProfile,
-                    description: _getCrtProfileDescription(profile),
-                  ),
-                )
-                .toList();
-
-            return SettingsItem.dropdown(
-              title: 'CRT 显示效果',
-              subtitle: '使用 CRT GLSL 着色器模拟显示器质感（可与 Anime4K 叠加）',
-              icon: Ionicons.tv_outline,
-              items: items,
-              onChanged: (dynamic value) async {
-                if (value is! CrtProfile) return;
-                await videoState.setCrtProfile(value);
-                if (!context.mounted) return;
-                final String option = _getCrtProfileTitle(value);
-                final String message =
-                    value == CrtProfile.off ? '已关闭 CRT' : 'CRT 已切换为$option';
-                BlurSnackBar.show(context, message);
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            final currentAction = videoState.playbackEndAction;
-            final items = PlaybackEndAction.values
-                .map(
-                  (action) => DropdownMenuItemData(
-                    title: action.label,
-                    value: action,
-                    isSelected: action == currentAction,
-                    description: action.description,
-                  ),
-                )
-                .toList();
-
-            return SettingsItem.dropdown(
-              title: '播放结束操作',
-              subtitle: '控制本集播放完毕后的默认行为',
-              icon: Ionicons.stop_circle_outline,
-              items: items,
-              onChanged: (dynamic value) async {
-                if (value is! PlaybackEndAction) return;
-                await videoState.setPlaybackEndAction(value);
-                if (!context.mounted) return;
-                BlurSnackBar.show(
-                  context,
-                  value == PlaybackEndAction.autoNext
-                      ? '播放结束后将自动进入下一话'
-                      : value == PlaybackEndAction.pause
-                          ? '播放结束后将停留在当前页面'
-                          : '播放结束后将返回上一页',
-                );
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            final bool isAutoNext =
-                videoState.playbackEndAction == PlaybackEndAction.autoNext;
-            final double minSeconds =
-                AutoNextEpisodeService.minCountdownSeconds.toDouble();
-            final double maxSeconds =
-                AutoNextEpisodeService.maxCountdownSeconds.toDouble();
-            final divisions = AutoNextEpisodeService.maxCountdownSeconds -
-                AutoNextEpisodeService.minCountdownSeconds;
-            return SettingsItem.slider(
-              title: '自动连播倒计时',
-              subtitle: isAutoNext
-                  ? '播放结束后等待多久再自动播放下一话'
-                  : '该设置在“播放结束操作”选择“自动播放下一话”时才会生效',
-              icon: Ionicons.timer_outline,
-              enabled: isAutoNext,
-              value: videoState.autoNextCountdownSeconds.toDouble(),
-              min: minSeconds,
-              max: maxSeconds,
-              divisions: divisions,
-              onChanged: (value) {
-                videoState.setAutoNextCountdownSeconds(value.round());
-              },
-              labelFormatter: (value) => '${value.round()} 秒',
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
         SettingsItem.dropdown(
           title: "弹幕渲染引擎",
           subtitle: "选择弹幕的渲染方式",
@@ -1052,6 +807,251 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                     value ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
                   );
                 }
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final currentAction = videoState.playbackEndAction;
+            final items = PlaybackEndAction.values
+                .map(
+                  (action) => DropdownMenuItemData(
+                    title: action.label,
+                    value: action,
+                    isSelected: action == currentAction,
+                    description: action.description,
+                  ),
+                )
+                .toList();
+
+            return SettingsItem.dropdown(
+              title: '播放结束操作',
+              subtitle: '控制本集播放完毕后的默认行为',
+              icon: Ionicons.stop_circle_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! PlaybackEndAction) return;
+                await videoState.setPlaybackEndAction(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value == PlaybackEndAction.autoNext
+                      ? '播放结束后将自动进入下一话'
+                      : value == PlaybackEndAction.pause
+                          ? '播放结束后将停留在当前页面'
+                          : '播放结束后将返回上一页',
+                );
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final bool isAutoNext =
+                videoState.playbackEndAction == PlaybackEndAction.autoNext;
+            final double minSeconds =
+                AutoNextEpisodeService.minCountdownSeconds.toDouble();
+            final double maxSeconds =
+                AutoNextEpisodeService.maxCountdownSeconds.toDouble();
+            final divisions = AutoNextEpisodeService.maxCountdownSeconds -
+                AutoNextEpisodeService.minCountdownSeconds;
+            return SettingsItem.slider(
+              title: '自动连播倒计时',
+              subtitle: isAutoNext
+                  ? '播放结束后等待多久再自动播放下一话'
+                  : '该设置在“播放结束操作”选择“自动播放下一话”时才会生效',
+              icon: Ionicons.timer_outline,
+              enabled: isAutoNext,
+              value: videoState.autoNextCountdownSeconds.toDouble(),
+              min: minSeconds,
+              max: maxSeconds,
+              divisions: divisions,
+              onChanged: (value) {
+                videoState.setAutoNextCountdownSeconds(value.round());
+              },
+              labelFormatter: (value) => '${value.round()} 秒',
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        if (globals.isPhone) ...[
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
+                title: '后台自动暂停',
+                subtitle: '切到后台或锁屏时自动暂停播放（仅移动端）',
+                icon: Ionicons.pause_circle_outline,
+                value: videoState.pauseOnBackground,
+                onChanged: (bool value) async {
+                  await videoState.setPauseOnBackground(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
+                  );
+                },
+              );
+            },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
+            return SettingsItem.button(
+              title: '截图保存位置',
+              subtitle: currentPath.isEmpty ? '默认：下载目录' : currentPath,
+              icon: Icons.camera_alt_outlined,
+              onTap: () async {
+                final selected = await FilePickerService().pickDirectory(
+                  initialDirectory: currentPath.isEmpty ? null : currentPath,
+                );
+                if (selected == null || selected.trim().isEmpty) return;
+                await videoState.setScreenshotSaveDirectory(selected);
+                if (!context.mounted) return;
+                BlurSnackBar.show(context, '截图保存位置已更新');
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return SettingsItem.toggle(
+              title: '时间轴截图预览',
+              subtitle: '进度条悬停时显示缩略图（仅本地/WebDAV/SMB/共享媒体库生效）',
+              icon: Icons.photo_size_select_small_outlined,
+              value: videoState.timelinePreviewEnabled,
+              onChanged: (bool value) async {
+                await videoState.setTimelinePreviewEnabled(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                );
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        if (globals.isDesktop) ...[
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
+                title: '右侧悬浮设置菜单',
+                subtitle: '鼠标移到播放器最右侧显示设置菜单（桌面端）',
+                icon: Ionicons.settings_outline,
+                value: videoState.desktopHoverSettingsMenuEnabled,
+                onChanged: (bool value) async {
+                  await videoState.setDesktopHoverSettingsMenuEnabled(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启右侧悬浮设置菜单' : '已关闭右侧悬浮设置菜单',
+                  );
+                },
+              );
+            },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final Anime4KProfile currentProfile = videoState.anime4kProfile;
+            final bool supportsAnime4K = videoState.isAnime4KSupported;
+
+            final items = Anime4KProfile.values
+                .map(
+                  (profile) => DropdownMenuItemData(
+                    title: _getAnime4KProfileTitle(profile),
+                    value: profile,
+                    isSelected: profile == currentProfile,
+                    description: _getAnime4KProfileDescription(profile),
+                  ),
+                )
+                .toList();
+
+            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+              return const SizedBox.shrink();
+            }
+
+            if (!supportsAnime4K) {
+              return const SizedBox.shrink();
+            }
+
+            return SettingsItem.dropdown(
+              title: 'Anime4K 超分辨率（实验性）',
+              subtitle: '使用 Anime4K GLSL 着色器提升二次元画面清晰度',
+              icon: Ionicons.color_wand_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! Anime4KProfile) return;
+                await videoState.setAnime4KProfile(value);
+                if (!context.mounted) return;
+                final String option = _getAnime4KProfileTitle(value);
+                final String message = value == Anime4KProfile.off
+                    ? '已关闭 Anime4K'
+                    : 'Anime4K 已切换为$option';
+                BlurSnackBar.show(context, message);
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final CrtProfile currentProfile = videoState.crtProfile;
+            final bool supportsCrt = videoState.isCrtSupported;
+
+            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+              return const SizedBox.shrink();
+            }
+
+            if (!supportsCrt) {
+              return const SizedBox.shrink();
+            }
+
+            final items = CrtProfile.values
+                .map(
+                  (profile) => DropdownMenuItemData(
+                    title: _getCrtProfileTitle(profile),
+                    value: profile,
+                    isSelected: profile == currentProfile,
+                    description: _getCrtProfileDescription(profile),
+                  ),
+                )
+                .toList();
+
+            return SettingsItem.dropdown(
+              title: 'CRT 显示效果',
+              subtitle: '使用 CRT GLSL 着色器模拟显示器质感（可与 Anime4K 叠加）',
+              icon: Ionicons.tv_outline,
+              items: items,
+              onChanged: (dynamic value) async {
+                if (value is! CrtProfile) return;
+                await videoState.setCrtProfile(value);
+                if (!context.mounted) return;
+                final String option = _getCrtProfileTitle(value);
+                final String message =
+                    value == CrtProfile.off ? '已关闭 CRT' : 'CRT 已切换为$option';
+                BlurSnackBar.show(context, message);
               },
             );
           },

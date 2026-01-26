@@ -18,6 +18,9 @@ class MaterialUserActivity extends StatefulWidget {
 
 class _MaterialUserActivityState extends State<MaterialUserActivity> 
     with SingleTickerProviderStateMixin, UserActivityController {
+  static const Color _ratingAccentColor = Color(0xFFFF2E55);
+  static const double _buttonHoverScale = 1.06;
+
   @override
   Widget build(BuildContext context) {
     final theme = fluent.FluentTheme.of(context);
@@ -48,6 +51,8 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             BlurButton(
               icon: Ionicons.refresh_outline,
               text: '刷新',
+              flatStyle: true,
+              hoverScale: _buttonHoverScale,
               onTap: () {
                 if (isLoading) return;
                 loadUserActivity();
@@ -177,6 +182,8 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
           BlurButton(
             icon: Ionicons.refresh_outline,
             text: '重试',
+            flatStyle: true,
+            hoverScale: _buttonHoverScale,
             onTap: loadUserActivity,
           ),
         ],
@@ -218,7 +225,6 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
 
   Widget _buildFavoritesList() {
     final theme = fluent.FluentTheme.of(context);
-    final textPrimary = theme.resources.textFillColorPrimary;
 
     if (favorites.isEmpty) {
       return _buildEmptyState('暂无收藏', Ionicons.heart_outline);
@@ -238,16 +244,16 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
               ? Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const fluent.Icon(
+                    fluent.Icon(
                       Ionicons.star,
-                      color: Colors.yellow,
+                      color: _ratingAccentColor,
                       size: 14,
                     ),
                     const SizedBox(width: 2),
                     Text(
                       '${item['rating']}',
                       style: TextStyle(
-                        color: textPrimary,
+                        color: _ratingAccentColor,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -276,16 +282,16 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const fluent.Icon(
+              fluent.Icon(
                 Ionicons.star,
-                color: Colors.yellow,
+                color: _ratingAccentColor,
                 size: 16,
               ),
               const SizedBox(width: 4),
               Text(
                 '${item['rating']}',
-                style: const TextStyle(
-                  color: Colors.yellow,
+                style: TextStyle(
+                  color: _ratingAccentColor,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -306,6 +312,9 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
     final textPrimary = theme.resources.textFillColorPrimary;
     final textSecondary = theme.resources.textFillColorSecondary;
     final imageUrl = processImageUrl(item['imageUrl']);
+    const coverWidth = 48.0;
+    const coverHeight = 60.0;
+    const coverRadius = 4.0;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -326,17 +335,17 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             margin: EdgeInsets.zero,
             onPressed: () => openAnimeDetail(item['animeId']),
             leading: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(coverRadius),
               child: imageUrl != null
                   ? Image.network(
                       imageUrl,
-                      width: 40,
-                      height: 60,
+                      width: coverWidth,
+                      height: coverHeight,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
-                          width: 40,
-                          height: 60,
+                          width: coverWidth,
+                          height: coverHeight,
                           color: theme.resources.cardBackgroundFillColorSecondary,
                           child: fluent.Icon(
                             Ionicons.image_outline,
@@ -347,8 +356,8 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                       },
                     )
                   : Container(
-                      width: 40,
-                      height: 60,
+                      width: coverWidth,
+                      height: coverHeight,
                       color: theme.resources.cardBackgroundFillColorSecondary,
                       child: fluent.Icon(
                         Ionicons.image_outline,

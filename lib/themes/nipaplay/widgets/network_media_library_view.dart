@@ -292,6 +292,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               BlurButton(
                 icon: Icons.cloud,
                 text: '添加媒体服务器',
+                hoverForegroundColor: const Color(0xFFFF2E55),
                 onTap: _showServerDialog,
               ),
             ],

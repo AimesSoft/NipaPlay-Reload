@@ -28,11 +28,13 @@ class HoverZoomTab extends StatefulWidget {
   final String text;
   final double fontSize;
   final Widget? icon;
+  final Color? hoverColor;
   const HoverZoomTab({
     super.key,
     required this.text,
     this.fontSize = 20,
     this.icon,
+    this.hoverColor,
   });
 
   @override
@@ -58,7 +60,12 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
                             (currentColor.b - activeColor.b).abs() < 0.1;
 
     // 1. 确定基础颜色（必须是不透明的，用于后续着色）
-    final Color solidColor = isSelected ? activeColor : highlightColor;
+    Color solidColor = isSelected ? activeColor : highlightColor;
+    
+    // 如果设置了悬停颜色且当前处于悬停状态，应用悬停颜色
+    if (_isHovered && widget.hoverColor != null && !isSelected) {
+      solidColor = widget.hoverColor!;
+    }
 
     // 2. 确定整体透明度
     // 选中或悬停时 100% 不透明，未选中默认状态跟随 TabBar 的 alpha (通常为 0.6 左右)

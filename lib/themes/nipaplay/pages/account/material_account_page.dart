@@ -490,6 +490,8 @@ style: TextStyle(
           BlurButton(
             icon: fluent.FluentIcons.signin,
             text: "登录弹弹play账号",
+            flatStyle: true,
+            hoverScale: _buttonHoverScale,
             onTap: showLoginDialog,
           ),
           const SizedBox(height: 6),
@@ -502,6 +504,8 @@ style: subtitleStyle,
           BlurButton(
             icon: fluent.FluentIcons.add_friend,
             text: "注册弹弹play账号",
+            flatStyle: true,
+            hoverScale: _buttonHoverScale,
             onTap: showRegisterDialog,
           ),
           const SizedBox(height: 6),
@@ -561,16 +565,8 @@ style: subtitleStyle,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 用户信息
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colorScheme.onSurface.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: colorScheme.onSurface.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
               const fluent.Icon(
@@ -707,6 +703,8 @@ style: subtitleStyle,
         BlurButton(
           icon: fluent.FluentIcons.link,
           text: '打开访问令牌页面',
+          flatStyle: true,
+          hoverScale: _buttonHoverScale,
           onTap: () async {
             const url = 'https://next.bgm.tv/demo/access-token';
             try {
@@ -752,6 +750,8 @@ style: subtitleStyle,
           icon: fluent.FluentIcons.save,
           text: '保存令牌',
           expandHorizontally: true,
+          flatStyle: true,
+          hoverScale: _buttonHoverScale,
           onTap: () {
             if (isLoading) return;
             saveBangumiToken();
@@ -772,6 +772,8 @@ style: subtitleStyle,
       child: BlurButton(
         icon: icon,
         text: text,
+        flatStyle: true,
+        hoverScale: _buttonHoverScale,
         onTap: () {
           if (isDisabled) return;
           onPressed?.call();

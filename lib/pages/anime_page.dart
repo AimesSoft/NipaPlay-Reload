@@ -271,6 +271,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   bool _hasWebDAVConnections = false;
   bool _hasSMBConnections = false;
   bool _localConnectionsReady = false;
+
+  // 添加变量追踪“添加媒体服务器”入口的悬停状态
+  bool _isAddEntryHovered = false;
   
   // 动态计算标签页数量
   int get _tabCount {
@@ -601,21 +604,37 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     required Color iconColor,
     required Color textColor,
   }) {
+    const Color hoverColor = Color(0xFFFF2E55);
+    final Color displayColor = _isAddEntryHovered ? hoverColor : textColor;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _isAddEntryHovered = true),
+        onExit: (_) => setState(() => _isAddEntryHovered = false),
         child: GestureDetector(
           onTap: _showServerSelectionDialog,
-          child: DefaultTextStyle(
-            style: TextStyle(color: textColor),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: HoverZoomTab(
-                text: '添加媒体服务器',
-                fontSize: 18,
-                icon: Icon(Icons.cloud_outlined, size: 18, color: iconColor),
-              ),
+          child: AnimatedScale(
+            scale: _isAddEntryHovered ? 1.1 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_outlined,
+                    size: 18, color: displayColor),
+                const SizedBox(width: 6),
+                Text(
+                  '添加媒体服务器',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: displayColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

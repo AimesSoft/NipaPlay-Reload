@@ -711,6 +711,7 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                 BlurButton(
                   icon: Icons.cloud,
                   text: '添加媒体服务器',
+                  hoverForegroundColor: const Color(0xFFFF2E55),
                   onTap: _showServerSelectionDialog,
                 ),
             ],

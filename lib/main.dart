@@ -1348,17 +1348,18 @@ class MainPageState extends State<MainPage>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  SizedBox(
-                    height: kWindowCaptionHeight,
-                    child: Center(
-                      child: WindowControlButtons(
-                        isMaximized: isMaximized,
-                        onMinimize: _minimizeWindow,
-                        onMaximizeRestore: _toggleWindowSize,
-                        onClose: _closeWindow,
+                  if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
+                    SizedBox(
+                      height: kWindowCaptionHeight,
+                      child: Center(
+                        child: WindowControlButtons(
+                          isMaximized: isMaximized,
+                          onMinimize: _minimizeWindow,
+                          onMaximizeRestore: _toggleWindowSize,
+                          onClose: _closeWindow,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             );

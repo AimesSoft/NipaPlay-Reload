@@ -128,6 +128,8 @@ class _BlurButtonState extends State<BlurButton> {
         child: InkWell(
           onTap: widget.onTap,
           borderRadius: borderRadius,
+          hoverColor: Colors.transparent,
+          focusColor: Colors.transparent,
           child: Padding(
             padding: widget.padding,
             child: AnimatedScale(
