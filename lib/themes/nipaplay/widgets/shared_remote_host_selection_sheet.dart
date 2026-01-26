@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:provider/provider.dart';
-
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_lan_scan_dialog.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:provider/provider.dart';
 
 class SharedRemoteHostSelectionSheet extends StatelessWidget {
   const SharedRemoteHostSelectionSheet({super.key});
 
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    return NipaplayWindow.show<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => const SharedRemoteHostSelectionSheet(),
+      enableAnimation: enableAnimation,
+      barrierDismissible: true,
+      child: const SharedRemoteHostSelectionSheet(),
     );
   }
 
@@ -26,120 +31,137 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<SharedRemoteLibraryProvider>();
     final hosts = provider.hosts;
-    final enableBlur =
-        context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect;
-
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
     final sheetHeight = hosts.isEmpty
-        ? (MediaQuery.of(context).size.height * 0.4)
-            .clamp(260.0, 360.0)
-            .toDouble()
-        : MediaQuery.of(context).size.height * 0.55;
+        ? (screenSize.height * 0.4).clamp(260.0, 360.0).toDouble()
+        : screenSize.height * 0.55;
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurface.withOpacity(0.7);
+    final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
+    final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.14 : 0.2);
+    final panelColor =
+        isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04);
+    final itemColor =
+        isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-        top: 12,
-      ),
-      child: GlassmorphicContainer(
-        width: double.infinity,
-        height: sheetHeight,
-        borderRadius: 24,
-        blur: enableBlur ? 20 : 0,
-        border: 1,
-        alignment: Alignment.topCenter,
-        linearGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.22),
-            Colors.white.withOpacity(0.12),
-          ],
-        ),
-        borderGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.4),
-            Colors.white.withOpacity(0.4),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Ionicons.link_outline,
-                      color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  const Text(
-                    '选择共享客户端',
-                    locale: Locale('zh', 'CN'),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+    return NipaplayWindowScaffold(
+      maxWidth: dialogWidth,
+      maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.85),
+      onClose: () => Navigator.of(context).maybePop(),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: keyboardHeight),
+        child: SizedBox(
+          height: sheetHeight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Ionicons.link_outline,
+                        color: textColor, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      '选择共享客户端',
+                      locale: const Locale('zh', 'CN'),
+                      style: textTheme.titleLarge?.copyWith(
+                            color: textColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ) ??
+                          TextStyle(
+                            color: textColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                      textAlign: TextAlign.left,
                     ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
+                  locale: const Locale('zh', 'CN'),
+                  style: TextStyle(
+                    color: subTextColor,
+                    fontSize: 13,
+                    height: 1.3,
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
-                locale: Locale('zh', 'CN'),
-                style:
-                    TextStyle(color: Colors.white70, fontSize: 13, height: 1.3),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: hosts.isEmpty
-                    ? _buildEmptyState(context)
-                    : _buildHostList(context, provider, hosts),
-              ),
-              const SizedBox(height: 12),
-              BlurButton(
-                icon: Ionicons.wifi_outline,
-                text: '扫描局域网',
-                expandHorizontally: true,
-                onTap: () => _showLanScanDialog(context, provider),
-              ),
-              const SizedBox(height: 10),
-              BlurButton(
-                icon: Ionicons.add_outline,
-                text: '添加共享客户端',
-                expandHorizontally: true,
-                onTap: () => _showAddHostDialog(context, provider),
-              ),
-            ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: hosts.isEmpty
+                      ? _buildEmptyState(
+                          context,
+                          backgroundColor: panelColor,
+                          borderColor: borderColor,
+                          subTextColor: subTextColor,
+                        )
+                      : _buildHostList(
+                          context,
+                          provider,
+                          hosts,
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          mutedTextColor: mutedTextColor,
+                          borderColor: borderColor,
+                          itemColor: itemColor,
+                        ),
+                ),
+                const SizedBox(height: 12),
+                BlurButton(
+                  icon: Ionicons.wifi_outline,
+                  text: '扫描局域网',
+                  expandHorizontally: true,
+                  onTap: () => _showLanScanDialog(context, provider),
+                ),
+                const SizedBox(height: 10),
+                BlurButton(
+                  icon: Ionicons.add_outline,
+                  text: '添加共享客户端',
+                  expandHorizontally: true,
+                  onTap: () => _showAddHostDialog(context, provider),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(
+    BuildContext context, {
+    required Color backgroundColor,
+    required Color borderColor,
+    required Color subTextColor,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: borderColor),
       ),
-      child: const Column(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Ionicons.cloud_offline_outline, color: Colors.white60),
-          SizedBox(height: 10),
+          Icon(Ionicons.cloud_offline_outline,
+              color: subTextColor.withOpacity(0.8)),
+          const SizedBox(height: 10),
           Text(
             '尚未添加任何共享客户端\n请点击下方按钮进行添加',
             textAlign: TextAlign.center,
-            locale: Locale('zh', 'CN'),
-            style: TextStyle(color: Colors.white70),
+            locale: const Locale('zh', 'CN'),
+            style: TextStyle(color: subTextColor),
           ),
         ],
       ),
@@ -149,8 +171,13 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
   Widget _buildHostList(
     BuildContext context,
     SharedRemoteLibraryProvider provider,
-    List<SharedRemoteHost> hosts,
-  ) {
+    List<SharedRemoteHost> hosts, {
+    required Color textColor,
+    required Color subTextColor,
+    required Color mutedTextColor,
+    required Color borderColor,
+    required Color itemColor,
+  }) {
     return ListView.separated(
       itemCount: hosts.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -176,10 +203,10 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
               border: Border.all(
                 color: isActive
                     ? Colors.lightBlueAccent.withOpacity(0.5)
-                    : Colors.white.withOpacity(0.08),
+                    : borderColor,
                 width: isActive ? 1.2 : 0.6,
               ),
-              color: Colors.black.withOpacity(0.22),
+              color: itemColor,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,8 +224,8 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                     Expanded(
                       child: Text(
                         displayName,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: textColor,
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
@@ -221,14 +248,14 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                         ),
                       )
                     else
-                      const Icon(Ionicons.chevron_forward,
-                          color: Colors.white54, size: 16),
+                      Icon(Ionicons.chevron_forward,
+                          color: textColor.withOpacity(0.5), size: 16),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Text(
                   host.baseUrl,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: TextStyle(color: subTextColor, fontSize: 12),
                 ),
                 if (host.lastError != null && host.lastError!.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -242,7 +269,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   lastSync != null ? '最后同步: $lastSync' : '最后同步: 尚未成功连接',
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  style: TextStyle(color: mutedTextColor, fontSize: 11),
                 ),
               ],
             ),

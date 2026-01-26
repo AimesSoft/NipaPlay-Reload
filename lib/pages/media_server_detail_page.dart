@@ -73,6 +73,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
   bool _detailAutoMatchCancelled = false;
 
   TabController? _tabController;
+  String? _hoveredEpisodeId;
 
   // 辅助方法：获取演员头像URL
   String? _getActorImageUrl(dynamic actor) {
@@ -638,6 +639,7 @@ style: TextStyle(color: secondaryTextColor)));
         sourceLabel: widget.serverType == MediaServerType.jellyfin
             ? 'Jellyfin'
             : 'Emby',
+        sourceLabelUseContainer: false,
         onClose: () => Navigator.of(context).pop(),
         tabController: _tabController,
         showTabs: !isDesktopOrTablet,
@@ -1049,6 +1051,13 @@ style: TextStyle(color: secondaryTextColor)));
         final episodeImageUrl = episode.imagePrimaryTag != null
             ? _getEpisodeImageUrl(episode, service)
             : '';
+        final bool playHoverEnabled =
+            !_isDetailAutoMatching && !globals.isTouch;
+        final bool isPlayHovered =
+            playHoverEnabled && _hoveredEpisodeId == episode.id;
+        final Color playIconColor = isPlayHovered
+            ? const Color(0xFFFF2E55)
+            : secondaryTextColor;
         
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1124,10 +1133,30 @@ style: TextStyle(color: secondaryTextColor)));
                 ),
             ],
           ),
-          trailing: Icon(
-            Ionicons.play_circle_outline, 
-            color: secondaryTextColor, 
-            size: 22,
+          trailing: MouseRegion(
+            cursor: playHoverEnabled
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic,
+            onEnter: playHoverEnabled
+                ? (_) => setState(() => _hoveredEpisodeId = episode.id)
+                : null,
+            onExit: playHoverEnabled
+                ? (_) {
+                    if (_hoveredEpisodeId == episode.id) {
+                      setState(() => _hoveredEpisodeId = null);
+                    }
+                  }
+                : null,
+            child: AnimatedScale(
+              scale: isPlayHovered ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              child: Icon(
+                Ionicons.play_circle_outline,
+                color: playIconColor,
+                size: 22,
+              ),
+            ),
           ),
           onTap: () async {
             if (_isDetailAutoMatching) {

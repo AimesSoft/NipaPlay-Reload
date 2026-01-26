@@ -60,6 +60,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   bool _isImageLoaded = false;
   bool _isDisposed = false;
   ui.Image? _basicImage; // 基础图片
+  bool _hasRetriedLowRes = false;
 
   @override
   void initState() {
@@ -90,6 +91,7 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   void _loadImage() {
     if (_currentUrl == widget.imageUrl || _isDisposed) return;
     _currentUrl = widget.imageUrl;
+    _hasRetriedLowRes = false;
     
     // 旧版：仅使用缓存管理器单通道加载
     if (widget.loadMode == CachedImageLoadMode.legacy) {
@@ -293,6 +295,27 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                 displaySize,
                 context,
               );
+
+              if (!_hasRetriedLowRes &&
+                  widget.blurIfLowRes &&
+                  !widget.forceBlur &&
+                  selectedImage != null &&
+                  snapshot.hasData &&
+                  _shouldApplyBlur(selectedImage, displaySize, context)) {
+                _hasRetriedLowRes = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && !_isDisposed) {
+                    setState(() {
+                      _imageFuture = ImageCacheManager.instance.loadImage(
+                        widget.imageUrl,
+                        targetWidth: widget.memCacheWidth,
+                        targetHeight: widget.memCacheHeight,
+                        forceRefresh: true,
+                      );
+                    });
+                  }
+                });
+              }
 
               if (snapshot.hasError && selectedImage == null) {
                 if (widget.errorBuilder != null) {

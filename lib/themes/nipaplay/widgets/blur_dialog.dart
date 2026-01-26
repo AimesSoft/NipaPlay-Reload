@@ -74,14 +74,17 @@ class BlurDialog {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 if (hasTitle) ...[
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.left,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
                 ],

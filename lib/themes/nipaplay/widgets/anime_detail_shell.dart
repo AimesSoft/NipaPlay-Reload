@@ -20,6 +20,7 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
     this.isDesktopOrTablet = false,
     this.episodesView,
     this.desktopView,
+    this.sourceLabelUseContainer = true,
   });
 
   final String title;
@@ -34,6 +35,7 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
   final Widget infoView;
   final Widget? episodesView;
   final Widget? desktopView;
+  final bool sourceLabelUseContainer;
 
   @override
   Widget build(BuildContext context) {
@@ -85,32 +87,52 @@ class NipaplayAnimeDetailLayout extends StatelessWidget {
                   ),
                 ),
               if (sourceLabel != null)
-                Container(
-                  margin: const EdgeInsets.only(right: 8.0),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: (isDark ? Colors.white : Colors.black).withOpacity(0.12),
-                        width: 0.5),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Ionicons.cloud_outline,
-                          size: 14, color: iconColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        sourceLabel!,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: iconColor),
-                      ),
-                    ],
-                  ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: sourceLabelUseContainer
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: (isDark ? Colors.white : Colors.black)
+                                .withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: (isDark ? Colors.white : Colors.black)
+                                    .withOpacity(0.12),
+                                width: 0.5),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Ionicons.cloud_outline,
+                                  size: 14, color: iconColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                sourceLabel!,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: iconColor),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Ionicons.cloud_outline,
+                                size: 14, color: iconColor),
+                            const SizedBox(width: 4),
+                            Text(
+                              sourceLabel!,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: iconColor),
+                            ),
+                          ],
+                        ),
                 ),
               if (headerActions != null) ...headerActions!,
             ],

@@ -83,7 +83,12 @@ class ImageCacheManager {
     return cachedImage;
   }
 
-  Future<ui.Image> loadImage(String url, {int? targetWidth, int? targetHeight}) async {
+  Future<ui.Image> loadImage(
+    String url, {
+    int? targetWidth,
+    int? targetHeight,
+    bool forceRefresh = false,
+  }) async {
     if (!_isInitialized && !kIsWeb) {
       await _initCacheDir();
     }
@@ -91,7 +96,7 @@ class ImageCacheManager {
     final cacheKey = _getCacheKeyWithDimensions(url, targetWidth, targetHeight);
 
     // 如果图片已经在内存缓存中，更新访问时间并增加引用计数
-    if (_cache.containsKey(cacheKey)) {
+    if (!forceRefresh && _cache.containsKey(cacheKey)) {
       _lastAccessed[cacheKey] = DateTime.now();
       _refCount[cacheKey] = (_refCount[cacheKey] ?? 0) + 1;
       return _cache[cacheKey]!;
@@ -111,7 +116,7 @@ class ImageCacheManager {
       try {
         // 检查本地缓存 (本地缓存文件本身不区分尺寸，只存原图数据)
         // 我们从本地读取原图数据，然后按需解码
-        if (!kIsWeb) {
+        if (!forceRefresh && !kIsWeb) {
           final cacheFile = await _getCacheFile(url); // 文件名只跟URL有关
           if (await cacheFile.exists()) {
             final bytes = await cacheFile.readAsBytes();
