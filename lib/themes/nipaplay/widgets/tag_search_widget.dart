@@ -36,7 +36,7 @@ class TagSearchModal extends StatefulWidget {
   @override
   State<TagSearchModal> createState() => _TagSearchModalState();
 
-  static Future<void?> show(
+  static Future<void> show(
     BuildContext context, {
     String? prefilledTag,
     List<String>? preselectedTags,

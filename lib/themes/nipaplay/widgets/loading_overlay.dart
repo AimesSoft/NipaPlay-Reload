@@ -118,6 +118,12 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final bool isDark = theme.brightness == Brightness.dark;
+    final bool hasCoverImage =
+        widget.coverImageUrl != null && widget.coverImageUrl!.isNotEmpty;
+
     // 计算比例尺寸时考虑屏幕大小，修复clamp参数顺序问题
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -129,24 +135,42 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
     
     final effectiveWidth = math.max(300.0, targetWidth);
     final effectiveHeight = math.max(200.0, math.min(screenHeight * 0.5, widget.height ?? 300));
+
+    final Color fallbackBackgroundColor =
+        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+    final Color effectiveBackgroundColor =
+        widget.backgroundColor == Colors.black ? fallbackBackgroundColor : widget.backgroundColor;
+    final Color effectiveTextColor =
+        widget.textColor == Colors.white ? (isDark ? Colors.white : Colors.black87) : widget.textColor;
+    final Color baseSurface = Color.lerp(
+      colorScheme.surface,
+      colorScheme.onSurface,
+      isDark ? 0.12 : 0.04,
+    )!;
+    final Color cardColor = baseSurface.withOpacity(isDark ? 0.92 : 0.96);
+    final Color cardBorderColor =
+        colorScheme.onSurface.withOpacity(isDark ? 0.2 : 0.12);
+    final Color cardShadowColor =
+        Colors.black.withOpacity(isDark ? 0.45 : 0.16);
+    final Color cursorColor = effectiveTextColor.withOpacity(widget.textOpacity);
     
     // 获取文本样式
     final textStyle = TextStyle(
-      color: widget.textColor.withOpacity(widget.textOpacity),
+      color: effectiveTextColor.withOpacity(widget.textOpacity),
       fontSize: widget.fontSize,
       fontWeight: widget.isBold ? FontWeight.w600 : FontWeight.normal,
       letterSpacing: 0.5,
     );
     
     final titleStyle = TextStyle(
-      color: widget.textColor.withOpacity(widget.textOpacity * 0.9),
+      color: effectiveTextColor.withOpacity(widget.textOpacity * 0.9),
       fontSize: widget.fontSize + 2,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.3,
     );
     
     final subtitleStyle = TextStyle(
-      color: widget.textColor.withOpacity(widget.textOpacity * 0.8),
+      color: effectiveTextColor.withOpacity(widget.textOpacity * 0.8),
       fontSize: widget.fontSize - 2,
       fontWeight: FontWeight.w500,
       letterSpacing: 0.2,
@@ -156,34 +180,68 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
       fit: StackFit.expand,
       children: [
         // 背景
-        Container(
-          color: widget.backgroundColor.withOpacity(widget.backgroundOpacity),
-        ),
-        // 毛玻璃加载界面
+        if (hasCoverImage)
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(color: fallbackBackgroundColor),
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                  child: Opacity(
+                    opacity: isDark ? 0.25 : 0.35,
+                    child: CachedNetworkImageWidget(
+                      imageUrl: widget.coverImageUrl!,
+                      fit: BoxFit.cover,
+                      shouldCompress: false,
+                      loadMode: CachedImageLoadMode.hybrid,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        (isDark ? const Color(0xFF2C2C2C) : Colors.white)
+                            .withOpacity(0.1),
+                        (isDark ? const Color(0xFF2C2C2C) : Colors.white)
+                            .withOpacity(0.4),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          Container(
+            color: effectiveBackgroundColor.withOpacity(widget.backgroundOpacity),
+          ),
+        // 加载界面
         Center(
           child: Material(
             type: MaterialType.transparency,
-            child: GlassmorphicContainer(
+            child: Container(
               width: effectiveWidth,
               height: effectiveHeight,
-              borderRadius: widget.borderRadius,
-              blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
               alignment: Alignment.center,
-              border: widget.borderWidth,
-              linearGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFFffffff).withOpacity(0.15),
-                  const Color(0xFFFFFFFF).withOpacity(0.08),
-                ],
-              ),
-              borderGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFFffffff).withOpacity(0.6),
-                  const Color((0xFFFFFFFF)).withOpacity(0.4),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(widget.borderRadius),
+                border: Border.all(
+                  color: cardBorderColor,
+                  width: widget.borderWidth,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: cardShadowColor,
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
                 ],
               ),
               child: Padding(
@@ -194,7 +252,11 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           // 上方：媒体信息区域
-                          _buildMediaInfoSection(titleStyle, subtitleStyle),
+                          _buildMediaInfoSection(
+                            titleStyle,
+                            subtitleStyle,
+                            effectiveTextColor,
+                          ),
                           // 分隔线
                           Container(
                             height: 1,
@@ -205,16 +267,19 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
                                 colors: [
-                                  widget.textColor.withOpacity(0.1),
-                                  widget.textColor.withOpacity(0.3),
-                                  widget.textColor.withOpacity(0.1),
+                                  effectiveTextColor.withOpacity(0.1),
+                                  effectiveTextColor.withOpacity(0.3),
+                                  effectiveTextColor.withOpacity(0.1),
                                 ],
                               ),
                             ),
                           ),
                           // 下方：加载信息区域
                           Expanded(
-                            child: _buildLoadingMessagesSection(textStyle),
+                            child: _buildLoadingMessagesSection(
+                              textStyle,
+                              cursorColor,
+                            ),
                           ),
                         ],
                       )
@@ -224,7 +289,11 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                           // 左侧：媒体信息区域 (1/3 宽度)
                           Expanded(
                             flex: 1,
-                            child: _buildMediaInfoSection(titleStyle, subtitleStyle),
+                            child: _buildMediaInfoSection(
+                              titleStyle,
+                              subtitleStyle,
+                              effectiveTextColor,
+                            ),
                           ),
                           // 分隔线
                           Container(
@@ -235,9 +304,9 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  widget.textColor.withOpacity(0.1),
-                                  widget.textColor.withOpacity(0.3),
-                                  widget.textColor.withOpacity(0.1),
+                                  effectiveTextColor.withOpacity(0.1),
+                                  effectiveTextColor.withOpacity(0.3),
+                                  effectiveTextColor.withOpacity(0.1),
                                 ],
                               ),
                             ),
@@ -245,7 +314,10 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                           // 右侧：加载信息区域 (2/3 宽度)
                           Expanded(
                             flex: 2,
-                            child: _buildLoadingMessagesSection(textStyle),
+                            child: _buildLoadingMessagesSection(
+                              textStyle,
+                              cursorColor,
+                            ),
                           ),
                         ],
                       ),
@@ -258,7 +330,11 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
   }
 
   // 构建左侧媒体信息区域
-  Widget _buildMediaInfoSection(TextStyle titleStyle, TextStyle subtitleStyle) {
+  Widget _buildMediaInfoSection(
+    TextStyle titleStyle,
+    TextStyle subtitleStyle,
+    Color accentColor,
+  ) {
     // 手机上使用横向布局，平板/桌面保持竖向布局
     if (globals.isPhone && !globals.isTablet) {
       return Row(
@@ -266,7 +342,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // 封面图片（手机上较小）
-          _buildCoverImage(80, 106, titleStyle), // 3:4 比例，但更小
+          _buildCoverImage(80, 106, accentColor), // 3:4 比例，但更小
           const SizedBox(width: 16),
           // 文字信息
           Expanded(
@@ -280,7 +356,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildCoverImage(120, 160, titleStyle), // 原来的尺寸
+          _buildCoverImage(120, 160, accentColor), // 原来的尺寸
           _buildTextInfo(titleStyle, subtitleStyle),
         ],
       );
@@ -288,14 +364,14 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
   }
 
   // 构建封面图片
-  Widget _buildCoverImage(double width, double height, TextStyle titleStyle) {
+  Widget _buildCoverImage(double width, double height, Color accentColor) {
     return Container(
       width: width,
       height: height,
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        color: widget.textColor.withOpacity(0.1),
+        color: accentColor.withOpacity(0.1),
       ),
       child: widget.coverImageUrl != null
           ? ClipRRect(
@@ -306,13 +382,13 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     decoration: BoxDecoration(
-                      color: widget.textColor.withOpacity(0.1),
+                      color: accentColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       Icons.movie,
                       size: width * 0.4,
-                      color: widget.textColor.withOpacity(0.5),
+                      color: accentColor.withOpacity(0.5),
                     ),
                   );
                 },
@@ -321,7 +397,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
           : Icon(
               Icons.movie,
               size: width * 0.4,
-              color: widget.textColor.withOpacity(0.5),
+              color: accentColor.withOpacity(0.5),
             ),
     );
   }
@@ -373,7 +449,10 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
   }
 
   // 构建右侧加载消息区域
-  Widget _buildLoadingMessagesSection(TextStyle textStyle) {
+  Widget _buildLoadingMessagesSection(
+    TextStyle textStyle,
+    Color cursorColor,
+  ) {
     return ScrollConfiguration(
       // 隐藏滚动条
       behavior: ScrollConfiguration.of(context).copyWith(
@@ -412,7 +491,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                             text: widget.messages[index],
                             style: textStyle,
                             cursorAnimation: _cursorAnimation,
-                            cursorColor: widget.textColor.withOpacity(widget.textOpacity),
+                            cursorColor: cursorColor,
                             typingSpeed: const Duration(milliseconds: 50),
                           ),
                         ),
@@ -525,4 +604,4 @@ class _TypingTextCursorState extends State<TypingTextCursor> {
       ],
     );
   }
-} 
+}
