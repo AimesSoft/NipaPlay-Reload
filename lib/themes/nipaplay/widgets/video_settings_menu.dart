@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'subtitle_tracks_menu.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'control_bar_settings_menu.dart';
 import 'danmaku_settings_menu.dart';
 import 'audio_tracks_menu.dart';
@@ -13,7 +11,6 @@ import 'subtitle_list_menu.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'playlist_menu.dart';
 import 'playback_rate_menu.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'danmaku_offset_menu.dart';
 import 'jellyfin_quality_menu.dart';
 import 'playback_info_menu.dart';
@@ -21,6 +18,7 @@ import 'seek_step_menu.dart';
 import 'package:nipaplay/player_menu/player_menu_definition_builder.dart';
 import 'package:nipaplay/player_menu/player_menu_models.dart';
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
+import 'base_settings_menu.dart';
 
 class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -37,10 +35,11 @@ class VideoSettingsMenu extends StatefulWidget {
 }
 
 class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
-  final Map<PlayerMenuPaneId, OverlayEntry> _paneOverlays = {};
   PlayerMenuPaneId? _activePaneId;
   late final VideoPlayerState videoState;
   late final PlayerKernelType _currentKernelType;
+  static const double _menuWidth = 300;
+  static const double _menuRightOffset = 20;
 
   @override
   void initState() {
@@ -50,73 +49,75 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   }
 
   void _handleItemTap(PlayerMenuPaneId paneId) {
-    if (_activePaneId == paneId) {
-      _closePane(paneId);
-      return;
-    }
-    _closeAllOverlays();
-    final overlayEntry = _createOverlayForPane(paneId);
-    _paneOverlays[paneId] = overlayEntry;
-    Overlay.of(context).insert(overlayEntry);
     if (mounted) {
       setState(() {
-        _activePaneId = paneId;
+        _activePaneId = _activePaneId == paneId ? null : paneId;
       });
     } else {
-      _activePaneId = paneId;
+      _activePaneId = _activePaneId == paneId ? null : paneId;
     }
   }
 
-  OverlayEntry _createOverlayForPane(PlayerMenuPaneId paneId) {
+  void _closeActivePane() {
+    if (!mounted) {
+      _activePaneId = null;
+      return;
+    }
+    setState(() {
+      _activePaneId = null;
+    });
+  }
+
+  Widget _buildPane(PlayerMenuPaneId paneId) {
     late final Widget child;
     switch (paneId) {
       case PlayerMenuPaneId.subtitleTracks:
         child = SubtitleTracksMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.subtitleTracks),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.subtitleList:
         child = SubtitleListMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.subtitleList),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.audioTracks:
         child = AudioTracksMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.audioTracks),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuSettings:
         child = DanmakuSettingsMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.danmakuSettings),
+          onClose: _closeActivePane,
           videoState: videoState,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuTracks:
         child = DanmakuTracksMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.danmakuTracks),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuList:
         child = DanmakuListMenu(
           videoState: videoState,
-          onClose: () => _closePane(PlayerMenuPaneId.danmakuList),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuOffset:
         child = DanmakuOffsetMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.danmakuOffset),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.controlBarSettings:
         child = ControlBarSettingsMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.controlBarSettings),
+          onClose: _closeActivePane,
           videoState: videoState,
           onHoverChanged: widget.onHoverChanged,
         );
@@ -125,26 +126,26 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         child = ChangeNotifierProvider(
           create: (_) => PlaybackRatePaneController(videoState: videoState),
           child: PlaybackRateMenu(
-            onClose: () => _closePane(PlayerMenuPaneId.playbackRate),
+            onClose: _closeActivePane,
             onHoverChanged: widget.onHoverChanged,
           ),
         );
         break;
       case PlayerMenuPaneId.playlist:
         child = PlaylistMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.playlist),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.jellyfinQuality:
         child = JellyfinQualityMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.jellyfinQuality),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.playbackInfo:
         child = PlaybackInfoMenu(
-          onClose: () => _closePane(PlayerMenuPaneId.playbackInfo),
+          onClose: _closeActivePane,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
@@ -152,51 +153,19 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
         child = ChangeNotifierProvider(
           create: (_) => SeekStepPaneController(videoState: videoState),
           child: SeekStepMenu(
-            onClose: () => _closePane(PlayerMenuPaneId.seekStep),
+            onClose: _closeActivePane,
             onHoverChanged: widget.onHoverChanged,
           ),
         );
         break;
     }
 
-    return OverlayEntry(builder: (context) => child);
-  }
-
-  void _closePane(PlayerMenuPaneId paneId) {
-    final entry = _paneOverlays.remove(paneId);
-    entry?.remove();
-    if (_activePaneId == paneId) {
-      if (mounted) {
-        setState(() {
-          _activePaneId = null;
-        });
-      } else {
-        _activePaneId = null;
-      }
-    }
-  }
-
-  void _closeAllOverlays() {
-    for (final entry in _paneOverlays.values) {
-      entry.remove();
-    }
-    _paneOverlays.clear();
-    if (mounted) {
-      setState(() {
-        _activePaneId = null;
-      });
-    } else {
-      _activePaneId = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final entry in _paneOverlays.values) {
-      entry.remove();
-    }
-    _paneOverlays.clear();
-    super.dispose();
+    return SettingsMenuScope(
+      width: _menuWidth,
+      rightOffset: _menuRightOffset,
+      useBackButton: true,
+      child: child,
+    );
   }
 
   @override
@@ -209,10 +178,20 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
             kernelType: _currentKernelType,
           ),
         ).build();
-        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final backgroundColor = Colors.white.withOpacity(0.08);
-        final borderColor = Colors.white.withOpacity(0.2);
-
+        final Widget menuContent = _activePaneId == null
+            ? BaseSettingsMenu(
+                title: '设置',
+                width: _menuWidth,
+                rightOffset: _menuRightOffset,
+                onHoverChanged: widget.onHoverChanged,
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: menuItems
+                      .map((item) => _buildSettingsItem(item))
+                      .toList(),
+                ),
+              )
+            : _buildPane(_activePaneId!);
         return Material(
           type: MaterialType.transparency,
           child: SizedBox(
@@ -223,7 +202,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                 Positioned.fill(
                   child: GestureDetector(
                     onTap: () {
-                      _closeAllOverlays();
+                      _closeActivePane();
                       widget.onClose();
                     },
                     child: Container(
@@ -231,89 +210,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                     ),
                   ),
                 ),
-                Positioned(
-                  right: 20,
-                  top: globals.isPhone ? 10 : 80,
-                  child: Container(
-                    width: 200,
-                    constraints: BoxConstraints(
-                      maxHeight: globals.isPhone 
-                          ? MediaQuery.of(context).size.height - 120 
-                          : MediaQuery.of(context).size.height - 200,
-                    ),
-                    child: MouseRegion(
-                      onEnter: (_) => videoState.setControlsHovered(true),
-                      onExit: (_) => videoState.setControlsHovered(false),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: backgroundColor,
-                              borderRadius: BorderRadius.circular(15),
-                              border: Border.all(
-                                color: borderColor,
-                                width: 0.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                  spreadRadius: 0,
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: borderColor,
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Text(
-                                        '设置',
-                                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Spacer(),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: menuItems
-                                          .map((item) => _buildSettingsItem(item))
-                                          .toList(),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                menuContent,
               ],
             ),
           ),

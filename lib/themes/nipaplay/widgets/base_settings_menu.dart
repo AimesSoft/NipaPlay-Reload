@@ -5,6 +5,31 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
+class SettingsMenuScope extends InheritedWidget {
+  final double? width;
+  final double? rightOffset;
+  final bool useBackButton;
+
+  const SettingsMenuScope({
+    super.key,
+    required super.child,
+    this.width,
+    this.rightOffset,
+    this.useBackButton = false,
+  });
+
+  static SettingsMenuScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<SettingsMenuScope>();
+  }
+
+  @override
+  bool updateShouldNotify(SettingsMenuScope oldWidget) {
+    return width != oldWidget.width ||
+        rightOffset != oldWidget.rightOffset ||
+        useBackButton != oldWidget.useBackButton;
+  }
+}
+
 class BaseSettingsMenu extends StatelessWidget {
   final String title;
   final Widget content;
@@ -27,6 +52,7 @@ class BaseSettingsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scope = SettingsMenuScope.maybeOf(context);
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
     final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
 
@@ -35,6 +61,9 @@ class BaseSettingsMenu extends StatelessWidget {
         final colorScheme = Theme.of(context).colorScheme;
         final backgroundColor = colorScheme.surface.withOpacity(0.15);
         final borderColor = colorScheme.onSurface.withOpacity(0.2);
+        final resolvedWidth = scope?.width ?? width;
+        final resolvedRightOffset = scope?.rightOffset ?? rightOffset;
+        final bool useBackButton = scope?.useBackButton ?? false;
 
         return Material(
           type: MaterialType.transparency,
@@ -44,10 +73,10 @@ class BaseSettingsMenu extends StatelessWidget {
             child: Stack(
               children: [
                 Positioned(
-                  right: rightOffset,
+                  right: resolvedRightOffset,
                   top: globals.isPhone ? 10 : 80,
                   child: Container(
-                    width: width,
+                    width: resolvedWidth,
                     constraints: BoxConstraints(
                       maxHeight: globals.isPhone
                           ? MediaQuery.of(context).size.height - 120
@@ -107,6 +136,19 @@ class BaseSettingsMenu extends StatelessWidget {
                                     ),
                                     child: Row(
                                       children: [
+                                        if (useBackButton && onClose != null)
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.arrow_back_ios_new_rounded,
+                                              color: colorScheme.onSurface,
+                                            ),
+                                            onPressed: onClose,
+                                            iconSize: 18,
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                        if (useBackButton && onClose != null)
+                                          const SizedBox(width: 8),
                                         Text(
                                           title,
                                           style: TextStyle(
@@ -117,9 +159,12 @@ class BaseSettingsMenu extends StatelessWidget {
                                         ),
                                         const Spacer(),
                                         if (extraButton != null) extraButton!,
-                                        if (onClose != null)
+                                        if (!useBackButton && onClose != null)
                                           IconButton(
-                                            icon: Icon(Icons.close, color: colorScheme.onSurface),
+                                            icon: Icon(
+                                              Icons.close,
+                                              color: colorScheme.onSurface,
+                                            ),
                                             onPressed: onClose,
                                             iconSize: 18,
                                             padding: EdgeInsets.zero,
