@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 import 'package:nipaplay/utils/shortcut_tooltip_manager.dart'; // 添加新的快捷键提示管理器
@@ -11,7 +10,6 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class ModernVideoControls extends StatefulWidget {
   const ModernVideoControls({super.key});
@@ -197,10 +195,6 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       builder: (context, child) {
         return Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            // 移除颜色随模式变化的逻辑，直接使用统一的毛玻璃效果
-            final backgroundColor = Colors.white.withOpacity(0.08);
-            final borderColor = Colors.white.withOpacity(0.2);
-
             return Focus(
               canRequestFocus: true,
               autofocus: true,
@@ -216,53 +210,18 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                         child: Padding(
                           padding: EdgeInsets.only(
                             bottom: videoState.controlBarHeight,
-                            left:20,
-                            right:20,
+                            left: 20,
+                            right: 20,
                           ),
                           child: MouseRegion(
                             onEnter: (_) => videoState.setControlsHovered(true),
-                        onExit: (_) => videoState.setControlsHovered(false),
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.horizontal(
-                            left: Radius.circular(30),
-                            right: Radius.circular(30),
-                          ),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: const BorderRadius.horizontal(
-                                  left: Radius.circular(30),
-                                  right: Radius.circular(30),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
-                                    spreadRadius: 0,
-                                  ),
-                                ],
+                            onExit: (_) => videoState.setControlsHovered(false),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: globals.isPhone ? 6 : 20,
                               ),
-                              child: Container(
-                                //height: globals.isPhone && !globals.isTablet? 30.0 : 60.0,
-                                decoration: BoxDecoration(
-                                  color: backgroundColor,
-                                  borderRadius: const BorderRadius.horizontal(
-                                    left: Radius.circular(30),
-                                    right: Radius.circular(30),
-                                  ),
-                                  border: Border.all(
-                                    color: borderColor,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: globals.isPhone ? 6 : 20,
-                                  ),
-                                  child: Row(
-                                    children: [
+                              child: Row(
+                                children: [
                                         // 上一话按钮
                                         Consumer<VideoPlayerState>(
                                           builder: (context, videoState, child) {
@@ -504,10 +463,6 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
