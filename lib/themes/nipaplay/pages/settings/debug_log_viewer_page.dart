@@ -9,6 +9,7 @@ import 'package:nipaplay/services/log_share_service.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
@@ -310,11 +311,11 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
       title: '确认清空',
       content: '确定要清空所有日志吗？此操作无法撤销。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.pop(context),
           child: Text('取消', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7))),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () {
             Navigator.pop(context);
             DebugLogService().clearLogs();
@@ -396,7 +397,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
       title: '日志统计',
       content: contentBuffer.toString(),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.pop(context),
           child: Text('关闭', style: TextStyle(color: colorScheme.onSurface)),
         ),
@@ -655,7 +656,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
           ],
         ),
         actions: [
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () {
               Clipboard.setData(ClipboardData(text: url));
               if (mounted) {
@@ -858,11 +859,11 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                                 title: '日志详细信息',
                                 content: detailsContent,
                                 actions: [
-                                  TextButton(
+                                  HoverScaleTextButton(
                                     onPressed: () => Navigator.pop(context),
                                     child: Text('关闭', style: TextStyle(color: colorScheme.onSurface)),
                                   ),
-                                  TextButton(
+                                  HoverScaleTextButton(
                                     onPressed: () {
                                       Navigator.pop(context);
                                       _copyLogEntry(entry);

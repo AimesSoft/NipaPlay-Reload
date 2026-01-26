@@ -7,6 +7,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -550,7 +551,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
         ],
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () {
             _detailAutoMatchCancelled = true;
             Navigator.of(context, rootNavigator: true).pop();

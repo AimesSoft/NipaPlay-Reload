@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -16,6 +17,8 @@ class SettingsMenuScope extends InheritedWidget {
   final bool showPointer;
   final double pointerWidth;
   final double pointerHeight;
+  final double? minHeight;
+  final double? maxHeight;
 
   const SettingsMenuScope({
     super.key,
@@ -30,6 +33,8 @@ class SettingsMenuScope extends InheritedWidget {
     this.showPointer = false,
     this.pointerWidth = 16,
     this.pointerHeight = 8,
+    this.minHeight,
+    this.maxHeight,
   });
 
   static SettingsMenuScope? maybeOf(BuildContext context) {
@@ -47,7 +52,9 @@ class SettingsMenuScope extends InheritedWidget {
         anchorRect != oldWidget.anchorRect ||
         showPointer != oldWidget.showPointer ||
         pointerWidth != oldWidget.pointerWidth ||
-        pointerHeight != oldWidget.pointerHeight;
+        pointerHeight != oldWidget.pointerHeight ||
+        minHeight != oldWidget.minHeight ||
+        maxHeight != oldWidget.maxHeight;
   }
 }
 
@@ -79,9 +86,22 @@ class BaseSettingsMenu extends StatelessWidget {
 
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final colorScheme = Theme.of(context).colorScheme;
+        final baseTheme = Theme.of(context);
+        final colorScheme = baseTheme.colorScheme;
+        const menuTextColor = Colors.white;
         final backgroundColor = colorScheme.surface.withOpacity(0.15);
         final borderColor = colorScheme.onSurface.withOpacity(0.2);
+        final menuTheme = baseTheme.copyWith(
+          colorScheme: colorScheme.copyWith(
+            onSurface: menuTextColor,
+            onSurfaceVariant: menuTextColor.withOpacity(0.7),
+          ),
+          textTheme: baseTheme.textTheme.apply(
+            bodyColor: menuTextColor,
+            displayColor: menuTextColor,
+          ),
+          iconTheme: baseTheme.iconTheme.copyWith(color: menuTextColor),
+        );
         final resolvedWidth = scope?.width ?? width;
         final resolvedRightOffset = scope?.rightOffset ?? rightOffset;
         final bool useBackButton = scope?.useBackButton ?? false;
@@ -93,6 +113,13 @@ class BaseSettingsMenu extends StatelessWidget {
         final double pointerWidth = scope?.pointerWidth ?? 16;
         final double pointerHeight = scope?.pointerHeight ?? 8;
         final Size screenSize = MediaQuery.of(context).size;
+        final double screenMaxHeight = globals.isPhone
+            ? screenSize.height - 120
+            : screenSize.height - 200;
+        final double resolvedMaxHeight =
+            math.min(scope?.maxHeight ?? screenMaxHeight, screenMaxHeight);
+        final double resolvedMinHeight = (scope?.minHeight ?? 0)
+            .clamp(0.0, resolvedMaxHeight);
         const double horizontalMargin = 12;
         const double pointerPadding = 12;
         bool pointUp = true;
@@ -137,9 +164,8 @@ class BaseSettingsMenu extends StatelessWidget {
                   child: Container(
                     width: resolvedWidth,
                     constraints: BoxConstraints(
-                      maxHeight: globals.isPhone
-                          ? MediaQuery.of(context).size.height - 120
-                          : MediaQuery.of(context).size.height - 200,
+                      minHeight: resolvedMinHeight,
+                      maxHeight: resolvedMaxHeight,
                     ),
                     child: MouseRegion(
                       onEnter: (_) {
@@ -166,12 +192,12 @@ class BaseSettingsMenu extends StatelessWidget {
                         contentPaddingBottom: contentPaddingBottom,
                         child: ConstrainedBox(
                           constraints: BoxConstraints(
-                            maxHeight: globals.isPhone
-                                ? MediaQuery.of(context).size.height - 120
-                                : MediaQuery.of(context).size.height - 200,
+                            minHeight: resolvedMinHeight,
+                            maxHeight: resolvedMaxHeight,
                           ),
                           child: Column(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisSize:
+                                showHeader ? MainAxisSize.max : MainAxisSize.min,
                             children: [
                               if (showHeader)
                                 Container(
@@ -193,7 +219,7 @@ class BaseSettingsMenu extends StatelessWidget {
                                         IconButton(
                                           icon: Icon(
                                             Icons.arrow_back_ios_new_rounded,
-                                            color: colorScheme.onSurface,
+                                            color: menuTextColor,
                                           ),
                                           onPressed: onClose,
                                           iconSize: 18,
@@ -205,7 +231,7 @@ class BaseSettingsMenu extends StatelessWidget {
                                       Text(
                                         title,
                                         style: TextStyle(
-                                          color: colorScheme.onSurface,
+                                          color: menuTextColor,
                                           fontSize: 16,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -216,7 +242,7 @@ class BaseSettingsMenu extends StatelessWidget {
                                         IconButton(
                                           icon: Icon(
                                             Icons.close,
-                                            color: colorScheme.onSurface,
+                                            color: menuTextColor,
                                           ),
                                           onPressed: onClose,
                                           iconSize: 18,
@@ -226,22 +252,37 @@ class BaseSettingsMenu extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                              ListView(
-                                padding: EdgeInsets.zero,
-                                primary: false,
-                                shrinkWrap: true,
-                                physics: const ClampingScrollPhysics(),
-                                children: [
-                                  if (!showHeader && showBackItem && onClose != null)
-                                    _MenuBackItem(
-                                      label: '返回',
-                                      onTap: onClose!,
-                                      textColor: colorScheme.onSurface,
-                                      dividerColor: borderColor,
-                                    ),
-                                  content,
-                                ],
-                              ),
+                              (showHeader
+                                  ? Expanded(
+                                      child: Theme(
+                                        data: menuTheme,
+                                        child: _MenuContentList(
+                                          showHeader: showHeader,
+                                          showBackItem: showBackItem,
+                                          onClose: onClose,
+                                          textColor: menuTextColor,
+                                          dividerColor: borderColor,
+                                          minHeight: resolvedMinHeight,
+                                          maxHeight: resolvedMaxHeight,
+                                          shrinkWrap: false,
+                                          content: content,
+                                        ),
+                                      ),
+                                    )
+                                  : Theme(
+                                      data: menuTheme,
+                                      child: _MenuContentList(
+                                        showHeader: showHeader,
+                                        showBackItem: showBackItem,
+                                        onClose: onClose,
+                                        textColor: menuTextColor,
+                                        dividerColor: borderColor,
+                                        minHeight: resolvedMinHeight,
+                                        maxHeight: resolvedMaxHeight,
+                                        shrinkWrap: true,
+                                        content: content,
+                                      ),
+                                    )),
                             ],
                           ),
                         ),
@@ -255,6 +296,62 @@ class BaseSettingsMenu extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class _MenuContentList extends StatelessWidget {
+  final bool showHeader;
+  final bool showBackItem;
+  final VoidCallback? onClose;
+  final Color textColor;
+  final Color dividerColor;
+  final double minHeight;
+  final double maxHeight;
+  final bool shrinkWrap;
+  final Widget content;
+
+  const _MenuContentList({
+    required this.showHeader,
+    required this.showBackItem,
+    required this.onClose,
+    required this.textColor,
+    required this.dividerColor,
+    required this.minHeight,
+    required this.maxHeight,
+    required this.shrinkWrap,
+    required this.content,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget listView = ListView(
+      padding: EdgeInsets.zero,
+      primary: false,
+      shrinkWrap: shrinkWrap,
+      physics: const ClampingScrollPhysics(),
+      children: [
+        if (!showHeader && showBackItem && onClose != null)
+          _MenuBackItem(
+            label: '返回',
+            onTap: onClose!,
+            textColor: textColor,
+            dividerColor: dividerColor,
+          ),
+        content,
+      ],
+    );
+
+    if (!showHeader) {
+      listView = ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: minHeight,
+          maxHeight: maxHeight,
+        ),
+        child: listView,
+      );
+    }
+
+    return listView;
   }
 }
 
@@ -323,6 +420,7 @@ class _MenuBubble extends StatelessWidget {
   final double contentPaddingTop;
   final double contentPaddingBottom;
   final Widget child;
+  final double borderWidth;
 
   const _MenuBubble({
     required this.backgroundColor,
@@ -337,6 +435,7 @@ class _MenuBubble extends StatelessWidget {
     required this.contentPaddingTop,
     required this.contentPaddingBottom,
     required this.child,
+    this.borderWidth = 0.5,
   });
 
   @override
@@ -347,38 +446,51 @@ class _MenuBubble extends StatelessWidget {
       pointerHeight: showPointer ? pointerHeight : 0,
       pointerX: pointerX,
       pointUp: pointUp,
-      side: BorderSide(
-        color: borderColor,
-        width: 0.5,
-      ),
+      side: BorderSide.none,
     );
 
-    return ClipPath(
-      clipper: ShapeBorderClipper(shape: shape),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: DecoratedBox(
-          decoration: ShapeDecoration(
-            shape: shape,
-            color: backgroundColor,
-            shadows: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-                spreadRadius: 0,
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        ClipPath(
+          clipper: ShapeBorderClipper(shape: shape),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+            child: DecoratedBox(
+              decoration: ShapeDecoration(
+                shape: shape,
+                color: backgroundColor,
+                shadows: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                    spreadRadius: 0,
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Padding(
-            padding: EdgeInsets.only(
-              top: contentPaddingTop,
-              bottom: contentPaddingBottom,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: contentPaddingTop,
+                  bottom: contentPaddingBottom,
+                ),
+                child: child,
+              ),
             ),
-            child: child,
           ),
         ),
-      ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _MenuBorderPainter(
+                shape: shape,
+                color: borderColor,
+                strokeWidth: borderWidth,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -415,12 +527,24 @@ class _MenuBubbleShape extends ShapeBorder {
     );
   }
 
+  _MenuBubbleShape deflate(double delta) {
+    return _MenuBubbleShape(
+      radius: (radius - delta).clamp(0.0, radius),
+      pointerWidth: (pointerWidth - delta * 2).clamp(0.0, pointerWidth),
+      pointerHeight: (pointerHeight - delta).clamp(0.0, pointerHeight),
+      pointerX: pointerX - delta,
+      pointUp: pointUp,
+      side: BorderSide.none,
+    );
+  }
+
   @override
   Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
     if (side.width == 0) {
       return getOuterPath(rect, textDirection: textDirection);
     }
-    return getOuterPath(rect.deflate(side.width), textDirection: textDirection);
+    final insetShape = deflate(side.width);
+    return insetShape.getOuterPath(rect.deflate(side.width), textDirection: textDirection);
   }
 
   @override
@@ -475,8 +599,64 @@ class _MenuBubbleShape extends ShapeBorder {
     final paint = Paint()
       ..color = side.color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = side.width;
+      ..strokeWidth = side.width
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
     final path = getOuterPath(rect, textDirection: textDirection);
     canvas.drawPath(path, paint);
+  }
+}
+
+class _MenuBorderPainter extends CustomPainter {
+  final ShapeBorder shape;
+  final Color color;
+  final double strokeWidth;
+
+  const _MenuBorderPainter({
+    required this.shape,
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (strokeWidth <= 0) {
+      return;
+    }
+    final rect = Offset.zero & size;
+    if (shape is _MenuBubbleShape) {
+      final bubbleShape = shape as _MenuBubbleShape;
+      final innerRect = rect.deflate(strokeWidth);
+      if (innerRect.width <= 0 || innerRect.height <= 0) {
+        return;
+      }
+      final outerPath = bubbleShape.getOuterPath(rect);
+      final innerPath = bubbleShape.deflate(strokeWidth).getOuterPath(innerRect);
+      final borderPath = Path()
+        ..fillType = PathFillType.evenOdd
+        ..addPath(outerPath, Offset.zero)
+        ..addPath(innerPath, Offset.zero);
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true;
+      canvas.drawPath(borderPath, paint);
+    } else {
+      final path = shape.getOuterPath(rect);
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MenuBorderPainter oldDelegate) {
+    return oldDelegate.shape != shape ||
+        oldDelegate.color != color ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }

@@ -76,7 +76,7 @@ import 'constants/settings_keys.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> navigatorKey = globals.navigatorKey;
 // 将通道定义为全局变量
 const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 

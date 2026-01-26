@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'blur_button.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -262,8 +263,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
           ),
         ),
         actions: [
-          TextButton(
-            child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          HoverScaleTextButton(
+            child: const Text('取消', style: TextStyle(color: Colors.white)),
             onPressed: () => Navigator.of(context).pop(null),
           ),
         ],
@@ -852,7 +853,7 @@ style: TextStyle(
                     '当前视频没有可用的字幕轨道。\n您可以通过"加载本地字幕文件"按钮添加外部字幕。',
                     locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                      color: Colors.white70,
+                      color: Colors.white,
                       fontSize: 14,
                     ),
                     textAlign: TextAlign.center,

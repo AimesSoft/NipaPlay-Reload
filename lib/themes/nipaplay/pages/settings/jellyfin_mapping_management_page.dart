@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 
 class JellyfinMappingManagementPage extends StatefulWidget {
   const JellyfinMappingManagementPage({super.key});
@@ -47,12 +48,12 @@ class _JellyfinMappingManagementPageState extends State<JellyfinMappingManagemen
       title: '清除所有映射',
       content: '确定要清除所有Jellyfin剧集映射吗？这将删除所有已建立的智能映射关系，无法恢复。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('确定清除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
           onPressed: () => Navigator.of(context).pop(true),
@@ -85,7 +86,7 @@ style: TextStyle(color: Colors.red)),
         title: '映射分析',
         content: '暂无映射数据可供分析。\n\n请先使用Jellyfin播放器观看动画并手动匹配弹幕，系统将自动建立映射关系。',
         actions: [
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('知道了', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),
@@ -125,7 +126,7 @@ style: TextStyle(color: Colors.white)),
       title: '映射分析报告',
       content: content.toString(),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('关闭', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white)),

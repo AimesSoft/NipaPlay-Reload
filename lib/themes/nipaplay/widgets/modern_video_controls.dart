@@ -128,7 +128,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   }
 
   void _showSettingsMenu(BuildContext context) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     _settingsOverlay?.remove();
+    videoState.setControlsVisibilityLocked(true);
 
     Rect? anchorRect;
     final RenderBox? renderBox =
@@ -142,6 +144,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       builder: (context) => VideoSettingsMenu(
         anchorRect: anchorRect,
         onClose: () {
+          videoState.setControlsVisibilityLocked(false);
           _settingsOverlay?.remove();
           _settingsOverlay = null;
         },

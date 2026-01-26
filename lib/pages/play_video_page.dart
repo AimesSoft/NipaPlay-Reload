@@ -22,6 +22,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
 import '../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
@@ -237,21 +238,21 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           title: '保存截图',
           content: '请选择保存位置',
           actions: [
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop('photos'),
               child: const Text(
                 '相册',
                 style: TextStyle(color: Colors.white),
               ),
             ),
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop('file'),
               child: const Text(
                 '文件',
                 style: TextStyle(color: Colors.white),
               ),
             ),
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text(
                 '取消',
@@ -315,7 +316,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         ],
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
         ),

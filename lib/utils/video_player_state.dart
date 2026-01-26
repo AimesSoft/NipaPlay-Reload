@@ -258,6 +258,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   final String _timelinePreviewEnabledKey = 'timeline_preview_enabled';
+
+  WatchHistoryProvider? _resolveWatchHistoryProvider() {
+    final context = _context;
+    if (context != null && context.mounted) {
+      try {
+        return context.read<WatchHistoryProvider>();
+      } catch (_) {}
+    }
+    final rootContext = globals.navigatorKey.currentState?.overlay?.context;
+    if (rootContext != null) {
+      try {
+        return rootContext.read<WatchHistoryProvider>();
+      } catch (_) {}
+    }
+    return null;
+  }
   bool _timelinePreviewEnabled = true; // 默认开启时间轴缩略图
   bool _timelinePreviewSupported = false;
   int _timelinePreviewIntervalMs = 15000;

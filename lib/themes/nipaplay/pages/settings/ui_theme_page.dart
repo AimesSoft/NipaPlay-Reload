@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:window_manager/window_manager.dart';
@@ -170,7 +171,7 @@ class _UIThemePageState extends State<UIThemePage> {
       content: '切换到 ${newTheme.displayName} 主题需要重启应用才能完全生效。\n\n是否要立即重启应用？',
       barrierDismissible: true,
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -178,7 +179,7 @@ class _UIThemePageState extends State<UIThemePage> {
               locale: Locale("zh-Hans", "zh"),
               style: TextStyle(color: Colors.grey)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () async {
             // 先保存主题设置
             await provider.setTheme(newTheme);

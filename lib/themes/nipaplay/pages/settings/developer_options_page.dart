@@ -7,6 +7,7 @@ import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -258,7 +259,7 @@ XDG缓存目录: $cacheDir
 遵循XDG Base Directory规范，提供更好的Linux用户体验。
         """.trim(),
         actions: <Widget>[
-          TextButton(
+          HoverScaleTextButton(
             child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
@@ -281,12 +282,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: "确认迁移",
       content: "这将重新执行数据目录迁移过程。\n\n注意：这是一个测试功能，在正常情况下不应该使用。",
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("确认", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
           onPressed: () => Navigator.of(context).pop(true),
@@ -319,7 +320,7 @@ ${result.message}
 - 失败项目: ${result.failedItems}
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
@@ -337,7 +338,7 @@ ${result.message}
 ${result.errors.join('\n')}
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),
@@ -387,7 +388,7 @@ XDG_CACHE_HOME: $xdgCacheHome
 • 提供与其他Linux应用一致的用户体验
         """.trim(),
         actions: <Widget>[
-          TextButton(
+          HoverScaleTextButton(
             child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
@@ -418,12 +419,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
 是否继续？
       """.trim(),
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("确认恢复", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
           onPressed: () => Navigator.of(context).pop(true),
@@ -454,7 +455,7 @@ ${result.message}
 您的个人文件已恢复到 ~/Documents 目录。
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
@@ -472,7 +473,7 @@ ${result.message}
 ${result.errors.join('\n')}
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),

@@ -1,5 +1,16 @@
 part of dashboard_home_page;
 
+const _blockedRandomRecommendationKeywords = <String>[
+  '我的英雄学院',
+  '我的英雄學院',
+  '僕のヒーローアカデミア',
+  'ヒロアカ',
+  'my hero academia',
+  'boku no hero academia',
+  'hero academia',
+  'mha',
+];
+
 class RandomRecommendationItem {
   final String tag;
   final SearchResultAnime anime;
@@ -79,6 +90,7 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
             if (filterAdultContentGlobally && anime.isRestricted == true) {
               return false;
             }
+            if (_isMyHeroAcademiaRelated(anime)) return false;
             return true;
           }).toList();
 
@@ -211,5 +223,13 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
     const maxLength = 8;
     if (tag.length <= maxLength) return '#$tag';
     return '#${tag.substring(0, maxLength)}...';
+  }
+
+  bool _isMyHeroAcademiaRelated(SearchResultAnime anime) {
+    final title = anime.animeTitle.trim();
+    if (title.isEmpty) return false;
+    final normalizedTitle = title.toLowerCase();
+    return _blockedRandomRecommendationKeywords
+        .any((keyword) => normalizedTitle.contains(keyword));
   }
 }

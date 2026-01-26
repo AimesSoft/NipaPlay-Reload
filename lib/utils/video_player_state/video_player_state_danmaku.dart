@@ -892,8 +892,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 使用 Provider 获取播放记录
       WatchHistoryItem? existingHistory;
 
-      if (_context != null && _context!.mounted) {
-        final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
+      final watchHistoryProvider = _resolveWatchHistoryProvider();
+      if (watchHistoryProvider != null) {
         existingHistory =
             await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
       } else {
@@ -1003,10 +1003,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         }
 
         // 通过 Provider 更新记录
-        if (_context != null && _context!.mounted) {
-          await _context!
-              .read<WatchHistoryProvider>()
-              .addOrUpdateHistory(updatedHistory);
+        if (watchHistoryProvider != null) {
+          await watchHistoryProvider.addOrUpdateHistory(updatedHistory);
         } else {
           // 直接使用数据库更新
           await WatchHistoryDatabase.instance
@@ -1054,10 +1052,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         );
 
         // 通过 Provider 添加记录
-        if (_context != null && _context!.mounted) {
-          await _context!
-              .read<WatchHistoryProvider>()
-              .addOrUpdateHistory(newHistory);
+        if (watchHistoryProvider != null) {
+          await watchHistoryProvider.addOrUpdateHistory(newHistory);
         } else {
           // 直接使用数据库添加
           await WatchHistoryDatabase.instance

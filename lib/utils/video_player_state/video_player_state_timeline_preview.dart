@@ -222,6 +222,13 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       await previewPlayer.prepare();
       previewPlayer.state = PlayerPlaybackState.paused;
       await _waitForTimelinePreviewReady(previewPlayer);
+      if (kernel == PlayerKernelType.mdk) {
+        try {
+          await previewPlayer.updateTexture();
+        } catch (e) {
+          debugPrint('初始化时间轴截图纹理失败: $e');
+        }
+      }
       _timelinePreviewPlayer = previewPlayer;
       _timelinePreviewPlayerKernel = kernel;
       _timelinePreviewPlayerSource = source;
@@ -262,6 +269,15 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       AbstractPlayer player, int bucket, int session) async {
     if (session != _timelinePreviewSessionId) return null;
     try {
+      if (_timelinePreviewPlayerKernel == PlayerKernelType.mdk &&
+          player.textureId.value == null) {
+        try {
+          await player.updateTexture();
+        } catch (e) {
+          debugPrint('时间轴截图纹理创建失败: $e');
+        }
+      }
+
       int targetHeight = _timelinePreviewMaxHeight;
       int targetWidth = _timelinePreviewDefaultWidth;
       final videoStreams = player.mediaInfo.video;
@@ -308,12 +324,10 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         image = img.decodeImage(frame.bytes);
       } catch (_) {}
 
-      image ??= img.Image.fromBytes(
-        width: frame.width > 0 ? frame.width : _timelinePreviewDefaultWidth,
-        height: frame.height > 0 ? frame.height : _timelinePreviewMaxHeight,
-        bytes: frame.bytes.buffer,
-        numChannels: 4,
-      );
+      image ??= _decodeTimelineRawFrame(frame);
+      if (image == null) {
+        return null;
+      }
 
       if (image.height > _timelinePreviewMaxHeight) {
         image = img.copyResize(
@@ -327,6 +341,43 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       debugPrint('编码时间轴缩略图失败: $e');
       return null;
     }
+  }
+
+  img.Image? _decodeTimelineRawFrame(PlayerFrame frame) {
+    final width = frame.width > 0 ? frame.width : _timelinePreviewDefaultWidth;
+    final height =
+        frame.height > 0 ? frame.height : _timelinePreviewMaxHeight;
+    final bytes = frame.bytes;
+    if (width <= 0 || height <= 0 || bytes.isEmpty) return null;
+
+    int? rowStride;
+    if (bytes.length % height == 0) {
+      final stride = bytes.length ~/ height;
+      if (stride >= width * 4) {
+        rowStride = stride;
+      }
+    }
+
+    if (bytes.length < width * height * 4 && rowStride == null) {
+      return null;
+    }
+
+    return img.Image.fromBytes(
+      width: width,
+      height: height,
+      bytes: bytes.buffer,
+      numChannels: 4,
+      rowStride: rowStride,
+      order: _resolveTimelinePreviewChannelOrder(),
+    );
+  }
+
+  img.ChannelOrder _resolveTimelinePreviewChannelOrder() {
+    final kernel = _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
+    if (kernel == PlayerKernelType.mediaKit) {
+      return img.ChannelOrder.bgra;
+    }
+    return img.ChannelOrder.rgba;
   }
 
   Future<void> _prefetchInitialTimelineThumbnails(int session) async {

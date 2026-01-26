@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'base_settings_menu.dart';
 import 'settings_hint_text.dart';
 import 'blur_snackbar.dart';
+import 'fluent_settings_switch.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
@@ -284,7 +285,7 @@ style: TextStyle(color: Colors.white)),
                               children: [
                                 Icon(
                                   isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                  color: isSelected ? Colors.blue : Colors.white70,
+                                  color: isSelected ? Colors.blue : Colors.white,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 12),
@@ -296,7 +297,7 @@ style: TextStyle(color: Colors.white)),
                                         _getQualityDisplayName(quality),
                                         locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                                          color: isSelected ? Colors.blue : Colors.white,
+                                          color: Colors.white,
                                           fontSize: 14,
                                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                         ),
@@ -306,7 +307,7 @@ style: TextStyle(
                                         _getQualityDescription(quality),
                                         locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                                          color: isSelected ? Colors.blue.withOpacity(0.8) : Colors.white60,
+                                          color: Colors.white,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -341,11 +342,10 @@ style: TextStyle(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('转码时烧录字幕', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 13)),
-                      Switch(
+style: TextStyle(color: Colors.white, fontSize: 13)),
+                      FluentSettingsSwitch(
                         value: _burnIn,
                         onChanged: (v) => setState(() => _burnIn = v),
-                        activeColor: Colors.blue,
                       ),
                     ],
                   ),
@@ -379,7 +379,7 @@ style: TextStyle(color: Colors.white70, fontSize: 13)),
             children: [
               Icon(
                 selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: selected ? Colors.blue : Colors.white70,
+                color: selected ? Colors.blue : Colors.white,
                 size: 18,
               ),
               const SizedBox(width: 10),
@@ -388,7 +388,7 @@ style: TextStyle(color: Colors.white70, fontSize: 13)),
                   title,
                   locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                    color: selected ? Colors.blue : Colors.white,
+                    color: Colors.white,
                     fontSize: 13,
                   ),
                   overflow: TextOverflow.ellipsis,

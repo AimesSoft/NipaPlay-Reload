@@ -42,6 +42,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   late final PlayerKernelType _currentKernelType;
   static const double _menuWidth = 300;
   static const double _menuRightOffset = 20;
+  static const double _submenuMinHeight = 220;
+  static const double _submenuMaxHeight = 420;
 
   @override
   void initState() {
@@ -78,15 +80,18 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   }
 
   SettingsMenuScope _wrapMenu({required bool showBackItem, required Widget child}) {
+    final bool showHeader = showBackItem;
     return SettingsMenuScope(
       width: _menuWidth,
       rightOffset: _menuRightOffset,
       useBackButton: showBackItem,
-      showHeader: false,
-      showBackItem: showBackItem,
+      showHeader: showHeader,
+      showBackItem: showHeader ? false : showBackItem,
       lockControlsVisible: true,
       anchorRect: widget.anchorRect,
       showPointer: widget.anchorRect != null,
+      minHeight: showBackItem ? _submenuMinHeight : null,
+      maxHeight: showBackItem ? _submenuMaxHeight : null,
       child: child,
     );
   }

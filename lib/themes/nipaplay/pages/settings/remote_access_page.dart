@@ -5,6 +5,7 @@ import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
@@ -154,6 +155,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         controller: portController,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        cursorColor: const Color(0xFFFF2E55),
         decoration: InputDecoration(
           labelText: '端口 (1-65535)',
           labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
@@ -164,15 +166,17 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.38)),
           ),
         ),
-        style: TextStyle(color: colorScheme.onSurface),
+        style: const TextStyle(color: Color(0xFFFF2E55)),
       ),
       actions: [
-        TextButton(
-          child: Text('取消', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7))),
+        HoverScaleTextButton(
+          text: '取消',
+          idleColor: colorScheme.onSurface.withOpacity(0.7),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        TextButton(
-          child: Text('确定', style: TextStyle(color: colorScheme.onSurface)),
+        HoverScaleTextButton(
+          text: '确定',
+          idleColor: colorScheme.onSurface,
           onPressed: () {
             final port = int.tryParse(portController.text);
             if (port != null && port > 0 && port < 65536) {

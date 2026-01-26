@@ -489,7 +489,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                         child: Text(
                           '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕',
                           locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: Colors.white),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -502,7 +502,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                             child: Text(
                               '当前字幕轨道没有可显示的字幕内容',
                               locale: Locale("zh-Hans", "zh"),
-                              style: TextStyle(color: Colors.white70),
+                              style: TextStyle(color: Colors.white),
                               textAlign: TextAlign.center,
                             ),
                           ),

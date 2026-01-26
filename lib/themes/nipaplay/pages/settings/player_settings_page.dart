@@ -16,6 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
@@ -150,7 +151,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       content: '更改播放器内核需要重启应用才能生效。点击确定退出应用。',
       barrierDismissible: false,
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () {
             // 直接退出应用
             if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
@@ -290,7 +291,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       content: '更改弹幕内核需要重启应用才能完全生效。点击确定退出应用，点击取消保留当前设置。',
       barrierDismissible: true,
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -298,7 +299,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               locale: Locale("zh-Hans", "zh"),
               style: TextStyle(color: Colors.grey)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () {
             // 直接退出应用
             if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {

@@ -14,6 +14,7 @@ import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -72,14 +73,14 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 ? '媒体访问权限已被永久拒绝。请前往系统设置开启。'
                 : '存储权限已被永久拒绝。请前往系统设置开启。',
             actions: [
-              TextButton(
+              HoverScaleTextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                   openAppSettings();
                 },
                 child: const Text('去设置'),
               ),
-              TextButton(
+              HoverScaleTextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('取消'),
               ),
@@ -487,14 +488,14 @@ class _ThemeModePageState extends State<ThemeModePage> {
         },
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
-          style: TextButton.styleFrom(foregroundColor: colorScheme.onSurface.withOpacity(0.7)),
+          idleColor: colorScheme.onSurface.withOpacity(0.7),
           child: const Text("取消"),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(previewColor),
-          style: TextButton.styleFrom(foregroundColor: colorScheme.onSurface),
+          idleColor: colorScheme.onSurface,
           child: const Text("确定"),
         ),
       ],

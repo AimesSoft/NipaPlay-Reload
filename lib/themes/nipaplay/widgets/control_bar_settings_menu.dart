@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
+import 'fluent_settings_switch.dart';
 import 'settings_hint_text.dart';
 
 class ControlBarSettingsMenu extends StatefulWidget {
@@ -81,7 +82,7 @@ class _ControlBarSettingsMenuState extends State<ControlBarSettingsMenu> {
                             fontSize: 14,
                           ),
                         ),
-                        Switch(
+                        FluentSettingsSwitch(
                           value: videoState.minimalProgressBarEnabled,
                           onChanged: (value) {
                             videoState.setMinimalProgressBarEnabled(value);
@@ -104,7 +105,7 @@ class _ControlBarSettingsMenuState extends State<ControlBarSettingsMenu> {
                             fontSize: 14,
                           ),
                         ),
-                        Switch(
+                        FluentSettingsSwitch(
                           value: widget.videoState.showDanmakuDensityChart,
                           onChanged: (value) {
                             widget.videoState.setShowDanmakuDensityChart(value);

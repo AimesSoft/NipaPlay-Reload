@@ -7,6 +7,7 @@ import 'package:universal_html/html.dart' as web_html;
 import 'package:image_picker/image_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -166,7 +167,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
           title: '选择来源',
           content: '请选择视频来源',
           actions: [
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () {
                 Navigator.of(context).pop('album');
               },
@@ -175,7 +176,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                 style: TextStyle(color: Colors.white),
               ),
             ),
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () {
                 Navigator.of(context).pop('file'); // 先 pop
               },
@@ -217,14 +218,14 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                   title: '权限被永久拒绝',
                   content: '您已永久拒绝相关权限。请前往系统设置手动为NipaPlay开启所需权限。',
                   actions: [
-                    TextButton(
+                    HoverScaleTextButton(
                       onPressed: () {
                         Navigator.of(context).pop();
                         openAppSettings();
                       },
                       child: const Text('前往设置'),
                     ),
-                    TextButton(
+                    HoverScaleTextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('取消'),
                     ),

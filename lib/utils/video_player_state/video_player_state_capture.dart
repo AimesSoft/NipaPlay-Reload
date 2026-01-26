@@ -32,6 +32,81 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         bytes[2] == 0xFF;
   }
 
+  img.Image _forceOpaqueImage(img.Image image) {
+    if (!image.hasAlpha) {
+      return image.convert(
+        numChannels: 4,
+        alpha: image.maxChannelValue,
+      );
+    }
+    final alpha = image.maxChannelValue;
+    for (final pixel in image) {
+      pixel.a = alpha;
+    }
+    return image;
+  }
+
+  Uint8List? _encodeFrameToPngBytes(PlayerFrame frame) {
+    final frameBytes = frame.bytes;
+    final isPng = _isPngBytes(frameBytes);
+    final isJpeg = _isJpegBytes(frameBytes);
+
+    img.Image? decoded;
+    if (isPng || isJpeg) {
+      try {
+        decoded = img.decodeImage(frameBytes);
+      } catch (_) {}
+      if (decoded != null) {
+        final opaque = _forceOpaqueImage(decoded);
+        return Uint8List.fromList(img.encodePng(opaque));
+      }
+    } else {
+      try {
+        decoded = img.decodeImage(frameBytes);
+      } catch (_) {}
+      if (decoded != null) {
+        final opaque = _forceOpaqueImage(decoded);
+        return Uint8List.fromList(img.encodePng(opaque));
+      }
+    }
+
+    final rawSpec = _matchRawFrameSpec(frame);
+    if (rawSpec == null) {
+      return null;
+    }
+
+    final expectedLength = rawSpec.width * rawSpec.height * 4;
+    if (frameBytes.length < expectedLength ||
+        (frameBytes.length != expectedLength && rawSpec.rowStride == null)) {
+      return null;
+    }
+
+    final channelOrder = player.getPlayerKernelName() == 'Media Kit'
+        ? img.ChannelOrder.bgra
+        : img.ChannelOrder.rgba;
+    final rawCopy = Uint8List.fromList(frameBytes);
+    final rowStride = rawSpec.rowStride ?? rawSpec.width * 4;
+    for (int y = 0; y < rawSpec.height; y++) {
+      final rowStart = y * rowStride;
+      final rowEnd = rowStart + rawSpec.width * 4;
+      for (int i = rowStart + 3; i < rowEnd && i < rawCopy.length; i += 4) {
+        rawCopy[i] = 0xFF;
+      }
+    }
+
+    final image = img.Image.fromBytes(
+      width: rawSpec.width,
+      height: rawSpec.height,
+      bytes: rawCopy.buffer,
+      numChannels: 4,
+      rowStride: rawSpec.rowStride,
+      order: channelOrder,
+    );
+
+    final pngBytes = img.encodePng(image);
+    return Uint8List.fromList(pngBytes);
+  }
+
   _RawFrameSpec? _matchRawFrameSpec(PlayerFrame frame) {
     final byteLength = frame.bytes.length;
     final candidates = <_RawFrameSpec>[];
@@ -148,74 +223,15 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.png';
       final thumbnailFile = File(thumbnailPath);
 
-      final frameBytes = videoFrame.bytes;
-
-      if (_isPngBytes(frameBytes)) {
-        debugPrint('检测到PNG格式的截图数据，直接保存');
-        await thumbnailFile.writeAsBytes(frameBytes);
-        debugPrint('成功保存PNG截图，大小: ${frameBytes.length} 字节');
-        return thumbnailPath;
-      }
-
-      if (_isJpegBytes(frameBytes)) {
-        debugPrint('检测到JPEG格式的截图数据，直接保存');
-        await thumbnailFile.writeAsBytes(frameBytes);
-        debugPrint('成功保存JPEG截图，大小: ${frameBytes.length} 字节');
-        return thumbnailPath;
-      }
-
-      img.Image? decoded;
-      try {
-        decoded = img.decodeImage(frameBytes);
-      } catch (_) {}
-
-      if (decoded != null) {
-        debugPrint('检测到已编码的截图数据，转换为PNG保存');
-        final pngBytes = img.encodePng(decoded);
-        await thumbnailFile.writeAsBytes(pngBytes);
-        debugPrint('成功保存转换后的截图，尺寸: ${decoded.width}x${decoded.height}');
-        return thumbnailPath;
-      }
-
-      debugPrint('检测到原始像素格式的截图数据，尝试转换处理');
-      final rawSpec = _matchRawFrameSpec(videoFrame);
-      if (rawSpec == null) {
-        debugPrint('无法确定原始截图尺寸，跳过保存');
+      final pngBytes = _encodeFrameToPngBytes(videoFrame);
+      if (pngBytes == null || pngBytes.isEmpty) {
+        debugPrint('无法转换截图数据，跳过保存');
         return null;
       }
 
-      final expectedLength = rawSpec.width * rawSpec.height * 4;
-      if (frameBytes.length < expectedLength ||
-          (frameBytes.length != expectedLength && rawSpec.rowStride == null)) {
-        debugPrint(
-            '原始截图数据长度与尺寸不匹配: ${frameBytes.length} 字节, 期望: $expectedLength');
-        return null;
-      }
-
-      try {
-        final channelOrder = player.getPlayerKernelName() == 'Media Kit'
-            ? img.ChannelOrder.bgra
-            : img.ChannelOrder.rgba;
-        final rawCopy = Uint8List.fromList(frameBytes);
-        final image = img.Image.fromBytes(
-          width: rawSpec.width,
-          height: rawSpec.height,
-          bytes: rawCopy.buffer,
-          numChannels: 4,
-          rowStride: rawSpec.rowStride,
-          order: channelOrder,
-        );
-
-        final pngBytes = img.encodePng(image);
-        await thumbnailFile.writeAsBytes(pngBytes);
-
-        debugPrint(
-            '成功保存转换后的截图，保留了${rawSpec.width}x${rawSpec.height}的原始比例');
-        return thumbnailPath;
-      } catch (e) {
-        debugPrint('处理图像数据时出错: $e');
-        return null;
-      }
+      await thumbnailFile.writeAsBytes(pngBytes, flush: true);
+      debugPrint('成功保存截图，大小: ${pngBytes.length} 字节');
+      return thumbnailPath;
     } catch (e) {
       debugPrint('无暂停截图时出错: $e');
       return null;
@@ -273,18 +289,15 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         _currentVideoHash = videoFileHash; // 缓存哈希值
       }
 
-      // 直接使用image包将RGBA数据转换为PNG
       try {
-        // 从RGBA字节数据创建图像
-        final image = img.Image.fromBytes(
-          width: targetWidth, // Should be videoFrame.width
-          height: targetHeight, // Should be videoFrame.height
-          bytes: videoFrame.bytes.buffer, // CHANGED to get ByteBuffer
-          numChannels: 4,
-        );
-
-        // 编码为PNG格式
-        final pngBytes = img.encodePng(image);
+        final pngBytes = _encodeFrameToPngBytes(videoFrame);
+        if (pngBytes == null || pngBytes.isEmpty) {
+          // 恢复播放状态
+          if (isPlaying) {
+            player.state = PlaybackState.playing;
+          }
+          return null;
+        }
 
         // 创建缩略图目录
         final appDir = await StorageService.getAppStorageDirectory();
@@ -296,7 +309,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         // 保存缩略图文件
         final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.png';
         final thumbnailFile = File(thumbnailPath);
-        await thumbnailFile.writeAsBytes(pngBytes);
+        await thumbnailFile.writeAsBytes(pngBytes, flush: true);
 
         // 恢复播放状态
         if (isPlaying) {

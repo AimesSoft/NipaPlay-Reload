@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -201,7 +202,7 @@ class _GeneralPageState extends State<GeneralPage> {
                       title: '确认清除缓存',
                       content: '确定要清除所有缓存的图片文件吗？',
                       actions: [
-                        TextButton(
+                        HoverScaleTextButton(
                           child: Text(
                             '取消',
                             locale:Locale("zh-Hans","zh"),
@@ -209,7 +210,7 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                           ),
                           onPressed: () => Navigator.of(context).pop(false),
                         ),
-                        TextButton(
+                        HoverScaleTextButton(
                           child: Text(
                             '确定',
                             locale:Locale("zh-Hans","zh"),

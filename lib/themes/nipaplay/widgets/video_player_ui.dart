@@ -13,6 +13,7 @@ import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
 import 'blur_snackbar.dart';
+import 'hover_scale_text_button.dart';
 import 'right_edge_hover_menu.dart';
 import 'minimal_progress_bar.dart';
 import 'danmaku_density_bar.dart';
@@ -119,7 +120,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
               title: '播放错误',
               content: errorMessage,
               actions: [
-                TextButton(
+                HoverScaleTextButton(
                   child: const Text('确定'),
                   onPressed: () {
                     // 1. Pop the dialog

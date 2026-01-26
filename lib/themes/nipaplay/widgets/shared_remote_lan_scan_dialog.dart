@@ -14,6 +14,7 @@ import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 
 class SharedRemoteLanScanDialog {
   static Future<bool?> show(
@@ -25,7 +26,7 @@ class SharedRemoteLanScanDialog {
       title: '扫描局域网',
       contentWidget: _SharedRemoteLanScanDialogContent(provider: provider),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('关闭', style: TextStyle(color: Colors.white70)),
         ),

@@ -33,7 +33,11 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
 
     _isCapturingFrame = true;
     try {
-      final newThumbnailPath = await _captureVideoFrameWithoutPausing();
+      String? newThumbnailPath = await _captureVideoFrameWithoutPausing();
+      if (newThumbnailPath == null &&
+          player.state == PlaybackState.paused) {
+        newThumbnailPath = await captureVideoFrame();
+      }
       if (newThumbnailPath != null) {
         _currentThumbnailPath = newThumbnailPath;
         debugPrint('条件截图完成($triggerEvent): $_currentThumbnailPath');

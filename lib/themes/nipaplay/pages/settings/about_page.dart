@@ -6,6 +6,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
 
@@ -164,7 +165,7 @@ class _AboutPageState extends State<AboutPage> {
       ),
       actions: [
         if (info.releaseUrl.trim().isNotEmpty)
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _launchURL(info.releaseUrl);
@@ -174,7 +175,7 @@ class _AboutPageState extends State<AboutPage> {
               style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
             '关闭',
@@ -213,7 +214,7 @@ class _AboutPageState extends State<AboutPage> {
         title: '检查更新失败',
         content: '请稍后再试',
         actions: [
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(
               '关闭',
@@ -281,7 +282,7 @@ class _AboutPageState extends State<AboutPage> {
         ),
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
             '关闭',

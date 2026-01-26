@@ -9,7 +9,7 @@ class SettingsHintText extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+        color: Colors.white,
         fontSize: 12,
       ),
       textAlign: TextAlign.left,

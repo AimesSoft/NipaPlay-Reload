@@ -63,7 +63,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           '快进快退时间',
                           locale: Locale("zh", "CN"),
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: Colors.white,
                             fontSize: 14,
                           ),
                         ),
@@ -83,7 +83,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                       locale: Locale("zh", "CN"),
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white54,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -108,14 +108,14 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                         children: [
                           Icon(
                             isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                            color: isSelected ? Colors.white : Colors.white70,
+                            color: isSelected ? Colors.white : Colors.white,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
                           Text(
                             '${seconds}秒',
                             style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white70,
+                              color: isSelected ? Colors.white : Colors.white,
                               fontSize: 14,
                               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                             ),
@@ -142,7 +142,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           '长按右键倍速',
                           locale: Locale("zh", "CN"),
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: Colors.white,
                             fontSize: 14,
                           ),
                         ),
@@ -162,7 +162,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                       locale: Locale("zh", "CN"),
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white54,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -187,14 +187,14 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                         children: [
                           Icon(
                             isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                            color: isSelected ? Colors.white : Colors.white70,
+                            color: isSelected ? Colors.white : Colors.white,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
                           Text(
                             '${speed}x',
                             style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white70,
+                              color: isSelected ? Colors.white : Colors.white,
                               fontSize: 14,
                               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                             ),
@@ -221,7 +221,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                           '跳过时间',
                           locale: Locale("zh", "CN"),
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: Colors.white,
                             fontSize: 14,
                           ),
                         ),
@@ -241,7 +241,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                       locale: Locale("zh", "CN"),
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white54,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -273,7 +273,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                               ),
                               child: const Icon(
                                 Icons.remove,
-                                color: Colors.white70,
+                                color: Colors.white,
                                 size: 20,
                               ),
                             ),
@@ -302,12 +302,12 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(color: Colors.white70),
+                                borderSide: const BorderSide(color: Colors.white),
                               ),
                               filled: true,
                               fillColor: Colors.white10,
                               suffixText: '秒',
-                              suffixStyle: const TextStyle(color: Colors.white54),
+                              suffixStyle: const TextStyle(color: Colors.white),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
                             onChanged: (value) {
@@ -352,7 +352,7 @@ class _SeekStepMenuState extends State<SeekStepMenu> {
                               ),
                               child: const Icon(
                                 Icons.add,
-                                color: Colors.white70,
+                                color: Colors.white,
                                 size: 20,
                               ),
                             ),

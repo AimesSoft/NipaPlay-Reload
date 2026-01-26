@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/backup_service.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
@@ -176,11 +177,11 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         title: '确认恢复',
         content: '恢复操作将会合并备份文件中的观看进度（包括截图）到当前记录中，且只会恢复本地存在的媒体文件的进度。是否继续？',
         actions: [
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('取消', style: TextStyle(color: Colors.white70)),
           ),
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('确认', style: TextStyle(color: Colors.white)),
           ),

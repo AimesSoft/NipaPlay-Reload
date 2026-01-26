@@ -7,6 +7,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 
 class SharedRemoteLibrarySettingsSection extends StatelessWidget {
   const SharedRemoteLibrarySettingsSection({super.key});
@@ -283,11 +284,11 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
       title: '删除共享客户端',
       content: '确定要删除该客户端吗？',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
         ),
@@ -319,11 +320,11 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
         style: const TextStyle(color: Colors.white),
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('保存', style: TextStyle(color: Colors.white)),
         ),
@@ -355,11 +356,11 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
         style: const TextStyle(color: Colors.white),
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('保存', style: TextStyle(color: Colors.white)),
         ),

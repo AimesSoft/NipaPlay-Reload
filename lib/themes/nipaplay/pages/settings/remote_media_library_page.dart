@@ -13,6 +13,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dar
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_settings_section.dart';
@@ -800,12 +801,12 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
         ),
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () async {
             try {
               await MediaServerDeviceIdService.instance
@@ -1411,12 +1412,12 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
       title: '断开连接',
       content: '确定要断开与Jellyfin服务器的连接吗？\n\n这将清除服务器信息和登录状态。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
@@ -1550,12 +1551,12 @@ style: TextStyle(color: Colors.red)),
       title: '断开连接',
       content: '确定要断开与Emby服务器的连接吗？\n\n这将清除服务器信息和登录状态。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
@@ -1645,12 +1646,12 @@ style: TextStyle(color: Colors.red)),
       title: '断开弹弹play远程服务',
       content: '确定要断开与弹弹play远程服务的连接吗？\n\n这将清除已保存的地址与 API 密钥。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),

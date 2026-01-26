@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -228,16 +229,16 @@ class DesktopExitHandler
         },
       ),
       actions: [
-        material.TextButton(
+        HoverScaleTextButton(
           onPressed: () => material.Navigator.of(context).pop(
             const DesktopExitDecision(
               action: DesktopExitAction.cancelAndReturn,
               remember: false,
             ),
           ),
-          child: material.Text(
+          child: const material.Text(
             '取消并返回',
-            style: const material.TextStyle(color: material.Colors.white70),
+            style: material.TextStyle(color: material.Colors.white70),
           ),
         ),
         material.OutlinedButton(

@@ -773,10 +773,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
         }
 
-        if (_context != null && _context!.mounted) {
-          await _context!
-              .read<WatchHistoryProvider>()
-              .addOrUpdateHistory(updatedHistory);
+        final watchHistoryProvider = _resolveWatchHistoryProvider();
+        if (watchHistoryProvider != null) {
+          await watchHistoryProvider.addOrUpdateHistory(updatedHistory);
         }
         return;
       }
@@ -876,9 +875,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         await WatchHistoryManager.addOrUpdateHistory(item);
       }
 
-      if (_context != null && _context!.mounted) {
-        _context!.read<WatchHistoryProvider>().refresh();
-      }
+      _resolveWatchHistoryProvider()?.refresh();
     } catch (e) {
       //debugPrint('初始化观看记录时出错: $e\n$s');
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 
 class SMBConnectionDialog {
   static Future<bool?> show(
@@ -153,7 +154,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(
+              HoverScaleTextButton(
                 onPressed: _isSubmitting
                     ? null
                     : () {

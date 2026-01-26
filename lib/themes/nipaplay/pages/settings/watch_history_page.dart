@@ -17,6 +17,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 class WatchHistoryPage extends StatefulWidget {
@@ -79,106 +81,79 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
 
   Widget _buildWatchHistoryItem(WatchHistoryItem item) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     const Color nipaColor = Color(0xFFFF2E55);
-    
-    final Color itemBgColor = isDark 
-        ? Colors.white.withOpacity(0.05) 
-        : Colors.black.withOpacity(0.03);
-    final Color borderColor = isDark
-        ? Colors.white.withOpacity(0.08)
-        : Colors.black.withOpacity(0.08);
 
-    return Container(
+    return HistoryLikeListCard(
       margin: const EdgeInsets.only(bottom: 2),
-      decoration: BoxDecoration(
-        color: itemBgColor,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: borderColor, width: 0.5),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _isAutoMatching ? null : () => _onWatchHistoryItemTap(item),
-          // 移除所有涟漪和高亮效果
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
+      onTap: _isAutoMatching ? null : () => _onWatchHistoryItemTap(item),
+      child: Row(
+        children: [
+          _buildThumbnail(item),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildThumbnail(item),
-                const SizedBox(width: 12),
-                
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        item.animeName.isNotEmpty ? item.animeName : path.basename(item.filePath),
-                        style: TextStyle(
-                          color: colorScheme.onSurface,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.episodeTitle ?? '未知集数',
-                        style: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (item.watchProgress > 0) ...[
-                        const SizedBox(height: 6),
-                        Container(
-                          width: double.infinity,
-                          height: 2,
-                          decoration: BoxDecoration(
-                            color: colorScheme.onSurface.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(1),
-                          ),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: item.watchProgress,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: nipaColor, // 使用 ff2e55
-                                borderRadius: BorderRadius.circular(1),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(width: 8),
                 Text(
-                  _formatTime(item.lastWatchTime),
+                  item.animeName.isNotEmpty
+                      ? item.animeName
+                      : path.basename(item.filePath),
                   style: TextStyle(
-                    color: colorScheme.onSurface.withOpacity(0.4),
+                    color: colorScheme.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.episodeTitle ?? '未知集数',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
                     fontSize: 11,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 8),
-                // 自定义动画删除按钮
-                _AnimatedTrashButton(
-                  onTap: () => _showDeleteConfirmDialog(item),
-                ),
+                if (item.watchProgress > 0) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: item.watchProgress,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: nipaColor, // 使用 ff2e55
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-        ),
+          const SizedBox(width: 8),
+          Text(
+            _formatTime(item.lastWatchTime),
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.4),
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _AnimatedTrashButton(
+            onTap: () => _showDeleteConfirmDialog(item),
+          ),
+        ],
       ),
     );
   }
@@ -506,13 +481,13 @@ style: TextStyle(
       title: '删除观看记录',
       content: '确定要删除 ${item.animeName} 的观看记录吗？',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消'),
           onPressed: () {
             Navigator.of(context).pop();
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('删除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
           onPressed: () async {
