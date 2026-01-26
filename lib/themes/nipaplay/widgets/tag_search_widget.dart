@@ -1541,6 +1541,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
     required ValueChanged<double> onChanged,
     required _TagSearchStyle style,
   }) {
+    const searchColor = Color(0xFFFF2E55);
     final sliderStyle = fluent.SliderThemeData(
       activeColor: fluent.WidgetStatePropertyAll(style.accentColor),
       thumbColor: fluent.WidgetStatePropertyAll(style.accentColor),
@@ -1548,6 +1549,11 @@ class _TagSearchModalState extends State<TagSearchModal> {
         style.accentColor.withOpacity(0.25),
       ),
       trackHeight: const fluent.WidgetStatePropertyAll(3.5),
+    );
+    final fluentTheme = fluent.FluentThemeData(
+      brightness: Theme.of(context).brightness,
+      accentColor: fluent.ColorExtension(searchColor).toAccentColor(),
+      sliderTheme: sliderStyle,
     );
 
     return Column(
@@ -1573,14 +1579,17 @@ class _TagSearchModalState extends State<TagSearchModal> {
           ],
         ),
         const SizedBox(height: 6),
-        fluent.Slider(
-          value: value,
-          min: 0,
-          max: 10,
-          divisions: 10,
-          label: value.round().toString(),
-          style: sliderStyle,
-          onChanged: onChanged,
+        fluent.FluentTheme(
+          data: fluentTheme,
+          child: fluent.Slider(
+            value: value,
+            min: 0,
+            max: 10,
+            divisions: 10,
+            label: value.round().toString(),
+            style: sliderStyle,
+            onChanged: onChanged,
+          ),
         ),
       ],
     );

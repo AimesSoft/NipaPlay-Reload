@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
@@ -272,14 +273,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           title: "文件夹访问受限",
           content: io.Platform.isAndroid ?"无法访问您选择的文件夹，可能是权限问题。\n\n如果您使用的是Android 11或更高版本，请考虑在设置中开启「管理所有文件」权限。" : "无法访问您选择的文件夹，可能是权限问题。",
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("打开设置", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
@@ -329,7 +330,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             title: "访问提示 ",
             content: dialogContent,
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () {
@@ -358,7 +359,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             title: "访问错误",
             content: "无法访问所选文件夹，可能是权限问题。\n\n建议选择您的个人文件夹或媒体文件夹，如Pictures、Download或Movies。\n\n错误: ${e.toString().substring(0, min(e.toString().length, 100))}",
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () {

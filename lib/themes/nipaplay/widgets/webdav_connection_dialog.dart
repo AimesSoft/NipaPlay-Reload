@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 
 class WebDAVConnectionDialog {
@@ -214,7 +215,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(
+              HoverScaleTextButton(
                 onPressed: _isLoading ? null : () {
                   Navigator.of(context).pop(false);
                 },
@@ -226,7 +227,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
               
               const SizedBox(width: 12),
               
-              TextButton(
+              HoverScaleTextButton(
                 onPressed: _isLoading ? null : _testConnection,
                 child: _isLoading
                     ? const SizedBox(

@@ -196,8 +196,7 @@ class BaseSettingsMenu extends StatelessWidget {
                             maxHeight: resolvedMaxHeight,
                           ),
                           child: Column(
-                            mainAxisSize:
-                                showHeader ? MainAxisSize.max : MainAxisSize.min,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               if (showHeader)
                                 Container(
@@ -253,7 +252,8 @@ class BaseSettingsMenu extends StatelessWidget {
                                   ),
                                 ),
                               (showHeader
-                                  ? Expanded(
+                                  ? Flexible(
+                                      fit: FlexFit.loose,
                                       child: Theme(
                                         data: menuTheme,
                                         child: _MenuContentList(
@@ -264,7 +264,7 @@ class BaseSettingsMenu extends StatelessWidget {
                                           dividerColor: borderColor,
                                           minHeight: resolvedMinHeight,
                                           maxHeight: resolvedMaxHeight,
-                                          shrinkWrap: false,
+                                          shrinkWrap: true,
                                           content: content,
                                         ),
                                       ),
