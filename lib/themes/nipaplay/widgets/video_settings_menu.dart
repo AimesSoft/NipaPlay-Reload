@@ -48,12 +48,12 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     super.initState();
     videoState = Provider.of<VideoPlayerState>(context, listen: false);
     _currentKernelType = PlayerFactory.getKernelType();
-    videoState.setControlsHovered(true);
+    videoState.setControlsVisibilityLocked(true);
   }
 
   @override
   void dispose() {
-    videoState.setControlsHovered(false);
+    videoState.setControlsVisibilityLocked(false);
     super.dispose();
   }
 

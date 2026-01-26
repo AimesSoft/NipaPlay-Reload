@@ -672,80 +672,29 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
   Widget _getVideoThumbnail(WatchHistoryItem item) {
     final now = DateTime.now();
-    
-    // iOS平台特殊处理：检查截图文件的修改时间
-    if (Platform.isIOS && item.thumbnailPath != null) {
-      final thumbnailFile = File(item.thumbnailPath!);
+
+    final thumbnailPath = item.thumbnailPath;
+    if (thumbnailPath != null) {
+      final thumbnailFile = File(thumbnailPath);
       if (thumbnailFile.existsSync()) {
+        int modifiedMs = 0;
         try {
-          final fileModified = thumbnailFile.lastModifiedSync();
-          final cacheKey = '${item.filePath}_${fileModified.millisecondsSinceEpoch}';
-          
-          // 使用包含文件修改时间的缓存key，确保文件更新后缓存失效
-          if (_thumbnailCache.containsKey(cacheKey)) {
-            final cachedData = _thumbnailCache[cacheKey]!;
-            final lastRenderTime = cachedData['time'] as DateTime;
-            
-            if (now.difference(lastRenderTime).inSeconds < 60) {
-              return cachedData['widget'] as Widget;
-            }
-          }
-          
-          // 清理旧的缓存条目（相同filePath但不同修改时间）
-          _thumbnailCache.removeWhere((key, value) => key.startsWith('${item.filePath}_'));
-          
-          final thumbnailWidget = FutureBuilder<Uint8List>(
-            future: thumbnailFile.readAsBytes(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Container(color: Colors.white10);
-              }
-              if (snapshot.hasError || !snapshot.hasData) {
-                return _buildDefaultThumbnail(item);
-              }
-              if (snapshot.data!.isEmpty) {
-                return _buildDefaultThumbnail(item);
-              }
-              try {
-                return Image.memory(
-                  snapshot.data!,
-                  key: ValueKey('${item.filePath}_${fileModified.millisecondsSinceEpoch}'),
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                  errorBuilder: (_, __, ___) => _buildDefaultThumbnail(item),
-                );
-              } catch (e) {
-                return _buildDefaultThumbnail(item);
-              }
-            },
-          );
-          
-          // 使用新的缓存key存储
-          _thumbnailCache[cacheKey] = {
-            'widget': thumbnailWidget,
-            'time': now
-          };
-          
-          return thumbnailWidget;
+          modifiedMs = thumbnailFile.lastModifiedSync().millisecondsSinceEpoch;
         } catch (e) {
           debugPrint('获取截图文件修改时间失败: $e');
         }
-      }
-    }
-    
-    // 非iOS平台或获取修改时间失败时的原有逻辑
-    if (_thumbnailCache.containsKey(item.filePath)) {
-      final cachedData = _thumbnailCache[item.filePath]!;
-      final lastRenderTime = cachedData['time'] as DateTime;
-      
-      if (now.difference(lastRenderTime).inSeconds < 60) {
-        return cachedData['widget'] as Widget;
-      }
-    }
-    if (item.thumbnailPath != null) {
-      final thumbnailFile = File(item.thumbnailPath!);
-      if (thumbnailFile.existsSync()) {
+
+        final cacheKey = '${item.filePath}_${thumbnailPath}_$modifiedMs';
+        if (_thumbnailCache.containsKey(cacheKey)) {
+          final cachedData = _thumbnailCache[cacheKey]!;
+          final lastRenderTime = cachedData['time'] as DateTime;
+          if (now.difference(lastRenderTime).inSeconds < 60) {
+            return cachedData['widget'] as Widget;
+          }
+        }
+
+        _thumbnailCache.removeWhere((key, value) => key.startsWith('${item.filePath}_'));
+
         final thumbnailWidget = FutureBuilder<Uint8List>(
           future: thumbnailFile.readAsBytes(),
           builder: (context, snapshot) {
@@ -761,6 +710,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
             try {
               return Image.memory(
                 snapshot.data!,
+                key: ValueKey(cacheKey),
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
@@ -771,25 +721,32 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
             }
           },
         );
-        
-        // 缓存生成的缩略图和当前时间
-        _thumbnailCache[item.filePath] = {
+
+        _thumbnailCache[cacheKey] = {
           'widget': thumbnailWidget,
           'time': now
         };
-        
+
         return thumbnailWidget;
       }
     }
 
+    if (_thumbnailCache.containsKey(item.filePath)) {
+      final cachedData = _thumbnailCache[item.filePath]!;
+      final lastRenderTime = cachedData['time'] as DateTime;
+
+      if (now.difference(lastRenderTime).inSeconds < 60) {
+        return cachedData['widget'] as Widget;
+      }
+    }
+
     final defaultThumbnail = _buildDefaultThumbnail(item);
-    
-    // 缓存默认缩略图和当前时间
+
     _thumbnailCache[item.filePath] = {
       'widget': defaultThumbnail,
       'time': now
     };
-    
+
     return defaultThumbnail;
   }
 

@@ -1,11 +1,8 @@
-import 'dart:ui';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
-import 'package:provider/provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 const Color _fluentAccentColor = Color(0xFFFF2E55);
 
@@ -429,8 +426,17 @@ class SettingsItem extends StatelessWidget {
           ],
         );
       case SettingsItemType.hotkey:
-        final appearanceProvider = context.watch<AppearanceSettingsProvider>();
-        final isBlurEnabled = appearanceProvider.enableWidgetBlurEffect;
+        final bool isDark = Theme.of(context).brightness == Brightness.dark;
+        final Color hotkeyBackgroundColor =
+            isDark ? const Color(0xFF1E1E1E) : Colors.white;
+        final Color hotkeyBorderColor = isRecording
+            ? Colors.red
+            : (isDark ? Colors.white24 : Colors.black12);
+        final Color hotkeyTextColor = isRecording
+            ? Colors.red
+            : (enabled
+                ? colorScheme.onSurface
+                : colorScheme.onSurface.withOpacity(0.54));
 
         return ListTile(
           leading: icon != null
@@ -457,41 +463,23 @@ class SettingsItem extends StatelessWidget {
                   ),
                 )
               : null,
-          trailing: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(
-                sigmaX: isBlurEnabled ? 10.0 : 0.0,
-                sigmaY: isBlurEnabled ? 10.0 : 0.0,
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: hotkeyBackgroundColor,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: hotkeyBorderColor,
+                width: 1,
               ),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isRecording
-                      ? Colors.red.withOpacity(0.2)
-                      : colorScheme.onSurface.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isRecording
-                        ? Colors.red
-                        : colorScheme.onSurface.withOpacity(0.4),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  isRecording ? '按任意键...' : (hotkeyText ?? '未设置'),
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: isRecording
-                        ? Colors.red
-                        : (enabled
-                            ? colorScheme.onSurface
-                            : colorScheme.onSurface.withOpacity(0.54)),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+            ),
+            child: Text(
+              isRecording ? '按任意键...' : (hotkeyText ?? '未设置'),
+              locale: const Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                color: hotkeyTextColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),

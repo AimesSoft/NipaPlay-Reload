@@ -224,6 +224,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Timer? _autoHideTimer;
   Timer? _screenshotTimer; // 添加截图定时器
   bool _isControlsHovered = false;
+  bool _controlsVisibilityLocked = false;
   bool _isSeeking = false;
   final FocusNode _focusNode = FocusNode();
   final GlobalKey screenshotBoundaryKey =

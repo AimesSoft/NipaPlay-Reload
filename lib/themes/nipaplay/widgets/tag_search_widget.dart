@@ -19,6 +19,110 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 
+class _TagSearchStyle {
+  const _TagSearchStyle({
+    required this.isDark,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.iconColor,
+    required this.cardColor,
+    required this.cardStrongColor,
+    required this.borderColor,
+    required this.dividerColor,
+    required this.chipColor,
+    required this.chipSelectedColor,
+    required this.chipBorderColor,
+    required this.inputFillColor,
+    required this.inputBorderColor,
+    required this.inputFocusedBorderColor,
+    required this.tabIndicatorColor,
+    required this.tabDividerColor,
+    required this.glassGradientStart,
+    required this.glassGradientEnd,
+    required this.glassBorderStart,
+    required this.glassBorderEnd,
+    required this.accentColor,
+    required this.buttonColor,
+    required this.buttonDisabledColor,
+    required this.progressColor,
+  });
+
+  final bool isDark;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
+  final Color iconColor;
+  final Color cardColor;
+  final Color cardStrongColor;
+  final Color borderColor;
+  final Color dividerColor;
+  final Color chipColor;
+  final Color chipSelectedColor;
+  final Color chipBorderColor;
+  final Color inputFillColor;
+  final Color inputBorderColor;
+  final Color inputFocusedBorderColor;
+  final Color tabIndicatorColor;
+  final Color tabDividerColor;
+  final Color glassGradientStart;
+  final Color glassGradientEnd;
+  final Color glassBorderStart;
+  final Color glassBorderEnd;
+  final Color accentColor;
+  final Color buttonColor;
+  final Color buttonDisabledColor;
+  final Color progressColor;
+
+  factory _TagSearchStyle.from(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final onSurface = theme.colorScheme.onSurface;
+    const accent = Color(0xFFFF2E55);
+    final tintBase = isDark ? Colors.white : Colors.black;
+
+    return _TagSearchStyle(
+      isDark: isDark,
+      textPrimary: onSurface,
+      textSecondary: onSurface.withOpacity(0.7),
+      textMuted: onSurface.withOpacity(0.5),
+      iconColor: onSurface.withOpacity(0.7),
+      cardColor: isDark
+          ? Colors.white.withOpacity(0.08)
+          : Colors.black.withOpacity(0.04),
+      cardStrongColor: isDark
+          ? Colors.white.withOpacity(0.12)
+          : Colors.black.withOpacity(0.06),
+      borderColor: onSurface.withOpacity(isDark ? 0.2 : 0.12),
+      dividerColor: onSurface.withOpacity(isDark ? 0.16 : 0.1),
+      chipColor: isDark
+          ? Colors.white.withOpacity(0.12)
+          : Colors.black.withOpacity(0.05),
+      chipSelectedColor: accent.withOpacity(isDark ? 0.25 : 0.18),
+      chipBorderColor: onSurface.withOpacity(isDark ? 0.22 : 0.14),
+      inputFillColor:
+          isDark ? Colors.white.withOpacity(0.08) : Colors.white,
+      inputBorderColor: onSurface.withOpacity(isDark ? 0.2 : 0.12),
+      inputFocusedBorderColor: accent,
+      tabIndicatorColor: isDark
+          ? Colors.white.withOpacity(0.14)
+          : Colors.black.withOpacity(0.08),
+      tabDividerColor: onSurface.withOpacity(isDark ? 0.18 : 0.12),
+      glassGradientStart:
+          tintBase.withOpacity(isDark ? 0.2 : 0.04),
+      glassGradientEnd: tintBase.withOpacity(isDark ? 0.12 : 0.02),
+      glassBorderStart:
+          tintBase.withOpacity(isDark ? 0.35 : 0.12),
+      glassBorderEnd:
+          tintBase.withOpacity(isDark ? 0.2 : 0.08),
+      accentColor: accent,
+      buttonColor: accent.withOpacity(isDark ? 0.25 : 0.16),
+      buttonDisabledColor: onSurface.withOpacity(isDark ? 0.1 : 0.08),
+      progressColor: accent,
+    );
+  }
+}
+
 class TagSearchModal extends StatefulWidget {
   final String? prefilledTag;
   final List<String>? preselectedTags;
@@ -76,6 +180,9 @@ class TagSearchModal extends StatefulWidget {
 
 class _TagSearchModalState extends State<TagSearchModal>
     with TickerProviderStateMixin {
+  static const double _desktopWidthThreshold = 900;
+  static const double _desktopSidebarWidth = 320;
+
   final SearchService _searchService = SearchService.instance;
   late TabController _tabController;
 
@@ -434,6 +541,7 @@ class _TagSearchModalState extends State<TagSearchModal>
 
   @override
   Widget build(BuildContext context) {
+    final style = _TagSearchStyle.from(context);
     final borderRadius = widget.useWindow
         ? BorderRadius.circular(20)
         : const BorderRadius.only(
@@ -460,132 +568,156 @@ class _TagSearchModalState extends State<TagSearchModal>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withOpacity(0.3),
-            Colors.white.withOpacity(0.25),
+            style.glassGradientStart,
+            style.glassGradientEnd,
           ],
         ),
         borderGradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withOpacity(0.5),
-            Colors.white.withOpacity(0.5),
+            style.glassBorderStart,
+            style.glassBorderEnd,
           ],
         ),
-        child: Column(
-          children: [
-            if (!widget.useWindow)
-              // 拖拽指示器
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                alignment: Alignment.center,
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(2),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isDesktopLayout =
+                constraints.maxWidth >= _desktopWidthThreshold;
+            final titleText = widget.prefilledTag != null
+                ? '标签搜索: ${widget.prefilledTag}'
+                : (widget.preselectedTags != null &&
+                        widget.preselectedTags!.isNotEmpty)
+                    ? '标签搜索 (从 ${widget.preselectedTags!.length} 个当前标签中选择)'
+                    : '标签搜索';
+
+            return Column(
+              children: [
+                if (!widget.useWindow)
+                  // 拖拽指示器
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: style.textMuted,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                if (widget.useWindow) const SizedBox(height: 12),
+
+                // 标题
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    titleText,
+                    style: TextStyle(
+                      color: style.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-            if (widget.useWindow) const SizedBox(height: 12),
 
-            // 标题
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(
-                widget.prefilledTag != null
-                    ? '标签搜索: ${widget.prefilledTag}'
-                    : (widget.preselectedTags != null && widget.preselectedTags!.isNotEmpty)
-                        ? '标签搜索 (从 ${widget.preselectedTags!.length} 个当前标签中选择)'
-                        : '标签搜索',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-
-            // Tab栏（仅在无预填充标签时显示）
-            if (widget.prefilledTag == null) ...[
-              TabBar(
-                controller: _tabController,
-                labelColor: Colors.white,
-                dividerHeight: 3.0,
-                dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                indicatorPadding: const EdgeInsets.only(
-              top: 45, left: 0, right: 0),
-                indicator: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                unselectedLabelColor: Colors.white.withOpacity(0.7),
-                tabs: const [
-                  Tab(text: '文本标签搜索'),
-                  Tab(text: '高级搜索'),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // 内容区域
-            Expanded(
-              child: widget.prefilledTag != null
-                  ? _buildPrefilledTagSearch()
-                  : TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildTextSearchTab(),
-                        _buildAdvancedSearchTab(),
-                      ],
+                // Tab栏（仅在无预填充标签时显示）
+                if (widget.prefilledTag == null) ...[
+                  TabBar(
+                    controller: _tabController,
+                    labelColor: style.textPrimary,
+                    dividerHeight: 1.0,
+                    dividerColor: style.tabDividerColor,
+                    indicatorPadding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    indicator: BoxDecoration(
+                      color: style.tabIndicatorColor,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-            ),
-          ],
+                    unselectedLabelColor: style.textSecondary,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                    tabs: const [
+                      Tab(text: '文本标签搜索'),
+                      Tab(text: '高级搜索'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // 内容区域
+                Expanded(
+                  child: _buildContent(style, isDesktopLayout),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildPrefilledTagSearch() {
+  Widget _buildContent(_TagSearchStyle style, bool isDesktopLayout) {
+    if (widget.prefilledTag != null) {
+      return isDesktopLayout
+          ? _buildDesktopPrefilledTagSearch(style)
+          : _buildPrefilledTagSearch(style);
+    }
+
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        isDesktopLayout
+            ? _buildDesktopTextSearch(style)
+            : _buildTextSearchTab(style),
+        isDesktopLayout
+            ? _buildDesktopAdvancedSearch(style)
+            : _buildAdvancedSearchTab(style),
+      ],
+    );
+  }
+
+  Widget _buildPrefilledTagInfo(_TagSearchStyle style) {
+    return _buildPanel(
+      style,
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Icon(Ionicons.pricetag, color: style.iconColor, size: 20),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: style.chipSelectedColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: style.chipBorderColor),
+            ),
+            child: Text(
+              widget.prefilledTag!,
+              style: TextStyle(color: style.textPrimary, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrefilledTagSearch(_TagSearchStyle style) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 显示当前搜索的标签
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Ionicons.pricetag, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    widget.prefilledTag!,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildPrefilledTagInfo(style),
           const SizedBox(height: 16),
 
           // 搜索结果标题
           if (_displayedTextResults.isNotEmpty || _isTextSearching) ...[
-            const Text(
+            Text(
               '搜索结果',
               style: TextStyle(
-                color: Colors.white,
+                color: style.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -595,238 +727,32 @@ class _TagSearchModalState extends State<TagSearchModal>
 
           // 搜索结果列表
           ..._buildScrollableSearchResults(
-              _displayedTextResults,
-              _isTextSearching,
-              _isLoadingMoreText,
-              _textSearchResults.length),
+            _displayedTextResults,
+            _isTextSearching,
+            _isLoadingMoreText,
+            _textSearchResults.length,
+            style,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTextSearchTab() {
+  Widget _buildTextSearchTab(_TagSearchStyle style) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 当前标签区域（预选标签菜单）
-          if (widget.preselectedTags != null && widget.preselectedTags!.isNotEmpty) ...[
-            Container(
-              width: double.infinity, // 确保顶满宽度
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '当前标签 (点击添加到搜索)',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: widget.preselectedTags!
-                        .map((tag) => GestureDetector(
-                              onTap: () {
-                                // 从当前标签添加到已添加标签
-                                if (!_textTags.contains(tag)) {
-                                  setState(() {
-                                    _textTags.add(tag);
-                                  });
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: _textTags.contains(tag) 
-                                      ? Colors.white.withOpacity(0.3)  // 已添加的标签显示更亮的白色
-                                      : Colors.white.withOpacity(0.15), // 未添加的标签显示较暗的白色
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.5),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (_textTags.contains(tag))
-                                      const Icon(
-                                        Ionicons.checkmark_circle,
-                                        color: Colors.white,
-                                        size: 14,
-                                      ),
-                                    if (_textTags.contains(tag))
-                                      const SizedBox(width: 4),
-                                    Text(
-                                      tag,
-                                      style: const TextStyle(
-                                          color: Colors.white, fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // 标签输入区域
-          Container(
-            width: double.infinity, // 确保顶满宽度
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '添加标签',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _textTagController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: '输入标签名称',
-                          hintStyle:
-                              TextStyle(color: Colors.white.withOpacity(0.7)),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.3)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(
-                                color: Colors.white.withOpacity(0.3)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Colors.white),
-                          ),
-                        ),
-                        onSubmitted: (_) => _addTextTag(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _addTextTag,
-                      icon:
-                          const Icon(Ionicons.add_circle, color: Colors.white),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (_textTags.isNotEmpty) ...[
-                  const Text(
-                    '已添加标签 (用于搜索):',
-                    style: TextStyle(color: Colors.white, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _textTags
-                        .map((tag) => GestureDetector(
-                              onTap: () {
-                                // 点击标签填充到输入框
-                                _textTagController.text = tag;
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      tag,
-                                      style: const TextStyle(
-                                          color: Colors.white, fontSize: 12),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    GestureDetector(
-                                      onTap: () => _removeTextTag(tag),
-                                      child: const Icon(
-                                        Ionicons.close,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isTextSearching ? null : _performTextSearch,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white.withOpacity(0.2),
-                      foregroundColor: Colors.white,
-                      elevation: 0, // 去掉阴影
-                      shadowColor: Colors.transparent, // 确保阴影完全透明
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: _isTextSearching
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text('搜索'),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ..._buildTextSearchFilterSections(style),
           const SizedBox(height: 16),
 
           // 搜索结果标题
           if (_displayedTextResults.isNotEmpty || _isTextSearching) ...[
-            const Text(
+            Text(
               '搜索结果',
               style: TextStyle(
-                color: Colors.white,
+                color: style.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -839,24 +765,459 @@ class _TagSearchModalState extends State<TagSearchModal>
               _displayedTextResults,
               _isTextSearching,
               _isLoadingMoreText,
-              _textSearchResults.length),
+              _textSearchResults.length,
+              style),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildTextSearchFilterSections(_TagSearchStyle style) {
+    final List<Widget> sections = [];
+
+    if (widget.preselectedTags != null && widget.preselectedTags!.isNotEmpty) {
+      sections.add(
+        _buildPanel(
+          style,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '当前标签 (点击添加到搜索)',
+                style: TextStyle(
+                  color: style.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.preselectedTags!
+                    .map((tag) => GestureDetector(
+                          onTap: () {
+                            // 从当前标签添加到已添加标签
+                            if (!_textTags.contains(tag)) {
+                              setState(() {
+                                _textTags.add(tag);
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _textTags.contains(tag)
+                                  ? style.chipSelectedColor
+                                  : style.chipColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: style.chipBorderColor,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_textTags.contains(tag))
+                                  Icon(
+                                    Ionicons.checkmark_circle,
+                                    color: style.accentColor,
+                                    size: 14,
+                                  ),
+                                if (_textTags.contains(tag))
+                                  const SizedBox(width: 4),
+                                Text(
+                                  tag,
+                                  style: TextStyle(
+                                    color: style.textPrimary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      );
+      sections.add(const SizedBox(height: 16));
+    }
+
+    sections.add(
+      _buildPanel(
+        style,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '添加标签',
+              style: TextStyle(
+                color: style.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _textTagController,
+                    style: TextStyle(color: style.textPrimary),
+                    cursorColor: style.accentColor,
+                    decoration: InputDecoration(
+                      hintText: '输入标签名称',
+                      hintStyle: TextStyle(color: style.textMuted),
+                      filled: true,
+                      fillColor: style.inputFillColor,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: style.inputBorderColor),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: style.inputBorderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: style.inputFocusedBorderColor),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    onSubmitted: (_) => _addTextTag(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _addTextTag,
+                  icon: Icon(Ionicons.add_circle, color: style.accentColor),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_textTags.isNotEmpty) ...[
+              Text(
+                '已添加标签 (用于搜索):',
+                style: TextStyle(color: style.textSecondary, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _textTags
+                    .map((tag) => GestureDetector(
+                          onTap: () {
+                            // 点击标签填充到输入框
+                            _textTagController.text = tag;
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: style.chipColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: style.chipBorderColor,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  tag,
+                                  style: TextStyle(
+                                    color: style.textPrimary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () => _removeTextTag(tag),
+                                  child: Icon(
+                                    Ionicons.close,
+                                    color: style.textSecondary,
+                                    size: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+            ],
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isTextSearching ? null : _performTextSearch,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: style.buttonColor,
+                  foregroundColor: style.textPrimary,
+                  disabledBackgroundColor: style.buttonDisabledColor,
+                  disabledForegroundColor: style.textMuted,
+                  elevation: 0, // 去掉阴影
+                  shadowColor: Colors.transparent, // 确保阴影完全透明
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _isTextSearching
+                    ? SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(style.progressColor),
+                        ),
+                      )
+                    : const Text('搜索'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return sections;
+  }
+
+  Widget _buildPanel(
+    _TagSearchStyle style, {
+    required Widget child,
+    EdgeInsets padding = const EdgeInsets.all(16),
+    Color? backgroundColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? style.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: style.borderColor),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildDesktopPrefilledTagSearch(_TagSearchStyle style) {
+    return Row(
+      children: [
+        SizedBox(
+          width: _desktopSidebarWidth,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 12, 16),
+            child: _buildPrefilledTagInfo(style),
+          ),
+        ),
+        VerticalDivider(
+          width: 1,
+          thickness: 1,
+          color: style.dividerColor,
+        ),
+        Expanded(
+          child: _buildTextSearchResultsPanel(style),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopTextSearch(_TagSearchStyle style) {
+    return Row(
+      children: [
+        SizedBox(
+          width: _desktopSidebarWidth,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 12, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _buildTextSearchFilterSections(style),
+            ),
+          ),
+        ),
+        VerticalDivider(
+          width: 1,
+          thickness: 1,
+          color: style.dividerColor,
+        ),
+        Expanded(
+          child: _buildTextSearchResultsPanel(style),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopAdvancedSearch(_TagSearchStyle style) {
+    if (_isLoadingConfig) {
+      return _buildLoadingState(style);
+    }
+
+    if (_searchConfig == null) {
+      return _buildAdvancedSearchError(style);
+    }
+
+    return Row(
+      children: [
+        SizedBox(
+          width: _desktopSidebarWidth,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 12, 16),
+            child: _buildAdvancedSearchFilters(style),
+          ),
+        ),
+        VerticalDivider(
+          width: 1,
+          thickness: 1,
+          color: style.dividerColor,
+        ),
+        Expanded(
+          child: _buildAdvancedResultsPanel(style),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTextSearchResultsPanel(_TagSearchStyle style) {
+    final showHeader = _displayedTextResults.isNotEmpty || _isTextSearching;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showHeader) ...[
+            Text(
+              '搜索结果',
+              style: TextStyle(
+                color: style.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Expanded(
+            child: _buildTextResultsBody(style),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextResultsBody(_TagSearchStyle style) {
+    if (_isTextSearching && _displayedTextResults.isEmpty) {
+      return _buildLoadingState(style);
+    }
+    if (!_isTextSearching && _displayedTextResults.isEmpty) {
+      return _buildEmptyState(style);
+    }
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: _buildScrollableSearchResults(
+        _displayedTextResults,
+        _isTextSearching,
+        _isLoadingMoreText,
+        _textSearchResults.length,
+        style,
+      ),
+    );
+  }
+
+  Widget _buildAdvancedResultsPanel(_TagSearchStyle style) {
+    final showHeader =
+        _displayedAdvancedResults.isNotEmpty || _isAdvancedSearching;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showHeader) ...[
+            Text(
+              '搜索结果',
+              style: TextStyle(
+                color: style.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Expanded(
+            child: _buildSearchResults(
+              _displayedAdvancedResults,
+              _isAdvancedSearching,
+              _advancedScrollController,
+              _isLoadingMoreAdvanced,
+              _advancedSearchResults.length,
+              style,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingState(_TagSearchStyle style) {
+    return Center(
+      child: CircularProgressIndicator(
+        valueColor: AlwaysStoppedAnimation<Color>(style.progressColor),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(_TagSearchStyle style) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Ionicons.search,
+            size: 64,
+            color: style.textMuted,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '暂无搜索结果',
+            style: TextStyle(
+              color: style.textSecondary,
+              fontSize: 16,
+            ),
+          ),
         ],
       ),
     );
   }
 
   // 构建可滚动的搜索结果列表
-  List<Widget> _buildScrollableSearchResults(List<SearchResultAnime> results, bool isLoading,
-      bool isLoadingMore, int totalResults) {
+  List<Widget> _buildScrollableSearchResults(
+    List<SearchResultAnime> results,
+    bool isLoading,
+    bool isLoadingMore,
+    int totalResults,
+    _TagSearchStyle style,
+  ) {
     List<Widget> widgets = [];
 
     if (isLoading && results.isEmpty) {
       widgets.add(
-        const Padding(
-          padding: EdgeInsets.all(32.0),
+        Padding(
+          padding: const EdgeInsets.all(32.0),
           child: Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(style.progressColor),
             ),
           ),
         ),
@@ -874,13 +1235,13 @@ class _TagSearchModalState extends State<TagSearchModal>
                 Icon(
                   Ionicons.search,
                   size: 64,
-                  color: Colors.white.withOpacity(0.5),
+                  color: style.textMuted,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   '暂无搜索结果',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: style.textSecondary,
                     fontSize: 16,
                   ),
                 ),
@@ -899,9 +1260,10 @@ class _TagSearchModalState extends State<TagSearchModal>
         Container(
           margin: const EdgeInsets.symmetric(vertical: 8),
           child: Card(
-            color: Colors.white.withOpacity(0.1),
+            color: style.cardColor,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: style.borderColor),
             ),
             child: InkWell(
               onTap: () => _openAnimeDetail(anime.animeId),
@@ -917,7 +1279,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                       height: double.infinity, // 顶满高度
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(8),
-                        color: Colors.white.withOpacity(0.1),
+                        color: style.cardStrongColor,
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
@@ -929,9 +1291,9 @@ class _TagSearchModalState extends State<TagSearchModal>
                                 fit: BoxFit.cover,
                                 loadMode: CachedImageLoadMode.legacy, // 标签搜索中的番剧海报使用legacy模式，避免海报突然切换
                               )
-                            : const Icon(
+                            : Icon(
                                 Ionicons.image,
-                                color: Colors.white,
+                                color: style.textMuted,
                                 size: 32,
                               ),
                       ),
@@ -948,8 +1310,8 @@ class _TagSearchModalState extends State<TagSearchModal>
                           // 标题
                           Text(
                             anime.animeTitle,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: style.textPrimary,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -962,7 +1324,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                             Text(
                               anime.typeDescription!,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
+                                color: style.textSecondary,
                                 fontSize: 14,
                               ),
                               maxLines: 1,
@@ -981,7 +1343,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                               Text(
                                 anime.rating.toStringAsFixed(1),
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: style.textSecondary,
                                   fontSize: 14,
                                 ),
                               ),
@@ -989,7 +1351,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                               Text(
                                 '${anime.episodeCount} 集',
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: style.textSecondary,
                                   fontSize: 14,
                                 ),
                               ),
@@ -1000,9 +1362,9 @@ class _TagSearchModalState extends State<TagSearchModal>
                     ),
                     
                     // 箭头图标
-                    const Icon(
+                    Icon(
                       Ionicons.chevron_forward,
-                      color: Colors.white,
+                      color: style.iconColor,
                       size: 20,
                     ),
                   ],
@@ -1017,11 +1379,12 @@ class _TagSearchModalState extends State<TagSearchModal>
     // 添加加载更多指示器
     if (isLoadingMore) {
       widgets.add(
-        const Padding(
-          padding: EdgeInsets.all(16.0),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
           child: Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(style.progressColor),
             ),
           ),
         ),
@@ -1037,8 +1400,10 @@ class _TagSearchModalState extends State<TagSearchModal>
             child: ElevatedButton(
               onPressed: _loadMoreTextResults,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.2),
-                foregroundColor: Colors.white,
+                backgroundColor: style.buttonColor,
+                foregroundColor: style.textPrimary,
+                disabledBackgroundColor: style.buttonDisabledColor,
+                disabledForegroundColor: style.textMuted,
                 elevation: 0,
                 shadowColor: Colors.transparent,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -1056,34 +1421,13 @@ class _TagSearchModalState extends State<TagSearchModal>
     return widgets;
   }
 
-  Widget _buildAdvancedSearchTab() {
+  Widget _buildAdvancedSearchTab(_TagSearchStyle style) {
     if (_isLoadingConfig) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
-      );
+      return _buildLoadingState(style);
     }
 
     if (_searchConfig == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Ionicons.warning, color: Colors.white, size: 48),
-            const SizedBox(height: 16),
-            const Text(
-              '加载搜索配置失败',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadSearchConfig,
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      );
+      return _buildAdvancedSearchError(style);
     }
 
     return SingleChildScrollView(
@@ -1091,133 +1435,7 @@ class _TagSearchModalState extends State<TagSearchModal>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 关键词搜索
-          _buildAdvancedSearchSection(
-            '关键词',
-            TextField(
-              controller: _keywordController,
-              style: const TextStyle(color: Colors.white),
-              onSubmitted: (_) => _performAdvancedSearch(),
-              decoration: InputDecoration(
-                hintText: '输入作品标题关键词',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
-
-          // 评分范围
-          _buildAdvancedSearchSection(
-            '评分范围 (${_minRating.round()} - ${_maxRating.round()})',
-            RangeSlider(
-              values: RangeValues(_minRating, _maxRating),
-              min: 0,
-              max: 10,
-              divisions: 10,
-              labels:
-                  RangeLabels('${_minRating.round()}', '${_maxRating.round()}'),
-              onChanged: (values) {
-                setState(() {
-                  _minRating = values.start;
-                  _maxRating = values.end;
-                });
-              },
-              activeColor: Colors.white,
-              inactiveColor: Colors.white.withOpacity(0.3),
-            ),
-          ),
-
-          // 年份选择 - 一行布局，使用毛玻璃样式
-          if (_searchConfig != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    // 左边的标签
-                    const Text(
-                      '年份',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    // 右边的下拉菜单
-                    BlurDropdown<int?>(
-                      dropdownKey: _yearDropdownKey,
-                      items: [
-                        DropdownMenuItemData<int?>(
-                          title: '全部年份',
-                          value: null,
-                          isSelected: _selectedYear == null,
-                        ),
-                        ...List.generate(
-                          _searchConfig!.maxYear - _searchConfig!.minYear + 1,
-                          (index) => _searchConfig!.maxYear - index,
-                        ).map((year) => DropdownMenuItemData<int?>(
-                              title: '$year',
-                              value: year,
-                              isSelected: _selectedYear == year,
-                            )),
-                      ],
-                      onItemSelected: (value) {
-                        setState(() {
-                          _selectedYear = value;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // 搜索按钮
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isAdvancedSearching ? null : _performAdvancedSearch,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.2),
-                foregroundColor: Colors.white,
-                elevation: 0, // 去掉阴影
-                shadowColor: Colors.transparent, // 确保阴影完全透明
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: _isAdvancedSearching
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Text('开始搜索', style: TextStyle(fontSize: 16)),
-            ),
-          ),
-
+          _buildAdvancedSearchFilters(style),
           const SizedBox(height: 16),
 
           // 搜索结果
@@ -1228,29 +1446,203 @@ class _TagSearchModalState extends State<TagSearchModal>
                 _isAdvancedSearching,
                 _advancedScrollController,
                 _isLoadingMoreAdvanced,
-                _advancedSearchResults.length),
+                _advancedSearchResults.length,
+                style),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAdvancedSearchSection(String title, Widget child) {
+  Widget _buildAdvancedSearchError(_TagSearchStyle style) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Ionicons.warning, color: style.textPrimary, size: 48),
+          const SizedBox(height: 16),
+          Text(
+            '加载搜索配置失败',
+            style: TextStyle(color: style.textPrimary, fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _loadSearchConfig,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: style.buttonColor,
+              foregroundColor: style.textPrimary,
+            ),
+            child: const Text('重试'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedSearchFilters(_TagSearchStyle style) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 关键词搜索
+        _buildAdvancedSearchSection(
+          '关键词',
+          TextField(
+            controller: _keywordController,
+            style: TextStyle(color: style.textPrimary),
+            onSubmitted: (_) => _performAdvancedSearch(),
+            cursorColor: style.accentColor,
+            decoration: InputDecoration(
+              hintText: '输入作品标题关键词',
+              hintStyle: TextStyle(color: style.textMuted),
+              filled: true,
+              fillColor: style.inputFillColor,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: style.inputBorderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: style.inputBorderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: style.inputFocusedBorderColor),
+              ),
+            ),
+          ),
+          style,
+        ),
+
+        // 评分范围
+        _buildAdvancedSearchSection(
+          '评分范围 (${_minRating.round()} - ${_maxRating.round()})',
+          RangeSlider(
+            values: RangeValues(_minRating, _maxRating),
+            min: 0,
+            max: 10,
+            divisions: 10,
+            labels: RangeLabels(
+              '${_minRating.round()}',
+              '${_maxRating.round()}',
+            ),
+            onChanged: (values) {
+              setState(() {
+                _minRating = values.start;
+                _maxRating = values.end;
+              });
+            },
+            activeColor: style.accentColor,
+            inactiveColor: style.borderColor,
+          ),
+          style,
+        ),
+
+        // 年份选择 - 一行布局
+        if (_searchConfig != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: style.cardColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: style.borderColor),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    '年份',
+                    style: TextStyle(
+                      color: style.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  BlurDropdown<int?>(
+                    dropdownKey: _yearDropdownKey,
+                    items: [
+                      DropdownMenuItemData<int?>(
+                        title: '全部年份',
+                        value: null,
+                        isSelected: _selectedYear == null,
+                      ),
+                      ...List.generate(
+                        _searchConfig!.maxYear -
+                            _searchConfig!.minYear +
+                            1,
+                        (index) => _searchConfig!.maxYear - index,
+                      ).map((year) => DropdownMenuItemData<int?>(
+                            title: '$year',
+                            value: year,
+                            isSelected: _selectedYear == year,
+                          )),
+                    ],
+                    onItemSelected: (value) {
+                      setState(() {
+                        _selectedYear = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isAdvancedSearching ? null : _performAdvancedSearch,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: style.buttonColor,
+              foregroundColor: style.textPrimary,
+              disabledBackgroundColor: style.buttonDisabledColor,
+              disabledForegroundColor: style.textMuted,
+              elevation: 0,
+              shadowColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: _isAdvancedSearching
+                ? SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(style.progressColor),
+                    ),
+                  )
+                : const Text('开始搜索', style: TextStyle(fontSize: 16)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdvancedSearchSection(
+    String title,
+    Widget child,
+    _TagSearchStyle style,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: style.cardColor,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: style.borderColor),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: style.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -1264,11 +1656,12 @@ class _TagSearchModalState extends State<TagSearchModal>
   }
 
   Widget _buildSearchResults(List<SearchResultAnime> results, bool isLoading,
-      ScrollController scrollController, bool isLoadingMore, int totalResults) {
+      ScrollController scrollController, bool isLoadingMore, int totalResults,
+      _TagSearchStyle style) {
     if (isLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          valueColor: AlwaysStoppedAnimation<Color>(style.progressColor),
         ),
       );
     }
@@ -1281,13 +1674,13 @@ class _TagSearchModalState extends State<TagSearchModal>
             Icon(
               Ionicons.search,
               size: 64,
-              color: Colors.white.withOpacity(0.5),
+              color: style.textMuted,
             ),
             const SizedBox(height: 16),
             Text(
               '暂无搜索结果',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
+                color: style.textSecondary,
                 fontSize: 16,
               ),
             ),
@@ -1303,11 +1696,12 @@ class _TagSearchModalState extends State<TagSearchModal>
       itemBuilder: (context, index) {
         // 如果是加载指示器
         if (index >= results.length) {
-          return const Padding(
-            padding: EdgeInsets.all(16.0),
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
             child: Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(style.progressColor),
               ),
             ),
           );
@@ -1317,9 +1711,10 @@ class _TagSearchModalState extends State<TagSearchModal>
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 8),
           child: Card(
-            color: Colors.white.withOpacity(0.1),
+            color: style.cardColor,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: style.borderColor),
             ),
             child: InkWell(
               onTap: () => _openAnimeDetail(anime.animeId),
@@ -1335,7 +1730,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                       height: double.infinity, // 顶满高度
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(8),
-                        color: Colors.white.withOpacity(0.1),
+                        color: style.cardStrongColor,
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
@@ -1347,9 +1742,9 @@ class _TagSearchModalState extends State<TagSearchModal>
                                 fit: BoxFit.cover,
                                 loadMode: CachedImageLoadMode.legacy, // 标签搜索中的番剧海报使用legacy模式，避免海报突然切换
                               )
-                            : const Icon(
+                            : Icon(
                                 Ionicons.image,
-                                color: Colors.white,
+                                color: style.textMuted,
                                 size: 32,
                               ),
                       ),
@@ -1366,8 +1761,8 @@ class _TagSearchModalState extends State<TagSearchModal>
                           // 标题
                           Text(
                             anime.animeTitle,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: style.textPrimary,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -1380,7 +1775,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                             Text(
                               anime.typeDescription!,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
+                                color: style.textSecondary,
                                 fontSize: 14,
                               ),
                               maxLines: 1,
@@ -1399,7 +1794,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                               Text(
                                 anime.rating.toStringAsFixed(1),
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: style.textSecondary,
                                   fontSize: 14,
                                 ),
                               ),
@@ -1407,7 +1802,7 @@ class _TagSearchModalState extends State<TagSearchModal>
                               Text(
                                 '${anime.episodeCount} 集',
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: style.textSecondary,
                                   fontSize: 14,
                                 ),
                               ),
@@ -1418,9 +1813,9 @@ class _TagSearchModalState extends State<TagSearchModal>
                     ),
                     
                     // 箭头图标
-                    const Icon(
+                    Icon(
                       Ionicons.chevron_forward,
-                      color: Colors.white,
+                      color: style.iconColor,
                       size: 20,
                     ),
                   ],

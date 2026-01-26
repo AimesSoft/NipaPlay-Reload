@@ -20,6 +20,7 @@ class _AboutPageState extends State<AboutPage> {
   String _version = '加载中...';
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
+  bool _isUpdateButtonHovered = false;
 
   @override
   void initState() {
@@ -298,6 +299,14 @@ class _AboutPageState extends State<AboutPage> {
           bodyColor: colorScheme.onSurface,
           displayColor: colorScheme.onSurface,
         );
+    final bool isUpdateButtonEnabled = !_isCheckingUpdate;
+    final bool showUpdateButtonHover =
+        isUpdateButtonEnabled && _isUpdateButtonHovered;
+    const Color updateAccentColor = Color(0xFFFF2E55);
+    final Color updateIdleColor = colorScheme.onSurface
+        .withOpacity(isUpdateButtonEnabled ? 0.75 : 0.4);
+    final Color updateButtonColor =
+        showUpdateButtonHover ? updateAccentColor : updateIdleColor;
     
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -361,30 +370,63 @@ class _AboutPageState extends State<AboutPage> {
             ),
           ),
           const SizedBox(height: 20),
-          TextButton.icon(
-            onPressed: _isCheckingUpdate ? null : _manualCheckForUpdates,
-            style: TextButton.styleFrom(
-              foregroundColor: colorScheme.onSurface,
-              backgroundColor: colorScheme.onSurface.withOpacity(0.08),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(color: colorScheme.onSurface.withOpacity(0.12)),
+          MouseRegion(
+            onEnter: (_) => isUpdateButtonEnabled
+                ? setState(() => _isUpdateButtonHovered = true)
+                : null,
+            onExit: (_) => isUpdateButtonEnabled
+                ? setState(() => _isUpdateButtonHovered = false)
+                : null,
+            cursor: isUpdateButtonEnabled
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic,
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: isUpdateButtonEnabled ? _manualCheckForUpdates : null,
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: AnimatedScale(
+                    scale: showUpdateButtonHover ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutBack,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isCheckingUpdate)
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  updateButtonColor),
+                            ),
+                          )
+                        else
+                          Icon(
+                            Icons.system_update_alt,
+                            size: 18,
+                            color: updateButtonColor,
+                          ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isCheckingUpdate ? '检测中...' : '检测更新',
+                          style: textTheme.labelLarge?.copyWith(
+                                color: updateButtonColor,
+                              ) ??
+                              TextStyle(color: updateButtonColor),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-            icon: _isCheckingUpdate
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(colorScheme.onSurface.withOpacity(0.7)),
-                    ),
-                  )
-                : const Icon(Icons.system_update_alt, size: 18),
-            label: Text(_isCheckingUpdate ? '检测中...' : '检测更新'),
           ),
           const SizedBox(height: 20),
 

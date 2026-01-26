@@ -545,6 +545,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void resetAutoHideTimer() {
+    if (_controlsVisibilityLocked) {
+      return;
+    }
     _autoHideTimer?.cancel();
     if (hasVideo && _showControls && !_isControlsHovered) {
       _autoHideTimer = Timer(const Duration(seconds: 5), () {
@@ -556,7 +559,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void setControlsHovered(bool value) {
-    _isControlsHovered = value;
+    if (_controlsVisibilityLocked && !value) {
+      return;
+    }
+    _isControlsHovered = value || _controlsVisibilityLocked;
     if (value) {
       _hideControlsTimer?.cancel();
       _hideMouseTimer?.cancel();
@@ -569,6 +575,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void resetHideMouseTimer() {
+    if (_controlsVisibilityLocked) {
+      return;
+    }
     _hideMouseTimer?.cancel();
     if (hasVideo && !_isControlsHovered && !globals.isPhone) {
       _hideMouseTimer = Timer(const Duration(milliseconds: 1500), () {
@@ -578,6 +587,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void resetHideControlsTimer() {
+    if (_controlsVisibilityLocked) {
+      return;
+    }
     _hideControlsTimer?.cancel();
     setShowControls(true);
     if (hasVideo && !_isControlsHovered && !globals.isPhone) {
@@ -588,6 +600,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void handleMouseMove(Offset position) {
+    if (_controlsVisibilityLocked) {
+      return;
+    }
     if (!_isControlsHovered && !globals.isPhone) {
       resetHideControlsTimer();
       resetHideMouseTimer();
@@ -603,6 +618,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void setShowControls(bool value) {
+    if (_controlsVisibilityLocked && !value) {
+      return;
+    }
     _showControls = value;
     if (value) {
       resetAutoHideTimer();
@@ -615,6 +633,24 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void setShowRightMenu(bool value) {
     _showRightMenu = value;
     notifyListeners();
+  }
+
+  void setControlsVisibilityLocked(bool value) {
+    if (_controlsVisibilityLocked == value) {
+      return;
+    }
+    _controlsVisibilityLocked = value;
+    if (value) {
+      _hideControlsTimer?.cancel();
+      _hideMouseTimer?.cancel();
+      _autoHideTimer?.cancel();
+      _isControlsHovered = true;
+      setShowControls(true);
+    } else {
+      _isControlsHovered = false;
+      resetHideControlsTimer();
+      resetAutoHideTimer();
+    }
   }
 
   void toggleRightMenu() {
