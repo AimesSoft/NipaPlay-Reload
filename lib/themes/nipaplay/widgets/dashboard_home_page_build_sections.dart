@@ -672,6 +672,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
   Widget _getVideoThumbnail(WatchHistoryItem item) {
     final now = DateTime.now();
+    final historyStamp = item.lastWatchTime.millisecondsSinceEpoch;
 
     final thumbnailPath = item.thumbnailPath;
     if (thumbnailPath != null) {
@@ -684,7 +685,8 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
           debugPrint('获取截图文件修改时间失败: $e');
         }
 
-        final cacheKey = '${item.filePath}_${thumbnailPath}_$modifiedMs';
+        final cacheKey =
+            '${item.filePath}_${thumbnailPath}_$modifiedMs_$historyStamp';
         if (_thumbnailCache.containsKey(cacheKey)) {
           final cachedData = _thumbnailCache[cacheKey]!;
           final lastRenderTime = cachedData['time'] as DateTime;

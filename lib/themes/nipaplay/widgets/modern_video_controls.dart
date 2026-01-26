@@ -143,6 +143,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     _settingsOverlay = OverlayEntry(
       builder: (context) => VideoSettingsMenu(
         anchorRect: anchorRect,
+        anchorKey: _settingsButtonKey,
         onClose: () {
           videoState.setControlsVisibilityLocked(false);
           _settingsOverlay?.remove();

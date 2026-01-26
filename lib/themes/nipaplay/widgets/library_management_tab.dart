@@ -388,14 +388,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '确认移除',
       content: '确定要从列表中移除文件夹 "$folderPathToRemove" 吗？\n相关的媒体记录也会被清理。',
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('移除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
@@ -880,7 +880,7 @@ style: TextStyle(
             ),
           ),
           const SizedBox(height: 16),
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white54)),
@@ -961,7 +961,7 @@ style: TextStyle(color: Colors.white54)),
       title: "如何添加视频文件",
       content: dialogContent,
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
           onPressed: () {
@@ -985,14 +985,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '重置存储路径',
       content: '确定要重置存储路径吗？这将清除您之前设置的自定义路径，并使用系统默认位置。\n\n注意：这不会删除您已添加到媒体库的视频文件。',
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('重置', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
@@ -1051,14 +1051,14 @@ style: TextStyle(color: Colors.redAccent)),
           title: 'Android存储权限状态',
           content: content.toString(),
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text('关闭', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text('申请权限', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () async {
@@ -1101,14 +1101,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           title: "需要媒体权限",
           content: "NipaPlay需要访问媒体文件权限才能扫描视频文件。\n\n请在系统设置中允许NipaPlay访问照片、视频和音频权限。",
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("稍后再说", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("打开设置", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
@@ -1181,14 +1181,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           title: "未找到视频文件夹",
           content: "无法找到系统视频文件夹。建议使用\"管理所有文件\"权限或手动选择文件夹。",
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("开启完整权限", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
@@ -1360,12 +1360,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                 content:
                     '这将清理所有文件夹的变化检测缓存，下次扫描时将重新检查所有文件夹。\n\n适用于：\n• 怀疑智能扫描遗漏了某些变化\n• 想要强制重新扫描所有文件夹\n\n确定要清理缓存吗？',
                       actions: <Widget>[
-                        TextButton(
+                        HoverScaleTextButton(
                           child: Text('取消', locale: const Locale("zh-Hans","zh"),
 style: TextStyle(color: secondaryTextColor)),
                           onPressed: () => Navigator.of(context).pop(false),
                         ),
-                        TextButton(
+                        HoverScaleTextButton(
                           child: const Text('清理', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orangeAccent)),
                           onPressed: () => Navigator.of(context).pop(true),
@@ -1391,12 +1391,12 @@ style: TextStyle(color: Colors.orangeAccent)),
                       title: '智能刷新确认',
                       content: '将使用智能扫描技术重新检查所有已添加的媒体文件夹：\n\n• 自动检测文件夹内容变化\n• 只扫描有新增、删除或修改文件的文件夹\n• 跳过无变化的文件夹，大幅提升扫描速度\n• 可选择跳过已匹配且未观看的文件\n\n这可能需要一些时间，但比传统全量扫描快很多。',
                       actions: <Widget>[
-                        TextButton(
+                        HoverScaleTextButton(
                           child: Text('取消', locale: const Locale("zh-Hans","zh"),
 style: TextStyle(color: secondaryTextColor)),
                           onPressed: () => Navigator.of(context).pop(false),
                         ),
-                        TextButton(
+                        HoverScaleTextButton(
                           child: const Text('智能刷新', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                           onPressed: () => Navigator.of(context).pop(true),
@@ -1809,14 +1809,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '移除扫描结果',
       content: '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称、集数信息和弹幕ID，但保留观看进度。',
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('移除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
@@ -1980,12 +1980,12 @@ style: TextStyle(color: Colors.redAccent)),
                               title: '确认扫描',
                               content: '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
                               actions: <Widget>[
-                                TextButton(
+                                HoverScaleTextButton(
                                   child: Text('取消', locale: const Locale("zh-Hans","zh"),
 style: TextStyle(color: secondaryTextColor)),
                                   onPressed: () => Navigator.of(context).pop(false),
                                 ),
-                                TextButton(
+                                HoverScaleTextButton(
                                   child: const Text('扫描', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                                   onPressed: () => Navigator.of(context).pop(true),
@@ -2484,11 +2484,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '扫描WebDAV文件夹',
       content: '确定要扫描WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('扫描', style: TextStyle(color: Colors.white)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -2606,11 +2606,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '扫描SMB文件夹',
       content: '确定要扫描SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('扫描', style: TextStyle(color: Colors.white)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -2684,11 +2684,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '删除SMB连接',
       content: '确定要删除SMB连接 "${connection.name}" 吗？',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -2750,11 +2750,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '删除WebDAV连接',
       content: '确定要删除WebDAV连接 "${connection.name}" 吗？',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
           onPressed: () => Navigator.of(context).pop(true),
         ),

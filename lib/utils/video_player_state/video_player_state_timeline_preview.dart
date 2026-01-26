@@ -269,6 +269,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       AbstractPlayer player, int bucket, int session) async {
     if (session != _timelinePreviewSessionId) return null;
     try {
+      final kernel =
+          _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
       if (_timelinePreviewPlayerKernel == PlayerKernelType.mdk &&
           player.textureId.value == null) {
         try {
@@ -303,13 +305,29 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
       if (session != _timelinePreviewSessionId) return null;
 
-      final frame =
+      if (kernel == PlayerKernelType.mdk) {
+        // MDK 首次 snapshot 可能没有渲染帧，先触发一次以确保后续截图可用。
+        await player.snapshot(width: targetWidth, height: targetHeight);
+        await Future.delayed(const Duration(milliseconds: 60));
+      }
+
+      PlayerFrame? frame =
           await player.snapshot(width: targetWidth, height: targetHeight);
+      if ((frame == null || frame.bytes.isEmpty) &&
+          kernel == PlayerKernelType.mdk) {
+        await Future.delayed(const Duration(milliseconds: 80));
+        frame = await player.snapshot(width: targetWidth, height: targetHeight);
+      }
       if (session != _timelinePreviewSessionId) return null;
       if (frame == null || frame.bytes.isEmpty) {
         return null;
       }
-      return frame;
+      return _normalizeTimelineFrameSize(
+        frame,
+        player,
+        fallbackWidth: targetWidth,
+        fallbackHeight: targetHeight,
+      );
     } catch (e) {
       debugPrint('捕获时间轴帧失败: $e');
       return null;
@@ -369,6 +387,48 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       numChannels: 4,
       rowStride: rowStride,
       order: _resolveTimelinePreviewChannelOrder(),
+    );
+  }
+
+  PlayerFrame _normalizeTimelineFrameSize(
+    PlayerFrame frame,
+    AbstractPlayer player, {
+    required int fallbackWidth,
+    required int fallbackHeight,
+  }) {
+    final bytes = frame.bytes;
+    int resolvedWidth = frame.width;
+    int resolvedHeight = frame.height;
+
+    bool lengthMatches(int width, int height) {
+      if (width <= 0 || height <= 0) return false;
+      return bytes.length == width * height * 4;
+    }
+
+    if (!lengthMatches(resolvedWidth, resolvedHeight)) {
+      final streams = player.mediaInfo.video;
+      if (streams != null && streams.isNotEmpty) {
+        final codec = streams.first.codec;
+        if (lengthMatches(codec.width, codec.height)) {
+          resolvedWidth = codec.width;
+          resolvedHeight = codec.height;
+        }
+      }
+    }
+
+    if (resolvedWidth <= 0 || resolvedHeight <= 0) {
+      resolvedWidth = fallbackWidth;
+      resolvedHeight = fallbackHeight;
+    }
+
+    if (resolvedWidth == frame.width && resolvedHeight == frame.height) {
+      return frame;
+    }
+
+    return PlayerFrame(
+      width: resolvedWidth,
+      height: resolvedHeight,
+      bytes: bytes,
     );
   }
 

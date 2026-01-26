@@ -24,12 +24,14 @@ class VideoSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
   final ValueChanged<bool>? onHoverChanged;
   final Rect? anchorRect;
+  final GlobalKey? anchorKey;
 
   const VideoSettingsMenu({
     super.key,
     required this.onClose,
     this.onHoverChanged,
     this.anchorRect,
+    this.anchorKey,
   });
 
   @override
@@ -44,6 +46,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   static const double _menuRightOffset = 20;
   static const double _submenuMinHeight = 220;
   static const double _submenuMaxHeight = 420;
+  Rect? _anchorRect;
 
   @override
   void initState() {
@@ -51,12 +54,40 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     videoState = Provider.of<VideoPlayerState>(context, listen: false);
     _currentKernelType = PlayerFactory.getKernelType();
     videoState.setControlsVisibilityLocked(true);
+    _anchorRect = widget.anchorRect;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAnchorRect());
   }
 
   @override
   void dispose() {
     videoState.setControlsVisibilityLocked(false);
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(VideoSettingsMenu oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.anchorRect != oldWidget.anchorRect) {
+      _anchorRect = widget.anchorRect ?? _anchorRect;
+    }
+    if (widget.anchorKey != oldWidget.anchorKey ||
+        widget.anchorRect != oldWidget.anchorRect) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAnchorRect());
+    }
+  }
+
+  void _refreshAnchorRect() {
+    if (!mounted) return;
+    final context = widget.anchorKey?.currentContext;
+    if (context == null) return;
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+    final rect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
+    if (_anchorRect != rect) {
+      setState(() {
+        _anchorRect = rect;
+      });
+    }
   }
 
   void _handleItemTap(PlayerMenuPaneId paneId) {
@@ -88,8 +119,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       showHeader: showHeader,
       showBackItem: showHeader ? false : showBackItem,
       lockControlsVisible: true,
-      anchorRect: widget.anchorRect,
-      showPointer: widget.anchorRect != null,
+      anchorRect: _anchorRect,
+      showPointer: _anchorRect != null,
       minHeight: showBackItem ? _submenuMinHeight : null,
       maxHeight: showBackItem ? _submenuMaxHeight : null,
       child: child,
