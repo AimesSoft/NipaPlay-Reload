@@ -43,6 +43,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     }
 
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
+    final bool isDesktopOrTablet = globals.isDesktopOrTablet;
     // 强制启用动画
     const enableAnimation = true;
 
@@ -62,13 +63,11 @@ class _CustomScaffoldState extends State<CustomScaffold> {
         extendBodyBehindAppBar: false,
         appBar: widget.shouldShowAppBar && widget.tabPage.isNotEmpty
             ? AppBar(
-                toolbarHeight: !widget.pageIsHome && !globals.isDesktop
+                toolbarHeight: !widget.pageIsHome && !isDesktopOrTablet
                     ? 100
-                    : globals.isDesktop
+                    : isDesktopOrTablet
                         ? 20
-                        : globals.isTablet
-                            ? 30
-                            : 60,
+                        : 60,
                 leading: widget.pageIsHome
                     ? null
                     : IconButton(
@@ -204,8 +203,8 @@ class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 桌面端不显示Logo（移至右上角），移动端与Web保持原有布局
-    if (globals.isDesktop) {
+    // 桌面端/平板不显示Logo（移至右上角），移动端与Web保持原有布局
+    if (globals.isDesktopOrTablet) {
       return tabBar;
     }
 

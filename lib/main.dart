@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:media_kit/media_kit.dart';
@@ -86,6 +87,12 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey =
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPaintBaselinesEnabled = false;
+  debugPaintSizeEnabled = false;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    debugPaintBaselinesEnabled = false;
+    debugPaintSizeEnabled = false;
+  });
 
   // Web 端不再提供 UI，仅保留客户端连接的远程访问 API。
   if (kIsWeb) {
@@ -1270,9 +1277,15 @@ class MainPageState extends State<MainPage>
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final mediaPadding = MediaQuery.of(context).padding;
     final bool isMac = !kIsWeb && Platform.isMacOS;
-    final double topPadding = isMac ? 10 : 4;
-    final double rightPadding = isMac ? 20 : 10;
+    final bool isDesktop = globals.isDesktop;
+    final double baseTopPadding = isMac ? 10 : 4;
+    final double baseRightPadding = isMac ? 20 : 10;
+    final double topPadding =
+        isDesktop ? baseTopPadding : baseTopPadding + mediaPadding.top;
+    final double rightPadding =
+        isDesktop ? baseRightPadding : baseRightPadding + mediaPadding.right;
     return Stack(
       children: [
         // 使用 Selector 只监听需要的状态
@@ -1317,7 +1330,7 @@ class MainPageState extends State<MainPage>
         Selector<VideoPlayerState, bool>(
           selector: (context, videoState) => videoState.shouldShowAppBar(),
           builder: (context, shouldShowAppBar, child) {
-            if (!globals.isDesktop || !shouldShowAppBar) {
+            if (!globals.isDesktopOrTablet || !shouldShowAppBar) {
               return const SizedBox.shrink();
             }
             return Positioned(

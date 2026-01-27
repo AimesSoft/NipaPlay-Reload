@@ -57,8 +57,17 @@ class CupertinoThemeDescriptor extends ThemeDescriptor {
           ],
           home: context.cupertinoHomeBuilder(),
           builder: (buildContext, appChild) {
-            return context.overlayBuilder(
+            final child = context.overlayBuilder(
               appChild ?? const SizedBox.shrink(),
+            );
+            if (context.environment.isIOS) {
+              return child;
+            }
+            return DefaultTextStyle(
+              style: DefaultTextStyle.of(buildContext).style,
+              overflow: TextOverflow.visible,
+              softWrap: true,
+              child: child,
             );
           },
         );

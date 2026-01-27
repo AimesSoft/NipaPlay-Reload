@@ -2,12 +2,15 @@ import 'dart:async';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/hotkey_service.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_gesture_area.dart';
@@ -15,10 +18,21 @@ import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/danmaku_density_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/minimal_progress_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/playback_info_menu.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/vertical_indicator.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/glass_action_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/lock_controls_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_settings_menu.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
-import 'package:nipaplay/pages/play_video_page.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -32,6 +46,12 @@ class CupertinoPlayVideoPage extends StatefulWidget {
 class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   double? _dragProgress;
   bool _isDragging = false;
+  bool _isHoveringAnimeInfo = false;
+  bool _isHoveringBackButton = false;
+  double _horizontalDragDistance = 0.0;
+  bool _isUiLocked = false;
+  bool _showUiLockButton = false;
+  Timer? _uiLockButtonTimer;
   final OverlayContextMenuController _contextMenuController =
       OverlayContextMenuController();
   OverlayEntry? _playbackInfoOverlay;
@@ -60,6 +80,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     _hidePlaybackInfoOverlay();
     _settingsOverlay?.remove();
     _settingsOverlay = null;
+    _uiLockButtonTimer?.cancel();
     super.dispose();
   }
 
@@ -353,9 +374,6 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_useNipaplayControls) {
-      return PlayVideoPage(videoPath: widget.videoPath);
-    }
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, _) {
         return WillPopScope(
@@ -377,6 +395,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   }
 
   Widget _buildBody(VideoPlayerState videoState) {
+    if (_useNipaplayControls) {
+      return _buildNipaplayBody(videoState);
+    }
     final textureId = videoState.player.textureId.value;
     final hasVideo = videoState.hasVideo && textureId != null && textureId >= 0;
     final progressValue = _isDragging
@@ -486,6 +507,214 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
   }
 
+  Widget _buildNipaplayBody(VideoPlayerState videoState) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Colors.black),
+        const Positioned.fill(
+          child: VideoPlayerWidget(
+            emptyPlaceholder: ColoredBox(color: Colors.black),
+          ),
+        ),
+        if (videoState.hasVideo) _buildNipaplayControls(videoState),
+      ],
+    );
+  }
+
+  Widget _buildNipaplayControls(VideoPlayerState videoState) {
+    final bool uiLocked = globals.isPhone ? _isUiLocked : false;
+    final bool showLockButton = globals.isPhone &&
+        (videoState.showControls || (uiLocked && _showUiLockButton));
+    final bool showShareButton =
+        SystemShareService.isSupported && !globals.isDesktop;
+    final bool showScreenshotButton = !kIsWeb && globals.isPhone;
+
+    return Stack(
+      children: [
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, _) {
+            return VerticalIndicator(videoState: videoState);
+          },
+        ),
+        Positioned(
+          top: 16.0,
+          left: 16.0,
+          child: SafeArea(
+            bottom: false,
+            child: AnimatedOpacity(
+              opacity: videoState.showControls ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: IgnorePointer(
+                ignoring: !videoState.showControls,
+                child: Padding(
+                  padding: EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
+                  child: Row(
+                    children: [
+                      MouseRegion(
+                        cursor: _isHoveringBackButton
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
+                        onEnter: (_) =>
+                            setState(() => _isHoveringBackButton = true),
+                        onExit: (_) =>
+                            setState(() => _isHoveringBackButton = false),
+                        child: BackButtonWidget(
+                          videoState: videoState,
+                          onExit: () async {
+                            if (mounted) {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12.0),
+                      SendDanmakuButton(
+                        onPressed: () => _showSendDanmakuDialog(videoState),
+                      ),
+                      const SizedBox(width: 8.0),
+                      SkipButton(
+                        onPressed: () => videoState.skip(),
+                      ),
+                      const SizedBox(width: 12.0),
+                      MouseRegion(
+                        cursor: _isHoveringAnimeInfo
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
+                        onEnter: (_) =>
+                            setState(() => _isHoveringAnimeInfo = true),
+                        onExit: (_) =>
+                            setState(() => _isHoveringAnimeInfo = false),
+                        child: AnimeInfoWidget(videoState: videoState),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 16.0,
+          right: 16.0,
+          child: SafeArea(
+            bottom: false,
+            child: AnimatedOpacity(
+              opacity: videoState.showControls ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: IgnorePointer(
+                ignoring: !videoState.showControls,
+                child: Padding(
+                  padding: EdgeInsets.only(right: globals.isPhone ? 24.0 : 0.0),
+                  child: MouseRegion(
+                    onEnter: (_) => videoState.setControlsHovered(true),
+                    onExit: (_) => videoState.setControlsHovered(false),
+                    child: Row(
+                      children: [
+                        if (!kIsWeb &&
+                            defaultTargetPlatform == TargetPlatform.iOS)
+                          GlassActionButton(
+                            tooltip: '投屏 (AirPlay)',
+                            icon: Icons.airplay_rounded,
+                            onPressed: () {
+                              videoState.resetHideControlsTimer();
+                              _showAirPlayPickerNipaplay();
+                            },
+                          ),
+                        if (showScreenshotButton) ...[
+                          if (!kIsWeb &&
+                              defaultTargetPlatform == TargetPlatform.iOS)
+                            const SizedBox(width: 12),
+                          GlassActionButton(
+                            tooltip: '截图',
+                            icon: Icons.camera_alt_outlined,
+                            onPressed: () {
+                              videoState.resetHideControlsTimer();
+                              _captureScreenshotNipaplay(videoState);
+                            },
+                          ),
+                        ],
+                        if (showShareButton) ...[
+                          const SizedBox(width: 12),
+                          GlassActionButton(
+                            tooltip: (!kIsWeb &&
+                                    defaultTargetPlatform ==
+                                        TargetPlatform.iOS)
+                                ? '分享 / AirDrop'
+                                : '分享',
+                            icon: (!kIsWeb &&
+                                    defaultTargetPlatform ==
+                                        TargetPlatform.iOS)
+                                ? Icons.ios_share_rounded
+                                : Icons.share_rounded,
+                            onPressed: () {
+                              videoState.resetHideControlsTimer();
+                              _shareCurrentMediaNipaplay(videoState);
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (globals.isPhone && videoState.isFullscreen)
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 60,
+            child: GestureDetector(
+              onHorizontalDragStart: _handleSideSwipeDragStart,
+              onHorizontalDragUpdate: _handleSideSwipeDragUpdate,
+              onHorizontalDragEnd: _handleSideSwipeDragEnd,
+              behavior: HitTestBehavior.translucent,
+              dragStartBehavior: DragStartBehavior.down,
+              child: Container(),
+            ),
+          ),
+        const VideoControlsOverlay(showFullscreenButton: false),
+        if (uiLocked)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _showUiLockButtonTemporarily,
+              child: const SizedBox.expand(),
+            ),
+          ),
+        if (globals.isPhone)
+          Positioned(
+            left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Transform.translate(
+                offset: const Offset(0, -90),
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 150),
+                  offset: Offset(showLockButton ? 0 : -0.1, 0),
+                  child: AnimatedOpacity(
+                    opacity: showLockButton ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 150),
+                    child: IgnorePointer(
+                      ignoring: !showLockButton,
+                      child: LockControlsButton(
+                        locked: uiLocked,
+                        onPressed: () => _toggleUiLock(videoState),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildPlaceholder(VideoPlayerState videoState) {
     final messages = videoState.statusMessages;
     return Center(
@@ -508,6 +737,255 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
         ],
       ),
     );
+  }
+
+  void _handleSideSwipeDragStart(DragStartDetails details) {
+    if (!globals.isPhone) return;
+    if (!_isUiLocked) {
+      _horizontalDragDistance = 0.0;
+    }
+  }
+
+  void _handleSideSwipeDragUpdate(DragUpdateDetails details) {
+    if (!globals.isPhone) return;
+    if (!_isUiLocked) {
+      _horizontalDragDistance += details.delta.dx;
+    }
+  }
+
+  void _handleSideSwipeDragEnd(DragEndDetails details) {
+    if (!globals.isPhone || _isUiLocked) {
+      _horizontalDragDistance = 0.0;
+      return;
+    }
+
+    final TabController? tabController =
+        context.findAncestorWidgetOfExactType<DefaultTabController>() != null
+            ? DefaultTabController.of(context)
+            : null;
+
+    if (tabController == null) {
+      _horizontalDragDistance = 0.0;
+      return;
+    }
+
+    TabChangeNotifier? tabChangeNotifier;
+    try {
+      tabChangeNotifier =
+          Provider.of<TabChangeNotifier>(context, listen: false);
+    } catch (_) {
+      tabChangeNotifier = null;
+    }
+    if (tabChangeNotifier == null) {
+      _horizontalDragDistance = 0.0;
+      return;
+    }
+
+    final currentIndex = tabController.index;
+    final tabCount = tabController.length;
+    int newIndex = currentIndex;
+
+    final double dragThreshold = MediaQuery.of(context).size.width / 15;
+
+    if (_horizontalDragDistance < -dragThreshold) {
+      if (currentIndex < tabCount - 1) {
+        newIndex = currentIndex + 1;
+      }
+    } else if (_horizontalDragDistance > dragThreshold) {
+      if (currentIndex > 0) {
+        newIndex = currentIndex - 1;
+      }
+    }
+
+    if (newIndex != currentIndex) {
+      tabChangeNotifier.changeTab(newIndex);
+    }
+    _horizontalDragDistance = 0.0;
+  }
+
+  void _toggleUiLock(VideoPlayerState videoState) {
+    if (!globals.isPhone) return;
+    final nextLocked = !_isUiLocked;
+    _uiLockButtonTimer?.cancel();
+    setState(() {
+      _isUiLocked = nextLocked;
+      _showUiLockButton = nextLocked;
+    });
+    videoState.setShowControls(!nextLocked);
+
+    if (nextLocked) {
+      _showUiLockButtonTemporarily();
+    }
+  }
+
+  void _showUiLockButtonTemporarily(
+      [Duration duration = const Duration(seconds: 3)]) {
+    if (!mounted) return;
+    if (!globals.isPhone) return;
+    if (!_isUiLocked) return;
+
+    _uiLockButtonTimer?.cancel();
+    setState(() {
+      _showUiLockButton = true;
+    });
+    _uiLockButtonTimer = Timer(duration, () {
+      if (!mounted) return;
+      if (!_isUiLocked) return;
+      setState(() {
+        _showUiLockButton = false;
+      });
+    });
+  }
+
+  Future<void> _shareCurrentMediaNipaplay(
+      VideoPlayerState videoState) async {
+    if (!SystemShareService.isSupported) return;
+
+    final currentVideoPath = videoState.currentVideoPath;
+    final currentActualUrl = videoState.currentActualPlayUrl;
+
+    String? filePath;
+    String? url;
+
+    if (currentVideoPath != null && currentVideoPath.isNotEmpty) {
+      final uri = Uri.tryParse(currentVideoPath);
+      final scheme = uri?.scheme.toLowerCase();
+      if (scheme == 'http' || scheme == 'https') {
+        url = currentVideoPath;
+      } else if (scheme == 'jellyfin' || scheme == 'emby') {
+        url = currentActualUrl;
+      } else if (scheme == 'smb' || scheme == 'webdav' || scheme == 'dav') {
+        url = currentVideoPath;
+      } else {
+        filePath = currentVideoPath;
+      }
+    } else {
+      url = currentActualUrl;
+    }
+
+    final titleParts = <String>[
+      if ((videoState.animeTitle ?? '').trim().isNotEmpty)
+        videoState.animeTitle!.trim(),
+      if ((videoState.episodeTitle ?? '').trim().isNotEmpty)
+        videoState.episodeTitle!.trim(),
+    ];
+    final subject = titleParts.isEmpty ? null : titleParts.join(' · ');
+
+    if ((filePath == null || filePath.isEmpty) &&
+        (url == null || url.isEmpty)) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '没有可分享的内容');
+      return;
+    }
+
+    try {
+      await SystemShareService.share(
+        text: subject,
+        url: url,
+        filePath: filePath,
+        subject: subject,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '分享失败: $e');
+    }
+  }
+
+  Future<void> _captureScreenshotNipaplay(
+      VideoPlayerState videoState) async {
+    if (kIsWeb) return;
+    if (!videoState.hasVideo) return;
+
+    try {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        final destination = await BlurDialog.show<String>(
+          context: context,
+          title: '保存截图',
+          content: '请选择保存位置',
+          actions: [
+            HoverScaleTextButton(
+              onPressed: () => Navigator.of(context).pop('photos'),
+              child: const Text(
+                '相册',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            HoverScaleTextButton(
+              onPressed: () => Navigator.of(context).pop('file'),
+              child: const Text(
+                '文件',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+
+        if (!mounted) return;
+        if (destination == null) return;
+
+        if (destination == 'photos') {
+          final ok = await videoState.captureScreenshotToPhotos();
+          if (!mounted) return;
+          BlurSnackBar.show(context, ok ? '截图已保存到相册' : '截图失败');
+          return;
+        }
+      }
+
+      final path = await videoState.captureScreenshot();
+      if (!mounted) return;
+      if (path == null || path.isEmpty) {
+        BlurSnackBar.show(context, '截图失败');
+        return;
+      }
+      BlurSnackBar.show(context, '截图已保存: $path');
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '截图失败: $e');
+    }
+  }
+
+  Future<void> _showAirPlayPickerNipaplay() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+
+    await BlurDialog.show(
+      context: context,
+      title: '投屏',
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          SizedBox(height: 8),
+          Text(
+            '点击下方 AirPlay 图标选择设备',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 16),
+          Center(child: AirPlayRoutePicker(size: 44)),
+          SizedBox(height: 12),
+          Text(
+            '如未发现设备，请确认与接收端在同一局域网。',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+      actions: [
+        HoverScaleTextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showSendDanmakuDialog(VideoPlayerState videoState) async {
+    final hotkeyService = HotkeyService();
+    hotkeyService.unregisterHotkeys();
+    try {
+      await videoState.showSendDanmakuDialog();
+    } finally {
+      hotkeyService.registerHotkeys();
+    }
   }
 
   Widget _buildTopBar(VideoPlayerState videoState) {

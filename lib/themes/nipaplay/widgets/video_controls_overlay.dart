@@ -4,7 +4,12 @@ import 'modern_video_controls.dart';
 import 'package:provider/provider.dart';
 
 class VideoControlsOverlay extends StatelessWidget {
-  const VideoControlsOverlay({super.key});
+  final bool showFullscreenButton;
+
+  const VideoControlsOverlay({
+    super.key,
+    this.showFullscreenButton = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +28,9 @@ class VideoControlsOverlay extends StatelessWidget {
               child: AnimatedSlide(
                 duration: const Duration(milliseconds: 150),
                 offset: Offset(0, videoState.showControls ? 0 : 0.1),
-                child: const ModernVideoControls(),
+                child: ModernVideoControls(
+                  showFullscreenButton: showFullscreenButton,
+                ),
               ),
             ),
           ),

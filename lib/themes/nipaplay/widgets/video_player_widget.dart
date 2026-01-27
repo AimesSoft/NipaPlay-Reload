@@ -4,10 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_player_ui.dart';
 
 class VideoPlayerWidget extends StatelessWidget {
-  const VideoPlayerWidget({super.key});
+  final Widget? emptyPlaceholder;
+
+  const VideoPlayerWidget({
+    super.key,
+    this.emptyPlaceholder,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const VideoPlayerUI();
+    return VideoPlayerUI(emptyPlaceholder: emptyPlaceholder);
   }
 } 

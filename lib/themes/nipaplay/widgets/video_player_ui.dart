@@ -26,7 +26,12 @@ import 'playback_info_menu.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class VideoPlayerUI extends StatefulWidget {
-  const VideoPlayerUI({super.key});
+  final Widget? emptyPlaceholder;
+
+  const VideoPlayerUI({
+    super.key,
+    this.emptyPlaceholder,
+  });
 
   @override
   State<VideoPlayerUI> createState() => _VideoPlayerUIState();
@@ -558,9 +563,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         _updateAnimeCoverUrl(videoState.animeId);
 
         if (!videoState.hasVideo) {
+          final placeholder = widget.emptyPlaceholder ?? const VideoUploadUI();
           return Stack(
             children: [
-              const VideoUploadUI(),
+              placeholder,
               if (videoState.status == PlayerStatus.recognizing ||
                   videoState.status == PlayerStatus.loading)
                 LoadingOverlay(

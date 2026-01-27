@@ -8,10 +8,12 @@ import 'control_shadow.dart';
 
 class BackButtonWidget extends StatefulWidget {
   final VideoPlayerState videoState;
+  final Future<void> Function()? onExit;
 
   const BackButtonWidget({
     super.key,
     required this.videoState,
+    this.onExit,
   });
 
   @override
@@ -60,7 +62,13 @@ class _BackButtonWidgetState extends State<BackButtonWidget> {
                 setState(() => _isBackButtonPressed = false);
                 try {
                   // 先调用handleBackButton处理截图
-                  await widget.videoState.handleBackButton();
+                  final shouldExit = await widget.videoState.handleBackButton();
+                  if (widget.onExit != null) {
+                    if (!shouldExit) return;
+                    await widget.videoState.resetPlayer();
+                    await widget.onExit!();
+                    return;
+                  }
                   // 然后重置播放器状态
                   await widget.videoState.resetPlayer();
                 } catch (e) {

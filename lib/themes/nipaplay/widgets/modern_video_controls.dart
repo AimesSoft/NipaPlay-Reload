@@ -13,7 +13,12 @@ import 'video_settings_menu.dart';
 import 'dart:async';
 
 class ModernVideoControls extends StatefulWidget {
-  const ModernVideoControls({super.key});
+  final bool showFullscreenButton;
+
+  const ModernVideoControls({
+    super.key,
+    this.showFullscreenButton = true,
+  });
 
   @override
   State<ModernVideoControls> createState() => _ModernVideoControlsState();
@@ -458,36 +463,51 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       ),
                                       
                                       // 全屏按钮（所有平台）或菜单栏切换按钮（平板）
-                                      _buildControlButton(
-                                        icon: Icon(
-                                          globals.isTablet 
-                                            ? (videoState.isAppBarHidden 
-                                                ? Icons.fullscreen_exit_rounded 
-                                                : Icons.fullscreen_rounded)
-                                            : (videoState.isFullscreen 
-                                                ? Icons.fullscreen_exit_rounded 
-                                                : Icons.fullscreen_rounded),
-                                          key: ValueKey<bool>(globals.isTablet ? videoState.isAppBarHidden : videoState.isFullscreen),
-                                          color: Colors.white,
-                                          size: globals.isPhone ? 36 : 32,
+                                      if (widget.showFullscreenButton)
+                                        _buildControlButton(
+                                          icon: Icon(
+                                            globals.isTablet
+                                                ? (videoState.isAppBarHidden
+                                                    ? Icons.fullscreen_exit_rounded
+                                                    : Icons.fullscreen_rounded)
+                                                : (videoState.isFullscreen
+                                                    ? Icons.fullscreen_exit_rounded
+                                                    : Icons.fullscreen_rounded),
+                                            key: ValueKey<bool>(
+                                              globals.isTablet
+                                                  ? videoState.isAppBarHidden
+                                                  : videoState.isFullscreen,
+                                            ),
+                                            color: Colors.white,
+                                            size: globals.isPhone ? 36 : 32,
+                                          ),
+                                          onTap: () => globals.isTablet
+                                              ? videoState
+                                                  .toggleAppBarVisibility()
+                                              : videoState.toggleFullscreen(),
+                                          isPressed: _isFullscreenPressed,
+                                          isHovered: _isFullscreenHovered,
+                                          onHover: (value) => setState(
+                                              () => _isFullscreenHovered = value),
+                                          onPressed: (value) => setState(
+                                              () => _isFullscreenPressed = value),
+                                          tooltip: globals.isTablet
+                                              ? (videoState.isAppBarHidden
+                                                  ? '显示菜单栏'
+                                                  : '隐藏菜单栏')
+                                              : globals.isPhone
+                                                  ? (videoState.isFullscreen
+                                                      ? '退出全屏'
+                                                      : '全屏')
+                                                  : _tooltipManager
+                                                      .formatActionWithShortcut(
+                                                        'fullscreen',
+                                                        videoState.isFullscreen
+                                                            ? '退出全屏'
+                                                            : '全屏',
+                                                      ),
+                                          useCustomAnimation: true,
                                         ),
-                                        onTap: () => globals.isTablet 
-                                          ? videoState.toggleAppBarVisibility() 
-                                          : videoState.toggleFullscreen(),
-                                        isPressed: _isFullscreenPressed,
-                                        isHovered: _isFullscreenHovered,
-                                        onHover: (value) => setState(() => _isFullscreenHovered = value),
-                                        onPressed: (value) => setState(() => _isFullscreenPressed = value),
-                                        tooltip: globals.isTablet 
-                                          ? (videoState.isAppBarHidden ? '显示菜单栏' : '隐藏菜单栏')
-                                          : globals.isPhone
-                                            ? (videoState.isFullscreen ? '退出全屏' : '全屏')
-                                            : _tooltipManager.formatActionWithShortcut(
-                                                'fullscreen',
-                                                videoState.isFullscreen ? '退出全屏' : '全屏'
-                                              ),
-                                        useCustomAnimation: true,
-                                      ),
                                     ],
                                   ),
                                 ],

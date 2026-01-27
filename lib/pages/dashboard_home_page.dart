@@ -882,47 +882,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                     SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
                   ],
                   
-                  // 空状态提示（当没有任何内容时）
-                  if (_recentJellyfinItemsByLibrary.isEmpty && 
-                      _recentEmbyItemsByLibrary.isEmpty && 
-                      _localAnimeItems.isEmpty && 
-                      !_isLoadingRecommended) ...[
-                    Container(
-                      height: 200,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.white10,
-                      ),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.video_library_outlined,
-                              color: Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white54
-                                  : Colors.black54,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              jellyfinProvider.isConnected || embyProvider.isConnected
-                                  ? '正在加载内容...'
-                                  : '连接媒体服务器或观看本地视频以查看内容',
-                              style: TextStyle(
-                                color: Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.white54
-                                    : Colors.black54,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
-                  ],
+
                   
                   // 底部间距
                   SizedBox(height: isPhone ? 30 : 50),
