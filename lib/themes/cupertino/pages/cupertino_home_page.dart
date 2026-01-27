@@ -32,7 +32,6 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_anime_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
@@ -1181,9 +1180,18 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Widget _buildTodayAnimeCard(BangumiAnime anime) {
     final title = anime.nameCn.isNotEmpty ? anime.nameCn : anime.name;
+    final summary = (anime.summary != null && anime.summary!.isNotEmpty)
+        ? anime.summary
+        : anime.typeDescription;
 
     return GestureDetector(
-      onTap: () => ThemedAnimeDetail.show(context, anime.id),
+      onTap: () => _openCupertinoAnimeDetail(
+        animeId: anime.id,
+        title: title,
+        summary: summary,
+        imageUrl: anime.imageUrl,
+        episodeCount: anime.totalEpisodes,
+      ),
       child: SizedBox(
         width: 120,
         height: 210,
@@ -1259,7 +1267,13 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         imageUrl: anime.imageUrl,
         episodeLabel: _buildRandomEpisodeLabel(anime),
         lastWatchTime: null,
-        onTap: () => ThemedAnimeDetail.show(context, anime.animeId),
+        onTap: () => _openCupertinoAnimeDetail(
+          animeId: anime.animeId,
+          title: anime.animeTitle,
+          summary: summary,
+          imageUrl: anime.imageUrl,
+          episodeCount: anime.episodeCount,
+        ),
         sourceLabel: _formatRandomTagLabel(item.tag),
         rating: anime.rating > 0 ? anime.rating : null,
         summary: summary,
@@ -2934,6 +2948,24 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       return;
     }
 
+    await _openCupertinoAnimeDetail(
+      animeId: item.animeId!,
+      title: item.title,
+      summary: item.subtitle,
+      imageUrl: item.imageUrl,
+      episodeCount: item.episodeCount,
+    );
+  }
+
+  Future<void> _openCupertinoAnimeDetail({
+    required int animeId,
+    required String title,
+    String? summary,
+    String? imageUrl,
+    int? episodeCount,
+  }) async {
+    if (!mounted) return;
+
     SharedRemoteLibraryProvider? sharedProvider;
     try {
       sharedProvider = context.read<SharedRemoteLibraryProvider>();
@@ -2954,54 +2986,62 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
     final detailMode = themeNotifier?.animeDetailDisplayMode;
 
-    if (sharedProvider == null) {
-      ThemedAnimeDetail.show(context, item.animeId!);
-      return;
-    }
-
-    SharedRemoteAnimeSummary? summary;
-    for (final entry in sharedProvider.animeSummaries) {
-      if (entry.animeId == item.animeId) {
-        summary = entry;
-        break;
+    SharedRemoteAnimeSummary? summaryFromProvider;
+    if (sharedProvider != null) {
+      for (final entry in sharedProvider.animeSummaries) {
+        if (entry.animeId == animeId) {
+          summaryFromProvider = entry;
+          break;
+        }
       }
     }
 
-    summary = summary != null
+    final fallbackSummary = SharedRemoteAnimeSummary(
+      animeId: animeId,
+      name: title,
+      nameCn: title,
+      summary: summary,
+      imageUrl: imageUrl,
+      lastWatchTime: DateTime.now(),
+      episodeCount: episodeCount ?? 0,
+      hasMissingFiles: false,
+    );
+
+    final resolvedSummary = summaryFromProvider != null
         ? SharedRemoteAnimeSummary(
-            animeId: summary.animeId,
-            name: summary.name,
-            nameCn: summary.nameCn ?? summary.name,
-            summary: summary.summary ?? item.subtitle,
-            imageUrl: summary.imageUrl ?? item.imageUrl,
-            lastWatchTime: summary.lastWatchTime,
-            episodeCount: summary.episodeCount,
-            hasMissingFiles: summary.hasMissingFiles,
+            animeId: summaryFromProvider.animeId,
+            name: summaryFromProvider.name,
+            nameCn: summaryFromProvider.nameCn ?? summaryFromProvider.name,
+            summary: summaryFromProvider.summary ?? summary,
+            imageUrl: summaryFromProvider.imageUrl ?? imageUrl,
+            lastWatchTime: summaryFromProvider.lastWatchTime,
+            episodeCount: summaryFromProvider.episodeCount,
+            hasMissingFiles: summaryFromProvider.hasMissingFiles,
           )
-        : SharedRemoteAnimeSummary(
-            animeId: item.animeId!,
-            name: item.title,
-            nameCn: item.title,
-            summary: item.subtitle,
-            imageUrl: item.imageUrl,
-            lastWatchTime: DateTime.now(),
-            episodeCount: item.episodeCount ?? 0,
-            hasMissingFiles: false,
-          );
+        : fallbackSummary;
+
+    final detailPage = CupertinoSharedAnimeDetailPage(
+      anime: resolvedSummary,
+      hideBackButton: true,
+      displayModeOverride: detailMode,
+      showCloseButton: true,
+      customEpisodeLoader: sharedProvider == null
+          ? ({bool force = false}) async => const []
+          : null,
+    );
+
+    final child = sharedProvider != null
+        ? ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
+            value: sharedProvider,
+            child: detailPage,
+          )
+        : detailPage;
 
     await CupertinoBottomSheet.show(
       context: context,
       title: null,
       showCloseButton: false,
-      child: ChangeNotifierProvider<SharedRemoteLibraryProvider>.value(
-        value: sharedProvider,
-        child: CupertinoSharedAnimeDetailPage(
-          anime: summary,
-          hideBackButton: true,
-          displayModeOverride: detailMode,
-          showCloseButton: true,
-        ),
-      ),
+      child: child,
     );
   }
 
