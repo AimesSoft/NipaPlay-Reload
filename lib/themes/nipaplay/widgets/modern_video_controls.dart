@@ -412,20 +412,18 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       
                                       // 时间显示
                                       ControlTextShadow(
-                                        child: DefaultTextStyle(
+                                        child: Text(
+                                          '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
                                           style: const TextStyle(
-                                            color: Colors.white60,
+                                            color: Colors.white,
                                             fontSize: 14,
                                             fontWeight: FontWeight.normal,
                                             height: 1.0,
                                             textBaseline: TextBaseline.alphabetic,
                                           ),
                                           textAlign: TextAlign.center,
-                                          child: Text(
-                                            '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
-                                            softWrap: false,
-                                            overflow: TextOverflow.visible,
-                                          ),
+                                          softWrap: false,
+                                          overflow: TextOverflow.visible,
                                         ),
                                       ),
                                       

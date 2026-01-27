@@ -48,6 +48,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   static const int _maxAnchorRefreshAttempts = 6;
   Rect? _anchorRect;
   int _anchorRefreshAttempts = 0;
+  bool _loggedNullAnchor = false;
+  bool _loggedResolvedAnchor = false;
 
   @override
   void initState() {
@@ -57,6 +59,12 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     videoState.setControlsVisibilityLocked(true);
     _anchorRect = widget.anchorRect;
     _anchorRefreshAttempts = 0;
+    assert(() {
+      debugPrint(
+        'VideoSettingsMenu: init anchorRect=$_anchorRect anchorKey=${widget.anchorKey != null}',
+      );
+      return true;
+    }());
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAnchorRect());
   }
 
@@ -96,6 +104,10 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     }
     final rect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
     if (_anchorRect != rect) {
+      assert(() {
+        debugPrint('VideoSettingsMenu: anchorRect updated to $rect');
+        return true;
+      }());
       setState(() {
         _anchorRect = rect;
       });
@@ -108,6 +120,12 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       return;
     }
     if (_anchorRefreshAttempts >= _maxAnchorRefreshAttempts) {
+      assert(() {
+        debugPrint(
+          'VideoSettingsMenu: anchorRect refresh aborted after $_anchorRefreshAttempts attempts',
+        );
+        return true;
+      }());
       return;
     }
     _anchorRefreshAttempts += 1;
@@ -134,8 +152,43 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     });
   }
 
+  Rect? _resolveAnchorRect() {
+    if (_anchorRect != null) {
+      return _anchorRect;
+    }
+    final context = widget.anchorKey?.currentContext;
+    if (context == null) {
+      return null;
+    }
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) {
+      return null;
+    }
+    return renderBox.localToGlobal(Offset.zero) & renderBox.size;
+  }
+
   SettingsMenuScope _wrapMenu({required bool showBackItem, required Widget child}) {
     final bool showHeader = showBackItem;
+    final Rect? resolvedAnchorRect = _resolveAnchorRect();
+    if (resolvedAnchorRect == null) {
+      if (!_loggedNullAnchor) {
+        assert(() {
+          debugPrint(
+            'VideoSettingsMenu: resolvedAnchorRect is null (widgetAnchorRect=${widget.anchorRect}, anchorKey=${widget.anchorKey != null})',
+          );
+          return true;
+        }());
+        _loggedNullAnchor = true;
+      }
+    } else if (!_loggedResolvedAnchor) {
+      assert(() {
+        debugPrint(
+          'VideoSettingsMenu: resolvedAnchorRect=$resolvedAnchorRect',
+        );
+        return true;
+      }());
+      _loggedResolvedAnchor = true;
+    }
     return SettingsMenuScope(
       width: _menuWidth,
       rightOffset: _menuRightOffset,
@@ -143,8 +196,8 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       showHeader: showHeader,
       showBackItem: showHeader ? false : showBackItem,
       lockControlsVisible: true,
-      anchorRect: _anchorRect,
-      showPointer: _anchorRect != null,
+      anchorRect: resolvedAnchorRect,
+      showPointer: resolvedAnchorRect != null,
       height: _menuHeight,
       child: child,
     );

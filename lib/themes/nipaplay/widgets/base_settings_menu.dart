@@ -121,6 +121,7 @@ class BaseSettingsMenu extends StatelessWidget {
         const double horizontalMargin = 12;
         const double pointerPadding = 12;
         bool pointUp = true;
+        bool useExternalPointer = false;
         double? pointerX;
         double? left;
         double? top;
@@ -136,16 +137,25 @@ class BaseSettingsMenu extends StatelessWidget {
               .clamp(horizontalMargin, screenSize.width - resolvedWidth - horizontalMargin);
           pointerX = (anchorRect.center.dx - left)
               .clamp(pointerPadding, resolvedWidth - pointerPadding);
+          useExternalPointer = showPointer && pointerX != null;
+          final double pointerOffset = useExternalPointer ? pointerHeight : 0;
           if (showAbove) {
-            bottom = screenSize.height - anchorRect.top;
+            bottom = screenSize.height - anchorRect.top + pointerOffset;
             pointUp = false;
-            contentPaddingBottom = pointerHeight;
+            contentPaddingBottom = useExternalPointer ? 0 : pointerHeight;
           } else {
-            top = anchorRect.bottom;
+            top = anchorRect.bottom + pointerOffset;
             pointUp = true;
-            contentPaddingTop = pointerHeight;
+            contentPaddingTop = useExternalPointer ? 0 : pointerHeight;
           }
         }
+
+        assert(() {
+          debugPrint(
+            'BaseSettingsMenu: anchorRect=$anchorRect showPointer=$showPointer useExternalPointer=$useExternalPointer pointerX=$pointerX pointUp=$pointUp left=$left top=$top bottom=$bottom',
+          );
+          return true;
+        }());
 
         return Material(
           type: MaterialType.transparency,
@@ -178,7 +188,8 @@ class BaseSettingsMenu extends StatelessWidget {
                         borderColor: borderColor,
                         blurValue: blurValue,
                         borderRadius: 15,
-                        showPointer: showPointer && pointerX != null,
+                        showPointer:
+                            showPointer && pointerX != null && !useExternalPointer,
                         pointUp: pointUp,
                         pointerX: pointerX ?? resolvedWidth / 2,
                         pointerWidth: pointerWidth,
@@ -261,12 +272,79 @@ class BaseSettingsMenu extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (useExternalPointer && pointerX != null && left != null)
+                  Positioned(
+                    left: left + pointerX - pointerWidth / 2,
+                    top: pointUp ? (top ?? 0) - pointerHeight : null,
+                    bottom: pointUp ? null : (bottom ?? 0) - pointerHeight,
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        size: Size(pointerWidth, pointerHeight),
+                        painter: _SettingsMenuPointerPainter(
+                          fillColor: backgroundColor,
+                          borderColor: borderColor,
+                          pointUp: pointUp,
+                          borderWidth: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
         );
       },
     );
+  }
+}
+
+class _SettingsMenuPointerPainter extends CustomPainter {
+  final Color fillColor;
+  final Color borderColor;
+  final bool pointUp;
+  final double borderWidth;
+
+  const _SettingsMenuPointerPainter({
+    required this.fillColor,
+    required this.borderColor,
+    required this.pointUp,
+    required this.borderWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    if (pointUp) {
+      path.moveTo(size.width / 2, 0);
+      path.lineTo(size.width, size.height);
+      path.lineTo(0, size.height);
+    } else {
+      path.moveTo(0, 0);
+      path.lineTo(size.width, 0);
+      path.lineTo(size.width / 2, size.height);
+    }
+    path.close();
+
+    final fillPaint = Paint()
+      ..color = fillColor
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
+
+    if (borderWidth > 0) {
+      final strokePaint = Paint()
+        ..color = borderColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = borderWidth;
+      canvas.drawPath(path, strokePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SettingsMenuPointerPainter oldDelegate) {
+    return fillColor != oldDelegate.fillColor ||
+        borderColor != oldDelegate.borderColor ||
+        pointUp != oldDelegate.pointUp ||
+        borderWidth != oldDelegate.borderWidth;
   }
 }
 
