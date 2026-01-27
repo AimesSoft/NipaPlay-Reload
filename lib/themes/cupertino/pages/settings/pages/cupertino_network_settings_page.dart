@@ -121,7 +121,7 @@ class _CupertinoNetworkSettingsPageState
       _ServerOption(
         label: '备用服务器',
         value: NetworkSettings.backupServer,
-        description: '139.217.235.62:16001',
+        description: '139.224.252.88:16001',
       ),
     ];
 

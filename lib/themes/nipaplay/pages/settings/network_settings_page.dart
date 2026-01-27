@@ -290,7 +290,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '• 备用服务器：139.217.235.62:16001（镜像服务器，主服务器无法访问时使用）',
+                  '• 备用服务器：139.224.252.88:16001（镜像服务器，主服务器无法访问时使用）',
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 12,
