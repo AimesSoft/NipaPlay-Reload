@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Locale, ThemeMode;
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
@@ -29,40 +30,37 @@ class CupertinoThemeDescriptor extends ThemeDescriptor {
         );
 
   static Widget _buildApp(ThemeBuildContext context) {
-    final env = context.environment;
-    if (env.isPhone && !env.isWeb && !env.isIOS) {
-      PlatformInfo.setPlatformOverride(
-        PlatformOverride.ios,
-        iosVersion: 18,
-      );
-    } else {
-      PlatformInfo.clearPlatformOverride();
-    }
-    return AdaptiveApp(
-      title: 'NipaPlay',
-      navigatorKey: context.navigatorKey,
-      themeMode: context.themeNotifier.themeMode,
-      materialLightTheme: AppTheme.lightTheme,
-      materialDarkTheme: AppTheme.darkTheme,
-      cupertinoLightTheme: const CupertinoThemeData(
-        brightness: Brightness.light,
-      ),
-      cupertinoDarkTheme: const CupertinoThemeData(
-        brightness: Brightness.dark,
-      ),
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('zh', 'CN'),
-        Locale('en', ''),
-      ],
-      home: context.cupertinoHomeBuilder(),
-      builder: (buildContext, appChild) {
-        return context.overlayBuilder(
-          appChild ?? const SizedBox.shrink(),
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        final lightScheme = AppTheme.material3LightScheme(lightDynamic);
+        final darkScheme = AppTheme.material3DarkScheme(darkDynamic);
+        return AdaptiveApp(
+          title: 'NipaPlay',
+          navigatorKey: context.navigatorKey,
+          themeMode: context.themeNotifier.themeMode,
+          materialLightTheme: AppTheme.material3LightTheme(lightScheme),
+          materialDarkTheme: AppTheme.material3DarkTheme(darkScheme),
+          cupertinoLightTheme: const CupertinoThemeData(
+            brightness: Brightness.light,
+          ),
+          cupertinoDarkTheme: const CupertinoThemeData(
+            brightness: Brightness.dark,
+          ),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('zh', 'CN'),
+            Locale('en', ''),
+          ],
+          home: context.cupertinoHomeBuilder(),
+          builder: (buildContext, appChild) {
+            return context.overlayBuilder(
+              appChild ?? const SizedBox.shrink(),
+            );
+          },
         );
       },
     );

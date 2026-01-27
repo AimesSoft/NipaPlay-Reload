@@ -507,17 +507,9 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           onDestinationSelected: widget.bottomNavigationBar!.onTap!,
           indicatorColor: widget.bottomNavigationBar!.selectedItemColor,
           destinations: widget.bottomNavigationBar!.items!.map((dest) {
-            // Convert icon to IconData if it's a String (SF Symbol - fallback to Icons)
-            final IconData iconData = dest.icon is String
-                ? Icons
-                      .circle // Fallback for Android if SF Symbol is provided
-                : dest.icon as IconData;
-
+            final IconData iconData = _resolveMaterialIcon(dest.icon);
             final IconData? selectedIconData = dest.selectedIcon != null
-                ? (dest.selectedIcon is String
-                      ? Icons
-                            .circle // Fallback for Android
-                      : dest.selectedIcon as IconData)
+                ? _resolveMaterialIcon(dest.selectedIcon)
                 : null;
 
             // Wrap icons with badge if badgeCount is provided
@@ -630,6 +622,51 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       'checkmark.circle': CupertinoIcons.checkmark_circle,
     };
     return iconMap[sfSymbol] ?? CupertinoIcons.circle;
+  }
+
+  IconData _resolveMaterialIcon(dynamic icon) {
+    if (icon is IconData) {
+      return icon;
+    }
+    if (icon is String) {
+      return _sfSymbolToMaterialIcon(icon);
+    }
+    return Icons.circle;
+  }
+
+  IconData _sfSymbolToMaterialIcon(String sfSymbol) {
+    const iconMap = {
+      'house': Icons.home_outlined,
+      'house.fill': Icons.home,
+      'magnifyingglass': Icons.search,
+      'heart': Icons.favorite_border,
+      'heart.fill': Icons.favorite,
+      'person': Icons.person_outline,
+      'person.fill': Icons.person,
+      'person.crop.circle': Icons.account_circle_outlined,
+      'person.crop.circle.fill': Icons.account_circle,
+      'gear': Icons.settings_outlined,
+      'gear.fill': Icons.settings,
+      'gearshape': Icons.settings_outlined,
+      'gearshape.fill': Icons.settings,
+      'star': Icons.star_border,
+      'star.fill': Icons.star,
+      'bell': Icons.notifications_outlined,
+      'bell.fill': Icons.notifications,
+      'bag': Icons.shopping_bag_outlined,
+      'bag.fill': Icons.shopping_bag,
+      'bookmark': Icons.bookmark_border,
+      'bookmark.fill': Icons.bookmark,
+      'info.circle': Icons.info_outline,
+      'info.circle.fill': Icons.info,
+      'plus.circle': Icons.add_circle_outline,
+      'plus': Icons.add,
+      'checkmark.circle': Icons.check_circle_outline,
+      'checkmark.circle.fill': Icons.check_circle,
+      'play.rectangle': Icons.play_circle_outline,
+      'play.rectangle.fill': Icons.play_circle,
+    };
+    return iconMap[sfSymbol] ?? Icons.circle;
   }
 }
 

@@ -12,6 +12,42 @@ class AppTheme {
     return Platform.isWindows ? "微软雅黑" : null;
   }
 
+  static const Color _materialSeedColor = Color(0xFF2196F3);
+
+  static ColorScheme material3LightScheme(ColorScheme? dynamicScheme) {
+    return dynamicScheme ??
+        ColorScheme.fromSeed(
+          seedColor: _materialSeedColor,
+          brightness: Brightness.light,
+        );
+  }
+
+  static ColorScheme material3DarkScheme(ColorScheme? dynamicScheme) {
+    return dynamicScheme ??
+        ColorScheme.fromSeed(
+          seedColor: _materialSeedColor,
+          brightness: Brightness.dark,
+        );
+  }
+
+  static ThemeData material3LightTheme(ColorScheme scheme) {
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      brightness: Brightness.light,
+      fontFamily: _platformDefaultFont,
+    );
+  }
+
+  static ThemeData material3DarkTheme(ColorScheme scheme) {
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      brightness: Brightness.dark,
+      fontFamily: _platformDefaultFont,
+    );
+  }
+
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light, // 设置亮度为浅色模式
     fontFamily: _platformDefaultFont, // 使用平台默认字体

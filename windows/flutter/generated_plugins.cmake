@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   charset_converter
   desktop_drop
+  dynamic_color
   file_selector_windows
   fvp
   hotkey_manager_windows
