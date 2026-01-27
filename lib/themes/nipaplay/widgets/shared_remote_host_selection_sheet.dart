@@ -31,7 +31,13 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     final provider = context.watch<SharedRemoteLibraryProvider>();
     final hosts = provider.hosts;
     final screenSize = MediaQuery.of(context).size;
-    final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
+    final baseDialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
+    final bool useWideDialog =
+        globals.isDesktopOrTablet && screenSize.width >= 720;
+    final dialogWidth = useWideDialog
+        ? (screenSize.width * 0.78).clamp(600.0, 880.0)
+        : baseDialogWidth;
+    final bool useSplitLayout = dialogWidth >= 620;
     final sheetHeight = hosts.isEmpty
         ? (screenSize.height * 0.4).clamp(260.0, 360.0).toDouble()
         : screenSize.height * 0.55;
@@ -48,22 +54,23 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     final itemColor = isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
     final backgroundColor =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
-    final ButtonStyle actionButtonStyle = ButtonStyle(
-      foregroundColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.disabled)) {
-          return mutedTextColor;
-        }
-        if (states.contains(MaterialState.hovered)) {
-          return accentColor;
-        }
-        return accentColor;
-      }),
-      overlayColor: MaterialStateProperty.all(Colors.transparent),
-      splashFactory: NoSplash.splashFactory,
-      padding: MaterialStateProperty.all(
-        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      ),
-    );
+    final listWidget = hosts.isEmpty
+        ? _buildEmptyState(
+            context,
+            backgroundColor: panelColor,
+            borderColor: borderColor,
+            subTextColor: subTextColor,
+          )
+        : _buildHostList(
+            context,
+            provider,
+            hosts,
+            textColor: textColor,
+            subTextColor: subTextColor,
+            mutedTextColor: mutedTextColor,
+            borderColor: borderColor,
+            itemColor: itemColor,
+          );
 
     return NipaplayWindowScaffold(
       maxWidth: dialogWidth,
@@ -115,37 +122,38 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Expanded(
-                    child: hosts.isEmpty
-                        ? _buildEmptyState(
-                            context,
-                            backgroundColor: panelColor,
-                            borderColor: borderColor,
-                            subTextColor: subTextColor,
+                    child: useSplitLayout
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: listWidget),
+                              const SizedBox(width: 16),
+                              SizedBox(
+                                width: (dialogWidth * 0.32).clamp(220.0, 280.0),
+                                child: _buildActionPanel(
+                                  context,
+                                  provider,
+                                  accentColor: accentColor,
+                                  textColor: textColor,
+                                  subTextColor: subTextColor,
+                                  borderColor: borderColor,
+                                  panelColor: panelColor,
+                                ),
+                              ),
+                            ],
                           )
-                        : _buildHostList(
-                            context,
-                            provider,
-                            hosts,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            mutedTextColor: mutedTextColor,
-                            borderColor: borderColor,
-                            itemColor: itemColor,
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildInlineActions(
+                                context,
+                                provider,
+                                accentColor: accentColor,
+                              ),
+                              const SizedBox(height: 12),
+                              Expanded(child: listWidget),
+                            ],
                           ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: () => _showLanScanDialog(context, provider),
-                    style: actionButtonStyle,
-                    icon: const Icon(Ionicons.wifi_outline, size: 18),
-                    label: const Text('扫描局域网'),
-                  ),
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    onPressed: () => _showAddHostDialog(context, provider),
-                    style: actionButtonStyle,
-                    icon: const Icon(Ionicons.add_outline, size: 18),
-                    label: const Text('添加共享客户端'),
                   ),
                 ],
               ),
@@ -177,7 +185,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
               color: subTextColor.withOpacity(0.8)),
           const SizedBox(height: 10),
           Text(
-            '尚未添加任何共享客户端\n请点击下方按钮进行添加',
+            '尚未添加任何共享客户端\n请使用操作按钮进行添加',
             textAlign: TextAlign.center,
             locale: const Locale('zh', 'CN'),
             style: TextStyle(color: subTextColor),
@@ -295,6 +303,173 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildInlineActions(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider, {
+    required Color accentColor,
+  }) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 10,
+      children: [
+        _buildPrimaryActionButton(
+          icon: Ionicons.wifi_outline,
+          label: '扫描局域网',
+          onPressed: () => _showLanScanDialog(context, provider),
+          accentColor: accentColor,
+          minWidth: 160,
+        ),
+        _buildSecondaryActionButton(
+          icon: Ionicons.add_outline,
+          label: '添加共享客户端',
+          onPressed: () => _showAddHostDialog(context, provider),
+          accentColor: accentColor,
+          minWidth: 160,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionPanel(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider, {
+    required Color accentColor,
+    required Color textColor,
+    required Color subTextColor,
+    required Color borderColor,
+    required Color panelColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: panelColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '快速操作',
+            locale: const Locale('zh', 'CN'),
+            style: TextStyle(
+              color: textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildPrimaryActionButton(
+            icon: Ionicons.wifi_outline,
+            label: '扫描局域网',
+            onPressed: () => _showLanScanDialog(context, provider),
+            accentColor: accentColor,
+            expand: true,
+          ),
+          const SizedBox(height: 8),
+          _buildSecondaryActionButton(
+            icon: Ionicons.add_outline,
+            label: '添加共享客户端',
+            onPressed: () => _showAddHostDialog(context, provider),
+            accentColor: accentColor,
+            expand: true,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '已开启远程访问的设备会被自动发现，未发现可手动输入地址。',
+            locale: const Locale('zh', 'CN'),
+            style: TextStyle(
+              color: subTextColor,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  ButtonStyle _primaryActionStyle(Color accentColor) {
+    return ElevatedButton.styleFrom(
+      backgroundColor: accentColor,
+      foregroundColor: Colors.white,
+      minimumSize: const Size(0, 40),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      elevation: 0,
+    ).copyWith(
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+    );
+  }
+
+  ButtonStyle _secondaryActionStyle(Color accentColor) {
+    return OutlinedButton.styleFrom(
+      foregroundColor: accentColor,
+      minimumSize: const Size(0, 40),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      side: BorderSide(color: accentColor.withOpacity(0.7)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+    ).copyWith(
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+    );
+  }
+
+  Widget _buildPrimaryActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    required Color accentColor,
+    bool expand = false,
+    double minWidth = 0,
+  }) {
+    final button = ElevatedButton.icon(
+      onPressed: onPressed,
+      style: _primaryActionStyle(accentColor),
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
+
+    if (expand) {
+      return SizedBox(width: double.infinity, child: button);
+    }
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(minWidth: minWidth),
+      child: button,
+    );
+  }
+
+  Widget _buildSecondaryActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    required Color accentColor,
+    bool expand = false,
+    double minWidth = 0,
+  }) {
+    final button = OutlinedButton.icon(
+      onPressed: onPressed,
+      style: _secondaryActionStyle(accentColor),
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
+
+    if (expand) {
+      return SizedBox(width: double.infinity, child: button);
+    }
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(minWidth: minWidth),
+      child: button,
     );
   }
 
