@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bounce_hover_scale.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
@@ -28,6 +29,8 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
   Color selectedColor = const Color(0xFFffffff);
   String danmakuType = 'scroll'; // 'scroll', 'top', 'bottom'
   bool _isSending = false;
+  bool _isSendButtonHovered = false;
+  bool _isSendButtonPressed = false;
 
   final List<Color> _presetColors = [
     const Color(0xFFfe0502), const Color(0xFFff7106), const Color(0xFFffaa01), const Color(0xFFffd301),
@@ -266,6 +269,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                   controller: _hexColorController,
                   maxLength: 6,
                   style: TextStyle(color: colorScheme.onSurface),
+                  cursorColor: inputThemeColor,
                   decoration: InputDecoration(
                     hintText: '输入六位十六进制颜色值',
                     counterText: '',
@@ -276,7 +280,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                       borderSide: BorderSide(color: theme.dividerColor),
                     ),
                     focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: colorScheme.secondary, width: 2),
+                      borderSide: BorderSide(color: inputThemeColor, width: 2),
                     ),
                   ),
                   onChanged: (value) {
@@ -297,55 +301,68 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                 const SizedBox(height: 8),
                 Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: theme.dividerColor),
                   ),
-                  child: ToggleButtons(
-                    isSelected: [
-                      danmakuType == 'scroll',
-                      danmakuType == 'top',
-                      danmakuType == 'bottom',
-                    ],
-                    onPressed: (index) {
-                      setState(() {
-                        if (index == 0) danmakuType = 'scroll';
-                        if (index == 1) danmakuType = 'top';
-                        if (index == 2) danmakuType = 'bottom';
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    selectedColor: colorScheme.onSecondary,
-                    fillColor: colorScheme.secondary,
-                    color: colorScheme.onSurface,
-                    constraints: const BoxConstraints(minHeight: 40.0, minWidth: 80.0),
-                    children: const [
-                      Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('滚动')),
-                      Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('顶部')),
-                      Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('底部')),
-                    ],
-                  ),
-                ),
+                            child: ToggleButtons(
+                              isSelected: [
+                                danmakuType == 'scroll',
+                                danmakuType == 'top',
+                                danmakuType == 'bottom',
+                              ],
+                              onPressed: (index) {
+                                setState(() {
+                                  if (index == 0) danmakuType = 'scroll';
+                                  if (index == 1) danmakuType = 'top';
+                                  if (index == 2) danmakuType = 'bottom';
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              splashColor: Colors.transparent,
+                              highlightColor: Colors.transparent,
+                              selectedColor: inputThemeColor,
+                              fillColor: Colors.transparent,
+                              color: theme.colorScheme.onSurface,
+                              constraints: const BoxConstraints(minHeight: 32.0, minWidth: 80.0),
+                              children: const [
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('滚动')),
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('顶部')),
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('底部')),
+                              ],
+                            ),                ),
                 const SizedBox(height: 24),
                 Align(
                   alignment: Alignment.centerRight,
                   child: _isSending
                       ? const CircularProgressIndicator()
-                      : GestureDetector(
-                          onTap: _isSending ? null : _sendDanmaku,
-                          child: Container(
-                            width: 120,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(25),
-                              color: theme.colorScheme.secondary,
-                            ),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              '发送',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white),
+                      : MouseRegion(
+                          onEnter: (_) => setState(() => _isSendButtonHovered = true),
+                          onExit: (_) => setState(() => _isSendButtonHovered = false),
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTapDown: (_) => setState(() => _isSendButtonPressed = true),
+                            onTapUp: (_) => setState(() => _isSendButtonPressed = false),
+                            onTapCancel: () => setState(() => _isSendButtonPressed = false),
+                            onTap: _isSending ? null : _sendDanmaku,
+                            child: BounceHoverScale(
+                              isHovered: _isSendButtonHovered,
+                              isPressed: _isSendButtonPressed,
+                              child: Container(
+                                width: 120,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(25),
+                                  color: inputThemeColor,
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  '发送',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -392,7 +409,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: theme.dividerColor),
           ),
           child: ToggleButtons(
@@ -408,11 +425,13 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                 if (index == 2) danmakuType = 'bottom';
               });
             },
-            borderRadius: BorderRadius.circular(20),
-            selectedColor: theme.colorScheme.onSecondary,
-            fillColor: theme.colorScheme.secondary,
+            borderRadius: BorderRadius.circular(8),
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            selectedColor: const Color(0xFFff2e55),
+            fillColor: Colors.transparent,
             color: theme.colorScheme.onSurface,
-            constraints: const BoxConstraints(minHeight: 35.0, minWidth: 60.0),
+            constraints: const BoxConstraints(minHeight: 32.0, minWidth: 60.0),
             children: const [
               Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text('滚动', style: TextStyle(fontSize: 12))),
               Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text('顶部', style: TextStyle(fontSize: 12))),
@@ -482,22 +501,34 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
             width: double.infinity,
             child: _isSending
                 ? const Center(child: CircularProgressIndicator())
-                : GestureDetector(
-                    onTap: _isSending ? null : _sendDanmaku,
-                    child: Container(
-                      width: double.infinity,
-                      height: 45,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(22),
-                        color: theme.colorScheme.secondary,
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        '发送弹幕',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white),
+                : MouseRegion(
+                    onEnter: (_) => setState(() => _isSendButtonHovered = true),
+                    onExit: (_) => setState(() => _isSendButtonHovered = false),
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTapDown: (_) => setState(() => _isSendButtonPressed = true),
+                      onTapUp: (_) => setState(() => _isSendButtonPressed = false),
+                      onTapCancel: () => setState(() => _isSendButtonPressed = false),
+                      onTap: _isSending ? null : _sendDanmaku,
+                      child: BounceHoverScale(
+                        isHovered: _isSendButtonHovered,
+                        isPressed: _isSendButtonPressed,
+                        child: Container(
+                          width: double.infinity,
+                          height: 45,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            color: const Color(0xFFff2e55),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            '发送弹幕',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white),
+                          ),
+                        ),
                       ),
                     ),
                   ),
