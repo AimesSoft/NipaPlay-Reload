@@ -393,7 +393,10 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             child: ScaleTransition(
               alignment: scaleAlignment,
               scale: _menuScaleAnimation,
-              child: menuContent,
+              child: Theme(
+                data: Theme.of(context).copyWith(brightness: Brightness.dark),
+                child: menuContent,
+              ),
             ),
           ),
         );
