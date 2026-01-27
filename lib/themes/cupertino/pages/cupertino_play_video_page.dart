@@ -15,9 +15,10 @@ import 'package:nipaplay/themes/nipaplay/widgets/volume_gesture_area.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/danmaku_density_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/minimal_progress_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/playback_info_menu.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_player_menu.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/video_settings_menu.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
+import 'package:nipaplay/pages/play_video_page.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -34,12 +35,20 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   final OverlayContextMenuController _contextMenuController =
       OverlayContextMenuController();
   OverlayEntry? _playbackInfoOverlay;
+  OverlayEntry? _settingsOverlay;
+  final GlobalKey _settingsButtonKey = GlobalKey();
+
+  bool get _useNipaplayControls {
+    return PlatformInfo.isAndroid ||
+        (PlatformInfo.isIOS && !PlatformInfo.isIOS26OrHigher());
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (_useNipaplayControls) return;
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       videoState.setContext(context);
     });
@@ -49,6 +58,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   void dispose() {
     _contextMenuController.dispose();
     _hidePlaybackInfoOverlay();
+    _settingsOverlay?.remove();
+    _settingsOverlay = null;
     super.dispose();
   }
 
@@ -342,6 +353,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_useNipaplayControls) {
+      return PlayVideoPage(videoPath: widget.videoPath);
+    }
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, _) {
         return WillPopScope(
@@ -514,6 +528,12 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 children: [
                   _buildBackButton(videoState),
                   const SizedBox(width: 12),
+                  if (videoState.hasVideo) ...[
+                    _buildSendDanmakuButton(videoState),
+                    const SizedBox(width: 8),
+                    _buildSkipButton(videoState),
+                    const SizedBox(width: 12),
+                  ],
                   Expanded(child: _buildTitleButton(context, videoState)),
                   if (!kIsWeb &&
                       defaultTargetPlatform == TargetPlatform.iOS) ...[
@@ -659,6 +679,58 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
   }
 
+  Widget _buildSendDanmakuButton(VideoPlayerState videoState) {
+    final enabled = videoState.episodeId != null;
+
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: AdaptiveButton.child(
+        onPressed: enabled
+            ? () {
+                videoState.resetHideControlsTimer();
+                unawaited(videoState.showSendDanmakuDialog());
+              }
+            : null,
+        style: AdaptiveButtonStyle.glass,
+        size: AdaptiveButtonSize.large,
+        enabled: enabled,
+        useSmoothRectangleBorder: false,
+        child: const Icon(
+          Icons.chat_bubble_outline_rounded,
+          size: 20,
+          color: CupertinoColors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkipButton(VideoPlayerState videoState) {
+    final enabled = videoState.hasVideo;
+
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: AdaptiveButton.child(
+        onPressed: enabled
+            ? () {
+                videoState.resetHideControlsTimer();
+                videoState.skip();
+              }
+            : null,
+        style: AdaptiveButtonStyle.glass,
+        size: AdaptiveButtonSize.large,
+        enabled: enabled,
+        useSmoothRectangleBorder: false,
+        child: const Icon(
+          Icons.double_arrow_rounded,
+          size: 20,
+          color: CupertinoColors.white,
+        ),
+      ),
+    );
+  }
+
   Widget _buildTitleButton(BuildContext context, VideoPlayerState videoState) {
     final title = _composeTitle(videoState);
     if (title.isEmpty) {
@@ -671,16 +743,54 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: AdaptiveButton(
-          onPressed: null,
-          label: title,
-          style: AdaptiveButtonStyle.glass,
-          size: AdaptiveButtonSize.large,
-          enabled: false,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          useSmoothRectangleBorder: true,
+        child: IgnorePointer(
+          child: AdaptiveButton(
+            onPressed: () {},
+            label: title,
+            textColor: CupertinoColors.white,
+            style: AdaptiveButtonStyle.glass,
+            size: AdaptiveButtonSize.large,
+            enabled: true,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            useSmoothRectangleBorder: true,
+          ),
         ),
       ),
+    );
+  }
+
+  AdaptiveButtonSize _resolveControlButtonSize(double extent) {
+    return extent >= 44 ? AdaptiveButtonSize.large : AdaptiveButtonSize.medium;
+  }
+
+  Widget _buildControlIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    required bool enabled,
+    required double size,
+    required double iconSize,
+  }) {
+    final button = SizedBox(
+      width: size,
+      height: size,
+      child: AdaptiveButton.child(
+        onPressed: enabled ? onPressed : null,
+        style: AdaptiveButtonStyle.plain,
+        size: _resolveControlButtonSize(size),
+        enabled: enabled,
+        useSmoothRectangleBorder: false,
+        child: Icon(
+          icon,
+          size: iconSize,
+          color: CupertinoColors.white,
+        ),
+      ),
+    );
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 150),
+      opacity: enabled ? 1.0 : 0.35,
+      child: button,
     );
   }
 
@@ -689,6 +799,13 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     final duration = videoState.duration;
     final position = videoState.position;
     final totalMillis = duration.inMilliseconds;
+    final isPhone = globals.isPhone;
+    final smallButtonExtent = isPhone ? 36.0 : 32.0;
+    final playButtonExtent = isPhone ? 44.0 : 36.0;
+    final smallIconSize = isPhone ? 24.0 : 20.0;
+    final playIconSize = isPhone ? 30.0 : 24.0;
+    final spacing = isPhone ? 4.0 : 6.0;
+    final rightSpacing = isPhone ? 10.0 : 12.0;
 
     return Positioned(
       left: 0,
@@ -712,96 +829,179 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      _buildPlayPauseButton(videoState),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: AdaptiveSlider(
-                          value: totalMillis > 0
-                              ? progressValue.clamp(0.0, 1.0)
-                              : 0.0,
-                          min: 0.0,
-                          max: 1.0,
-                          activeColor: CupertinoColors.activeBlue,
-                          onChangeStart: totalMillis > 0
-                              ? (_) {
-                                  videoState.resetHideControlsTimer();
-                                  setState(() {
-                                    _isDragging = true;
-                                  });
-                                }
-                              : null,
-                          onChanged: totalMillis > 0
-                              ? (value) {
-                                  setState(() {
-                                    _dragProgress = value;
-                                  });
-                                }
-                              : null,
-                          onChangeEnd: totalMillis > 0
-                              ? (value) {
-                                  final target = Duration(
-                                    milliseconds: (value * totalMillis).round(),
-                                  );
-                                  videoState.seekTo(target);
-                                  videoState.resetHideControlsTimer();
-                                  setState(() {
-                                    _isDragging = false;
-                                    _dragProgress = null;
-                                  });
-                                }
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: kMinInteractiveDimensionCupertino,
-                        height: kMinInteractiveDimensionCupertino,
-                        child: PlatformInfo.isIOS26OrHigher()
-                            ? AdaptiveButton.sfSymbol(
-                                onPressed: () {
-                                  videoState.resetHideControlsTimer();
-                                  _showSettingsMenu(context);
-                                },
-                                sfSymbol: const SFSymbol('gearshape.fill'),
-                                style: AdaptiveButtonStyle.glass,
-                                size: AdaptiveButtonSize.large,
-                              )
-                            : AdaptiveButton.child(
-                                onPressed: () {
-                                  videoState.resetHideControlsTimer();
-                                  _showSettingsMenu(context);
-                                },
-                                style: AdaptiveButtonStyle.glass,
-                                size: AdaptiveButtonSize.large,
-                                child: const Icon(
-                                  CupertinoIcons.settings,
-                                  size: 22,
-                                  color: CupertinoColors.white,
-                                ),
-                              ),
-                      ),
-                    ],
+                  AdaptiveSlider(
+                    value: totalMillis > 0
+                        ? progressValue.clamp(0.0, 1.0)
+                        : 0.0,
+                    min: 0.0,
+                    max: 1.0,
+                    activeColor: CupertinoColors.activeBlue,
+                    onChangeStart: totalMillis > 0
+                        ? (_) {
+                            videoState.resetHideControlsTimer();
+                            setState(() {
+                              _isDragging = true;
+                            });
+                          }
+                        : null,
+                    onChanged: totalMillis > 0
+                        ? (value) {
+                            setState(() {
+                              _dragProgress = value;
+                            });
+                          }
+                        : null,
+                    onChangeEnd: totalMillis > 0
+                        ? (value) {
+                            final target = Duration(
+                              milliseconds: (value * totalMillis).round(),
+                            );
+                            videoState.seekTo(target);
+                            videoState.resetHideControlsTimer();
+                            setState(() {
+                              _isDragging = false;
+                              _dragProgress = null;
+                            });
+                          }
+                        : null,
                   ),
                   const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${_formatDuration(position)} / ${_formatDuration(duration)}',
-                      style: TextStyle(
-                        color: CupertinoColors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        shadows: const [
-                          Shadow(
-                            color: Color.fromARGB(140, 0, 0, 0),
-                            offset: Offset(0, 1),
-                            blurRadius: 3,
-                          ),
-                        ],
+                  Row(
+                    children: [
+                      _buildControlIconButton(
+                        icon: Icons.skip_previous_rounded,
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          unawaited(videoState.playPreviousEpisode());
+                        },
+                        enabled: videoState.canPlayPreviousEpisode,
+                        size: smallButtonExtent,
+                        iconSize: smallIconSize,
                       ),
-                    ),
+                      SizedBox(width: spacing),
+                      _buildControlIconButton(
+                        icon: Icons.fast_rewind_rounded,
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          final newPosition = videoState.position -
+                              Duration(seconds: videoState.seekStepSeconds);
+                          videoState.seekTo(newPosition);
+                        },
+                        enabled: videoState.hasVideo,
+                        size: smallButtonExtent,
+                        iconSize: smallIconSize,
+                      ),
+                      SizedBox(width: spacing),
+                      _buildPlayPauseButton(
+                        videoState,
+                        buttonSize: playButtonExtent,
+                        iconSize: playIconSize,
+                      ),
+                      SizedBox(width: spacing),
+                      _buildControlIconButton(
+                        icon: Icons.fast_forward_rounded,
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          final newPosition = videoState.position +
+                              Duration(seconds: videoState.seekStepSeconds);
+                          videoState.seekTo(newPosition);
+                        },
+                        enabled: videoState.hasVideo,
+                        size: smallButtonExtent,
+                        iconSize: smallIconSize,
+                      ),
+                      SizedBox(width: spacing),
+                      _buildControlIconButton(
+                        icon: Icons.skip_next_rounded,
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          unawaited(videoState.playNextEpisode());
+                        },
+                        enabled: videoState.canPlayNextEpisode,
+                        size: smallButtonExtent,
+                        iconSize: smallIconSize,
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${_formatDuration(position)} / ${_formatDuration(duration)}',
+                        style: TextStyle(
+                          color: CupertinoColors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          shadows: const [
+                            Shadow(
+                              color: Color.fromARGB(140, 0, 0, 0),
+                              offset: Offset(0, 1),
+                              blurRadius: 3,
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: rightSpacing),
+                      Builder(
+                        builder: (buttonContext) {
+                          return SizedBox(
+                            key: _settingsButtonKey,
+                            width: smallButtonExtent,
+                            height: smallButtonExtent,
+                            child: PlatformInfo.isIOS26OrHigher()
+                                ? AdaptiveButton.sfSymbol(
+                                    onPressed: () {
+                                      videoState.resetHideControlsTimer();
+                                      _showSettingsMenu(buttonContext);
+                                    },
+                                    sfSymbol: SFSymbol(
+                                      'gearshape.fill',
+                                      size: smallIconSize,
+                                      color: CupertinoColors.white,
+                                    ),
+                                    style: AdaptiveButtonStyle.plain,
+                                    size: _resolveControlButtonSize(
+                                      smallButtonExtent,
+                                    ),
+                                    useSmoothRectangleBorder: false,
+                                  )
+                                : AdaptiveButton.child(
+                                    onPressed: () {
+                                      videoState.resetHideControlsTimer();
+                                      _showSettingsMenu(buttonContext);
+                                    },
+                                    style: AdaptiveButtonStyle.plain,
+                                    size: _resolveControlButtonSize(
+                                      smallButtonExtent,
+                                    ),
+                                    useSmoothRectangleBorder: false,
+                                    child: Icon(
+                                      CupertinoIcons.settings,
+                                      size: smallIconSize,
+                                      color: CupertinoColors.white,
+                                    ),
+                                  ),
+                          );
+                        },
+                      ),
+                      SizedBox(width: spacing),
+                      _buildControlIconButton(
+                        icon: globals.isTablet
+                            ? (videoState.isAppBarHidden
+                                ? Icons.fullscreen_exit_rounded
+                                : Icons.fullscreen_rounded)
+                            : (videoState.isFullscreen
+                                ? Icons.fullscreen_exit_rounded
+                                : Icons.fullscreen_rounded),
+                        onPressed: () {
+                          videoState.resetHideControlsTimer();
+                          if (globals.isTablet) {
+                            videoState.toggleAppBarVisibility();
+                          } else {
+                            unawaited(videoState.toggleFullscreen());
+                          }
+                        },
+                        enabled: true,
+                        size: smallButtonExtent,
+                        iconSize: smallIconSize,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -812,10 +1012,17 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
   }
 
-  Widget _buildPlayPauseButton(VideoPlayerState videoState) {
+  Widget _buildPlayPauseButton(
+    VideoPlayerState videoState, {
+    double? buttonSize,
+    double? iconSize,
+  }) {
     final isPaused = videoState.isPaused;
+    final resolvedButtonSize = buttonSize ?? 40.0;
+    final resolvedIconSize = iconSize ?? 22.0;
 
     void handlePress() {
+      videoState.resetHideControlsTimer();
       if (isPaused) {
         videoState.play();
       } else {
@@ -823,36 +1030,38 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       }
     }
 
+    final adaptiveSize = _resolveControlButtonSize(resolvedButtonSize);
+
     Widget button;
     if (PlatformInfo.isIOS26OrHigher()) {
       button = AdaptiveButton.sfSymbol(
         onPressed: handlePress,
         sfSymbol: SFSymbol(
           isPaused ? 'play.fill' : 'pause.fill',
-          size: 20,
+          size: resolvedIconSize,
           color: CupertinoColors.white,
         ),
         style: AdaptiveButtonStyle.plain,
-        size: AdaptiveButtonSize.medium,
+        size: adaptiveSize,
         useSmoothRectangleBorder: false,
       );
     } else {
       button = AdaptiveButton.child(
         onPressed: handlePress,
         style: AdaptiveButtonStyle.plain,
-        size: AdaptiveButtonSize.medium,
+        size: adaptiveSize,
         useSmoothRectangleBorder: false,
         child: Icon(
           isPaused ? CupertinoIcons.play_fill : CupertinoIcons.pause_fill,
           color: CupertinoColors.white,
-          size: 22,
+          size: resolvedIconSize,
         ),
       );
     }
 
     return SizedBox(
-      width: 40,
-      height: 40,
+      width: resolvedButtonSize,
+      height: resolvedButtonSize,
       child: button,
     );
   }
@@ -894,13 +1103,44 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     return title ?? episode ?? '';
   }
 
-  void _showSettingsMenu(BuildContext context) {
-    CupertinoBottomSheet.show(
-      context: context,
-      title: '播放设置',
-      floatingTitle: true,
-      heightRatio: 0.92,
-      child: const CupertinoPlayerMenu(),
+  void _showSettingsMenu(BuildContext buttonContext) {
+    final videoState =
+        Provider.of<VideoPlayerState>(buttonContext, listen: false);
+    _settingsOverlay?.remove();
+    videoState.setControlsVisibilityLocked(true);
+
+    Rect? anchorRect;
+    final RenderBox? renderBox =
+        buttonContext.findRenderObject() as RenderBox?;
+    if (renderBox != null && renderBox.hasSize) {
+      final position = renderBox.localToGlobal(Offset.zero);
+      anchorRect = position & renderBox.size;
+    } else {
+      final RenderBox? keyRenderBox =
+          _settingsButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      if (keyRenderBox != null && keyRenderBox.hasSize) {
+        final position = keyRenderBox.localToGlobal(Offset.zero);
+        anchorRect = position & keyRenderBox.size;
+      }
+    }
+
+    _settingsOverlay = OverlayEntry(
+      builder: (context) => VideoSettingsMenu(
+        anchorRect: anchorRect,
+        anchorKey: _settingsButtonKey,
+        onClose: () {
+          videoState.setControlsVisibilityLocked(false);
+          _settingsOverlay?.remove();
+          _settingsOverlay = null;
+        },
+      ),
     );
+
+    final overlay = Overlay.of(buttonContext);
+    if (overlay == null) {
+      videoState.setControlsVisibilityLocked(false);
+      return;
+    }
+    overlay.insert(_settingsOverlay!);
   }
 }

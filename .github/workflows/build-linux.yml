@@ -12,8 +12,8 @@ on:
 
 jobs:
   build:
-    name: Build Linux Packages
-    runs-on: ubuntu-24.04
+    name: Build Linux Packages (amd64)
+    runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-Linux-amd64
@@ -44,4 +44,36 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-Linux-amd64
+          path: build/linux/
+
+  build-arm64:
+    name: Build Linux Packages (arm64)
+    runs-on: ubuntu-22.04-arm
+    env:
+      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
+      FVP_DEPS_LATEST: 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+      
+      - name: Setup Flutter Environment
+        id: setup
+        uses: ./.github/actions/setup-flutter
+      
+      - name: Build Linux Packages
+        uses: ./.github/actions/build-linux
+        with:
+          app-version: ${{ steps.setup.outputs.version }}
+          arch: arm64
+      
+      - name: Clean flutter pub cache
+        run: flutter pub cache clean
+      
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-Linux-arm64
           path: build/linux/
