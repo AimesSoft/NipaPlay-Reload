@@ -226,50 +226,6 @@ class _ThemeModePageState extends State<ThemeModePage> {
               dropdownKey: _dropdownKey,
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            SettingsItem.dropdown(
-              title: "背景毛玻璃效果",
-              subtitle: "调整界面元素的模糊强度",
-              icon: Ionicons.water_outline,
-              items: [
-                DropdownMenuItemData(
-                  title: "无",
-                  value: 0,
-                  isSelected: settingsProvider.blurPower == 0,
-                ),
-                DropdownMenuItemData(
-                  title: "轻微",
-                  value: 5,
-                  isSelected: settingsProvider.blurPower == 5,
-                ),
-                DropdownMenuItemData(
-                  title: "中等",
-                  value: 15,
-                  isSelected: settingsProvider.blurPower == 15,
-                ),
-                DropdownMenuItemData(
-                  title: "高",
-                  value: 25,
-                  isSelected: settingsProvider.blurPower == 25,
-                ),
-                DropdownMenuItemData(
-                  title: "超级",
-                  value: 50,
-                  isSelected: settingsProvider.blurPower == 50,
-                ),
-                DropdownMenuItemData(
-                  title: "梦幻",
-                  value: 100,
-                  isSelected: settingsProvider.blurPower == 100,
-                ),
-              ],
-              onChanged: (blur) {
-                context
-                    .read<SettingsProvider>()
-                    .setBlurPower(blur.toDouble());
-              },
-              dropdownKey: _blurDropdownKey,
-            ),
-            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.toggle(
               title: "控件毛玻璃效果",
               subtitle: "关闭后可提升性能，但会失去部分UI透明感",
@@ -319,6 +275,50 @@ class _ThemeModePageState extends State<ThemeModePage> {
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             if (widget.themeNotifier.backgroundImageMode != "关闭") ...[
+              SettingsItem.dropdown(
+                title: "背景毛玻璃效果",
+                subtitle: "调整界面元素的模糊强度",
+                icon: Ionicons.water_outline,
+                items: [
+                  DropdownMenuItemData(
+                    title: "无",
+                    value: 0,
+                    isSelected: settingsProvider.blurPower == 0,
+                  ),
+                  DropdownMenuItemData(
+                    title: "轻微",
+                    value: 5,
+                    isSelected: settingsProvider.blurPower == 5,
+                  ),
+                  DropdownMenuItemData(
+                    title: "中等",
+                    value: 15,
+                    isSelected: settingsProvider.blurPower == 15,
+                  ),
+                  DropdownMenuItemData(
+                    title: "高",
+                    value: 25,
+                    isSelected: settingsProvider.blurPower == 25,
+                  ),
+                  DropdownMenuItemData(
+                    title: "超级",
+                    value: 50,
+                    isSelected: settingsProvider.blurPower == 50,
+                  ),
+                  DropdownMenuItemData(
+                    title: "梦幻",
+                    value: 100,
+                    isSelected: settingsProvider.blurPower == 100,
+                  ),
+                ],
+                onChanged: (blur) {
+                  context
+                      .read<SettingsProvider>()
+                      .setBlurPower(blur.toDouble());
+                },
+                dropdownKey: _blurDropdownKey,
+              ),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               SettingsItem.dropdown(
                 title: "背景图像渲染",
                 subtitle: "选择背景颜色与图片的合成方式",

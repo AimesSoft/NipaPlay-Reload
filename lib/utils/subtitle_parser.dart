@@ -14,6 +14,18 @@ class SubtitleDecodeResult {
   });
 }
 
+class SubtitleParseResult {
+  final List<SubtitleEntry> entries;
+  final SubtitleFormat format;
+  final String encoding;
+
+  const SubtitleParseResult({
+    required this.entries,
+    required this.format,
+    required this.encoding,
+  });
+}
+
 enum SubtitleFormat {
   ass,
   srt,
