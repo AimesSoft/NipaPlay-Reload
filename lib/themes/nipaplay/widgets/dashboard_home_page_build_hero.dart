@@ -169,14 +169,9 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
             else
               Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.blue.withOpacity(0.3),
-                      Colors.purple.withOpacity(0.3),
-                    ],
-                  ),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white10
+                      : Colors.black12,
                 ),
               ),
             
@@ -402,14 +397,9 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
             else
               Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.blue.withOpacity(0.3),
-                      Colors.purple.withOpacity(0.3),
-                    ],
-                  ),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white10
+                      : Colors.black12,
                 ),
               ),
             

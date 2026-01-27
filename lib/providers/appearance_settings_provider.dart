@@ -21,7 +21,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _recentWatchingStyleKey = 'recent_watching_style';
   static const String _uiScaleKey = 'ui_scale_factor';
 
-  static const double uiScaleMin = 0.9;
+  static const double uiScaleMin = 1.0;
   static const double uiScaleMax = 1.3;
   static const double uiScaleStep = 0.05;
   static const double defaultUiScale = 1.0;

@@ -63,10 +63,8 @@ class CupertinoThemeDescriptor extends ThemeDescriptor {
             if (context.environment.isIOS) {
               return child;
             }
-            return DefaultTextStyle(
-              style: DefaultTextStyle.of(buildContext).style,
-              overflow: TextOverflow.visible,
-              softWrap: true,
+            return DefaultTextStyle.merge(
+              style: const TextStyle(decoration: TextDecoration.none),
               child: child,
             );
           },

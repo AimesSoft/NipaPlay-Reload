@@ -57,19 +57,28 @@ class Text extends flutter.StatelessWidget {
 
   @override
   flutter.Widget build(flutter.BuildContext context) {
+    final baseStyle = style?.inherit == false
+        ? (style ?? const flutter.TextStyle())
+        : flutter.DefaultTextStyle.of(context).style.merge(style);
+    final effectiveStyle =
+        baseStyle.copyWith(decoration: flutter.TextDecoration.none);
     final resolvedTextScaleFactor =
         textScaler == null ? textScaleFactor : null;
 
     if (textSpan != null) {
+      final wrappedSpan = flutter.TextSpan(
+        style: effectiveStyle,
+        children: [textSpan!],
+      );
       return flutter.Text.rich(
-        textSpan!,
-        style: style,
+        wrappedSpan,
+        style: null,
         strutStyle: strutStyle,
         textAlign: textAlign,
         textDirection: textDirection,
         locale: locale,
         softWrap: softWrap,
-        overflow: flutter.TextOverflow.visible,
+        overflow: overflow,
         textScaleFactor: resolvedTextScaleFactor,
         textScaler: textScaler,
         maxLines: maxLines,
@@ -81,13 +90,13 @@ class Text extends flutter.StatelessWidget {
 
     return flutter.Text(
       data,
-      style: style,
+      style: effectiveStyle,
       strutStyle: strutStyle,
       textAlign: textAlign,
       textDirection: textDirection,
       locale: locale,
       softWrap: softWrap,
-      overflow: flutter.TextOverflow.visible,
+      overflow: overflow,
       textScaleFactor: resolvedTextScaleFactor,
       textScaler: textScaler,
       maxLines: maxLines,
