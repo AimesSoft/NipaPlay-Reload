@@ -231,22 +231,27 @@ class AdaptiveButton extends StatelessWidget {
   Widget _buildCupertinoButton(BuildContext context) {
     final buttonColor = color ?? CupertinoColors.systemBlue;
     final effectiveOnPressed = enabled ? onPressed : null;
+    final resolvedRadius =
+        borderRadius ?? const BorderRadius.all(Radius.circular(8.0));
 
-    // Build child widget based on mode
-    Widget buttonChild;
-    if (sfSymbol != null) {
-      // SF Symbol fallback - use CupertinoIcons or Icon
-      buttonChild = Icon(
-        CupertinoIcons.circle_fill, // Default fallback icon
-        color: sfSymbol!.color,
-        size: sfSymbol!.size,
+    Widget buildContent(Color fallbackColor) {
+      if (sfSymbol != null) {
+        return Icon(
+          CupertinoIcons.circle_fill,
+          color: sfSymbol!.color ?? fallbackColor,
+          size: sfSymbol!.size,
+        );
+      }
+      if (icon != null) {
+        return Icon(icon, color: iconColor ?? fallbackColor);
+      }
+      if (child != null) {
+        return child!;
+      }
+      return Text(
+        label ?? '',
+        style: TextStyle(color: textColor ?? fallbackColor),
       );
-    } else if (icon != null) {
-      buttonChild = Icon(icon, color: iconColor);
-    } else if (child != null) {
-      buttonChild = child!;
-    } else {
-      buttonChild = Text(label ?? '', style: TextStyle(color: textColor));
     }
 
     switch (style) {
@@ -254,9 +259,8 @@ class AdaptiveButton extends StatelessWidget {
         return CupertinoButton.filled(
           onPressed: effectiveOnPressed,
           padding: padding,
-          borderRadius:
-              borderRadius ?? const BorderRadius.all(Radius.circular(8.0)),
-          child: buttonChild,
+          borderRadius: resolvedRadius,
+          child: buildContent(textColor ?? CupertinoColors.white),
         );
 
       case AdaptiveButtonStyle.plain:
@@ -264,9 +268,30 @@ class AdaptiveButton extends StatelessWidget {
           onPressed: effectiveOnPressed,
           padding: padding ?? const EdgeInsets.symmetric(horizontal: 16.0),
           color: null,
-          child: DefaultTextStyle(
-            style: TextStyle(color: textColor ?? buttonColor),
-            child: buttonChild,
+          child: buildContent(textColor ?? buttonColor),
+        );
+
+      case AdaptiveButtonStyle.tinted:
+        return CupertinoButton(
+          onPressed: effectiveOnPressed,
+          padding: padding,
+          borderRadius: resolvedRadius,
+          color: buttonColor.withValues(alpha: 0.15),
+          child: buildContent(textColor ?? buttonColor),
+        );
+
+      case AdaptiveButtonStyle.bordered:
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: resolvedRadius,
+            border: Border.all(color: buttonColor),
+          ),
+          child: CupertinoButton(
+            onPressed: effectiveOnPressed,
+            padding: padding,
+            borderRadius: resolvedRadius,
+            color: Colors.transparent,
+            child: buildContent(textColor ?? buttonColor),
           ),
         );
 
@@ -276,24 +301,28 @@ class AdaptiveButton extends StatelessWidget {
         return CupertinoButton(
           onPressed: effectiveOnPressed,
           padding: padding,
-          borderRadius:
-              borderRadius ?? const BorderRadius.all(Radius.circular(8.0)),
+          borderRadius: resolvedRadius,
           color: buttonColor.withValues(alpha: 0.15),
-          child: DefaultTextStyle(
-            style: TextStyle(color: textColor ?? buttonColor),
-            child: buttonChild,
-          ),
+          child: buildContent(textColor ?? buttonColor),
         );
 
-      default:
-        // For other styles, use regular CupertinoButton with color
+      case AdaptiveButtonStyle.gray:
         return CupertinoButton(
           onPressed: effectiveOnPressed,
           padding: padding,
-          borderRadius:
-              borderRadius ?? const BorderRadius.all(Radius.circular(8.0)),
+          borderRadius: resolvedRadius,
+          color: CupertinoColors.systemGrey5,
+          child: buildContent(textColor ?? CupertinoColors.label),
+        );
+
+      default:
+        // Fallback to filled style
+        return CupertinoButton(
+          onPressed: effectiveOnPressed,
+          padding: padding,
+          borderRadius: resolvedRadius,
           color: buttonColor,
-          child: buttonChild,
+          child: buildContent(textColor ?? CupertinoColors.white),
         );
     }
   }

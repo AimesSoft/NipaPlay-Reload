@@ -536,6 +536,16 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
         // 尝试刷新已显示的缩略图
         _triggerImageCacheRefresh(thumbnailPath);
+
+        if (SharedRemoteHistoryHelper.isSharedRemoteStreamPath(_currentVideoPath!)) {
+          unawaited(
+            SharedRemotePlaybackSyncService.instance.syncThumbnail(
+              videoUrl: _currentVideoPath!,
+              thumbnailPath: thumbnailPath,
+              clientUpdatedAt: DateTime.now(),
+            ),
+          );
+        }
       }
     } catch (e) {
       // 添加 stackTrace

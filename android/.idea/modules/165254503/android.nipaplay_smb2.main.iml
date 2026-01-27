@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module version="4">
+  <component name="AdditionalModuleElements">
+    <content url="file://$MODULE_DIR$/../../../../packages/nipaplay_smb2" dumb="true">
+      <excludeFolder url="file://$MODULE_DIR$/../../../../packages/nipaplay_smb2/android/.cxx" />
+      <excludeFolder url="file://$MODULE_DIR$/../../../../packages/nipaplay_smb2/android/.externalNativeBuild" />
+    </content>
+  </component>
+</module>

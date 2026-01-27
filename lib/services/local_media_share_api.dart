@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
@@ -13,6 +14,7 @@ class LocalMediaShareApi {
     router.get('/episodes/<shareId>/stream', _handleEpisodeStream);
     router.add('HEAD', '/episodes/<shareId>/stream', _handleEpisodeStreamHead);
     router.post('/episodes/<shareId>/progress', _handleUpdateEpisodeProgress);
+    router.post('/episodes/<shareId>/thumbnail', _handleUpdateEpisodeThumbnail);
   }
 
   final LocalMediaShareService _service = LocalMediaShareService.instance;
@@ -183,4 +185,83 @@ class LocalMediaShareApi {
     }
   }
 
+  Future<Response> _handleUpdateEpisodeThumbnail(Request request) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    Map<String, dynamic> payload = const {};
+    try {
+      final rawBody = await request.readAsString();
+      if (rawBody.isNotEmpty) {
+        payload = json.decode(rawBody) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      return Response.badRequest(body: 'Invalid JSON payload');
+    }
+
+    final thumbnailValue =
+        payload['thumbnailBase64'] ?? payload['thumbnail'] ?? payload['imageBase64'];
+    if (thumbnailValue is! String || thumbnailValue.trim().isEmpty) {
+      return Response.badRequest(body: 'Missing thumbnailBase64');
+    }
+
+    String base64Payload = thumbnailValue.trim();
+    if (base64Payload.startsWith('data:')) {
+      final commaIndex = base64Payload.indexOf(',');
+      if (commaIndex != -1 && commaIndex + 1 < base64Payload.length) {
+        base64Payload = base64Payload.substring(commaIndex + 1);
+      }
+    }
+
+    List<int> thumbnailBytes;
+    try {
+      thumbnailBytes = base64Decode(base64Payload);
+    } catch (_) {
+      return Response.badRequest(body: 'Invalid thumbnailBase64');
+    }
+
+    if (thumbnailBytes.isEmpty) {
+      return Response.badRequest(body: 'Empty thumbnail payload');
+    }
+
+    DateTime? clientUpdatedAt;
+    final clientTime = payload['clientUpdatedAt'] ?? payload['clientTime'];
+    if (clientTime is String) {
+      clientUpdatedAt = DateTime.tryParse(clientTime);
+    }
+
+    String? format;
+    final formatValue = payload['format'] ?? payload['mimeType'];
+    if (formatValue is String) {
+      format = formatValue;
+    }
+
+    try {
+      final updatedHistory = await _service.updateEpisodeThumbnail(
+        shareId: shareId,
+        thumbnailBytes: Uint8List.fromList(thumbnailBytes),
+        clientUpdatedAt: clientUpdatedAt,
+        format: format,
+      );
+
+      if (updatedHistory == null) {
+        return Response.notFound('Episode not found');
+      }
+
+      return Response.ok(
+        json.encode({
+          'success': true,
+          'data': {
+            'thumbnailPath': updatedHistory.thumbnailPath,
+            'lastWatchTime': updatedHistory.lastWatchTime.toIso8601String(),
+          },
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Failed to update thumbnail: $e');
+    }
+  }
 }
