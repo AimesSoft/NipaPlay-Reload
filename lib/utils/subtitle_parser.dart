@@ -128,9 +128,24 @@ class SubtitleParser {
         }
       }
 
+      SubtitleDecodeResult? best;
+      double bestScore = double.negativeInfinity;
+
+      void considerCandidate(String text, String encoding) {
+        if (text.isEmpty) return;
+        if (!_looksLikeText(text)) return;
+        final format = _detectFormat(text, filePath);
+        if (!allowUnknownFormat && format == SubtitleFormat.unknown) return;
+        final score = _scoreDecodedText(text, filePath, encoding, format);
+        if (score > bestScore) {
+          bestScore = score;
+          best = SubtitleDecodeResult(text: text, encoding: encoding);
+        }
+      }
+
       try {
         final text = utf8.decode(bytes, allowMalformed: false);
-        return SubtitleDecodeResult(text: text, encoding: 'utf-8');
+        considerCandidate(text, 'utf-8');
       } catch (_) {}
 
       final looksBinary = _looksBinary(bytes);
@@ -142,11 +157,7 @@ class SubtitleParser {
       for (final encoding in encodingCandidates) {
         final decoded = await _decodeWithEncoding(bytes, encoding);
         if (decoded == null) continue;
-        final format = _detectFormat(decoded, filePath);
-        if (_looksLikeText(decoded) &&
-            (allowUnknownFormat || format != SubtitleFormat.unknown)) {
-          return SubtitleDecodeResult(text: decoded, encoding: encoding);
-        }
+        considerCandidate(decoded, encoding);
       }
 
       if (Platform.isMacOS || Platform.isLinux) {
@@ -154,19 +165,15 @@ class SubtitleParser {
         for (final encoding in iconvCandidates) {
           final decoded = await _decodeWithIconv(filePath, encoding);
           if (decoded == null) continue;
-          final format = _detectFormat(decoded, filePath);
-          if (_looksLikeText(decoded) &&
-              (allowUnknownFormat || format != SubtitleFormat.unknown)) {
-            return SubtitleDecodeResult(text: decoded, encoding: encoding);
-          }
+          considerCandidate(decoded, encoding);
         }
       }
 
       final latin1Text = latin1.decode(bytes, allowInvalid: true);
-      final format = _detectFormat(latin1Text, filePath);
-      if (_looksLikeText(latin1Text) &&
-          (allowUnknownFormat || format != SubtitleFormat.unknown)) {
-        return SubtitleDecodeResult(text: latin1Text, encoding: 'latin1');
+      considerCandidate(latin1Text, 'latin1');
+
+      if (best != null) {
+        return best;
       }
     } catch (e) {
       debugPrint('解析字幕文件出错: $e');
@@ -528,30 +535,163 @@ class SubtitleParser {
     }
   }
 
+  static double _scoreDecodedText(
+      String text, String filePath, String encoding, SubtitleFormat format) {
+    final sample = text.length > 8192 ? text.substring(0, 8192) : text;
+    int total = 0;
+    int cjkCount = 0;
+    int asciiCount = 0;
+    int replacementCount = 0;
+    int controlCount = 0;
+    int punctCount = 0;
+
+    for (final rune in sample.runes) {
+      total++;
+      if (rune == 0xFFFD) {
+        replacementCount++;
+      }
+      if (rune < 0x09 || (rune > 0x0D && rune < 0x20)) {
+        controlCount++;
+      }
+      if (rune >= 0x20 && rune <= 0x7E) {
+        asciiCount++;
+      }
+      if (_isCjkRune(rune)) {
+        cjkCount++;
+      }
+      if (_isCjkPunctuation(rune)) {
+        punctCount++;
+      }
+    }
+
+    if (total == 0) return double.negativeInfinity;
+
+    final totalDouble = total.toDouble();
+    final cjkRatio = cjkCount / totalDouble;
+    final asciiRatio = asciiCount / totalDouble;
+    final replacementRatio = replacementCount / totalDouble;
+    final controlRatio = controlCount / totalDouble;
+    final punctRatio = punctCount / totalDouble;
+
+    double score = 0;
+    if (format != SubtitleFormat.unknown) {
+      score += 5;
+    } else {
+      score -= 2;
+    }
+
+    score += cjkRatio * 8;
+    score += asciiRatio * 2;
+    score += punctRatio * 2;
+    score -= replacementRatio * 20;
+    score -= controlRatio * 12;
+    score += _scoreEncodingHint(filePath, encoding);
+
+    return score;
+  }
+
+  static double _scoreEncodingHint(String filePath, String encoding) {
+    final lowerPath = filePath.toLowerCase();
+    final lowerEncoding = encoding.toLowerCase();
+    double score = 0;
+
+    if (lowerPath.contains('big5') ||
+        lowerPath.contains('繁体') ||
+        lowerPath.contains('cht') ||
+        lowerPath.contains('traditional')) {
+      if (lowerEncoding.contains('big5')) {
+        score += 1.5;
+      }
+    }
+
+    if (lowerPath.contains('gbk') ||
+        lowerPath.contains('gb2312') ||
+        lowerPath.contains('gb18030') ||
+        lowerPath.contains('简体') ||
+        lowerPath.contains('chs')) {
+      if (lowerEncoding.contains('gb')) {
+        score += 1.5;
+      }
+    }
+
+    return score;
+  }
+
+  static bool _isCjkRune(int rune) {
+    return (rune >= 0x4E00 && rune <= 0x9FFF) ||
+        (rune >= 0x3400 && rune <= 0x4DBF) ||
+        (rune >= 0xF900 && rune <= 0xFAFF) ||
+        (rune >= 0x3040 && rune <= 0x30FF) ||
+        (rune >= 0xAC00 && rune <= 0xD7AF);
+  }
+
+  static bool _isCjkPunctuation(int rune) {
+    return (rune >= 0x3000 && rune <= 0x303F) ||
+        (rune >= 0xFF00 && rune <= 0xFFEF) ||
+        rune == 0x201C ||
+        rune == 0x201D ||
+        rune == 0x2018 ||
+        rune == 0x2019;
+  }
+
   // 直接从文件解析ASS字幕
   static Future<List<SubtitleEntry>> parseAssFile(String filePath) async {
     try {
-      final decoded = await decodeSubtitleFile(filePath);
-      if (decoded == null) {
-        return [];
-      }
-
-      final format = _detectFormat(decoded.text, filePath);
-      switch (format) {
-        case SubtitleFormat.ass:
-          return parseAss(decoded.text);
-        case SubtitleFormat.srt:
-          return parseSrt(decoded.text);
-        case SubtitleFormat.subViewer:
-          return parseSubViewer(decoded.text);
-        case SubtitleFormat.microdvd:
-          return parseMicrodvd(decoded.text);
-        case SubtitleFormat.unknown:
-          return [];
-      }
+      final result = await parseSubtitleFile(filePath);
+      return result.entries;
     } catch (e) {
       debugPrint('解析字幕文件出错: $e');
       return [];
+    }
+  }
+
+  static Future<SubtitleParseResult> parseSubtitleFile(String filePath,
+      {bool allowUnknownFormat = false}) async {
+    try {
+      final decoded = await decodeSubtitleFile(
+        filePath,
+        allowUnknownFormat: allowUnknownFormat,
+      );
+      if (decoded == null) {
+        return const SubtitleParseResult(
+          entries: [],
+          format: SubtitleFormat.unknown,
+          encoding: 'unknown',
+        );
+      }
+
+      final format = _detectFormat(decoded.text, filePath);
+      List<SubtitleEntry> entries;
+      switch (format) {
+        case SubtitleFormat.ass:
+          entries = parseAss(decoded.text);
+          break;
+        case SubtitleFormat.srt:
+          entries = parseSrt(decoded.text);
+          break;
+        case SubtitleFormat.subViewer:
+          entries = parseSubViewer(decoded.text);
+          break;
+        case SubtitleFormat.microdvd:
+          entries = parseMicrodvd(decoded.text);
+          break;
+        case SubtitleFormat.unknown:
+          entries = [];
+          break;
+      }
+
+      return SubtitleParseResult(
+        entries: entries,
+        format: format,
+        encoding: decoded.encoding,
+      );
+    } catch (e) {
+      debugPrint('解析字幕文件出错: $e');
+      return const SubtitleParseResult(
+        entries: [],
+        format: SubtitleFormat.unknown,
+        encoding: 'unknown',
+      );
     }
   }
 
