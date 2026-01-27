@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -130,37 +129,35 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
     
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    const inputThemeColor = Color(0xFFff2e55);
 
     final strokeColor = _getStrokeColor(selectedColor);
-      
-    final danmakuPreview = Text(
-      textController.text,
-      style: TextStyle(
-        fontSize: 20,
-        color: selectedColor,
-        shadows: [
-          Shadow(
-            offset: Offset(globals.strokeWidth, globals.strokeWidth),
-            blurRadius: 2.0,
-            color: strokeColor,
-          ),
-          Shadow(
-            offset: Offset(-globals.strokeWidth, -globals.strokeWidth),
-            blurRadius: 2.0,
-            color: strokeColor,
-          ),
-          Shadow(
-            offset: Offset(globals.strokeWidth, -globals.strokeWidth),
-            blurRadius: 2.0,
-            color: strokeColor,
-          ),
-          Shadow(
-            offset: Offset(-globals.strokeWidth, globals.strokeWidth),
-            blurRadius: 2.0,
-            color: strokeColor,
-          ),
-        ],
-      ),
+    
+    final previewStyle = TextStyle(
+      fontSize: 18,
+      color: selectedColor,
+      shadows: [
+        Shadow(
+          offset: Offset(globals.strokeWidth, globals.strokeWidth),
+          blurRadius: 2.0,
+          color: strokeColor,
+        ),
+        Shadow(
+          offset: Offset(-globals.strokeWidth, -globals.strokeWidth),
+          blurRadius: 2.0,
+          color: strokeColor,
+        ),
+        Shadow(
+          offset: Offset(globals.strokeWidth, -globals.strokeWidth),
+          blurRadius: 2.0,
+          color: strokeColor,
+        ),
+        Shadow(
+          offset: Offset(-globals.strokeWidth, globals.strokeWidth),
+          blurRadius: 2.0,
+          color: strokeColor,
+        ),
+      ],
     );
 
     if (isRealPhone) {
@@ -175,7 +172,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
             // 左侧：输入区域
             Expanded(
               flex: 1,
-              child: _buildInputSection(theme),
+              child: _buildInputSection(theme, previewStyle, inputThemeColor),
             ),
             const SizedBox(width: 16),
             // 右侧：颜色选择
@@ -199,27 +196,18 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 弹幕预览
-                Container(
-                  height: 100,
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: danmakuPreview,
-                  ),
-                ),
                 TextField(
                   controller: textController,
                   autofocus: true,
-                  style: TextStyle(color: colorScheme.onSurface),
+                  style: previewStyle,
+                  cursorColor: inputThemeColor,
                   decoration: InputDecoration(
                     hintText: '在这里输入弹幕内容...',
                     hintStyle: TextStyle(color: theme.hintColor),
                     border: const OutlineInputBorder(),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: inputThemeColor, width: 2),
+                    ),
                     fillColor: colorScheme.surfaceContainerHighest,
                     filled: true,
                   ),
@@ -344,32 +332,14 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                       ? const CircularProgressIndicator()
                       : GestureDetector(
                           onTap: _isSending ? null : _sendDanmaku,
-                          child: GlassmorphicContainer(
+                          child: Container(
                             width: 120,
                             height: 50,
-                            borderRadius: 25,
-                            blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
-                            alignment: Alignment.center,
-                            border: 2,
-                            linearGradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  colorScheme.secondary.withOpacity(0.3),
-                                  colorScheme.secondary.withOpacity(0.2),
-                                ],
-                                stops: const [
-                                  0.1,
-                                  1,
-                                ]),
-                            borderGradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                colorScheme.secondary.withOpacity(0.5),
-                                colorScheme.secondary.withOpacity(0.5),
-                              ],
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(25),
+                              color: theme.colorScheme.secondary,
                             ),
+                            alignment: Alignment.center,
                             child: const Text(
                               '发送',
                               style: TextStyle(
@@ -389,7 +359,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
   }
 
   /// 构建输入区域（手机设备左侧）
-  Widget _buildInputSection(ThemeData theme) {
+  Widget _buildInputSection(ThemeData theme, TextStyle previewStyle, Color inputThemeColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -397,11 +367,15 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
         TextField(
           controller: textController,
           autofocus: true,
-          style: TextStyle(color: theme.colorScheme.onSurface),
+          style: previewStyle,
+          cursorColor: inputThemeColor,
           decoration: InputDecoration(
             hintText: '输入弹幕内容...',
             hintStyle: TextStyle(color: theme.hintColor),
             border: const OutlineInputBorder(),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: inputThemeColor, width: 2),
+            ),
             fillColor: theme.colorScheme.surfaceContainerHighest,
             filled: true,
           ),
@@ -510,32 +484,14 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                 ? const Center(child: CircularProgressIndicator())
                 : GestureDetector(
                     onTap: _isSending ? null : _sendDanmaku,
-                    child: GlassmorphicContainer(
+                    child: Container(
                       width: double.infinity,
                       height: 45,
-                      borderRadius: 22,
-                      blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
-                      alignment: Alignment.center,
-                      border: 2,
-                      linearGradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            theme.colorScheme.secondary.withOpacity(0.3),
-                            theme.colorScheme.secondary.withOpacity(0.2),
-                          ],
-                          stops: const [
-                            0.1,
-                            1,
-                          ]),
-                      borderGradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          theme.colorScheme.secondary.withOpacity(0.5),
-                          theme.colorScheme.secondary.withOpacity(0.5),
-                        ],
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(22),
+                        color: theme.colorScheme.secondary,
                       ),
+                      alignment: Alignment.center,
                       child: const Text(
                         '发送弹幕',
                         style: TextStyle(
