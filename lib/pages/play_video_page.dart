@@ -18,8 +18,6 @@ import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/lock_controls_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
-import '../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -38,8 +36,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _isHoveringAnimeInfo = false;
   bool _isHoveringBackButton = false;
   double _horizontalDragDistance = 0.0;
-  final GlobalKey<SendDanmakuDialogContentState> _danmakuDialogKey =
-      GlobalKey();
   bool _isUiLocked = false;
   bool _showUiLockButton = false;
   Timer? _uiLockButtonTimer;
@@ -532,47 +528,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   Future<void> _showSendDanmakuDialog(VideoPlayerState videoState) async {
     final hotkeyService = HotkeyService();
-    final wasPlaying = videoState.player.state == PlaybackState.playing;
-
-    if (wasPlaying) {
-      await videoState.player.pauseDirectly();
-    }
-
-    final episodeId = videoState.episodeId;
-    final currentTime = videoState.position.inSeconds.toDouble();
-
-    if (episodeId == null) {
-      BlurSnackBar.show(context, '无法获取剧集信息，无法发送弹幕');
-      if (wasPlaying) await videoState.player.playDirectly();
-      return;
-    }
-
     hotkeyService.unregisterHotkeys();
-
-    // 检查是否为手机设备
-    final window = WidgetsBinding.instance.window;
-    final size = window.physicalSize / window.devicePixelRatio;
-    final shortestSide = size.width < size.height ? size.width : size.height;
-    final bool isRealPhone =
-        Platform.isIOS || Platform.isAndroid && shortestSide < 600;
-
-    await BlurDialog.show(
-      context: context,
-      title: isRealPhone ? '' : '发送弹幕', // 手机设备不显示标题
-      contentWidget: SendDanmakuDialogContent(
-        episodeId: episodeId,
-        currentTime: currentTime,
-        onDanmakuSent: (danmaku) {
-          videoState.addDanmakuToNewTrack(danmaku);
-        },
-      ),
-      actions: [],
-    );
-
-    hotkeyService.registerHotkeys();
-
-    if (wasPlaying) {
-      await videoState.player.playDirectly();
+    try {
+      await videoState.showSendDanmakuDialog();
+    } finally {
+      hotkeyService.registerHotkeys();
     }
   }
 }

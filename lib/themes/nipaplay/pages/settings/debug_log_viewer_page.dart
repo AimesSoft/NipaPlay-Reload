@@ -10,6 +10,7 @@ import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bounce_hover_scale.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
@@ -36,6 +37,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
 
   bool _showTimestamp = true;
   bool _autoScroll = false;
+  bool _isMoreOptionsHovered = false;
   String _selectedLevel = '全部';
   String _selectedTag = '全部';
   String _searchQuery = '';
@@ -545,33 +547,13 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.onSurface.withOpacity(0.2),
-            colorScheme.onSurface.withOpacity(0.15),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.onSurface.withOpacity(0.3),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: const BoxDecoration(),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: isSwitch ? null : onTap,
-          borderRadius: BorderRadius.circular(12),
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
@@ -691,6 +673,7 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                 // 搜索框
                 TextField(
                   controller: _searchController,
+                  cursorColor: const Color(0xFFff2e55),
                   style: TextStyle(color: colorScheme.onSurface),
                   decoration: InputDecoration(
                     hintText: '搜索日志内容...',
@@ -699,8 +682,8 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                     border: OutlineInputBorder(
                       borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.3)),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: colorScheme.onSurface),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFFff2e55), width: 2),
                     ),
                   ),
                 ),
@@ -777,10 +760,23 @@ class _DebugLogViewerPageState extends State<DebugLogViewerPage> with TickerProv
                     const SizedBox(width: 16),
                     
                     // 选项按钮
-                    IconButton(
-                      onPressed: () => _showMoreOptions(context),
-                      icon: Icon(Ionicons.ellipsis_vertical, color: colorScheme.onSurface),
-                      //tooltip: '更多选项',
+                    MouseRegion(
+                      onEnter: (_) => setState(() => _isMoreOptionsHovered = true),
+                      onExit: (_) => setState(() => _isMoreOptionsHovered = false),
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () => _showMoreOptions(context),
+                        child: BounceHoverScale(
+                          isHovered: _isMoreOptionsHovered,
+                          isPressed: false,
+                          child: Icon(
+                            Ionicons.ellipsis_vertical,
+                            color: _isMoreOptionsHovered 
+                                ? const Color(0xFFff2e55) 
+                                : colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

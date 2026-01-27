@@ -183,6 +183,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _customServerController,
+                  cursorColor: const Color(0xFFff2e55),
                   decoration: InputDecoration(
                     hintText: 'https://your-danmaku-server.com',
                     hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
@@ -190,6 +191,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fillColor: colorScheme.onSurface.withOpacity(0.1),
                     border: const OutlineInputBorder(
                       borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.all(Radius.circular(8)),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFFff2e55), width: 2),
                       borderRadius: BorderRadius.all(Radius.circular(8)),
                     ),
                   ),

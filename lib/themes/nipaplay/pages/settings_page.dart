@@ -211,7 +211,7 @@ class _SettingsPageState extends State<SettingsPage>
         ),
         _SettingEntry(
           id: _entryRemoteAccess,
-          title: "远程访问（客户端）",
+          title: "远程访问",
           icon: Ionicons.link_outline,
           onTap: () => _handleItemTap(
               _entryRemoteAccess, const RemoteAccessPage(), "远程访问"),

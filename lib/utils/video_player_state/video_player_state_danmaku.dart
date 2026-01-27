@@ -1163,7 +1163,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           await player.pauseDirectly();
         } catch (e) {
           debugPrint('[VideoPlayerState] 暂停失败: $e');
+          try {
+            player.state = PlaybackState.paused;
+          } catch (fallbackError) {
+            debugPrint('[VideoPlayerState] 暂停回退失败: $fallbackError');
+          }
         }
+        _setStatus(PlayerStatus.paused, message: '已暂停');
+        _uiUpdateTicker?.stop();
       }
 
       try {
@@ -1183,6 +1190,18 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
             await player.playDirectly();
           } catch (e) {
             debugPrint('[VideoPlayerState] 恢复播放失败: $e');
+            try {
+              player.state = PlaybackState.playing;
+            } catch (fallbackError) {
+              debugPrint('[VideoPlayerState] 恢复播放回退失败: $fallbackError');
+            }
+          }
+          _setStatus(PlayerStatus.playing, message: '开始播放');
+          if (_uiUpdateTicker == null) {
+            _startUiUpdateTimer();
+          }
+          if (!(_uiUpdateTicker?.isActive ?? false)) {
+            _uiUpdateTicker!.start();
           }
         }
       }
