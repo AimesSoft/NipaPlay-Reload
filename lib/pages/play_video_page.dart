@@ -12,7 +12,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/glass_action_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/shadow_action_button.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
@@ -427,7 +427,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     children: [
                       if (!kIsWeb &&
                           defaultTargetPlatform == TargetPlatform.iOS)
-                        GlassActionButton(
+                        ShadowActionButton(
                           tooltip: '投屏 (AirPlay)',
                           icon: Icons.airplay_rounded,
                           onPressed: () {
@@ -439,7 +439,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                         if (!kIsWeb &&
                             defaultTargetPlatform == TargetPlatform.iOS)
                           const SizedBox(width: 12),
-                        GlassActionButton(
+                        ShadowActionButton(
                           tooltip: '截图',
                           icon: Icons.camera_alt_outlined,
                           onPressed: () {
@@ -450,7 +450,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       ],
                       if (showShareButton) ...[
                         const SizedBox(width: 12),
-                        GlassActionButton(
+                        ShadowActionButton(
                           tooltip: (!kIsWeb &&
                                   defaultTargetPlatform == TargetPlatform.iOS)
                               ? '分享 / AirDrop'

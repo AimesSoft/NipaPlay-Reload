@@ -23,7 +23,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/vertical_indicator.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/glass_action_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/shadow_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/lock_controls_button.dart';
@@ -59,8 +59,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   final GlobalKey _settingsButtonKey = GlobalKey();
 
   bool get _useNipaplayControls {
-    return PlatformInfo.isAndroid ||
-        (PlatformInfo.isIOS && !PlatformInfo.isIOS26OrHigher());
+    return PlatformInfo.isAndroid || PlatformInfo.isIOS;
   }
 
   @override
@@ -617,7 +616,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                         children: [
                           if (!kIsWeb &&
                               defaultTargetPlatform == TargetPlatform.iOS)
-                            GlassActionButton(
+                            ShadowActionButton(
                               tooltip: '投屏 (AirPlay)',
                               icon: Icons.airplay_rounded,
                               onPressed: () {
@@ -629,7 +628,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                             if (!kIsWeb &&
                                 defaultTargetPlatform == TargetPlatform.iOS)
                               const SizedBox(width: 12),
-                            GlassActionButton(
+                            ShadowActionButton(
                               tooltip: '截图',
                               icon: Icons.camera_alt_outlined,
                               onPressed: () {
@@ -640,7 +639,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           ],
                           if (showShareButton) ...[
                             const SizedBox(width: 12),
-                            GlassActionButton(
+                            ShadowActionButton(
                               tooltip: (!kIsWeb &&
                                       defaultTargetPlatform ==
                                           TargetPlatform.iOS)
@@ -1462,27 +1461,6 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                                   ),
                           );
                         },
-                      ),
-                      SizedBox(width: spacing),
-                      _buildControlIconButton(
-                        icon: globals.isTablet
-                            ? (videoState.isAppBarHidden
-                                ? Icons.fullscreen_exit_rounded
-                                : Icons.fullscreen_rounded)
-                            : (videoState.isFullscreen
-                                ? Icons.fullscreen_exit_rounded
-                                : Icons.fullscreen_rounded),
-                        onPressed: () {
-                          videoState.resetHideControlsTimer();
-                          if (globals.isTablet) {
-                            videoState.toggleAppBarVisibility();
-                          } else {
-                            unawaited(videoState.toggleFullscreen());
-                          }
-                        },
-                        enabled: true,
-                        size: smallButtonExtent,
-                        iconSize: smallIconSize,
                       ),
                     ],
                   ),

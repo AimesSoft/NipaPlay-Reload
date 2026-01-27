@@ -199,9 +199,14 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
   }
 
   Rect? _resolveAnchorRect() {
-    if (_anchorRect != null) {
-      return _anchorRect;
+    final Rect? resolved = _anchorRect ?? _resolveAnchorRectFromKey();
+    if (resolved == null) {
+      return null;
     }
+    return _normalizeAnchorRect(resolved);
+  }
+
+  Rect? _resolveAnchorRectFromKey() {
     final context = widget.anchorKey?.currentContext;
     if (context == null) {
       return null;
@@ -211,6 +216,31 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
       return null;
     }
     return renderBox.localToGlobal(Offset.zero) & renderBox.size;
+  }
+
+  Rect _normalizeAnchorRect(Rect rect) {
+    // UiScaleWrapper shrinks MediaQuery size; normalize global coords to layout space.
+    final mediaSize = MediaQuery.of(context).size;
+    if (mediaSize.width == 0 || mediaSize.height == 0) {
+      return rect;
+    }
+    final view = View.of(context);
+    final viewSize = view.physicalSize / view.devicePixelRatio;
+    final double scaleX = viewSize.width / mediaSize.width;
+    final double scaleY = viewSize.height / mediaSize.height;
+    if (!scaleX.isFinite ||
+        !scaleY.isFinite ||
+        scaleX <= 0 ||
+        scaleY <= 0 ||
+        ((scaleX - 1.0).abs() < 0.001 && (scaleY - 1.0).abs() < 0.001)) {
+      return rect;
+    }
+    return Rect.fromLTWH(
+      rect.left / scaleX,
+      rect.top / scaleY,
+      rect.width / scaleX,
+      rect.height / scaleY,
+    );
   }
 
   SettingsMenuScope _wrapMenu({required bool showBackItem, required Widget child}) {
