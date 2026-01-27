@@ -1,8 +1,11 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/ui_scale_wrapper.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 
 class NipaplayThemeDescriptor extends ThemeDescriptor {
@@ -41,8 +44,15 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
       navigatorKey: context.navigatorKey,
       home: context.materialHomeBuilder(),
       builder: (buildContext, appChild) {
-        return context.overlayBuilder(
+        final uiScale = buildContext.select<AppearanceSettingsProvider, double>(
+          (provider) => provider.uiScale,
+        );
+        final overlayChild = context.overlayBuilder(
           appChild ?? const SizedBox.shrink(),
+        );
+        return UiScaleWrapper(
+          scale: uiScale,
+          child: overlayChild,
         );
       },
     );

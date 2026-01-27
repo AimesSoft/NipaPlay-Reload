@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' show SystemMouseCursors;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:package_info_plus/package_info_plus.dart';

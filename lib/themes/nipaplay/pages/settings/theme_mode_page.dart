@@ -187,6 +187,10 @@ class _ThemeModePageState extends State<ThemeModePage> {
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final settingsProvider = context.watch<SettingsProvider>();
     final colorScheme = Theme.of(context).colorScheme;
+    final int scaleDivisions = ((AppearanceSettingsProvider.uiScaleMax -
+                AppearanceSettingsProvider.uiScaleMin) /
+            AppearanceSettingsProvider.uiScaleStep)
+        .round();
     
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -234,6 +238,20 @@ class _ThemeModePageState extends State<ThemeModePage> {
               onChanged: (value) {
                 appearanceSettings.setEnableWidgetBlurEffect(value);
               },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.slider(
+              title: "界面缩放",
+              subtitle: "调整 NipaPlay 界面的整体大小",
+              icon: Ionicons.expand_outline,
+              value: appearanceSettings.uiScale,
+              min: AppearanceSettingsProvider.uiScaleMin,
+              max: AppearanceSettingsProvider.uiScaleMax,
+              divisions: scaleDivisions,
+              onChanged: (value) {
+                appearanceSettings.setUiScale(value);
+              },
+              labelFormatter: (value) => 'x${value.toStringAsFixed(2)}',
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.dropdown(

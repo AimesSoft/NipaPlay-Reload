@@ -963,7 +963,7 @@ style: TextStyle(color: Colors.white54)),
       actions: <Widget>[
         HoverScaleTextButton(
           child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
+style: TextStyle(color: Color(0xFFFF2E55))),
           onPressed: () {
             Navigator.of(context).pop();
           },

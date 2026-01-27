@@ -1,0 +1,18 @@
+                        -H/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/src
+-DCMAKE_SYSTEM_NAME=Android
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+-DCMAKE_SYSTEM_VERSION=21
+-DANDROID_PLATFORM=android-21
+-DANDROID_ABI=arm64-v8a
+-DCMAKE_ANDROID_ARCH_ABI=arm64-v8a
+-DANDROID_NDK=/Users/dfsteve/Library/Android/sdk/ndk/27.0.12077973
+-DCMAKE_ANDROID_NDK=/Users/dfsteve/Library/Android/sdk/ndk/27.0.12077973
+-DCMAKE_TOOLCHAIN_FILE=/Users/dfsteve/Library/Android/sdk/ndk/27.0.12077973/build/cmake/android.toolchain.cmake
+-DCMAKE_MAKE_PROGRAM=/Users/dfsteve/Library/Android/sdk/cmake/3.22.1/bin/ninja
+-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/Library/Afolder/FlutterProject/nipaplay/build/nipaplay_smb2/intermediates/cxx/RelWithDebInfo/2u5s5i5f/obj/arm64-v8a
+-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/Library/Afolder/FlutterProject/nipaplay/build/nipaplay_smb2/intermediates/cxx/RelWithDebInfo/2u5s5i5f/obj/arm64-v8a
+-DCMAKE_BUILD_TYPE=RelWithDebInfo
+-B/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/android/.cxx/RelWithDebInfo/2u5s5i5f/arm64-v8a
+-GNinja
+                        Build command args: []
+                        Version: 2

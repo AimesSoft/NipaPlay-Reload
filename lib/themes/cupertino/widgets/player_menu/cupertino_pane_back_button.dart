@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 class CupertinoPaneBackButton extends StatelessWidget {
   const CupertinoPaneBackButton({

@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 /// Cupertino 风格的网络媒体服务器状态卡片。

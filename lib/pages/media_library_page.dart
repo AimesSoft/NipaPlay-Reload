@@ -717,13 +717,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
-              if (!_isJellyfinConnected)
-                BlurButton(
-                  icon: Icons.cloud,
-                  text: '添加媒体服务器',
-                  hoverForegroundColor: const Color(0xFFFF2E55),
-                  onTap: _showServerSelectionDialog,
-                ),
             ],
           ),
         ),

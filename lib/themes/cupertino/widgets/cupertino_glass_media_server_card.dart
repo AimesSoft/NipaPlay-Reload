@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 /// 液态玻璃风格的网络媒体服务器卡片。
 class CupertinoGlassMediaServerCard extends StatelessWidget {
