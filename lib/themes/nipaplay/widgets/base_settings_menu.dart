@@ -151,9 +151,6 @@ class BaseSettingsMenu extends StatelessWidget {
         }
 
         assert(() {
-          debugPrint(
-            'BaseSettingsMenu: anchorRect=$anchorRect showPointer=$showPointer useExternalPointer=$useExternalPointer pointerX=$pointerX pointUp=$pointUp left=$left top=$top bottom=$bottom',
-          );
           return true;
         }());
 
