@@ -131,6 +131,9 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
       return const SizedBox.shrink();
     }
     
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     // 使用Consumer检查开发者选项中的设置
     return Consumer<DeveloperOptionsProvider>(
       builder: (context, devOptions, child) {
@@ -139,189 +142,156 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
           return const SizedBox.shrink();
         }
         
-        // 否则显示系统资源信息（带毛玻璃效果）
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 253, 253, 253).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 0.5,
-                ),
+        // 否则显示系统资源信息（纯色背景）
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.dividerColor,
+              width: 0.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
               ),
-              child: Column(
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // CPU使用率
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // CPU使用率
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.memory, size: 22, color: Colors.white70),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_cpuUsage.toStringAsFixed(1)}%',
-                            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: _getCpuColor(),
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 10),
-                      
-                      // 内存使用量
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.sd_storage_outlined, size: 22, color: Colors.white70),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_memoryUsageMB.toStringAsFixed(1)}MB',
-                            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: _getMemoryColor(),
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 10),
-                      
-                      // 帧率
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.speed, size: 22, color: Colors.white70),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_fps.toStringAsFixed(1)} FPS',
-                            locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: _getFpsColor(),
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                        ],
+                      Icon(Icons.memory, size: 22, color: colorScheme.onSurface.withOpacity(0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_cpuUsage.toStringAsFixed(1)}%',
+                        locale: const Locale("zh", "CN"),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: _getCpuColor(),
+                          decoration: TextDecoration.none,
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(width: 10),
                   
-                  // 播放器内核信息 (原解码器和MDK版本信息)
+                  // 内存使用量
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // // 解码器信息 - REMOVED
-                      // Flexible(
-                      //   flex: 3,
-                      //   child: Row(
-                      //     mainAxisSize: MainAxisSize.min,
-                      //     children: [
-                      //       const Icon(Icons.video_library, size: 18, color: Colors.white70),
-                      //       const SizedBox(width: 4),
-                      //       Flexible(
-                      //         child: Text(
-                      //           _activeDecoder, // This would show hw/sw - ffmpeg etc.
-                      //           style: const TextStyle(
-                      //             fontSize: 14,
-                      //             fontWeight: FontWeight.bold,
-                      //             color: Colors.white,
-                      //             decoration: TextDecoration.none,
-                      //           ),
-                      //           overflow: TextOverflow.ellipsis,
-                      //         ),
-                      //       ),
-                      //     ],
-                      //   ),
-                      // ),
-                      
-                      // // 分隔符 - REMOVED as only one item now in this row part
-                      // Padding(
-                      //   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      //   child: Container(
-                      //     height: 16,
-                      //     width: 1,
-                      //     color: Colors.white30,
-                      //   ),
-                      // ),
-                      
-                      // 播放器内核信息
-                      Flexible(
-                        flex: 1,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.developer_board, size: 16, color: Colors.white70),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                '播放器: $_playerKernelType', // 使用变量显示当前播放器内核
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  decoration: TextDecoration.none,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                      Icon(Icons.sd_storage_outlined, size: 22, color: colorScheme.onSurface.withOpacity(0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_memoryUsageMB.toStringAsFixed(1)}MB',
+                        locale: const Locale("zh", "CN"),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: _getMemoryColor(),
+                          decoration: TextDecoration.none,
                         ),
                       ),
-                      
-                      // 分隔符
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Container(
-                          height: 16,
-                          width: 1,
-                          color: Colors.white30,
-                        ),
-                      ),
-                      
-                      // 弹幕内核信息
-                      Flexible(
-                        flex: 1,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.subtitles, size: 16, color: Colors.white70),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                '弹幕: $_danmakuKernelType',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  decoration: TextDecoration.none,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                    ],
+                  ),
+                  const SizedBox(width: 10),
+                  
+                  // 帧率
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.speed, size: 22, color: colorScheme.onSurface.withOpacity(0.7)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_fps.toStringAsFixed(1)} FPS',
+                        locale: const Locale("zh", "CN"),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: _getFpsColor(),
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 4),
+              
+              // 播放器内核信息
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 播放器内核信息
+                  Flexible(
+                    flex: 1,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.developer_board, size: 16, color: colorScheme.onSurface.withOpacity(0.7)),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            '播放器: $_playerKernelType',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                              decoration: TextDecoration.none,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // 分隔符
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Container(
+                      height: 16,
+                      width: 1,
+                      color: theme.dividerColor,
+                    ),
+                  ),
+                  
+                  // 弹幕内核信息
+                  Flexible(
+                    flex: 1,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.subtitles, size: 16, color: colorScheme.onSurface.withOpacity(0.7)),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            '弹幕: $_danmakuKernelType',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                              decoration: TextDecoration.none,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         );
       },

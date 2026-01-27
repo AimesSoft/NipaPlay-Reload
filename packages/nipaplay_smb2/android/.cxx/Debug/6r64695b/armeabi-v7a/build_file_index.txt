@@ -1,0 +1,3 @@
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/src/CMakeLists.txt
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/CMakeLists.txt
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/lib/CMakeLists.txt

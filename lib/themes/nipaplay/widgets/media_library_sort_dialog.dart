@@ -20,6 +20,116 @@ class MediaSortOption {
   });
 }
 
+const List<MediaSortOption> jellyfinSortOptions = [
+  MediaSortOption(
+    value: 'DateCreated,SortName',
+    label: '创建时间',
+    description: '按文件创建时间排序',
+  ),
+  MediaSortOption(
+    value: 'SortName',
+    label: '名称',
+    description: '按名称字母顺序排序',
+  ),
+  MediaSortOption(
+    value: 'PremiereDate',
+    label: '首播日期',
+    description: '按首播日期排序',
+  ),
+  MediaSortOption(
+    value: 'DatePlayed',
+    label: '播放时间',
+    description: '按最后播放时间排序',
+  ),
+  MediaSortOption(
+    value: 'ProductionYear',
+    label: '制作年份',
+    description: '按制作年份排序',
+  ),
+  MediaSortOption(
+    value: 'CommunityRating',
+    label: '社区评分',
+    description: '按社区评分排序',
+  ),
+  MediaSortOption(
+    value: 'Runtime',
+    label: '时长',
+    description: '按视频时长排序',
+  ),
+  MediaSortOption(
+    value: 'PlayCount',
+    label: '播放次数',
+    description: '按播放次数排序',
+  ),
+];
+
+const List<MediaSortOption> embySortOptions = [
+  MediaSortOption(
+    value: 'DateCreated',
+    label: '创建时间',
+    description: '按文件创建时间排序',
+  ),
+  MediaSortOption(
+    value: 'SortName',
+    label: '名称',
+    description: '按名称字母顺序排序',
+  ),
+  MediaSortOption(
+    value: 'PremiereDate',
+    label: '首播日期',
+    description: '按首播日期排序',
+  ),
+  MediaSortOption(
+    value: 'DatePlayed',
+    label: '播放时间',
+    description: '按最后播放时间排序',
+  ),
+  MediaSortOption(
+    value: 'ProductionYear',
+    label: '制作年份',
+    description: '按制作年份排序',
+  ),
+  MediaSortOption(
+    value: 'CommunityRating',
+    label: '社区评分',
+    description: '按社区评分排序',
+  ),
+  MediaSortOption(
+    value: 'CriticRating',
+    label: '影评人评分',
+    description: '按影评人评分排序',
+  ),
+  MediaSortOption(
+    value: 'Runtime',
+    label: '时长',
+    description: '按视频时长排序',
+  ),
+  MediaSortOption(
+    value: 'PlayCount',
+    label: '播放次数',
+    description: '按播放次数排序',
+  ),
+  MediaSortOption(
+    value: 'Random',
+    label: '随机',
+    description: '随机排序',
+  ),
+];
+
+const List<Map<String, String>> mediaLibrarySortOrders = [
+  {'value': 'Ascending', 'label': '升序'},
+  {'value': 'Descending', 'label': '降序'},
+];
+
+List<MediaSortOption> getMediaSortOptions(MediaLibraryType type) {
+  switch (type) {
+    case MediaLibraryType.emby:
+      return embySortOptions;
+    case MediaLibraryType.jellyfin:
+      return jellyfinSortOptions;
+  }
+}
+
 /// 通用媒体库排序弹窗
 class MediaLibrarySortDialog extends StatefulWidget {
   final String currentSortBy;
@@ -58,117 +168,9 @@ class _MediaLibrarySortDialogState extends State<MediaLibrarySortDialog> {
   late String _selectedSortBy;
   late String _selectedSortOrder;
 
-  /// Jellyfin 排序选项
-  static const List<MediaSortOption> _jellyfinSortOptions = [
-    MediaSortOption(
-      value: 'DateCreated,SortName',
-      label: '创建时间',
-      description: '按文件创建时间排序',
-    ),
-    MediaSortOption(
-      value: 'SortName',
-      label: '名称',
-      description: '按名称字母顺序排序',
-    ),
-    MediaSortOption(
-      value: 'PremiereDate',
-      label: '首播日期',
-      description: '按首播日期排序',
-    ),
-    MediaSortOption(
-      value: 'DatePlayed',
-      label: '播放时间',
-      description: '按最后播放时间排序',
-    ),
-    MediaSortOption(
-      value: 'ProductionYear',
-      label: '制作年份',
-      description: '按制作年份排序',
-    ),
-    MediaSortOption(
-      value: 'CommunityRating',
-      label: '社区评分',
-      description: '按社区评分排序',
-    ),
-    MediaSortOption(
-      value: 'Runtime',
-      label: '时长',
-      description: '按视频时长排序',
-    ),
-    MediaSortOption(
-      value: 'PlayCount',
-      label: '播放次数',
-      description: '按播放次数排序',
-    ),
-  ];
-
-  /// Emby 排序选项
-  static const List<MediaSortOption> _embySortOptions = [
-    MediaSortOption(
-      value: 'DateCreated',
-      label: '创建时间',
-      description: '按文件创建时间排序',
-    ),
-    MediaSortOption(
-      value: 'SortName',
-      label: '名称',
-      description: '按名称字母顺序排序',
-    ),
-    MediaSortOption(
-      value: 'PremiereDate',
-      label: '首播日期',
-      description: '按首播日期排序',
-    ),
-    MediaSortOption(
-      value: 'DatePlayed',
-      label: '播放时间',
-      description: '按最后播放时间排序',
-    ),
-    MediaSortOption(
-      value: 'ProductionYear',
-      label: '制作年份',
-      description: '按制作年份排序',
-    ),
-    MediaSortOption(
-      value: 'CommunityRating',
-      label: '社区评分',
-      description: '按社区评分排序',
-    ),
-    MediaSortOption(
-      value: 'CriticRating',
-      label: '影评人评分',
-      description: '按影评人评分排序',
-    ),
-    MediaSortOption(
-      value: 'Runtime',
-      label: '时长',
-      description: '按视频时长排序',
-    ),
-    MediaSortOption(
-      value: 'PlayCount',
-      label: '播放次数',
-      description: '按播放次数排序',
-    ),
-    MediaSortOption(
-      value: 'Random',
-      label: '随机',
-      description: '随机排序',
-    ),
-  ];
-
-  static const List<Map<String, String>> _sortOrders = [
-    {'value': 'Ascending', 'label': '升序'},
-    {'value': 'Descending', 'label': '降序'},
-  ];
-
   /// 根据媒体库类型获取排序选项
   List<MediaSortOption> get _sortOptions {
-    switch (widget.libraryType) {
-      case MediaLibraryType.emby:
-        return _embySortOptions;
-      case MediaLibraryType.jellyfin:
-        return _jellyfinSortOptions;
-    }
+    return getMediaSortOptions(widget.libraryType);
   }
 
   /// 获取弹窗标题
@@ -353,7 +355,7 @@ style: TextStyle(
                   ),
                   const SizedBox(height: 12),
                   Row(
-                    children: _sortOrders.map((order) {
+                    children: mediaLibrarySortOrders.map((order) {
                       final isSelected = _selectedSortOrder == order['value'];
                       return Expanded(
                         child: Container(

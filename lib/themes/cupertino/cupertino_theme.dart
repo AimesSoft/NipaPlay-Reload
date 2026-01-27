@@ -29,6 +29,15 @@ class CupertinoThemeDescriptor extends ThemeDescriptor {
         );
 
   static Widget _buildApp(ThemeBuildContext context) {
+    final env = context.environment;
+    if (env.isPhone && !env.isWeb && !env.isIOS) {
+      PlatformInfo.setPlatformOverride(
+        PlatformOverride.ios,
+        iosVersion: 18,
+      );
+    } else {
+      PlatformInfo.clearPlatformOverride();
+    }
     return AdaptiveApp(
       title: 'NipaPlay',
       navigatorKey: context.navigatorKey,

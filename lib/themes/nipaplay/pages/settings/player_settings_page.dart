@@ -944,6 +944,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                           keyboardType: TextInputType.url,
                           autocorrect: false,
                           enableSuggestions: false,
+                          cursorColor: _fluentAccentColor,
                           decoration: InputDecoration(
                             labelText: '接口 URL',
                             labelStyle: TextStyle(
@@ -960,6 +961,12 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                               borderRadius:
                                   BorderRadius.all(Radius.circular(8)),
                             ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderSide: BorderSide(
+                                  color: _fluentAccentColor, width: 2),
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8)),
+                            ),
                           ),
                           style: TextStyle(color: colorScheme.onSurface),
                         ),
@@ -968,6 +975,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                           controller: _spoilerAiModelController,
                           autocorrect: false,
                           enableSuggestions: false,
+                          cursorColor: _fluentAccentColor,
                           decoration: InputDecoration(
                             labelText: '模型',
                             labelStyle: TextStyle(
@@ -984,6 +992,12 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                               borderRadius:
                                   BorderRadius.all(Radius.circular(8)),
                             ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderSide: BorderSide(
+                                  color: _fluentAccentColor, width: 2),
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8)),
+                            ),
                           ),
                           style: TextStyle(color: colorScheme.onSurface),
                         ),
@@ -993,6 +1007,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                           obscureText: true,
                           autocorrect: false,
                           enableSuggestions: false,
+                          cursorColor: _fluentAccentColor,
                           decoration: InputDecoration(
                             labelText: 'API Key',
                             labelStyle: TextStyle(
@@ -1008,6 +1023,12 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                             fillColor: colorScheme.onSurface.withOpacity(0.1),
                             border: const OutlineInputBorder(
                               borderSide: BorderSide.none,
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8)),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderSide: BorderSide(
+                                  color: _fluentAccentColor, width: 2),
                               borderRadius:
                                   BorderRadius.all(Radius.circular(8)),
                             ),

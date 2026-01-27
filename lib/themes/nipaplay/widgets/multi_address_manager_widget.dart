@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/url_name_generator.dart';
 
 /// 多地址管理组件
@@ -102,95 +103,129 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
     _urlController.clear();
     _nameController.clear();
     
-    final result = await showDialog<Map<String, String>>(
+    final result = await NipaplayWindow.show<Map<String, String>>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => TextSelectionTheme(
+      child: TextSelectionTheme(
         data: _selectionTheme,
-        child: AlertDialog(
+        child: NipaplayWindowScaffold(
+          maxWidth: 560,
+          maxHeightFactor: 0.75,
           backgroundColor:
               _isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2),
-          title: Text(
-            '添加服务器地址',
-            style: TextStyle(color: _textColor),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '为同一服务器添加多个访问地址，系统会自动选择可用的地址连接。',
-                style: TextStyle(color: _subTextColor, fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _urlController,
-                cursorColor: _accentColor,
-                style: TextStyle(color: _textColor),
-                decoration: InputDecoration(
-                  labelText: '服务器地址',
-                  hintText: '例如：http://192.168.1.100:8096',
-                  labelStyle: TextStyle(color: _subTextColor),
-                  hintStyle: TextStyle(color: _mutedTextColor),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: _borderColor),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _accentColor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.add_link,
+                          color: _accentColor,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '添加服务器地址',
+                        style: TextStyle(
+                          color: _textColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _accentColor),
+                  const SizedBox(height: 12),
+                  Text(
+                    '为同一服务器添加多个访问地址，系统会自动选择可用的地址连接。',
+                    style: TextStyle(color: _subTextColor, fontSize: 14),
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _nameController,
-                cursorColor: _accentColor,
-                style: TextStyle(color: _textColor),
-                decoration: InputDecoration(
-                  labelText: '地址名称（可留空自动生成）',
-                  hintText: '例如：家庭网络、公网访问，或留空自动生成',
-                  labelStyle: TextStyle(color: _subTextColor),
-                  hintStyle: TextStyle(color: _mutedTextColor),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: _borderColor),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _urlController,
+                    cursorColor: _accentColor,
+                    style: TextStyle(color: _textColor),
+                    decoration: InputDecoration(
+                      labelText: '服务器地址',
+                      hintText: '例如：http://192.168.1.100:8096',
+                      labelStyle: TextStyle(color: _subTextColor),
+                      hintStyle: TextStyle(color: _mutedTextColor),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: _borderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: _accentColor),
+                      ),
+                    ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _accentColor),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _nameController,
+                    cursorColor: _accentColor,
+                    style: TextStyle(color: _textColor),
+                    decoration: InputDecoration(
+                      labelText: '地址名称（可留空自动生成）',
+                      hintText: '例如：家庭网络、公网访问，或留空自动生成',
+                      labelStyle: TextStyle(color: _subTextColor),
+                      hintStyle: TextStyle(color: _mutedTextColor),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: _borderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: _accentColor),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: _plainTextButtonStyle(),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (_urlController.text.trim().isNotEmpty) {
-                  final url = _urlController.text.trim();
-                  final name = UrlNameGenerator.generateAddressName(
-                    url,
-                    customName: _nameController.text.trim(),
-                  );
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: _plainTextButtonStyle(),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () {
+                          if (_urlController.text.trim().isNotEmpty) {
+                            final url = _urlController.text.trim();
+                            final name = UrlNameGenerator.generateAddressName(
+                              url,
+                              customName: _nameController.text.trim(),
+                            );
 
-                  Navigator.of(context).pop({
-                    'url': url,
-                    'name': name,
-                  });
-                } else {
-                  BlurSnackBar.show(context, '请填写服务器地址');
-                }
-              },
-              style: _plainTextButtonStyle(baseColor: _accentColor),
-              child: const Text('添加'),
+                            Navigator.of(context).pop({
+                              'url': url,
+                              'name': name,
+                            });
+                          } else {
+                            BlurSnackBar.show(context, '请填写服务器地址');
+                          }
+                        },
+                        style: _plainTextButtonStyle(baseColor: _accentColor),
+                        child: const Text('添加'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );

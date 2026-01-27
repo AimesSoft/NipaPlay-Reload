@@ -16,18 +16,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/search_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_anime_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
@@ -67,6 +70,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   bool _historyAutoMatchDialogVisible = false;
 
   List<_CupertinoRecommendedItem> _recommendedItems = [];
+
+  List<BangumiAnime> _todayAnimes = [];
+  bool _isLoadingTodayAnimes = false;
+  List<_CupertinoRandomRecommendationItem> _randomRecommendations = [];
+  bool _isLoadingRandomRecommendations = false;
   
   // 最近添加数据
   Map<String, List<dynamic>> _recentJellyfinItemsByLibrary = {};
@@ -148,6 +156,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         if (mounted) {
           _loadRecommendedContent();
           _loadLatestContent();
+          _loadTodayAnimes();
+          _loadRandomRecommendations();
         }
       });
     }
@@ -449,6 +459,136 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       if (!mounted) return;
       debugPrint('CupertinoHomePage: 加载推荐内容失败: $e');
       _setRecommendedPlaceholders();
+    }
+  }
+
+  Future<void> _loadTodayAnimes({bool forceRefresh = false}) async {
+    if (!mounted) return;
+    setState(() => _isLoadingTodayAnimes = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bool filterAdultContentGlobally =
+          prefs.getBool('global_filter_adult_content') ?? true;
+      final allAnimes = await BangumiService.instance.getCalendar(
+        forceRefresh: forceRefresh,
+        filterAdultContent: filterAdultContentGlobally,
+      );
+
+      final now = DateTime.now();
+      int weekday = now.weekday;
+      if (weekday == 7) weekday = 0;
+
+      if (!mounted) return;
+      setState(() {
+        _todayAnimes =
+            allAnimes.where((anime) => anime.airWeekday == weekday).toList();
+        _isLoadingTodayAnimes = false;
+      });
+    } catch (e) {
+      debugPrint('CupertinoHomePage: 加载今日新番失败: $e');
+      if (mounted) {
+        setState(() => _isLoadingTodayAnimes = false);
+      }
+    }
+  }
+
+  Future<void> _loadRandomRecommendations({bool forceRefresh = false}) async {
+    if (!mounted || _isLoadingRandomRecommendations) return;
+    if (!forceRefresh && _randomRecommendations.isNotEmpty) return;
+
+    setState(() => _isLoadingRandomRecommendations = true);
+
+    try {
+      final config = await SearchService.instance.getSearchConfig();
+      final tags = config.tags
+          .map((tag) => tag.value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+
+      if (tags.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _randomRecommendations = [];
+            _isLoadingRandomRecommendations = false;
+          });
+        }
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final bool filterAdultContentGlobally =
+          prefs.getBool('global_filter_adult_content') ?? true;
+
+      final random = math.Random();
+      tags.shuffle(random);
+
+      final items = <_CupertinoRandomRecommendationItem>[];
+      final usedAnimeIds = <int>{};
+
+      for (int start = 0; start < tags.length && items.length < 5; start += 5) {
+        final batch = tags.sublist(start, math.min(start + 5, tags.length));
+        final futures = batch.map((tag) async {
+          try {
+            final result = await SearchService.instance.searchAnimeByTags([tag]);
+            return _CupertinoRandomTagSearchResult(tag, result.animes);
+          } catch (e) {
+            debugPrint('CupertinoHomePage: 随机推荐标签搜索失败: $tag, error: $e');
+            return null;
+          }
+        }).toList();
+
+        final results = await Future.wait(futures, eagerError: false);
+        for (final entry in results) {
+          if (entry == null) continue;
+
+          final cappedResults = entry.animes.take(100).toList();
+          final candidates = cappedResults.where((anime) {
+            if (anime.animeId <= 0 || anime.animeTitle.isEmpty) return false;
+            if (anime.imageUrl == null || anime.imageUrl!.isEmpty) return false;
+            if (filterAdultContentGlobally && anime.isRestricted == true) {
+              return false;
+            }
+            if (_isMyHeroAcademiaRelated(anime)) return false;
+            return true;
+          }).toList();
+
+          if (candidates.isEmpty) continue;
+
+          candidates.shuffle(random);
+          SearchResultAnime? selected;
+          for (final anime in candidates) {
+            if (!usedAnimeIds.contains(anime.animeId)) {
+              selected = anime;
+              break;
+            }
+          }
+
+          if (selected != null) {
+            usedAnimeIds.add(selected.animeId);
+            items.add(
+              _CupertinoRandomRecommendationItem(
+                tag: entry.tag,
+                anime: selected,
+              ),
+            );
+          }
+
+          if (items.length >= 5) break;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _randomRecommendations = items;
+          _isLoadingRandomRecommendations = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('CupertinoHomePage: 加载随机推荐失败: $e');
+      if (mounted) {
+        setState(() => _isLoadingRandomRecommendations = false);
+      }
     }
   }
 
@@ -813,6 +953,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     await Future.wait([
       _loadRecommendedContent(forceRefresh: true),
       _loadLatestContent(),
+      _loadTodayAnimes(forceRefresh: true),
+      _loadRandomRecommendations(forceRefresh: true),
       syncService.syncJellyfinResume(),
       syncService.syncEmbyResume(),
     ]);
@@ -830,6 +972,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
     // 获取状态栏高度
     final statusBarHeight = MediaQuery.of(context).padding.top;
+    final bool showTodaySection =
+        _isLoadingTodayAnimes || _todayAnimes.isNotEmpty;
+    final bool showRandomSection =
+        _isLoadingRandomRecommendations || _randomRecommendations.isNotEmpty;
+    final String todayTitle = _buildTodaySectionTitle();
 
     return ColoredBox(
       color: backgroundColor,
@@ -849,6 +996,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               ),
               SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
               SliverToBoxAdapter(child: _buildHeroSection()),
+              if (showTodaySection) ...[
+                SliverToBoxAdapter(child: _buildSectionTitle(todayTitle)),
+                SliverToBoxAdapter(child: _buildTodaySection()),
+              ],
+              if (showRandomSection) ...[
+                SliverToBoxAdapter(child: _buildSectionTitle('随机推荐')),
+                SliverToBoxAdapter(child: _buildRandomRecommendationsSection()),
+              ],
               SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
               SliverToBoxAdapter(
                 child:
@@ -983,6 +1138,131 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             child: _buildPosterCard(item, cardHeight),
           );
         },
+      ),
+    );
+  }
+
+  String _buildTodaySectionTitle() {
+    final now = DateTime.now();
+    const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    int weekdayIndex = now.weekday;
+    if (weekdayIndex == 7) weekdayIndex = 0;
+    return '今日新番 - ${weekdayNames[weekdayIndex]}';
+  }
+
+  Widget _buildTodaySection() {
+    if (_todayAnimes.isEmpty && !_isLoadingTodayAnimes) {
+      return const SizedBox.shrink();
+    }
+
+    if (_isLoadingTodayAnimes && _todayAnimes.isEmpty) {
+      return const SizedBox(
+        height: 210,
+        child: Center(child: CupertinoActivityIndicator()),
+      );
+    }
+
+    return SizedBox(
+      height: 210,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _todayAnimes.length,
+        itemBuilder: (context, index) {
+          final anime = _todayAnimes[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _buildTodayAnimeCard(anime),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTodayAnimeCard(BangumiAnime anime) {
+    final title = anime.nameCn.isNotEmpty ? anime.nameCn : anime.name;
+
+    return GestureDetector(
+      onTap: () => ThemedAnimeDetail.show(context, anime.id),
+      child: SizedBox(
+        width: 120,
+        height: 210,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox.expand(
+                  child: _buildPosterImage(anime.imageUrl),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRandomRecommendationsSection() {
+    if (_randomRecommendations.isEmpty && !_isLoadingRandomRecommendations) {
+      return const SizedBox.shrink();
+    }
+
+    if (_isLoadingRandomRecommendations && _randomRecommendations.isEmpty) {
+      return const SizedBox(
+        height: 210,
+        child: Center(child: CupertinoActivityIndicator()),
+      );
+    }
+
+    return SizedBox(
+      height: 210,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _randomRecommendations.length,
+        itemBuilder: (context, index) {
+          final item = _randomRecommendations[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _buildRandomRecommendationCard(item),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRandomRecommendationCard(
+      _CupertinoRandomRecommendationItem item) {
+    final anime = item.anime;
+    final summary = (anime.intro != null && anime.intro!.isNotEmpty)
+        ? anime.intro!
+        : anime.typeDescription;
+
+    return SizedBox(
+      width: 320,
+      child: CupertinoAnimeCard(
+        key: ValueKey('random_${anime.animeId}_${item.tag.hashCode}'),
+        title: anime.animeTitle,
+        imageUrl: anime.imageUrl,
+        episodeLabel: _buildRandomEpisodeLabel(anime),
+        lastWatchTime: null,
+        onTap: () => ThemedAnimeDetail.show(context, anime.animeId),
+        sourceLabel: _formatRandomTagLabel(item.tag),
+        rating: anime.rating > 0 ? anime.rating : null,
+        summary: summary,
       ),
     );
   }
@@ -1790,6 +2070,89 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     );
   }
 
+  Widget _buildPosterImage(String? path) {
+    final placeholderColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.systemGrey5,
+      context,
+    );
+
+    if (path == null || path.isEmpty) {
+      return Container(
+        color: placeholderColor,
+        child: const Center(
+          child: Icon(
+            CupertinoIcons.photo,
+            size: 32,
+            color: CupertinoColors.systemGrey,
+          ),
+        ),
+      );
+    }
+
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        fit: BoxFit.cover,
+        errorBuilder: (context, _, __) => Container(
+          color: placeholderColor,
+          child: const Center(
+            child: Icon(
+              CupertinoIcons.photo,
+              size: 32,
+              color: CupertinoColors.systemGrey,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (path.startsWith('assets/')) {
+      return Image.asset(
+        path,
+        fit: BoxFit.cover,
+        errorBuilder: (context, _, __) => Container(
+          color: placeholderColor,
+          child: const Center(
+            child: Icon(
+              CupertinoIcons.photo,
+              size: 32,
+              color: CupertinoColors.systemGrey,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final file = File(path);
+    if (file.existsSync()) {
+      return Image.file(
+        file,
+        fit: BoxFit.cover,
+        errorBuilder: (context, _, __) => Container(
+          color: placeholderColor,
+          child: const Center(
+            child: Icon(
+              CupertinoIcons.photo,
+              size: 32,
+              color: CupertinoColors.systemGrey,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: placeholderColor,
+      child: const Center(
+        child: Icon(
+          CupertinoIcons.photo,
+          size: 32,
+          color: CupertinoColors.systemGrey,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPosterBackground(String path) {
     if (path.startsWith('http')) {
       return Image.network(
@@ -1843,6 +2206,31 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         style: textStyle.copyWith(fontSize: 22, fontWeight: FontWeight.w600),
       ),
     );
+  }
+
+  String _buildRandomEpisodeLabel(SearchResultAnime anime) {
+    if (anime.episodeCount > 0) {
+      return '共${anime.episodeCount}集';
+    }
+    if (anime.typeDescription != null && anime.typeDescription!.isNotEmpty) {
+      return anime.typeDescription!;
+    }
+    return '未知集数';
+  }
+
+  String _formatRandomTagLabel(String tag) {
+    if (tag.isEmpty) return '随机';
+    const maxLength = 8;
+    if (tag.length <= maxLength) return '#$tag';
+    return '#${tag.substring(0, maxLength)}...';
+  }
+
+  bool _isMyHeroAcademiaRelated(SearchResultAnime anime) {
+    final title = anime.animeTitle.trim();
+    if (title.isEmpty) return false;
+    final normalizedTitle = title.toLowerCase();
+    return _blockedRandomRecommendationKeywords
+        .any((keyword) => normalizedTitle.contains(keyword));
   }
 
   Widget _buildEmptyRecentPlaceholder() {
@@ -2653,6 +3041,34 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         return;
     }
   }
+}
+
+const _blockedRandomRecommendationKeywords = <String>[
+  '我的英雄学院',
+  '我的英雄學院',
+  '僕のヒーローアカデミア',
+  'ヒロアカ',
+  'my hero academia',
+  'boku no hero academia',
+  'hero academia',
+  'mha',
+];
+
+class _CupertinoRandomRecommendationItem {
+  final String tag;
+  final SearchResultAnime anime;
+
+  const _CupertinoRandomRecommendationItem({
+    required this.tag,
+    required this.anime,
+  });
+}
+
+class _CupertinoRandomTagSearchResult {
+  final String tag;
+  final List<SearchResultAnime> animes;
+
+  const _CupertinoRandomTagSearchResult(this.tag, this.animes);
 }
 
 class _CupertinoRecommendedItem {

@@ -10,10 +10,10 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_library_sort_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/jellyfin_library_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/emby_library_card.dart';
@@ -155,6 +155,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   String? _error;
   Timer? _refreshTimer;
   final ScrollController _gridScrollController = ScrollController();
+  final GlobalKey _remoteSortDropdownKey = GlobalKey();
   
   // 库视图状态
   String? _selectedLibraryId;
@@ -219,6 +220,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         source = source.where((item) => item.title.toLowerCase().contains(query)).toList();
       }
       
+      if (_showRemoteSortDropdown) {
+        _filteredMediaItems = source;
+        return;
+      }
+
       // 排序
       switch (_currentSort) {
         case LocalLibrarySortType.name:
@@ -301,10 +307,22 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
+  MediaLibraryType get _mediaLibraryType {
+    switch (widget.serverType) {
+      case NetworkMediaServerType.jellyfin:
+        return MediaLibraryType.jellyfin;
+      case NetworkMediaServerType.emby:
+        return MediaLibraryType.emby;
+    }
+  }
+
   String? get _currentFolderId =>
       _folderStack.isNotEmpty ? _folderStack.last.id : null;
 
   bool get _isAtFolderRoot => _folderStack.length <= 1;
+
+  bool get _showRemoteSortDropdown =>
+      _isShowingLibraryContent && !_isSearching && !_isFolderNavigation;
 
   @override
   Widget build(BuildContext context) {
@@ -372,67 +390,61 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       );
     }
 
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            // 主页面搜索栏
-            _buildMainSearchBar(),
-            // 媒体库网格或搜索结果
-            Expanded(
-              child: RepaintBoundary(
-                child: Scrollbar(
-                  controller: _gridScrollController,
-                  thickness: 4,
-                  radius: const Radius.circular(2),
-                  child: _isSearching
-                      ? GridView.builder(
-                          controller: _gridScrollController,
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 500,
-                            mainAxisExtent: 140,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                          padding: const EdgeInsets.all(16),
-                          cacheExtent: 800,
-                          clipBehavior: Clip.hardEdge,
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          itemCount: _searchResults.length,
-                          itemBuilder: (context, index) {
-                            final item = _searchResults[index];
-                            return _buildMediaCard(item);
-                          },
-                        )
-                      : GridView.builder(
-                          controller: _gridScrollController,
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 400,
-                            childAspectRatio: 16 / 9,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                          padding: const EdgeInsets.all(20),
-                          cacheExtent: 800,
-                          clipBehavior: Clip.hardEdge,
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          itemCount: selectedLibraries.length,
-                          itemBuilder: (context, index) {
-                            final library = selectedLibraries[index];
-                            return _buildLibraryCard(library);
-                          },
-                        ),
-                ),
-              ),
+        // 主页面搜索栏
+        _buildMainSearchBar(),
+        // 媒体库网格或搜索结果
+        Expanded(
+          child: RepaintBoundary(
+            child: Scrollbar(
+              controller: _gridScrollController,
+              thickness: 4,
+              radius: const Radius.circular(2),
+              child: _isSearching
+                  ? GridView.builder(
+                      controller: _gridScrollController,
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 500,
+                        mainAxisExtent: 140,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      cacheExtent: 800,
+                      clipBehavior: Clip.hardEdge,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      addAutomaticKeepAlives: false,
+                      addRepaintBoundaries: true,
+                      itemCount: _searchResults.length,
+                      itemBuilder: (context, index) {
+                        final item = _searchResults[index];
+                        return _buildMediaCard(item);
+                      },
+                    )
+                  : GridView.builder(
+                      controller: _gridScrollController,
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 400,
+                        childAspectRatio: 16 / 9,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      padding: const EdgeInsets.all(20),
+                      cacheExtent: 800,
+                      clipBehavior: Clip.hardEdge,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      addAutomaticKeepAlives: false,
+                      addRepaintBoundaries: true,
+                      itemCount: selectedLibraries.length,
+                      itemBuilder: (context, index) {
+                        final library = selectedLibraries[index];
+                        return _buildLibraryCard(library);
+                      },
+                    ),
             ),
-          ],
+          ),
         ),
-        // 右下角按钮组
-        _buildFloatingActionButtons(),
       ],
     );
   }
@@ -474,86 +486,76 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
 
     if (_mediaItems.isEmpty) {
-      return Stack(
+      return Column(
         children: [
-          Column(
-            children: [
-              // 已整合返回按钮和标题的控制栏
-              _buildSearchBar(),
-              // 空内容提示
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _isFolderNavigation ? '该文件夹为空。' : '该媒体库为空。',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey, fontSize: 16),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildPlainActionButton(
-                          icon: Icons.arrow_back,
-                          text: _isFolderNavigation && !_isAtFolderRoot
-                              ? '返回上级文件夹'
-                              : '返回媒体库列表',
-                          onPressed: _handleBackNavigation,
-                        ),
-                      ],
+          // 已整合返回按钮和标题的控制栏
+          _buildSearchBar(),
+          // 空内容提示
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _isFolderNavigation ? '该文件夹为空。' : '该媒体库为空。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    _buildPlainActionButton(
+                      icon: Icons.arrow_back,
+                      text: _isFolderNavigation && !_isAtFolderRoot
+                          ? '返回上级文件夹'
+                          : '返回媒体库列表',
+                      onPressed: _handleBackNavigation,
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-          _buildFloatingActionButtons(),
         ],
       );
     }
 
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            // 搜索栏（在媒体库内容视图中显示，已整合返回按钮和标题）
-            if (_isShowingLibraryContent) _buildSearchBar(),
-            // 媒体内容网格/文件夹列表
-            Expanded(
-              child: RepaintBoundary(
-                child: Scrollbar(
-                  controller: _gridScrollController,
-                  thickness: 4,
-                  radius: const Radius.circular(2),
-                  child: _isFolderNavigation
-                      ? _buildFolderListView()
-                                                                                                        : GridView.builder(
-                                                                                                            controller: _gridScrollController,
-                                                                                                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                                                                                              maxCrossAxisExtent: 500,
-                                                                                                              mainAxisExtent: 140,
-                                                                                                              crossAxisSpacing: 16,
-                                                                                                              mainAxisSpacing: 16,
-                                                                                                            ),
-                                                                                                            padding: const EdgeInsets.all(16),
-                                                                                                            cacheExtent: 800,
-                                                                                                            clipBehavior: Clip.hardEdge,
-                                                                                                            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                                                                                                            addAutomaticKeepAlives: false,
-                                                                                                            addRepaintBoundaries: true,
-                                                                                                            itemCount: _isSearching ? _searchResults.length : _filteredMediaItems.length,
-                                                                                                            itemBuilder: (context, index) {
-                                                                                                              final item = _isSearching ? _searchResults[index] : _filteredMediaItems[index];
-                                                                                                              return _buildMediaCard(item);
-                                                                                                            },
-                                                                                                          ),
-                ),
-              ),
+        // 搜索栏（在媒体库内容视图中显示，已整合返回按钮和标题）
+        if (_isShowingLibraryContent) _buildSearchBar(),
+        // 媒体内容网格/文件夹列表
+        Expanded(
+          child: RepaintBoundary(
+            child: Scrollbar(
+              controller: _gridScrollController,
+              thickness: 4,
+              radius: const Radius.circular(2),
+              child: _isFolderNavigation
+                  ? _buildFolderListView()
+                  : GridView.builder(
+                      controller: _gridScrollController,
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 500,
+                        mainAxisExtent: 140,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      cacheExtent: 800,
+                      clipBehavior: Clip.hardEdge,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      addAutomaticKeepAlives: false,
+                      addRepaintBoundaries: true,
+                      itemCount: _isSearching ? _searchResults.length : _filteredMediaItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _isSearching ? _searchResults[index] : _filteredMediaItems[index];
+                        return _buildMediaCard(item);
+                      },
+                    ),
             ),
-          ],
+          ),
         ),
-        _buildFloatingActionButtons(),
       ],
     );
   }
@@ -574,30 +576,6 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     } catch (_) {
       return '媒体库';
     }
-  }
-
-  Widget _buildFloatingActionButtons() {
-    final showSortButton =
-        _isShowingLibraryContent && !_isSearching && !_isFolderNavigation;
-    if (!showSortButton) {
-      return const SizedBox.shrink();
-    }
-
-    return Positioned(
-      right: 16,
-      bottom: 16,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 排序按钮（仅在显示库内容且未在搜索时显示）
-          FloatingActionGlassButton(
-            iconData: Ionicons.swap_vertical_outline,
-            onPressed: _showSortDialog,
-            description: '排序选项\n按名称、日期或评分排序\n提升浏览体验',
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildServerSettingsAction() {
@@ -793,6 +771,12 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       title = _getCurrentViewTitle(_provider);
     }
 
+    final showLocalSort = !_showRemoteSortDropdown;
+    final trailingActions = [
+      _buildServerSettingsAction(),
+      if (_showRemoteSortDropdown) _buildRemoteSortDropdown(),
+    ];
+
     return LocalLibraryControlBar(
       showBackButton: _isShowingLibraryContent,
       onBack: _handleBackNavigation,
@@ -800,13 +784,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       searchController: _searchController,
       currentSort: _currentSort,
       onSearchChanged: _onSearchChanged,
-      onSortChanged: (type) {
-        setState(() => _currentSort = type);
-        _applySortAndFilter();
-      },
-      trailingActions: [
-        _buildServerSettingsAction(),
-      ],
+      onSortChanged: showLocalSort
+          ? (type) {
+              setState(() => _currentSort = type);
+              _applySortAndFilter();
+            }
+          : null,
+      showSort: showLocalSort,
+      trailingActions: trailingActions,
     );
   }
 
@@ -1314,50 +1299,79 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
-  // 显示排序对话框
-  Future<void> _showSortDialog() async {
-    final MediaLibraryType libraryType = widget.serverType == NetworkMediaServerType.jellyfin 
-        ? MediaLibraryType.jellyfin 
-        : MediaLibraryType.emby;
-    
+  Widget _buildRemoteSortDropdown() {
     final provider = _provider;
-    
-    // 获取当前媒体库的排序设置，如果没有则使用全局设置
-    Map<String, String> currentSortSettings;
-    if (_isShowingLibraryContent && _selectedLibraryId != null) {
-      currentSortSettings = provider.getLibrarySortSettings(_selectedLibraryId!);
-    } else {
-      currentSortSettings = {
-        'sortBy': provider.currentSortBy,
-        'sortOrder': provider.currentSortOrder,
-      };
-    }
-    
-    final result = await MediaLibrarySortDialog.show(
-      context, 
-      currentSortBy: currentSortSettings['sortBy']!,
-      currentSortOrder: currentSortSettings['sortOrder']!,
-      libraryType: libraryType,
+    final currentSortSettings = _getCurrentRemoteSortSettings(provider);
+    final items = _buildRemoteSortItems(
+      currentSortSettings['sortBy']!,
+      currentSortSettings['sortOrder']!,
     );
-    
-    if (result != null && mounted) {
-      if (_isShowingLibraryContent && _selectedLibraryId != null) {
-        // 保存当前媒体库的排序设置
-        provider.setLibrarySortSettings(
-          _selectedLibraryId!,
-          result['sortBy']!,
-          result['sortOrder']!,
+
+    return BlurDropdown<_RemoteSortSelection>(
+      dropdownKey: _remoteSortDropdownKey,
+      items: items,
+      onItemSelected: _applyRemoteSortSelection,
+    );
+  }
+
+  Map<String, String> _getCurrentRemoteSortSettings(dynamic provider) {
+    if (_isShowingLibraryContent && _selectedLibraryId != null) {
+      return provider.getLibrarySortSettings(_selectedLibraryId!);
+    }
+    return {
+      'sortBy': provider.currentSortBy,
+      'sortOrder': provider.currentSortOrder,
+    };
+  }
+
+  List<DropdownMenuItemData<_RemoteSortSelection>> _buildRemoteSortItems(
+    String currentSortBy,
+    String currentSortOrder,
+  ) {
+    final options = getMediaSortOptions(_mediaLibraryType);
+    final items = <DropdownMenuItemData<_RemoteSortSelection>>[];
+
+    for (final option in options) {
+      for (final order in mediaLibrarySortOrders) {
+        final sortOrderValue = order['value'];
+        final sortOrderLabel = order['label'];
+        if (sortOrderValue == null || sortOrderLabel == null) {
+          continue;
+        }
+
+        final selection = _RemoteSortSelection(
+          sortBy: option.value,
+          sortOrder: sortOrderValue,
+          label: '${option.label} ($sortOrderLabel)',
+          description: option.description,
         );
-        
-        // 重新加载当前媒体库内容
-        _loadLibraryContent(_selectedLibraryId!);
-      } else {
-        // 更新全局排序设置
-        provider.updateSortSettingsOnly(
-          result['sortBy']!,
-          result['sortOrder']!,
+
+        items.add(
+          DropdownMenuItemData<_RemoteSortSelection>(
+            title: selection.label,
+            value: selection,
+            isSelected: option.value == currentSortBy &&
+                sortOrderValue == currentSortOrder,
+            description: selection.description,
+          ),
         );
       }
+    }
+
+    return items;
+  }
+
+  void _applyRemoteSortSelection(_RemoteSortSelection selection) {
+    final provider = _provider;
+    if (_isShowingLibraryContent && _selectedLibraryId != null) {
+      provider.setLibrarySortSettings(
+        _selectedLibraryId!,
+        selection.sortBy,
+        selection.sortOrder,
+      );
+      _loadLibraryContent(_selectedLibraryId!);
+    } else {
+      provider.updateSortSettingsOnly(selection.sortBy, selection.sortOrder);
     }
   }
 
@@ -1372,4 +1386,29 @@ class _FolderNode {
     required this.id,
     required this.name,
   });
+}
+
+class _RemoteSortSelection {
+  final String sortBy;
+  final String sortOrder;
+  final String label;
+  final String? description;
+
+  const _RemoteSortSelection({
+    required this.sortBy,
+    required this.sortOrder,
+    required this.label,
+    this.description,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _RemoteSortSelection &&
+          runtimeType == other.runtimeType &&
+          sortBy == other.sortBy &&
+          sortOrder == other.sortOrder;
+
+  @override
+  int get hashCode => Object.hash(sortBy, sortOrder);
 }

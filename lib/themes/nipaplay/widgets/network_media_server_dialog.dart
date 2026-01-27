@@ -6,10 +6,11 @@ import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/multi_address_manager_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -149,7 +150,6 @@ class NetworkMediaServerDialog extends StatefulWidget {
         context: context,
         enableAnimation: enableAnimation,
         barrierDismissible: true,
-        barrierColor: Colors.black.withOpacity(0.5),
         child: NetworkMediaServerDialog(serverType: serverType),
       );
     } else {
@@ -215,6 +215,116 @@ class NetworkMediaServerDialog extends StatefulWidget {
       case MediaServerType.emby:
         return EmbyProviderAdapter(Provider.of<EmbyProvider>(context, listen: false));
     }
+  }
+}
+
+class _LibrarySelectionTile extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color iconColor;
+  final bool isSelected;
+  final Color accentColor;
+  final Color textColor;
+  final Color subTextColor;
+  final VoidCallback onTap;
+
+  const _LibrarySelectionTile({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.iconColor,
+    required this.isSelected,
+    required this.accentColor,
+    required this.textColor,
+    required this.subTextColor,
+    required this.onTap,
+  });
+
+  @override
+  State<_LibrarySelectionTile> createState() => _LibrarySelectionTileState();
+}
+
+class _LibrarySelectionTileState extends State<_LibrarySelectionTile> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) return;
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  void _setPressed(bool value) {
+    if (_isPressed == value) return;
+    setState(() {
+      _isPressed = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isActive = widget.isSelected || _isHovered || _isPressed;
+    final Color titleColor =
+        isActive ? widget.accentColor : widget.textColor;
+    final Color subtitleColor = isActive
+        ? widget.accentColor.withOpacity(0.7)
+        : widget.subTextColor;
+    final Color iconColor =
+        isActive ? widget.accentColor : widget.iconColor;
+
+    return MouseRegion(
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapUp: (_) => _setPressed(false),
+        onTapCancel: () => _setPressed(false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: isActive ? 1.03 : 1.0,
+          alignment: Alignment.centerLeft,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(widget.icon, color: iconColor, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: TextStyle(
+                          color: titleColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.subtitle,
+                        locale: const Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color: subtitleColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -497,28 +607,30 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
     }
   }
 
-  IconData get _serverIcon {
+  String get _serverIconAsset {
     switch (widget.serverType) {
       case MediaServerType.jellyfin:
-        return Ionicons.play_circle_outline;
+        return 'assets/jellyfin.svg';
       case MediaServerType.emby:
-        return Ionicons.tv_outline;
+        return 'assets/emby.svg';
     }
   }
 
-  Color get _serverColor {
-    switch (widget.serverType) {
-      case MediaServerType.jellyfin:
-        return Colors.blue;
-      case MediaServerType.emby:
-        return const Color(0xFF52B54B);
-    }
-  }
+  bool get _supportsTranscode =>
+      widget.serverType == MediaServerType.jellyfin ||
+      widget.serverType == MediaServerType.emby;
 
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-    final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
+    final baseDialogWidth =
+        globals.DialogSizes.getDialogWidth(screenSize.width);
+    final maxDialogWidth = screenSize.width * 0.92;
+    final resolvedDialogWidth =
+        screenSize.width >= 900 ? 900.0 : baseDialogWidth;
+    final dialogWidth = resolvedDialogWidth > maxDialogWidth
+        ? maxDialogWidth
+        : resolvedDialogWidth;
 
     return NipaplayWindowScaffold(
       maxWidth: dialogWidth,
@@ -531,13 +643,35 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
           constraints: const BoxConstraints(minHeight: 500),
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: SingleChildScrollView(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isWideLayout = constraints.maxWidth >= 760;
+                return SingleChildScrollView(
+                  child:
+                      isWideLayout ? _buildWideContent() : _buildNarrowContent(),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader(),
+        const SizedBox(height: 20),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeader(),
-                  const SizedBox(height: 20),
                   _buildServerInfo(),
                   const SizedBox(height: 20),
                   if (_serverAddresses.isNotEmpty) ...[
@@ -551,21 +685,57 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                     ),
                     const SizedBox(height: 20),
                   ],
-                  _buildLibrariesSection(),
-                  const SizedBox(height: 20),
-                  if (widget.serverType == MediaServerType.jellyfin ||
-                      widget.serverType == MediaServerType.emby) ...[
-                    _buildTranscodeSection(),
-                    const SizedBox(height: 20),
-                  ],
-                  const SizedBox(height: 4),
                   _buildActionButtons(),
                 ],
               ),
             ),
-          ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLibrariesSection(),
+                  if (_supportsTranscode) ...[
+                    const SizedBox(height: 20),
+                    _buildTranscodeSection(),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
-      ),
+      ],
+    );
+  }
+
+  Widget _buildNarrowContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader(),
+        const SizedBox(height: 20),
+        _buildServerInfo(),
+        const SizedBox(height: 20),
+        if (_serverAddresses.isNotEmpty) ...[
+          MultiAddressManagerWidget(
+            addresses: _serverAddresses,
+            currentAddressId: _currentAddressId,
+            onAddAddress: _handleAddAddress,
+            onRemoveAddress: _handleRemoveAddress,
+            onSwitchAddress: _handleSwitchAddress,
+            onUpdatePriority: _handleUpdatePriority,
+          ),
+          const SizedBox(height: 20),
+        ],
+        _buildLibrariesSection(),
+        if (_supportsTranscode) ...[
+          const SizedBox(height: 20),
+          _buildTranscodeSection(),
+        ],
+        const SizedBox(height: 4),
+        _buildActionButtons(),
+      ],
     );
   }
 
@@ -575,17 +745,21 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: _serverColor.withOpacity(0.2),
+            color: _accentColor.withOpacity(0.2),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _serverColor.withOpacity(0.3),
+              color: _accentColor.withOpacity(0.3),
               width: 1,
             ),
           ),
-          child: Icon(
-            _serverIcon,
-            color: _serverColor,
-            size: 28,
+          child: SvgPicture.asset(
+            _serverIconAsset,
+            width: 28,
+            height: 28,
+            colorFilter: const ColorFilter.mode(
+              _accentColor,
+              BlendMode.srcIn,
+            ),
           ),
         ),
         const SizedBox(width: 16),
@@ -632,10 +806,10 @@ style: TextStyle(
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.2),
+                  color: _accentColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.dns, color: Colors.blue, size: 20),
+                child: const Icon(Icons.dns, color: _accentColor, size: 20),
               ),
               const SizedBox(width: 12),
               Text(
@@ -659,10 +833,10 @@ style: TextStyle(color: _subTextColor, fontSize: 14),
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
+                  color: _accentColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.person, color: Colors.green, size: 20),
+                child: const Icon(Icons.person, color: _accentColor, size: 20),
               ),
               const SizedBox(width: 12),
               Text(
@@ -691,10 +865,11 @@ style: TextStyle(color: _subTextColor, fontSize: 14),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.2),
+                color: _accentColor.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.library_books, color: Colors.purple, size: 20),
+              child:
+                  const Icon(Icons.library_books, color: _accentColor, size: 20),
             ),
             const SizedBox(width: 12),
             Text(
@@ -769,69 +944,35 @@ style: TextStyle(
 
   Widget _buildLibrariesList() {
     return ListView.separated(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: _currentAvailableLibraries.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      separatorBuilder: (context, index) => Divider(
+        color: _borderColor,
+        height: 1,
+      ),
       itemBuilder: (context, index) {
         final library = _currentAvailableLibraries[index];
         final isSelected = _currentSelectedLibraryIds.contains(library.id);
-        
-        return Container(
-          decoration: BoxDecoration(
-            color: isSelected
-                ? _serverColor.withOpacity(_isDarkMode ? 0.18 : 0.12)
-                : _panelAltColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected
-                  ? _serverColor.withOpacity(0.3)
-                  : _borderColor,
-              width: 1,
-            ),
-          ),
-          child: CheckboxListTile(
-            value: isSelected,
-            onChanged: (bool? value) {
-              setState(() {
-                if (value == true) {
-                  _currentSelectedLibraryIds.add(library.id);
-                } else {
-                  _currentSelectedLibraryIds.remove(library.id);
-                }
-              });
-            },
-            title: Text(
-              library.name,
-              style: TextStyle(
-                color: _textColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            subtitle: Text(
-              library.type,
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                color: _subTextColor,
-                fontSize: 12,
-              ),
-            ),
-            secondary: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _getLibraryTypeColor(library.type).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                _getLibraryTypeIcon(library.type),
-                color: _getLibraryTypeColor(library.type),
-                size: 20,
-              ),
-            ),
-            activeColor: _serverColor,
-            checkColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          ),
+
+        return _LibrarySelectionTile(
+          key: ValueKey(library.id),
+          title: library.name,
+          subtitle: library.type,
+          icon: _getLibraryTypeIcon(library.type),
+          iconColor: _getLibraryTypeColor(library.type),
+          isSelected: isSelected,
+          accentColor: _accentColor,
+          textColor: _textColor,
+          subTextColor: _subTextColor,
+          onTap: () {
+            setState(() {
+              if (isSelected) {
+                _currentSelectedLibraryIds.remove(library.id);
+              } else {
+                _currentSelectedLibraryIds.add(library.id);
+              }
+            });
+          },
         );
       },
     );
@@ -853,18 +994,7 @@ style: TextStyle(
   }
 
   Color _getLibraryTypeColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'movies':
-        return Colors.red;
-      case 'tvshows':
-        return Colors.blue;
-      case 'music':
-        return Colors.green;
-      case 'books':
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
+    return _subTextColor;
   }
 
   Widget _buildTranscodeSection() {
@@ -906,10 +1036,11 @@ style: TextStyle(
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.2),
+                    color: _accentColor.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.high_quality, color: Colors.orange, size: 20),
+                  child:
+                      const Icon(Icons.high_quality, color: _accentColor, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -984,13 +1115,10 @@ style: TextStyle(
                               ),
                             ),
                           ),
-                          Switch(
+                          FluentSettingsSwitch(
                             value: _transcodeEnabled,
-                            onChanged: _handleTranscodeEnabledChanged,
-                            activeColor: Colors.orange,
-                            activeTrackColor: Colors.orange.withOpacity(0.3),
-                            inactiveThumbColor: _textColor.withOpacity(0.5),
-                            inactiveTrackColor: _borderColor,
+                            onChanged: (value) =>
+                                _handleTranscodeEnabledChanged(value),
                           ),
                         ],
                       ),
@@ -1024,13 +1152,13 @@ style: TextStyle(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
                                     color: isSelected 
-                                        ? Colors.orange.withOpacity(
+                                        ? _accentColor.withOpacity(
                                             _isDarkMode ? 0.25 : 0.2)
                                         : _panelAltColor,
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
                                       color: isSelected 
-                                          ? Colors.orange
+                                          ? _accentColor
                                           : _borderColor,
                                       width: 1,
                                     ),
@@ -1039,7 +1167,7 @@ style: TextStyle(
                                     children: [
                                       Icon(
                                         isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                        color: isSelected ? Colors.orange : _subTextColor,
+                                        color: isSelected ? _accentColor : _subTextColor,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 12),
@@ -1051,7 +1179,7 @@ style: TextStyle(
                                               quality.displayName,
                                               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                                                color: isSelected ? Colors.orange : _textColor,
+                                                color: isSelected ? _accentColor : _textColor,
                                                 fontSize: 14,
                                                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                               ),

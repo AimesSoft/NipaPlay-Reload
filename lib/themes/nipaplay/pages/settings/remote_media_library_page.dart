@@ -759,52 +759,71 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
 
   Future<void> _showCustomDeviceIdDialog(_MediaServerDeviceIdInfo info) async {
     final controller = TextEditingController(text: info.customDeviceId ?? '');
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const accentColor = Color(0xFFFF2E55);
+    final textColor = colorScheme.onSurface;
+    final secondaryTextColor = textColor.withOpacity(0.7);
+    final hintColor = textColor.withOpacity(0.5);
+    final borderColor = textColor.withOpacity(isDark ? 0.25 : 0.2);
+    final fillColor = isDark ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
+    final selectionTheme = TextSelectionThemeData(
+      cursorColor: accentColor,
+      selectionColor: accentColor.withOpacity(0.3),
+      selectionHandleColor: accentColor,
+    );
 
     await BlurDialog.show<void>(
       context: context,
       title: '自定义 DeviceId',
-      contentWidget: SizedBox(
-        width: double.infinity,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '留空表示使用自动生成的设备标识。\n\n建议只使用字母/数字/下划线/短横线，长度不超过128，且不要包含双引号或换行。',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLength: 128,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '例如: My-iPhone-01',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-                counterStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                filled: true,
-                fillColor: Colors.white.withOpacity(0.06),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      BorderSide(color: Colors.white.withOpacity(0.15), width: 1),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      BorderSide(color: Colors.white.withOpacity(0.35), width: 1),
+      contentWidget: TextSelectionTheme(
+        data: selectionTheme,
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '留空表示使用自动生成的设备标识。\n\n建议只使用字母/数字/下划线/短横线，长度不超过128，且不要包含双引号或换行。',
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: secondaryTextColor,
+                  fontSize: 13,
+                  height: 1.4,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                maxLength: 128,
+                cursorColor: accentColor,
+                style: const TextStyle(color: accentColor),
+                decoration: InputDecoration(
+                  hintText: '例如: My-iPhone-01',
+                  hintStyle: TextStyle(color: hintColor),
+                  counterStyle: TextStyle(color: hintColor),
+                  filled: true,
+                  fillColor: fillColor,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: borderColor, width: 1),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: accentColor, width: 1),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+          text: '取消',
+          idleColor: secondaryTextColor,
         ),
         HoverScaleTextButton(
           onPressed: () async {
@@ -826,8 +845,8 @@ style: TextStyle(color: Colors.white70)),
               }
             }
           },
-          child: const Text('保存', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white)),
+          text: '保存',
+          idleColor: textColor,
         ),
       ],
     );

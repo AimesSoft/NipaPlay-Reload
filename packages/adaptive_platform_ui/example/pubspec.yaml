@@ -1,0 +1,29 @@
+name: adaptive_platform_ui_example
+description: Example app demonstrating adaptive_platform_ui package
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.9.2
+  flutter: ">=1.17.0"
+
+
+dependencies:
+  go_router: ^15.1.2
+  cupertino_icons: ^1.0.8
+  intl: ^0.20.2
+  adaptive_platform_ui:
+    path: ../
+  flutter:
+    sdk: flutter
+  # cupertino: ^0.0.1
+  flutter_localizations:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

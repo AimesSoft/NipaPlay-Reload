@@ -90,6 +90,9 @@ class _HoverScaleButtonState extends State<_HoverScaleButton> {
   Widget build(BuildContext context) {
     const activeColor = Color(0xFFFF2E55);
     final isEnabled = widget.enabled;
+    final baseIconTheme = Theme.of(context).iconTheme;
+    final Color? iconColor =
+        _isHovered && isEnabled ? activeColor : baseIconTheme.color;
 
     return MouseRegion(
       onEnter: (_) => isEnabled ? setState(() => _isHovered = true) : null,
@@ -101,12 +104,8 @@ class _HoverScaleButtonState extends State<_HoverScaleButton> {
           scale: _isHovered && isEnabled ? 1.3 : 1.0,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutBack,
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              iconTheme: IconThemeData(
-                color: _isHovered && isEnabled ? activeColor : null,
-              ),
-            ),
+          child: IconTheme(
+            data: baseIconTheme.copyWith(color: iconColor),
             child: widget.child,
           ),
         ),

@@ -12,6 +12,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 class SharedRemoteLibrarySettingsSection extends StatelessWidget {
   const SharedRemoteLibrarySettingsSection({super.key});
 
+  static const Color _accentColor = Color(0xFFFF2E55);
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SharedRemoteLibraryProvider>(
@@ -135,19 +137,18 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
                     ),
                   ),
                   if (!isActive)
-                    TextButton(
+                    HoverScaleTextButton(
+                      text: '设为当前',
+                      idleColor: colorScheme.onSurface.withOpacity(0.7),
+                      hoverColor: _accentColor,
                       onPressed: () => provider.setActiveHost(host.id),
-                      child: Text(
-                        '设为当前',
-                        style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                      ),
                     )
                   else
                     Text(
                       '当前使用',
                       locale: const Locale('zh', 'CN'),
                       style: TextStyle(
-                        color: colorScheme.primary,
+                        color: _accentColor,
                         fontSize: 12,
                       ),
                     ),
@@ -175,33 +176,44 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  TextButton(
-                    onPressed: () => provider.refreshLibrary(userInitiated: true),
-                    child: Text(
-                      '刷新',
-                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  HoverScaleTextButton(
+                    text: '刷新',
+                    idleColor: _accentColor,
+                    hoverColor: _accentColor,
+                    onPressed: () =>
+                        provider.refreshLibrary(userInitiated: true),
+                  ),
+                  HoverScaleTextButton(
+                    text: '重命名',
+                    idleColor: _accentColor,
+                    hoverColor: _accentColor,
+                    onPressed: () => _showRenameDialog(
+                      context,
+                      provider,
+                      host.id,
+                      host.displayName,
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => _showRenameDialog(context, provider, host.id, host.displayName),
-                    child: Text(
-                      '重命名',
-                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => _showUpdateUrlDialog(context, provider, host.id, host.baseUrl),
-                    child: Text(
-                      '修改地址',
-                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  HoverScaleTextButton(
+                    text: '修改地址',
+                    idleColor: _accentColor,
+                    hoverColor: _accentColor,
+                    onPressed: () => _showUpdateUrlDialog(
+                      context,
+                      provider,
+                      host.id,
+                      host.baseUrl,
                     ),
                   ),
                   const Spacer(),
-                  TextButton(
-                    onPressed: () => _confirmRemoveHost(context, provider, host.id),
-                    child: Text(
-                      '删除',
-                      style: TextStyle(color: colorScheme.error),
+                  HoverScaleTextButton(
+                    text: '删除',
+                    idleColor: _accentColor,
+                    hoverColor: _accentColor,
+                    onPressed: () => _confirmRemoveHost(
+                      context,
+                      provider,
+                      host.id,
                     ),
                   ),
                 ],
@@ -279,6 +291,8 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     SharedRemoteLibraryProvider provider,
     String hostId,
   ) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final secondaryTextColor = colorScheme.onSurface.withOpacity(0.7);
     final confirm = await BlurDialog.show<bool>(
       context: context,
       title: '删除共享客户端',
@@ -286,11 +300,14 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          text: '取消',
+          idleColor: secondaryTextColor,
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
+          text: '删除',
+          idleColor: colorScheme.error,
+          hoverColor: colorScheme.error,
         ),
       ],
     );
@@ -308,25 +325,49 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     String currentName,
   ) async {
     final controller = TextEditingController(text: currentName);
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final secondaryTextColor = colorScheme.onSurface.withOpacity(0.7);
+    final hintColor = colorScheme.onSurface.withOpacity(0.5);
+    final borderColor =
+        colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
+    final selectionTheme = TextSelectionThemeData(
+      cursorColor: _accentColor,
+      selectionColor: _accentColor.withOpacity(0.3),
+      selectionHandleColor: _accentColor,
+    );
     final confirmed = await BlurDialog.show<bool>(
       context: context,
       title: '重命名',
-      contentWidget: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          labelText: '备注名称',
-          labelStyle: TextStyle(color: Colors.white70),
+      contentWidget: TextSelectionTheme(
+        data: selectionTheme,
+        child: TextField(
+          controller: controller,
+          cursorColor: _accentColor,
+          decoration: InputDecoration(
+            labelText: '备注名称',
+            labelStyle: TextStyle(color: secondaryTextColor),
+            hintStyle: TextStyle(color: hintColor),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: borderColor),
+            ),
+            focusedBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: _accentColor),
+            ),
+          ),
+          style: const TextStyle(color: _accentColor),
         ),
-        style: const TextStyle(color: Colors.white),
       ),
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          text: '取消',
+          idleColor: secondaryTextColor,
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('保存', style: TextStyle(color: Colors.white)),
+          text: '保存',
+          idleColor: colorScheme.onSurface,
         ),
       ],
     );
@@ -344,25 +385,49 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     String currentUrl,
   ) async {
     final controller = TextEditingController(text: currentUrl);
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final secondaryTextColor = colorScheme.onSurface.withOpacity(0.7);
+    final hintColor = colorScheme.onSurface.withOpacity(0.5);
+    final borderColor =
+        colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
+    final selectionTheme = TextSelectionThemeData(
+      cursorColor: _accentColor,
+      selectionColor: _accentColor.withOpacity(0.3),
+      selectionHandleColor: _accentColor,
+    );
     final confirmed = await BlurDialog.show<bool>(
       context: context,
       title: '修改访问地址',
-      contentWidget: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          labelText: '访问地址',
-          labelStyle: TextStyle(color: Colors.white70),
+      contentWidget: TextSelectionTheme(
+        data: selectionTheme,
+        child: TextField(
+          controller: controller,
+          cursorColor: _accentColor,
+          decoration: InputDecoration(
+            labelText: '访问地址',
+            labelStyle: TextStyle(color: secondaryTextColor),
+            hintStyle: TextStyle(color: hintColor),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: borderColor),
+            ),
+            focusedBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: _accentColor),
+            ),
+          ),
+          style: const TextStyle(color: _accentColor),
         ),
-        style: const TextStyle(color: Colors.white),
       ),
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          text: '取消',
+          idleColor: secondaryTextColor,
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('保存', style: TextStyle(color: Colors.white)),
+          text: '保存',
+          idleColor: colorScheme.onSurface,
         ),
       ],
     );

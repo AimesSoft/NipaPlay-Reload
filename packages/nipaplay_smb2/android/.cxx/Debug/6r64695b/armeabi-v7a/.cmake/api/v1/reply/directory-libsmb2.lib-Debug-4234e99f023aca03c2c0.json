@@ -1,0 +1,45 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/lib/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 250,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"libsmb2/lib/libsmb2.a"
+			],
+			"targetId" : "smb2::@130cf677f8ffb0db15d1",
+			"targetIndex" : 1,
+			"type" : "target"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "libsmb2/lib",
+		"source" : "/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/lib"
+	}
+}
