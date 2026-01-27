@@ -35,10 +35,11 @@ class VideoSettingsMenu extends StatefulWidget {
   });
 
   @override
-  State<VideoSettingsMenu> createState() => _VideoSettingsMenuState();
+  State<VideoSettingsMenu> createState() => VideoSettingsMenuState();
 }
 
-class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
+class VideoSettingsMenuState extends State<VideoSettingsMenu>
+    with SingleTickerProviderStateMixin {
   PlayerMenuPaneId? _activePaneId;
   late final VideoPlayerState videoState;
   late final PlayerKernelType _currentKernelType;
@@ -46,10 +47,16 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   static const double _menuRightOffset = 20;
   static const double _menuHeight = 420;
   static const int _maxAnchorRefreshAttempts = 6;
+  static const Duration _menuEnterDuration = Duration(milliseconds: 240);
+  static const Duration _menuExitDuration = Duration(milliseconds: 170);
   Rect? _anchorRect;
   int _anchorRefreshAttempts = 0;
   bool _loggedNullAnchor = false;
   bool _loggedResolvedAnchor = false;
+  bool _isClosing = false;
+  late final AnimationController _menuAnimationController;
+  late final Animation<double> _menuFadeAnimation;
+  late final Animation<double> _menuScaleAnimation;
 
   @override
   void initState() {
@@ -59,6 +66,23 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     videoState.setControlsVisibilityLocked(true);
     _anchorRect = widget.anchorRect;
     _anchorRefreshAttempts = 0;
+    _menuAnimationController = AnimationController(
+      vsync: this,
+      duration: _menuEnterDuration,
+      reverseDuration: _menuExitDuration,
+    );
+    _menuFadeAnimation = CurvedAnimation(
+      parent: _menuAnimationController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    _menuScaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _menuAnimationController,
+        curve: Curves.easeOutBack,
+        reverseCurve: Curves.easeInCubic,
+      ),
+    );
     assert(() {
       debugPrint(
         'VideoSettingsMenu: init anchorRect=$_anchorRect anchorKey=${widget.anchorKey != null}',
@@ -66,11 +90,13 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       return true;
     }());
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAnchorRect());
+    _menuAnimationController.forward();
   }
 
   @override
   void dispose() {
     videoState.setControlsVisibilityLocked(false);
+    _menuAnimationController.dispose();
     super.dispose();
   }
 
@@ -150,6 +176,26 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     setState(() {
       _activePaneId = null;
     });
+  }
+
+  Future<void> requestClose() async {
+    if (_isClosing) return;
+    _isClosing = true;
+    if (mounted) {
+      await _menuAnimationController.reverse();
+    }
+    widget.onClose();
+  }
+
+  bool _isPointUp(BuildContext context) {
+    final Rect? anchorRect = _resolveAnchorRect();
+    if (anchorRect == null) {
+      return true;
+    }
+    final Size screenSize = MediaQuery.of(context).size;
+    final double spaceAbove = anchorRect.top;
+    final double spaceBelow = screenSize.height - anchorRect.bottom;
+    return spaceAbove < spaceBelow;
   }
 
   Rect? _resolveAnchorRect() {
@@ -302,6 +348,21 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final bool pointUp = _isPointUp(context);
+        final Offset slideBegin =
+            pointUp ? const Offset(0, -0.03) : const Offset(0, 0.03);
+        final Animation<Offset> slideAnimation = Tween<Offset>(
+          begin: slideBegin,
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(
+            parent: _menuAnimationController,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        );
+        final Alignment scaleAlignment =
+            pointUp ? Alignment.topCenter : Alignment.bottomCenter;
         final menuItems = PlayerMenuDefinitionBuilder(
           context: PlayerMenuContext(
             videoState: videoState,
@@ -325,6 +386,17 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                 ),
               )
             : _buildPane(_activePaneId!);
+        final Widget animatedMenuContent = FadeTransition(
+          opacity: _menuFadeAnimation,
+          child: SlideTransition(
+            position: slideAnimation,
+            child: ScaleTransition(
+              alignment: scaleAlignment,
+              scale: _menuScaleAnimation,
+              child: menuContent,
+            ),
+          ),
+        );
         return Material(
           type: MaterialType.transparency,
           child: SizedBox(
@@ -335,15 +407,17 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
                 Positioned.fill(
                   child: GestureDetector(
                     onTap: () {
-                      _closeActivePane();
-                      widget.onClose();
+                      requestClose();
                     },
                     child: Container(
                       color: Colors.transparent,
                     ),
                   ),
                 ),
-                menuContent,
+                IgnorePointer(
+                  ignoring: _isClosing,
+                  child: animatedMenuContent,
+                ),
               ],
             ),
           ),
