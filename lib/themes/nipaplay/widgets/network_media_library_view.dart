@@ -12,7 +12,6 @@ import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_library_sort_dialog.dart';
@@ -149,6 +148,8 @@ class NetworkMediaLibraryView extends StatefulWidget {
 
 class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView> 
     with AutomaticKeepAliveClientMixin {
+  static const Color _accentColor = Color(0xFFFF2E55);
+
   
   List<NetworkMediaItem> _mediaItems = [];
   String? _error;
@@ -170,6 +171,42 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   List<NetworkMediaItem> _searchResults = [];
   List<NetworkMediaItem> _filteredMediaItems = [];
   Timer? _searchDebounceTimer;
+
+  ButtonStyle _plainButtonStyle({Color? baseColor}) {
+    final textColor = Theme.of(context).colorScheme.onSurface;
+    final mutedColor = textColor.withOpacity(0.5);
+    final resolvedBase = baseColor ?? textColor;
+    return ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return mutedColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return _accentColor;
+        }
+        return resolvedBase;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+    );
+  }
+
+  Widget _buildPlainActionButton({
+    required IconData icon,
+    required String text,
+    required VoidCallback? onPressed,
+    Color? baseColor,
+  }) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: _plainButtonStyle(baseColor: baseColor),
+      icon: Icon(icon, size: 18),
+      label: Text(text),
+    );
+  }
 
   void _applySortAndFilter() {
     if (!mounted) return;
@@ -289,11 +326,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
-              BlurButton(
+              _buildPlainActionButton(
                 icon: Icons.cloud,
                 text: '添加媒体服务器',
-                hoverForegroundColor: const Color(0xFFFF2E55),
-                onTap: _showServerDialog,
+                onPressed: _showServerDialog,
+                baseColor: _accentColor,
               ),
             ],
           ),
@@ -324,10 +361,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
-              BlurButton(
+              _buildPlainActionButton(
                 icon: Icons.refresh,
                 text: '刷新媒体库',
-                onTap: () => _loadData(),
+                onPressed: () => _loadData(),
               ),
             ],
           ),
@@ -417,16 +454,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  BlurButton(
+                  _buildPlainActionButton(
                     icon: Icons.refresh,
                     text: '重试',
-                    onTap: _retryCurrentView,
+                    onPressed: _retryCurrentView,
                   ),
                   const SizedBox(width: 16),
-                  BlurButton(
+                  _buildPlainActionButton(
                     icon: Icons.arrow_back,
                     text: '返回',
-                    onTap: _handleBackNavigation,
+                    onPressed: _handleBackNavigation,
                   ),
                 ],
               ),
@@ -457,12 +494,12 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                           style: TextStyle(color: Colors.grey, fontSize: 16),
                         ),
                         const SizedBox(height: 16),
-                        BlurButton(
+                        _buildPlainActionButton(
                           icon: Icons.arrow_back,
                           text: _isFolderNavigation && !_isAtFolderRoot
                               ? '返回上级文件夹'
                               : '返回媒体库列表',
-                          onTap: _handleBackNavigation,
+                          onPressed: _handleBackNavigation,
                         ),
                       ],
                     ),

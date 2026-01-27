@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 
 class WebDAVConnectionDialog {
@@ -58,205 +57,217 @@ class _WebDAVFormState extends State<_WebDAVForm> {
   
   @override
   Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 13,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          
-          // 连接名称
-          TextFormField(
-            controller: _nameController,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: '连接名称（可选）',
-              labelStyle: const TextStyle(color: Colors.white70),
-              hintText: '留空则自动生成',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.lightBlueAccent),
-              ),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.1),
-            ),
-            validator: (value) {
-              // 连接名称现在是可选的，不需要验证
-              return null;
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // WebDAV URL
-          TextFormField(
-            controller: _urlController,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'WebDAV地址',
-              labelStyle: const TextStyle(color: Colors.white70),
-              hintText: 'https://your-server.com/webdav',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.lightBlueAccent),
-              ),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.1),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return '请输入WebDAV地址';
-              }
-              if (!value.startsWith('http://') && !value.startsWith('https://')) {
-                return '请输入有效的URL地址';
-              }
-              return null;
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // 用户名
-          TextFormField(
-            controller: _usernameController,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: '用户名',
-              labelStyle: const TextStyle(color: Colors.white70),
-              hintText: '可选，如果服务器需要认证',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.lightBlueAccent),
-              ),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.1),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // 密码
-          TextFormField(
-            controller: _passwordController,
-            obscureText: !_passwordVisible,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: '密码',
-              labelStyle: const TextStyle(color: Colors.white70),
-              hintText: '可选，如果服务器需要认证',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white30),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.lightBlueAccent),
-              ),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.1),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _passwordVisible ? Icons.visibility : Icons.visibility_off,
-                  color: Colors.white70,
-                ),
-                onPressed: () {
-                  setState(() {
-                    _passwordVisible = !_passwordVisible;
-                  });
-                },
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // 按钮行
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+    const accentColor = Color(0xFFFF2E55);
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurface.withOpacity(0.7);
+    final hintColor = colorScheme.onSurface.withOpacity(0.5);
+    final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
+    final fillColor = isDark ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
+    final surfaceColor =
+        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+    final selectionTheme = TextSelectionThemeData(
+      cursorColor: accentColor,
+      selectionColor: accentColor.withOpacity(0.3),
+      selectionHandleColor: accentColor,
+    );
+    final ButtonStyle plainButtonStyle = ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return hintColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return accentColor;
+        }
+        return textColor;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+    );
+    final ButtonStyle accentButtonStyle = plainButtonStyle.copyWith(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return hintColor;
+        }
+        return accentColor;
+      }),
+    );
+
+    InputDecoration buildDecoration({
+      required String label,
+      String? hint,
+      Widget? suffixIcon,
+    }) {
+      return InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: subTextColor),
+        hintText: hint,
+        hintStyle: TextStyle(color: hintColor),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+          borderSide: BorderSide(color: accentColor),
+        ),
+        filled: true,
+        fillColor: fillColor,
+        suffixIcon: suffixIcon,
+      );
+    }
+
+    return TextSelectionTheme(
+      data: selectionTheme,
+      child: Container(
+        color: surfaceColor,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              HoverScaleTextButton(
-                onPressed: _isLoading ? null : () {
-                  Navigator.of(context).pop(false);
-                },
-                child: const Text(
-                  '取消',
-                  style: TextStyle(color: Colors.white70),
+            Text(
+              'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
+              style: TextStyle(
+                color: subTextColor,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+
+            // 连接名称
+            TextFormField(
+              controller: _nameController,
+              cursorColor: accentColor,
+              style: TextStyle(color: textColor),
+              decoration: buildDecoration(
+                label: '连接名称（可选）',
+                hint: '留空则自动生成',
+              ),
+              validator: (value) {
+                // 连接名称现在是可选的，不需要验证
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 16),
+
+            // WebDAV URL
+            TextFormField(
+              controller: _urlController,
+              cursorColor: accentColor,
+              style: TextStyle(color: textColor),
+              decoration: buildDecoration(
+                label: 'WebDAV地址',
+                hint: 'https://your-server.com/webdav',
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return '请输入WebDAV地址';
+                }
+                if (!value.startsWith('http://') &&
+                    !value.startsWith('https://')) {
+                  return '请输入有效的URL地址';
+                }
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 16),
+
+            // 用户名
+            TextFormField(
+              controller: _usernameController,
+              cursorColor: accentColor,
+              style: TextStyle(color: textColor),
+              decoration: buildDecoration(
+                label: '用户名',
+                hint: '可选，如果服务器需要认证',
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // 密码
+            TextFormField(
+              controller: _passwordController,
+              obscureText: !_passwordVisible,
+              cursorColor: accentColor,
+              style: TextStyle(color: textColor),
+              decoration: buildDecoration(
+                label: '密码',
+                hint: '可选，如果服务器需要认证',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _passwordVisible ? Icons.visibility : Icons.visibility_off,
+                    color: accentColor,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _passwordVisible = !_passwordVisible;
+                    });
+                  },
+                  style: IconButton.styleFrom(
+                    overlayColor: Colors.transparent,
+                  ),
                 ),
               ),
-              
-              const SizedBox(width: 12),
-              
-              HoverScaleTextButton(
-                onPressed: _isLoading ? null : _testConnection,
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                        ),
-                      )
-                    : const Text(
-                        '测试连接',
-                        style: TextStyle(color: Colors.orangeAccent),
-                      ),
-              ),
-              
-              const SizedBox(width: 12),
-              
-              ElevatedButton(
-                onPressed: _isLoading ? null : _saveConnection,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.lightBlueAccent.withOpacity(0.2),
-                  foregroundColor: Colors.lightBlueAccent,
+            ),
+
+            const SizedBox(height: 24),
+
+            // 按钮行
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () => Navigator.of(context).pop(false),
+                  style: plainButtonStyle,
+                  child: const Text('取消'),
                 ),
-                child: Text(widget.editConnection == null ? '添加' : '保存'),
-              ),
+
+                const SizedBox(width: 12),
+
+                TextButton(
+                  onPressed: _isLoading ? null : _testConnection,
+                  style: accentButtonStyle,
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(accentColor),
+                          ),
+                        )
+                      : const Text('测试连接'),
+                ),
+
+                const SizedBox(width: 12),
+
+                TextButton(
+                  onPressed: _isLoading ? null : _saveConnection,
+                  style: accentButtonStyle,
+                  child: Text(widget.editConnection == null ? '添加' : '保存'),
+                ),
+              ],
+            ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

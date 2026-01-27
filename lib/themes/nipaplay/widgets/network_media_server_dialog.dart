@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/multi_address_manager_widget.dart';
@@ -221,6 +219,8 @@ class NetworkMediaServerDialog extends StatefulWidget {
 }
 
 class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
+  static const Color _accentColor = Color(0xFFFF2E55);
+
   Set<String> _currentSelectedLibraryIds = {};
   List<MediaLibrary> _currentAvailableLibraries = [];
   late MediaServerProvider _provider;
@@ -231,6 +231,38 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   bool _transcodeSettingsExpanded = false;
   JellyfinVideoQuality _selectedQuality = JellyfinVideoQuality.bandwidth5m;
   bool _transcodeEnabled = true;
+
+  bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
+  Color get _textColor => Theme.of(context).colorScheme.onSurface;
+  Color get _subTextColor => _textColor.withOpacity(0.7);
+  Color get _mutedTextColor => _textColor.withOpacity(0.5);
+  Color get _borderColor => _textColor.withOpacity(_isDarkMode ? 0.12 : 0.2);
+  Color get _surfaceColor =>
+      _isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+  Color get _panelColor =>
+      _isDarkMode ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
+  Color get _panelAltColor =>
+      _isDarkMode ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
+
+  ButtonStyle _plainButtonStyle({Color? baseColor}) {
+    final resolvedBase = baseColor ?? _textColor;
+    return ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return _mutedTextColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return _accentColor;
+        }
+        return resolvedBase;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+      ),
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -487,76 +519,48 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
-    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
-    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
 
     return NipaplayWindowScaffold(
       maxWidth: dialogWidth,
       maxHeightFactor: 0.9,
       onClose: () => Navigator.of(context).maybePop(),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 500),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.15),
-                Colors.white.withOpacity(0.05),
-              ],
-            ),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 20,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(),
-                      const SizedBox(height: 20),
-                      _buildServerInfo(),
-                      const SizedBox(height: 20),
-                      if (_serverAddresses.isNotEmpty) ...[
-                        MultiAddressManagerWidget(
-                          addresses: _serverAddresses,
-                          currentAddressId: _currentAddressId,
-                          onAddAddress: _handleAddAddress,
-                          onRemoveAddress: _handleRemoveAddress,
-                          onSwitchAddress: _handleSwitchAddress,
-                          onUpdatePriority: _handleUpdatePriority,
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-                      _buildLibrariesSection(),
-                      const SizedBox(height: 20),
-                      if (widget.serverType == MediaServerType.jellyfin ||
-                          widget.serverType == MediaServerType.emby) ...[
-                        _buildTranscodeSection(),
-                        const SizedBox(height: 20),
-                      ],
-                      const SizedBox(height: 4),
-                      _buildActionButtons(),
-                    ],
-                  ),
-                ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 500),
+          child: Container(
+            color: _surfaceColor,
+            padding: const EdgeInsets.all(24.0),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 20),
+                  _buildServerInfo(),
+                  const SizedBox(height: 20),
+                  if (_serverAddresses.isNotEmpty) ...[
+                    MultiAddressManagerWidget(
+                      addresses: _serverAddresses,
+                      currentAddressId: _currentAddressId,
+                      onAddAddress: _handleAddAddress,
+                      onRemoveAddress: _handleRemoveAddress,
+                      onSwitchAddress: _handleSwitchAddress,
+                      onUpdatePriority: _handleUpdatePriority,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  _buildLibrariesSection(),
+                  const SizedBox(height: 20),
+                  if (widget.serverType == MediaServerType.jellyfin ||
+                      widget.serverType == MediaServerType.emby) ...[
+                    _buildTranscodeSection(),
+                    const SizedBox(height: 20),
+                  ],
+                  const SizedBox(height: 4),
+                  _buildActionButtons(),
+                ],
               ),
             ),
           ),
@@ -591,8 +595,8 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
             children: [
               Text(
                 '$_serverName 服务器设置',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: _textColor,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
@@ -602,7 +606,7 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
                 '管理媒体库连接和选择',
                 locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: _subTextColor,
                   fontSize: 14,
                 ),
               ),
@@ -617,9 +621,9 @@ style: TextStyle(
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: _panelColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: _borderColor),
       ),
       child: Column(
         children: [
@@ -634,13 +638,16 @@ style: TextStyle(
                 child: const Icon(Icons.dns, color: Colors.blue, size: 20),
               ),
               const SizedBox(width: 12),
-              const Text('服务器:', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 14)),
+              Text(
+                '服务器:',
+                locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: _subTextColor, fontSize: 14),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   _provider.serverUrl ?? '未知',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: _textColor, fontSize: 14),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -658,12 +665,15 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
                 child: const Icon(Icons.person, color: Colors.green, size: 20),
               ),
               const SizedBox(width: 12),
-              const Text('用户:', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 14)),
+              Text(
+                '用户:',
+                locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: _subTextColor, fontSize: 14),
+              ),
               const SizedBox(width: 8),
               Text(
                 _provider.username ?? '匿名',
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+                style: TextStyle(color: _textColor, fontSize: 14),
               ),
             ],
           ),
@@ -687,11 +697,11 @@ style: TextStyle(color: Colors.white70, fontSize: 14)),
               child: const Icon(Icons.library_books, color: Colors.purple, size: 20),
             ),
             const SizedBox(width: 12),
-            const Text(
+            Text(
               '媒体库选择',
               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                color: Colors.white,
+                color: _textColor,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -702,9 +712,9 @@ style: TextStyle(
         Container(
           height: 300,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
+            color: _panelColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: _borderColor),
           ),
           child: _currentAvailableLibraries.isEmpty
               ? _buildEmptyLibrariesState()
@@ -724,12 +734,12 @@ style: TextStyle(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: _textColor.withOpacity(_isDarkMode ? 0.08 : 0.06),
                 borderRadius: BorderRadius.circular(50),
               ),
               child: Icon(
                 Icons.folder_off_outlined,
-                color: Colors.white.withOpacity(0.5),
+                color: _mutedTextColor,
                 size: 40,
               ),
             ),
@@ -738,7 +748,7 @@ style: TextStyle(
               '没有可用的媒体库',
               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
+                color: _subTextColor,
                 fontSize: 16,
               ),
             ),
@@ -747,7 +757,7 @@ style: TextStyle(
               '请检查服务器连接状态',
               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
+                color: _mutedTextColor,
                 fontSize: 14,
               ),
             ),
@@ -768,14 +778,14 @@ style: TextStyle(
         
         return Container(
           decoration: BoxDecoration(
-            color: isSelected 
-                ? _serverColor.withOpacity(0.15)
-                : Colors.white.withOpacity(0.05),
+            color: isSelected
+                ? _serverColor.withOpacity(_isDarkMode ? 0.18 : 0.12)
+                : _panelAltColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected 
+              color: isSelected
                   ? _serverColor.withOpacity(0.3)
-                  : Colors.white.withOpacity(0.1),
+                  : _borderColor,
               width: 1,
             ),
           ),
@@ -792,8 +802,8 @@ style: TextStyle(
             },
             title: Text(
               library.name,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: _textColor,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -802,7 +812,7 @@ style: TextStyle(
               library.type,
               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
+                color: _subTextColor,
                 fontSize: 12,
               ),
             ),
@@ -868,10 +878,15 @@ style: TextStyle(
             });
           },
           borderRadius: BorderRadius.circular(12),
+          splashFactory: NoSplash.splashFactory,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+          focusColor: Colors.transparent,
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: _panelColor,
               borderRadius: _transcodeSettingsExpanded 
                   ? const BorderRadius.only(
                       topLeft: Radius.circular(12),
@@ -880,11 +895,11 @@ style: TextStyle(
                   : BorderRadius.circular(12),
               border: _transcodeSettingsExpanded
                   ? Border(
-                      top: BorderSide(color: Colors.white.withOpacity(0.1)),
-                      left: BorderSide(color: Colors.white.withOpacity(0.1)),
-                      right: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      top: BorderSide(color: _borderColor),
+                      left: BorderSide(color: _borderColor),
+                      right: BorderSide(color: _borderColor),
                     )
-                  : Border.all(color: Colors.white.withOpacity(0.1)),
+                  : Border.all(color: _borderColor),
             ),
             child: Row(
               children: [
@@ -901,11 +916,11 @@ style: TextStyle(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         '转码设置',
                         locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                          color: Colors.white,
+                          color: _textColor,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -915,7 +930,7 @@ style: TextStyle(
                         '当前默认质量: ${_selectedQuality.displayName}',
                         locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
+                          color: _subTextColor,
                           fontSize: 12,
                         ),
                       ),
@@ -927,7 +942,7 @@ style: TextStyle(
                   duration: const Duration(milliseconds: 200),
                   child: Icon(
                     Icons.expand_more,
-                    color: Colors.white.withOpacity(0.7),
+                    color: _subTextColor,
                   ),
                 ),
               ],
@@ -942,15 +957,15 @@ style: TextStyle(
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.03),
+                    color: _panelAltColor,
                     borderRadius: const BorderRadius.only(
                       bottomLeft: Radius.circular(12),
                       bottomRight: Radius.circular(12),
                     ),
                     border: Border(
-                      left: BorderSide(color: Colors.white.withOpacity(0.1)),
-                      right: BorderSide(color: Colors.white.withOpacity(0.1)),
-                      bottom: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      left: BorderSide(color: _borderColor),
+                      right: BorderSide(color: _borderColor),
+                      bottom: BorderSide(color: _borderColor),
                     ),
                   ),
                   child: Column(
@@ -964,7 +979,7 @@ style: TextStyle(
                               '启用转码',
                               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
+                                color: _textColor.withOpacity(0.9),
                                 fontSize: 14,
                               ),
                             ),
@@ -974,8 +989,8 @@ style: TextStyle(
                             onChanged: _handleTranscodeEnabledChanged,
                             activeColor: Colors.orange,
                             activeTrackColor: Colors.orange.withOpacity(0.3),
-                            inactiveThumbColor: Colors.white.withOpacity(0.5),
-                            inactiveTrackColor: Colors.white.withOpacity(0.1),
+                            inactiveThumbColor: _textColor.withOpacity(0.5),
+                            inactiveTrackColor: _borderColor,
                           ),
                         ],
                       ),
@@ -985,7 +1000,7 @@ style: TextStyle(
                           '默认清晰度',
                           locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: _textColor.withOpacity(0.9),
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -1000,17 +1015,23 @@ style: TextStyle(
                               child: InkWell(
                                 onTap: () => _handleQualityChanged(quality),
                                 borderRadius: BorderRadius.circular(8),
+                                splashFactory: NoSplash.splashFactory,
+                                splashColor: Colors.transparent,
+                                highlightColor: Colors.transparent,
+                                hoverColor: Colors.transparent,
+                                focusColor: Colors.transparent,
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
                                     color: isSelected 
-                                        ? Colors.orange.withOpacity(0.2)
-                                        : Colors.white.withOpacity(0.05),
+                                        ? Colors.orange.withOpacity(
+                                            _isDarkMode ? 0.25 : 0.2)
+                                        : _panelAltColor,
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
                                       color: isSelected 
                                           ? Colors.orange
-                                          : Colors.white.withOpacity(0.1),
+                                          : _borderColor,
                                       width: 1,
                                     ),
                                   ),
@@ -1018,7 +1039,7 @@ style: TextStyle(
                                     children: [
                                       Icon(
                                         isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                        color: isSelected ? Colors.orange : Colors.white70,
+                                        color: isSelected ? Colors.orange : _subTextColor,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 12),
@@ -1030,7 +1051,7 @@ style: TextStyle(
                                               quality.displayName,
                                               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                                                color: isSelected ? Colors.orange : Colors.white,
+                                                color: isSelected ? Colors.orange : _textColor,
                                                 fontSize: 14,
                                                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                               ),
@@ -1160,20 +1181,20 @@ style: TextStyle(
     return Row(
       children: [
         Expanded(
-          child: BlurButton(
-            icon: Icons.link_off,
-            text: '断开连接',
-            onTap: _disconnectFromServer,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: TextButton.icon(
+            onPressed: _disconnectFromServer,
+            style: _plainButtonStyle(),
+            icon: const Icon(Icons.link_off, size: 18),
+            label: const Text('断开连接'),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: BlurButton(
-            icon: Icons.save,
-            text: '保存设置',
-            onTap: _saveSelectedLibraries,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: TextButton.icon(
+            onPressed: _saveSelectedLibraries,
+            style: _plainButtonStyle(baseColor: _accentColor),
+            icon: const Icon(Icons.save, size: 18),
+            label: const Text('保存设置'),
           ),
         ),
       ],

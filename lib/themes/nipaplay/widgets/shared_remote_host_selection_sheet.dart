@@ -3,7 +3,6 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_lan_scan_dialog.dart';
@@ -43,93 +42,116 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     final textColor = colorScheme.onSurface;
     final subTextColor = colorScheme.onSurface.withOpacity(0.7);
     final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
-    final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.14 : 0.2);
-    final panelColor =
-        isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04);
-    final itemColor =
-        isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
+    const accentColor = Color(0xFFFF2E55);
+    final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.12 : 0.18);
+    final panelColor = isDark ? const Color(0xFF242424) : const Color(0xFFEDEDED);
+    final itemColor = isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
+    final backgroundColor =
+        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+    final ButtonStyle actionButtonStyle = ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return mutedTextColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return accentColor;
+        }
+        return accentColor;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      ),
+    );
 
     return NipaplayWindowScaffold(
       maxWidth: dialogWidth,
       maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.85),
       onClose: () => Navigator.of(context).maybePop(),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: keyboardHeight),
-        child: SizedBox(
-          height: sheetHeight,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          color: backgroundColor,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: keyboardHeight),
+            child: SizedBox(
+              height: sheetHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Ionicons.link_outline,
-                        color: textColor, size: 20),
-                    const SizedBox(width: 8),
+                    Row(
+                      children: [
+                        Icon(Ionicons.link_outline,
+                            color: textColor, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '选择共享客户端',
+                          locale: const Locale('zh', 'CN'),
+                          style: textTheme.titleLarge?.copyWith(
+                                color: textColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ) ??
+                              TextStyle(
+                                color: textColor,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                          textAlign: TextAlign.left,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     Text(
-                      '选择共享客户端',
+                      '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
                       locale: const Locale('zh', 'CN'),
-                      style: textTheme.titleLarge?.copyWith(
-                            color: textColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ) ??
-                          TextStyle(
-                            color: textColor,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        color: subTextColor,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: hosts.isEmpty
+                          ? _buildEmptyState(
+                              context,
+                              backgroundColor: panelColor,
+                              borderColor: borderColor,
+                              subTextColor: subTextColor,
+                            )
+                          : _buildHostList(
+                              context,
+                              provider,
+                              hosts,
+                              textColor: textColor,
+                              subTextColor: subTextColor,
+                              mutedTextColor: mutedTextColor,
+                              borderColor: borderColor,
+                              itemColor: itemColor,
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () => _showLanScanDialog(context, provider),
+                      style: actionButtonStyle,
+                      icon: const Icon(Ionicons.wifi_outline, size: 18),
+                      label: const Text('扫描局域网'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: () => _showAddHostDialog(context, provider),
+                      style: actionButtonStyle,
+                      icon: const Icon(Ionicons.add_outline, size: 18),
+                      label: const Text('添加共享客户端'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
-                  locale: const Locale('zh', 'CN'),
-                  style: TextStyle(
-                    color: subTextColor,
-                    fontSize: 13,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: hosts.isEmpty
-                      ? _buildEmptyState(
-                          context,
-                          backgroundColor: panelColor,
-                          borderColor: borderColor,
-                          subTextColor: subTextColor,
-                        )
-                      : _buildHostList(
-                          context,
-                          provider,
-                          hosts,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          mutedTextColor: mutedTextColor,
-                          borderColor: borderColor,
-                          itemColor: itemColor,
-                        ),
-                ),
-                const SizedBox(height: 12),
-                BlurButton(
-                  icon: Ionicons.wifi_outline,
-                  text: '扫描局域网',
-                  expandHorizontally: true,
-                  onTap: () => _showLanScanDialog(context, provider),
-                ),
-                const SizedBox(height: 10),
-                BlurButton(
-                  icon: Ionicons.add_outline,
-                  text: '添加共享客户端',
-                  expandHorizontally: true,
-                  onTap: () => _showAddHostDialog(context, provider),
-                ),
-              ],
+              ),
             ),
           ),
         ),

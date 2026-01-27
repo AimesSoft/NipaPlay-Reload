@@ -12,7 +12,6 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
@@ -587,30 +586,53 @@ class _DandanplayRemoteLibraryViewState
   }
 
   Widget _buildDisconnectedState(DandanplayRemoteProvider provider) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = textColor.withOpacity(0.7);
+    final mutedTextColor = textColor.withOpacity(0.5);
+    const accentColor = Color(0xFFFF2E55);
+    final ButtonStyle actionButtonStyle = ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return mutedTextColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return accentColor;
+        }
+        return accentColor;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+    );
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Ionicons.cloud_offline_outline,
-                color: Colors.white54, size: 48),
+            Icon(Ionicons.cloud_offline_outline,
+                color: mutedTextColor, size: 48),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               '尚未连接弹弹play远程服务',
-              style: TextStyle(color: Colors.white, fontSize: 18),
+              style: TextStyle(color: textColor, fontSize: 18),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '请先在下方完成远程访问配置，即可浏览家中弹弹play媒体库。',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+              style: TextStyle(color: subTextColor, fontSize: 14),
             ),
             const SizedBox(height: 20),
-            BlurButton(
-              icon: Ionicons.link_outline,
-              text: '连接弹弹play',
-              onTap: () => _showConnectDialog(context, provider),
+            TextButton.icon(
+              onPressed: () => _showConnectDialog(context, provider),
+              style: actionButtonStyle,
+              icon: const Icon(Ionicons.link_outline, size: 18),
+              label: const Text('连接弹弹play'),
             ),
           ],
         ),
@@ -619,6 +641,10 @@ class _DandanplayRemoteLibraryViewState
   }
 
   Widget _buildEmptyState(DandanplayRemoteProvider provider) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = textColor.withOpacity(0.7);
+    final mutedTextColor = textColor.withOpacity(0.5);
     final title = '远程媒体库为空';
     final subtitle = '请确认弹弹play 远程访问已同步媒体，稍候片刻即可自动更新列表。';
 
@@ -630,20 +656,20 @@ class _DandanplayRemoteLibraryViewState
           children: [
             Icon(
               Ionicons.tv_outline,
-              color: Colors.white54,
+              color: mutedTextColor,
               size: 48,
             ),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 18),
+              style: TextStyle(color: textColor, fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: TextStyle(color: subTextColor, fontSize: 14),
             ),
           ],
         ),
@@ -659,54 +685,115 @@ class _DandanplayRemoteLibraryViewState
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) {
+        const accentColor = Color(0xFFFF2E55);
+        final colorScheme = Theme.of(dialogContext).colorScheme;
+        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        final textColor = colorScheme.onSurface;
+        final subTextColor = textColor.withOpacity(0.7);
+        final hintColor = textColor.withOpacity(0.5);
+        final borderColor = textColor.withOpacity(isDark ? 0.25 : 0.2);
+        final dialogBackground =
+            isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+        final selectionTheme = TextSelectionThemeData(
+          cursorColor: accentColor,
+          selectionColor: accentColor.withOpacity(0.3),
+          selectionHandleColor: accentColor,
+        );
+        final ButtonStyle plainButtonStyle = ButtonStyle(
+          foregroundColor: MaterialStateProperty.resolveWith((states) {
+            if (states.contains(MaterialState.disabled)) {
+              return hintColor;
+            }
+            if (states.contains(MaterialState.hovered)) {
+              return accentColor;
+            }
+            return subTextColor;
+          }),
+          overlayColor: MaterialStateProperty.all(Colors.transparent),
+          splashFactory: NoSplash.splashFactory,
+          padding: MaterialStateProperty.all(
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          ),
+        );
+        final ButtonStyle accentButtonStyle = plainButtonStyle.copyWith(
+          foregroundColor: MaterialStateProperty.resolveWith((states) {
+            if (states.contains(MaterialState.disabled)) {
+              return hintColor;
+            }
+            return accentColor;
+          }),
+        );
         final baseController =
             TextEditingController(text: provider.serverUrl ?? '');
         final tokenController = TextEditingController();
-        return AlertDialog(
-          backgroundColor: Colors.black.withValues(alpha: 0.8),
-          title: const Text(
-            '连接弹弹play远程服务',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: baseController,
-                keyboardType: TextInputType.url,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: '服务地址',
-                  hintText: '例如 http://192.168.1.10:23333',
+        return TextSelectionTheme(
+          data: selectionTheme,
+          child: AlertDialog(
+            backgroundColor: dialogBackground,
+            title: Text(
+              '连接弹弹play远程服务',
+              style: TextStyle(color: textColor),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: baseController,
+                  keyboardType: TextInputType.url,
+                  cursorColor: accentColor,
+                  style: TextStyle(color: textColor),
+                  decoration: InputDecoration(
+                    labelText: '服务地址',
+                    hintText: '例如 http://192.168.1.10:23333',
+                    labelStyle: TextStyle(color: subTextColor),
+                    hintStyle: TextStyle(color: hintColor),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: borderColor),
+                    ),
+                    focusedBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: tokenController,
+                  obscureText: true,
+                  cursorColor: accentColor,
+                  style: TextStyle(color: textColor),
+                  decoration: InputDecoration(
+                    labelText:
+                        provider.tokenRequired ? 'API密钥 (必填)' : 'API密钥 (可选)',
+                    labelStyle: TextStyle(color: subTextColor),
+                    hintStyle: TextStyle(color: hintColor),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: borderColor),
+                    ),
+                    focusedBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: accentColor),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                style: plainButtonStyle,
+                child: const Text('取消'),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: tokenController,
-                obscureText: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText:
-                      provider.tokenRequired ? 'API密钥 (必填)' : 'API密钥 (可选)',
-                ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop({
+                    'base': baseController.text.trim(),
+                    'token': tokenController.text.trim(),
+                  });
+                },
+                style: accentButtonStyle,
+                child: const Text('连接'),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop({
-                  'base': baseController.text.trim(),
-                  'token': tokenController.text.trim(),
-                });
-              },
-              child: const Text('连接'),
-            ),
-          ],
         );
       },
     );

@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:provider/provider.dart';
 
 class FloatingActionGlassButton extends StatelessWidget {
   final IconData iconData;
@@ -20,40 +17,32 @@ class FloatingActionGlassButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
-    final Widget button = GlassmorphicContainer(
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      blur: appearanceSettings.enableWidgetBlurEffect ? 25 : 0,
-      alignment: Alignment.center,
-      border: 1,
-      linearGradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          appearanceSettings.enableWidgetBlurEffect ?  Color(0xFFffffff).withOpacity(0.1) : Color.fromARGB(255, 193, 193, 193).withOpacity(0.5),
-          appearanceSettings.enableWidgetBlurEffect ?  Color(0xFFffffff).withOpacity(0.1):Color.fromARGB(255, 208, 208, 208).withOpacity(0.5)
-        ],
-      ),
-      borderGradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          const Color(0xFFffffff).withOpacity(0.5),
-          const Color(0xFFFFFFFF).withOpacity(0.5),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(28),
-          onTap: onPressed,
+    const accentColor = Color(0xFFFF2E55);
+    const double buttonSize = 64;
+    final Widget button = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          width: buttonSize,
+          height: buttonSize,
+          decoration: BoxDecoration(
+            color: accentColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
           child: Center(
             child: Icon(
               iconData,
               color: Colors.white,
-              size: 24,
+              size: 28,
             ),
           ),
         ),

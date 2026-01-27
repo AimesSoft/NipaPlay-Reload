@@ -686,7 +686,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         }
 
         final cacheKey =
-            '${item.filePath}_${thumbnailPath}_$modifiedMs_$historyStamp';
+            '${item.filePath}_${thumbnailPath}_${modifiedMs}_$historyStamp';
         if (_thumbnailCache.containsKey(cacheKey)) {
           final cachedData = _thumbnailCache[cacheKey]!;
           final lastRenderTime = cachedData['time'] as DateTime;
