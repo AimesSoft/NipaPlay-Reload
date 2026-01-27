@@ -180,7 +180,7 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
       context: context,
       enableAnimation: enableAnimation,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.transparent,
       child: Builder(
         builder: (BuildContext dialogContext) {
           final colorScheme = Theme.of(dialogContext).colorScheme;
@@ -197,12 +197,6 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                   padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.terminal,
-                        color: colorScheme.onSurface,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
                       Text(
                         '终端输出',
                         locale: const Locale('zh', 'CN'),
