@@ -72,6 +72,7 @@ import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
+import 'package:nipaplay/models/background_image_render_mode.dart';
 import 'constants/settings_keys.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
@@ -434,10 +435,13 @@ void main(List<String> args) async {
       SettingsStorage.loadString('customBackgroundPath'),
       SettingsStorage.loadString('anime_detail_display_mode',
           defaultValue: 'simple'),
-      SettingsStorage.loadBool(ThemeNotifier.useCustomThemeColorKey),
-      SettingsStorage.loadInt(
-        ThemeNotifier.customOverlayColorKey,
-        defaultValue: ThemeNotifier.defaultOverlayMaskColor.value,
+      SettingsStorage.loadString(
+        ThemeNotifier.backgroundImageRenderModeKey,
+        defaultValue: BackgroundImageRenderMode.opacity.storageKey,
+      ),
+      SettingsStorage.loadDouble(
+        ThemeNotifier.backgroundImageOverlayOpacityKey,
+        defaultValue: ThemeNotifier.defaultBackgroundImageOverlayOpacity,
       ),
     ]).then((results) {
       globals.backgroundImageMode =
@@ -450,15 +454,16 @@ void main(List<String> args) async {
 
       final themeMode = (results[0] as String?) ?? 'system';
       final animeDetailMode = (results[3] as String?) ?? 'simple';
-      final useCustomThemeColor = (results[4] as bool?) ?? false;
-      final overlayColorValue =
-          (results[5] as int?) ?? ThemeNotifier.defaultOverlayMaskColor.value;
+      final backgroundImageRenderMode =
+          (results[4] as String?) ?? BackgroundImageRenderMode.opacity.storageKey;
+      final backgroundImageOverlayOpacity = (results[5] as double?) ??
+          ThemeNotifier.defaultBackgroundImageOverlayOpacity;
 
       return <String, dynamic>{
         'themeMode': themeMode,
         'animeDetailMode': animeDetailMode,
-        'useCustomThemeColor': useCustomThemeColor,
-        'customOverlayColor': overlayColorValue,
+        'backgroundImageRenderMode': backgroundImageRenderMode,
+        'backgroundImageOverlayOpacity': backgroundImageOverlayOpacity,
       };
     }),
 
@@ -494,12 +499,16 @@ void main(List<String> args) async {
     final savedThemeMode = settingsMap['themeMode'] as String? ?? 'system';
     final savedDetailModeString =
         settingsMap['animeDetailMode'] as String? ?? 'simple';
-    final savedUseCustomThemeColor =
-        settingsMap['useCustomThemeColor'] as bool? ?? false;
-    final savedOverlayColorValue = settingsMap['customOverlayColor'] as int? ??
-        ThemeNotifier.defaultOverlayMaskColor.value;
+    final savedBackgroundRenderModeString =
+        settingsMap['backgroundImageRenderMode'] as String?;
+    final savedBackgroundOverlayOpacity =
+        settingsMap['backgroundImageOverlayOpacity'] as double? ??
+            ThemeNotifier.defaultBackgroundImageOverlayOpacity;
     final savedDetailMode =
         AnimeDetailDisplayModeStorage.fromString(savedDetailModeString);
+    final savedBackgroundRenderMode =
+        BackgroundImageRenderModeStorage.fromString(
+            savedBackgroundRenderModeString);
     ThemeMode initialThemeMode;
     switch (savedThemeMode) {
       case 'light':
@@ -547,8 +556,9 @@ void main(List<String> args) async {
               initialBackgroundImageMode: globals.backgroundImageMode,
               initialCustomBackgroundPath: globals.customBackgroundPath,
               initialAnimeDetailDisplayMode: savedDetailMode,
-              initialUseCustomThemeColor: savedUseCustomThemeColor,
-              initialCustomOverlayColor: Color(savedOverlayColorValue),
+              initialBackgroundImageRenderMode: savedBackgroundRenderMode,
+              initialBackgroundImageOverlayOpacity:
+                  savedBackgroundOverlayOpacity,
             ),
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),

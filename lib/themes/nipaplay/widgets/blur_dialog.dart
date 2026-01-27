@@ -13,6 +13,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    Color? backgroundColor,
     bool barrierDismissible = true,
   }) {
     // 根据主题设置选择使用哪个dialog
@@ -36,6 +37,7 @@ class BlurDialog {
       content: content,
       contentWidget: contentWidget,
       actions: actions,
+      backgroundColor: backgroundColor,
       barrierDismissible: barrierDismissible,
     );
   }
@@ -46,6 +48,7 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    Color? backgroundColor,
     bool barrierDismissible = true,
   }) {
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
@@ -134,6 +137,7 @@ class BlurDialog {
             onClose: barrierDismissible
                 ? () => Navigator.of(dialogContext).maybePop()
                 : null,
+            backgroundColor: backgroundColor,
             child: SingleChildScrollView(
               padding: EdgeInsets.only(bottom: keyboardHeight),
               child: dialogContent,

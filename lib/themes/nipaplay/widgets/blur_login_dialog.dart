@@ -171,116 +171,114 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
       maxWidth: dialogWidth,
       maxHeightFactor: 0.9,
       onClose: () => Navigator.of(context).maybePop(),
+      backgroundColor: surfaceColor,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          color: surfaceColor,
-          child: TextSelectionTheme(
-            data: selectionTheme,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: SizedBox(
-                height: dialogHeight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.title,
-                        style: textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                            ) ??
-                            TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                            ),
-                        textAlign: TextAlign.left,
-                      ),
-                      const SizedBox(height: 24),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ...widget.fields.asMap().entries.map((entry) {
-                                final index = entry.key;
-                                final field = entry.value;
-                                final isLastField =
-                                    index == widget.fields.length - 1;
-                                final nextField =
-                                    isLastField ? null : widget.fields[index + 1];
-
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: TextField(
-                                    controller: _controllers[field.key],
-                                    focusNode: _focusNodes[field.key],
-                                    cursorColor: _accentColor,
-                                    style: TextStyle(color: colorScheme.onSurface),
-                                    obscureText: field.isPassword,
-                                    textInputAction: isLastField
-                                        ? TextInputAction.done
-                                        : TextInputAction.next,
-                                    onSubmitted: (value) {
-                                      if (isLastField) {
-                                        if (!_isLoading) _handleLogin();
-                                      } else {
-                                        if (nextField != null) {
-                                          _focusNodes[nextField.key]
-                                              ?.requestFocus();
-                                        }
-                                      }
-                                    },
-                                    decoration: InputDecoration(
-                                      labelText: field.label,
-                                      hintText: field.hint,
-                                      labelStyle: TextStyle(color: labelColor),
-                                      hintStyle: TextStyle(color: hintColor),
-                                      enabledBorder: UnderlineInputBorder(
-                                        borderSide: BorderSide(color: borderColor),
-                                      ),
-                                      focusedBorder: const UnderlineInputBorder(
-                                        borderSide: BorderSide(color: _accentColor),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ],
+        child: TextSelectionTheme(
+          data: selectionTheme,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: keyboardHeight),
+            child: SizedBox(
+              height: dialogHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ) ??
+                          TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: _isLoading ? null : _handleLogin,
-                          style: buttonStyle,
-                          child: _isLoading
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      _accentColor,
+                      textAlign: TextAlign.left,
+                    ),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ...widget.fields.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final field = entry.value;
+                              final isLastField =
+                                  index == widget.fields.length - 1;
+                              final nextField =
+                                  isLastField ? null : widget.fields[index + 1];
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: TextField(
+                                  controller: _controllers[field.key],
+                                  focusNode: _focusNodes[field.key],
+                                  cursorColor: _accentColor,
+                                  style: TextStyle(color: colorScheme.onSurface),
+                                  obscureText: field.isPassword,
+                                  textInputAction: isLastField
+                                      ? TextInputAction.done
+                                      : TextInputAction.next,
+                                  onSubmitted: (value) {
+                                    if (isLastField) {
+                                      if (!_isLoading) _handleLogin();
+                                    } else {
+                                      if (nextField != null) {
+                                        _focusNodes[nextField.key]
+                                            ?.requestFocus();
+                                      }
+                                    }
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: field.label,
+                                    hintText: field.hint,
+                                    labelStyle: TextStyle(color: labelColor),
+                                    hintStyle: TextStyle(color: hintColor),
+                                    enabledBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: borderColor),
                                     ),
-                                  ),
-                                )
-                              : Text(
-                                  widget.loginButtonText,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                    focusedBorder: const UnderlineInputBorder(
+                                      borderSide: BorderSide(color: _accentColor),
+                                    ),
                                   ),
                                 ),
+                              );
+                            }),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: _isLoading ? null : _handleLogin,
+                        style: buttonStyle,
+                        child: _isLoading
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    _accentColor,
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                widget.loginButtonText,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

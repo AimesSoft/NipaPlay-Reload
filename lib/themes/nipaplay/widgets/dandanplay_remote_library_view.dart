@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -214,69 +213,72 @@ class _DandanplayRemoteLibraryViewState
     final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     const activeColor = Color(0xFFFF2E55);
     final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.1);
+    final fieldColor = isDark ? const Color(0xFF262626) : const Color(0xFFF2F2F2);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white,
-            border: Border.all(
-              color: _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
-              width: _searchFocusNode.hasFocus ? 1.5 : 1,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: fieldColor,
+          border: Border.all(
+            color: _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
+            width: _searchFocusNode.hasFocus ? 1.5 : 1,
+          ),
+        ),
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            textSelectionTheme: TextSelectionThemeData(
+              selectionColor: activeColor.withValues(alpha: 0.3),
+              selectionHandleColor: activeColor,
             ),
           ),
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              textSelectionTheme: TextSelectionThemeData(
-                selectionColor: activeColor.withValues(alpha: 0.3),
-                selectionHandleColor: activeColor,
+          child: TextField(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            style: TextStyle(color: primaryTextColor, fontSize: 16),
+            cursorColor: activeColor,
+            decoration: InputDecoration(
+              prefixIcon: Icon(
+                Icons.search,
+                color:
+                    _searchFocusNode.hasFocus ? activeColor : secondaryTextColor,
+                size: 20,
               ),
+              suffixIcon: _searchQuery.isEmpty
+                  ? null
+                  : SearchBarActionButton(
+                      icon: Icons.clear,
+                      onPressed: () {
+                        _searchDebounce?.cancel();
+                        setState(() {
+                          _searchQuery = '';
+                          _searchController.clear();
+                        });
+                      },
+                    ),
+              hintText: '搜索番剧或剧集…',
+              hintStyle:
+                  TextStyle(color: secondaryTextColor.withValues(alpha: 0.6)),
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              style: TextStyle(color: primaryTextColor, fontSize: 16),
-              cursorColor: activeColor,
-              decoration: InputDecoration(
-                              prefixIcon:
-                                  Icon(Icons.search, color: _searchFocusNode.hasFocus ? activeColor : secondaryTextColor, size: 20),
-                              suffixIcon: _searchQuery.isEmpty
-                                  ? null
-                                  : SearchBarActionButton(
-                                      icon: Icons.clear,
-                                      onPressed: () {
-                                        _searchDebounce?.cancel();
-                                        setState(() {
-                                          _searchQuery = '';
-                                          _searchController.clear();
-                                        });
-                                      },
-                                    ),
-                              hintText: '搜索番剧或剧集…',                hintStyle:
-                    TextStyle(color: secondaryTextColor.withValues(alpha: 0.6)),
-                border: InputBorder.none,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              onChanged: (value) {
-                _searchDebounce?.cancel();
-                _searchDebounce = Timer(const Duration(milliseconds: 300), () {
-                  if (!mounted) return;
-                  setState(() {
-                    _searchQuery = value.trim();
-                  });
-                });
-              },
-              onSubmitted: (value) {
-                _searchDebounce?.cancel();
+            onChanged: (value) {
+              _searchDebounce?.cancel();
+              _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                if (!mounted) return;
                 setState(() {
                   _searchQuery = value.trim();
                 });
-              },
-            ),
+              });
+            },
+            onSubmitted: (value) {
+              _searchDebounce?.cancel();
+              setState(() {
+                _searchQuery = value.trim();
+              });
+            },
           ),
         ),
       ),

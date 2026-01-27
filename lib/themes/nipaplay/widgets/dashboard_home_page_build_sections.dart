@@ -671,9 +671,6 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
   }
 
   Widget _getVideoThumbnail(WatchHistoryItem item) {
-    final now = DateTime.now();
-    final historyStamp = item.lastWatchTime.millisecondsSinceEpoch;
-
     final thumbnailPath = item.thumbnailPath;
     if (thumbnailPath != null) {
       final thumbnailFile = File(thumbnailPath);
@@ -685,19 +682,9 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
           debugPrint('获取截图文件修改时间失败: $e');
         }
 
-        final cacheKey =
-            '${item.filePath}_${thumbnailPath}_${modifiedMs}_$historyStamp';
-        if (_thumbnailCache.containsKey(cacheKey)) {
-          final cachedData = _thumbnailCache[cacheKey]!;
-          final lastRenderTime = cachedData['time'] as DateTime;
-          if (now.difference(lastRenderTime).inSeconds < 60) {
-            return cachedData['widget'] as Widget;
-          }
-        }
-
-        _thumbnailCache.removeWhere((key, value) => key.startsWith('${item.filePath}_'));
-
-        final thumbnailWidget = FutureBuilder<Uint8List>(
+        final cacheKey = '${item.filePath}_${thumbnailPath}_$modifiedMs';
+        return FutureBuilder<Uint8List>(
+          key: ValueKey(cacheKey),
           future: thumbnailFile.readAsBytes(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -723,33 +710,10 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
             }
           },
         );
-
-        _thumbnailCache[cacheKey] = {
-          'widget': thumbnailWidget,
-          'time': now
-        };
-
-        return thumbnailWidget;
       }
     }
 
-    if (_thumbnailCache.containsKey(item.filePath)) {
-      final cachedData = _thumbnailCache[item.filePath]!;
-      final lastRenderTime = cachedData['time'] as DateTime;
-
-      if (now.difference(lastRenderTime).inSeconds < 60) {
-        return cachedData['widget'] as Widget;
-      }
-    }
-
-    final defaultThumbnail = _buildDefaultThumbnail(item);
-
-    _thumbnailCache[item.filePath] = {
-      'widget': defaultThumbnail,
-      'time': now
-    };
-
-    return defaultThumbnail;
+    return _buildDefaultThumbnail(item);
   }
 
   Widget _buildDefaultThumbnail(WatchHistoryItem item) {

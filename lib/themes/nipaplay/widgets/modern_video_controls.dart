@@ -127,17 +127,25 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     );
   }
 
-  void _showSettingsMenu(BuildContext context) {
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+  void _showSettingsMenu(BuildContext buttonContext) {
+    final videoState =
+        Provider.of<VideoPlayerState>(buttonContext, listen: false);
     _settingsOverlay?.remove();
     videoState.setControlsVisibilityLocked(true);
 
     Rect? anchorRect;
     final RenderBox? renderBox =
-        _settingsButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox != null) {
+        buttonContext.findRenderObject() as RenderBox?;
+    if (renderBox != null && renderBox.hasSize) {
       final position = renderBox.localToGlobal(Offset.zero);
       anchorRect = position & renderBox.size;
+    } else {
+      final RenderBox? keyRenderBox =
+          _settingsButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      if (keyRenderBox != null && keyRenderBox.hasSize) {
+        final position = keyRenderBox.localToGlobal(Offset.zero);
+        anchorRect = position & keyRenderBox.size;
+      }
     }
 
     _settingsOverlay = OverlayEntry(
@@ -152,7 +160,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       ),
     );
 
-    Overlay.of(context).insert(_settingsOverlay!);
+    Overlay.of(buttonContext).insert(_settingsOverlay!);
   }
 
   @override
@@ -424,27 +432,31 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       const SizedBox(width: 12),
                                       
                                       // 设置按钮
-                                      KeyedSubtree(
-                                        key: _settingsButtonKey,
-                                        child: _buildControlButton(
-                                          icon: Icon(
-                                            Icons.tune_rounded,
-                                            key: const ValueKey('settings'),
-                                            color: Colors.white,
-                                            size: globals.isPhone ? 36 : 28,
-                                          ),
-                                          onTap: () {
-                                            _showSettingsMenu(context);
-                                          },
-                                          isPressed: _isSettingsPressed,
-                                          isHovered: _isSettingsHovered,
-                                          onHover: (value) =>
-                                              setState(() => _isSettingsHovered = value),
-                                          onPressed: (value) =>
-                                              setState(() => _isSettingsPressed = value),
-                                          tooltip: '设置',
-                                          useAnimatedSwitcher: true,
-                                        ),
+                                      Builder(
+                                        builder: (buttonContext) {
+                                          return SizedBox(
+                                            key: _settingsButtonKey,
+                                            child: _buildControlButton(
+                                              icon: Icon(
+                                                Icons.tune_rounded,
+                                                key: const ValueKey('settings'),
+                                                color: Colors.white,
+                                                size: globals.isPhone ? 36 : 28,
+                                              ),
+                                              onTap: () {
+                                                _showSettingsMenu(buttonContext);
+                                              },
+                                              isPressed: _isSettingsPressed,
+                                              isHovered: _isSettingsHovered,
+                                              onHover: (value) =>
+                                                  setState(() => _isSettingsHovered = value),
+                                              onPressed: (value) =>
+                                                  setState(() => _isSettingsPressed = value),
+                                              tooltip: '设置',
+                                              useAnimatedSwitcher: true,
+                                            ),
+                                          );
+                                        },
                                       ),
                                       
                                       // 全屏按钮（所有平台）或菜单栏切换按钮（平板）

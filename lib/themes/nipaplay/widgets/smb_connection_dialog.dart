@@ -8,9 +8,13 @@ class SMBConnectionDialog {
     BuildContext context, {
     SMBConnection? editConnection,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor =
+        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     return BlurDialog.show<bool>(
       context: context,
       title: editConnection == null ? '添加SMB服务器' : '编辑SMB服务器',
+      backgroundColor: backgroundColor,
       contentWidget: _SMBConnectionForm(editConnection: editConnection),
     );
   }
@@ -102,28 +106,23 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
 
   @override
   Widget build(BuildContext context) {
-    final surfaceColor =
-        _isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
-
     return TextSelectionTheme(
       data: _selectionTheme,
-      child: Container(
-        color: surfaceColor,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-            Text(
-              'SMB服务器支持Samba/CIFS共享，可在局域网中直接浏览视频文件。\n'
-              '建议优先使用IP地址并确保设备在同一网络内。',
-              style: TextStyle(
-                color: _subTextColor,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+          Text(
+            'SMB服务器支持Samba/CIFS共享，可在局域网中直接浏览视频文件。\n'
+            '建议优先使用IP地址并确保设备在同一网络内。',
+            style: TextStyle(
+              color: _subTextColor,
+              fontSize: 13,
             ),
-            const SizedBox(height: 20),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
             _buildTextField(
               controller: _nameController,
               label: '连接名称（可选）',
@@ -224,8 +223,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                 ),
               ],
             ),
-            ],
-          ),
+          ],
         ),
       ),
     );

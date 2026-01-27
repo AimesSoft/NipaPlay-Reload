@@ -44,9 +44,10 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
   late final PlayerKernelType _currentKernelType;
   static const double _menuWidth = 300;
   static const double _menuRightOffset = 20;
-  static const double _submenuMinHeight = 220;
-  static const double _submenuMaxHeight = 420;
+  static const double _menuHeight = 420;
+  static const int _maxAnchorRefreshAttempts = 6;
   Rect? _anchorRect;
+  int _anchorRefreshAttempts = 0;
 
   @override
   void initState() {
@@ -55,6 +56,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     _currentKernelType = PlayerFactory.getKernelType();
     videoState.setControlsVisibilityLocked(true);
     _anchorRect = widget.anchorRect;
+    _anchorRefreshAttempts = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAnchorRect());
   }
 
@@ -72,22 +74,44 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
     }
     if (widget.anchorKey != oldWidget.anchorKey ||
         widget.anchorRect != oldWidget.anchorRect) {
+      _anchorRefreshAttempts = 0;
       WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAnchorRect());
     }
   }
 
   void _refreshAnchorRect() {
     if (!mounted) return;
+    if (widget.anchorKey == null) {
+      return;
+    }
     final context = widget.anchorKey?.currentContext;
-    if (context == null) return;
+    if (context == null) {
+      _scheduleAnchorRefresh();
+      return;
+    }
     final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize) return;
+    if (renderBox == null || !renderBox.hasSize) {
+      _scheduleAnchorRefresh();
+      return;
+    }
     final rect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
     if (_anchorRect != rect) {
       setState(() {
         _anchorRect = rect;
       });
     }
+    _anchorRefreshAttempts = 0;
+  }
+
+  void _scheduleAnchorRefresh() {
+    if (widget.anchorKey == null) {
+      return;
+    }
+    if (_anchorRefreshAttempts >= _maxAnchorRefreshAttempts) {
+      return;
+    }
+    _anchorRefreshAttempts += 1;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAnchorRect());
   }
 
   void _handleItemTap(PlayerMenuPaneId paneId) {
@@ -121,8 +145,7 @@ class _VideoSettingsMenuState extends State<VideoSettingsMenu> {
       lockControlsVisible: true,
       anchorRect: _anchorRect,
       showPointer: _anchorRect != null,
-      minHeight: showBackItem ? _submenuMinHeight : null,
-      maxHeight: showBackItem ? _submenuMaxHeight : null,
+      height: _menuHeight,
       child: child,
     );
   }

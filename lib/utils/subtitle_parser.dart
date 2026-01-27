@@ -1,6 +1,26 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:charset_converter/charset_converter.dart';
+
+class SubtitleDecodeResult {
+  final String text;
+  final String encoding;
+
+  const SubtitleDecodeResult({
+    required this.text,
+    required this.encoding,
+  });
+}
+
+enum SubtitleFormat {
+  ass,
+  srt,
+  subViewer,
+  microdvd,
+  unknown,
+}
 
 class SubtitleEntry {
   final int startTimeMs;
@@ -38,6 +58,111 @@ class SubtitleEntry {
 }
 
 class SubtitleParser {
+  static final RegExp _assEventHeaderPattern =
+      RegExp(r'^\s*\[Events\]\s*$', multiLine: true);
+  static final RegExp _assDialoguePattern =
+      RegExp(r'^\s*Dialogue:', multiLine: true);
+  static final RegExp _srtTimePattern = RegExp(
+    r'(\d{1,2}:\d{2}:\d{2}[\.,]\d{1,3})\s*-->\s*'
+    r'(\d{1,2}:\d{2}:\d{2}[\.,]\d{1,3})',
+  );
+  static final RegExp _subViewerTimePattern = RegExp(
+    r'(\d{1,2}:\d{2}:\d{2}[\.,]\d{1,3})\s*,\s*'
+    r'(\d{1,2}:\d{2}:\d{2}[\.,]\d{1,3})',
+  );
+  static final RegExp _microdvdPattern =
+      RegExp(r'^\s*\{(\d+)\}\{(\d+)\}', multiLine: true);
+
+  static const List<String> _fallbackEncodings = [
+    'utf-16le',
+    'utf-16be',
+    'gb18030',
+    'gbk',
+    'big5',
+    'shift_jis',
+    'euc-kr',
+    'windows-1252',
+    'iso-8859-1',
+  ];
+  static const List<String> _iconvEncodings = [
+    'BIG5',
+    'GB18030',
+    'GBK',
+    'SHIFT_JIS',
+    'EUC-KR',
+    'UTF-16LE',
+    'UTF-16BE',
+  ];
+
+  static Future<SubtitleDecodeResult?> decodeSubtitleFile(
+      String filePath, {bool allowUnknownFormat = false}) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        return null;
+      }
+
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        return const SubtitleDecodeResult(text: '', encoding: 'utf-8');
+      }
+
+      final bomEncoding = _detectBomEncoding(bytes);
+      if (bomEncoding != null) {
+        final decoded = await _decodeWithEncoding(bytes, bomEncoding,
+            stripBom: true);
+        if (decoded != null) {
+          return SubtitleDecodeResult(text: decoded, encoding: bomEncoding);
+        }
+      }
+
+      try {
+        final text = utf8.decode(bytes, allowMalformed: false);
+        return SubtitleDecodeResult(text: text, encoding: 'utf-8');
+      } catch (_) {}
+
+      final looksBinary = _looksBinary(bytes);
+      if (looksBinary && !_looksLikeUtf16(bytes)) {
+        return null;
+      }
+
+      final encodingCandidates = _buildEncodingCandidates(filePath);
+      for (final encoding in encodingCandidates) {
+        final decoded = await _decodeWithEncoding(bytes, encoding);
+        if (decoded == null) continue;
+        final format = _detectFormat(decoded, filePath);
+        if (_looksLikeText(decoded) &&
+            (allowUnknownFormat || format != SubtitleFormat.unknown)) {
+          return SubtitleDecodeResult(text: decoded, encoding: encoding);
+        }
+      }
+
+      if (Platform.isMacOS || Platform.isLinux) {
+        final iconvCandidates = _buildIconvCandidates(filePath);
+        for (final encoding in iconvCandidates) {
+          final decoded = await _decodeWithIconv(filePath, encoding);
+          if (decoded == null) continue;
+          final format = _detectFormat(decoded, filePath);
+          if (_looksLikeText(decoded) &&
+              (allowUnknownFormat || format != SubtitleFormat.unknown)) {
+            return SubtitleDecodeResult(text: decoded, encoding: encoding);
+          }
+        }
+      }
+
+      final latin1Text = latin1.decode(bytes, allowInvalid: true);
+      final format = _detectFormat(latin1Text, filePath);
+      if (_looksLikeText(latin1Text) &&
+          (allowUnknownFormat || format != SubtitleFormat.unknown)) {
+        return SubtitleDecodeResult(text: latin1Text, encoding: 'latin1');
+      }
+    } catch (e) {
+      debugPrint('解析字幕文件出错: $e');
+    }
+
+    return null;
+  }
+
   static List<SubtitleEntry> parseAss(String content) {
     List<SubtitleEntry> entries = [];
     List<String> lines = LineSplitter.split(content).toList();
@@ -105,6 +230,136 @@ class SubtitleParser {
     
     return entries;
   }
+
+  static List<SubtitleEntry> parseSrt(String content) {
+    final entries = <SubtitleEntry>[];
+    final blocks = content.split(RegExp(r'\r?\n\r?\n+'));
+
+    for (final block in blocks) {
+      final lines = block.split(RegExp(r'\r?\n'));
+      if (lines.isEmpty) continue;
+
+      int timeLineIndex = 0;
+      if (lines.isNotEmpty && RegExp(r'^\s*\d+\s*$').hasMatch(lines[0])) {
+        timeLineIndex = 1;
+      }
+      if (timeLineIndex >= lines.length) continue;
+
+      final match = _srtTimePattern.firstMatch(lines[timeLineIndex]);
+      if (match == null) continue;
+
+      final startTimeMs = _parseTimeToMs(match.group(1) ?? '');
+      final endTimeMs = _parseTimeToMs(match.group(2) ?? '');
+      if (endTimeMs <= startTimeMs) continue;
+
+      final contentLines = lines.sublist(timeLineIndex + 1);
+      final text = contentLines.join('\n').trim();
+      if (text.isEmpty) continue;
+
+      entries.add(SubtitleEntry(
+        startTimeMs: startTimeMs,
+        endTimeMs: endTimeMs,
+        content: text,
+      ));
+    }
+
+    entries.sort((a, b) => a.startTimeMs.compareTo(b.startTimeMs));
+    return entries;
+  }
+
+  static List<SubtitleEntry> parseSubViewer(String content) {
+    final entries = <SubtitleEntry>[];
+    final lines = LineSplitter.split(content).toList();
+
+    int index = 0;
+    while (index < lines.length) {
+      final line = lines[index].trim();
+      if (line.isEmpty) {
+        index++;
+        continue;
+      }
+
+      final match = _subViewerTimePattern.firstMatch(line);
+      if (match == null) {
+        index++;
+        continue;
+      }
+
+      final startTimeMs = _parseTimeToMs(match.group(1) ?? '');
+      final endTimeMs = _parseTimeToMs(match.group(2) ?? '');
+      index++;
+
+      final buffer = <String>[];
+      while (index < lines.length && lines[index].trim().isNotEmpty) {
+        buffer.add(lines[index]);
+        index++;
+      }
+
+      final text = buffer.join('\n').trim();
+      if (text.isNotEmpty && endTimeMs > startTimeMs) {
+        entries.add(SubtitleEntry(
+          startTimeMs: startTimeMs,
+          endTimeMs: endTimeMs,
+          content: text,
+        ));
+      }
+    }
+
+    entries.sort((a, b) => a.startTimeMs.compareTo(b.startTimeMs));
+    return entries;
+  }
+
+  static List<SubtitleEntry> parseMicrodvd(String content,
+      {double defaultFps = 23.976}) {
+    final entries = <SubtitleEntry>[];
+    final lines = LineSplitter.split(content);
+    double? fps;
+
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      final match =
+          RegExp(r'^\{(\d+)\}\{(\d+)\}(.*)$').firstMatch(line);
+      if (match == null) continue;
+
+      final startFrame = int.tryParse(match.group(1) ?? '') ?? 0;
+      final endFrame = int.tryParse(match.group(2) ?? '') ?? 0;
+      final payload = (match.group(3) ?? '').trim();
+
+      if ((startFrame == 0 && endFrame == 0) ||
+          (startFrame == 1 && endFrame == 1)) {
+        final parsedFps =
+            double.tryParse(payload.replaceAll(',', '.'));
+        if (parsedFps != null && parsedFps > 1) {
+          fps = parsedFps;
+          continue;
+        }
+      }
+
+      final usedFps = fps ?? defaultFps;
+      if (usedFps <= 0) continue;
+
+      final startTimeMs = ((startFrame / usedFps) * 1000).round();
+      final endTimeMs = ((endFrame / usedFps) * 1000).round();
+      if (endTimeMs <= startTimeMs) continue;
+
+      final text = payload
+          .replaceAll('|', '\n')
+          .replaceAll(RegExp(r'\{[^}]*\}'), '')
+          .trim();
+      if (text.isEmpty) continue;
+
+      entries.add(SubtitleEntry(
+        startTimeMs: startTimeMs,
+        endTimeMs: endTimeMs,
+        content: text,
+      ));
+    }
+
+    entries.sort((a, b) => a.startTimeMs.compareTo(b.startTimeMs));
+    return entries;
+  }
   
   // 特殊处理Dialogue行的分割，考虑文本中可能包含逗号的情况
   static List<String> _splitDialogueLine(String line) {
@@ -142,7 +397,8 @@ class SubtitleParser {
   // 将时间字符串解析为毫秒数
   static int _parseTimeToMs(String timeStr) {
     // 格式: h:mm:ss.cs 或 h:mm:ss.ms
-    List<String> parts = timeStr.split(':');
+    final normalized = timeStr.replaceAll(',', '.');
+    List<String> parts = normalized.split(':');
     
     if (parts.length != 3) return 0;
     
@@ -180,19 +436,218 @@ class SubtitleParser {
     return result;
   }
   
+  static SubtitleFormat _detectFormat(String content, String filePath) {
+    if (_assEventHeaderPattern.hasMatch(content) ||
+        _assDialoguePattern.hasMatch(content)) {
+      return SubtitleFormat.ass;
+    }
+    if (_srtTimePattern.hasMatch(content)) {
+      return SubtitleFormat.srt;
+    }
+    if (_subViewerTimePattern.hasMatch(content)) {
+      return SubtitleFormat.subViewer;
+    }
+    if (_microdvdPattern.hasMatch(content)) {
+      return SubtitleFormat.microdvd;
+    }
+
+    final lowerPath = filePath.toLowerCase();
+    if (lowerPath.endsWith('.ass') || lowerPath.endsWith('.ssa')) {
+      return SubtitleFormat.ass;
+    }
+    if (lowerPath.endsWith('.srt')) {
+      return SubtitleFormat.srt;
+    }
+
+    return SubtitleFormat.unknown;
+  }
+
+  static List<String> _buildEncodingCandidates(String filePath) {
+    final candidates = List<String>.from(_fallbackEncodings);
+    final lowerPath = filePath.toLowerCase();
+
+    if (lowerPath.contains('big5') ||
+        lowerPath.contains('繁体') ||
+        lowerPath.contains('cht') ||
+        lowerPath.contains('traditional')) {
+      _promoteEncoding(candidates, 'big5');
+    }
+
+    if (lowerPath.contains('gbk') ||
+        lowerPath.contains('gb2312') ||
+        lowerPath.contains('gb18030') ||
+        lowerPath.contains('简体') ||
+        lowerPath.contains('chs')) {
+      _promoteEncoding(candidates, 'gb18030');
+      _promoteEncoding(candidates, 'gbk');
+    }
+
+    return candidates;
+  }
+
+  static List<String> _buildIconvCandidates(String filePath) {
+    final candidates = List<String>.from(_iconvEncodings);
+    final lowerPath = filePath.toLowerCase();
+
+    if (lowerPath.contains('big5') ||
+        lowerPath.contains('繁体') ||
+        lowerPath.contains('cht') ||
+        lowerPath.contains('traditional')) {
+      _promoteEncoding(candidates, 'BIG5');
+    }
+
+    if (lowerPath.contains('gbk') ||
+        lowerPath.contains('gb2312') ||
+        lowerPath.contains('gb18030') ||
+        lowerPath.contains('简体') ||
+        lowerPath.contains('chs')) {
+      _promoteEncoding(candidates, 'GB18030');
+      _promoteEncoding(candidates, 'GBK');
+    }
+
+    return candidates;
+  }
+
+  static void _promoteEncoding(List<String> candidates, String encoding) {
+    final index = candidates.indexOf(encoding);
+    if (index > 0) {
+      candidates.removeAt(index);
+      candidates.insert(0, encoding);
+    }
+  }
+
   // 直接从文件解析ASS字幕
   static Future<List<SubtitleEntry>> parseAssFile(String filePath) async {
     try {
-      File file = File(filePath);
-      if (!await file.exists()) {
+      final decoded = await decodeSubtitleFile(filePath);
+      if (decoded == null) {
         return [];
       }
-      
-      String content = await file.readAsString();
-      return parseAss(content);
+
+      final format = _detectFormat(decoded.text, filePath);
+      switch (format) {
+        case SubtitleFormat.ass:
+          return parseAss(decoded.text);
+        case SubtitleFormat.srt:
+          return parseSrt(decoded.text);
+        case SubtitleFormat.subViewer:
+          return parseSubViewer(decoded.text);
+        case SubtitleFormat.microdvd:
+          return parseMicrodvd(decoded.text);
+        case SubtitleFormat.unknown:
+          return [];
+      }
     } catch (e) {
       debugPrint('解析字幕文件出错: $e');
       return [];
     }
   }
-} 
+
+  static String? _detectBomEncoding(Uint8List bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      return 'utf-8';
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      return 'utf-16le';
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      return 'utf-16be';
+    }
+    return null;
+  }
+
+  static Future<String?> _decodeWithEncoding(
+      Uint8List bytes, String encoding,
+      {bool stripBom = false}) async {
+    try {
+      final data = stripBom ? bytes.sublist(encoding == 'utf-8' ? 3 : 2) : bytes;
+      if (encoding == 'utf-8') {
+        return utf8.decode(data, allowMalformed: false);
+      }
+      return await CharsetConverter.decode(encoding, data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> _decodeWithIconv(
+      String filePath, String encoding) async {
+    try {
+      final result = await Process.run(
+        'iconv',
+        ['-f', encoding, '-t', 'utf-8', filePath],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      if (result.exitCode != 0) {
+        return null;
+      }
+      final output = result.stdout;
+      if (output is String && output.isNotEmpty) {
+        return output;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static bool _looksBinary(Uint8List bytes) {
+    if (bytes.isEmpty) return false;
+
+    int zeroCount = 0;
+    int controlCount = 0;
+    for (final b in bytes) {
+      if (b == 0) zeroCount++;
+      if (b < 0x09 || (b > 0x0D && b < 0x20)) {
+        controlCount++;
+      }
+    }
+
+    final length = bytes.length;
+    if (length == 0) return false;
+
+    final zeroRatio = zeroCount / length;
+    final controlRatio = controlCount / length;
+
+    return zeroRatio > 0.1 || controlRatio > 0.3;
+  }
+
+  static bool _looksLikeUtf16(Uint8List bytes) {
+    if (bytes.length < 4) return false;
+    int evenZeros = 0;
+    int oddZeros = 0;
+    int evenCount = 0;
+    int oddCount = 0;
+
+    for (int i = 0; i < bytes.length; i++) {
+      if (i.isEven) {
+        evenCount++;
+        if (bytes[i] == 0) evenZeros++;
+      } else {
+        oddCount++;
+        if (bytes[i] == 0) oddZeros++;
+      }
+    }
+
+    final evenRatio = evenCount == 0 ? 0 : evenZeros / evenCount;
+    final oddRatio = oddCount == 0 ? 0 : oddZeros / oddCount;
+    return evenRatio > 0.6 || oddRatio > 0.6;
+  }
+
+  static bool _looksLikeText(String text) {
+    if (text.isEmpty) return true;
+    final sample = text.length > 2048 ? text.substring(0, 2048) : text;
+    int controlCount = 0;
+    for (int i = 0; i < sample.length; i++) {
+      final codeUnit = sample.codeUnitAt(i);
+      if (codeUnit == 0xFFFD ||
+          codeUnit < 0x09 ||
+          (codeUnit > 0x0D && codeUnit < 0x20)) {
+        controlCount++;
+      }
+    }
+    return controlCount / sample.length < 0.05;
+  }
+}

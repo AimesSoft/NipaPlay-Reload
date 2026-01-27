@@ -13,22 +13,45 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 
 class SharedRemoteLanScanDialog {
   static Future<bool?> show(
     BuildContext context, {
     required SharedRemoteLibraryProvider provider,
   }) {
-    final textColor = Theme.of(context).colorScheme.onSurface.withOpacity(0.7);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textColor = colorScheme.onSurface.withOpacity(0.7);
+    final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
+    const accentColor = Color(0xFFFF2E55);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor =
+        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+    final ButtonStyle plainButtonStyle = ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return mutedTextColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return accentColor;
+        }
+        return textColor;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+    );
     return BlurDialog.show<bool>(
       context: context,
       title: '扫描局域网',
       contentWidget: _SharedRemoteLanScanDialogContent(provider: provider),
+      backgroundColor: backgroundColor,
       actions: [
-        HoverScaleTextButton(
+        TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: Text('关闭', style: TextStyle(color: textColor)),
+          style: plainButtonStyle,
+          child: const Text('关闭'),
         ),
       ],
     );
@@ -408,8 +431,6 @@ class _SharedRemoteLanScanDialogContentState
     final mutedTextColor = textColor.withOpacity(0.5);
     final borderColor = textColor.withOpacity(isDark ? 0.12 : 0.18);
     final itemColor = isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
-    final backgroundColor =
-        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     final ButtonStyle actionButtonStyle = ButtonStyle(
       foregroundColor: MaterialStateProperty.resolveWith((states) {
         if (states.contains(MaterialState.disabled)) {
@@ -437,154 +458,151 @@ class _SharedRemoteLanScanDialogContentState
                 : '正在扫描：$prefixLabel（默认端口 $defaultPort）  $_scanned/$_total  已发现 ${_foundHosts.length} 台')
             : '扫描完成：$prefixLabel  共找到 ${_foundHosts.length} 台');
 
-    return Container(
-      color: backgroundColor,
-      child: SizedBox(
-        height: height,
-        width: double.infinity,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '将自动发现局域网中已开启“远程访问”的 NipaPlay（无需手动输入端口）。若未发现设备，会回退扫描默认端口 1180（旧版本兼容）。',
-              style: TextStyle(
-                color: subTextColor,
-                fontSize: 13,
-                height: 1.35,
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '将自动发现局域网中已开启“远程访问”的 NipaPlay（无需手动输入端口）。若未发现设备，会回退扫描默认端口 1180（旧版本兼容）。',
+            style: TextStyle(
+              color: subTextColor,
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Spacer(),
+              SizedBox(
+                width: 120,
+                child: TextButton.icon(
+                  icon: const Icon(Ionicons.refresh_outline, size: 18),
+                  label: Text(_isScanning ? '停止' : '重新扫描'),
+                  onPressed: _isScanning
+                      ? () => _cancelScan(updateState: true)
+                      : _startScan,
+                  style: actionButtonStyle,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Spacer(),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(
+                _isScanning
+                    ? Ionicons.radio_outline
+                    : Ionicons.checkmark_circle_outline,
+                color: _isScanning ? subTextColor : mutedTextColor,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color:
+                        _errorMessage != null ? Colors.orangeAccent : subTextColor,
+                    fontSize: 12,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (_isScanning)
                 SizedBox(
-                  width: 120,
-                  child: TextButton.icon(
-                    icon: const Icon(Ionicons.refresh_outline, size: 18),
-                    label: Text(_isScanning ? '停止' : '重新扫描'),
-                    onPressed: _isScanning
-                        ? () => _cancelScan(updateState: true)
-                        : _startScan,
-                    style: actionButtonStyle,
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(accentColor),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(
-                  _isScanning
-                      ? Ionicons.radio_outline
-                      : Ionicons.checkmark_circle_outline,
-                  color: _isScanning ? subTextColor : mutedTextColor,
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    statusText,
-                    style: TextStyle(
-                      color: _errorMessage != null
-                          ? Colors.orangeAccent
-                          : subTextColor,
-                      fontSize: 12,
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _foundHosts.isEmpty
+                ? Center(
+                    child: Text(
+                      _isScanning ? '暂未发现设备…' : '未发现任何设备',
+                      style: TextStyle(color: mutedTextColor),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (_isScanning)
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: _foundHosts.isEmpty
-                  ? Center(
-                      child: Text(
-                        _isScanning ? '暂未发现设备…' : '未发现任何设备',
-                        style: TextStyle(color: mutedTextColor),
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: _foundHosts.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final host = _foundHosts[index];
-                        final title =
-                            (host.hostname?.trim().isNotEmpty ?? false)
-                                ? host.hostname!.trim()
-                                : host.ip;
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: borderColor),
-                            color: itemColor,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Ionicons.desktop_outline,
-                                  color: subTextColor, size: 18),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      title,
-                                      style: TextStyle(
-                                        color: textColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                  )
+                : ListView.separated(
+                    itemCount: _foundHosts.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final host = _foundHosts[index];
+                      final title =
+                          (host.hostname?.trim().isNotEmpty ?? false)
+                              ? host.hostname!.trim()
+                              : host.ip;
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: borderColor),
+                          color: itemColor,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Ionicons.desktop_outline,
+                                color: subTextColor, size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      host.baseUrl,
-                                      style: TextStyle(
-                                        color: subTextColor,
-                                        fontSize: 12,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    host.baseUrl,
+                                    style: TextStyle(
+                                      color: subTextColor,
+                                      fontSize: 12,
                                     ),
-                                  ],
-                                ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 10),
-                              TextButton(
-                                onPressed: _isAdding
-                                    ? null
-                                    : () => _addDiscoveredHost(host),
-                                style: actionButtonStyle,
-                                child: _isAdding
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            accentColor,
-                                          ),
+                            ),
+                            const SizedBox(width: 10),
+                            TextButton(
+                              onPressed: _isAdding
+                                  ? null
+                                  : () => _addDiscoveredHost(host),
+                              style: actionButtonStyle,
+                              child: _isAdding
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          accentColor,
                                         ),
-                                      )
-                                    : const Text('添加'),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+                                      ),
+                                    )
+                                  : const Text('添加'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }

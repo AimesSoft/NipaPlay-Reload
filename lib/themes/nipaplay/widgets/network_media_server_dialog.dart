@@ -524,12 +524,12 @@ class _NetworkMediaServerDialogState extends State<NetworkMediaServerDialog> {
       maxWidth: dialogWidth,
       maxHeightFactor: 0.9,
       onClose: () => Navigator.of(context).maybePop(),
+      backgroundColor: _surfaceColor,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 500),
-          child: Container(
-            color: _surfaceColor,
+          child: Padding(
             padding: const EdgeInsets.all(24.0),
             child: SingleChildScrollView(
               child: Column(

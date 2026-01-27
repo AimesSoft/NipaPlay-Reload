@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'subtitle_parser.dart';
+import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
 
@@ -17,6 +18,7 @@ class SubtitleManager extends ChangeNotifier {
   String? _currentExternalSubtitlePath;
   final Map<String, Map<String, dynamic>> _subtitleTrackInfo = {};
   final Map<String, List<dynamic>> _subtitleCache = {};
+  int _subtitleLoadToken = 0;
 
   // 视频-字幕路径映射的持久化存储键
   static const String _videoSubtitleMapKey = 'video_subtitle_map';
@@ -174,7 +176,10 @@ class SubtitleManager extends ChangeNotifier {
       if (await file.exists()) {
         // 仅对文本字幕进行预解析，图像字幕(.sup)直接交给播放器
         final extension = p.extension(path).toLowerCase();
-        if (extension == '.ass' || extension == '.srt' || extension == '.ssa') {
+        if (extension == '.ass' ||
+            extension == '.srt' ||
+            extension == '.ssa' ||
+            extension == '.sub') {
           // 解析字幕文件
           final entries = await SubtitleParser.parseAssFile(path);
           _subtitleCache[path] = entries;
@@ -317,6 +322,7 @@ class SubtitleManager extends ChangeNotifier {
   // 设置外部字幕并更新路径
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     try {
+      final loadToken = ++_subtitleLoadToken;
       // NEW: Check if player supports external subtitles
       if (!_player.supportsExternalSubtitles && path.isNotEmpty) {
         debugPrint('SubtitleManager: 当前播放器内核不支持加载外部字幕');
@@ -334,6 +340,11 @@ class SubtitleManager extends ChangeNotifier {
       if (path.isNotEmpty && File(path).existsSync()) {
         // 设置外部字幕文件
         _player.setMedia(path, MediaType.subtitle);
+
+        if (_isMdkKernel()) {
+          // MDK 要求文本字幕为 UTF-8 编码。
+          unawaited(_reloadExternalSubtitleAsUtf8(path, loadToken));
+        }
 
         // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
         _currentExternalSubtitlePath = path;
@@ -376,6 +387,74 @@ class SubtitleManager extends ChangeNotifier {
     } catch (e) {
       debugPrint('设置外部字幕失败: $e');
     }
+  }
+
+  bool _isMdkKernel() => _player.getPlayerKernelName() == 'MDK';
+
+  Future<void> _reloadExternalSubtitleAsUtf8(
+      String sourcePath, int loadToken) async {
+    try {
+      if (kIsWeb) return;
+      if (!_isMdkKernel()) return;
+
+      final extension = p.extension(sourcePath).toLowerCase();
+      if (extension == '.sup') return;
+
+      final decoded = await SubtitleParser.decodeSubtitleFile(
+        sourcePath,
+        allowUnknownFormat: true,
+      );
+      if (decoded == null) {
+        if (extension == '.sub') {
+          final idxPath = p.setExtension(sourcePath, '.idx');
+          final idxFile = File(idxPath);
+          if (await idxFile.exists()) {
+            if (loadToken != _subtitleLoadToken) return;
+            if (_currentExternalSubtitlePath != sourcePath) return;
+            _player.setMedia(idxPath, MediaType.subtitle);
+            debugPrint('SubtitleManager: 检测到VobSub，改用IDX加载字幕: $idxPath');
+          }
+        }
+        return;
+      }
+
+      final encoding = decoded.encoding.toLowerCase();
+      if (encoding.startsWith('utf-8')) return;
+
+      final file = File(sourcePath);
+      if (!await file.exists()) return;
+      final stat = await file.stat();
+      if (stat.size <= 0) return;
+
+      final cacheDir = await _getSubtitleCacheDirectory();
+      final cacheKey =
+          '$sourcePath|${stat.modified.millisecondsSinceEpoch}|${stat.size}';
+      final hash = sha1.convert(utf8.encode(cacheKey)).toString();
+      final targetExtension = extension.isEmpty ? '.srt' : extension;
+      final targetPath = p.join(cacheDir.path, '$hash$targetExtension');
+
+      final targetFile = File(targetPath);
+      if (!await targetFile.exists()) {
+        await targetFile.writeAsString(decoded.text, encoding: utf8);
+      }
+
+      if (loadToken != _subtitleLoadToken) return;
+      if (_currentExternalSubtitlePath != sourcePath) return;
+
+      _player.setMedia(targetPath, MediaType.subtitle);
+      debugPrint('SubtitleManager: 已为MDK转换字幕编码并重新加载: $targetPath');
+    } catch (e) {
+      debugPrint('SubtitleManager: 转换字幕编码失败: $e');
+    }
+  }
+
+  Future<Directory> _getSubtitleCacheDirectory() async {
+    final baseDir = await StorageService.getAppStorageDirectory();
+    final cacheDir = Directory(p.join(baseDir.path, 'subtitle_transcoded'));
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+    }
+    return cacheDir;
   }
 
   // 强制设置外部字幕（手动操作）

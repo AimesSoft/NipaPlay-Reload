@@ -69,88 +69,85 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
       maxWidth: dialogWidth,
       maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.85),
       onClose: () => Navigator.of(context).maybePop(),
+      backgroundColor: backgroundColor,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          color: backgroundColor,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(bottom: keyboardHeight),
-            child: SizedBox(
-              height: sheetHeight,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Ionicons.link_outline,
-                            color: textColor, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          '选择共享客户端',
-                          locale: const Locale('zh', 'CN'),
-                          style: textTheme.titleLarge?.copyWith(
-                                color: textColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ) ??
-                              TextStyle(
-                                color: textColor,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                          textAlign: TextAlign.left,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
-                      locale: const Locale('zh', 'CN'),
-                      style: TextStyle(
-                        color: subTextColor,
-                        fontSize: 13,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: hosts.isEmpty
-                          ? _buildEmptyState(
-                              context,
-                              backgroundColor: panelColor,
-                              borderColor: borderColor,
-                              subTextColor: subTextColor,
-                            )
-                          : _buildHostList(
-                              context,
-                              provider,
-                              hosts,
-                              textColor: textColor,
-                              subTextColor: subTextColor,
-                              mutedTextColor: mutedTextColor,
-                              borderColor: borderColor,
-                              itemColor: itemColor,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: keyboardHeight),
+          child: SizedBox(
+            height: sheetHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Ionicons.link_outline, color: textColor, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        '选择共享客户端',
+                        locale: const Locale('zh', 'CN'),
+                        style: textTheme.titleLarge?.copyWith(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ) ??
+                            TextStyle(
+                              color: textColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
+                        textAlign: TextAlign.left,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
+                    locale: const Locale('zh', 'CN'),
+                    style: TextStyle(
+                      color: subTextColor,
+                      fontSize: 13,
+                      height: 1.3,
                     ),
-                    const SizedBox(height: 12),
-                    TextButton.icon(
-                      onPressed: () => _showLanScanDialog(context, provider),
-                      style: actionButtonStyle,
-                      icon: const Icon(Ionicons.wifi_outline, size: 18),
-                      label: const Text('扫描局域网'),
-                    ),
-                    const SizedBox(height: 10),
-                    TextButton.icon(
-                      onPressed: () => _showAddHostDialog(context, provider),
-                      style: actionButtonStyle,
-                      icon: const Icon(Ionicons.add_outline, size: 18),
-                      label: const Text('添加共享客户端'),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: hosts.isEmpty
+                        ? _buildEmptyState(
+                            context,
+                            backgroundColor: panelColor,
+                            borderColor: borderColor,
+                            subTextColor: subTextColor,
+                          )
+                        : _buildHostList(
+                            context,
+                            provider,
+                            hosts,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            mutedTextColor: mutedTextColor,
+                            borderColor: borderColor,
+                            itemColor: itemColor,
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: () => _showLanScanDialog(context, provider),
+                    style: actionButtonStyle,
+                    icon: const Icon(Ionicons.wifi_outline, size: 18),
+                    label: const Text('扫描局域网'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: () => _showAddHostDialog(context, provider),
+                    style: actionButtonStyle,
+                    icon: const Icon(Ionicons.add_outline, size: 18),
+                    label: const Text('添加共享客户端'),
+                  ),
+                ],
               ),
             ),
           ),

@@ -5,9 +5,13 @@ import 'package:nipaplay/services/webdav_service.dart';
 
 class WebDAVConnectionDialog {
   static Future<bool?> show(BuildContext context, {WebDAVConnection? editConnection}) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor =
+        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     return BlurDialog.show<bool>(
       context: context,
       title: editConnection == null ? '添加WebDAV服务器' : '编辑WebDAV服务器',
+      backgroundColor: backgroundColor,
       contentWidget: _WebDAVForm(editConnection: editConnection),
     );
   }
@@ -65,8 +69,6 @@ class _WebDAVFormState extends State<_WebDAVForm> {
     final hintColor = colorScheme.onSurface.withOpacity(0.5);
     final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
     final fillColor = isDark ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
-    final surfaceColor =
-        isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     final selectionTheme = TextSelectionThemeData(
       cursorColor: accentColor,
       selectionColor: accentColor.withOpacity(0.3),
@@ -127,23 +129,21 @@ class _WebDAVFormState extends State<_WebDAVForm> {
 
     return TextSelectionTheme(
       data: selectionTheme,
-      child: Container(
-        color: surfaceColor,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-            Text(
-              'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
-              style: TextStyle(
-                color: subTextColor,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+          Text(
+            'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
+            style: TextStyle(
+              color: subTextColor,
+              fontSize: 13,
             ),
-            const SizedBox(height: 24),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
 
             // 连接名称
             TextFormField(
@@ -265,8 +265,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                 ),
               ],
             ),
-            ],
-          ),
+          ],
         ),
       ),
     );

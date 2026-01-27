@@ -7,6 +7,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     bool forceRefreshToday = false,
   }) async {
     final stopwatch = Stopwatch()..start();
+    final bool isIOS = Platform.isIOS;
     debugPrint('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
     _lastLoadTime = DateTime.now();
     
@@ -51,20 +52,27 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
 
     // 并行加载推荐内容、最近内容、今日新番和随机推荐
     try {
-      await Future.wait([
+      final futures = <Future<void>>[
         _loadRecommendedContent(forceRefresh: shouldForceRecommended),
         _loadRecentContent(),
-        _loadTodayAnimes(forceRefresh: forceRefreshToday),
-        _loadRandomRecommendations(forceRefresh: forceRefreshRandom),
-      ]);
+      ];
+      if (!isIOS) {
+        futures.addAll([
+          _loadTodayAnimes(forceRefresh: forceRefreshToday),
+          _loadRandomRecommendations(forceRefresh: forceRefreshRandom),
+        ]);
+      }
+      await Future.wait(futures);
     } catch (e) {
       debugPrint('DashboardHomePage: 并行加载数据时发生错误: $e');
       // 如果并行加载失败，尝试串行加载
       try {
         await _loadRecommendedContent(forceRefresh: shouldForceRecommended);
         await _loadRecentContent();
-        await _loadTodayAnimes(forceRefresh: forceRefreshToday);
-        await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
+        if (!isIOS) {
+          await _loadTodayAnimes(forceRefresh: forceRefreshToday);
+          await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
+        }
       } catch (e2) {
         debugPrint('DashboardHomePage: 串行加载数据也失败: $e2');
       }

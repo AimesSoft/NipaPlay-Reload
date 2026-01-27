@@ -801,14 +801,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
-    // 当播放器处于活跃状态时，关闭 Dashboard 上的所有 Ticker（动画/过渡），避免后台动画占用栅格时间。
-    final bool tickerEnabled = !_isVideoPlayerActive();
-  final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
+    final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
+    final bool isIOS = Platform.isIOS;
 
-    return TickerMode(
-      enabled: tickerEnabled,
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: Colors.transparent,
       body: Consumer2<JellyfinProvider, EmbyProvider>(
         builder: (context, jellyfinProvider, embyProvider, child) {
@@ -823,18 +819,20 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   
                   SizedBox(height: isPhone ? 16 : 32),
 
-                  // 今日新番区域
-                  _buildTodaySeriesSection(),
+                  if (!isIOS) ...[
+                    // 今日新番区域
+                    _buildTodaySeriesSection(),
 
-                  if (_todayAnimes.isNotEmpty || _isLoadingTodayAnimes)
-                    SizedBox(height: isPhone ? 16 : 32),
+                    if (_todayAnimes.isNotEmpty || _isLoadingTodayAnimes)
+                      SizedBox(height: isPhone ? 16 : 32),
 
-                  // 随机推荐区域
-                  _buildRandomRecommendationsSection(),
+                    // 随机推荐区域
+                    _buildRandomRecommendationsSection(),
 
-                  if (_randomRecommendations.isNotEmpty ||
-                      _isLoadingRandomRecommendations)
-                    SizedBox(height: isPhone ? 16 : 32),
+                    if (_randomRecommendations.isNotEmpty ||
+                        _isLoadingRandomRecommendations)
+                      SizedBox(height: isPhone ? 16 : 32),
+                  ],
                   
                   // 继续播放区域
                   _buildContinueWatching(isPhone: isPhone),
@@ -933,7 +931,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             );
         },
       ),
-    ),
-  );
+    );
 }
 }

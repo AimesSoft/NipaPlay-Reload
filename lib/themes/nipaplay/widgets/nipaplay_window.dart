@@ -12,6 +12,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
     super.key,
     required this.child,
     this.backgroundImageUrl,
+    this.backgroundColor,
     this.blurBackground = false,
     this.onClose,
     this.topRightAction,
@@ -21,6 +22,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
 
   final Widget child;
   final String? backgroundImageUrl;
+  final Color? backgroundColor;
   final bool blurBackground;
   final VoidCallback? onClose;
   final Widget? topRightAction;
@@ -115,7 +117,8 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color bgColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final Color bgColor = widget.backgroundColor ??
+        (isDark ? const Color(0xFF2C2C2C) : Colors.white);
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final bool useMacStyleCloseButton = _useMacStyleCloseButton();
     final Widget? topRightAction = widget.topRightAction;
