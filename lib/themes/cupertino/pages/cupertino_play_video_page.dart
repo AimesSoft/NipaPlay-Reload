@@ -530,129 +530,66 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
         SystemShareService.isSupported && !globals.isDesktop;
     final bool showScreenshotButton = !kIsWeb && globals.isPhone;
 
-    return Stack(
-      children: [
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, _) {
-            return VerticalIndicator(videoState: videoState);
-          },
-        ),
-        Positioned(
-          top: 16.0,
-          left: 16.0,
-          child: SafeArea(
-            bottom: false,
-            child: AnimatedOpacity(
-              opacity: videoState.showControls ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 150),
-              child: IgnorePointer(
-                ignoring: !videoState.showControls,
-                child: Padding(
-                  padding: EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
-                  child: Row(
-                    children: [
-                      MouseRegion(
-                        cursor: _isHoveringBackButton
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                        onEnter: (_) =>
-                            setState(() => _isHoveringBackButton = true),
-                        onExit: (_) =>
-                            setState(() => _isHoveringBackButton = false),
-                        child: BackButtonWidget(
-                          videoState: videoState,
-                          onExit: () async {
-                            if (mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12.0),
-                      SendDanmakuButton(
-                        onPressed: () => _showSendDanmakuDialog(videoState),
-                      ),
-                      const SizedBox(width: 8.0),
-                      SkipButton(
-                        onPressed: () => videoState.skip(),
-                      ),
-                      const SizedBox(width: 12.0),
-                      MouseRegion(
-                        cursor: _isHoveringAnimeInfo
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                        onEnter: (_) =>
-                            setState(() => _isHoveringAnimeInfo = true),
-                        onExit: (_) =>
-                            setState(() => _isHoveringAnimeInfo = false),
-                        child: AnimeInfoWidget(videoState: videoState),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+    return DefaultTextStyle.merge(
+      style: const TextStyle(decoration: TextDecoration.none),
+      child: Stack(
+        children: [
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, _) {
+              return VerticalIndicator(videoState: videoState);
+            },
           ),
-        ),
-        Positioned(
-          top: 16.0,
-          right: 16.0,
-          child: SafeArea(
-            bottom: false,
-            child: AnimatedOpacity(
-              opacity: videoState.showControls ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 150),
-              child: IgnorePointer(
-                ignoring: !videoState.showControls,
-                child: Padding(
-                  padding: EdgeInsets.only(right: globals.isPhone ? 24.0 : 0.0),
-                  child: MouseRegion(
-                    onEnter: (_) => videoState.setControlsHovered(true),
-                    onExit: (_) => videoState.setControlsHovered(false),
+          Positioned(
+            top: 16.0,
+            left: 16.0,
+            child: SafeArea(
+              bottom: false,
+              child: AnimatedOpacity(
+                opacity: videoState.showControls ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(
+                  ignoring: !videoState.showControls,
+                  child: Padding(
+                    padding:
+                        EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
                     child: Row(
                       children: [
-                        if (!kIsWeb &&
-                            defaultTargetPlatform == TargetPlatform.iOS)
-                          GlassActionButton(
-                            tooltip: '投屏 (AirPlay)',
-                            icon: Icons.airplay_rounded,
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              _showAirPlayPickerNipaplay();
+                        MouseRegion(
+                          cursor: _isHoveringBackButton
+                              ? SystemMouseCursors.click
+                              : SystemMouseCursors.basic,
+                          onEnter: (_) =>
+                              setState(() => _isHoveringBackButton = true),
+                          onExit: (_) =>
+                              setState(() => _isHoveringBackButton = false),
+                          child: BackButtonWidget(
+                            videoState: videoState,
+                            onExit: () async {
+                              if (mounted) {
+                                Navigator.of(context).pop();
+                              }
                             },
                           ),
-                        if (showScreenshotButton) ...[
-                          if (!kIsWeb &&
-                              defaultTargetPlatform == TargetPlatform.iOS)
-                            const SizedBox(width: 12),
-                          GlassActionButton(
-                            tooltip: '截图',
-                            icon: Icons.camera_alt_outlined,
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              _captureScreenshotNipaplay(videoState);
-                            },
-                          ),
-                        ],
-                        if (showShareButton) ...[
-                          const SizedBox(width: 12),
-                          GlassActionButton(
-                            tooltip: (!kIsWeb &&
-                                    defaultTargetPlatform ==
-                                        TargetPlatform.iOS)
-                                ? '分享 / AirDrop'
-                                : '分享',
-                            icon: (!kIsWeb &&
-                                    defaultTargetPlatform ==
-                                        TargetPlatform.iOS)
-                                ? Icons.ios_share_rounded
-                                : Icons.share_rounded,
-                            onPressed: () {
-                              videoState.resetHideControlsTimer();
-                              _shareCurrentMediaNipaplay(videoState);
-                            },
-                          ),
-                        ],
+                        ),
+                        const SizedBox(width: 12.0),
+                        SendDanmakuButton(
+                          onPressed: () => _showSendDanmakuDialog(videoState),
+                        ),
+                        const SizedBox(width: 8.0),
+                        SkipButton(
+                          onPressed: () => videoState.skip(),
+                        ),
+                        const SizedBox(width: 12.0),
+                        MouseRegion(
+                          cursor: _isHoveringAnimeInfo
+                              ? SystemMouseCursors.click
+                              : SystemMouseCursors.basic,
+                          onEnter: (_) =>
+                              setState(() => _isHoveringAnimeInfo = true),
+                          onExit: (_) =>
+                              setState(() => _isHoveringAnimeInfo = false),
+                          child: AnimeInfoWidget(videoState: videoState),
+                        ),
                       ],
                     ),
                   ),
@@ -660,50 +597,67 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
               ),
             ),
           ),
-        ),
-        if (globals.isPhone && videoState.isFullscreen)
           Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 60,
-            child: GestureDetector(
-              onHorizontalDragStart: _handleSideSwipeDragStart,
-              onHorizontalDragUpdate: _handleSideSwipeDragUpdate,
-              onHorizontalDragEnd: _handleSideSwipeDragEnd,
-              behavior: HitTestBehavior.translucent,
-              dragStartBehavior: DragStartBehavior.down,
-              child: Container(),
-            ),
-          ),
-        const VideoControlsOverlay(showFullscreenButton: false),
-        if (uiLocked)
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _showUiLockButtonTemporarily,
-              child: const SizedBox.expand(),
-            ),
-          ),
-        if (globals.isPhone)
-          Positioned(
-            left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: Transform.translate(
-                offset: const Offset(0, -90),
-                child: AnimatedSlide(
-                  duration: const Duration(milliseconds: 150),
-                  offset: Offset(showLockButton ? 0 : -0.1, 0),
-                  child: AnimatedOpacity(
-                    opacity: showLockButton ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: IgnorePointer(
-                      ignoring: !showLockButton,
-                      child: LockControlsButton(
-                        locked: uiLocked,
-                        onPressed: () => _toggleUiLock(videoState),
+            top: 16.0,
+            right: 16.0,
+            child: SafeArea(
+              bottom: false,
+              child: AnimatedOpacity(
+                opacity: videoState.showControls ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(
+                  ignoring: !videoState.showControls,
+                  child: Padding(
+                    padding:
+                        EdgeInsets.only(right: globals.isPhone ? 24.0 : 0.0),
+                    child: MouseRegion(
+                      onEnter: (_) => videoState.setControlsHovered(true),
+                      onExit: (_) => videoState.setControlsHovered(false),
+                      child: Row(
+                        children: [
+                          if (!kIsWeb &&
+                              defaultTargetPlatform == TargetPlatform.iOS)
+                            GlassActionButton(
+                              tooltip: '投屏 (AirPlay)',
+                              icon: Icons.airplay_rounded,
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                _showAirPlayPickerNipaplay();
+                              },
+                            ),
+                          if (showScreenshotButton) ...[
+                            if (!kIsWeb &&
+                                defaultTargetPlatform == TargetPlatform.iOS)
+                              const SizedBox(width: 12),
+                            GlassActionButton(
+                              tooltip: '截图',
+                              icon: Icons.camera_alt_outlined,
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                _captureScreenshotNipaplay(videoState);
+                              },
+                            ),
+                          ],
+                          if (showShareButton) ...[
+                            const SizedBox(width: 12),
+                            GlassActionButton(
+                              tooltip: (!kIsWeb &&
+                                      defaultTargetPlatform ==
+                                          TargetPlatform.iOS)
+                                  ? '分享 / AirDrop'
+                                  : '分享',
+                              icon: (!kIsWeb &&
+                                      defaultTargetPlatform ==
+                                          TargetPlatform.iOS)
+                                  ? Icons.ios_share_rounded
+                                  : Icons.share_rounded,
+                              onPressed: () {
+                                videoState.resetHideControlsTimer();
+                                _shareCurrentMediaNipaplay(videoState);
+                              },
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
@@ -711,7 +665,58 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
               ),
             ),
           ),
-      ],
+          if (globals.isPhone && videoState.isFullscreen)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: 60,
+              child: GestureDetector(
+                onHorizontalDragStart: _handleSideSwipeDragStart,
+                onHorizontalDragUpdate: _handleSideSwipeDragUpdate,
+                onHorizontalDragEnd: _handleSideSwipeDragEnd,
+                behavior: HitTestBehavior.translucent,
+                dragStartBehavior: DragStartBehavior.down,
+                child: Container(),
+              ),
+            ),
+          const VideoControlsOverlay(showFullscreenButton: false),
+          if (uiLocked)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _showUiLockButtonTemporarily,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          if (globals.isPhone)
+            Positioned(
+              left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Transform.translate(
+                  offset: const Offset(0, -90),
+                  child: AnimatedSlide(
+                    duration: const Duration(milliseconds: 150),
+                    offset: Offset(showLockButton ? 0 : -0.1, 0),
+                    child: AnimatedOpacity(
+                      opacity: showLockButton ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: IgnorePointer(
+                        ignoring: !showLockButton,
+                        child: LockControlsButton(
+                          locked: uiLocked,
+                          onPressed: () => _toggleUiLock(videoState),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
