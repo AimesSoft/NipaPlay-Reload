@@ -419,6 +419,11 @@ class SubtitleManager extends ChangeNotifier {
       }
 
       final encoding = decoded.encoding.toLowerCase();
+      final preview = _extractSubtitlePreview(decoded.text);
+      final format =
+          SubtitleParser.detectFormat(decoded.text, sourcePath);
+      debugPrint(
+          'SubtitleManager: 检测到字幕编码: ${decoded.encoding}, 格式: $format, 预览: $preview');
       if (encoding.startsWith('utf-8')) return;
 
       final file = File(sourcePath);
@@ -427,10 +432,11 @@ class SubtitleManager extends ChangeNotifier {
       if (stat.size <= 0) return;
 
       final cacheDir = await _getSubtitleCacheDirectory();
+      const cacheVersion = 'v2';
       final cacheKey =
-          '$sourcePath|${stat.modified.millisecondsSinceEpoch}|${stat.size}';
+          '$cacheVersion|$sourcePath|${stat.modified.millisecondsSinceEpoch}|${stat.size}|${decoded.encoding}';
       final hash = sha1.convert(utf8.encode(cacheKey)).toString();
-      final targetExtension = extension.isEmpty ? '.srt' : extension;
+      final targetExtension = _resolveSubtitleExtension(format, extension);
       final targetPath = p.join(cacheDir.path, '$hash$targetExtension');
 
       final targetFile = File(targetPath);
@@ -455,6 +461,52 @@ class SubtitleManager extends ChangeNotifier {
       await cacheDir.create(recursive: true);
     }
     return cacheDir;
+  }
+
+  String _resolveSubtitleExtension(
+      SubtitleFormat format, String originalExtension) {
+    if (format == SubtitleFormat.ass) return '.ass';
+    if (format == SubtitleFormat.srt) return '.srt';
+    if (format == SubtitleFormat.subViewer) return '.sub';
+    if (format == SubtitleFormat.microdvd) return '.sub';
+    if (originalExtension.isNotEmpty) return originalExtension;
+    return '.sub';
+  }
+
+  String _extractSubtitlePreview(String text) {
+    final lines = LineSplitter.split(text);
+    String? firstNonEmpty;
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      firstNonEmpty ??= trimmed;
+      if (_containsCjk(trimmed)) {
+        return _trimPreview(trimmed);
+      }
+    }
+
+    if (firstNonEmpty == null) return '';
+    return _trimPreview(firstNonEmpty);
+  }
+
+  bool _containsCjk(String text) {
+    for (final rune in text.runes) {
+      if ((rune >= 0x4E00 && rune <= 0x9FFF) ||
+          (rune >= 0x3400 && rune <= 0x4DBF) ||
+          (rune >= 0xF900 && rune <= 0xFAFF) ||
+          (rune >= 0x3040 && rune <= 0x30FF) ||
+          (rune >= 0xAC00 && rune <= 0xD7AF)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String _trimPreview(String text) {
+    final cleaned = text.replaceAll('\n', ' ').trim();
+    if (cleaned.length <= 80) return cleaned;
+    return '${cleaned.substring(0, 80)}...';
   }
 
   // 强制设置外部字幕（手动操作）

@@ -91,6 +91,8 @@ class SubtitleParser {
     'gb18030',
     'gbk',
     'big5',
+    'cp950',
+    'big5-hkscs',
     'shift_jis',
     'euc-kr',
     'windows-1252',
@@ -98,6 +100,8 @@ class SubtitleParser {
   ];
   static const List<String> _iconvEncodings = [
     'BIG5',
+    'CP950',
+    'BIG5-HKSCS',
     'GB18030',
     'GBK',
     'SHIFT_JIS',
@@ -125,6 +129,19 @@ class SubtitleParser {
             stripBom: true);
         if (decoded != null) {
           return SubtitleDecodeResult(text: decoded, encoding: bomEncoding);
+        }
+      }
+
+      final detectedEncoding = await _detectEncodingWithUchardet(filePath);
+      if (detectedEncoding != null) {
+        final detectedResult = await _decodeWithDetectedEncoding(
+          bytes,
+          filePath,
+          detectedEncoding,
+          allowUnknownFormat: allowUnknownFormat,
+        );
+        if (detectedResult != null) {
+          return detectedResult;
         }
       }
 
@@ -481,6 +498,10 @@ class SubtitleParser {
     return SubtitleFormat.unknown;
   }
 
+  static SubtitleFormat detectFormat(String content, String filePath) {
+    return _detectFormat(content, filePath);
+  }
+
   static List<String> _buildEncodingCandidates(String filePath) {
     final candidates = List<String>.from(_fallbackEncodings);
     final lowerPath = filePath.toLowerCase();
@@ -490,6 +511,8 @@ class SubtitleParser {
         lowerPath.contains('cht') ||
         lowerPath.contains('traditional')) {
       _promoteEncoding(candidates, 'big5');
+      _promoteEncoding(candidates, 'cp950');
+      _promoteEncoding(candidates, 'big5-hkscs');
     }
 
     if (lowerPath.contains('gbk') ||
@@ -513,6 +536,8 @@ class SubtitleParser {
         lowerPath.contains('cht') ||
         lowerPath.contains('traditional')) {
       _promoteEncoding(candidates, 'BIG5');
+      _promoteEncoding(candidates, 'CP950');
+      _promoteEncoding(candidates, 'BIG5-HKSCS');
     }
 
     if (lowerPath.contains('gbk') ||
@@ -544,6 +569,7 @@ class SubtitleParser {
     int replacementCount = 0;
     int controlCount = 0;
     int punctCount = 0;
+    int latin1SupplementCount = 0;
 
     for (final rune in sample.runes) {
       total++;
@@ -555,6 +581,9 @@ class SubtitleParser {
       }
       if (rune >= 0x20 && rune <= 0x7E) {
         asciiCount++;
+      }
+      if (rune >= 0x00A1 && rune <= 0x00FF) {
+        latin1SupplementCount++;
       }
       if (_isCjkRune(rune)) {
         cjkCount++;
@@ -572,6 +601,7 @@ class SubtitleParser {
     final replacementRatio = replacementCount / totalDouble;
     final controlRatio = controlCount / totalDouble;
     final punctRatio = punctCount / totalDouble;
+    final latin1Ratio = latin1SupplementCount / totalDouble;
 
     double score = 0;
     if (format != SubtitleFormat.unknown) {
@@ -585,6 +615,14 @@ class SubtitleParser {
     score += punctRatio * 2;
     score -= replacementRatio * 20;
     score -= controlRatio * 12;
+    if (latin1Ratio > 0.08 && cjkRatio < 0.02) {
+      score -= (latin1Ratio - 0.08) * 40;
+    }
+    if (encoding.toLowerCase() == 'latin1' &&
+        latin1Ratio > 0.06 &&
+        cjkRatio < 0.02) {
+      score -= 8;
+    }
     score += _scoreEncodingHint(filePath, encoding);
 
     return score;
@@ -711,6 +749,139 @@ class SubtitleParser {
     return null;
   }
 
+  static Future<String?> _detectEncodingWithUchardet(
+      String filePath) async {
+    if (!(Platform.isMacOS || Platform.isLinux)) {
+      return null;
+    }
+
+    const commands = [
+      '/opt/homebrew/bin/uchardet',
+      '/usr/local/bin/uchardet',
+      'uchardet',
+    ];
+
+    for (final command in commands) {
+      try {
+        final result = await Process.run(
+          command,
+          [filePath],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        final output = result.stdout.toString().trim();
+        if (output.isEmpty) continue;
+        final normalized = _normalizeEncodingName(output);
+        if (normalized != null) {
+          return normalized;
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  static String? _normalizeEncodingName(String rawEncoding) {
+    final lower = rawEncoding.trim().toLowerCase();
+    if (lower.isEmpty) return null;
+    if (lower.contains('unknown') || lower.contains('binary')) {
+      return null;
+    }
+
+    if (lower == 'ascii') return 'utf-8';
+    if (lower.startsWith('utf-8')) return 'utf-8';
+    if (lower == 'utf8') return 'utf-8';
+    if (lower == 'utf-16le' || lower == 'utf16le') return 'utf-16le';
+    if (lower == 'utf-16be' || lower == 'utf16be') return 'utf-16be';
+
+    if (lower == 'big5' || lower == 'big-5') return 'big5';
+    if (lower == 'big5-hkscs' || lower == 'big5hkscs') {
+      return 'big5-hkscs';
+    }
+    if (lower == 'cp950' || lower == 'windows-950') return 'cp950';
+
+    if (lower == 'gb18030') return 'gb18030';
+    if (lower == 'gbk' || lower == 'cp936' || lower == 'windows-936') {
+      return 'gbk';
+    }
+    if (lower == 'gb2312') return 'gb18030';
+
+    if (lower == 'shift_jis' ||
+        lower == 'shift-jis' ||
+        lower == 'sjis' ||
+        lower == 'windows-31j') {
+      return 'shift_jis';
+    }
+    if (lower == 'euc-kr' || lower == 'euckr') return 'euc-kr';
+
+    if (lower == 'iso-8859-1' ||
+        lower == 'iso_8859-1' ||
+        lower == 'latin1') {
+      return 'iso-8859-1';
+    }
+    if (lower == 'windows-1252' || lower == 'cp1252') {
+      return 'windows-1252';
+    }
+
+    return null;
+  }
+
+  static String? _toIconvEncoding(String encoding) {
+    switch (encoding.toLowerCase()) {
+      case 'utf-8':
+        return 'UTF-8';
+      case 'utf-16le':
+        return 'UTF-16LE';
+      case 'utf-16be':
+        return 'UTF-16BE';
+      case 'big5':
+        return 'BIG5';
+      case 'cp950':
+        return 'CP950';
+      case 'big5-hkscs':
+        return 'BIG5-HKSCS';
+      case 'gb18030':
+        return 'GB18030';
+      case 'gbk':
+        return 'GBK';
+      case 'shift_jis':
+        return 'SHIFT_JIS';
+      case 'euc-kr':
+        return 'EUC-KR';
+      case 'iso-8859-1':
+        return 'ISO-8859-1';
+      case 'windows-1252':
+        return 'WINDOWS-1252';
+    }
+    return null;
+  }
+
+  static Future<SubtitleDecodeResult?> _decodeWithDetectedEncoding(
+    Uint8List bytes,
+    String filePath,
+    String detectedEncoding, {
+    bool allowUnknownFormat = false,
+  }) async {
+    final normalized =
+        _normalizeEncodingName(detectedEncoding) ?? detectedEncoding;
+    if (normalized.isEmpty) return null;
+
+    String? decoded;
+    final iconvEncoding = _toIconvEncoding(normalized);
+    if (iconvEncoding != null && (Platform.isMacOS || Platform.isLinux)) {
+      decoded = await _decodeWithIconv(filePath, iconvEncoding);
+    }
+
+    decoded ??= await _decodeWithEncoding(bytes, normalized);
+    if (decoded == null || decoded.isEmpty) return null;
+    if (!_looksLikeText(decoded)) return null;
+
+    final format = _detectFormat(decoded, filePath);
+    if (!allowUnknownFormat && format == SubtitleFormat.unknown) return null;
+
+    return SubtitleDecodeResult(text: decoded, encoding: normalized);
+  }
+
   static Future<String?> _decodeWithEncoding(
       Uint8List bytes, String encoding,
       {bool stripBom = false}) async {
@@ -727,21 +898,25 @@ class SubtitleParser {
 
   static Future<String?> _decodeWithIconv(
       String filePath, String encoding) async {
-    try {
-      final result = await Process.run(
-        'iconv',
-        ['-f', encoding, '-t', 'utf-8', filePath],
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      );
-      if (result.exitCode != 0) {
-        return null;
-      }
-      final output = result.stdout;
-      if (output is String && output.isNotEmpty) {
-        return output;
-      }
-    } catch (_) {}
+    const commands = [
+      '/usr/bin/iconv',
+      '/opt/homebrew/opt/libiconv/bin/iconv',
+      'iconv',
+    ];
+    for (final command in commands) {
+      try {
+        final result = await Process.run(
+          command,
+          ['-f', encoding, '-t', 'utf-8', filePath],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        final output = result.stdout;
+        if (output is String && output.isNotEmpty) {
+          return output;
+        }
+      } catch (_) {}
+    }
     return null;
   }
 
