@@ -129,10 +129,6 @@
 <p><strong>媒体库界面</strong></p>
   <img src="others/%E5%AA%92%E4%BD%93%E5%BA%93%E7%95%8C%E9%9D%A2.png" width="70%" alt="媒体库界面">
 
-<p><strong>剧集列表界面</strong></p>
-  <img src="others/%E5%89%A7%E9%9B%86%E5%88%97%E8%A1%A8%E7%95%8C%E9%9D%A2.png" width="70%" alt="剧集列表界面">
-
-
 <p><strong>库管理界面</strong></p>
   <img src="others/%E5%BA%93%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2.png" width="70%" alt="库管理界面">
 </div>
