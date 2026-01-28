@@ -79,16 +79,6 @@
 
 ---
 
-#### 8. 更多主题支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
-
-**问题描述**: 目前主题数量有限，希望有更多风格的主题选择。
-
-**技术领域**: UI/UX 设计、Flutter 主题系统
-**相关文件**: `lib/theme_abstraction/`, `lib/themes/nipaplay/widgets/`
-**期望结果**: 新增多种风格的主题（如：极简、游戏风、复古等）
-
----
-
 ### 🎬 播放器内核扩展
 
 #### 9. HDR 支持 ![难度: 高](https://img.shields.io/badge/难度-高-red)
