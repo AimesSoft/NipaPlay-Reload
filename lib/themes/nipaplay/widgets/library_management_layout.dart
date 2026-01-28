@@ -211,12 +211,12 @@ class LibraryManagementFolderRow extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         trailing: loading
-            ? SizedBox(
+            ? const SizedBox(
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: resolvedIconColor,
+                  color: Color(0xFFFF2E55),
                 ),
               )
             : Icon(

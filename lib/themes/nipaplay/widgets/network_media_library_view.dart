@@ -451,7 +451,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   Widget _buildLibraryContentView(dynamic provider, dynamic service) {
     if (_isLoadingLibraryContent) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (_error != null) {

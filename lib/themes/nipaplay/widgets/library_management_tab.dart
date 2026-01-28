@@ -51,6 +51,7 @@ class LibraryManagementTab extends StatefulWidget {
 }
 
 class _LibraryManagementTabState extends State<LibraryManagementTab> {
+  static const Color _accentColor = Color(0xFFFF2E55);
   static const String _lastScannedDirectoryPickerPathKey = 'last_scanned_dir_picker_path';
   static const String _librarySortOptionKey = 'library_sort_option'; // 新增键用于保存排序选项
 
@@ -630,10 +631,10 @@ style: TextStyle(color: Colors.redAccent)),
             ),
             if (expanded)
               if (loading)
-                const Center(
+                Center(
                   child: Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: CircularProgressIndicator(),
+                    padding: const EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(color: _accentColor),
                   ),
                 )
               else ...[
@@ -2008,7 +2009,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                 }
               },
               children: _loadingFolders.contains(folderPath)
-                  ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
+                  ? [Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(color: _accentColor)))]
                   : _buildFileSystemNodes(_expandedFolderContents[folderPath] ?? [], folderPath, 1),
             ),
           ),
@@ -2156,10 +2157,10 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           },
           children: _loadingWebDAVFolders.contains('${connection.name}:/')
               ? [
-                  const Center(
+                  Center(
                     child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(),
+                      padding: const EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(color: _accentColor),
                     ),
                   ),
                 ]
@@ -2248,10 +2249,10 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           },
           children: _loadingSMBFolders.contains('${connection.name}:/')
               ? [
-                  const Center(
+                  Center(
                     child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(),
+                      padding: const EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(color: _accentColor),
                     ),
                   ),
                 ]
@@ -2276,7 +2277,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       final contents = _webdavFolderContents[key];
   
       if (_loadingWebDAVFolders.contains(key)) {
-        return [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))];
+        return [Center(child: Padding(padding: const EdgeInsets.all(8.0), child: CircularProgressIndicator(color: _accentColor)))];
       }
   
       if (contents == null || contents.isEmpty) {
@@ -2320,10 +2321,10 @@ style: TextStyle(color: Colors.lightBlueAccent)),
               ),
               if (expanded)
                 if (loading)
-                  const Center(
+                  Center(
                     child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(),
+                      padding: const EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(color: _accentColor),
                     ),
                   )
                 else
@@ -2367,7 +2368,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     final contents = _smbFolderContents[key];
 
     if (_loadingSMBFolders.contains(key)) {
-      return [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))];
+      return [Center(child: Padding(padding: const EdgeInsets.all(8.0), child: CircularProgressIndicator(color: _accentColor)))];
     }
 
     if (contents == null || contents.isEmpty) {
@@ -2411,10 +2412,10 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             ),
             if (expanded)
               if (loading)
-                const Center(
+                Center(
                   child: Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: CircularProgressIndicator(),
+                    padding: const EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(color: _accentColor),
                   ),
                 )
               else

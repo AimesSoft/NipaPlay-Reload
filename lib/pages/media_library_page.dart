@@ -47,6 +47,7 @@ class MediaLibraryPage extends StatefulWidget {
 }
 
 class _MediaLibraryPageState extends State<MediaLibraryPage> {
+  static const Color _accentColor = Color(0xFFFF2E55);
   // 🔥 临时禁用页面保活，测试是否解决CPU泄漏问题
   // with AutomaticKeepAliveClientMixin {
   List<WatchHistoryItem> _uniqueLibraryItems = []; 
@@ -632,7 +633,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     if (_isLoadingInitial) {
       return const SizedBox(
         height: 200, 
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: CircularProgressIndicator(color: _accentColor)),
       );
     }
 

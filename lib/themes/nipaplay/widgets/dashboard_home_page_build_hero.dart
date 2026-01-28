@@ -11,7 +11,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
           color: Colors.white10,
         ),
         child: const Center(
-          child: CircularProgressIndicator(),
+          child: CircularProgressIndicator(color: Color(0xFFFF2E55)),
         ),
       );
     }

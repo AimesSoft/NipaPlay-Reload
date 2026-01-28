@@ -38,6 +38,7 @@ class SharedRemoteLibraryView extends StatefulWidget {
 
 class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     with AutomaticKeepAliveClientMixin {
+  static const Color _accentColor = Color(0xFFFF2E55);
   final ScrollController _gridScrollController = ScrollController();
   final ScrollController _managementScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -209,7 +210,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           LinearProgressIndicator(
             value: progress,
             backgroundColor: Colors.white10,
-            valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
+            valueColor: const AlwaysStoppedAnimation<Color>(_accentColor),
           ),
         ],
       ),
@@ -235,7 +236,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     bool hasHosts,
   ) {
     if (provider.isInitializing) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!hasHosts) {
@@ -243,7 +244,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (provider.isLoading && animeSummaries.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (animeSummaries.isEmpty) {
@@ -609,7 +610,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     List<SharedRemoteScannedFolder> folders,
   ) {
     if (provider.isInitializing) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!hasHosts) {
@@ -617,7 +618,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (provider.isManagementLoading && folders.isEmpty && provider.scanStatus == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!provider.hasActiveHost) {
@@ -744,12 +745,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 ),
               ),
               if (loading)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8.0),
+                const Padding(
+                  padding: EdgeInsets.only(left: 8.0),
                   child: SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: iconColor),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: _accentColor),
                   ),
                 ),
             ],

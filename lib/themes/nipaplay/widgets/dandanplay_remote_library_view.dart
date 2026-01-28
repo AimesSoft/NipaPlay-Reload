@@ -31,6 +31,7 @@ class DandanplayRemoteLibraryView extends StatefulWidget {
 
 class _DandanplayRemoteLibraryViewState
     extends State<DandanplayRemoteLibraryView> {
+  static const Color _accentColor = Color(0xFFFF2E55);
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
@@ -60,11 +61,10 @@ class _DandanplayRemoteLibraryViewState
   Widget build(BuildContext context) {
     return Consumer<DandanplayRemoteProvider>(
       builder: (context, provider, child) {
-        if (!provider.isInitialized && provider.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (!provider.isConnected) {
+            if (!provider.isInitialized && provider.isLoading) {
+              return const Center(child: CircularProgressIndicator(color: _accentColor));
+            }
+                if (!provider.isConnected) {
           return _buildDisconnectedState(provider);
         }
 
