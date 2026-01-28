@@ -293,6 +293,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   void pause() {
     if (_status == PlayerStatus.playing) {
+      final bool isWindowsMediaKit = !kIsWeb &&
+          Platform.isWindows &&
+          player.getPlayerKernelName() == 'Media Kit';
+      if (isWindowsMediaKit) {
+        try {
+          // Hint mpv to pause immediately on Windows to reduce control latency.
+          player.setProperty('pause', 'yes');
+        } catch (_) {}
+      }
+
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
       player.pauseDirectly().then((_) {
         //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
@@ -327,8 +337,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       _saveCurrentPositionToHistory();
-      // 在暂停时触发截图
-      _captureConditionalScreenshot("暂停时");
+      // 在暂停时触发截图（Windows+MediaKit 延迟，避免与 mpv 暂停竞争）
+      if (isWindowsMediaKit) {
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (_status == PlayerStatus.paused) {
+            _captureConditionalScreenshot("暂停时");
+          }
+        });
+      } else {
+        _captureConditionalScreenshot("暂停时");
+      }
       // 停止UI更新Ticker，避免继续产帧
       _uiUpdateTicker?.stop();
       // WakelockPlus.disable(); // Already handled by _setStatus
@@ -339,6 +357,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     // <<< ADDED DEBUG LOG >>>
     debugPrint(
         '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
+    final bool isWindowsMediaKit = !kIsWeb &&
+        Platform.isWindows &&
+        player.getPlayerKernelName() == 'Media Kit';
+    if (isWindowsMediaKit) {
+      try {
+        // Ensure mpv is unpaused immediately on Windows.
+        player.setProperty('pause', 'no');
+      } catch (_) {}
+    }
     _ensurePlayerVolumeMatchesPlatformPolicy();
     if (hasVideo &&
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
