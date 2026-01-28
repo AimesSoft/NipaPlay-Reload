@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -9,11 +8,9 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Define the key for SharedPreferences
-const String globalFilterAdultContentKey = 'global_filter_adult_content';
 const String defaultPageIndexKey = 'default_page_index';
 
 class GeneralPage extends StatefulWidget {
@@ -24,7 +21,6 @@ class GeneralPage extends StatefulWidget {
 }
 
 class _GeneralPageState extends State<GeneralPage> {
-  bool _filterAdultContent = true;
   int _defaultPageIndex = 0;
   final GlobalKey _defaultPageDropdownKey = GlobalKey();
   DesktopExitBehavior _desktopExitBehavior = DesktopExitBehavior.askEveryTime;
@@ -75,7 +71,6 @@ class _GeneralPageState extends State<GeneralPage> {
     final desktopExitBehavior = await DesktopExitPreferences.load();
     if (mounted) {
       setState(() {
-        _filterAdultContent = prefs.getBool(globalFilterAdultContentKey) ?? true;
         var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
         _desktopExitBehavior = desktopExitBehavior;
 
@@ -90,11 +85,6 @@ class _GeneralPageState extends State<GeneralPage> {
     }
   }
 
-  Future<void> _saveFilterPreference(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(globalFilterAdultContentKey, value);
-  }
-
   Future<void> _saveDefaultPagePreference(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(defaultPageIndexKey, index);
@@ -106,139 +96,100 @@ class _GeneralPageState extends State<GeneralPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppearanceSettingsProvider>(
-      builder: (context, appearanceSettings, child) {
-        return FutureBuilder<int>(
-          future: _loadDefaultPageIndex(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+    return FutureBuilder<int>(
+      future: _loadDefaultPageIndex(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-            if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}'));
-            }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
 
-            _defaultPageIndex = snapshot.data ?? 0;
+        _defaultPageIndex = snapshot.data ?? 0;
 
-            final colorScheme = Theme.of(context).colorScheme;
+        final colorScheme = Theme.of(context).colorScheme;
 
-            return ListView(
-              children: [
-                if (globals.isDesktop)
-                SettingsItem.dropdown(
-                  title: "关闭窗口时",
-                  subtitle: "设置关闭按钮的默认行为，可随时修改“记住我的选择”",
-                  icon: Ionicons.close_outline,
-                  items: _getDesktopExitItems(),
-                  onChanged: (behavior) {
-                    setState(() {
-                      _desktopExitBehavior = behavior as DesktopExitBehavior;
-                    });
-                    _saveDesktopExitBehavior(behavior as DesktopExitBehavior);
-                  },
-                  dropdownKey: _desktopExitBehaviorDropdownKey,
-                ),
-                if (globals.isDesktop)
-                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.dropdown(
-                  title: "默认展示页面",
-                  subtitle: "选择应用启动后默认显示的页面",
-                  icon: Ionicons.home_outline,
-                  items: _getDefaultPageItems(),
-                  onChanged: (index) {
-                    setState(() {
-                      _defaultPageIndex = index;
-                    });
-                    _saveDefaultPagePreference(index);
-                  },
-                  dropdownKey: _defaultPageDropdownKey,
-                ),
-                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.dropdown(
-                  title: "番剧卡片点击行为",
-                  subtitle: "选择点击番剧卡片后默认展示的内容",
-                  icon: Ionicons.card_outline,
-                  items: [
-                    DropdownMenuItemData(
-                      title: "简介",
-                      value: AnimeCardAction.synopsis,
-                      isSelected: appearanceSettings.animeCardAction == AnimeCardAction.synopsis,
+        return ListView(
+          children: [
+            if (globals.isDesktop)
+            SettingsItem.dropdown(
+              title: "关闭窗口时",
+              subtitle: "设置关闭按钮的默认行为，可随时修改“记住我的选择”",
+              icon: Ionicons.close_outline,
+              items: _getDesktopExitItems(),
+              onChanged: (behavior) {
+                setState(() {
+                  _desktopExitBehavior = behavior as DesktopExitBehavior;
+                });
+                _saveDesktopExitBehavior(behavior as DesktopExitBehavior);
+              },
+              dropdownKey: _desktopExitBehaviorDropdownKey,
+            ),
+            if (globals.isDesktop)
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.dropdown(
+              title: "默认展示页面",
+              subtitle: "选择应用启动后默认显示的页面",
+              icon: Ionicons.home_outline,
+              items: _getDefaultPageItems(),
+              onChanged: (index) {
+                setState(() {
+                  _defaultPageIndex = index;
+                });
+                _saveDefaultPagePreference(index);
+              },
+              dropdownKey: _defaultPageDropdownKey,
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.button(
+              title: "清除图片缓存",
+              subtitle: "清除所有缓存的图片文件",
+              icon: Ionicons.trash_outline,
+              trailingIcon: Ionicons.trash_outline,
+              isDestructive: true,
+              onTap: () async {
+                final bool? confirm = await BlurDialog.show<bool>(
+                  context: context,
+                  title: '确认清除缓存',
+                  content: '确定要清除所有缓存的图片文件吗？',
+                  actions: [
+                    HoverScaleTextButton(
+                      child: Text(
+                        '取消',
+                        locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(false),
                     ),
-                    DropdownMenuItemData(
-                      title: "剧集列表",
-                      value: AnimeCardAction.episodeList,
-                      isSelected: appearanceSettings.animeCardAction == AnimeCardAction.episodeList,
+                    HoverScaleTextButton(
+                      child: Text(
+                        '确定',
+                        locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(true),
                     ),
                   ],
-                  onChanged: (action) {
-                    appearanceSettings.setAnimeCardAction(action);
-                  },
-                ),
-                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                if (!globals.isPhone)
-                SettingsItem.toggle(
-                  title: "过滤成人内容 (全局)",
-                  subtitle: "在新番列表等处隐藏成人内容",
-                  icon: Ionicons.shield_outline,
-                  value: _filterAdultContent,
-                  onChanged: (bool value) {
-                    setState(() {
-                      _filterAdultContent = value;
-                    });
-                    _saveFilterPreference(value);
-                  },
-                ),
-                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-                SettingsItem.button(
-                  title: "清除图片缓存",
-                  subtitle: "清除所有缓存的图片文件",
-                  icon: Ionicons.trash_outline,
-                  trailingIcon: Ionicons.trash_outline,
-                  isDestructive: true,
-                  onTap: () async {
-                    final bool? confirm = await BlurDialog.show<bool>(
-                      context: context,
-                      title: '确认清除缓存',
-                      content: '确定要清除所有缓存的图片文件吗？',
-                      actions: [
-                        HoverScaleTextButton(
-                          child: Text(
-                            '取消',
-                            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                          ),
-                          onPressed: () => Navigator.of(context).pop(false),
-                        ),
-                        HoverScaleTextButton(
-                          child: Text(
-                            '确定',
-                            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface),
-                          ),
-                          onPressed: () => Navigator.of(context).pop(true),
-                        ),
-                      ],
-                    );
+                );
 
-                    if (confirm == true) {
-                      try {
-                        await ImageCacheManager.instance.clearCache();
-                        if (context.mounted) {
-                          BlurSnackBar.show(context, '图片缓存已清除');
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          BlurSnackBar.show(context, '清除缓存失败: $e');
-                        }
-                      }
+                if (confirm == true) {
+                  try {
+                    await ImageCacheManager.instance.clearCache();
+                    if (context.mounted) {
+                      BlurSnackBar.show(context, '图片缓存已清除');
                     }
-                  },
-                ),
-                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-              ],
-            );
-          },
+                  } catch (e) {
+                    if (context.mounted) {
+                      BlurSnackBar.show(context, '清除缓存失败: $e');
+                    }
+                  }
+                }
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          ],
         );
       },
     );

@@ -30,6 +30,8 @@ class DandanplayService {
   static const String _danmakuProxyEndpoint =
       'https://nipaplay.aimes-soft.com/danmaku_proxy.php';
   static const Duration _danmakuRequestTimeout = Duration(seconds: 10);
+  static const int _danmakuRequestMaxAttempts = 2;
+  static const Duration _danmakuRetryDelay = Duration(milliseconds: 600);
   static bool get isLoggedIn => _isLoggedIn;
   static String? get userName => _userName;
   static String? get screenName => _screenName;
@@ -1057,6 +1059,38 @@ class DandanplayService {
     return convert ? 1 : 0;
   }
 
+  static bool _shouldRetryDanmakuRequest(Object error) {
+    return error is TimeoutException ||
+        error is SocketException ||
+        error is HttpException ||
+        error is http.ClientException;
+  }
+
+  static Future<http.Response> _getDanmakuResponseWithRetry(
+    Uri uri,
+    Map<String, String> headers,
+  ) async {
+    for (var attempt = 1; attempt <= _danmakuRequestMaxAttempts; attempt++) {
+      try {
+        return await http
+            .get(uri, headers: headers)
+            .timeout(_danmakuRequestTimeout);
+      } catch (e, st) {
+        final shouldRetry =
+            _shouldRetryDanmakuRequest(e) && attempt < _danmakuRequestMaxAttempts;
+        if (!shouldRetry) {
+          Error.throwWithStackTrace(e, st);
+        }
+        final nextAttempt = attempt + 1;
+        debugPrint('弹幕请求失败，准备重试($nextAttempt/$_danmakuRequestMaxAttempts): $e');
+        await Future.delayed(Duration(
+          milliseconds: _danmakuRetryDelay.inMilliseconds * attempt,
+        ));
+      }
+    }
+    throw Exception('弹幕请求失败');
+  }
+
   /// 从指定服务器获取弹幕
   static Future<Map<String, dynamic>> _fetchDanmakuFromServer(
       String episodeId, int animeId, String serverUrl) async {
@@ -1072,9 +1106,9 @@ class DandanplayService {
     debugPrint('发送弹幕请求到: $apiUrl');
     ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');
 
-    final response = await http.get(
+    final response = await _getDanmakuResponseWithRetry(
       Uri.parse(apiUrl),
-      headers: {
+      {
         'Accept': 'application/json',
         'User-Agent': userAgent,
         'X-AppId': appId,
@@ -1082,7 +1116,7 @@ class DandanplayService {
         'X-Timestamp': '$timestamp',
         if (_token != null) 'Authorization': 'Bearer $_token',
       },
-    ).timeout(_danmakuRequestTimeout); // 添加超时限制
+    );
 
     return _handleDanmakuResponse(response, episodeId, animeId);
   }
@@ -1174,9 +1208,9 @@ class DandanplayService {
 
     debugPrint('发送弹幕代理请求到: $proxyUrl');
 
-    final response = await http.get(
+    final response = await _getDanmakuResponseWithRetry(
       Uri.parse(proxyUrl),
-      headers: {
+      {
         'Accept': 'application/json',
         'User-Agent': userAgent,
         'X-AppId': appId,
@@ -1184,7 +1218,7 @@ class DandanplayService {
         'X-Timestamp': '$timestamp',
         if (_token != null) 'Authorization': 'Bearer $_token',
       },
-    ).timeout(_danmakuRequestTimeout);
+    );
 
     return _handleDanmakuResponse(response, episodeId, animeId);
   }

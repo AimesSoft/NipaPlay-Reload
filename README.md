@@ -20,7 +20,7 @@
 
 ## 下载
 
-- **Windows（x86 64）/Linux（amd64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）**
+- **Windows（x86 64）/Linux（amd64 & arm64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）**
   
   - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
 - **iOS (App Store)**

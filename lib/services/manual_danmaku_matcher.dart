@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/manual_danmaku_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
 
 /// 手动弹幕匹配器
 ///
@@ -99,10 +102,16 @@ class ManualDanmakuMatcher {
     BuildContext context, {
     String? initialVideoTitle,
   }) async {
-    return await showDialog<Map<String, dynamic>>(
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    return await NipaplayWindow.show<Map<String, dynamic>>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => ManualDanmakuMatchDialog(
+      enableAnimation: enableAnimation,
+      barrierDismissible: true,
+      child: ManualDanmakuMatchDialog(
         initialVideoTitle: initialVideoTitle,
       ),
     );

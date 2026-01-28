@@ -706,15 +706,25 @@ style: TextStyle(color: Colors.redAccent)),
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // 手动匹配弹幕按钮
-                    IconButton(
-                      icon: Icon(Icons.subtitles, color: iconColor, size: 20),
-                      onPressed: () => _showManualDanmakuMatchDialog(entity.path, fileName, historyItem),
+                    SearchBarActionButton(
+                      icon: Icons.subtitles,
+                      color: iconColor,
+                      onPressed: () => _showManualDanmakuMatchDialog(
+                        entity.path,
+                        fileName,
+                        historyItem,
+                      ),
                     ),
                     // 移除扫描结果按钮
                     if (historyItem != null && (historyItem.animeId != null || historyItem.episodeId != null))
-                      IconButton(
-                        icon: Icon(Icons.clear, color: iconColor, size: 20),
-                        onPressed: () => _showRemoveScanResultDialog(entity.path, fileName, historyItem),
+                      SearchBarActionButton(
+                        icon: Icons.clear,
+                        color: iconColor,
+                        onPressed: () => _showRemoveScanResultDialog(
+                          entity.path,
+                          fileName,
+                          historyItem,
+                        ),
                       ),
                   ],
                 ),
@@ -1367,8 +1377,7 @@ style: TextStyle(color: secondaryTextColor)),
                           onPressed: () => Navigator.of(context).pop(false),
                         ),
                         HoverScaleTextButton(
-                          child: const Text('清理', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orangeAccent)),
+                          child: const Text('清理', locale:Locale("zh-Hans","zh")),
                           onPressed: () => Navigator.of(context).pop(true),
                         ),
                       ],
@@ -1398,8 +1407,7 @@ style: TextStyle(color: secondaryTextColor)),
                           onPressed: () => Navigator.of(context).pop(false),
                         ),
                         HoverScaleTextButton(
-                          child: const Text('智能刷新', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
+                          child: const Text('智能刷新', locale:Locale("zh-Hans","zh")),
                           onPressed: () => Navigator.of(context).pop(true),
                         ),
                       ],
