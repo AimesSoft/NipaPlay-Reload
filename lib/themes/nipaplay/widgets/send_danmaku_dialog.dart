@@ -162,11 +162,12 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
       ],
     );
 
+    Widget content;
     if (isRealPhone) {
-      return _buildPhoneLayout(theme, previewStyle, inputThemeColor);
+      content = _buildPhoneLayout(theme, previewStyle, inputThemeColor);
     } else {
       // 非手机设备保持原有布局
-      return Scrollbar(
+      content = Scrollbar(
         controller: _scrollController,
         thumbVisibility: true,
         child: SingleChildScrollView(
@@ -355,6 +356,11 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
         ),
       );
     }
+
+    return Material(
+      type: MaterialType.transparency,
+      child: content,
+    );
   }
 
   Widget _buildPhoneLayout(
