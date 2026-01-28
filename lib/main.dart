@@ -110,6 +110,8 @@ void main(List<String> args) async {
     return;
   }
 
+  WatchHistoryDatabase.ensureInitialized();
+
   // 安装 HTTP 客户端覆盖（自签名证书信任规则），尽早生效
   await HttpClientInitializer.install();
 

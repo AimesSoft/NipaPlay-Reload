@@ -13,6 +13,7 @@ class WatchHistoryDatabase {
   static const String _dbName = 'watch_history.db';
   static const int _dbVersion = 1;
   static bool _migrationCompleted = false;
+  static bool _ffiInitialized = false;
   
   // 私有构造函数
   WatchHistoryDatabase._init();
@@ -27,12 +28,7 @@ class WatchHistoryDatabase {
   // 初始化数据库
   Future<Database> _initDB() async {
     // 确保在桌面平台上初始化SQLite FFI
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      if (databaseFactory != databaseFactoryFfi) {
-        sqfliteFfiInit();
-        databaseFactory = databaseFactoryFfi;
-      }
-    }
+    ensureInitialized();
     
     // 使用StorageService获取正确的存储目录
     final io.Directory storageDir = await StorageService.getAppStorageDirectory();
@@ -50,6 +46,16 @@ class WatchHistoryDatabase {
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
+  }
+
+  static void ensureInitialized() {
+    if (_ffiInitialized || kIsWeb) return;
+    if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      return;
+    }
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    _ffiInitialized = true;
   }
   
   // 创建数据库表
