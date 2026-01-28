@@ -97,6 +97,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   PlayableItem Function(SharedRemoteEpisode episode)? _sharedEpisodeBuilder;
   final Map<int, SharedRemoteEpisode> _sharedEpisodeMap = {};
   final Map<int, PlayableItem> _sharedPlayableMap = {};
+  final Map<int, Future<WatchHistoryItem?>> _episodeHistoryFutures = {};
   bool _isLoadingSharedEpisodes = false;
   String? _sharedEpisodesError;
   bool _isLoading = true;
@@ -281,6 +282,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     setState(() {
       _isLoading = true;
       _error = null;
+      _episodeHistoryFutures.clear();
       _bangumiSubjectId = null;
       _bangumiComment = null;
       _isLoadingBangumiCollection = false;
@@ -1553,10 +1555,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 final bool sharedPlayableAvailable = sharedEpisode != null &&
                     sharedPlayable != null &&
                     sharedEpisode.fileExists;
+                final historyFuture = _episodeHistoryFutures.putIfAbsent(
+                  episode.id,
+                  () => WatchHistoryManager.getHistoryItemByEpisode(
+                      anime.id, episode.id),
+                );
 
                 return FutureBuilder<WatchHistoryItem?>(
-                  future: WatchHistoryManager.getHistoryItemByEpisode(
-                      anime.id, episode.id),
+                  future: historyFuture,
                   builder: (context, historySnapshot) {
                     final bool enableEpisodeHover = !globals.isTouch;
                     final bool isEpisodeHovered = enableEpisodeHover &&

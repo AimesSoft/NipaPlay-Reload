@@ -1444,6 +1444,9 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
     final scanService = Provider.of<ScanService>(context);
     final appearanceProvider = Provider.of<AppearanceSettingsProvider>(context);
     final bool enableBlur = appearanceProvider.enableWidgetBlurEffect;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color scanMessageColor = isDark ? Colors.white70 : Colors.black54;
+    final Color scanProgressBackground = isDark ? Colors.white.withOpacity(0.2) : Colors.black12;
     // final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false); // Keep if needed for other actions
 
     return Column(
@@ -1457,14 +1460,14 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(scanService.scanMessage, style: const TextStyle(color: Colors.white70)),
+                  Text(scanService.scanMessage, style: TextStyle(color: scanMessageColor)),
                   if (scanService.isScanning && scanService.scanProgress > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: LinearProgressIndicator(
                         value: scanService.scanProgress,
-                        backgroundColor: Colors.grey[700],
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
+                        backgroundColor: scanProgressBackground,
+                        valueColor: const AlwaysStoppedAnimation<Color>(_accentColor),
                       ),
                     ),
                 ],
