@@ -43,7 +43,6 @@ class ServerHistorySyncService {
       return;
     }
 
-    debugPrint('ServerHistorySyncService.initialize -> install ready listeners');
     _jellyfinService.addReadyListener(_handleJellyfinReady);
     _embyService.addReadyListener(_handleEmbyReady);
 

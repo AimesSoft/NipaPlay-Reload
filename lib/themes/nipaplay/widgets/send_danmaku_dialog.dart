@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
@@ -124,10 +125,8 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
 
   @override
   Widget build(BuildContext context) {
-    // 检查是否为真正的手机设备
-    final window = WidgetsBinding.instance.window;
-    final size = window.physicalSize / window.devicePixelRatio;
-    final shortestSide = size.width < size.height ? size.width : size.height;
+    final mediaQuery = MediaQuery.of(context);
+    final shortestSide = mediaQuery.size.shortestSide;
     final bool isRealPhone = globals.isPhone && shortestSide < 600;
     
     final theme = Theme.of(context);
@@ -142,50 +141,29 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
       shadows: [
         Shadow(
           offset: Offset(globals.strokeWidth, globals.strokeWidth),
-          blurRadius: 2.0,
+          blurRadius: 0.0,
           color: strokeColor,
         ),
         Shadow(
           offset: Offset(-globals.strokeWidth, -globals.strokeWidth),
-          blurRadius: 2.0,
+          blurRadius: 0.0,
           color: strokeColor,
         ),
         Shadow(
           offset: Offset(globals.strokeWidth, -globals.strokeWidth),
-          blurRadius: 2.0,
+          blurRadius: 0.0,
           color: strokeColor,
         ),
         Shadow(
           offset: Offset(-globals.strokeWidth, globals.strokeWidth),
-          blurRadius: 2.0,
+          blurRadius: 0.0,
           color: strokeColor,
         ),
       ],
     );
 
     if (isRealPhone) {
-      // 手机设备使用左右布局，充满可用空间
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch, // 让子项拉伸到父容器高度
-          children: [
-            // 左侧：输入区域
-            Expanded(
-              flex: 1,
-              child: _buildInputSection(theme, previewStyle, inputThemeColor),
-            ),
-            const SizedBox(width: 16),
-            // 右侧：颜色选择
-            Expanded(
-              flex: 1,
-              child: _buildColorSection(theme),
-            ),
-          ],
-        ),
-      );
+      return _buildPhoneLayout(theme, previewStyle, inputThemeColor);
     } else {
       // 非手机设备保持原有布局
       return Scrollbar(
@@ -206,7 +184,11 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                   cursorColor: inputThemeColor,
                   decoration: InputDecoration(
                     hintText: '在这里输入弹幕内容...',
-                    hintStyle: TextStyle(color: theme.hintColor),
+                    hintStyle: TextStyle(
+                      color: theme.hintColor,
+                      fontSize: previewStyle.fontSize,
+                      shadows: const [],
+                    ),
                     border: const OutlineInputBorder(),
                     focusedBorder: const OutlineInputBorder(
                       borderSide: BorderSide(color: inputThemeColor, width: 2),
@@ -375,6 +357,204 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
     }
   }
 
+  Widget _buildPhoneLayout(
+    ThemeData theme,
+    TextStyle previewStyle,
+    Color inputThemeColor,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: textController,
+            autofocus: true,
+            style: previewStyle,
+            cursorColor: inputThemeColor,
+            decoration: InputDecoration(
+              hintText: '输入弹幕内容...',
+              hintStyle: TextStyle(
+                color: theme.hintColor,
+                fontSize: previewStyle.fontSize,
+                shadows: const [],
+              ),
+              border: const OutlineInputBorder(),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: inputThemeColor, width: 2),
+              ),
+              fillColor: theme.colorScheme.surfaceContainerHighest,
+              filled: true,
+            ),
+            maxLength: 100,
+            onChanged: (text) {
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 12),
+          Text('弹幕模式', style: TextStyle(color: theme.colorScheme.onSurface)),
+          const SizedBox(height: 8),
+          CupertinoSegmentedControl<String>(
+            groupValue: danmakuType,
+            selectedColor: inputThemeColor,
+            unselectedColor: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey5,
+              context,
+            ),
+            borderColor: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey3,
+              context,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            children: const {
+              'scroll': Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Text('滚动', style: TextStyle(fontSize: 12)),
+              ),
+              'top': Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Text('顶部', style: TextStyle(fontSize: 12)),
+              ),
+              'bottom': Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Text('底部', style: TextStyle(fontSize: 12)),
+              ),
+            },
+            onValueChanged: (value) {
+              setState(() {
+                danmakuType = value;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+          Text('选择颜色', style: TextStyle(color: theme.colorScheme.onSurface)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8.0,
+            runSpacing: 8.0,
+            children: _presetColors.map((color) {
+              final isSelected = selectedColor == color;
+              Color borderColor;
+              if (isSelected) {
+                if (color.value == 0xFFFFFFFF) {
+                  borderColor = theme.colorScheme.secondary;
+                } else {
+                  borderColor = _lighten(color);
+                }
+              } else {
+                if (color == const Color(0xFF000000) ||
+                    color == const Color(0xFF222222)) {
+                  borderColor = Colors.grey.shade800;
+                } else {
+                  borderColor = _darken(color);
+                }
+              }
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    selectedColor = color;
+                  });
+                },
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: borderColor,
+                      width: 2,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _hexColorController,
+            maxLength: 6,
+            style: TextStyle(color: theme.colorScheme.onSurface),
+            cursorColor: inputThemeColor,
+            decoration: InputDecoration(
+              hintText: '输入六位十六进制颜色值',
+              counterText: '',
+              prefixText: '#',
+              hintStyle: TextStyle(color: theme.hintColor),
+              prefixStyle: TextStyle(color: theme.hintColor),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: theme.dividerColor),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: inputThemeColor, width: 2),
+              ),
+            ),
+            onChanged: (value) {
+              if (value.length == 6) {
+                try {
+                  final colorInt = int.parse(value, radix: 16);
+                  setState(() {
+                    selectedColor = Color(0xFF000000 | colorInt);
+                  });
+                } catch (e) {
+                  // Ignore invalid hex values
+                }
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildSendButton(
+            width: double.infinity,
+            label: '发送弹幕',
+            height: 46,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSendButton({
+    required double width,
+    required String label,
+    required double height,
+  }) {
+    if (_isSending) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isSendButtonHovered = true),
+      onExit: (_) => setState(() => _isSendButtonHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _isSendButtonPressed = true),
+        onTapUp: (_) => setState(() => _isSendButtonPressed = false),
+        onTapCancel: () => setState(() => _isSendButtonPressed = false),
+        onTap: _isSending ? null : _sendDanmaku,
+        child: BounceHoverScale(
+          isHovered: _isSendButtonHovered,
+          isPressed: _isSendButtonPressed,
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(height / 2),
+              color: const Color(0xFFff2e55),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 构建输入区域（手机设备左侧）
   Widget _buildInputSection(ThemeData theme, TextStyle previewStyle, Color inputThemeColor) {
     return Column(
@@ -388,7 +568,11 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
           cursorColor: inputThemeColor,
           decoration: InputDecoration(
             hintText: '输入弹幕内容...',
-            hintStyle: TextStyle(color: theme.hintColor),
+            hintStyle: TextStyle(
+              color: theme.hintColor,
+              fontSize: previewStyle.fontSize,
+              shadows: const [],
+            ),
             border: const OutlineInputBorder(),
             focusedBorder: OutlineInputBorder(
               borderSide: BorderSide(color: inputThemeColor, width: 2),
@@ -499,39 +683,11 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
           padding: const EdgeInsets.only(top: 16.0),
           child: SizedBox(
             width: double.infinity,
-            child: _isSending
-                ? const Center(child: CircularProgressIndicator())
-                : MouseRegion(
-                    onEnter: (_) => setState(() => _isSendButtonHovered = true),
-                    onExit: (_) => setState(() => _isSendButtonHovered = false),
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTapDown: (_) => setState(() => _isSendButtonPressed = true),
-                      onTapUp: (_) => setState(() => _isSendButtonPressed = false),
-                      onTapCancel: () => setState(() => _isSendButtonPressed = false),
-                      onTap: _isSending ? null : _sendDanmaku,
-                      child: BounceHoverScale(
-                        isHovered: _isSendButtonHovered,
-                        isPressed: _isSendButtonPressed,
-                        child: Container(
-                          width: double.infinity,
-                          height: 45,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(22),
-                            color: const Color(0xFFff2e55),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            '发送弹幕',
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+            child: _buildSendButton(
+              width: double.infinity,
+              label: '发送弹幕',
+              height: 45,
+            ),
           ),
         ),
       ],

@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'hotkey_service.dart';
 
 /// 弹幕对话框管理器，用于防止多个弹幕对话框堆叠
@@ -43,26 +45,49 @@ class DanmakuDialogManager {
     _currentContext = context;
     
     try {
-      // 检查是否为手机设备
-      final window = WidgetsBinding.instance.window;
-      final size = window.physicalSize / window.devicePixelRatio;
-      final shortestSide = size.width < size.height ? size.width : size.height;
-      final bool isRealPhone = Platform.isIOS || Platform.isAndroid && shortestSide < 600;
-      
-      await BlurDialog.show(
-        context: context,
-        title: isRealPhone ? '' : '发送弹幕', // 手机设备不显示标题
-        contentWidget: SendDanmakuDialogContent(
-          episodeId: episodeId,
-          currentTime: currentTime,
-          onDanmakuSent: onDanmakuSent,
-        ),
-        actions: [],
-      ).then((_) {
-        _isShowingDialog = false;
-        _currentContext = null;
-        onDialogClosed();
-      });
+      final mediaQuery = MediaQuery.of(context);
+      final shortestSide = mediaQuery.size.shortestSide;
+      final bool isPhoneLike = globals.isPhone &&
+          (Platform.isIOS || Platform.isAndroid) &&
+          shortestSide < 600;
+
+      if (isPhoneLike) {
+        await CupertinoBottomSheet.show(
+          context: context,
+          title: '发送弹幕',
+          heightRatio: 0.9,
+          child: Builder(
+            builder: (sheetContext) {
+              final keyboardHeight =
+                  MediaQuery.of(sheetContext).viewInsets.bottom;
+              return AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: SendDanmakuDialogContent(
+                  episodeId: episodeId,
+                  currentTime: currentTime,
+                  onDanmakuSent: onDanmakuSent,
+                ),
+              );
+            },
+          ),
+        );
+      } else {
+        await BlurDialog.show(
+          context: context,
+          title: '发送弹幕',
+          contentWidget: SendDanmakuDialogContent(
+            episodeId: episodeId,
+            currentTime: currentTime,
+            onDanmakuSent: onDanmakuSent,
+          ),
+          actions: [],
+        );
+      }
+      _isShowingDialog = false;
+      _currentContext = null;
+      onDialogClosed();
     } catch (e) {
       debugPrint('[DanmakuDialogManager] 显示弹幕对话框出错: $e');
       _isShowingDialog = false;

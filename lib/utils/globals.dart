@@ -117,7 +117,6 @@ class DialogSizes {
       generalDialogHeight = 400.0;
     }
     
-    print('[DialogSizes] 初始化完成 - 屏幕: ${screenWidth}x$screenHeight, 登录框: $loginDialogHeight, 服务器框: $serverDialogHeight');
   }
   
   /// 获取适合的对话框宽度

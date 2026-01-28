@@ -40,7 +40,6 @@ class PlayerFactory {
       
       if (kernelTypeIndex != null && kernelTypeIndex < PlayerKernelType.values.length) {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
-        debugPrint('[PlayerFactory] 预加载内核设置: ${_cachedKernelType.toString()}');
       } else {
         _cachedKernelType = PlayerKernelType.mediaKit;
         debugPrint('[PlayerFactory] 无内核设置，使用默认: MDK');
@@ -104,7 +103,6 @@ class PlayerFactory {
         debugPrint('[PlayerFactory] 创建 Video Player 播放器');
         return VideoPlayerAdapter();
       case PlayerKernelType.mediaKit:
-        debugPrint('[PlayerFactory] 创建 Media Kit 播放器');
         return MediaKitPlayerAdapter();
       // case PlayerKernelType.otherPlayer:
       //   // return OtherPlayerAdapter(ThirdPartyPlayerApi());

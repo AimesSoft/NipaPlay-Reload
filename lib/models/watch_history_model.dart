@@ -145,7 +145,6 @@ class WatchHistoryManager {
       
       // 如果已迁移到数据库，则只从数据库加载
       if (_migratedToDatabase) {
-        debugPrint('检测到已迁移到数据库，WatchHistoryManager将只从数据库加载数据');
         // 从数据库预加载缓存
         await _preloadCacheFromDatabase();
       } else {
@@ -169,7 +168,6 @@ class WatchHistoryManager {
       final historyItems = await db.getAllWatchHistory();
       _cachedItems.clear();
       _cachedItems.addAll(historyItems);
-      debugPrint('从数据库预加载了 ${_cachedItems.length} 条历史记录到缓存');
     } catch (e) {
       debugPrint('从数据库预加载缓存失败: $e');
       _cachedItems.clear();

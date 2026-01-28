@@ -3,7 +3,7 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'danmaku_container.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
-import 'package:nipaplay/danmaku_canvas/canvas_danmaku_renderer.dart';
+import 'package:danmaku_canvas/canvas_danmaku_renderer.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -111,6 +111,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             blockBottomDanmaku: videoState.blockBottomDanmaku,
             blockScrollDanmaku: videoState.blockScrollDanmaku,
             blockWords: videoState.danmakuBlockWords,
+            danmakuList: activeDanmakuList,
             currentTime: widget.currentPosition / 1000 +
                 combinedTimeOffset,
             isPlaying: widget.isPlaying,

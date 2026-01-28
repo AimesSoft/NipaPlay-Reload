@@ -567,7 +567,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     options.forEach((String key, String value) {
       try {
         player.setProperty(key, value);
-        debugPrint('[VideoPlayerState] Anime4K 调整 $key=$value');
       } catch (e) {
         debugPrint('[VideoPlayerState] 设置 $key=$value 失败: $e');
       }
@@ -586,9 +585,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           ? '${snapshot.displayWidth}x${snapshot.displayHeight}'
           : '未知';
 
-      debugPrint(
-        '[VideoPlayerState] Anime4K 分辨率$contextLabel 源=$srcLabel, 输出=$dispLabel',
-      );
     } catch (e) {
       debugPrint('[VideoPlayerState] Anime4K 分辨率日志失败: $e');
     }
@@ -603,7 +599,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     try {
       if (!enable) {
         await player.setVideoSurfaceSize();
-        debugPrint('[VideoPlayerState] Anime4K 纹理尺寸恢复为自动');
         return;
       }
 
@@ -637,9 +632,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await player.setVideoSurfaceSize(
         width: targetWidth,
         height: targetHeight,
-      );
-      debugPrint(
-        '[VideoPlayerState] Anime4K 纹理尺寸调整为 ${targetWidth}x$targetHeight',
       );
     } catch (e) {
       if (retry < maxRetry) {

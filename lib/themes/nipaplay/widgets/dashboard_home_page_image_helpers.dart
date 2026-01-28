@@ -31,7 +31,6 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           if (cachedBangumiId != null && cachedBangumiId.isNotEmpty) {
             final bangumiImageUrl = await _getBangumiHighQualityImage(cachedBangumiId);
             if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
-              debugPrint('从缓存的Bangumi信息获取到高清图片: $bangumiImageUrl');
               return bangumiImageUrl;
             }
           }
@@ -45,21 +44,17 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         // 如果获取到bangumi ID，尝试从Bangumi API获取高清图片
         final bangumiImageUrl = await _getBangumiHighQualityImage(bangumiId);
         if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
-          debugPrint('从Bangumi API获取到高清图片: $bangumiImageUrl');
           return bangumiImageUrl;
         }
       }
       
       // 如果Bangumi API失败，回退到弹弹play的图片
       if (animeDetail.imageUrl.isNotEmpty) {
-        debugPrint('回退到弹弹play图片: ${animeDetail.imageUrl}');
         return animeDetail.imageUrl;
       }
       
-  debugPrint('未能获取到任何图片 (animeId: $animeId)');
       return null;
-    } catch (e) {
-      debugPrint('获取高清图片失败 (animeId: $animeId): $e');
+    } catch (_) {
       // 出错时回退到弹弹play的图片
       return animeDetail.imageUrl;
     }
@@ -82,7 +77,6 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           final match = regex.firstMatch(bangumiUrl);
           if (match != null) {
             final bangumiId = match.group(1);
-            debugPrint('从弹弹play获取到bangumi ID: $bangumiId');
             return bangumiId;
           }
         }
@@ -92,16 +86,13 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         if (directBangumiId != null) {
           final String bangumiIdStr = directBangumiId.toString();
           if (bangumiIdStr.isNotEmpty && bangumiIdStr != '0') {
-            debugPrint('从弹弹play直接获取到bangumi ID: $bangumiIdStr');
             return bangumiIdStr;
           }
         }
       }
       
-      debugPrint('弹弹play未返回有效的bangumi ID (animeId: $animeId)');
       return null;
-    } catch (e) {
-      debugPrint('从弹弹play获取bangumi ID失败 (animeId: $animeId): $e');
+    } catch (_) {
       return null;
     }
   }
@@ -113,7 +104,6 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
       // GET /v0/subjects/{subject_id}/image?type=large
       final String imageApiUrl = 'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large';
       
-      debugPrint('请求Bangumi图片API: $imageApiUrl');
       
       final response = await http.head(
         Uri.parse(imageApiUrl),
@@ -126,7 +116,6 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         // Bangumi API返回302重定向到实际图片URL
         final String? location = response.headers['location'];
         if (location != null && location.isNotEmpty) {
-          debugPrint('Bangumi API重定向到: $location');
           return location;
         }
       } else if (response.statusCode == 200) {
@@ -134,20 +123,16 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         return imageApiUrl;
       }
       
-      debugPrint('Bangumi图片API响应异常: ${response.statusCode}');
       return null;
-    } catch (e) {
-      debugPrint('从Bangumi API获取图片失败 (bangumiId: $bangumiId): $e');
+    } catch (_) {
       return null;
     }
   }
 
   // 升级为高清图片（后台异步处理）
   Future<void> _upgradeToHighQualityImages(List<dynamic> candidates, List<RecommendedItem> currentItems) async {
-    debugPrint('开始后台升级为高清图片...');
     
     if (candidates.isEmpty || currentItems.isEmpty) {
-      debugPrint('无候选项目或当前项目，跳过高清图片升级');
       return;
     }
     
@@ -162,11 +147,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     }
     
     // 异步处理所有升级，不阻塞UI
-    Future.wait(upgradeFutures, eagerError: false).then((_) {
-      debugPrint('所有推荐图片升级完成');
-    }).catchError((e) {
-      debugPrint('升级推荐图片时发生错误: $e');
-    });
+    unawaited(Future.wait(upgradeFutures, eagerError: false));
   }
   
   // 升级单个项目为高清图片
@@ -277,8 +258,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
                 highQualityImageUrl = persisted;
               }
             }
-          } catch (e) {
-            debugPrint('获取本地媒体高清信息失败 (animeId: ${candidate.animeId}): $e');
+          } catch (_) {
           }
         }
         
@@ -322,8 +302,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
                 isLowRes: !_looksHighQualityUrl(hqUrl),
               );
             }
-          } catch (e) {
-            debugPrint('升级弹弹play高清图片失败: $e');
+          } catch (_) {
           }
         }
       }
@@ -338,11 +317,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         
         // CachedNetworkImageWidget 会自动处理图片预加载和缓存
         
-        debugPrint('项目 ${upgradedItem.title} 已升级为高清版本');
       }
       
-    } catch (e) {
-      debugPrint('升级项目 $index 为高清版本失败: $e');
+    } catch (_) {
     }
   }
 
@@ -414,13 +391,11 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         if (url.isNotEmpty) {
           candidates.add(MapEntry(imageType, url));
         }
-      } catch (e) {
-        debugPrint('Jellyfin构建${imageType}图片URL失败: $e');
+      } catch (_) {
       }
     }
 
     if (candidates.isEmpty) {
-      debugPrint('Jellyfin无法构建任何图片URL');
       return null;
     }
 
@@ -434,13 +409,11 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     for (final t in imageTypes) {
       for (final res in validations) {
         if (res != null && res.key == t) {
-          debugPrint('Jellyfin获取到${t}有效图片: ${res.value.substring(0, math.min(100, res.value.length))}...');
           return res;
         }
       }
     }
 
-    debugPrint('Jellyfin未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
     return null;
   }
 
@@ -456,13 +429,11 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         if (url.isNotEmpty) {
           candidates.add(MapEntry(imageType, url));
         }
-      } catch (e) {
-        debugPrint('Emby构建${imageType}图片URL失败: $e');
+      } catch (_) {
       }
     }
 
     if (candidates.isEmpty) {
-      debugPrint('Emby无法构建任何图片URL');
       return null;
     }
 
@@ -474,13 +445,11 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     for (final t in imageTypes) {
       for (final res in validations) {
         if (res != null && res.key == t) {
-          debugPrint('Emby获取到${t}有效图片: ${res.value.substring(0, math.min(100, res.value.length))}...');
           return res;
         }
       }
     }
 
-    debugPrint('Emby未找到任何可用图片，尝试类型: ${imageTypes.join(", ")}');
     return null;
   }
 
@@ -515,8 +484,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           .replaceAll('<br>', ' ')
           .replaceAll('<br/>', ' ')
           .replaceAll('<br />', ' ') : '暂无简介信息';
-    } catch (e) {
-      debugPrint('获取Jellyfin详细信息失败: $e');
+    } catch (_) {
       return item.overview?.isNotEmpty == true ? item.overview!
           .replaceAll('<br>', ' ')
           .replaceAll('<br/>', ' ')
@@ -532,8 +500,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           .replaceAll('<br>', ' ')
           .replaceAll('<br/>', ' ')
           .replaceAll('<br />', ' ') : '暂无简介信息';
-    } catch (e) {
-      debugPrint('获取Emby详细信息失败: $e');
+    } catch (_) {
       return item.overview?.isNotEmpty == true ? item.overview!
           .replaceAll('<br>', ' ')
           .replaceAll('<br/>', ' ')

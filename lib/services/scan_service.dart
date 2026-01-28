@@ -208,7 +208,6 @@ class ScanService with ChangeNotifier {
         final Map<String, dynamic> cacheMap = json.decode(cacheJson);
         _folderHashCache = cacheMap.map((key, value) => MapEntry(key, value.toString()));
       }
-      debugPrint("文件夹hash缓存已加载，包含 ${_folderHashCache.length} 个条目");
     } catch (e) {
       debugPrint("加载文件夹hash缓存失败: $e");
       _folderHashCache = {};
@@ -241,7 +240,6 @@ class ScanService with ChangeNotifier {
           return MapEntry(key, <String, String>{});
         });
       }
-      debugPrint("子文件夹hash缓存已加载，包含 ${_subFolderHashCache.length} 个主文件夹");
     } catch (e) {
       debugPrint("加载子文件夹hash缓存失败: $e");
       _subFolderHashCache = {};

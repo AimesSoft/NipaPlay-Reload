@@ -30,7 +30,6 @@ class AutoSyncService {
       }
       
       _isInitialized = true;
-      debugPrint('自动同步服务初始化完成，状态: ${enabled ? "启用" : "禁用"}');
     } catch (e) {
       debugPrint('自动同步服务初始化失败: $e');
     }

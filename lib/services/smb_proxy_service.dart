@@ -70,7 +70,6 @@ class SMBProxyService {
         _port = _server!.port;
         _isRunning = true;
         await prefs.setInt(_portKey, _port);
-        debugPrint('SMBProxyService started on 127.0.0.1:$_port');
         return;
       } catch (e) {
         lastError = e;

@@ -6,6 +6,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart'; // 
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 
 class CustomScaffold extends StatefulWidget {
   final List<Widget> pages;
@@ -27,6 +28,8 @@ class CustomScaffold extends StatefulWidget {
 }
 
 class _CustomScaffoldState extends State<CustomScaffold> {
+  int? _lastTabIndex;
+
   void _handlePageChangedBySwitchableView(int index) {
     if (widget.tabController != null && widget.tabController!.index != index) {
       widget.tabController!.animateTo(index);
@@ -34,10 +37,56 @@ class _CustomScaffoldState extends State<CustomScaffold> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _attachTabController(widget.tabController);
+  }
+
+  @override
+  void didUpdateWidget(CustomScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tabController != widget.tabController) {
+      _detachTabController(oldWidget.tabController);
+      _attachTabController(widget.tabController);
+    }
+  }
+
+  @override
+  void dispose() {
+    _detachTabController(widget.tabController);
+    super.dispose();
+  }
+
+  void _attachTabController(TabController? controller) {
+    if (controller == null) {
+      return;
+    }
+    _lastTabIndex = controller.index;
+    controller.addListener(_handleTabControllerTick);
+  }
+
+  void _detachTabController(TabController? controller) {
+    controller?.removeListener(_handleTabControllerTick);
+  }
+
+  void _handleTabControllerTick() {
+    final controller = widget.tabController;
+    if (controller == null) {
+      return;
+    }
+    final currentIndex = controller.index;
+    if (_lastTabIndex == currentIndex) {
+      return;
+    }
+    _lastTabIndex = currentIndex;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (widget.tabController == null) {
-      print(
-          '[CustomScaffold] CRITICAL: widget.tabController is null. Tabs will not work.');
       return const Center(
           child: Text("Error: TabController not provided to CustomScaffold"));
     }
@@ -55,6 +104,14 @@ class _CustomScaffoldState extends State<CustomScaffold> {
         : const <int>[];
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final bool hasVideo = context.select<VideoPlayerState, bool>(
+      (videoState) => videoState.hasVideo,
+    );
+    final bool showTabDivider = widget.pageIsHome &&
+        widget.tabController?.index == 1 &&
+        hasVideo;
+    final Color tabDividerColor =
+        isDarkMode ? Colors.white24 : Colors.black12;
 
     return BackgroundWithBlur(
       child: Scaffold(
@@ -92,8 +149,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                     splashFactory: NoSplash.splashFactory, // 去除水波纹
                     overlayColor:
                         WidgetStateProperty.all(Colors.transparent), // 去除点击背景色
-                    // 移除灰色滑轨
-                    dividerColor: Colors.transparent,
+                    // 仅在播放页正在播放时显示滑轨，用于分隔视频与Tab
+                    dividerColor:
+                        showTabDivider ? tabDividerColor : Colors.transparent,
                     dividerHeight: 3.0,
                     indicator: const _CustomTabIndicator(
                       indicatorHeight: 3.0,

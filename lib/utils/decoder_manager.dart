@@ -36,7 +36,6 @@ class DecoderManager {
     // ALWAYS try to use hardware decoders
     final savedDecoders = prefs.getStringList(_selectedDecodersKey);
     if (savedDecoders != null && savedDecoders.isNotEmpty) {
-      debugPrint('使用保存的解码器设置: $savedDecoders');
       player.setDecoders(MediaType.video, savedDecoders); // Use our MediaType
       // 更新活跃解码器信息
       _updateActiveDecoderInfo(savedDecoders);
@@ -78,7 +77,6 @@ class DecoderManager {
     }
     
     // 输出解码器相关属性
-    debugPrint('硬件解码始终作为优先选项（如果之前未保存特定设置）');
     _setGlobalDecodingProperties(); // Ensure global properties are set
   }
 
@@ -203,16 +201,12 @@ class DecoderManager {
     // 平台特定设置 - 仅保留基本的编解码器设置，不再手动调整大量参数
     if (Platform.isMacOS || Platform.isIOS) {
       // VideoToolbox不需要大量参数设置，解码器选择时已经配置好了
-      debugPrint('macOS/iOS平台使用简化的解码器设置');
     } else if (Platform.isWindows) {
       // Windows平台使用简化的解码器设置
-      debugPrint('Windows平台使用简化的解码器设置');
     } else if (Platform.isLinux) {
       // Linux平台使用简化的解码器设置
-      debugPrint('Linux平台使用简化的解码器设置');
     } else if (Platform.isAndroid) {
       // Android平台使用简化的解码器设置
-      debugPrint('Android平台使用简化的解码器设置');
     }
     
     // 基本通用设置 - 保留关键属性

@@ -13,6 +13,12 @@ import './player_data_models.dart';
 
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
+  static bool _disableMpvLogs = false;
+
+  static void setMpvLogLevelNone() {
+    _disableMpvLogs = true;
+  }
+
   final Player _player;
   late final VideoController _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
@@ -67,9 +73,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
                     ? 'Droid Sans Fallback'
                     : null,
             bufferSize: 32 * 1024 * 1024,
-            logLevel: MPVLogLevel.debug,
+            logLevel: _disableMpvLogs ? MPVLogLevel.error : MPVLogLevel.debug,
           ),
         ) {
+    _applyMpvLogLevelOverride();
     _controller = VideoController(
       _player,
       configuration: const VideoControllerConfiguration(
@@ -87,15 +94,26 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _initializeTicker();
   }
 
+  void _applyMpvLogLevelOverride() {
+    if (!_disableMpvLogs) {
+      return;
+    }
+    try {
+      unawaited(
+        (_player.platform as dynamic).setProperty('msg-level', 'all=no'),
+      );
+    } catch (e) {
+      debugPrint('MediaKit: 设置MPV日志级别为none失败: $e');
+    }
+  }
+
   void _initializeHardwareDecoding() {
     try {
       if (defaultTargetPlatform == TargetPlatform.android) {
         (_player.platform as dynamic)?.setProperty('hwdec', 'mediacodec-copy');
-        debugPrint('MediaKit: Android: 设置硬件解码模式为 mediacodec-copy');
       } else {
         // 对于其他平台，'auto-copy' 仍然是一个好的通用选择
         (_player.platform as dynamic)?.setProperty('hwdec', 'auto-copy');
-        debugPrint('MediaKit: Non-Android: 设置硬件解码模式为 auto-copy');
       }
     } catch (e) {
       debugPrint('MediaKit: 设置硬件解码模式失败: $e');
@@ -106,7 +124,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     try {
       final videoDecoders = ['auto'];
       setDecoders(PlayerMediaType.video, videoDecoders);
-      debugPrint('MediaKit: 设置默认解码器配置完成');
     } catch (e) {
       debugPrint('设置解码器失败: $e');
     }
@@ -154,7 +171,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       platform.setProperty?.call("sub-auto", "fuzzy");
       platform.setProperty?.call("sub-ass-vsfilter-aspect-compat", "yes");
       platform.setProperty?.call("sub-ass-vsfilter-blur-compat", "yes");
-      debugPrint('MediaKit: 设置内嵌字体和字幕选项完成');
     } catch (e) {
       debugPrint('设置字体回退和字幕选项失败: $e');
     }
@@ -1506,8 +1522,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {
     try {
       await _controller.setSize(width: width, height: height);
-      debugPrint(
-          'MediaKit: 调整视频纹理尺寸为 ${width ?? 'auto'}x${height ?? 'auto'}');
     } catch (e) {
       debugPrint('MediaKit: 调整视频纹理尺寸失败: $e');
     }

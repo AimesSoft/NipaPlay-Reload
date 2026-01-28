@@ -30,7 +30,6 @@ import 'services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'models/watch_history_model.dart';
 import 'package:path/path.dart' as path;
-import 'package:nipaplay/utils/network_checker.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
@@ -75,6 +74,7 @@ import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
 import 'constants/settings_keys.dart';
+import 'player_abstraction/media_kit_player_adapter.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
@@ -192,6 +192,7 @@ void main(List<String> args) async {
       rethrow;
     }
   }
+  MediaKitPlayerAdapter.setMpvLogLevelNone();
 
   // 添加全局异常捕获
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -409,9 +410,6 @@ void main(List<String> args) async {
   // 创建应用所需的目录结构
   await _initializeAppDirectories();
 
-  // 检查网络连接
-  _checkNetworkConnection();
-
   // 预加载播放器内核设置
   await PlayerFactory.initialize();
 
@@ -422,7 +420,6 @@ void main(List<String> args) async {
   if (!kIsWeb && Platform.isMacOS) {
     try {
       await SecurityBookmarkService.restoreAllBookmarks();
-      debugPrint('SecurityBookmarkService 书签恢复完成');
     } catch (e) {
       debugPrint('SecurityBookmarkService 书签恢复失败: $e');
     }
@@ -536,7 +533,6 @@ void main(List<String> args) async {
       try {
         await windowManager.setIcon('assets/images/logo512.png');
       } catch (e) {
-        debugPrint('windowManager.setIcon 失败: $e');
       }
       WindowOptions windowOptions = const WindowOptions(
         skipTaskbar: false,
@@ -604,8 +600,6 @@ Future<void> _initializeAppDirectories() async {
 
     // 创建临时目录
     await _ensureTemporaryDirectoryExists();
-
-    debugPrint('应用目录结构初始化完成');
   } catch (e) {
     debugPrint('创建应用目录结构失败: $e');
   }
@@ -627,108 +621,6 @@ Future<void> _prepareDanmakuCachePolicy() async {
   }
 }
 
-// 检查网络连接
-Future<void> _checkNetworkConnection() async {
-  debugPrint('==================== 网络连接诊断开始 ====================');
-  if (!kIsWeb) {
-    debugPrint(
-        '设备系统: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}');
-    debugPrint(
-        '设备类型: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : Platform.isMacOS ? 'macOS' : '其他'}');
-  } else {
-    debugPrint('设备系统: Web');
-  }
-
-  // 检查代理设置
-  if (!kIsWeb) {
-    final proxySettings = NetworkChecker.checkProxySettings();
-    debugPrint('代理设置检查结果:');
-    if (proxySettings['hasProxy']) {
-      debugPrint('系统存在代理设置:');
-      final settings = proxySettings['proxySettings'] as Map<String, dynamic>;
-      settings.forEach((key, value) {
-        debugPrint(' - $key: $value');
-      });
-    } else {
-      debugPrint('未检测到系统代理设置');
-      if (proxySettings['error'] != null) {
-        debugPrint('检测代理时出错: ${proxySettings['error']}');
-      }
-    }
-  }
-
-  try {
-    debugPrint('\n测试百度连接:');
-    // 检查百度网络连接 (详细模式)
-    final baiduResult = await NetworkChecker.checkConnection(
-      url: 'https://www.baidu.com',
-      timeout: 5,
-      verbose: true,
-    );
-
-    debugPrint('\n百度连接状态: ${baiduResult['connected'] ? '成功' : '失败'}');
-    if (baiduResult['connected']) {
-      debugPrint('响应时间: ${baiduResult['duration']}ms');
-      debugPrint('响应大小: ${baiduResult['responseSize']} 字节');
-    }
-
-    // 等待一下再测试下一个地址
-    await Future.delayed(const Duration(seconds: 1));
-
-    debugPrint('\n测试Google连接(对比测试):');
-    // 检查谷歌网络连接（对比测试）
-    final googleResult = await NetworkChecker.checkConnection(
-      url: 'https://www.google.com',
-      timeout: 5,
-      verbose: true,
-    );
-
-    debugPrint('\nGoogle连接状态: ${googleResult['connected'] ? '成功' : '失败'}');
-    if (googleResult['connected']) {
-      debugPrint('响应时间: ${googleResult['duration']}ms');
-      debugPrint('响应大小: ${googleResult['responseSize']} 字节');
-    }
-
-    // 再测试一个国内的站点
-    await Future.delayed(const Duration(seconds: 1));
-    //debugPrint('\n测试腾讯连接:');
-    final tencentResult = await NetworkChecker.checkConnection(
-      url: 'https://www.qq.com',
-      timeout: 5,
-      verbose: true,
-    );
-
-    // 诊断结果总结
-    debugPrint('\n==================== 网络诊断结果总结 ====================');
-    if (baiduResult['connected'] || tencentResult['connected']) {
-      debugPrint('✅ 国内网络连接正常');
-    } else {
-      debugPrint('❌ 国内网络连接异常，请检查网络设置');
-    }
-
-    if (googleResult['connected']) {
-      debugPrint('✅ 国外网络连接正常');
-    } else {
-      debugPrint('❌ 国外网络连接异常，如果只有国外连接异常可能是正常的');
-    }
-
-    if (!kIsWeb &&
-        Platform.isIOS &&
-        !baiduResult['connected'] &&
-        !tencentResult['connected']) {
-      debugPrint('\n⚠️ iOS设备网络问题排查建议:');
-      debugPrint('1. 请确保应用有网络访问权限');
-      debugPrint('2. 检查是否启用了VPN或代理');
-      debugPrint('3. 尝试重启设备或重置网络设置');
-      debugPrint('4. 确认Info.plist中已添加ATS例外配置');
-    }
-  } catch (e) {
-    debugPrint('网络检查过程中发生异常: $e');
-  }
-
-  debugPrint('==================== 网络连接诊断结束 ====================');
-}
-
 // 确保临时目录存在
 Future<void> _ensureTemporaryDirectoryExists() async {
   try {
@@ -740,13 +632,8 @@ Future<void> _ensureTemporaryDirectoryExists() async {
 
     // 确保tmp目录存在
     if (!tmpDir.existsSync()) {
-      debugPrint('创建应用临时目录: ${tmpDir.path}');
       tmpDir.createSync(recursive: true);
     }
-
-    // 输出目录信息用于调试
-    debugPrint('应用文档目录: ${appDir.path}');
-    debugPrint('应用临时目录: ${tmpDir.path}');
   } catch (e) {
     debugPrint('创建临时目录失败: $e');
   }
@@ -770,7 +657,6 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DesktopExitHandler.instance.initialize(navigatorKey);
-      debugPrint('_NipaPlayAppState: 应用初始化完成，设置监听器');
 
       // 调试：启动时打印数据库内容
       Future.delayed(const Duration(milliseconds: 1000), () async {
@@ -787,13 +673,10 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             Provider.of<WatchHistoryProvider>(context, listen: false);
         final scanService = Provider.of<ScanService>(context, listen: false);
 
-        debugPrint('_NipaPlayAppState: 准备设置WatchHistoryProvider监听ScanService');
         watchHistoryProvider.setScanService(scanService);
-        debugPrint('_NipaPlayAppState: WatchHistoryProvider监听器设置完成');
 
         // 启动历史记录加载
         watchHistoryProvider.loadHistory();
-        debugPrint('_NipaPlayAppState: 历史记录加载完成');
       } catch (e) {
         debugPrint('_NipaPlayAppState: 设置监听器时出错: $e');
       }
@@ -1060,15 +943,11 @@ class MainPageState extends State<MainPage>
         vsync: this,
         initialIndex: _defaultPageIndex.clamp(0, tabLength - 1),
       );
-      debugPrint(
-          '[MainPageState] TabController initialized with length: $tabLength, index: ${globalTabController!.index}');
     }
   }
 
   void _initializeListeners() {
     globalTabController?.addListener(_onTabChange);
-    debugPrint(
-        '[MainPageState] initState: globalTabController listener ADDED.');
 
     if (globals.isDesktop) {
       windowManager.addListener(this);
@@ -1095,7 +974,6 @@ class MainPageState extends State<MainPage>
 
   void _initializeHotkeys() async {
     await HotkeyServiceInitializer().initialize(context);
-    debugPrint('[MainPage] 初始化快捷键提示管理器');
     ShortcutTooltipManager();
   }
 

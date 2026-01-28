@@ -32,28 +32,28 @@ class WatchHistoryProvider extends ChangeNotifier {
   
   // 设置ScanService监听器
   void setScanService(ScanService scanService) {
-    debugPrint('WatchHistoryProvider: setScanService 被调用');
+    //debugPrint('WatchHistoryProvider: setScanService 被调用');
     
     // 移除旧的监听器
     if (_scanService != null) {
-      debugPrint('WatchHistoryProvider: 移除旧的ScanService监听器');
+      //debugPrint('WatchHistoryProvider: 移除旧的ScanService监听器');
       _scanService!.removeListener(_onScanServiceStateChanged);
     }
     
     // 设置新的监听器
     _scanService = scanService;
     _scanService!.addListener(_onScanServiceStateChanged);
-    debugPrint('WatchHistoryProvider: 已添加ScanService监听器');
+    //debugPrint('WatchHistoryProvider: 已添加ScanService监听器');
   }
   
   // 扫描状态变化监听器
   void _onScanServiceStateChanged() {
     if (_scanService == null) return;
     
-    debugPrint('WatchHistoryProvider: ScanService状态变化 - scanJustCompleted: ${_scanService!.scanJustCompleted}');
+    //debugPrint('WatchHistoryProvider: ScanService状态变化 - scanJustCompleted: ${_scanService!.scanJustCompleted}');
     
     if (_scanService!.scanJustCompleted) {
-      debugPrint('WatchHistoryProvider: 检测到扫描完成，自动刷新历史记录');
+      //debugPrint('WatchHistoryProvider: 检测到扫描完成，自动刷新历史记录');
       
       // 延迟刷新，确保扫描结果已保存到数据库
       Future.delayed(const Duration(milliseconds: 100), () {

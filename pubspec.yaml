@@ -56,6 +56,7 @@ dependencies:
   http: ^1.3.0
   dio: ^5.1.0
   xml: ^6.5.0
+  yaml: ^3.1.3
   webdav_client: ^1.2.2
   crypto: ^3.0.3
   cached_network_image: ^3.4.1
@@ -102,6 +103,8 @@ dependencies:
   fluent_ui: ^4.13.0
   ffi: ^2.1.3
   smb_connect: ^0.0.9
+  danmaku_canvas:
+    path: packages/danmaku_canvas
   nipaplay_smb2:
     path: packages/nipaplay_smb2
 
@@ -152,6 +155,11 @@ flutter_launcher_icons:
 # The following section is specific to Flutter packages.
 flutter:
   assets:
+    - pubspec.lock
+    - packages/adaptive_platform_ui/pubspec.yaml
+    - packages/danmaku_canvas/pubspec.yaml
+    - packages/nipaplay_smb2/pubspec.yaml
+    - third_party/smb_connect/pubspec.yaml
     - assets/logo.png
     - assets/logo2.png
     - assets/images/logo512.png

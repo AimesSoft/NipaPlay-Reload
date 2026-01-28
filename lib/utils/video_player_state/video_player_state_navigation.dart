@@ -689,7 +689,6 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       debugPrint('启动UI更新Ticker（playing）');
     } else {
       _uiUpdateTicker!.stop();
-      debugPrint('已准备UI更新Ticker但未启动（status=$_status）');
     }
   }
 }

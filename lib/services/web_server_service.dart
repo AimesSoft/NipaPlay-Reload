@@ -83,7 +83,6 @@ class WebServerService {
       await saveSettings();
       return true;
     } catch (e) {
-      print('Failed to start remote access server: $e');
       _isRunning = false;
       await _lanDiscoveryResponder.stop();
       return false;

@@ -115,29 +115,22 @@ class EmbyProvider extends ChangeNotifier {
   // 初始化Emby Provider
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
-    print('EmbyProvider: 开始初始化...');
-    
+
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
     _notifyCoalesced();
     
     try {
-      print('EmbyProvider: 调用EmbyService.loadSavedSettings()...');
-  await _embyService.loadSavedSettings();
-  await _loadSortSettings(); // 加载排序设置
+      await _embyService.loadSavedSettings();
+      await _loadSortSettings(); // 加载排序设置
       _isInitialized = true;
-      
-      print('EmbyProvider: EmbyService初始化完成，初始连接状态: ${_embyService.isConnected}');
       
       // 添加连接状态监听器
       _embyService.addConnectionStateListener(_onConnectionStateChanged);
       
       // 由于连接验证现在是异步的，我们不再等待它完成
       // 如果连接验证成功，会在后续的异步操作中自动加载媒体项目
-      print('EmbyProvider: 连接验证将在后台异步进行');
-      
     } catch (e) {
       print('EmbyProvider: 初始化过程中发生异常: $e');
       _hasError = true;
@@ -145,7 +138,6 @@ class EmbyProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       _notifyCoalesced();
-      print('EmbyProvider: 初始化完成');
     }
   }
   

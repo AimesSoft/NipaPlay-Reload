@@ -28,8 +28,10 @@ class WatchHistoryDatabase {
   Future<Database> _initDB() async {
     // 确保在桌面平台上初始化SQLite FFI
     if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+      if (databaseFactory != databaseFactoryFfi) {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      }
     }
     
     // 使用StorageService获取正确的存储目录

@@ -3,6 +3,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_dependency_versions_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_debug_log_viewer_sheet.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -18,6 +19,15 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
       title: '终端输出',
       floatingTitle: true,
       child: const CupertinoDebugLogViewerSheet(),
+    );
+  }
+
+  Future<void> _openDependencyVersions(BuildContext context) async {
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '依赖库版本',
+      floatingTitle: true,
+      child: const CupertinoDependencyVersionsSheet(),
     );
   }
 
@@ -61,6 +71,17 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                         backgroundColor: resolveSettingsTileBackground(context),
                         showChevron: true,
                         onTap: () => _openTerminalOutput(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.list_bullet,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('依赖库版本'),
+                        subtitle: const Text('查看依赖库与版本号（含 GitHub 跳转）'),
+                        backgroundColor: resolveSettingsTileBackground(context),
+                        showChevron: true,
+                        onTap: () => _openDependencyVersions(context),
                       ),
                     ],
                   ),

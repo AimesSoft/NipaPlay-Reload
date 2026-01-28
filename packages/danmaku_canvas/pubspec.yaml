@@ -1,0 +1,12 @@
+name: danmaku_canvas
+description: "Canvas danmaku renderer for NipaPlay."
+version: 0.0.1
+publish_to: 'none'
+
+environment:
+  sdk: ^3.5.3
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter

@@ -162,10 +162,6 @@ class JellyfinProvider extends ChangeNotifier {
       
       // 添加连接状态监听器
       _jellyfinService.addConnectionStateListener(_onConnectionStateChanged);
-      
-      print('JellyfinProvider: JellyfinService初始化完成，初始连接状态: ${_jellyfinService.isConnected}');
-      print('JellyfinProvider: 连接验证将在后台异步进行');
-      
     } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();

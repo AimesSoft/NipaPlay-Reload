@@ -105,7 +105,6 @@ class SystemResourceMonitor {
       final patch = versionInt % 100;
       
       _mdkVersion = '$major.$minor.$patch';
-      debugPrint('MDK版本: $_mdkVersion (原始值: $versionInt)');
     } catch (e) {
       debugPrint('获取MDK版本号出错: $e');
       _mdkVersion = "未知";
@@ -130,7 +129,6 @@ class SystemResourceMonitor {
         default:
           _playerKernelType = "未知";
       }
-      debugPrint('当前播放器内核类型: $_playerKernelType');
     } catch (e) {
       debugPrint('获取播放器内核类型出错: $e');
       _playerKernelType = "未知";
@@ -318,7 +316,6 @@ class SystemResourceMonitor {
         default:
           _danmakuKernelType = "未知";
       }
-      debugPrint('当前弹幕内核类型: $_danmakuKernelType');
     } catch (e) {
       debugPrint('获取弹幕内核类型出错: $e');
       _danmakuKernelType = "未知";

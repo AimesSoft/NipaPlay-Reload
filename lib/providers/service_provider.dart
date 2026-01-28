@@ -47,7 +47,5 @@ class ServiceProvider {
     } catch (e) {
       debugPrint('ServiceProvider: WebServer 初始化失败: $e');
     }
-
-    debugPrint('ServiceProvider: 所有服务初始化完成，连接验证将在后台异步进行');
   }
 }

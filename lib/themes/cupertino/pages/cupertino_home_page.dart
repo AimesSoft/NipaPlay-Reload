@@ -1567,39 +1567,23 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               child: SizedBox(
                 width: 120,
                 height: 180, // 固定封面高度
-                child: item.thumbnailPath != null
-                    ? Image.network(
-                        item.thumbnailPath!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: CupertinoDynamicColor.resolve(
-                              CupertinoColors.systemGrey5,
-                              context,
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                CupertinoIcons.play_rectangle,
-                                size: 32,
-                                color: CupertinoColors.systemGrey,
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : Container(
-                        color: CupertinoDynamicColor.resolve(
-                          CupertinoColors.systemGrey5,
-                          context,
-                        ),
-                        child: const Center(
-                          child: Icon(
-                            CupertinoIcons.play_rectangle,
-                            size: 32,
-                            color: CupertinoColors.systemGrey,
-                          ),
-                        ),
+                child: _buildPathImage(
+                  item.thumbnailPath,
+                  fit: BoxFit.cover,
+                  placeholder: Container(
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemGrey5,
+                      context,
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        CupertinoIcons.play_rectangle,
+                        size: 32,
+                        color: CupertinoColors.systemGrey,
                       ),
+                    ),
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -2089,73 +2073,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       CupertinoColors.systemGrey5,
       context,
     );
-
-    if (path == null || path.isEmpty) {
-      return Container(
-        color: placeholderColor,
-        child: const Center(
-          child: Icon(
-            CupertinoIcons.photo,
-            size: 32,
-            color: CupertinoColors.systemGrey,
-          ),
-        ),
-      );
-    }
-
-    if (path.startsWith('http')) {
-      return Image.network(
-        path,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, __) => Container(
-          color: placeholderColor,
-          child: const Center(
-            child: Icon(
-              CupertinoIcons.photo,
-              size: 32,
-              color: CupertinoColors.systemGrey,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (path.startsWith('assets/')) {
-      return Image.asset(
-        path,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, __) => Container(
-          color: placeholderColor,
-          child: const Center(
-            child: Icon(
-              CupertinoIcons.photo,
-              size: 32,
-              color: CupertinoColors.systemGrey,
-            ),
-          ),
-        ),
-      );
-    }
-
-    final file = File(path);
-    if (file.existsSync()) {
-      return Image.file(
-        file,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, __) => Container(
-          color: placeholderColor,
-          child: const Center(
-            child: Icon(
-              CupertinoIcons.photo,
-              size: 32,
-              color: CupertinoColors.systemGrey,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
+    final placeholder = Container(
       color: placeholderColor,
       child: const Center(
         child: Icon(
@@ -2165,29 +2083,21 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         ),
       ),
     );
+
+    return _buildPathImage(
+      path,
+      fit: BoxFit.cover,
+      placeholder: placeholder,
+    );
   }
 
   Widget _buildPosterBackground(String path) {
-    if (path.startsWith('http')) {
-      return Image.network(
-        path,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, __) =>
-            Container(color: CupertinoColors.systemGrey),
-      );
-    }
-
-    final file = File(path);
-    if (file.existsSync()) {
-      return Image.file(
-        file,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, __) =>
-            Container(color: CupertinoColors.systemGrey),
-      );
-    }
-
-    return Container(color: CupertinoColors.systemGrey);
+    final placeholder = Container(color: CupertinoColors.systemGrey);
+    return _buildPathImage(
+      path,
+      fit: BoxFit.cover,
+      placeholder: placeholder,
+    );
   }
 
   Widget _buildPageIndicator(_CupertinoRecommendedItem _) {
@@ -2419,8 +2329,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
     // iOS平台特殊处理：检查截图文件的修改时间
     if (Platform.isIOS && item.thumbnailPath != null) {
-      final thumbnailFile = File(item.thumbnailPath!);
-      if (thumbnailFile.existsSync()) {
+      final thumbnailFile = _resolveLocalImageFile(item.thumbnailPath);
+      if (thumbnailFile != null && thumbnailFile.existsSync()) {
         try {
           final fileModified = thumbnailFile.lastModifiedSync();
           final cacheKey =
@@ -2491,8 +2401,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     }
 
     if (item.thumbnailPath != null) {
-      final thumbnailFile = File(item.thumbnailPath!);
-      if (thumbnailFile.existsSync()) {
+      final thumbnailFile = _resolveLocalImageFile(item.thumbnailPath);
+      if (thumbnailFile != null && thumbnailFile.existsSync()) {
         final thumbnailWidget = FutureBuilder<Uint8List>(
           future: thumbnailFile.readAsBytes(),
           builder: (context, snapshot) {
@@ -2538,6 +2448,62 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     _thumbnailCache[item.filePath] = {'widget': defaultThumbnail, 'time': now};
 
     return defaultThumbnail;
+  }
+
+  File? _resolveLocalImageFile(String? path) {
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return null;
+    }
+    if (path.startsWith('assets/')) {
+      return null;
+    }
+    final uri = Uri.tryParse(path);
+    if (uri == null) {
+      return null;
+    }
+    if (uri.scheme == 'file') {
+      return File.fromUri(uri);
+    }
+    if (uri.scheme.isNotEmpty) {
+      return null;
+    }
+    return File(path);
+  }
+
+  Widget _buildPathImage(
+    String? path, {
+    required BoxFit fit,
+    required Widget placeholder,
+  }) {
+    if (path == null || path.isEmpty) {
+      return placeholder;
+    }
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return Image.network(
+        path,
+        fit: fit,
+        errorBuilder: (_, __, ___) => placeholder,
+      );
+    }
+    if (path.startsWith('assets/')) {
+      return Image.asset(
+        path,
+        fit: fit,
+        errorBuilder: (_, __, ___) => placeholder,
+      );
+    }
+    final file = _resolveLocalImageFile(path);
+    if (file != null && file.existsSync()) {
+      return Image.file(
+        file,
+        fit: fit,
+        errorBuilder: (_, __, ___) => placeholder,
+      );
+    }
+    return placeholder;
   }
 
   Widget _buildDefaultThumbnail(WatchHistoryItem item) {

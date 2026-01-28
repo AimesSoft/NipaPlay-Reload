@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/video_player_state.dart';
-import 'lib/danmaku_screen.dart';
-import 'lib/danmaku_controller.dart';
-import 'lib/models/danmaku_option.dart';
-import 'lib/models/danmaku_content_item.dart' as canvas_models;
+import 'danmaku_screen.dart';
+import 'danmaku_controller.dart';
+import 'models/danmaku_option.dart';
+import 'models/danmaku_content_item.dart' as canvas_models;
 
 // Canvas弹幕渲染管理器
 class CanvasDanmakuManager {
@@ -20,6 +18,7 @@ class CanvasDanmakuManager {
     required bool blockBottomDanmaku,
     required bool blockScrollDanmaku,
     required List<String> blockWords,
+    required List<Map<String, dynamic>> danmakuList,
     required double currentTime,
     required bool isPlaying,
     required double playbackRate,
@@ -36,6 +35,7 @@ class CanvasDanmakuManager {
       blockBottomDanmaku: blockBottomDanmaku,
       blockScrollDanmaku: blockScrollDanmaku,
       blockWords: blockWords,
+      danmakuList: danmakuList,
       currentTime: currentTime,
       isPlaying: isPlaying,
       playbackRate: playbackRate,
@@ -56,6 +56,7 @@ class CanvasDanmakuRenderer extends StatefulWidget {
   final bool blockBottomDanmaku;
   final bool blockScrollDanmaku;
   final List<String> blockWords;
+  final List<Map<String, dynamic>> danmakuList;
   final double currentTime;
   final bool isPlaying;
   final double playbackRate;
@@ -73,6 +74,7 @@ class CanvasDanmakuRenderer extends StatefulWidget {
     required this.blockBottomDanmaku,
     required this.blockScrollDanmaku,
     required this.blockWords,
+    required this.danmakuList,
     required this.currentTime,
     required this.isPlaying,
     required this.playbackRate,
@@ -106,8 +108,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
     // 初始化时处理弹幕
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      _processAndAddDanmaku(videoState.danmakuList, widget.currentTime);
+      _processAndAddDanmaku(widget.danmakuList, widget.currentTime);
     });
   }
 
@@ -176,22 +177,18 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       _initializeDanmakuScreen();
     }
 
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
-        // 确保弹幕播放状态与视频播放状态同步
-        if (_controller != null) {
-          if (widget.isPlaying && !_controller!.running) {
-            //print('Canvas弹幕: Consumer检测到需要恢复播放');
-            _controller!.resume();
-          } else if (!widget.isPlaying && _controller!.running) {
-            //print('Canvas弹幕: Consumer检测到需要暂停播放');
-            _controller!.pause();
-          }
-        }
+    // 确保弹幕播放状态与视频播放状态同步
+    if (_controller != null) {
+      if (widget.isPlaying && !_controller!.running) {
+        //print('Canvas弹幕: Consumer检测到需要恢复播放');
+        _controller!.resume();
+      } else if (!widget.isPlaying && _controller!.running) {
+        //print('Canvas弹幕: Consumer检测到需要暂停播放');
+        _controller!.pause();
+      }
+    }
 
-        return _danmakuScreen!;
-      },
-    );
+    return _danmakuScreen!;
   }
 
   @override
@@ -226,6 +223,8 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
 
     // 只在时间变化、播放状态变化或其他重要属性变化时处理弹幕
     bool shouldProcessDanmaku = widget.currentTime != oldWidget.currentTime ||
+        widget.danmakuList != oldWidget.danmakuList ||
+        widget.danmakuList.length != oldWidget.danmakuList.length ||
         widget.isPlaying != oldWidget.isPlaying ||
         widget.fontSize != oldWidget.fontSize ||
         widget.opacity != oldWidget.opacity ||
@@ -238,9 +237,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       // 获取最新的弹幕列表并处理
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final videoState =
-            Provider.of<VideoPlayerState>(context, listen: false);
-        _processAndAddDanmaku(videoState.danmakuList, widget.currentTime);
+        _processAndAddDanmaku(widget.danmakuList, widget.currentTime);
       });
     }
   }

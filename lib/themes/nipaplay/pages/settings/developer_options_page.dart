@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/utils/platform_utils.dart' as platform;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/dependency_versions_window.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/debug_log_viewer_page.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
@@ -86,6 +87,18 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+            SettingsItem.button(
+              title: '依赖库版本',
+              subtitle: '查看依赖库版本与 GitHub 跳转',
+              icon: Ionicons.list_outline,
+              trailingIcon: Ionicons.chevron_forward_outline,
+              onTap: () {
+                _openDependencyVersions(context);
+              },
+            ),
+
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
             // Linux存储迁移选项（仅Linux平台显示，Web环境下不显示）
@@ -227,6 +240,21 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
           );
         },
       ),
+    );
+  }
+
+  void _openDependencyVersions(BuildContext context) {
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    NipaplayWindow.show<void>(
+      context: context,
+      enableAnimation: enableAnimation,
+      barrierDismissible: true,
+      barrierColor: Colors.transparent,
+      child: const DependencyVersionsWindow(),
     );
   }
 

@@ -52,11 +52,9 @@ class SearchService {
           if (now - timestamp <= _configCacheDuration.inMilliseconds) {
             _cachedConfig = SearchConfig.fromJson(data['config']);
             _configCacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-            debugPrint('[搜索服务] 从本地缓存加载搜索配置');
             return _cachedConfig!;
           }
-        } catch (e) {
-          debugPrint('[搜索服务] 解析缓存的搜索配置失败: $e');
+        } catch (_) {
         }
       }
 
@@ -79,7 +77,6 @@ class SearchService {
             };
             await prefs.setString(_configCacheKey, json.encode(cacheData));
 
-            debugPrint('[搜索服务] 成功获取搜索配置，标签数量: ${_cachedConfig!.tags.length}');
             return _cachedConfig!;
           } else {
             throw Exception('API返回错误: ${data['errorMessage']}');
@@ -87,8 +84,7 @@ class SearchService {
         } else {
           throw Exception('HTTP错误: ${response.statusCode}');
         }
-      } catch (e) {
-        debugPrint('[搜索服务] 获取搜索配置失败: $e');
+      } catch (_) {
         rethrow;
       }
     }
@@ -140,7 +136,6 @@ class SearchService {
           final data = json.decode(response.body);
           if (data['success'] == true) {
             final result = SearchResult.fromTagSearchJson(data);
-            debugPrint('[搜索服务] 文本标签搜索成功，找到 ${result.animes.length} 个结果');
             return result;
           } else {
             throw Exception('API返回错误: ${data['errorMessage']}');
@@ -148,8 +143,7 @@ class SearchService {
         } else {
           throw Exception('HTTP错误: ${response.statusCode}');
         }
-      } catch (e) {
-        debugPrint('[搜索服务] 文本标签搜索失败: $e');
+      } catch (_) {
         rethrow;
       }
     }
@@ -237,7 +231,6 @@ class SearchService {
           final data = json.decode(response.body);
           if (data['success'] == true) {
             final result = SearchResult.fromAdvancedSearchJson(data);
-            debugPrint('[搜索服务] 高级搜索成功，找到 ${result.animes.length} 个结果');
             return result;
           } else {
             throw Exception('API返回错误: ${data['errorMessage']}');
@@ -245,8 +238,7 @@ class SearchService {
         } else {
           throw Exception('HTTP错误: ${response.statusCode}');
         }
-      } catch (e) {
-        debugPrint('[搜索服务] 高级搜索失败: $e');
+      } catch (_) {
         rethrow;
       }
     }
@@ -282,9 +274,6 @@ class SearchService {
         }
       }
 
-      debugPrint('[搜索服务] 请求URL: $url');
-      debugPrint('[搜索服务] API路径: $apiPath');
-      //debugPrint('[搜索服务] 请求头: $headers');
 
       final response = await http
           .get(
@@ -298,14 +287,8 @@ class SearchService {
         },
       );
 
-      debugPrint('[搜索服务] 响应状态码: ${response.statusCode}');
-      if (response.statusCode != 200) {
-        debugPrint('[搜索服务] 响应内容: ${response.body}');
-      }
-
       return response;
-    } catch (e) {
-      debugPrint('[搜索服务] HTTP请求失败: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -317,6 +300,5 @@ class SearchService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_configCacheKey);
-    debugPrint('[搜索服务] 缓存已清除');
   }
 }

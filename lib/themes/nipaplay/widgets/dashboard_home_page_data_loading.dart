@@ -8,24 +8,20 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
   }) async {
     final stopwatch = Stopwatch()..start();
     final bool isIOS = Platform.isIOS;
-    debugPrint('DashboardHomePage: _loadData 被调用 - _isLoadingRecommended: $_isLoadingRecommended, mounted: $mounted');
     _lastLoadTime = DateTime.now();
     
     // 检查Widget状态
     if (!mounted) {
-      debugPrint('DashboardHomePage: Widget已销毁，跳过数据加载');
       return;
     }
     
     // 如果播放器处于活跃状态，跳过数据加载
     if (_isVideoPlayerActive()) {
-      debugPrint('DashboardHomePage: 播放器活跃中，跳过数据加载');
       return;
     }
     
     // 如果正在加载，先检查是否需要强制重新加载
     if (_isLoadingRecommended) {
-      debugPrint('DashboardHomePage: 已在加载中，跳过重复调用 - _isLoadingRecommended: $_isLoadingRecommended');
       return;
     }
     
@@ -33,18 +29,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     try {
       final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
       if (!watchHistoryProvider.isLoaded && !watchHistoryProvider.isLoading) {
-        debugPrint('DashboardHomePage: WatchHistoryProvider未加载，主动触发加载');
         await watchHistoryProvider.loadHistory();
-      } else if (watchHistoryProvider.isLoaded) {
-        debugPrint('DashboardHomePage: WatchHistoryProvider已加载完成，历史记录数量: ${watchHistoryProvider.history.length}');
-      } else {
-        debugPrint('DashboardHomePage: WatchHistoryProvider正在加载中...');
       }
-    } catch (e) {
-      debugPrint('DashboardHomePage: 加载WatchHistoryProvider失败: $e');
+    } catch (_) {
     }
     
-    debugPrint('DashboardHomePage: 开始加载数据');
     
     final shouldForceRecommended = forceRefreshRecommended ||
         _recommendedItems.isEmpty ||
@@ -63,8 +52,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         ]);
       }
       await Future.wait(futures);
-    } catch (e) {
-      debugPrint('DashboardHomePage: 并行加载数据时发生错误: $e');
+    } catch (_) {
       // 如果并行加载失败，尝试串行加载
       try {
         await _loadRecommendedContent(forceRefresh: shouldForceRecommended);
@@ -73,18 +61,15 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           await _loadTodayAnimes(forceRefresh: forceRefreshToday);
           await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
         }
-      } catch (e2) {
-        debugPrint('DashboardHomePage: 串行加载数据也失败: $e2');
+      } catch (_) {
       }
     }
     
     stopwatch.stop();
-    debugPrint('DashboardHomePage: 数据加载完成，总耗时: ${stopwatch.elapsedMilliseconds}ms');
   }
 
   void _handleManualRefresh() {
     if (_isLoadingRecommended) {
-      debugPrint('DashboardHomePage: 忽略刷新请求，正在加载中');
       return;
     }
     unawaited(_loadData(
@@ -100,16 +85,12 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
   // 检查并处理待处理的刷新请求
   void _checkPendingRefresh() {
     if (_pendingRefreshAfterLoad && mounted) {
-      debugPrint('DashboardHomePage: 处理待处理的刷新请求 - ${_pendingRefreshReason}');
       _pendingRefreshAfterLoad = false;
       _pendingRefreshReason = '';
       // 使用短延迟避免连续调用，并检查播放器状态
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && !_isLoadingRecommended && !_isVideoPlayerActive()) {
-          debugPrint('DashboardHomePage: 执行待处理的刷新请求');
           _loadData();
-        } else if (_isVideoPlayerActive()) {
-          debugPrint('DashboardHomePage: 播放器活跃中，跳过待处理的刷新请求');
         }
       });
     }
@@ -146,15 +127,13 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           _isLoadingTodayAnimes = false;
         });
       }
-    } catch (e) {
-      debugPrint('加载今日新番失败: $e');
+    } catch (_) {
       if (mounted) setState(() => _isLoadingTodayAnimes = false);
     }
   }
 
   Future<void> _loadRecommendedContent({bool forceRefresh = false}) async {
     if (!mounted) {
-      debugPrint('DashboardHomePage: Widget已销毁，跳过推荐内容加载');
       return;
     }
     
@@ -166,7 +145,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                 .difference(_DashboardHomePageState._lastRecommendedLoadTime!)
                 .inHours <
             24) {
-      debugPrint('DashboardHomePage: 使用缓存的推荐内容');
       setState(() {
         _recommendedItems = _DashboardHomePageState._cachedRecommendedItems;
         _recommendedDandanLookup =
@@ -182,7 +160,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       return;
     }
 
-    debugPrint('DashboardHomePage: 开始加载推荐内容');
     setState(() {
       _isLoadingRecommended = true;
     });
@@ -202,19 +179,15 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       if (jellyfinProvider.isConnected) {
         final jellyfinService = JellyfinService.instance;
         final jellyfinFutures = <Future<List<JellyfinMediaItem>>>[];
-        final jellyfinLibNames = <String>[];
         for (final library in jellyfinService.availableLibraries) {
           if (jellyfinService.selectedLibraryIds.contains(library.id)) {
-            jellyfinLibNames.add(library.name);
             jellyfinFutures.add(
               jellyfinService
                   .getRandomMediaItemsByLibrary(library.id, limit: 50)
                   .then((items) {
-                    debugPrint('从Jellyfin媒体库 ${library.name} 收集到 ${items.length} 个候选项目');
                     return items;
                   })
                   .catchError((e) {
-                    debugPrint('获取Jellyfin媒体库 ${library.name} 随机内容失败: $e');
                     return <JellyfinMediaItem>[];
                   }),
             );
@@ -239,11 +212,9 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               embyService
                   .getRandomMediaItemsByLibrary(library.id, limit: 50)
                   .then((items) {
-                    debugPrint('从Emby媒体库 ${library.name} 收集到 ${items.length} 个候选项目');
                     return items;
                   })
                   .catchError((e) {
-                    debugPrint('获取Emby媒体库 ${library.name} 随机内容失败: $e');
                     return <EmbyMediaItem>[];
                   }),
             );
@@ -291,15 +262,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           localItems.shuffle(math.Random());
           final selectedLocalItems = localItems.take(math.min(30, localItems.length)).toList();
           allCandidates.addAll(selectedLocalItems);
-          debugPrint('从本地媒体库收集到 ${selectedLocalItems.length} 个候选项目');
-        } catch (e) {
-          debugPrint('获取本地媒体库随机内容失败: $e');
+        } catch (_) {
         }
-      } else {
-        debugPrint('WatchHistoryProvider未加载完成，跳过本地媒体库推荐内容收集');
       }
 
-        // 从弹弹play远程媒体库收集候选项目
+      // 从弹弹play远程媒体库收集候选项目
       if (dandanSource != null &&
           dandanSource.isConnected &&
           dandanSource.animeGroups.isNotEmpty) {
@@ -314,7 +281,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           await _loadPersistedLocalImageUrls(dandanAnimeIds);
         }
         allCandidates.addAll(selectedGroups);
-        debugPrint('从弹弹play媒体库收集到 ${selectedGroups.length} 个候选项目');
       }
 
       // 第二步：从所有候选中随机选择7个（去重）
@@ -335,7 +301,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             break;
           }
         }
-        debugPrint('从${allCandidates.length}个候选项目中随机选择了${selectedCandidates.length}个(去重后)');
       }
 
       // 第二点五步：预加载本地媒体项目的图片缓存，确保立即显示
@@ -346,7 +311,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           .toSet();
       if (localAnimeIds.isNotEmpty) {
         await _loadPersistedLocalImageUrls(localAnimeIds);
-        debugPrint('预加载了 ${localAnimeIds.length} 个本地推荐项目的图片缓存');
       }
 
       final dandanAnimeIds = selectedCandidates
@@ -357,7 +321,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           .toSet();
       if (dandanAnimeIds.isNotEmpty) {
         await _loadPersistedLocalImageUrls(dandanAnimeIds);
-        debugPrint('预加载了 ${dandanAnimeIds.length} 个弹弹play推荐项目的图片缓存');
       }
 
       // 第三步：快速构建基础推荐项目，先用缓存的封面图片
@@ -462,7 +425,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                     }
                   }
                 }
-              } catch (e) {
+              } catch (_) {
                 // 忽略缓存访问错误
               }
             }
@@ -497,8 +460,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               isLowRes: coverUrl != null, // 弹弹play默认封面是低清
             );
           }
-        } catch (e) {
-          debugPrint('快速构建推荐项目失败: $e');
+        } catch (_) {
           return null;
         }
         return null;
@@ -557,9 +519,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         _upgradeToHighQualityImages(upgradeCandidates, upgradeBasicItems);
       }
       
-      debugPrint('推荐内容基础加载完成，总共 ${basicItems.length} 个项目，后台正在加载高清图片');
-    } catch (e) {
-      debugPrint('加载推荐内容失败: $e');
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isLoadingRecommended = false;
@@ -613,11 +573,9 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
 
   Future<void> _loadRecentContent({bool includeRemote = true}) async {
     if (_isLoadingRecentContent) {
-      debugPrint('DashboardHomePage: 最近内容正在加载，跳过本次调用');
       return;
     }
     _isLoadingRecentContent = true;
-    debugPrint('DashboardHomePage: 开始加载最近内容');
     try {
       DandanplayRemoteProvider? dandanProvider;
       try {
@@ -637,10 +595,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                   final libraryItems = await jellyfinService.getLatestMediaItemsByLibrary(library.id, limit: 25);
                   if (libraryItems.isNotEmpty) {
                     _recentJellyfinItemsByLibrary[library.name] = libraryItems;
-                    debugPrint('Jellyfin媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
                   }
-                } catch (e) {
-                  debugPrint('获取Jellyfin媒体库 ${library.name} 最近内容失败: $e');
+                } catch (_) {
                 }
               }());
             }
@@ -666,10 +622,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                   final libraryItems = await embyService.getLatestMediaItemsByLibrary(library.id, limit: 25);
                   if (libraryItems.isNotEmpty) {
                     _recentEmbyItemsByLibrary[library.name] = libraryItems;
-                    debugPrint('Emby媒体库 ${library.name} 获取到 ${libraryItems.length} 个项目');
                   }
-                } catch (e) {
-                  debugPrint('获取Emby媒体库 ${library.name} 最近内容失败: $e');
+                } catch (_) {
                 }
               }());
             }
@@ -744,12 +698,9 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           }
 
           _localAnimeItems = localAnimeItems;
-          debugPrint('本地媒体库获取到 ${_localAnimeItems.length} 个项目（首屏使用缓存图片，后台补齐高清图）');
-        } catch (e) {
-          debugPrint('获取本地媒体库最近内容失败: $e');
+        } catch (_) {
         }
       } else {
-        debugPrint('WatchHistoryProvider未加载完成，跳过本地媒体库最近内容加载');
         _localAnimeItems = []; // 清空本地项目列表
       }
 
@@ -792,8 +743,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           _fetchDandanGroupImagesInBackground(dandanSource);
         }
       }
-    } catch (e) {
-      debugPrint('加载最近内容失败: $e');
+    } catch (_) {
     } finally {
       _isLoadingRecentContent = false;
     }
@@ -812,8 +762,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           _localImageCache[id] = url;
         }
       }
-    } catch (e) {
-      debugPrint('加载本地图片持久化缓存失败: $e');
+    } catch (_) {
     }
   }
 
@@ -822,7 +771,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     if (_isLoadingLocalImages) return;
     _isLoadingLocalImages = true;
     
-    debugPrint('开始后台获取本地番剧缺失图片，待处理项目: ${_localAnimeItems.length}');
     
     const int maxConcurrent = 3;
     final inflight = <Future<void>>[];
@@ -858,7 +806,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                 // summary = animeData['summary'] as String?; // 不需要summary
               }
             }
-          } catch (e) {
+          } catch (_) {
             // 忽略缓存读取错误
           }
           
@@ -897,7 +845,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             }
           }
           processedCount++;
-        } catch (e) {
+        } catch (_) {
           // 静默失败，避免刷屏
           processedCount++;
         }
@@ -929,7 +877,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       setState(() {});
     }
     
-    debugPrint('本地番剧图片后台获取完成，处理: $processedCount，更新: $updatedCount');
     _isLoadingLocalImages = false;
   }
 

@@ -43,7 +43,6 @@ class DandanplayService {
 
     // 输出当前使用的弹弹play服务器
     final currentServer = await NetworkSettings.getDandanplayServer();
-    print('[弹弹play服务] 当前使用的服务器: $currentServer');
   }
 
   /// 获取当前弹弹play API 基础 URL（包含用户自定义设置）
