@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:window_manager/window_manager.dart';
@@ -24,6 +25,7 @@ class _UIThemePageState extends State<UIThemePage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Consumer<UIThemeProvider>(
       builder: (context, uiThemeProvider, child) {
         return Scaffold(
@@ -34,21 +36,21 @@ class _UIThemePageState extends State<UIThemePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 标题
-                const Text(
+                Text(
                   '控件主题',
-                  locale: Locale("zh-Hans", "zh"),
+                  locale: const Locale("zh-Hans", "zh"),
                   style: TextStyle(
-                    color: Colors.white,
+                    color: colorScheme.onSurface,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   '选择应用的控件主题风格',
-                  locale: Locale("zh-Hans", "zh"),
+                  locale: const Locale("zh-Hans", "zh"),
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 14,
                   ),
                 ),
@@ -71,14 +73,15 @@ class _UIThemePageState extends State<UIThemePage> {
 
   Widget _buildThemeSelector(UIThemeProvider uiThemeProvider) {
     final availableThemes = uiThemeProvider.availableThemes;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Row(
       children: [
-        const Text(
+        Text(
           '主题风格',
-          locale: Locale("zh-Hans", "zh"),
+          locale: const Locale("zh-Hans", "zh"),
           style: TextStyle(
-            color: Colors.white,
+            color: colorScheme.onSurface,
             fontSize: 16,
             fontWeight: FontWeight.w500,
           ),
@@ -107,17 +110,18 @@ class _UIThemePageState extends State<UIThemePage> {
   }
 
   Widget _buildThemePreview(UIThemeProvider uiThemeProvider) {
+    final colorScheme = Theme.of(context).colorScheme;
     return SettingsCard(
       padding: const EdgeInsets.all(20),
       backgroundOpacity: 0.25,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '当前主题预览',
-            locale: Locale("zh-Hans", "zh"),
+            locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
-              color: Colors.white,
+              color: colorScheme.onSurface,
               fontSize: 16,
               fontWeight: FontWeight.w500,
             ),
@@ -130,14 +134,15 @@ class _UIThemePageState extends State<UIThemePage> {
   }
 
   Widget _buildThemeDescription(ThemeDescriptor descriptor) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           descriptor.preview.title,
           locale: const Locale("zh-Hans", "zh"),
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -146,8 +151,8 @@ class _UIThemePageState extends State<UIThemePage> {
         Text(
           descriptor.preview.highlights.map((item) => '• $item').join('\n'),
           locale: const Locale("zh-Hans", "zh"),
-          style: const TextStyle(
-            color: Colors.white70,
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.7),
             fontSize: 14,
             height: 1.5,
           ),
@@ -159,13 +164,14 @@ class _UIThemePageState extends State<UIThemePage> {
   /// 显示主题切换确认弹窗
   void _showThemeChangeConfirmDialog(
       ThemeDescriptor newTheme, UIThemeProvider provider) {
+    final colorScheme = Theme.of(context).colorScheme;
     BlurDialog.show(
       context: context,
       title: '主题切换提示',
       content: '切换到 ${newTheme.displayName} 主题需要重启应用才能完全生效。\n\n是否要立即重启应用？',
       barrierDismissible: true,
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -173,7 +179,7 @@ class _UIThemePageState extends State<UIThemePage> {
               locale: Locale("zh-Hans", "zh"),
               style: TextStyle(color: Colors.grey)),
         ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () async {
             // 先保存主题设置
             await provider.setTheme(newTheme);
@@ -181,9 +187,9 @@ class _UIThemePageState extends State<UIThemePage> {
             // 退出应用
             _exitApplication();
           },
-          child: const Text('重启应用',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white)),
+          child: Text('重启应用',
+              locale: const Locale("zh-Hans", "zh"),
+              style: TextStyle(color: colorScheme.onSurface)),
         ),
       ],
     );

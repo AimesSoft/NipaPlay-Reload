@@ -81,6 +81,8 @@ class _StoragePageState extends State<StoragePage> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return ListView(
       children: [
         SettingsItem.toggle(
@@ -90,7 +92,7 @@ class _StoragePageState extends State<StoragePage> {
           value: _clearOnLaunch,
           onChanged: _updateClearOnLaunch,
         ),
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         SettingsItem.button(
           title: '立即清理弹幕缓存',
           subtitle: _isClearing ? '正在清理...' : '删除缓存/缓存异常时可手动清理',
@@ -100,7 +102,7 @@ class _StoragePageState extends State<StoragePage> {
           onTap: () => _clearDanmakuCache(showSnack: true),
           trailingIcon: Ionicons.chevron_forward_outline,
         ),
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text(
@@ -108,7 +110,7 @@ class _StoragePageState extends State<StoragePage> {
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
-                ?.copyWith(color: Colors.white70),
+                ?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
           ),
         ),
       ],

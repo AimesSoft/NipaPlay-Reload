@@ -27,6 +27,29 @@ class JellyfinLibrary {
   }
 }
 
+class JellyfinUserData {
+  final bool? played;
+  final double? playbackPositionTicks;
+  final bool? isFavorite;
+  final int? playCount;
+
+  JellyfinUserData({
+    this.played,
+    this.playbackPositionTicks,
+    this.isFavorite,
+    this.playCount,
+  });
+
+  factory JellyfinUserData.fromJson(Map<String, dynamic> json) {
+    return JellyfinUserData(
+      played: json['Played'],
+      playbackPositionTicks: (json['PlaybackPositionTicks'] as num?)?.toDouble(),
+      isFavorite: json['IsFavorite'],
+      playCount: json['PlayCount'],
+    );
+  }
+}
+
 // Jellyfin媒体项目（电视剧、电影等）
 class JellyfinMediaItem {
   final String id;
@@ -41,6 +64,7 @@ class JellyfinMediaItem {
   final String? communityRating;
   final String? type;
   final bool isFolder;
+  final JellyfinUserData? userData; // 新增
   
   JellyfinMediaItem({
     required this.id,
@@ -55,6 +79,7 @@ class JellyfinMediaItem {
     this.communityRating,
     this.type,
     this.isFolder = false,
+    this.userData,
   });
   
   factory JellyfinMediaItem.fromJson(Map<String, dynamic> json) {
@@ -76,6 +101,7 @@ class JellyfinMediaItem {
       communityRating: json['CommunityRating']?.toString(),
       type: type?.toString(),
       isFolder: resolvedIsFolder,
+      userData: json['UserData'] != null ? JellyfinUserData.fromJson(json['UserData']) : null,
     );
   }
 

@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'dart:async'; // 添加定时器支持
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:provider/provider.dart';
 
 // 全局气泡管理器 - 确保同一时间只有一个气泡显示
 class _TooltipManager {
@@ -344,12 +341,16 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   }
 
   Widget _buildBubble(Size size) {
-    const textStyle = TextStyle(
-      color: Colors.white,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDark ? const Color(0xFF2B2B2B) : Colors.white;
+    final borderColor = isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08);
+    final textStyle = TextStyle(
+      color: isDark ? Colors.white : Colors.black87,
       fontSize: 14,
       height: 1.4,
       fontWeight: FontWeight.w400,
     );
+    const bubbleRadius = 8.0;
     
     return Container(
       constraints: BoxConstraints(
@@ -359,60 +360,48 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
         maxHeight: 400,
       ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(bubbleRadius),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(isDark ? 0.4 : 0.18),
+            blurRadius: 16,
+            spreadRadius: 1,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-          child: Consumer<AppearanceSettingsProvider>(
-            builder: (context, settingsProvider, _) => BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: settingsProvider.enableWidgetBlurEffect ? 25 : 0, sigmaY: settingsProvider.enableWidgetBlurEffect ? 25 : 0),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.25),
-                      Colors.white.withOpacity(0.15),
-                    ],
+        borderRadius: BorderRadius.circular(bubbleRadius),
+        child: Container(
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(bubbleRadius),
+            border: Border.all(
+              color: borderColor,
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(widget.padding),
+            child: IntrinsicHeight(
+              child: IntrinsicWidth(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: widget.maxWidth - widget.padding * 2,
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(widget.padding),
-                  child: IntrinsicHeight(
-                    child: IntrinsicWidth(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: widget.maxWidth - widget.padding * 2,
-                        ),
-                        child: Text(
-                          widget.text,
-                          style: textStyle,
-                          textAlign: TextAlign.left,
-                          softWrap: true,
-                          overflow: TextOverflow.visible,
-                        ),
-                      ),
-                    ),
+                  child: Text(
+                    widget.text,
+                    style: textStyle,
+                    textAlign: TextAlign.left,
+                    softWrap: true,
+                    overflow: TextOverflow.visible,
                   ),
                 ),
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }

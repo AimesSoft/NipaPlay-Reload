@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:ui';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -14,6 +17,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 class WatchHistoryPage extends StatefulWidget {
@@ -26,19 +31,18 @@ class WatchHistoryPage extends StatefulWidget {
 class _WatchHistoryPageState extends State<WatchHistoryPage> {
   bool _isAutoMatching = false;
   bool _autoMatchDialogVisible = false;
-  OverlayEntry? _contextMenuOverlay;
   final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
   List<WatchHistoryItem> _cachedValidHistory = const [];
   int _lastHistoryHash = 0;
 
   @override
   void dispose() {
-    _hideContextMenu();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -50,8 +54,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       body: Consumer<WatchHistoryProvider>(
         builder: (context, historyProvider, child) {
           if (historyProvider.isLoading && historyProvider.history.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.white),
+            return Center(
+              child: CircularProgressIndicator(color: colorScheme.onSurface),
             );
           }
 
@@ -76,119 +80,80 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   }
 
   Widget _buildWatchHistoryItem(WatchHistoryItem item) {
-    final appearanceProvider = context.watch<AppearanceSettingsProvider>();
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPress:
-        _isAutoMatching ? null : () => _showDeleteConfirmDialog(item),
-      onSecondaryTapDown: _isAutoMatching
-        ? null
-        : (details) =>
-          _showContextMenu(details.globalPosition, item),
-      child: GlassmorphicContainer(
-        width: double.infinity,
-        height: 70,
-        borderRadius: 8,
-        blur: appearanceProvider.enableWidgetBlurEffect ? 10 : 0,
-        alignment: Alignment.center,
-        border: 0.5,
-        linearGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFffffff).withOpacity(0.1),
-            const Color(0xFFFFFFFF).withOpacity(0.05),
-          ],
-        ),
-        borderGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFffffff).withOpacity(0.5),
-            const Color(0xFFFFFFFF).withOpacity(0.5),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _isAutoMatching ? null : () => _onWatchHistoryItemTap(item),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  // 缩略图
-                  _buildThumbnail(item),
-                  const SizedBox(width: 12),
-                  
-                  // 标题和副标题
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          item.animeName.isNotEmpty ? item.animeName : path.basename(item.filePath),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.episodeTitle ?? '未知集数',
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
+    final colorScheme = Theme.of(context).colorScheme;
+    const Color nipaColor = Color(0xFFFF2E55);
+
+    return HistoryLikeListCard(
+      margin: const EdgeInsets.only(bottom: 2),
+      onTap: _isAutoMatching ? null : () => _onWatchHistoryItemTap(item),
+      child: Row(
+        children: [
+          _buildThumbnail(item),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  item.animeName.isNotEmpty
+                      ? item.animeName
+                      : path.basename(item.filePath),
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
-                  
-                  // 观看进度和时间
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (item.watchProgress > 0)
-                        Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: item.watchProgress,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.secondary,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatTime(item.lastWatchTime),
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.episodeTitle ?? '未知集数',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (item.watchProgress > 0) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: item.watchProgress,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: nipaColor, // 使用 ff2e55
+                          borderRadius: BorderRadius.circular(1),
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ],
-              ),
+              ],
             ),
           ),
-        ),
+          const SizedBox(width: 8),
+          Text(
+            _formatTime(item.lastWatchTime),
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.4),
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _AnimatedTrashButton(
+            onTap: () => _showDeleteConfirmDialog(item),
+          ),
+        ],
       ),
     );
   }
@@ -208,50 +173,107 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                 height: 45, // 16:9 比例
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  return _buildDefaultThumbnail();
+                  return _buildDefaultThumbnail(item);
                 },
               ),
             );
           }
-          return _buildDefaultThumbnail();
+          return _buildDefaultThumbnail(item);
         },
       );
     }
-    return _buildDefaultThumbnail();
+    return _buildDefaultThumbnail(item);
   }
 
-  Widget _buildDefaultThumbnail() {
-    return Container(
-      width: 80,
-      height: 45, // 16:9 比例
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Icon(
-        Ionicons.videocam_outline,
-        color: Colors.white60,
-        size: 20,
-      ),
+  Widget _buildDefaultThumbnail(WatchHistoryItem item) {
+    if (item.animeId == null) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return Container(
+        width: 80,
+        height: 45,
+        decoration: BoxDecoration(
+          color: colorScheme.onSurface.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(
+          Ionicons.videocam_outline,
+          color: colorScheme.onSurface.withOpacity(0.6),
+          size: 20,
+        ),
+      );
+    }
+
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        String? imageUrl;
+        if (snapshot.hasData) {
+          imageUrl = snapshot.data!.getString('media_library_image_url_${item.animeId}');
+        }
+
+        final colorScheme = Theme.of(context).colorScheme;
+        if (imageUrl == null || imageUrl.isEmpty) {
+          return Container(
+            width: 80,
+            height: 45,
+            decoration: BoxDecoration(
+              color: colorScheme.onSurface.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              Ionicons.videocam_outline,
+              color: colorScheme.onSurface.withOpacity(0.6),
+              size: 20,
+            ),
+          );
+        }
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            width: 80,
+            height: 45,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(color: Colors.white),
+                  ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                    child: CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                    errorWidget: (context, url, error) => Container(color: Colors.black12),
+                  ),
+                ),
+                Container(color: Colors.black.withValues(alpha: 0.1)),
+                const Center(
+                  child: Icon(Ionicons.play_outline, color: Colors.white70, size: 16),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildEmptyState() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Ionicons.time_outline,
-            color: Colors.white60,
+            color: colorScheme.onSurface.withOpacity(0.6),
             size: 64,
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             '暂无观看记录',
-            locale:Locale("zh-Hans","zh"),
+            locale:const Locale("zh-Hans","zh"),
 style: TextStyle(
-              color: Colors.white,
+              color: colorScheme.onSurface,
               fontSize: 18,
               fontWeight: FontWeight.w500,
             ),
@@ -259,9 +281,9 @@ style: TextStyle(
           const SizedBox(height: 8),
           Text(
             '开始播放视频后，这里会显示观看记录',
-            locale:Locale("zh-Hans","zh"),
+            locale:const Locale("zh-Hans","zh"),
 style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
@@ -454,19 +476,18 @@ style: TextStyle(
   }
 
   void _showDeleteConfirmDialog(WatchHistoryItem item) {
-    _hideContextMenu();
     BlurDialog.show(
       context: context,
       title: '删除观看记录',
       content: '确定要删除 ${item.animeName} 的观看记录吗？',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消'),
           onPressed: () {
             Navigator.of(context).pop();
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('删除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
           onPressed: () async {
@@ -478,65 +499,6 @@ style: TextStyle(color: Colors.red)),
         ),
       ],
     );
-  }
-
-  void _showContextMenu(Offset tapPosition, WatchHistoryItem item) {
-    final overlay = Overlay.maybeOf(context);
-    if (overlay == null) return;
-
-    _hideContextMenu();
-
-    final renderBox = overlay.context.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize) return;
-
-    const double menuWidth = 196;
-    const double menuHeight = 56;
-    final Size overlaySize = renderBox.size;
-    final Offset overlayPosition = renderBox.globalToLocal(tapPosition);
-
-    double left = overlayPosition.dx;
-    double top = overlayPosition.dy;
-
-    if (left + menuWidth > overlaySize.width) {
-      left = overlaySize.width - menuWidth - 12;
-    }
-    if (top + menuHeight > overlaySize.height) {
-      top = overlaySize.height - menuHeight - 12;
-    }
-
-    final bool enableBlur = context.read<AppearanceSettingsProvider>().enableWidgetBlurEffect;
-
-    _contextMenuOverlay = OverlayEntry(
-      builder: (_) => Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _hideContextMenu,
-              onSecondaryTap: _hideContextMenu,
-            ),
-          ),
-          Positioned(
-            left: left,
-            top: top,
-            child: _BlurContextMenu(
-              enableBlur: enableBlur,
-              onDelete: () {
-                _hideContextMenu();
-                _showDeleteConfirmDialog(item);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-
-    overlay.insert(_contextMenuOverlay!);
-  }
-
-  void _hideContextMenu() {
-    _contextMenuOverlay?.remove();
-    _contextMenuOverlay = null;
   }
 
   List<WatchHistoryItem> _getValidHistory(List<WatchHistoryItem> history) {
@@ -571,64 +533,42 @@ style: TextStyle(color: Colors.red)),
   }
 }
 
-class _BlurContextMenu extends StatelessWidget {
-  final bool enableBlur;
-  final VoidCallback onDelete;
+class _AnimatedTrashButton extends StatefulWidget {
+  final VoidCallback onTap;
 
-  const _BlurContextMenu({
-    required this.enableBlur,
-    required this.onDelete,
-  });
+  const _AnimatedTrashButton({required this.onTap});
+
+  @override
+  State<_AnimatedTrashButton> createState() => _AnimatedTrashButtonState();
+}
+
+class _AnimatedTrashButtonState extends State<_AnimatedTrashButton> {
+  bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return GlassmorphicContainer(
-      width: 196,
-      height: 56,
-      borderRadius: 12,
-      blur: enableBlur ? 16 : 0,
-      border: 0.8,
-      alignment: Alignment.center,
-      linearGradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.white.withOpacity(0.18),
-          Colors.white.withOpacity(0.08),
-        ],
-      ),
-      borderGradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.white.withOpacity(0.45),
-          Colors.white.withOpacity(0.15),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onDelete,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Ionicons.trash_outline,
-                  size: 18,
-                  color: Colors.redAccent,
-                ),
-                SizedBox(width: 10),
-                Text(
-                  '删除观看记录',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
+    final colorScheme = Theme.of(context).colorScheme;
+    const Color nipaColor = Color(0xFFFF2E55);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _isHovered ? 1.2 : 1.0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeInOut,
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 150),
+            style: TextStyle(
+              color: _isHovered ? nipaColor : colorScheme.onSurface.withOpacity(0.4),
+            ),
+            child: Icon(
+              Ionicons.trash_outline,
+              size: 16,
+              color: _isHovered ? nipaColor : colorScheme.onSurface.withOpacity(0.4),
             ),
           ),
         ),

@@ -1,5 +1,5 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -121,7 +121,7 @@ class _CupertinoNetworkSettingsPageState
       _ServerOption(
         label: '备用服务器',
         value: NetworkSettings.backupServer,
-        description: '139.217.235.62:16001',
+        description: '139.224.252.88:16001',
       ),
     ];
 

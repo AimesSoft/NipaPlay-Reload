@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';

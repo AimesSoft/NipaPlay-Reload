@@ -1,0 +1,76 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 218,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 221,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 225,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "/usr/local/include",
+			"paths" : 
+			[
+				"/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2"
+			],
+			"type" : "directory"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "/usr/local/lib/cmake/libsmb2",
+			"paths" : 
+			[
+				"/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/cmake/FindSMB2.cmake",
+				"/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/android/.cxx/RelWithDebInfo/2u5s5i5f/x86_64/libsmb2/libsmb2-config-version.cmake"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "/usr/local/lib/pkgconfig",
+			"paths" : 
+			[
+				"/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/android/.cxx/RelWithDebInfo/2u5s5i5f/x86_64/libsmb2/libsmb2.pc"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "libsmb2",
+		"source" : "/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2"
+	}
+}

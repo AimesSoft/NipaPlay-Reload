@@ -43,7 +43,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     }
 
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
-    final enableAnimation = appearanceSettings.enablePageAnimation;
+    final bool isDesktopOrTablet = globals.isDesktopOrTablet;
+    // 强制启用动画
+    const enableAnimation = true;
 
     final currentIndex = widget.tabController!.index;
     final preloadIndices = widget.pageIsHome
@@ -52,50 +54,54 @@ class _CustomScaffoldState extends State<CustomScaffold> {
             .toList()
         : const <int>[];
 
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return BackgroundWithBlur(
       child: Scaffold(
         primary: false,
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? Colors.black.withOpacity(0.7)
-            : Colors.black.withOpacity(0.2),
+        backgroundColor: Colors.transparent,
         extendBodyBehindAppBar: false,
         appBar: widget.shouldShowAppBar && widget.tabPage.isNotEmpty
             ? AppBar(
-                toolbarHeight: !widget.pageIsHome && !globals.isDesktop
+                toolbarHeight: !widget.pageIsHome && !isDesktopOrTablet
                     ? 100
-                    : globals.isDesktop
+                    : isDesktopOrTablet
                         ? 20
-                        : globals.isTablet
-                            ? 30
-                            : 60,
+                        : 60,
                 leading: widget.pageIsHome
                     ? null
                     : IconButton(
                         icon: const Icon(Ionicons.chevron_back_outline),
-                        color: Colors.white,
+                        color: isDarkMode ? Colors.white : Colors.black,
                         onPressed: () {
                           Navigator.of(context).pop();
                         },
                       ),
                 backgroundColor: Colors.transparent,
                 elevation: 0,
-                bottom: TabBar(
-                  controller: widget.tabController,
-                  isScrollable: true,
-                  tabs: widget.tabPage,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white60,
-                  labelPadding: const EdgeInsets.only(bottom: 15.0),
-                  tabAlignment: TabAlignment.start,
-                  // 恢复灰色背景条，并使用自定义指示器
-                  dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                  dividerHeight: 3.0,
-                  indicator: const _CustomTabIndicator(
-                    indicatorHeight: 3.0,
-                    indicatorColor: Colors.white,
-                    radius: 30.0, // 使用大圆角形成药丸形状
+                bottom: _LogoTabBar(
+                  tabBar: TabBar(
+                    controller: widget.tabController,
+                    isScrollable: true,
+                    tabs: widget.tabPage,
+                    labelColor: const Color(0xFFFF2E55),
+                    unselectedLabelColor:
+                        isDarkMode ? Colors.white60 : Colors.black54,
+                    labelPadding: const EdgeInsets.only(bottom: 15.0),
+                    tabAlignment: TabAlignment.start,
+                    splashFactory: NoSplash.splashFactory, // 去除水波纹
+                    overlayColor:
+                        WidgetStateProperty.all(Colors.transparent), // 去除点击背景色
+                    // 移除灰色滑轨
+                    dividerColor: Colors.transparent,
+                    dividerHeight: 3.0,
+                    indicator: const _CustomTabIndicator(
+                      indicatorHeight: 3.0,
+                      indicatorColor: Color(0xFFFF2E55),
+                      radius: 30.0, // 使用大圆角形成药丸形状
+                    ),
+                    indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
                   ),
-                  indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
                 ),
               )
             : null,
@@ -111,8 +117,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                 ? const PageScrollPhysics()
                 : const NeverScrollableScrollPhysics(),
             onPageChanged: _handlePageChangedBySwitchableView,
-            children:
-                widget.pages.map((page) => RepaintBoundary(child: page)).toList(),
+            children: widget.pages
+                .map((page) => RepaintBoundary(child: page))
+                .toList(),
           ),
         ),
       ),
@@ -182,6 +189,39 @@ class _CustomPainter extends BoxPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
       paint,
+    );
+  }
+}
+
+class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
+  final TabBar tabBar;
+
+  const _LogoTabBar({super.key, required this.tabBar});
+
+  @override
+  Size get preferredSize => tabBar.preferredSize;
+
+  @override
+  Widget build(BuildContext context) {
+    // 桌面端/平板不显示Logo（移至右上角），移动端与Web保持原有布局
+    if (globals.isDesktopOrTablet) {
+      return tabBar;
+    }
+
+    return Row(
+      children: [
+        const SizedBox(width: 16),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 20.0),
+          child: Image.asset(
+            'assets/logo.png',
+            height: 40,
+            fit: BoxFit.contain,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: tabBar),
+      ],
     );
   }
 }

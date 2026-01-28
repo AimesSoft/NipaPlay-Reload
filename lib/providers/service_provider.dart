@@ -41,7 +41,7 @@ class ServiceProvider {
       onHistoryUpdated: () => watchHistoryProvider.refresh(),
     );
 
-    // Web 远程访问：若用户开启了“软件启动自动开启”，则在此启动 WebServer
+    // 远程访问服务：若用户开启了“软件启动自动开启”，则在此启动服务
     try {
       await webServer.loadSettings();
     } catch (e) {

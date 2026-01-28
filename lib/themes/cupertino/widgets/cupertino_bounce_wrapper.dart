@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 /// iOS风格的页面进入bounce动画包装器
 /// 模拟原生iOS应用切换页面时的轻微向上偏移后回弹的效果

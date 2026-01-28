@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
@@ -25,34 +26,57 @@ import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart'; // 导入WebDAV连接对话框
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 
+enum LibraryManagementSection { local, webdav, smb }
+
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
+  final LibraryManagementSection section;
 
-  const LibraryManagementTab({super.key, required this.onPlayEpisode});
+  const LibraryManagementTab({
+    super.key,
+    required this.onPlayEpisode,
+    this.section = LibraryManagementSection.local,
+  });
 
   @override
   State<LibraryManagementTab> createState() => _LibraryManagementTabState();
 }
-
-enum _LibrarySource { local, webdav, smb }
 
 class _LibraryManagementTabState extends State<LibraryManagementTab> {
   static const String _lastScannedDirectoryPickerPathKey = 'last_scanned_dir_picker_path';
   static const String _librarySortOptionKey = 'library_sort_option'; // 新增键用于保存排序选项
 
   final Map<String, List<io.FileSystemEntity>> _expandedFolderContents = {};
+  final Set<String> _expandedLocalFolders = {};
   final Set<String> _loadingFolders = {};
   final ScrollController _listScrollController = ScrollController();
+  final ScrollController _webdavScrollController = ScrollController();
+  final ScrollController _smbScrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  bool _hasScanServiceListener = false;
   
   // 存储ScanService引用
   ScanService? _scanService;
 
   // 排序相关状态
   int _sortOption = 0; // 0: 文件名升序, 1: 文件名降序, 2: 修改时间升序, 3: 修改时间降序, 4: 大小升序, 5: 大小降序
+  static const List<String> _sortOptionLabels = [
+    '文件名 (A→Z)',
+    '文件名 (Z→A)',
+    '修改时间 (旧→新)',
+    '修改时间 (新→旧)',
+    '文件大小 (小→大)',
+    '文件大小 (大→小)',
+  ];
+  final GlobalKey _sortDropdownKey = GlobalKey();
 
   static const Set<String> _batchMatchVideoExtensions = {
     '.mp4',
@@ -69,12 +93,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   };
 
   // 网络资源相关状态
-  _LibrarySource _activeSource = _LibrarySource.local;
   List<WebDAVConnection> _webdavConnections = [];
   final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
+  final Set<String> _expandedWebDAVFolders = {};
   final Set<String> _loadingWebDAVFolders = {};
   List<SMBConnection> _smbConnections = [];
   final Map<String, List<SMBFileEntry>> _smbFolderContents = {};
+  final Set<String> _expandedSMBFolders = {};
   final Set<String> _loadingSMBFolders = {};
 
   @override
@@ -82,14 +107,19 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     super.initState();
     
     // 延迟初始化，确保挂载完成
-    _initScanServiceListener();
+    if (widget.section == LibraryManagementSection.local) {
+      _initScanServiceListener();
+      // 加载保存的排序选项
+      _loadSortOption();
+    }
     
-    // 加载保存的排序选项
-    _loadSortOption();
+    if (widget.section == LibraryManagementSection.webdav) {
+      _initWebDAVService();
+    }
     
-    // 初始化WebDAV服务
-    _initWebDAVService();
-    _initSMBService();
+    if (widget.section == LibraryManagementSection.smb) {
+      _initSMBService();
+    }
   }
   
   // 提取为单独的方法，方便管理生命周期
@@ -104,6 +134,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         _scanService = scanService; // 保存引用
         print('初始化ScanService监听器开始');
         scanService.addListener(_checkScanResults);
+        _hasScanServiceListener = true;
         print('ScanService监听器添加成功');
       } catch (e) {
         print('初始化ScanService监听器失败: $e');
@@ -169,10 +200,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   @override
   void dispose() {
     // 安全移除监听器，使用保存的引用
-    if (_scanService != null) {
+    if (_hasScanServiceListener && _scanService != null) {
       _scanService!.removeListener(_checkScanResults);
     }
+    _searchController.dispose();
     _listScrollController.dispose();
+    _webdavScrollController.dispose();
+    _smbScrollController.dispose();
     super.dispose();
   }
 
@@ -239,14 +273,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           title: "文件夹访问受限",
           content: io.Platform.isAndroid ?"无法访问您选择的文件夹，可能是权限问题。\n\n如果您使用的是Android 11或更高版本，请考虑在设置中开启「管理所有文件」权限。" : "无法访问您选择的文件夹，可能是权限问题。",
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("打开设置", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
@@ -296,7 +330,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             title: "访问提示 ",
             content: dialogContent,
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () {
@@ -325,7 +359,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             title: "访问错误",
             content: "无法访问所选文件夹，可能是权限问题。\n\n建议选择您的个人文件夹或媒体文件夹，如Pictures、Download或Movies。\n\n错误: ${e.toString().substring(0, min(e.toString().length, 100))}",
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () {
@@ -354,14 +388,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '确认移除',
       content: '确定要从列表中移除文件夹 "$folderPathToRemove" 吗？\n相关的媒体记录也会被清理。',
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('移除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
@@ -546,64 +580,84 @@ style: TextStyle(color: Colors.redAccent)),
   }
 
   List<Widget> _buildFileSystemNodes(List<io.FileSystemEntity> entities, String parentPath, int depth) {
-    if (entities.isEmpty && !_loadingFolders.contains(parentPath)) {
-      return [Padding(
-        padding: EdgeInsets.only(left: depth * 16.0 + 16.0, top: 8.0, bottom: 8.0),
-        child: const Text("文件夹为空", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white54)),
-      )];
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    final double indent = libraryManagementTreeIndent(depth);
+
+    if (entities.isEmpty) {
+      return [
+        Padding(
+          padding: EdgeInsets.fromLTRB(indent, 6, 0, 6),
+          child: Text(
+            "（空文件夹）",
+            locale: const Locale("zh-Hans","zh"),
+            style: TextStyle(color: secondaryTextColor, fontSize: 12),
+          ),
+        )
+      ];
     }
+
     
     return entities.map<Widget>((entity) {
-      final indent = EdgeInsets.only(left: depth * 16.0);
       if (entity is io.Directory) {
         final dirPath = entity.path;
-        return Padding(
-          padding: indent,
-          child: ExpansionTile(
-            key: PageStorageKey<String>(dirPath),
-            leading: const Icon(Icons.folder_outlined, color: Colors.white70),
-            title: Text(p.basename(dirPath), style: const TextStyle(color: Colors.white)),
-            onExpansionChanged: (isExpanded) {
-              if (isExpanded && _expandedFolderContents[dirPath] == null && !_loadingFolders.contains(dirPath)) {
-                // 使用 Future.microtask 确保在当前构建帧完成后执行
-                Future.microtask(() => _loadFolderChildren(dirPath));
-              }
-            },
-            children: _loadingFolders.contains(dirPath)
-                ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
-                : [
-                    _buildBatchDanmakuMatchFolderAction(
-                      dirPath,
-                      _expandedFolderContents[dirPath] ?? const [],
-                    ),
-                    ..._buildFileSystemNodes(
-                      _expandedFolderContents[dirPath] ?? const [],
-                      dirPath,
-                      depth + 1,
-                    ),
-                  ],
-          ),
+        final expanded = _expandedLocalFolders.contains(dirPath);
+        final loading = _loadingFolders.contains(dirPath);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LibraryManagementFolderRow(
+              title: p.basename(dirPath),
+              indent: indent,
+              expanded: expanded,
+              loading: loading,
+              iconColor: iconColor,
+              textColor: textColor,
+              secondaryTextColor: secondaryTextColor,
+              onTap: () {
+                if (expanded) {
+                  setState(() => _expandedLocalFolders.remove(dirPath));
+                  return;
+                }
+                setState(() => _expandedLocalFolders.add(dirPath));
+                if (_expandedFolderContents[dirPath] == null &&
+                    !_loadingFolders.contains(dirPath)) {
+                  Future.microtask(() => _loadFolderChildren(dirPath));
+                }
+              },
+            ),
+            if (expanded)
+              if (loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else ...[
+                _buildBatchDanmakuMatchFolderAction(
+                  dirPath,
+                  _expandedFolderContents[dirPath] ?? const [],
+                ),
+                ..._buildFileSystemNodes(
+                  _expandedFolderContents[dirPath] ?? const [],
+                  dirPath,
+                  depth + 1,
+                ),
+              ],
+          ],
         );
       } else if (entity is io.File) {
         return Padding(
-          padding: indent,
+          padding: const EdgeInsets.only(top: 2),
           child: FutureBuilder<WatchHistoryItem?>(
             future: WatchHistoryManager.getHistoryItem(entity.path),
             builder: (context, snapshot) {
               // 获取扫描到的动画信息
               final historyItem = snapshot.data;
               final String fileName = p.basename(entity.path);
-              
-              // 调试信息
-              if (historyItem != null) {
-                debugPrint('🎬 文件: $fileName');
-                debugPrint('   动画名: ${historyItem.animeName}');
-                debugPrint('   集数: ${historyItem.episodeTitle}');
-                debugPrint('   来自扫描: ${historyItem.isFromScan}');
-                debugPrint('   动画ID: ${historyItem.animeId}');
-                debugPrint('   集数ID: ${historyItem.episodeId}');
-              }
               
               // 构建副标题（动画名称和集数）
               String? subtitleText;
@@ -631,14 +685,16 @@ style: TextStyle(color: Colors.white54)),
               }
               
               return ListTile(
-                leading: const Icon(Icons.videocam_outlined, color: Colors.white),
-                title: Text(fileName, style: const TextStyle(color: Colors.white)),
+                dense: true,
+                contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+                leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+                title: Text(fileName, style: TextStyle(color: textColor, fontSize: 13)),
                 subtitle: subtitleText != null 
                     ? Text(
                         subtitleText,
-                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
+                        locale: const Locale("zh-Hans","zh"),
+                        style: TextStyle(
+                          color: secondaryTextColor,
                           fontSize: 12,
                         ),
                         maxLines: 2,
@@ -650,13 +706,13 @@ style: TextStyle(
                   children: [
                     // 手动匹配弹幕按钮
                     IconButton(
-                      icon: const Icon(Icons.subtitles, color: Colors.white70, size: 20),
+                      icon: Icon(Icons.subtitles, color: iconColor, size: 20),
                       onPressed: () => _showManualDanmakuMatchDialog(entity.path, fileName, historyItem),
                     ),
                     // 移除扫描结果按钮
                     if (historyItem != null && (historyItem.animeId != null || historyItem.episodeId != null))
                       IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white70, size: 20),
+                        icon: Icon(Icons.clear, color: iconColor, size: 20),
                         onPressed: () => _showRemoveScanResultDialog(entity.path, fileName, historyItem),
                       ),
                   ],
@@ -719,17 +775,42 @@ style: TextStyle(
     return _batchMatchVideoExtensions.contains(p.extension(filePath).toLowerCase());
   }
 
+  void _applySortOption(int sortOption, {bool showToast = true}) {
+    if (!mounted) return;
+    if (sortOption < 0 || sortOption >= _sortOptionLabels.length) {
+      return;
+    }
+    if (sortOption == _sortOption) return;
+    setState(() {
+      _sortOption = sortOption;
+      for (final contents in _expandedFolderContents.values) {
+        _sortContents(contents);
+      }
+    });
+    _saveSortOption(sortOption);
+    if (showToast) {
+      BlurSnackBar.show(context, '排序方式已更改为：${_sortOptionLabels[sortOption]}');
+    }
+  }
+
+  Widget _buildSortDropdown() {
+    return BlurDropdown<int>(
+      dropdownKey: _sortDropdownKey,
+      onItemSelected: (value) => _applySortOption(value),
+      items: _sortOptionLabels
+          .asMap()
+          .entries
+          .map((entry) => DropdownMenuItemData<int>(
+                title: entry.value,
+                value: entry.key,
+                isSelected: entry.key == _sortOption,
+              ))
+          .toList(),
+    );
+  }
+
   // 显示排序选择对话框
   Future<void> _showSortOptionsDialog() async {
-    final List<String> sortOptions = [
-      '文件名 (A→Z)',
-      '文件名 (Z→A)',
-      '修改时间 (旧→新)',
-      '修改时间 (新→旧)',
-      '文件大小 (小→大)',
-      '文件大小 (大→小)',
-    ];
-
     final result = await BlurDialog.show<int>(
       context: context,
       title: '选择排序方式',
@@ -750,7 +831,7 @@ style: TextStyle(
             height: 200, // 减少高度
             child: SingleChildScrollView(
               child: Column(
-                children: sortOptions.asMap().entries.map((entry) {
+                children: _sortOptionLabels.asMap().entries.map((entry) {
                   final index = entry.key;
                   final option = entry.value;
                   final isSelected = _sortOption == index;
@@ -799,7 +880,7 @@ style: TextStyle(
             ),
           ),
           const SizedBox(height: 16),
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white54)),
@@ -808,17 +889,8 @@ style: TextStyle(color: Colors.white54)),
       ),
     );
 
-    if (result != null && result != _sortOption && mounted) {
-      setState(() {
-        _sortOption = result;
-        // 清空已展开的文件夹内容，强制重新加载和排序
-        _expandedFolderContents.clear();
-      });
-      
-      // 保存排序选项
-      _saveSortOption(result);
-      
-      BlurSnackBar.show(context, '排序方式已更改为：${sortOptions[result]}');
+    if (result != null) {
+      _applySortOption(result);
     }
   }
 
@@ -872,16 +944,16 @@ style: TextStyle(color: Colors.white54)),
       dialogContent += "1. 确保将视频文件存放在易于访问的文件夹中\n";
       dialogContent += "2. 您可以创建专门的文件夹，如「Movies」或「Anime」\n";
       dialogContent += "3. 确保文件夹权限设置正确，应用可以访问\n";
-      dialogContent += "4. 点击上方「添加并扫描文件夹」选择您的视频文件夹\n\n";
+      dialogContent += "4. 点击上方的添加文件夹按钮选择您的视频文件夹\n\n";
       dialogContent += "常见问题：\n";
       dialogContent += "- 如果无法选择某个文件夹，可能是权限问题\n";
       dialogContent += "- 建议使用标准的媒体文件夹如Pictures、Movies或Documents\n";
     }
     
     if (io.Platform.isIOS) {
-      dialogContent += "\n添加完文件后，点击上方的「扫描NipaPlay文件夹」按钮刷新媒体库。";
+      dialogContent += "\n添加完文件后，点击上方的添加文件夹按钮刷新媒体库。";
     } else {
-      dialogContent += "\n添加完文件后，点击上方的「添加并扫描文件夹」按钮选择您存放视频的文件夹。";
+      dialogContent += "\n添加完文件后，点击上方的添加文件夹按钮选择您存放视频的文件夹。";
     }
     
     BlurDialog.show<void>(
@@ -889,9 +961,9 @@ style: TextStyle(color: Colors.white54)),
       title: "如何添加视频文件",
       content: dialogContent,
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
+style: TextStyle(color: Color(0xFFFF2E55))),
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -913,14 +985,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '重置存储路径',
       content: '确定要重置存储路径吗？这将清除您之前设置的自定义路径，并使用系统默认位置。\n\n注意：这不会删除您已添加到媒体库的视频文件。',
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('重置', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
@@ -979,14 +1051,14 @@ style: TextStyle(color: Colors.redAccent)),
           title: 'Android存储权限状态',
           content: content.toString(),
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text('关闭', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text('申请权限', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () async {
@@ -1029,14 +1101,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           title: "需要媒体权限",
           content: "NipaPlay需要访问媒体文件权限才能扫描视频文件。\n\n请在系统设置中允许NipaPlay访问照片、视频和音频权限。",
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("稍后再说", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("打开设置", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
@@ -1109,14 +1181,14 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           title: "未找到视频文件夹",
           content: "无法找到系统视频文件夹。建议使用\"管理所有文件\"权限或手动选择文件夹。",
           actions: <Widget>[
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
+            HoverScaleTextButton(
               child: const Text("开启完整权限", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
               onPressed: () {
@@ -1162,9 +1234,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedSortOption = prefs.getInt(_librarySortOptionKey) ?? 0;
+      final resolvedSortOption =
+          (savedSortOption >= 0 && savedSortOption < _sortOptionLabels.length) ? savedSortOption : 0;
       if (mounted) {
         setState(() {
-          _sortOption = savedSortOption;
+          _sortOption = resolvedSortOption;
         });
       }
     } catch (e) {
@@ -1180,6 +1254,172 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     } catch (e) {
       debugPrint('保存排序选项失败: $e');
     }
+  }
+
+  String get _normalizedSearchQuery => _searchController.text.toLowerCase().trim();
+
+  List<String> _filterFolderPaths(List<String> folderPaths) {
+    final query = _normalizedSearchQuery;
+    if (query.isEmpty) return folderPaths;
+    return folderPaths.where((path) {
+      final lowerPath = path.toLowerCase();
+      return lowerPath.contains(query) ||
+          p.basename(path).toLowerCase().contains(query);
+    }).toList();
+  }
+
+  List<WebDAVConnection> _filterWebDAVConnections() {
+    final query = _normalizedSearchQuery;
+    if (query.isEmpty) return _webdavConnections;
+    return _webdavConnections.where((connection) {
+      return connection.name.toLowerCase().contains(query) ||
+          connection.url.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  List<SMBConnection> _filterSMBConnections() {
+    final query = _normalizedSearchQuery;
+    if (query.isEmpty) return _smbConnections;
+    return _smbConnections.where((connection) {
+      return connection.name.toLowerCase().contains(query) ||
+          connection.host.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String message,
+  }) {
+    return LibraryManagementEmptyState(
+      icon: icon,
+      title: message,
+    );
+  }
+
+  Widget _buildActionIcon({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return SearchBarActionButton(
+      icon: icon,
+      tooltip: tooltip,
+      onPressed: onPressed ?? () {},
+    );
+  }
+
+  List<Widget> _buildControlBarActions(ScanService scanService) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final bool isScanning = scanService.isScanning;
+    switch (widget.section) {
+      case LibraryManagementSection.webdav:
+        return [
+          _buildActionIcon(
+            icon: Icons.cloud_outlined,
+            tooltip: '添加WebDAV服务器',
+            onPressed: isScanning ? null : () => _showWebDAVConnectionDialog(),
+          ),
+        ];
+      case LibraryManagementSection.smb:
+        return [
+          _buildActionIcon(
+            icon: Icons.lan_outlined,
+            tooltip: '添加SMB服务器',
+            onPressed: isScanning ? null : () => _showSMBConnectionDialog(),
+          ),
+        ];
+      case LibraryManagementSection.local:
+      default:
+        return [
+          _buildSortDropdown(),
+          _buildActionIcon(
+            icon: Icons.create_new_folder_outlined,
+            tooltip: '添加本地文件夹',
+            onPressed: isScanning ? null : _pickAndScanDirectory,
+          ),
+          if (io.Platform.isAndroid)
+            _buildActionIcon(
+              icon: Icons.settings_backup_restore,
+              tooltip: '重置存储路径',
+              onPressed: isScanning ? null : _clearCustomStoragePath,
+            ),
+          if (io.Platform.isAndroid)
+            _buildActionIcon(
+              icon: Icons.security,
+              tooltip: '检查权限状态',
+              onPressed: isScanning ? null : _checkAndShowPermissionStatus,
+            ),
+          _buildActionIcon(
+            icon: Icons.cleaning_services,
+            tooltip: '清理智能扫描缓存',
+            onPressed: isScanning ? null : () async {
+              final confirm = await BlurDialog.show<bool>(
+                context: context,
+                title: '清理智能扫描缓存',
+                content:
+                    '这将清理所有文件夹的变化检测缓存，下次扫描时将重新检查所有文件夹。\n\n适用于：\n• 怀疑智能扫描遗漏了某些变化\n• 想要强制重新扫描所有文件夹\n\n确定要清理缓存吗？',
+                      actions: <Widget>[
+                        HoverScaleTextButton(
+                          child: Text('取消', locale: const Locale("zh-Hans","zh"),
+style: TextStyle(color: secondaryTextColor)),
+                          onPressed: () => Navigator.of(context).pop(false),
+                        ),
+                        HoverScaleTextButton(
+                          child: const Text('清理', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.orangeAccent)),
+                          onPressed: () => Navigator.of(context).pop(true),
+                        ),
+                      ],
+              );
+              if (confirm == true) {
+                await scanService.clearAllFolderHashCache();
+                if (mounted) {
+                  BlurSnackBar.show(context, '智能扫描缓存已清理');
+                }
+              }
+            },
+          ),
+          _buildActionIcon(
+            icon: Ionicons.refresh_outline,
+            tooltip: '智能刷新',
+            onPressed: isScanning
+                ? null
+                : () async {
+                    final confirm = await BlurDialog.show<bool>(
+                      context: context,
+                      title: '智能刷新确认',
+                      content: '将使用智能扫描技术重新检查所有已添加的媒体文件夹：\n\n• 自动检测文件夹内容变化\n• 只扫描有新增、删除或修改文件的文件夹\n• 跳过无变化的文件夹，大幅提升扫描速度\n• 可选择跳过已匹配且未观看的文件\n\n这可能需要一些时间，但比传统全量扫描快很多。',
+                      actions: <Widget>[
+                        HoverScaleTextButton(
+                          child: Text('取消', locale: const Locale("zh-Hans","zh"),
+style: TextStyle(color: secondaryTextColor)),
+                          onPressed: () => Navigator.of(context).pop(false),
+                        ),
+                        HoverScaleTextButton(
+                          child: const Text('智能刷新', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.lightBlueAccent)),
+                          onPressed: () => Navigator.of(context).pop(true),
+                        ),
+                      ],
+                    );
+                    if (confirm == true) {
+                      await scanService.rescanAllFolders();
+                    }
+                  },
+          ),
+        ];
+    }
+  }
+
+  Widget _buildManagementControlBar(ScanService scanService) {
+    return LocalLibraryControlBar(
+      searchController: _searchController,
+      onSearchChanged: (_) => setState(() {}),
+      onClearSearch: () => setState(() {}),
+      showSort: false,
+      trailingActions: _buildControlBarActions(scanService),
+    );
   }
 
   @override
@@ -1208,453 +1448,158 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Row(
+        _buildManagementControlBar(scanService),
+        if (widget.section == LibraryManagementSection.local) ...[
+          if (scanService.isScanning || scanService.scanMessage.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("媒体文件夹", locale:Locale("zh-Hans","zh"),
-style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 16),
-                  // 切换开关：本地文件夹 / WebDAV / SMB
-                  _buildSourceToggle(),
+                  Text(scanService.scanMessage, style: const TextStyle(color: Colors.white70)),
+                  if (scanService.isScanning && scanService.scanProgress > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: LinearProgressIndicator(
+                        value: scanService.scanProgress,
+                        backgroundColor: Colors.grey[700],
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
+                      ),
+                    ),
                 ],
               ),
-              Row(
-                children: [
-                  // 重置存储路径按钮 - 只在Android平台显示，macOS平台不支持自定义存储路径
-                  if (io.Platform.isAndroid)
-                    IconButton(
-                      icon: const Icon(Icons.settings_backup_restore),
-                      tooltip: '重置存储路径',
-                      color: Colors.white70,
-                      onPressed: scanService.isScanning ? null : _clearCustomStoragePath,
-                    ),
-                  if (io.Platform.isAndroid)
-                    IconButton(
-                      icon: const Icon(Icons.security),
-                      tooltip: '检查权限状态',
-                      color: Colors.white70,
-                      onPressed: scanService.isScanning ? null : _checkAndShowPermissionStatus,
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.cleaning_services),
-                    color: Colors.white70,
-                    onPressed: scanService.isScanning ? null : () async {
-                      final confirm = await BlurDialog.show<bool>(
-                        context: context,
-                        title: '清理智能扫描缓存',
-                        content: '这将清理所有文件夹的变化检测缓存，下次扫描时将重新检查所有文件夹。\n\n适用于：\n• 怀疑智能扫描遗漏了某些变化\n• 想要强制重新扫描所有文件夹\n\n确定要清理缓存吗？',
-                        actions: <Widget>[
-                          TextButton(
-                            child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
-                            onPressed: () => Navigator.of(context).pop(false),
-                          ),
-                          TextButton(
-                            child: const Text('清理', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orangeAccent)),
-                            onPressed: () => Navigator.of(context).pop(true),
-                          ),
-                        ],
-                      );
-                      if (confirm == true) {
-                        await scanService.clearAllFolderHashCache();
-                        if (mounted) {
-                          BlurSnackBar.show(context, '智能扫描缓存已清理');
-                        }
-                      }
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Ionicons.refresh_outline),
-                    color: Colors.white70,
-                    onPressed: scanService.isScanning 
-                        ? null 
-                        : () async {
-                            final confirm = await BlurDialog.show<bool>(
-                              context: context,
-                              title: '智能刷新确认',
-                              content: '将使用智能扫描技术重新检查所有已添加的媒体文件夹：\n\n• 自动检测文件夹内容变化\n• 只扫描有新增、删除或修改文件的文件夹\n• 跳过无变化的文件夹，大幅提升扫描速度\n• 可选择跳过已匹配且未观看的文件\n\n这可能需要一些时间，但比传统全量扫描快很多。',
-                              actions: <Widget>[
-                                TextButton(
-                                  child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
-                                  onPressed: () => Navigator.of(context).pop(false),
-                                ),
-                                TextButton(
-                                  child: const Text('智能刷新', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
-                                  onPressed: () => Navigator.of(context).pop(true),
-                                ),
-                              ],
-                            );
-                            if (confirm == true) {
-                              await scanService.rescanAllFolders(); // skipPreviouslyMatchedUnwatched defaults to true
-                            }
-                          },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            children: [
-              // 添加本地文件夹
-              Expanded(
-                child: GlassmorphicContainer(
-                  width: double.infinity,
-                  height: 50,
-                  borderRadius: 12,
-                  blur: enableBlur ? 10 : 0,
-                  alignment: Alignment.center,
-                  border: 1,
-                  linearGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05),
-                    ],
-                  ),
-                  borderGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.3),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: scanService.isScanning ? null : _pickAndScanDirectory,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Center(
-                        child: FutureBuilder<bool>(
-                          future: io.Platform.isAndroid
-                              ? _isAndroid13Plus()
-                              : Future.value(false),
-                          builder: (context, snapshot) {
-                            String buttonText = '添加本地文件夹';
-
-                            if (io.Platform.isIOS) {
-                              buttonText = '扫描NipaPlay文件夹';
-                            } else if (io.Platform.isAndroid) {
-                              if (snapshot.hasData && snapshot.data == true) {
-                                buttonText = '扫描视频文件夹';
-                              } else {
-                                buttonText = '添加本地文件夹';
-                              }
-                            }
-
-                            return FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                buttonText,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // 添加 WebDAV 服务器
-              Expanded(
-                child: GlassmorphicContainer(
-                  width: double.infinity,
-                  height: 50,
-                  borderRadius: 12,
-                  blur: enableBlur ? 10 : 0,
-                  alignment: Alignment.center,
-                  border: 1,
-                  linearGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05),
-                    ],
-                  ),
-                  borderGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.3),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: scanService.isScanning ? null : _showWebDAVConnectionDialog,
-                      borderRadius: BorderRadius.circular(12),
-                      child: const Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            '添加WebDAV服务器',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // 添加 SMB 服务器
-              Expanded(
-                child: GlassmorphicContainer(
-                  width: double.infinity,
-                  height: 50,
-                  borderRadius: 12,
-                  blur: enableBlur ? 10 : 0,
-                  alignment: Alignment.center,
-                  border: 1,
-                  linearGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05),
-                    ],
-                  ),
-                  borderGradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.3),
-                      Colors.white.withOpacity(0.1),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: scanService.isScanning ? null : _showSMBConnectionDialog,
-                      borderRadius: BorderRadius.circular(12),
-                      child: const Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            '添加SMB服务器',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (scanService.isScanning || scanService.scanMessage.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(scanService.scanMessage, style: const TextStyle(color: Colors.white70)),
-                if (scanService.isScanning && scanService.scanProgress > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: LinearProgressIndicator(
-                      value: scanService.scanProgress,
-                      backgroundColor: Colors.grey[700],
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.lightBlueAccent),
-                    ),
-                  ),
-              ],
             ),
-          ),
-        // 显示启动时检测到的变化
-        if (scanService.detectedChanges.isNotEmpty && !scanService.isScanning)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: GlassmorphicContainer(
-              width: double.infinity,
-              height: 50,
-              borderRadius: 12,
-              blur: enableBlur ? 10 : 0,
-              alignment: Alignment.centerLeft,
-              border: 1,
-              linearGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.orange.withOpacity(0.15),
-                  Colors.orange.withOpacity(0.05),
-                ],
-              ),
-              borderGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.orange.withOpacity(0.3),
-                  Colors.orange.withOpacity(0.1),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.notification_important, color: Colors.orange, size: 20),
-                        const SizedBox(width: 8),
-                        const Text(
-                          "检测到文件夹变化",
-                          locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => scanService.clearDetectedChanges(),
-                          child: const Text("忽略", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      scanService.getChangeDetectionSummary(),
-                      style: const TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                    const SizedBox(height: 12),
-                    ...scanService.detectedChanges.map((change) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  change.displayName,
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                                ),
-                                Text(
-                                  change.changeDescription,
-                                  style: const TextStyle(color: Colors.white60, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              // 扫描这个有变化的文件夹
-                              await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
-                              if (mounted) {
-                                BlurSnackBar.show(context, '已开始扫描: ${change.displayName}');
-                              }
-                            },
-                            child: const Text("扫描", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
-                          ),
-                        ],
-                      ),
-                    )),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              // 扫描所有有变化的文件夹
-                              for (final change in scanService.detectedChanges) {
-                                if (change.changeType != 'deleted') {
-                                  await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
-                                }
-                              }
-                              scanService.clearDetectedChanges();
-                              if (mounted) {
-                                BlurSnackBar.show(context, '已开始扫描所有有变化的文件夹');
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.lightBlueAccent.withOpacity(0.2),
-                              foregroundColor: Colors.lightBlueAccent,
-                            ),
-                            child: const Text("扫描所有变化"),
-                          ),
-                        ),
-                      ],
-                    ),
+          // 显示启动时检测到的变化
+          if (scanService.detectedChanges.isNotEmpty && !scanService.isScanning)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: GlassmorphicContainer(
+                width: double.infinity,
+                height: 50,
+                borderRadius: 12,
+                blur: enableBlur ? 10 : 0,
+                alignment: Alignment.centerLeft,
+                border: 1,
+                linearGradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.orange.withOpacity(0.15),
+                    Colors.orange.withOpacity(0.05),
                   ],
                 ),
-              ),
-            ),
-          ),
-        // 排序选项按钮
-        if (scanService.scannedFolders.isNotEmpty || scanService.isScanning)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              children: [
-                const Text('排序方式：', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: _showSortOptionsDialog,
-                  icon: const Icon(Icons.sort, color: Colors.white, size: 18),
-                  label: Text(
-                    [
-                      '文件名 (A→Z)',
-                      '文件名 (Z→A)',
-                      '修改时间 (旧→新)',
-                      '修改时间 (新→旧)',
-                      '文件大小 (小→大)',
-                      '文件大小 (大→小)',
-                    ][_sortOption],
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
+                borderGradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.orange.withOpacity(0.3),
+                    Colors.orange.withOpacity(0.1),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.notification_important, color: Colors.orange, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            "检测到文件夹变化",
+                            locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => scanService.clearDetectedChanges(),
+                            child: const Text("忽略", locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        scanService.getChangeDetectionSummary(),
+                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      const SizedBox(height: 12),
+                      ...scanService.detectedChanges.map((change) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    change.displayName,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    change.changeDescription,
+                                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                // 扫描这个有变化的文件夹
+                                await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
+                                if (mounted) {
+                                  BlurSnackBar.show(context, '已开始扫描: ${change.displayName}');
+                                }
+                              },
+                              child: const Text("扫描", locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.lightBlueAccent)),
+                            ),
+                          ],
+                        ),
+                      )),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                // 扫描所有有变化的文件夹
+                                for (final change in scanService.detectedChanges) {
+                                  if (change.changeType != 'deleted') {
+                                    await scanService.startDirectoryScan(change.folderPath, skipPreviouslyMatchedUnwatched: false);
+                                  }
+                                }
+                                scanService.clearDetectedChanges();
+                                if (mounted) {
+                                  BlurSnackBar.show(context, '已开始扫描所有有变化的文件夹');
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.lightBlueAccent.withOpacity(0.2),
+                                foregroundColor: Colors.lightBlueAccent,
+                              ),
+                              child: const Text("扫描所有变化"),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+        ],
         Expanded(
           child: Builder(
             builder: (_) {
-              switch (_activeSource) {
-                case _LibrarySource.webdav:
+              switch (widget.section) {
+                case LibraryManagementSection.webdav:
                   return _buildWebDAVFoldersList();
-                case _LibrarySource.smb:
+                case LibraryManagementSection.smb:
                   return _buildSMBFoldersList();
-                case _LibrarySource.local:
+                case LibraryManagementSection.local:
                 default:
-                  return (scanService.scannedFolders.isEmpty && !scanService.isScanning)
-                      ? const Center(
-                          child: Text(
-                            '尚未添加任何扫描文件夹。\n点击上方按钮添加。',
-                            textAlign: TextAlign.center,
-                            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-                          ),
-                        )
-                      : _buildResponsiveFolderList(scanService);
+                  return _buildLocalFoldersBody(scanService);
               }
             },
           ),
@@ -1741,6 +1686,7 @@ style: TextStyle(color: Colors.white70),
     BlurSnackBar.show(context, '批量匹配完成：成功更新 $successCount/${mappings.length} 个文件');
     setState(() {
       _expandedFolderContents.clear();
+      _expandedLocalFolders.clear();
     });
   }
 
@@ -1812,6 +1758,7 @@ style: TextStyle(color: Colors.white70),
               setState(() {
                 // 清空已展开的文件夹内容，强制重新加载
                 _expandedFolderContents.clear();
+                _expandedLocalFolders.clear();
               });
             }
           } catch (e) {
@@ -1862,14 +1809,14 @@ style: TextStyle(color: Colors.white70),
       title: '移除扫描结果',
       content: '确定要移除文件 "$fileName" 的扫描结果吗？\n\n当前扫描信息：\n$currentInfo\n\n移除后将清除动画名称、集数信息和弹幕ID，但保留观看进度。',
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () {
             Navigator.of(context).pop(false);
           },
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('移除', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.redAccent)),
           onPressed: () {
@@ -1907,11 +1854,12 @@ style: TextStyle(color: Colors.redAccent)),
           BlurSnackBar.show(context, '已移除 "$fileName" 的扫描结果');
           
           // 刷新UI
-          setState(() {
-            // 清空已展开的文件夹内容，强制重新加载
-            _expandedFolderContents.clear();
-          });
-        }
+      setState(() {
+        // 清空已展开的文件夹内容，强制重新加载
+        _expandedFolderContents.clear();
+        _expandedLocalFolders.clear();
+      });
+    }
       } catch (e) {
         debugPrint('❌ 移除扫描结果失败：$e');
         if (mounted) {
@@ -1922,123 +1870,15 @@ style: TextStyle(color: Colors.redAccent)),
   }
 
   // 响应式文件夹列表构建方法
-  Widget _buildResponsiveFolderList(ScanService scanService) {
+  Widget _buildResponsiveFolderList(ScanService scanService, List<String> folderPaths) {
     // 对根文件夹进行排序
-    final sortedFolders = _sortFolderPaths(scanService.scannedFolders);
+    final sortedFolders = _sortFolderPaths(folderPaths);
 
-    // 检测是否为手机设备 - 手机设备始终使用单列布局
-    if (isPhone) {
-      // 手机设备使用单列ListView（包括平板，因为平板只能扫描应用目录，文件夹有限）
-      if (io.Platform.isAndroid || io.Platform.isIOS) {
-        return ListView.builder(
-          controller: _listScrollController,
-          itemCount: sortedFolders.length,
-          itemBuilder: (context, index) {
-            final folderPath = sortedFolders[index];
-            return _buildFolderTile(folderPath, scanService);
-          },
-        );
-      } else {
-        return Scrollbar(
-          controller: _listScrollController,
-          radius: const Radius.circular(2),
-          thickness: 4,
-          child: ListView.builder(
-            controller: _listScrollController,
-            itemCount: sortedFolders.length,
-            itemBuilder: (context, index) {
-              final folderPath = sortedFolders[index];
-              return _buildFolderTile(folderPath, scanService);
-            },
-          ),
-        );
-      }
-    } else {
-      // 桌面设备使用真正的瀑布流布局
-      return Scrollbar(
-        controller: _listScrollController,
-        radius: const Radius.circular(2),
-        thickness: 4,
-        child: SingleChildScrollView(
-          controller: _listScrollController,
-          padding: const EdgeInsets.all(8),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return _buildWaterfallLayout(
-                scanService,
-                sortedFolders,
-                constraints.maxWidth,
-                300.0,
-                16.0,
-              );
-            },
-          ),
-        ),
-      );
-    }
-  }
-
-  // 真正的瀑布流布局组件
-  Widget _buildWaterfallLayout(ScanService scanService, List<String> sortedFolders, double maxWidth, double minItemWidth, double spacing) {
-    // 预留边距防止溢出
-    final availableWidth = maxWidth - 16.0; // 留出16px的安全边距
-
-    // 计算列数
-    final crossAxisCount = (availableWidth / minItemWidth).floor().clamp(1, 3);
-
-    // 重新计算间距和项目宽度
-    final totalSpacing = spacing * (crossAxisCount - 1);
-    final itemWidth = (availableWidth - totalSpacing) / crossAxisCount;
-
-    // 创建列的文件夹列表
-    final columnFolders = <List<String>>[];
-    for (var i = 0; i < crossAxisCount; i++) {
-      columnFolders.add([]);
-    }
-
-    // 按列分配已排序的文件夹
-    for (var i = 0; i < sortedFolders.length; i++) {
-      final columnIndex = i % crossAxisCount;
-      columnFolders[columnIndex].add(sortedFolders[i]);
-    }
-
-    // 创建列组件
-    final columnWidgets = <Widget>[];
-    for (var i = 0; i < crossAxisCount; i++) {
-      if (columnFolders[i].isNotEmpty) {
-        columnWidgets.add(
-          SizedBox(
-            width: itemWidth,
-            child: Column(
-              children: columnFolders[i].map((folderPath) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: _buildFolderTile(folderPath, scanService),
-                );
-              }).toList(),
-            ),
-          ),
-        );
-      }
-    }
-
-    // 使用Row排列列，添加间距
-    final rowChildren = <Widget>[];
-    for (var i = 0; i < columnWidgets.length; i++) {
-      if (i > 0) {
-        rowChildren.add(SizedBox(width: spacing)); // 添加列间距
-      }
-      rowChildren.add(columnWidgets[i]);
-    }
-
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: rowChildren,
-        ),
-      ),
+    return LibraryManagementList<String>(
+      scrollController: _listScrollController,
+      items: sortedFolders,
+      itemBuilder: (context, folderPath) =>
+          _buildFolderTile(folderPath, scanService),
     );
   }
 
@@ -2073,29 +1913,36 @@ style: TextStyle(color: Colors.redAccent)),
 
   // 统一的文件夹Tile构建方法
   Widget _buildFolderTile(String folderPath, ScanService scanService) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+
     return FutureBuilder<String>(
       future: _getDisplayPath(folderPath),
       builder: (context, snapshot) {
         final displayPath = snapshot.data ?? folderPath;
         
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.1),
-              width: 0.5,
-            ),
-          ),
-          child: ExpansionTile(
-              key: PageStorageKey<String>(folderPath),
-              leading: const Icon(Icons.folder_open_outlined, color: Colors.white70),
-              title: Row(
+        return LibraryManagementCard(
+          child: Theme(
+                      data: Theme.of(context).copyWith(
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        hoverColor: Colors.transparent,
+                        dividerColor: Colors.transparent,
+                      ),
+                      child: ExpansionTile(
+                          key: PageStorageKey<String>(folderPath),
+                          leading: Icon(Icons.folder_open_outlined, color: iconColor),
+                          iconColor: iconColor,
+                          collapsedIconColor: iconColor,
+                          title: Row(
+          
                 children: [
                   Expanded(
                     child: Text(
                       p.basename(folderPath),
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      style: TextStyle(color: textColor, fontSize: 16),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -2105,24 +1952,22 @@ style: TextStyle(color: Colors.redAccent)),
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   displayPath,
-                  locale:Locale("zh-Hans","zh"),
-                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
+                  locale: const Locale("zh-Hans","zh"),
+                  style: TextStyle(color: secondaryTextColor, fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                    constraints: const BoxConstraints(),
+                  SearchBarActionButton(
+                    icon: Icons.delete_outline,
+                    tooltip: '移除文件夹',
                     onPressed: scanService.isScanning ? null : () => _handleRemoveFolder(folderPath),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                    constraints: const BoxConstraints(),
+                  SearchBarActionButton(
+                    icon: Icons.refresh_rounded,
+                    tooltip: '扫描文件夹',
                     onPressed: scanService.isScanning
                         ? null
                         : () async {
@@ -2135,12 +1980,12 @@ style: TextStyle(color: Colors.redAccent)),
                               title: '确认扫描',
                               content: '将对文件夹 "${p.basename(folderPath)}" 进行智能扫描：\n\n• 检测文件夹内容是否有变化\n• 如无变化将快速跳过\n• 如有变化将进行全面扫描\n\n开始扫描？',
                               actions: <Widget>[
-                                TextButton(
-                                  child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+                                HoverScaleTextButton(
+                                  child: Text('取消', locale: const Locale("zh-Hans","zh"),
+style: TextStyle(color: secondaryTextColor)),
                                   onPressed: () => Navigator.of(context).pop(false),
                                 ),
-                                TextButton(
+                                HoverScaleTextButton(
                                   child: const Text('扫描', locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                                   onPressed: () => Navigator.of(context).pop(true),
@@ -2166,455 +2011,434 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                   ? [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))]
                   : _buildFileSystemNodes(_expandedFolderContents[folderPath] ?? [], folderPath, 1),
             ),
+          ),
         );
       },
     );
   }
 
-  // 辅助方法：检查是否为Android 13+
-  Future<bool> _isAndroid13Plus() async {
-    if (!io.Platform.isAndroid) return false;
-    final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
-    return sdkVersion >= 33;
-  }
-
-  Widget _buildSourceToggle() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildSourceToggleItem('本地', _LibrarySource.local),
-          const SizedBox(width: 4),
-          _buildSourceToggleItem('WebDAV', _LibrarySource.webdav),
-          const SizedBox(width: 4),
-          _buildSourceToggleItem('SMB', _LibrarySource.smb),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSourceToggleItem(String text, _LibrarySource source) {
-    final bool isActive = _activeSource == source;
-    return GestureDetector(
-      onTap: () {
-        if (_activeSource != source) {
-          setState(() {
-            _activeSource = source;
-          });
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.white.withOpacity(0.3) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.white70,
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
+  Widget _buildLocalFoldersBody(ScanService scanService) {
+    final filteredFolders = _filterFolderPaths(scanService.scannedFolders);
+    if (scanService.scannedFolders.isEmpty && !scanService.isScanning) {
+      return _buildEmptyState(
+        icon: Icons.folder_open_outlined,
+        message: '尚未添加任何扫描文件夹。\n点击上方的添加按钮开始。',
+      );
+    }
+    if (scanService.scannedFolders.isNotEmpty &&
+        filteredFolders.isEmpty &&
+        _normalizedSearchQuery.isNotEmpty) {
+      return _buildEmptyState(
+        icon: Icons.search_off,
+        message: '未找到匹配的文件夹。',
+      );
+    }
+    return _buildResponsiveFolderList(scanService, filteredFolders);
   }
   
   // 构建WebDAV文件夹列表
   Widget _buildWebDAVFoldersList() {
     if (_webdavConnections.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.cloud_off, size: 64, color: Colors.white54),
-              SizedBox(height: 16),
-              Text(
-                '尚未添加任何WebDAV服务器。\n点击上方"添加WebDAV服务器"按钮开始。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
+      return _buildEmptyState(
+        icon: Icons.cloud_off,
+        message: '尚未添加任何WebDAV服务器。\n点击上方的添加按钮开始。',
       );
     }
-    
-    return ListView.builder(
-      itemCount: _webdavConnections.length,
-      itemBuilder: (context, index) {
-        final connection = _webdavConnections[index];
-        return _buildWebDAVConnectionTile(connection);
-      },
+    final filteredConnections = _filterWebDAVConnections();
+    if (filteredConnections.isEmpty && _normalizedSearchQuery.isNotEmpty) {
+      return _buildEmptyState(
+        icon: Icons.search_off,
+        message: '未找到匹配的WebDAV服务器。',
+      );
+    }
+    return LibraryManagementList<WebDAVConnection>(
+      scrollController: _webdavScrollController,
+      items: filteredConnections,
+      itemBuilder: (context, connection) => _buildWebDAVConnectionTile(connection),
     );
   }
 
   Widget _buildSMBFoldersList() {
     if (_smbConnections.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lan_outlined, size: 64, color: Colors.white54),
-              SizedBox(height: 16),
-              Text(
-                '尚未添加任何SMB服务器。\n点击上方"添加SMB服务器"按钮开始。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
+      return _buildEmptyState(
+        icon: Icons.lan_outlined,
+        message: '尚未添加任何SMB服务器。\n点击上方的添加按钮开始。',
       );
     }
-
-    return ListView.builder(
-      itemCount: _smbConnections.length,
-      itemBuilder: (context, index) {
-        final connection = _smbConnections[index];
-        return _buildSMBConnectionTile(connection);
-      },
+    final filteredConnections = _filterSMBConnections();
+    if (filteredConnections.isEmpty && _normalizedSearchQuery.isNotEmpty) {
+      return _buildEmptyState(
+        icon: Icons.search_off,
+        message: '未找到匹配的SMB服务器。',
+      );
+    }
+    return LibraryManagementList<SMBConnection>(
+      scrollController: _smbScrollController,
+      items: filteredConnections,
+      itemBuilder: (context, connection) => _buildSMBConnectionTile(connection),
     );
   }
   
   // 构建WebDAV连接Tile
   Widget _buildWebDAVConnectionTile(WebDAVConnection connection) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1,
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+
+    return LibraryManagementCard(
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+          dividerColor: Colors.transparent,
         ),
-      ),
-      child: ExpansionTile(
-        key: PageStorageKey<String>('webdav_${connection.name}'),
-        leading: Icon(
-          Icons.cloud,
-          color: Colors.white,
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                connection.name,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                connection.isConnected ? '已连接' : '未连接',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
+        child: ExpansionTile(
+          key: PageStorageKey<String>('webdav_${connection.name}'),
+          leading: Icon(Icons.cloud, color: iconColor),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  connection.name,
+                  style: TextStyle(color: textColor, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            connection.url,
-            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
-            overflow: TextOverflow.ellipsis,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.2)
+                      : Colors.black.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  connection.isConnected ? '已连接' : '未连接',
+                  style: TextStyle(color: textColor, fontSize: 10),
+                ),
+              ),
+            ],
           ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white70, size: 20),
-              onPressed: () => _editWebDAVConnection(connection),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Text(
+              connection.url,
+              style: TextStyle(color: secondaryTextColor, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white70, size: 20),
-              onPressed: () => _removeWebDAVConnection(connection),
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
-              onPressed: () => _testWebDAVConnection(connection),
-            ),
-          ],
-        ),
-        onExpansionChanged: (isExpanded) {
-          if (isExpanded && connection.isConnected) {
-            _loadWebDAVFolderChildren(connection, '/');
-          }
-        },
-        children: connection.isConnected
-            ? _buildWebDAVFileNodes(connection, '/')
-            : [
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text(
-                    '连接未建立，无法浏览文件。请点击刷新按钮重新连接。',
-                    style: TextStyle(color: Colors.white54),
-                    textAlign: TextAlign.center,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SearchBarActionButton(
+                icon: Icons.edit,
+                tooltip: '编辑连接',
+                onPressed: () => _editWebDAVConnection(connection),
+              ),
+              SearchBarActionButton(
+                icon: Icons.delete_outline,
+                tooltip: '删除连接',
+                onPressed: () => _removeWebDAVConnection(connection),
+              ),
+              SearchBarActionButton(
+                icon: Icons.refresh,
+                tooltip: '测试连接',
+                onPressed: () => _testWebDAVConnection(connection),
+              ),
+            ],
+          ),
+          onExpansionChanged: (expanded) {
+            if (expanded && _webdavFolderContents[connection.name] == null) {
+              _loadWebDAVFolderChildren(connection, '/');
+            }
+          },
+          children: _loadingWebDAVFolders.contains('${connection.name}:/')
+              ? [
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
+                    ),
                   ),
-                ),
-              ],
+                ]
+              : _buildWebDAVFileNodes(connection, '/', 1),
+        ),
       ),
     );
   }
 
   Widget _buildSMBConnectionTile(SMBConnection connection) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
     final hostLabel =
         connection.port != 445 ? '${connection.host}:${connection.port}' : connection.host;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1,
+
+    return LibraryManagementCard(
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+          dividerColor: Colors.transparent,
         ),
-      ),
-      child: ExpansionTile(
-        key: PageStorageKey<String>('smb_${connection.name}'),
-        leading: const Icon(Icons.dns, color: Colors.white),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                connection.name,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                connection.isConnected ? '已连接' : '未连接',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
+        child: ExpansionTile(
+          key: PageStorageKey<String>('smb_${connection.name}'),
+          leading: Icon(Icons.dns, color: iconColor),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  connection.name,
+                  style: TextStyle(color: textColor, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            hostLabel,
-            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
-            overflow: TextOverflow.ellipsis,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.2)
+                      : Colors.black.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  connection.isConnected ? '已连接' : '未连接',
+                  style: TextStyle(color: textColor, fontSize: 10),
+                ),
+              ),
+            ],
           ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white70, size: 20),
-              onPressed: () => _showSMBConnectionDialog(editConnection: connection),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Text(
+              hostLabel,
+              style: TextStyle(color: secondaryTextColor, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white70, size: 20),
-              onPressed: () => _removeSMBConnection(connection),
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
-              onPressed: () => _refreshSMBConnection(connection),
-            ),
-          ],
-        ),
-        onExpansionChanged: (isExpanded) {
-          if (isExpanded && connection.isConnected) {
-            _loadSMBFolderChildren(connection, '/');
-          }
-        },
-        children: connection.isConnected
-            ? _buildSMBFileNodes(connection, '/')
-            : [
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text(
-                    '连接未建立，无法浏览文件。请点击刷新按钮重新连接。',
-                    style: TextStyle(color: Colors.white54),
-                    textAlign: TextAlign.center,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SearchBarActionButton(
+                icon: Icons.edit,
+                tooltip: '编辑连接',
+                onPressed: () =>
+                    _showSMBConnectionDialog(editConnection: connection),
+              ),
+              SearchBarActionButton(
+                icon: Icons.delete_outline,
+                tooltip: '删除连接',
+                onPressed: () => _removeSMBConnection(connection),
+              ),
+              SearchBarActionButton(
+                icon: Icons.refresh,
+                tooltip: '刷新连接',
+                onPressed: () => _refreshSMBConnection(connection),
+              ),
+            ],
+          ),
+          onExpansionChanged: (expanded) {
+            if (expanded && _smbFolderContents[connection.name] == null) {
+              _loadSMBFolderChildren(connection, '/');
+            }
+          },
+          children: _loadingSMBFolders.contains('${connection.name}:/')
+              ? [
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
+                    ),
                   ),
-                ),
-              ],
+                ]
+              : _buildSMBFileNodes(connection, '/', 1),
+        ),
       ),
     );
   }
   
-  // 构建WebDAV文件节点
-  List<Widget> _buildWebDAVFileNodes(WebDAVConnection connection, String path) {
-    final key = '${connection.name}:$path';
-    final files = _webdavFolderContents[key] ?? [];
-    
-    if (_loadingWebDAVFolders.contains(key)) {
-      return [
-        const Center(
-          child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      ];
-    }
-    
-    if (files.isEmpty) {
-      return [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            '文件夹为空或无法访问',
-            style: TextStyle(color: Colors.white54),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ];
-    }
-    
-    return files.map((file) {
-      if (file.isDirectory) {
-        return Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: ExpansionTile(
-            key: PageStorageKey<String>('${connection.name}:${file.path}'),
-            leading: const Icon(Icons.folder_outlined, color: Colors.white70),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            trailing: TextButton(
-              onPressed: () => _scanWebDAVFolder(connection, file.path, file.name),
-              child: const Text(
-                '扫描',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            onExpansionChanged: (isExpanded) {
-              if (isExpanded) {
-                _loadWebDAVFolderChildren(connection, file.path);
-              }
-            },
-            children: _buildWebDAVFileNodes(connection, file.path),
-          ),
-        );
-      } else {
-        return Padding(
-          padding: const EdgeInsets.only(left: 32.0),
-          child: ListTile(
-            leading: const Icon(Icons.videocam_outlined, color: Colors.white),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            subtitle: file.size != null
-                ? Text(
-                    '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  )
-                : null,
-            onTap: () => _playWebDAVFile(connection, file),
-          ),
-        );
+  List<Widget> _buildWebDAVFileNodes(
+    WebDAVConnection connection,
+    String path,
+    int depth,
+  ) {
+      final bool isDark = Theme.of(context).brightness == Brightness.dark;
+      final Color textColor = isDark ? Colors.white : Colors.black87;
+      final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+      final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+      final double indent = libraryManagementTreeIndent(depth);
+  
+      final key = '${connection.name}:$path';
+      final contents = _webdavFolderContents[key];
+  
+      if (_loadingWebDAVFolders.contains(key)) {
+        return [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))];
       }
-    }).toList();
-  }
+  
+      if (contents == null || contents.isEmpty) {
+        return [
+          Padding(
+            padding: EdgeInsets.fromLTRB(indent, 6, 0, 6),
+            child: Text(
+              "（空文件夹）",
+              style: TextStyle(color: secondaryTextColor, fontSize: 12),
+            ),
+          ),
+        ];
+      }
+  
+      return contents.map((file) {
+        if (file.isDirectory) {
+          final folderKey = '${connection.name}:${file.path}';
+          final expanded = _expandedWebDAVFolders.contains(folderKey);
+          final loading = _loadingWebDAVFolders.contains(folderKey);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LibraryManagementFolderRow(
+                title: file.name,
+                indent: indent,
+                expanded: expanded,
+                loading: loading,
+                iconColor: iconColor,
+                textColor: textColor,
+                secondaryTextColor: secondaryTextColor,
+                onTap: () {
+                  if (expanded) {
+                    setState(() => _expandedWebDAVFolders.remove(folderKey));
+                    return;
+                  }
+                  setState(() => _expandedWebDAVFolders.add(folderKey));
+                  if (_webdavFolderContents[folderKey] == null && !loading) {
+                    _loadWebDAVFolderChildren(connection, file.path);
+                  }
+                },
+              ),
+              if (expanded)
+                if (loading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else
+                  ..._buildWebDAVFileNodes(
+                    connection,
+                    file.path,
+                    depth + 1,
+                  ),
+            ],
+          );
+        } else {
+          return ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+            leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+            title: Text(
+              file.name,
+              style: TextStyle(color: textColor, fontSize: 13),
+            ),
+            trailing: IconButton(
+              icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
+              onPressed: () => _playWebDAVFile(connection, file),
+            ),
+            onTap: () => _playWebDAVFile(connection, file),
+          );
+        }
+      }).toList();
+    }
+  List<Widget> _buildSMBFileNodes(
+    SMBConnection connection,
+    String path,
+    int depth,
+  ) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+    final double indent = libraryManagementTreeIndent(depth);
 
-  List<Widget> _buildSMBFileNodes(SMBConnection connection, String path) {
     final key = '${connection.name}:$path';
-    final files = _smbFolderContents[key] ?? [];
+    final contents = _smbFolderContents[key];
 
     if (_loadingSMBFolders.contains(key)) {
-      return [
-        const Center(
-          child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      ];
+      return [const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))];
     }
 
-    if (files.isEmpty) {
+    if (contents == null || contents.isEmpty) {
       return [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
+        Padding(
+          padding: EdgeInsets.fromLTRB(indent, 6, 0, 6),
           child: Text(
-            '文件夹为空或无法访问',
-            style: TextStyle(color: Colors.white54),
-            textAlign: TextAlign.center,
+            "（空文件夹）",
+            style: TextStyle(color: secondaryTextColor, fontSize: 12),
           ),
         ),
       ];
     }
 
-    return files.map((file) {
+    return contents.map((file) {
       if (file.isDirectory) {
-        return Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: ExpansionTile(
-            key: PageStorageKey<String>('${connection.name}:${file.path}'),
-            leading: Icon(
-              file.isShare ? Icons.cloud_queue : Icons.folder_outlined,
-              color: Colors.white70,
+        final folderKey = '${connection.name}:${file.path}';
+        final expanded = _expandedSMBFolders.contains(folderKey);
+        final loading = _loadingSMBFolders.contains(folderKey);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LibraryManagementFolderRow(
+              title: file.name,
+              indent: indent,
+              expanded: expanded,
+              loading: loading,
+              iconColor: iconColor,
+              textColor: textColor,
+              secondaryTextColor: secondaryTextColor,
+              onTap: () {
+                if (expanded) {
+                  setState(() => _expandedSMBFolders.remove(folderKey));
+                  return;
+                }
+                setState(() => _expandedSMBFolders.add(folderKey));
+                if (_smbFolderContents[folderKey] == null && !loading) {
+                  _loadSMBFolderChildren(connection, file.path);
+                }
+              },
             ),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            trailing: TextButton(
-              onPressed: () => _scanSMBFolder(connection, file.path, file.name),
-              child: const Text(
-                '扫描',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            onExpansionChanged: (isExpanded) {
-              if (isExpanded) {
-                _loadSMBFolderChildren(connection, file.path);
-              }
-            },
-            children: _buildSMBFileNodes(connection, file.path),
-          ),
+            if (expanded)
+              if (loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else
+                ..._buildSMBFileNodes(
+                  connection,
+                  file.path,
+                  depth + 1,
+                ),
+          ],
         );
       } else {
-        return Padding(
-          padding: const EdgeInsets.only(left: 32.0),
-          child: ListTile(
-            leading: const Icon(Icons.movie_creation_outlined, color: Colors.white),
-            title: Text(
-              file.name,
-              style: const TextStyle(color: Colors.white),
-            ),
-            subtitle: file.size != null
-                ? Text(
-                    '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  )
-                : null,
-            onTap: () => _playSMBFile(connection, file),
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+          leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+          title: Text(
+            file.name,
+            style: TextStyle(color: textColor, fontSize: 13),
           ),
+          trailing: IconButton(
+            icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
+            onPressed: () => _playSMBFile(connection, file),
+          ),
+          onTap: () => _playSMBFile(connection, file),
         );
       }
     }).toList();
@@ -2660,11 +2484,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '扫描WebDAV文件夹',
       content: '确定要扫描WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('扫描', style: TextStyle(color: Colors.white)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -2782,11 +2606,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '扫描SMB文件夹',
       content: '确定要扫描SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('扫描', style: TextStyle(color: Colors.white)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -2860,11 +2684,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '删除SMB连接',
       content: '确定要删除SMB连接 "${connection.name}" 吗？',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -2876,6 +2700,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       setState(() {
         _smbConnections = SMBService.instance.connections;
         _smbFolderContents.removeWhere((key, value) => key.startsWith('${connection.name}:'));
+        _expandedSMBFolders.removeWhere((key) => key.startsWith('${connection.name}:'));
       });
       BlurSnackBar.show(context, 'SMB连接已删除');
     }
@@ -2890,6 +2715,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           _smbConnections = SMBService.instance.connections;
           _smbFolderContents
               .removeWhere((key, value) => key.startsWith('${connection.name}:'));
+          _expandedSMBFolders.removeWhere((key) => key.startsWith('${connection.name}:'));
         });
         final updated = SMBService.instance.getConnection(connection.name);
         if (updated?.isConnected == true) {
@@ -2924,11 +2750,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: '删除WebDAV连接',
       content: '确定要删除WebDAV连接 "${connection.name}" 吗？',
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text('删除', style: TextStyle(color: Colors.redAccent)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
@@ -2941,6 +2767,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
         _webdavConnections = WebDAVService.instance.connections;
         // 清理相关的文件夹内容缓存
         _webdavFolderContents.removeWhere((key, value) => key.startsWith('${connection.name}:'));
+        _expandedWebDAVFolders.removeWhere((key) => key.startsWith('${connection.name}:'));
       });
       BlurSnackBar.show(context, 'WebDAV连接已删除');
     }

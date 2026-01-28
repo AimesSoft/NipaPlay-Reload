@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 

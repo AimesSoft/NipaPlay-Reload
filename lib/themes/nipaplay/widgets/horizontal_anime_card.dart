@@ -6,9 +6,9 @@ class HorizontalAnimeCard extends StatelessWidget {
   final String imageUrl;
   final String title;
   final double? rating;
-  final bool isOnAir;
   final String? source;
-  final Widget? summaryWidget;
+  final String? summary;
+  final String? progress; // 新增：观看进度
   final VoidCallback onTap;
 
   const HorizontalAnimeCard({
@@ -17,13 +17,14 @@ class HorizontalAnimeCard extends StatelessWidget {
     required this.title,
     required this.onTap,
     this.rating,
-    this.isOnAir = false,
     this.source,
-    this.summaryWidget,
+    this.summary,
+    this.progress,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -67,54 +68,51 @@ class HorizontalAnimeCard extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 4),
+                  // Progress Row (New)
+                  if (progress != null && progress!.isNotEmpty) ...[
+                    Text(
+                      progress!,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   // Rating & Status/Source Row
                   Row(
                     children: [
                       if (rating != null && rating! > 0) ...[
-                        const Icon(Ionicons.star, size: 14, color: Colors.amber),
+                        Icon(
+                          Ionicons.star,
+                          size: 14,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           rating!.toStringAsFixed(1),
-                          style: const TextStyle(
-                            color: Colors.amber,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(width: 12),
                       ],
-                      if (isOnAir)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.green.withValues(alpha: 0.5), width: 0.5),
-                          ),
-                          child: const Text(
-                            '放送中',
-                            style: TextStyle(color: Colors.green, fontSize: 10),
-                          ),
-                        ),
                       if (source != null) ...[
-                        if (isOnAir) const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 0.5),
-                          ),
-                          child: Text(
-                            source!,
-                            style: const TextStyle(color: Colors.blueAccent, fontSize: 10),
+                        Text(
+                          source!,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black,
+                            fontSize: 10,
                           ),
                         ),
                       ],
@@ -122,8 +120,21 @@ class HorizontalAnimeCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   // Summary
-                  if (summaryWidget != null)
-                    Expanded(child: summaryWidget!),
+                  if (summary != null && summary!.isNotEmpty)
+                    Expanded(
+                      child: Text(
+                        summary!,
+                        maxLines: progress != null ? 2 : 3, // 如果有进度，减少一行简介空间
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.6)
+                              : Colors.black54,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

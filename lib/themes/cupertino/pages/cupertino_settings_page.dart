@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'settings/sections/cupertino_settings_general_section.dart';
 import 'settings/sections/cupertino_settings_about_section.dart';

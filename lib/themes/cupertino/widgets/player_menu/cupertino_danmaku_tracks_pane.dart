@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';

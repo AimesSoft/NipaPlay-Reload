@@ -1275,6 +1275,9 @@ class DandanplayService {
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('获取播放历史超时'),
       );
 
       debugPrint('[弹弹play服务] 播放历史响应: ${response.statusCode}');
@@ -1500,6 +1503,9 @@ class DandanplayService {
           'X-Timestamp': '$timestamp',
           'Authorization': 'Bearer $_token',
         },
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('获取收藏列表超时'),
       );
 
       debugPrint('[弹弹play服务] 收藏列表响应: ${response.statusCode}');

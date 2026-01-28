@@ -1,11 +1,11 @@
 // remote_access_page.dart
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
@@ -18,7 +18,7 @@ class RemoteAccessPage extends StatefulWidget {
 }
 
 class _RemoteAccessPageState extends State<RemoteAccessPage> {
-  // Web Server State
+  // Remote access service state
   bool _webServerEnabled = false;
   bool _autoStartEnabled = false;
   List<String> _accessUrls = [];
@@ -104,17 +104,17 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     if (enabled) {
       final success = await server.startServer(port: _currentPort);
       if (success) {
-        BlurSnackBar.show(context, 'Web服务器已启动');
+        BlurSnackBar.show(context, '远程访问服务已启动');
         _updateAccessUrls();
       } else {
-        BlurSnackBar.show(context, 'Web服务器启动失败');
+        BlurSnackBar.show(context, '远程访问服务启动失败');
         setState(() {
           _webServerEnabled = false;
         });
       }
     } else {
       await server.stopServer();
-      BlurSnackBar.show(context, 'Web服务器已停止');
+      BlurSnackBar.show(context, '远程访问服务已停止');
       setState(() {
         _accessUrls = [];
         _publicIpUrl = null;
@@ -146,33 +146,37 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   }
 
   void _showPortDialog() async {
+    final colorScheme = Theme.of(context).colorScheme;
     final portController = TextEditingController(text: _currentPort.toString());
     final newPort = await BlurDialog.show<int>(
       context: context,
-      title: '设置Web服务器端口',
+      title: '设置远程访问端口',
       contentWidget: TextField(
         controller: portController,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: const InputDecoration(
+        cursorColor: const Color(0xFFFF2E55),
+        decoration: InputDecoration(
           labelText: '端口 (1-65535)',
-          labelStyle: TextStyle(color: Colors.white70),
+          labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
           focusedBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: Colors.white),
+            borderSide: BorderSide(color: colorScheme.onSurface),
           ),
           enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: Colors.white38),
+            borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.38)),
           ),
         ),
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: Color(0xFFFF2E55)),
       ),
       actions: [
-        TextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+        HoverScaleTextButton(
+          text: '取消',
+          idleColor: colorScheme.onSurface.withOpacity(0.7),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        TextButton(
-          child: const Text('确定', style: TextStyle(color: Colors.white)),
+        HoverScaleTextButton(
+          text: '确定',
+          idleColor: colorScheme.onSurface,
           onPressed: () {
             final port = int.tryParse(portController.text);
             if (port != null && port > 0 && port < 65536) {
@@ -190,7 +194,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         _currentPort = newPort;
       });
       await ServiceProvider.webServer.setPort(newPort);
-      BlurSnackBar.show(context, 'Web服务器端口已更新，正在重启服务...');
+      BlurSnackBar.show(context, '远程访问端口已更新，正在重启服务...');
       _updateAccessUrls();
     }
   }
@@ -206,133 +210,119 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   }
 
   Widget _buildWebServerSection() {
-    return SettingsCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Ionicons.globe_outline,
-                color: Colors.white,
-                size: 24,
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Ionicons.globe_outline,
+              color: colorScheme.onSurface,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '远程访问',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
               ),
-              const SizedBox(width: 12),
-              const Text(
-                '远程访问',
+            ),
+            const Spacer(),
+            if (_webServerEnabled)
+              Text(
+                '已启用',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: colorScheme.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const Spacer(),
-              if (_webServerEnabled)
-                Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white, width: 1),
-                      ),
-                      child: const Text(
-                        '已启用',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
+          ],
+        ),
 
-              const Text(
-                '启用后可通过浏览器或其他NipaPlay客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
-              ),
+        const SizedBox(height: 16),
 
-              const SizedBox(height: 16),
-              
-              // 启用/禁用开关
-              _buildSettingItem(
-                icon: Icons.power_settings_new,
-                title: '启用Web服务器',
-                subtitle: '允许通过浏览器或其他客户端远程访问本机媒体库',
-                trailing: Switch(
-                  value: _webServerEnabled,
-                  onChanged: _toggleWebServer,
-                  activeColor: Colors.white,
-                  inactiveThumbColor: Colors.white,
-                  inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-                ),
-              ),
+        Text(
+          '启用后可供其他 NipaPlay 客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.7),
+            fontSize: 14,
+          ),
+        ),
 
-              // 自动开启
-              _buildSettingItem(
-                icon: Icons.auto_awesome,
-                title: '软件打开自动开启远程访问',
-                subtitle: '启动 NipaPlay 时自动开启 Web 远程访问（不影响手动开关）',
-                trailing: Switch(
-                  value: _autoStartEnabled,
-                  onChanged: _toggleAutoStart,
-                  activeColor: Colors.white,
-                  inactiveThumbColor: Colors.white,
-                  inactiveTrackColor: const Color.fromARGB(255, 0, 0, 0),
-                ),
-              ),
-              
-              if (_webServerEnabled) ...[
-                const SizedBox(height: 8),
-                const Divider(color: Colors.white12, height: 1),
-                const SizedBox(height: 8),
-                
-                // 访问地址
-                _buildAccessAddressSection(),
-                
-                const SizedBox(height: 8),
-                const Divider(color: Colors.white12, height: 1),
-                const SizedBox(height: 8),
-                
-                // 端口设置
-                _buildSettingItem(
-                  icon: Icons.settings_ethernet,
-                  title: '端口设置',
-                  subtitle: '当前端口: $_currentPort',
-                  trailing: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.white),
-                    onPressed: _showPortDialog,
-                  ),
-                ),
-              ],
+        const SizedBox(height: 16),
+        
+        // 启用/禁用开关
+        _buildSettingItem(
+          icon: Icons.power_settings_new,
+          title: '启用远程访问服务',
+          subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库',
+          trailing: FluentSettingsSwitch(
+            value: _webServerEnabled,
+            onChanged: _toggleWebServer,
+          ),
+        ),
+
+        // 自动开启
+        _buildSettingItem(
+          icon: Icons.auto_awesome,
+          title: '软件打开自动开启远程访问',
+          subtitle: '启动 NipaPlay 时自动开启远程访问服务（不影响手动开关）',
+          trailing: FluentSettingsSwitch(
+            value: _autoStartEnabled,
+            onChanged: _toggleAutoStart,
+          ),
+        ),
+        
+        if (_webServerEnabled) ...[
+          const SizedBox(height: 8),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          const SizedBox(height: 8),
+          
+          // 访问地址
+          _buildAccessAddressSection(),
+          
+          const SizedBox(height: 8),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          const SizedBox(height: 8),
+          
+          // 端口设置
+          _buildSettingItem(
+            icon: Icons.settings_ethernet,
+            title: '端口设置',
+            subtitle: '当前端口: $_currentPort',
+            trailing: IconButton(
+              icon: Icon(Icons.edit, color: colorScheme.onSurface),
+              onPressed: _showPortDialog,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
   
   Widget _buildAccessAddressSection() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Icon(
                 Icons.link,
-                color: Colors.white70,
+                color: colorScheme.onSurface.withOpacity(0.7),
                 size: 20,
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               Text(
-                '访问地址',
+                '客户端连接地址',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: colorScheme.onSurface,
                   fontWeight: FontWeight.w500,
                   fontSize: 15,
                 ),
@@ -340,28 +330,28 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             ],
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             '选择建议：\n'
             '• 本机：仅在这台设备上访问（localhost/127.0.0.1）\n'
             '• 内网：同一 Wi‑Fi/局域网的其他设备访问（推荐）\n'
             '• 外网：需要公网 IP + 路由器端口转发/防火墙放行后才能访问（注意安全）',
             style: TextStyle(
-              color: Colors.white60,
+              color: colorScheme.onSurface.withOpacity(0.6),
               fontSize: 13,
               height: 1.35,
             ),
           ),
           const SizedBox(height: 12),
           if (_accessUrls.isEmpty)
-            const Text('正在获取地址...', style: TextStyle(color: Colors.white70))
+            Text('正在获取地址...', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)))
           else
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ..._accessUrls.map((url) => _buildAddressItem(url)),
                 if (_isLoadingPublicIp)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Row(
                       children: [
                         SizedBox(
@@ -369,15 +359,15 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onSurface),
                           ),
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
                           '正在获取公网IP...',
                           style: TextStyle(
                             fontFamily: 'monospace',
-                            color: Colors.white70
+                            color: colorScheme.onSurface.withOpacity(0.7)
                           )
                         ),
                       ],
@@ -393,53 +383,42 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   }
   
   Widget _buildAddressItem(String url) {
+    final colorScheme = Theme.of(context).colorScheme;
     final type = RemoteAccessAddressUtils.classifyUrl(url);
     final label = RemoteAccessAddressUtils.labelZh(type);
     final (iconData, tagColor) = switch (type) {
-      RemoteAccessAddressType.local => (Icons.computer, Colors.blueAccent),
-      RemoteAccessAddressType.lan => (Icons.lan, Colors.greenAccent),
-      RemoteAccessAddressType.wan => (Icons.public, Colors.orangeAccent),
-      RemoteAccessAddressType.unknown => (Icons.link, Colors.white38),
+      RemoteAccessAddressType.local => (Icons.computer, colorScheme.primary),
+      RemoteAccessAddressType.lan => (Icons.lan, colorScheme.secondary),
+      RemoteAccessAddressType.wan => (Icons.public, colorScheme.tertiary),
+      RemoteAccessAddressType.unknown => (Icons.link, colorScheme.onSurface.withOpacity(0.38)),
     };
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         children: [
-          Icon(
-            iconData,
-            color: Colors.white38,
-            size: 14,
-          ),
+          Icon(iconData, color: tagColor, size: 14),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: tagColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: tagColor.withOpacity(0.35)),
-            ),
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
+          Text(
+            label,
+            style: TextStyle(
+              color: tagColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               url,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'monospace',
-                color: Colors.white70
+                color: colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.copy, color: Colors.white),
+            icon: Icon(Icons.copy, color: colorScheme.onSurface),
             iconSize: 18,
             visualDensity: VisualDensity.compact,
             onPressed: () => _copyUrl(url),
@@ -456,6 +435,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     required String subtitle,
     Widget? trailing,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -463,7 +443,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         children: [
           Icon(
             icon,
-            color: Colors.white70,
+            color: colorScheme.onSurface.withOpacity(0.7),
             size: 20,
           ),
           const SizedBox(width: 16),
@@ -473,8 +453,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
                     fontWeight: FontWeight.w500,
                     fontSize: 15,
                   ),
@@ -482,8 +462,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 14,
                   ),
                 ),

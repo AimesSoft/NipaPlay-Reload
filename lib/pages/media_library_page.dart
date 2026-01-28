@@ -3,11 +3,8 @@ import 'package:nipaplay/models/bangumi_model.dart'; // Needed for _fetchedAnime
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart'; // Needed for getAnimeDetails
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_media_library_view.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // For image URL persistence
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -20,15 +17,14 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, Tar
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-
 import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
-import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'dart:ui' as ui;
 
 // Define a callback type for when an episode is selected for playing
@@ -37,11 +33,13 @@ typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
 class MediaLibraryPage extends StatefulWidget {
   final OnPlayEpisodeCallback? onPlayEpisode; // Add this callback
   final bool jellyfinMode; // 是否为Jellyfin媒体库模式
+  final VoidCallback? onSourcesUpdated;
 
   const MediaLibraryPage({
     super.key, 
     this.onPlayEpisode,
     this.jellyfinMode = false,
+    this.onSourcesUpdated,
   }); // Modify constructor
 
   @override
@@ -66,6 +64,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   final Map<String, Widget> _cardWidgetCache = {};
   
   final ScrollController _gridScrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
+  List<WatchHistoryItem> _filteredItems = [];
 
   static const String _prefsKeyPrefix = 'media_library_image_url_';
   
@@ -93,6 +94,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   @override
   void dispose() {
     //debugPrint('[CPU-泄漏排查] MediaLibraryPage dispose 被调用！！！');
+    _searchController.dispose();
     try {
       if (mounted) { 
         final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
@@ -116,6 +118,28 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         });
       }
     }
+  }
+
+  void _applyFilter() {
+    if (!mounted) return;
+    setState(() {
+      String query = _searchController.text.toLowerCase().trim();
+      _filteredItems = _uniqueLibraryItems.where((item) {
+        return item.animeName.toLowerCase().contains(query);
+      }).toList();
+
+      // 排序逻辑
+      switch (_currentSort) {
+        case LocalLibrarySortType.name:
+          _filteredItems.sort((a, b) => a.animeName.compareTo(b.animeName));
+          break;
+        case LocalLibrarySortType.dateAdded:
+          _filteredItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+          break;
+        case LocalLibrarySortType.rating:
+          break;
+      }
+    });
   }
 
   Future<void> _processAndSortHistory(List<WatchHistoryItem> watchHistory) async {
@@ -168,6 +192,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         if (persistedUrl != null && persistedUrl.isNotEmpty) {
           loadedPersistedUrls[item.animeId!] = persistedUrl;
         }
+        
+        // 尝试从BangumiService内存缓存中恢复详情数据
+        final cachedDetail = BangumiService.instance.getAnimeDetailsFromMemory(item.animeId!);
+        if (cachedDetail != null) {
+          _fetchedFullAnimeData[item.animeId!] = cachedDetail;
+        }
       }
     }
 
@@ -177,6 +207,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       _isLoadingInitial = false; 
       // 🔥 CPU优化：清空卡片缓存，因为数据已更新
       _cardWidgetCache.clear();
+      _applyFilter();
     });
     _fetchAndPersistFullDetailsInBackground(); 
   }
@@ -337,68 +368,40 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   Future<void> _showServerSelectionDialog() async {
     final result = await MediaServerSelectionSheet.show(context);
 
-    if (result != null && mounted) {
-      if (result == 'jellyfin') {
+    if (!mounted || result == null) {
+      return;
+    }
+
+    bool sourcesUpdated = false;
+
+    switch (result) {
+      case 'jellyfin':
         await _showJellyfinServerDialog();
-      } else if (result == 'emby') {
+        break;
+      case 'emby':
         await _showEmbyServerDialog();
-      } else if (result == 'nipaplay') {
+        break;
+      case 'webdav':
+        sourcesUpdated = await WebDAVConnectionDialog.show(context) == true;
+        break;
+      case 'smb':
+        sourcesUpdated = await SMBConnectionDialog.show(context) == true;
+        break;
+      case 'nipaplay':
         await _showNipaplayServerDialog();
-      } else if (result == 'dandanplay') {
+        break;
+      case 'dandanplay':
         await _showDandanplayServerDialog();
-      }
+        break;
+    }
+
+    if (sourcesUpdated) {
+      widget.onSourcesUpdated?.call();
     }
   }
 
   Future<void> _showNipaplayServerDialog() async {
-    final sharedRemoteProvider = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
-
-    // 如果已有主机，显示选择界面；否则显示添加主机的登录对话框
-    if (sharedRemoteProvider.hosts.isNotEmpty) {
-      await SharedRemoteHostSelectionSheet.show(context);
-    } else {
-      // 显示添加主机的登录对话框
-      await BlurLoginDialog.show(
-        context,
-        title: '添加NipaPlay共享客户端',
-        fields: [
-          LoginField(
-            key: 'displayName',
-            label: '备注名称',
-            hint: '例如：家里的电脑',
-            required: false,
-          ),
-          LoginField(
-            key: 'baseUrl',
-            label: '访问地址',
-            hint: '例如：192.168.1.100（默认1180）或 192.168.1.100:2345',
-          ),
-        ],
-        loginButtonText: '添加',
-        onLogin: (values) async {
-          try {
-            final displayName = values['displayName']?.trim().isEmpty ?? true
-                ? values['baseUrl']!.trim()
-                : values['displayName']!.trim();
-
-            await sharedRemoteProvider.addHost(
-              displayName: displayName,
-              baseUrl: values['baseUrl']!.trim(),
-            );
-
-            return LoginResult(
-              success: true,
-              message: '已添加共享客户端',
-            );
-          } catch (e) {
-            return LoginResult(
-              success: false,
-              message: '添加失败：$e',
-            );
-          }
-        },
-      );
-    }
+    await SharedRemoteHostSelectionSheet.show(context);
   }
 
   Future<void> _showDandanplayServerDialog() async {
@@ -485,19 +488,19 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
             final animeDetail = await BangumiService.instance.getAnimeDetails(historyItem.animeId!);
             //debugPrint('[媒体库CPU] 获取到动画详情: ${historyItem.animeId} - ${animeDetail.name}');
             if (mounted) {
-              // 🔥 CPU优化：批量更新而不是单个setState
               _fetchedFullAnimeData[historyItem.animeId!] = animeDetail;
+              setState(() {});
               if (animeDetail.imageUrl.isNotEmpty) {
                 await prefs.setString('$_prefsKeyPrefix${historyItem.animeId!}', animeDetail.imageUrl);
                 if (mounted) {
-                  // 🔥 CPU优化：只更新数据，不立即setState
                   _persistedImageUrls[historyItem.animeId!] = animeDetail.imageUrl;
+                  setState(() {});
                 }
               } else {
                 await prefs.remove('$_prefsKeyPrefix${historyItem.animeId!}');
                 if(mounted && _persistedImageUrls.containsKey(historyItem.animeId!)){
-                  // 🔥 CPU优化：只更新数据，不立即setState
                   _persistedImageUrls.remove(historyItem.animeId!);
+                  setState(() {});
                 }
               }
             }
@@ -562,8 +565,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     // 🔥 移除super.build(context)调用，因为已禁用AutomaticKeepAliveClientMixin
     // super.build(context);
     //debugPrint('[媒体库CPU] MediaLibraryPage build 被调用 - mounted: $mounted');
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context);
-
     // This Consumer ensures that we rebuild when the watch history changes.
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
@@ -576,27 +577,57 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           });
         }
 
-        // Decide which UI to render based on the theme.
-        if (uiThemeProvider.isFluentUITheme) {
-          return FluentMediaLibraryView(
-            isLoading: _isLoadingInitial,
-            error: _error,
-            items: _uniqueLibraryItems,
-            fullAnimeData: _fetchedFullAnimeData,
-            persistedImageUrls: _persistedImageUrls,
-            isJellyfinConnected: _isJellyfinConnected,
-            scrollController: _gridScrollController,
-            onRefresh: _loadInitialMediaLibraryData,
-            onConnectServer: _showServerSelectionDialog,
-            onAnimeTap: _navigateToAnimeDetail,
-          );
-        } else {
-          return _buildLocalMediaLibrary();
-        }
+        return _buildLocalMediaLibrary();
       },
     );
   }
   
+  String? _getWatchProgress(int? animeId) {
+    if (animeId == null) return null;
+    
+    final detail = _fetchedFullAnimeData[animeId];
+    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+    
+    // 获取该动画的所有历史记录并去重（按episodeId或标题，如果有的话）
+    final allHistory = watchHistoryProvider.history.where((h) => h.animeId == animeId).toList();
+    
+    // 如果没有历史记录（理论上不应该，因为这里是媒体库），显示未观看
+    if (allHistory.isEmpty) return '未观看';
+
+    final watchedHistory = allHistory.where(_hasWatchProgress).toList();
+    if (watchedHistory.isEmpty) return '未观看';
+
+    // 统计已观看的集数
+    final watchedIds = <int>{};
+    for (var h in watchedHistory) {
+      if (h.episodeId != null && h.episodeId! > 0) {
+        watchedIds.add(h.episodeId!);
+      }
+    }
+    
+    int watchedCount = watchedIds.length;
+    if (watchedCount == 0) {
+      // 如果没有episodeId信息，按条目数估算（但不准确）
+      watchedCount = watchedHistory.length;
+    }
+
+    if (detail != null && detail.totalEpisodes != null && detail.totalEpisodes! > 0) {
+      if (watchedCount >= detail.totalEpisodes!) {
+        return '已看完';
+      }
+      return '已看 $watchedCount / ${detail.totalEpisodes} 集';
+    }
+    
+    return '已看 $watchedCount 集';
+  }
+
+  bool _hasWatchProgress(WatchHistoryItem item) {
+    if (item.watchProgress > 0.01) {
+      return true;
+    }
+    return item.lastPosition > 0;
+  }
+
   Widget _buildLocalMediaLibrary() {
     if (_isLoadingInitial) {
       return const SizedBox(
@@ -638,46 +669,52 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
-              if (!_isJellyfinConnected)
-                BlurButton(
-                  icon: Icons.cloud,
-                  text: '添加媒体服务器',
-                  onTap: _showServerSelectionDialog,
-                ),
             ],
           ),
         ),
       );
     }
 
-    return Stack(
+    return Column(
       children: [
-        RepaintBoundary(
-          child: Scrollbar(
-            controller: _gridScrollController,
-            thickness: kIsWeb ? 4 : (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) ? 0 : 4,
-            radius: const Radius.circular(2),
-            child: GridView.builder(
-              controller: _gridScrollController,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 500,
-                mainAxisExtent: 140,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-              cacheExtent: 800,
-              clipBehavior: Clip.hardEdge,
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: true,
-              itemCount: _uniqueLibraryItems.length,
-              itemBuilder: (context, index) {
-                // 🔥 CPU优化：添加itemBuilder监控
-                if (index % 20 == 0) {
-                  //debugPrint('[媒体库CPU] GridView itemBuilder - 索引: $index/${_uniqueLibraryItems.length}');
-                }
-                final historyItem = _uniqueLibraryItems[index];
+        LocalLibraryControlBar(
+          searchController: _searchController,
+          currentSort: _currentSort,
+          onSearchChanged: (val) => _applyFilter(),
+          onSortChanged: (type) {
+            _currentSort = type;
+            _applyFilter();
+          },
+        ),
+        Expanded(
+          child: Stack(
+            children: [
+              RepaintBoundary(
+                child: Scrollbar(
+                  controller: _gridScrollController,
+                  thickness: kIsWeb ? 4 : (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) ? 0 : 4,
+                  radius: const Radius.circular(2),
+                  child: GridView.builder(
+                    controller: _gridScrollController,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 500,
+                      mainAxisExtent: 140,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                    cacheExtent: 800,
+                    clipBehavior: Clip.hardEdge,
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    addAutomaticKeepAlives: false,
+                    addRepaintBoundaries: true,
+                    itemCount: _filteredItems.length,
+                    itemBuilder: (context, index) {
+                      // 🔥 CPU优化：添加itemBuilder监控
+                      if (index % 20 == 0) {
+                        //debugPrint('[媒体库CPU] GridView itemBuilder - 索引: $index/${_filteredItems.length}');
+                      }
+                      final historyItem = _filteredItems[index];
                 final animeId = historyItem.animeId;
                 
                 // 🔥 CPU优化：使用文件路径作为缓存键，检查是否已缓存
@@ -691,64 +728,78 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                     ? historyItem.animeName 
                     : (historyItem.episodeTitle ?? '未知动画');
 
-                if (animeId != null) {
-                    if (_fetchedFullAnimeData.containsKey(animeId)) {
-                        final fetchedData = _fetchedFullAnimeData[animeId]!;
-                        if (fetchedData.imageUrl.isNotEmpty) {
-                            imageUrlToDisplay = fetchedData.imageUrl;
-                        }
-                        if (fetchedData.nameCn.isNotEmpty) {
-                            nameToDisplay = fetchedData.nameCn;
-                        } else if (fetchedData.name.isNotEmpty) {
-                            nameToDisplay = fetchedData.name;
-                        }
-                    } else if (_persistedImageUrls.containsKey(animeId)) {
-                        imageUrlToDisplay = _persistedImageUrls[animeId]!;
-                    }
+                // 尝试从持久化缓存中获取图片（作为初始值）
+                if (animeId != null && _persistedImageUrls.containsKey(animeId)) {
+                    imageUrlToDisplay = _persistedImageUrls[animeId]!;
                 }
 
-                // 构建水平卡片
-                final card = HorizontalAnimeCard(
-                  imageUrl: imageUrlToDisplay,
-                  title: nameToDisplay,
-                  rating: animeId != null && _fetchedFullAnimeData.containsKey(animeId) 
-                      ? _fetchedFullAnimeData[animeId]!.rating 
-                      : null,
-                  isOnAir: false, // Local items are generally not "on air" in this context unless we check fetched data
-                  source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
-                  onTap: () {
-                    if (animeId != null) {
-                      _navigateToAnimeDetail(animeId);
-                    } else {
-                      BlurSnackBar.show(context, '无法打开详情，动画ID未知');
-                    }
-                  },
-                  summaryWidget: animeId != null && _fetchedFullAnimeData.containsKey(animeId) && _fetchedFullAnimeData[animeId]!.summary != null
-                      ? Text(
-                          _fetchedFullAnimeData[animeId]!.summary!,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        )
-                      : null,
-                );
-                
-                // 🔥 CPU优化：缓存卡片Widget
-                if (animeId != null) {
-                  //debugPrint('动画 $animeId 详细信息：');
-                  //debugPrint('  名称: $nameToDisplay');
-                  //debugPrint('  是否存在于_fetchedFullAnimeData: ${_fetchedFullAnimeData.containsKey(animeId)}');
-                  
-                  if (_fetchedFullAnimeData.containsKey(animeId)) {
-                    final animeData = _fetchedFullAnimeData[animeId]!;
-                    //debugPrint('  通用评分: ${animeData.rating}');
-                    //debugPrint('  评分详情: ${animeData.ratingDetails}');
-                  }
+                // 优先使用已获取的详情数据
+                BangumiAnime? detailData;
+                if (animeId != null && _fetchedFullAnimeData.containsKey(animeId)) {
+                  detailData = _fetchedFullAnimeData[animeId];
                 }
+
+                if (detailData != null) {
+                   // 有同步数据，直接构建
+                   String displayImage = imageUrlToDisplay;
+                   if (detailData.imageUrl.isNotEmpty) {
+                      displayImage = detailData.imageUrl;
+                   }
+                   
+                   final card = HorizontalAnimeCard(
+                     imageUrl: displayImage,
+                     title: nameToDisplay,
+                     rating: detailData.rating,
+                     source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                     summary: detailData.summary,
+                     progress: _getWatchProgress(animeId),
+                     onTap: () {
+                       if (animeId != null) {
+                         _navigateToAnimeDetail(animeId);
+                       } else {
+                         BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                       }
+                     },
+                   );
+                   
+                   if (_cardWidgetCache.length < 100) {
+                     _cardWidgetCache[cacheKey] = card;
+                   }
+                   return card;
+                }
+
+                // 没有同步数据，使用FutureBuilder来构建卡片
+                final card = FutureBuilder<BangumiAnime>(
+                  future: animeId != null ? BangumiService.instance.getAnimeDetails(animeId) : null,
+                  builder: (context, snapshot) {
+                    final detail = snapshot.data;
+                    
+                    // 图片：优先用 detail.imageUrl (高清)，其次用 persisted/thumbnail
+                    String displayImage = imageUrlToDisplay;
+                    if (detail != null && detail.imageUrl.isNotEmpty) {
+                       displayImage = detail.imageUrl;
+                    }
+                    
+                    // 评分
+                    double? displayRating = detail?.rating;
+                    
+                    return HorizontalAnimeCard(
+                      imageUrl: displayImage,
+                      title: nameToDisplay,
+                      rating: displayRating,
+                      source: AnimeCard.getSourceFromFilePath(historyItem.filePath),
+                      summary: detail?.summary,
+                      progress: _getWatchProgress(animeId),
+                      onTap: () {
+                        if (animeId != null) {
+                          _navigateToAnimeDetail(animeId);
+                        } else {
+                          BlurSnackBar.show(context, '无法打开详情，动画ID未知');
+                        }
+                      },
+                    );
+                  }
+                );
                 
                 // 🔥 CPU优化：缓存卡片Widget，限制缓存大小避免内存泄漏
                 if (_cardWidgetCache.length < 100) { // 限制最多缓存100个卡片
@@ -760,16 +811,10 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
             ),
           ),
         ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionGlassButton(
-            iconData: Ionicons.cloud_outline,
-            onPressed: _showServerSelectionDialog,
-            description: '添加媒体服务器\n连接到Jellyfin或Emby服务器\n享受云端媒体库内容',
-          ),
-        ),
       ],
+    ),
+    ),
+    ],
     );
   }
 }

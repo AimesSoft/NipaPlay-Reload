@@ -111,7 +111,7 @@ class BangumiAnime {
       name: json['animeTitle'] as String? ?? '',
       nameCn: json['animeTitle'] as String? ?? '', // Default to animeTitle, can be refined if 'titles' are available in intro
       imageUrl: imgUrl ?? 'assets/backempty.png', // Provide a default placeholder
-      airWeekday: json['airDay'] as int?, // 0 for Sun, 1-6 for Mon-Sat
+      airWeekday: json['airDay'] != null ? int.tryParse(json['airDay'].toString()) : null, // 0 for Sun, 1-6 for Mon-Sat
       rating: (json['rating'] as num?)?.toDouble(),
       isOnAir: json['isOnAir'] as bool?,
       isFavorited: json['isFavorited'] as bool?,

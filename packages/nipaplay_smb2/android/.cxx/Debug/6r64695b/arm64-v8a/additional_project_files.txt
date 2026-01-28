@@ -1,0 +1,7 @@
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2/libsmb2-dcerpc-lsa.h
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2/libsmb2-dcerpc-srvsvc.h
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2/libsmb2-dcerpc.h
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2/libsmb2-raw.h
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2/libsmb2.h
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2/smb2-errors.h
+/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/include/smb2/smb2.h

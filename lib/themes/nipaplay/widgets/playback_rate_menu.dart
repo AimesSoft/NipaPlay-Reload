@@ -43,7 +43,7 @@ class _PlaybackRateMenuState extends State<PlaybackRateMenu> {
                           '当前倍速',
                           locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                            color: Colors.white70,
+                            color: Colors.white,
                             fontSize: 14,
                           ),
                         ),
@@ -65,7 +65,7 @@ style: TextStyle(
                       locale:Locale("zh-Hans","zh"),
 style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey[400],
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -99,8 +99,8 @@ style: TextStyle(
                             color: isSelected 
                                 ? Colors.white 
                                 : isNormalSpeed 
-                                    ? Colors.white70 
-                                    : Colors.white60,
+                                    ? Colors.white 
+                                    : Colors.white,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -109,7 +109,7 @@ style: TextStyle(
                               '${speed}x ${_getSpeedDescription(speed, isNormalSpeed)}',
                               locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                                color: isSelected ? Colors.white : Colors.white70,
+                                color: isSelected ? Colors.white : Colors.white,
                                 fontSize: 14,
                                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                               ),

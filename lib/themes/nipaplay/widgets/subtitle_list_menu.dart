@@ -175,8 +175,13 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
 
         // 尝试直接解析文件，不使用缓存
         debugPrint('SubtitleListMenu: 开始解析字幕文件...');
-        final entries = await SubtitleParser.parseAssFile(subtitlePath);
+        final parseResult =
+            await SubtitleParser.parseSubtitleFile(subtitlePath);
+        final entries = parseResult.entries;
         debugPrint('SubtitleListMenu: 解析完成，共 ${entries.length} 条字幕');
+        debugPrint(
+            'SubtitleListMenu: 字幕编码: ${parseResult.encoding}, 格式: ${parseResult.format}');
+        _debugPrintSubtitleSample(entries);
 
         if (mounted) {
           setState(() {
@@ -445,6 +450,18 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
     return '${_windowStartIndex + index}/${_allSubtitleEntries.length}';
   }
 
+  void _debugPrintSubtitleSample(List<SubtitleEntry> entries) {
+    if (entries.isEmpty) return;
+    final sampleCount = entries.length < 3 ? entries.length : 3;
+    for (int i = 0; i < sampleCount; i++) {
+      final entry = entries[i];
+      final text = entry.content.replaceAll('\n', ' ').trim();
+      final preview = text.length > 80 ? '${text.substring(0, 80)}...' : text;
+      debugPrint(
+          'SubtitleListMenu: sample[$i] ${entry.formattedStartTime}-${entry.formattedEndTime} $preview');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
@@ -489,7 +506,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                         child: Text(
                           '没有激活的字幕轨道\n请在字幕轨道设置中激活字幕',
                           locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: Colors.white),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -502,7 +519,7 @@ class _SubtitleListMenuState extends State<SubtitleListMenu> {
                             child: Text(
                               '当前字幕轨道没有可显示的字幕内容',
                               locale: Locale("zh-Hans", "zh"),
-                              style: TextStyle(color: Colors.white70),
+                              style: TextStyle(color: Colors.white),
                               textAlign: TextAlign.center,
                             ),
                           ),

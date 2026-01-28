@@ -1,5 +1,4 @@
 // ThemeModePage.dart
-import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
@@ -14,10 +13,12 @@ import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/models/background_image_render_mode.dart';
 
 class ThemeModePage extends StatefulWidget {
   final ThemeNotifier themeNotifier;
@@ -34,14 +35,16 @@ class _ThemeModePageState extends State<ThemeModePage> {
   final GlobalKey _blurDropdownKey = GlobalKey();
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
   final GlobalKey _animationDropdownKey = GlobalKey();
-  bool _isCustomThemeMode = false;
-  late Color _customOverlayColor;
+  final GlobalKey _backgroundRenderModeDropdownKey = GlobalKey();
+  late BackgroundImageRenderMode _backgroundImageRenderMode;
+  late double _backgroundImageOverlayOpacity;
 
   @override
   void initState() {
     super.initState();
-    _isCustomThemeMode = widget.themeNotifier.useCustomThemeColor;
-    _customOverlayColor = widget.themeNotifier.customOverlayColor;
+    _backgroundImageRenderMode = widget.themeNotifier.backgroundImageRenderMode;
+    _backgroundImageOverlayOpacity =
+        widget.themeNotifier.backgroundImageOverlayOpacity;
   }
 
   Future<void> _pickCustomBackground(BuildContext context) async {
@@ -72,14 +75,14 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 ? '媒体访问权限已被永久拒绝。请前往系统设置开启。'
                 : '存储权限已被永久拒绝。请前往系统设置开启。',
             actions: [
-              TextButton(
+              HoverScaleTextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                   openAppSettings();
                 },
                 child: const Text('去设置'),
               ),
-              TextButton(
+              HoverScaleTextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('取消'),
               ),
@@ -183,6 +186,11 @@ class _ThemeModePageState extends State<ThemeModePage> {
     // 获取外观设置提供者
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final settingsProvider = context.watch<SettingsProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
+    final int scaleDivisions = ((AppearanceSettingsProvider.uiScaleMax -
+                AppearanceSettingsProvider.uiScaleMin) /
+            AppearanceSettingsProvider.uiScaleStep)
+        .round();
     
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -198,93 +206,30 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 DropdownMenuItemData(
                   title: "日间模式",
                   value: ThemeMode.light,
-                  isSelected: !_isCustomThemeMode &&
-                      widget.themeNotifier.themeMode == ThemeMode.light,
+                  isSelected: widget.themeNotifier.themeMode == ThemeMode.light,
                 ),
                 DropdownMenuItemData(
                   title: "夜间模式",
                   value: ThemeMode.dark,
-                  isSelected: !_isCustomThemeMode &&
-                      widget.themeNotifier.themeMode == ThemeMode.dark,
+                  isSelected: widget.themeNotifier.themeMode == ThemeMode.dark,
                 ),
                 DropdownMenuItemData(
                   title: "跟随系统",
                   value: ThemeMode.system,
-                  isSelected: !_isCustomThemeMode &&
-                      widget.themeNotifier.themeMode == ThemeMode.system,
-                ),
-                DropdownMenuItemData(
-                  title: "自定义颜色",
-                  value: 'custom',
-                  isSelected: _isCustomThemeMode,
+                  isSelected: widget.themeNotifier.themeMode == ThemeMode.system,
                 ),
               ],
               onChanged: (mode) {
-                if (mode == 'custom') {
+                if (mode is ThemeMode) {
                   setState(() {
-                    _isCustomThemeMode = true;
-                  });
-                  widget.themeNotifier.useCustomThemeColor = true;
-                } else if (mode is ThemeMode) {
-                  setState(() {
-                    _isCustomThemeMode = false;
                     widget.themeNotifier.themeMode = mode;
                     _saveThemeMode(mode);
-                    _customOverlayColor = widget.themeNotifier.customOverlayColor;
                   });
                 }
               },
               dropdownKey: _dropdownKey,
             ),
-            if (_isCustomThemeMode) ...[
-              const Divider(color: Colors.white12, height: 1),
-              _buildCustomOverlayColorTile(),
-            ],
-            const Divider(color: Colors.white12, height: 1),
-            SettingsItem.dropdown(
-              title: "背景毛玻璃效果",
-              subtitle: "调整界面元素的模糊强度",
-              icon: Ionicons.water_outline,
-              items: [
-                DropdownMenuItemData(
-                  title: "无",
-                  value: 0,
-                  isSelected: settingsProvider.blurPower == 0,
-                ),
-                DropdownMenuItemData(
-                  title: "轻微",
-                  value: 5,
-                  isSelected: settingsProvider.blurPower == 5,
-                ),
-                DropdownMenuItemData(
-                  title: "中等",
-                  value: 15,
-                  isSelected: settingsProvider.blurPower == 15,
-                ),
-                DropdownMenuItemData(
-                  title: "高",
-                  value: 25,
-                  isSelected: settingsProvider.blurPower == 25,
-                ),
-                DropdownMenuItemData(
-                  title: "超级",
-                  value: 50,
-                  isSelected: settingsProvider.blurPower == 50,
-                ),
-                DropdownMenuItemData(
-                  title: "梦幻",
-                  value: 100,
-                  isSelected: settingsProvider.blurPower == 100,
-                ),
-              ],
-              onChanged: (blur) {
-                context
-                    .read<SettingsProvider>()
-                    .setBlurPower(blur.toDouble());
-              },
-              dropdownKey: _blurDropdownKey,
-            ),
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.toggle(
               title: "控件毛玻璃效果",
               subtitle: "关闭后可提升性能，但会失去部分UI透明感",
@@ -294,7 +239,21 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 appearanceSettings.setEnableWidgetBlurEffect(value);
               },
             ),
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.slider(
+              title: "界面缩放",
+              subtitle: "调整 NipaPlay 界面的整体大小",
+              icon: Ionicons.expand_outline,
+              value: appearanceSettings.uiScale,
+              min: AppearanceSettingsProvider.uiScaleMin,
+              max: AppearanceSettingsProvider.uiScaleMax,
+              divisions: scaleDivisions,
+              onChanged: (value) {
+                appearanceSettings.setUiScale(value);
+              },
+              labelFormatter: (value) => 'x${value.toStringAsFixed(2)}',
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.dropdown(
               title: "背景图像",
               subtitle: "设置应用主界面的背景图片",
@@ -332,195 +291,103 @@ class _ThemeModePageState extends State<ThemeModePage> {
               },
               dropdownKey: _backgroundImageDropdownKey,
             ),
-            const Divider(color: Colors.white12, height: 1),
-            SettingsItem.toggle(
-              title: "页面滑动动画",
-              subtitle: "关闭可提升在低性能设备上的流畅度",
-              icon: Ionicons.swap_horizontal_outline,
-              value: appearanceSettings.enablePageAnimation,
-              onChanged: (value) {
-                appearanceSettings.setEnablePageAnimation(value);
-                BlurSnackBar.show(
-                  context, 
-                  value ? '已启用页面滑动动画' : '已关闭页面滑动动画'
-                );
-              },
-            ),
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            if (widget.themeNotifier.backgroundImageMode != "关闭") ...[
+              SettingsItem.dropdown(
+                title: "背景毛玻璃效果",
+                subtitle: "调整界面元素的模糊强度",
+                icon: Ionicons.water_outline,
+                items: [
+                  DropdownMenuItemData(
+                    title: "无",
+                    value: 0,
+                    isSelected: settingsProvider.blurPower == 0,
+                  ),
+                  DropdownMenuItemData(
+                    title: "轻微",
+                    value: 5,
+                    isSelected: settingsProvider.blurPower == 5,
+                  ),
+                  DropdownMenuItemData(
+                    title: "中等",
+                    value: 15,
+                    isSelected: settingsProvider.blurPower == 15,
+                  ),
+                  DropdownMenuItemData(
+                    title: "高",
+                    value: 25,
+                    isSelected: settingsProvider.blurPower == 25,
+                  ),
+                  DropdownMenuItemData(
+                    title: "超级",
+                    value: 50,
+                    isSelected: settingsProvider.blurPower == 50,
+                  ),
+                  DropdownMenuItemData(
+                    title: "梦幻",
+                    value: 100,
+                    isSelected: settingsProvider.blurPower == 100,
+                  ),
+                ],
+                onChanged: (blur) {
+                  context
+                      .read<SettingsProvider>()
+                      .setBlurPower(blur.toDouble());
+                },
+                dropdownKey: _blurDropdownKey,
+              ),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+              SettingsItem.dropdown(
+                title: "背景图像渲染",
+                subtitle: "选择背景颜色与图片的合成方式",
+                icon: Ionicons.color_wand_outline,
+                items: [
+                  DropdownMenuItemData(
+                    title: "不透明度",
+                    value: BackgroundImageRenderMode.opacity,
+                    isSelected: _backgroundImageRenderMode ==
+                        BackgroundImageRenderMode.opacity,
+                  ),
+                  DropdownMenuItemData(
+                    title: "柔光",
+                    value: BackgroundImageRenderMode.softLight,
+                    isSelected: _backgroundImageRenderMode ==
+                        BackgroundImageRenderMode.softLight,
+                  ),
+                ],
+                onChanged: (mode) {
+                  if (mode is BackgroundImageRenderMode) {
+                    setState(() {
+                      _backgroundImageRenderMode = mode;
+                    });
+                    widget.themeNotifier.backgroundImageRenderMode = mode;
+                  }
+                },
+                dropdownKey: _backgroundRenderModeDropdownKey,
+              ),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+              SettingsItem.slider(
+                title: "背景颜色叠加",
+                subtitle: "调整覆盖背景颜色的强度",
+                icon: Ionicons.color_palette_outline,
+                value: _backgroundImageOverlayOpacity,
+                min: 0,
+                max: 1,
+                divisions: 100,
+                onChanged: (value) {
+                  setState(() {
+                    _backgroundImageOverlayOpacity = value;
+                  });
+                  widget.themeNotifier.backgroundImageOverlayOpacity = value;
+                },
+                labelFormatter: (value) => value.toStringAsFixed(2),
+              ),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            ],
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildCustomOverlayColorTile() {
-    final hexValue = _formatColorHex(_customOverlayColor);
-    return ListTile(
-      leading: const Icon(
-        Ionicons.color_palette_outline,
-        color: Colors.white70,
-      ),
-      title: const Text(
-        "遮罩颜色",
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      subtitle: const Text(
-        "设置覆盖背景图像的颜色以提升可读性",
-        style: TextStyle(color: Colors.white70),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white24, width: 1),
-              color: _customOverlayColor,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            hexValue,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-      onTap: _showOverlayColorPicker,
-    );
-  }
-
-  Future<void> _showOverlayColorPicker() async {
-    double alpha = _customOverlayColor.alpha.toDouble();
-    double red = _customOverlayColor.red.toDouble();
-    double green = _customOverlayColor.green.toDouble();
-    double blue = _customOverlayColor.blue.toDouble();
-    Color previewColor = _customOverlayColor;
-
-    Color clampToColor() {
-      return Color.fromARGB(
-        alpha.clamp(0, 255).toInt(),
-        red.clamp(0, 255).toInt(),
-        green.clamp(0, 255).toInt(),
-        blue.clamp(0, 255).toInt(),
-      );
-    }
-
-    final Color? selectedColor = await BlurDialog.show<Color>(
-      context: context,
-      title: "选择遮罩颜色",
-      contentWidget: StatefulBuilder(
-        builder: (context, setPreviewState) {
-          Widget buildSlider({
-            required String label,
-            required double value,
-            required ValueChanged<double> onChanged,
-            required Color activeColor,
-          }) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "$label ${value.toInt()}",
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                Slider(
-                  min: 0,
-                  max: 255,
-                  divisions: 255,
-                  value: value,
-                  onChanged: (val) {
-                    setPreviewState(() {
-                      onChanged(val);
-                      previewColor = clampToColor();
-                    });
-                  },
-                  activeColor: activeColor,
-                  inactiveColor: Colors.white24,
-                ),
-              ],
-            );
-          }
-
-          return SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  height: 80,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24, width: 1),
-                    color: previewColor,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                buildSlider(
-                  label: "不透明度",
-                  value: alpha,
-                  onChanged: (val) => alpha = val,
-                  activeColor: Colors.white,
-                ),
-                buildSlider(
-                  label: "红色",
-                  value: red,
-                  onChanged: (val) => red = val,
-                  activeColor: Colors.redAccent,
-                ),
-                buildSlider(
-                  label: "绿色",
-                  value: green,
-                  onChanged: (val) => green = val,
-                  activeColor: Colors.lightGreenAccent,
-                ),
-                buildSlider(
-                  label: "蓝色",
-                  value: blue,
-                  onChanged: (val) => blue = val,
-                  activeColor: Colors.lightBlueAccent,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "当前值：${_formatColorHex(previewColor)}",
-                  style: const TextStyle(color: Colors.white70),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          style: TextButton.styleFrom(foregroundColor: Colors.white70),
-          child: const Text("取消"),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(previewColor),
-          style: TextButton.styleFrom(foregroundColor: Colors.white),
-          child: const Text("确定"),
-        ),
-      ],
-    );
-
-    if (selectedColor != null) {
-      setState(() {
-        _customOverlayColor = selectedColor;
-      });
-      widget.themeNotifier.customOverlayColor = selectedColor;
-    }
-  }
-
-  String _formatColorHex(Color color) {
-    return '#${color.value.toRadixString(16).padLeft(8, '0').toUpperCase()}';
   }
 
   Future<void> _saveThemeMode(ThemeMode mode) async {

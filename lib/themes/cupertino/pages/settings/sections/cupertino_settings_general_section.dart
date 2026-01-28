@@ -1,10 +1,9 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 
 import '../widgets/appearance_setting_tile.dart';
-import '../widgets/theme_setting_tile.dart';
 import '../widgets/player_setting_tile.dart';
 import '../widgets/network_setting_tile.dart';
 import '../widgets/media_server_setting_tile.dart';
@@ -41,7 +40,6 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
           backgroundColor: resolveSettingsSectionBackground(context),
           children: [
             CupertinoAppearanceSettingTile(),
-            CupertinoThemeSettingTile(),
             CupertinoPlayerSettingTile(),
             CupertinoNetworkSettingTile(),
             CupertinoStorageSettingTile(),

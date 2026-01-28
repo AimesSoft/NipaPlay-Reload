@@ -5,9 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_player_widget.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_send_danmaku_dialog.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_video_controls_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/vertical_indicator.dart';
@@ -15,16 +12,15 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/glass_action_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/shadow_action_button.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/lock_controls_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
-import '../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
@@ -40,8 +36,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _isHoveringAnimeInfo = false;
   bool _isHoveringBackButton = false;
   double _horizontalDragDistance = 0.0;
-  final GlobalKey<SendDanmakuDialogContentState> _danmakuDialogKey =
-      GlobalKey();
   bool _isUiLocked = false;
   bool _showUiLockButton = false;
   Timer? _uiLockButtonTimer;
@@ -240,21 +234,21 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           title: '保存截图',
           content: '请选择保存位置',
           actions: [
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop('photos'),
               child: const Text(
                 '相册',
                 style: TextStyle(color: Colors.white),
               ),
             ),
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop('file'),
               child: const Text(
                 '文件',
                 style: TextStyle(color: Colors.white),
               ),
             ),
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text(
                 '取消',
@@ -318,7 +312,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         ],
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
         ),
@@ -328,8 +322,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context);
-
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         return WillPopScope(
@@ -347,9 +339,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     child: VideoPlayerWidget(),
                   ),
                   if (videoState.hasVideo)
-                    uiThemeProvider.isFluentUITheme
-                        ? const FluentVideoControlsOverlay()
-                        : _buildMaterialControls(videoState),
+                    _buildMaterialControls(videoState),
                 ],
               ),
             ),
@@ -395,7 +385,15 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           setState(() => _isHoveringBackButton = false),
                       child: BackButtonWidget(videoState: videoState),
                     ),
-                    const SizedBox(width: 10.0),
+                    const SizedBox(width: 12.0),
+                    SendDanmakuButton(
+                      onPressed: () => _showSendDanmakuDialog(videoState),
+                    ),
+                    const SizedBox(width: 8.0),
+                    SkipButton(
+                      onPressed: () => videoState.skip(),
+                    ),
+                    const SizedBox(width: 12.0),
                     MouseRegion(
                       cursor: _isHoveringAnimeInfo
                           ? SystemMouseCursors.click
@@ -429,7 +427,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                     children: [
                       if (!kIsWeb &&
                           defaultTargetPlatform == TargetPlatform.iOS)
-                        GlassActionButton(
+                        ShadowActionButton(
                           tooltip: '投屏 (AirPlay)',
                           icon: Icons.airplay_rounded,
                           onPressed: () {
@@ -441,7 +439,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                         if (!kIsWeb &&
                             defaultTargetPlatform == TargetPlatform.iOS)
                           const SizedBox(width: 12),
-                        GlassActionButton(
+                        ShadowActionButton(
                           tooltip: '截图',
                           icon: Icons.camera_alt_outlined,
                           onPressed: () {
@@ -452,7 +450,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       ],
                       if (showShareButton) ...[
                         const SizedBox(width: 12),
-                        GlassActionButton(
+                        ShadowActionButton(
                           tooltip: (!kIsWeb &&
                                   defaultTargetPlatform == TargetPlatform.iOS)
                               ? '分享 / AirDrop'
@@ -467,36 +465,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           },
                         ),
                       ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
-          top: 0,
-          bottom: 0,
-          child: Center(
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 150),
-              offset: Offset(videoState.showControls ? 0 : -0.1, 0),
-              child: AnimatedOpacity(
-                opacity: videoState.showControls ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 150),
-                child: IgnorePointer(
-                  ignoring: !videoState.showControls,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SendDanmakuButton(
-                        onPressed: () => _showSendDanmakuDialog(videoState),
-                      ),
-                      const SizedBox(height: 12),
-                      SkipButton(
-                        onPressed: () => videoState.skip(),
-                      ),
                     ],
                   ),
                 ),
@@ -560,62 +528,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   Future<void> _showSendDanmakuDialog(VideoPlayerState videoState) async {
     final hotkeyService = HotkeyService();
-    final wasPlaying = videoState.player.state == PlaybackState.playing;
-
-    if (wasPlaying) {
-      await videoState.player.pauseDirectly();
-    }
-
-    final episodeId = videoState.episodeId;
-    final currentTime = videoState.position.inSeconds.toDouble();
-
-    if (episodeId == null) {
-      BlurSnackBar.show(context, '无法获取剧集信息，无法发送弹幕');
-      if (wasPlaying) await videoState.player.playDirectly();
-      return;
-    }
-
     hotkeyService.unregisterHotkeys();
-
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(context, listen: false);
-    if (uiThemeProvider.isFluentUITheme) {
-      await showDialog(
-        context: context,
-        builder: (context) => FluentSendDanmakuDialog(
-          episodeId: episodeId,
-          currentTime: currentTime,
-          onDanmakuSent: (danmaku) {
-            videoState.addDanmakuToNewTrack(danmaku);
-          },
-        ),
-      );
-    } else {
-      // 检查是否为手机设备
-      final window = WidgetsBinding.instance.window;
-      final size = window.physicalSize / window.devicePixelRatio;
-      final shortestSide = size.width < size.height ? size.width : size.height;
-      final bool isRealPhone =
-          Platform.isIOS || Platform.isAndroid && shortestSide < 600;
-
-      await BlurDialog.show(
-        context: context,
-        title: isRealPhone ? '' : '发送弹幕', // 手机设备不显示标题
-        contentWidget: SendDanmakuDialogContent(
-          episodeId: episodeId,
-          currentTime: currentTime,
-          onDanmakuSent: (danmaku) {
-            videoState.addDanmakuToNewTrack(danmaku);
-          },
-        ),
-        actions: [],
-      );
-    }
-
-    hotkeyService.registerHotkeys();
-
-    if (wasPlaying) {
-      await videoState.player.playDirectly();
+    try {
+      await videoState.showSendDanmakuDialog();
+    } finally {
+      hotkeyService.registerHotkeys();
     }
   }
 }

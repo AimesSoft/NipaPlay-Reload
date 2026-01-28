@@ -16,6 +16,8 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
   bool _isHoverAreaVisible = false;
   bool _isMenuVisible = false;
   OverlayEntry? _settingsMenuOverlay;
+  final GlobalKey<VideoSettingsMenuState> _menuKey =
+      GlobalKey<VideoSettingsMenuState>();
 
   @override
   void dispose() {
@@ -29,6 +31,7 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
     _settingsMenuOverlay = OverlayEntry(
       builder: (context) => HoverSettingsMenuWrapper(
         onClose: _hideSettingsMenu,
+        onRequestClose: _requestCloseSettingsMenu,
         onHover: (isHovered) {
           if (mounted) {
             setState(() {
@@ -36,6 +39,7 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
             });
           }
         },
+        menuKey: _menuKey,
       ),
     );
 
@@ -54,6 +58,15 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
       setState(() {
         _isMenuVisible = false;
       });
+    }
+  }
+
+  void _requestCloseSettingsMenu() {
+    final menuState = _menuKey.currentState;
+    if (menuState != null) {
+      menuState.requestClose();
+    } else {
+      _hideSettingsMenu();
     }
   }
 
@@ -90,7 +103,7 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
               // 延迟隐藏，给用户时间移动到菜单上
               Future.delayed(const Duration(milliseconds: 200), () {
                 if (mounted && !_isHoverAreaVisible && !_isMenuVisible) {
-                  _hideSettingsMenu();
+                  _requestCloseSettingsMenu();
                 }
               });
             },
@@ -145,12 +158,16 @@ class _RightEdgeHoverMenuState extends State<RightEdgeHoverMenu> {
 
 class HoverSettingsMenuWrapper extends StatefulWidget {
   final VoidCallback onClose;
+  final VoidCallback onRequestClose;
   final ValueChanged<bool> onHover;
+  final GlobalKey<VideoSettingsMenuState> menuKey;
 
   const HoverSettingsMenuWrapper({
     super.key,
     required this.onClose,
+    required this.onRequestClose,
     required this.onHover,
+    required this.menuKey,
   });
 
   @override
@@ -173,7 +190,7 @@ class _HoverSettingsMenuWrapperState extends State<HoverSettingsMenuWrapper> {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted && !_isMenuHovered) {
-        widget.onClose();
+        widget.onRequestClose();
       }
     });
   }
@@ -214,6 +231,7 @@ class _HoverSettingsMenuWrapperState extends State<HoverSettingsMenuWrapper> {
     return _HoverDetectionWrapper(
       onHover: _handleMainMenuHover,
       child: VideoSettingsMenu(
+        key: widget.menuKey,
         onClose: widget.onClose,
         onHoverChanged: _handleSubMenuHover,
       ),

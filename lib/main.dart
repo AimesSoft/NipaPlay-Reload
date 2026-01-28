@@ -2,7 +2,9 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
@@ -11,6 +13,7 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
@@ -39,8 +42,8 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
-import 'package:nipaplay/themes/fluent/pages/fluent_main_page.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
+import 'themes/nipaplay/pages/settings/account_page.dart';
 import 'dart:async';
 import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
@@ -70,12 +73,12 @@ import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
+import 'package:nipaplay/models/background_image_render_mode.dart';
 import 'constants/settings_keys.dart';
-import 'package:nipaplay/themes/web/web_entry_app.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> navigatorKey = globals.navigatorKey;
 // 将通道定义为全局变量
 const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 
@@ -84,15 +87,26 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey =
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  debugPaintBaselinesEnabled = false;
+  debugPaintSizeEnabled = false;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    debugPaintBaselinesEnabled = false;
+    debugPaintSizeEnabled = false;
+  });
 
-  // Web 端仅提供远程访问 Web UI，避免触发桌面/IO 相关初始化导致灰屏。
+  // Web 端不再提供 UI，仅保留客户端连接的远程访问 API。
   if (kIsWeb) {
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      debugPrint('应用发生错误: ${details.exception}');
-      debugPrint('错误堆栈: ${details.stack}');
-    };
-    runApp(const NipaPlayWebEntryApp());
+    runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Center(
+          child: Text(
+            'Web UI 已移除，请使用客户端连接远程访问服务。',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    ));
     return;
   }
 
@@ -372,12 +386,16 @@ void main(List<String> args) async {
         }
 
         Future.microtask(() {
-          // 根据平台选择正确的设置页面索引
-          final settingsIndex = Platform.isIOS ? 3 : 4;
-          _navigateToPage(context, settingsIndex); // 切换到设置页面
+          final uiThemeProvider =
+              Provider.of<UIThemeProvider>(context, listen: false);
+          if (uiThemeProvider.isCupertinoTheme) {
+            _navigateToPage(context, 3); // Cupertino 主题保留底部设置页
+          } else {
+            _showSettingsWindow(context); // Nipaplay 主题使用弹窗设置页
+          }
         });
 
-        return '正在切换到设置页面';
+        return '正在打开设置';
       } catch (e) {
         print('[Dart] 错误: $e');
         return '错误: $e';
@@ -424,10 +442,13 @@ void main(List<String> args) async {
       SettingsStorage.loadString('customBackgroundPath'),
       SettingsStorage.loadString('anime_detail_display_mode',
           defaultValue: 'simple'),
-      SettingsStorage.loadBool(ThemeNotifier.useCustomThemeColorKey),
-      SettingsStorage.loadInt(
-        ThemeNotifier.customOverlayColorKey,
-        defaultValue: ThemeNotifier.defaultOverlayMaskColor.value,
+      SettingsStorage.loadString(
+        ThemeNotifier.backgroundImageRenderModeKey,
+        defaultValue: BackgroundImageRenderMode.opacity.storageKey,
+      ),
+      SettingsStorage.loadDouble(
+        ThemeNotifier.backgroundImageOverlayOpacityKey,
+        defaultValue: ThemeNotifier.defaultBackgroundImageOverlayOpacity,
       ),
     ]).then((results) {
       globals.backgroundImageMode =
@@ -440,15 +461,16 @@ void main(List<String> args) async {
 
       final themeMode = (results[0] as String?) ?? 'system';
       final animeDetailMode = (results[3] as String?) ?? 'simple';
-      final useCustomThemeColor = (results[4] as bool?) ?? false;
-      final overlayColorValue =
-          (results[5] as int?) ?? ThemeNotifier.defaultOverlayMaskColor.value;
+      final backgroundImageRenderMode =
+          (results[4] as String?) ?? BackgroundImageRenderMode.opacity.storageKey;
+      final backgroundImageOverlayOpacity = (results[5] as double?) ??
+          ThemeNotifier.defaultBackgroundImageOverlayOpacity;
 
       return <String, dynamic>{
         'themeMode': themeMode,
         'animeDetailMode': animeDetailMode,
-        'useCustomThemeColor': useCustomThemeColor,
-        'customOverlayColor': overlayColorValue,
+        'backgroundImageRenderMode': backgroundImageRenderMode,
+        'backgroundImageOverlayOpacity': backgroundImageOverlayOpacity,
       };
     }),
 
@@ -468,10 +490,7 @@ void main(List<String> args) async {
       Future.value(),
 
     // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
-    if (!kIsWeb)
-      SMBProxyService.instance.initialize()
-    else
-      Future.value(),
+    if (!kIsWeb) SMBProxyService.instance.initialize() else Future.value(),
   ]).then((results) async {
     // BangumiService初始化完成后，检查并刷新缺少标签的缓存
     Future.microtask(() async {
@@ -487,12 +506,16 @@ void main(List<String> args) async {
     final savedThemeMode = settingsMap['themeMode'] as String? ?? 'system';
     final savedDetailModeString =
         settingsMap['animeDetailMode'] as String? ?? 'simple';
-    final savedUseCustomThemeColor =
-        settingsMap['useCustomThemeColor'] as bool? ?? false;
-    final savedOverlayColorValue = settingsMap['customOverlayColor'] as int? ??
-        ThemeNotifier.defaultOverlayMaskColor.value;
+    final savedBackgroundRenderModeString =
+        settingsMap['backgroundImageRenderMode'] as String?;
+    final savedBackgroundOverlayOpacity =
+        settingsMap['backgroundImageOverlayOpacity'] as double? ??
+            ThemeNotifier.defaultBackgroundImageOverlayOpacity;
     final savedDetailMode =
         AnimeDetailDisplayModeStorage.fromString(savedDetailModeString);
+    final savedBackgroundRenderMode =
+        BackgroundImageRenderModeStorage.fromString(
+            savedBackgroundRenderModeString);
     ThemeMode initialThemeMode;
     switch (savedThemeMode) {
       case 'light':
@@ -540,8 +563,9 @@ void main(List<String> args) async {
               initialBackgroundImageMode: globals.backgroundImageMode,
               initialCustomBackgroundPath: globals.customBackgroundPath,
               initialAnimeDetailDisplayMode: savedDetailMode,
-              initialUseCustomThemeColor: savedUseCustomThemeColor,
-              initialCustomOverlayColor: Color(savedOverlayColorValue),
+              initialBackgroundImageRenderMode: savedBackgroundRenderMode,
+              initialBackgroundImageOverlayOpacity:
+                  savedBackgroundOverlayOpacity,
             ),
           ),
           ChangeNotifierProvider(create: (_) => TabChangeNotifier()),
@@ -845,7 +869,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             materialHomeBuilder: () =>
                 MainPage(launchFilePath: widget.launchFilePath),
             fluentHomeBuilder: () =>
-                FluentMainPage(launchFilePath: widget.launchFilePath),
+                MainPage(launchFilePath: widget.launchFilePath),
             cupertinoHomeBuilder: () =>
                 CupertinoMainPage(launchFilePath: widget.launchFilePath),
           );
@@ -897,14 +921,8 @@ class MainPage extends StatefulWidget {
       const DashboardHomePage(),
       const PlayVideoPage(),
       const AnimePage(),
+      const AccountPage(),
     ];
-
-    // 仅在非iOS平台添加新番更新页面
-    if (!Platform.isIOS) {
-      pages.add(const NewSeriesPage());
-    }
-
-    pages.add(const SettingsPage());
     return pages;
   }
 
@@ -929,7 +947,6 @@ class MainPageState extends State<MainPage>
   bool _hotkeysAreRegistered = false;
   VideoPlayerState? _videoPlayerState;
   AppearanceSettingsProvider? _appearanceSettingsProvider;
-  bool? _mainTabAnimationEnabled;
 
   // Static method to find MainPageState from context
   static MainPageState? of(BuildContext context) {
@@ -944,7 +961,6 @@ class MainPageState extends State<MainPage>
     debugPrint('[MainPageState] targetTabIndex: $index');
 
     if (index != null) {
-      // 对于FluentUI主题，需要在标签切换时管理热键
       debugPrint('[MainPageState] 准备调用_manageHotkeys()...');
       _manageHotkeys();
       debugPrint('[MainPageState] _manageHotkeys()调用完成');
@@ -955,15 +971,9 @@ class MainPageState extends State<MainPage>
         if (globalTabController!.index != index) {
           try {
             debugPrint('[MainPageState] 尝试切换到标签: $index');
-            final enablePageAnimation =
-                context.read<AppearanceSettingsProvider>().enablePageAnimation;
-            if (enablePageAnimation) {
-              globalTabController!.animateTo(index);
-            } else {
-              globalTabController!.index = index;
-            }
-            debugPrint(
-                '[MainPageState] 已切换到标签: $index (动画: $enablePageAnimation)');
+            // 强制启用页面滑动动画
+            globalTabController!.animateTo(index);
+            debugPrint('[MainPageState] 已切换到标签: $index');
           } catch (e) {
             debugPrint('[MainPageState] 切换标签失败: $e');
           }
@@ -991,22 +1001,7 @@ class MainPageState extends State<MainPage>
 
     final tabIndex = globalTabController?.index ?? -1;
 
-    // 检查是否应该注册热键：
-    // 1. nipaplay主题：使用globalTabController，视频播放页面是索引1
-    // 2. FluentUI主题：使用TabChangeNotifier，视频播放页面也是索引1
-    bool shouldBeRegistered = false;
-
-    if (globalTabController != null) {
-      // nipaplay主题：检查tabIndex == 1
-      shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
-      //debugPrint('[HotkeyManager] nipaplay主题: tabIndex=$tabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
-    } else {
-      // FluentUI主题：检查TabChangeNotifier的targetTabIndex == 1
-      final tabChangeNotifier = _tabChangeNotifier;
-      final fluentTabIndex = tabChangeNotifier?.targetTabIndex ?? -1;
-      shouldBeRegistered = fluentTabIndex == 1 && videoState.hasVideo;
-      //debugPrint('[HotkeyManager] FluentUI主题: fluentTabIndex=$fluentTabIndex, hasVideo=${videoState.hasVideo}, shouldBeRegistered=$shouldBeRegistered');
-    }
+    final bool shouldBeRegistered = tabIndex == 1 && videoState.hasVideo;
 
     //debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
 
@@ -1053,37 +1048,20 @@ class MainPageState extends State<MainPage>
   Future<void> _initializeController() async {
     final prefs = await SharedPreferences.getInstance();
     _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
-    final enablePageAnimationPref = prefs.getBool('enable_page_animation') ??
-        (!kIsWeb && (Platform.isIOS || Platform.isAndroid));
-    _mainTabAnimationEnabled ??= enablePageAnimationPref;
-    final enablePageAnimation =
-        _mainTabAnimationEnabled ?? enablePageAnimationPref;
 
-    // 在iOS平台上确保默认页面索引不会指向新番更新页面
-    // iOS: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-设置
-    // 其他平台: 索引顺序为 0-主页, 1-视频播放, 2-媒体库, 3-新番更新, 4-设置
-    if (Platform.isIOS && _defaultPageIndex >= 3) {
-      // 如果默认页面是新番更新页面(索引3)或设置页面(索引4)，在iOS上需要调整
-      if (_defaultPageIndex == 3) {
-        // 原来的新番更新页面，调整为设置页面
-        _defaultPageIndex = 3; // iOS上设置页面的索引
-      } else if (_defaultPageIndex == 4) {
-        // 原来的设置页面，调整为设置页面
-        _defaultPageIndex = 3; // iOS上设置页面的索引
-      }
-    }
+    // 强制启用页面滑动动画
+    // ... (注释省略)
 
     if (mounted) {
-      // 根据平台动态设置TabController长度
-      final tabLength = Platform.isIOS ? 4 : 5;
+      // 主页面Tab数量与页面列表保持一致
+      final tabLength = widget.pages.length;
       globalTabController = TabController(
         length: tabLength,
         vsync: this,
-        initialIndex: _defaultPageIndex,
-        animationDuration: enablePageAnimation ? null : Duration.zero,
+        initialIndex: _defaultPageIndex.clamp(0, tabLength - 1),
       );
       debugPrint(
-          '[MainPageState] TabController initialized with length: $tabLength, index: $_defaultPageIndex');
+          '[MainPageState] TabController initialized with length: $tabLength, index: ${globalTabController!.index}');
     }
   }
 
@@ -1092,7 +1070,7 @@ class MainPageState extends State<MainPage>
     debugPrint(
         '[MainPageState] initState: globalTabController listener ADDED.');
 
-    if (globals.winLinDesktop) {
+    if (globals.isDesktop) {
       windowManager.addListener(this);
     }
   }
@@ -1103,7 +1081,7 @@ class MainPageState extends State<MainPage>
         _handleLaunchFile(widget.launchFilePath!);
       }
 
-      if (globals.winLinDesktop) {
+      if (globals.isDesktop) {
         _checkWindowMaximizedState();
       }
 
@@ -1177,7 +1155,7 @@ class MainPageState extends State<MainPage>
 
   // 检查窗口是否已最大化
   Future<void> _checkWindowMaximizedState() async {
-    if (globals.winLinDesktop) {
+    if (globals.isDesktop) {
       final maximized = await windowManager.isMaximized();
       if (maximized != isMaximized) {
         setState(() {
@@ -1194,12 +1172,7 @@ class MainPageState extends State<MainPage>
     final newAppearanceSettingsProvider =
         Provider.of<AppearanceSettingsProvider>(context, listen: false);
     if (newAppearanceSettingsProvider != _appearanceSettingsProvider) {
-      _appearanceSettingsProvider
-          ?.removeListener(_handleAppearanceSettingsChanged);
       _appearanceSettingsProvider = newAppearanceSettingsProvider;
-      _appearanceSettingsProvider
-          ?.addListener(_handleAppearanceSettingsChanged);
-      _handleAppearanceSettingsChanged();
     }
 
     // 初始化对话框尺寸管理器 - 只初始化一次
@@ -1223,47 +1196,14 @@ class MainPageState extends State<MainPage>
     _manageHotkeys(); // 初始状态检查
   }
 
-  void _handleAppearanceSettingsChanged() {
-    final enablePageAnimation =
-        _appearanceSettingsProvider?.enablePageAnimation;
-    if (enablePageAnimation == null) return;
-
-    if (_mainTabAnimationEnabled == enablePageAnimation) {
-      return;
-    }
-    _mainTabAnimationEnabled = enablePageAnimation;
-
-    final oldController = globalTabController;
-    if (oldController == null) return;
-
-    final currentIndex = oldController.index;
-    final length = oldController.length;
-    oldController.removeListener(_onTabChange);
-    oldController.dispose();
-
-    globalTabController = TabController(
-      length: length,
-      vsync: this,
-      initialIndex: currentIndex.clamp(0, length - 1),
-      animationDuration: enablePageAnimation ? null : Duration.zero,
-    );
-    globalTabController?.addListener(_onTabChange);
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   @override
   void dispose() {
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
-    _appearanceSettingsProvider
-        ?.removeListener(_handleAppearanceSettingsChanged);
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
-    if (globals.winLinDesktop) {
+    if (globals.isDesktop) {
       windowManager.removeListener(this);
     }
 
@@ -1296,7 +1236,7 @@ class MainPageState extends State<MainPage>
       } else {
         await windowManager.maximize();
       }
-      // 状态更新由windowManager的事件监听器处理
+      await _checkWindowMaximizedState();
     }
   }
 
@@ -1336,6 +1276,16 @@ class MainPageState extends State<MainPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final mediaPadding = MediaQuery.of(context).padding;
+    final bool isMac = !kIsWeb && Platform.isMacOS;
+    final bool isDesktop = globals.isDesktop;
+    final double baseTopPadding = isMac ? 10 : 4;
+    final double baseRightPadding = isMac ? 20 : 10;
+    final double topPadding =
+        isDesktop ? baseTopPadding : baseTopPadding + mediaPadding.top;
+    final double rightPadding =
+        isDesktop ? baseRightPadding : baseRightPadding + mediaPadding.right;
     return Stack(
       children: [
         // 使用 Selector 只监听需要的状态
@@ -1363,7 +1313,7 @@ class MainPageState extends State<MainPage>
         Positioned(
           top: 0,
           left: 0,
-          right: globals.isDesktop ? 120 : 0,
+          right: 0,
           child: SizedBox(
             height: 40,
             child: GestureDetector(
@@ -1380,34 +1330,199 @@ class MainPageState extends State<MainPage>
         Selector<VideoPlayerState, bool>(
           selector: (context, videoState) => videoState.shouldShowAppBar(),
           builder: (context, shouldShowAppBar, child) {
-            if (!globals.winLinDesktop || !shouldShowAppBar) {
+            if (!globals.isDesktopOrTablet || !shouldShowAppBar) {
               return const SizedBox.shrink();
             }
             return Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                width: 120,
-                height: globals.isPhone && globals.isMobile ? 55 : 40,
-                color: Colors.transparent,
-                child: WindowControlButtons(
-                  isMaximized: isMaximized,
-                  onMinimize: _minimizeWindow,
-                  onMaximizeRestore: _toggleWindowSize,
-                  onClose: _closeWindow,
-                ),
+              top: topPadding,
+              right: rightPadding,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SystemResourceDisplay(),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
+                      child: Image.asset(
+                        'assets/logo2.png',
+                        height: 24,
+                        fit: BoxFit.contain,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        colorBlendMode: BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
+                      child: _ThemeToggleButton(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
+                      child: _SettingsEntryButton(
+                        onPressed: () => _showSettingsWindow(context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
+                    SizedBox(
+                      height: kWindowCaptionHeight,
+                      child: Center(
+                        child: WindowControlButtons(
+                          isMaximized: isMaximized,
+                          onMinimize: _minimizeWindow,
+                          onMaximizeRestore: _toggleWindowSize,
+                          onClose: _closeWindow,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             );
           },
         ),
-
-        // 系统资源监控显示
-        Positioned(
-          top: 4,
-          right: globals.isPhone ? 10 : 130,
-          child: const SystemResourceDisplay(),
-        ),
       ],
+    );
+  }
+}
+
+class _SettingsEntryButton extends StatefulWidget {
+  final VoidCallback onPressed;
+
+  const _SettingsEntryButton({required this.onPressed});
+
+  @override
+  State<_SettingsEntryButton> createState() => _SettingsEntryButtonState();
+}
+
+class _ThemeToggleButton extends StatefulWidget {
+  @override
+  State<_ThemeToggleButton> createState() => _ThemeToggleButtonState();
+}
+
+class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
+    }
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  void _toggleTheme() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    context.read<ThemeNotifier>().themeMode =
+        isDarkMode ? ThemeMode.light : ThemeMode.dark;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final Color iconColor = _isHovered
+        ? const Color(0xFFFF2E55)
+        : (isDarkMode ? Colors.white : Colors.black87);
+    final icon = isDarkMode ? Icons.nightlight_rounded : Icons.light_mode_rounded;
+    final tooltip = isDarkMode ? '切换到日间模式' : '切换到夜间模式';
+
+    return Tooltip(
+      message: tooltip,
+      child: MouseRegion(
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTap: _toggleTheme,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 320),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale:
+                        Tween<double>(begin: 0.85, end: 1.0).animate(animation),
+                    child: RotationTransition(
+                      turns: Tween<double>(begin: 0.9, end: 1.0)
+                          .animate(animation),
+                      child: child,
+                    ),
+                  ),
+                );
+              },
+              child: Icon(
+                icon,
+                key: ValueKey<bool>(isDarkMode),
+                size: 22,
+                color: iconColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsEntryButtonState extends State<_SettingsEntryButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
+    }
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final Color iconColor = _isHovered
+        ? const Color(0xFFFF2E55)
+        : (isDarkMode ? Colors.white : Colors.black87);
+
+    return Tooltip(
+      message: '设置',
+      child: MouseRegion(
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: Icon(
+              Icons.settings_rounded,
+              size: 22,
+              color: iconColor,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1527,4 +1642,49 @@ void _navigateToPage(BuildContext context, int pageIndex) {
     debugPrint(
         '[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
   }
+}
+
+void _showSettingsWindow(BuildContext context) {
+  final appearanceSettings =
+      Provider.of<AppearanceSettingsProvider>(context, listen: false);
+  final enableAnimation = appearanceSettings.enablePageAnimation;
+  final screenSize = MediaQuery.of(context).size;
+  final isCompactLayout = screenSize.width < 900;
+  final maxWidth = isCompactLayout ? screenSize.width * 0.95 : 980.0;
+  final maxHeightFactor = isCompactLayout ? 0.9 : 0.85;
+
+  NipaplayWindow.show(
+    context: context,
+    enableAnimation: enableAnimation,
+    child: NipaplayWindowScaffold(
+      maxWidth: maxWidth,
+      maxHeightFactor: maxHeightFactor,
+      onClose: () => Navigator.of(context).pop(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Builder(
+            builder: (innerContext) {
+              final titleStyle = Theme.of(innerContext)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold);
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (details) {
+                  NipaplayWindowPositionProvider.of(innerContext)
+                      ?.onMove(details.delta);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text('设置', style: titleStyle),
+                ),
+              );
+            },
+          ),
+          const Expanded(child: SettingsPage()),
+        ],
+      ),
+    ),
+  );
 }

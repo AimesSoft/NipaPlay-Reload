@@ -16,9 +16,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/loading_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_anime_card.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/pages/fluent_new_series_page.dart';
 import 'package:nipaplay/main.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -57,12 +54,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
   // 显示搜索模态框
   void _showSearchModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const TagSearchModal(),
-    );
+    TagSearchModal.show(context);
   }
 
   // 添加星期几的映射
@@ -201,31 +193,21 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final anime = animes[index];
-            return HorizontalAnimeCard(
-              imageUrl: anime.imageUrl,
-              title: anime.nameCn.isNotEmpty ? anime.nameCn : anime.name,
-              rating: anime.rating,
-              isOnAir: anime.isOnAir ?? false,
-              onTap: () => _showAnimeDetail(anime),
-              summaryWidget: FutureBuilder<BangumiAnime>(
-                future: _bangumiService.getAnimeDetails(anime.id),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData && snapshot.data!.summary != null) {
-                    return Text(
-                      snapshot.data!.summary!,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    );
-                  }
-                  // Loading or no data
-                  return const SizedBox(); 
-                },
-              ),
+            return FutureBuilder<BangumiAnime>(
+              future: _bangumiService.getAnimeDetails(anime.id),
+              builder: (context, snapshot) {
+                String? summary;
+                if (snapshot.hasData && snapshot.data!.summary != null) {
+                  summary = snapshot.data!.summary;
+                }
+                return HorizontalAnimeCard(
+                  imageUrl: anime.imageUrl,
+                  title: anime.nameCn.isNotEmpty ? anime.nameCn : anime.name,
+                  rating: anime.rating,
+                  onTap: () => _showAnimeDetail(anime),
+                  summary: summary,
+                );
+              },
             );
           },
           childCount: animes.length,
@@ -278,14 +260,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   @override
   Widget build(BuildContext context) {
     super.build(context); // Added for AutomaticKeepAliveClientMixin
-    
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
-    
-    // 如果是Fluent UI主题，使用专门的Fluent UI页面
-    if (uiThemeProvider.isFluentUITheme) {
-      return const FluentNewSeriesPage();
-    }
-    
+
     //debugPrint('[NewSeriesPage build] START - isLoading: $_isLoading, error: $_error, animes.length: ${_animes.length}');
     
     // Outer Stack to handle the new LoadingOverlay for video loading
@@ -407,36 +382,19 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   Widget _buildAnimeCard(BuildContext context, BangumiAnime anime, {Key? key}) {
-    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
-    
-    if (uiThemeProvider.isFluentUITheme) {
-      // 使用 FluentUI 版本
-      return FluentAnimeCard(
-        key: key,
-        name: anime.nameCn,
-        imageUrl: anime.imageUrl,
-        isOnAir: false,
-        source: 'Bangumi',
-        rating: anime.rating,
-        ratingDetails: anime.ratingDetails,
-        onTap: () => _showAnimeDetail(anime),
-      );
-    } else {
-      // 使用 Material 版本（保持原有逻辑）
-      return AnimeCard(
-        key: key,
-        name: anime.nameCn,
-        imageUrl: anime.imageUrl,
-        isOnAir: false,
-        source: 'Bangumi',
-        rating: anime.rating,
-        ratingDetails: anime.ratingDetails,
-        enableBackdropImage: false,
-        enableBackgroundBlur: false,
-        enableShadow: false,
-        onTap: () => _showAnimeDetail(anime),
-      );
-    }
+    return AnimeCard(
+      key: key,
+      name: anime.nameCn,
+      imageUrl: anime.imageUrl,
+      isOnAir: false,
+      source: 'Bangumi',
+      rating: anime.rating,
+      ratingDetails: anime.ratingDetails,
+      enableBackdropImage: false,
+      enableBackgroundBlur: false,
+      enableShadow: false,
+      onTap: () => _showAnimeDetail(anime),
+    );
   }
 
   Future<void> _showAnimeDetail(BangumiAnime animeFromList) async {

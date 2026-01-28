@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 /// 液态玻璃风格的媒体库卡片，用于展示远程服务器中的分类库。

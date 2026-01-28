@@ -155,4 +155,4 @@ flutter pub add dart_vlc
 
 ---
 
-**⬅️ 上一篇: [7. 如何开发主题和自定义样式](07-Theme-Development.md)** | **➡️ 下一篇: [9. (进阶) 如何添加新的弹幕内核](09-Adding-a-New-Danmaku-Kernel.md)**
+**⬅️ 上一篇: [6. 常见问题解答 (FAQ)](06-FAQ.md)** | **➡️ 下一篇: [9. (进阶) 如何添加新的弹幕内核](09-Adding-a-New-Danmaku-Kernel.md)**

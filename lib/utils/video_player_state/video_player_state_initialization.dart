@@ -14,7 +14,6 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     _setupWindowManagerListener();
     _focusNode.requestFocus();
     await _loadLastVideo();
-    await _loadControlBarHeight(); // 加载保存的控制栏高度
     await _loadMinimalProgressBarSettings(); // 加载最小化进度条设置
     await _loadTimelinePreviewSetting(); // 加载时间轴缩略图开关
     await _loadDanmakuOpacity(); // 加载保存的弹幕不透明度

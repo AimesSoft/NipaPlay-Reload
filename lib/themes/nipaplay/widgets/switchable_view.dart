@@ -251,7 +251,8 @@ class _SwitchableViewState extends State<SwitchableView> {
       _cachedChildren = List<Widget?>.filled(length, null);
     }
 
-    _cachedChildren![safeIndex] ??= widget.children[safeIndex];
+    // Refresh the active child to avoid stale cached UI when its state changes.
+    _cachedChildren![safeIndex] = widget.children[safeIndex];
 
     return List<Widget>.generate(length, (i) {
       final cached = _cachedChildren![i];

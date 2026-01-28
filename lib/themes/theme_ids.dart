@@ -1,7 +1,4 @@
 class ThemeIds {
   static const String nipaplay = 'nipaplay';
-  static const String material = 'material';
-  static const String fluent = 'fluent_ui';
   static const String cupertino = 'cupertino';
-  static const String webRemote = 'web_remote';
 }

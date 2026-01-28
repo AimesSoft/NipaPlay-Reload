@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
@@ -11,6 +12,7 @@ import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/utils/storage_service.dart';
 
 class SharedEpisodeInfo {
   SharedEpisodeInfo({
@@ -481,5 +483,110 @@ class LocalMediaShareService {
 
     await watchHistory.addOrUpdateHistory(updatedHistory);
     return updatedHistory;
+  }
+
+  Future<WatchHistoryItem?> updateEpisodeThumbnail({
+    required String shareId,
+    required Uint8List thumbnailBytes,
+    DateTime? clientUpdatedAt,
+    String? format,
+  }) async {
+    if (thumbnailBytes.isEmpty) {
+      return null;
+    }
+
+    SharedEpisodeInfo? episode = _shareEpisodeMap[shareId];
+    if (episode == null) {
+      _rebuildCache();
+      episode = _shareEpisodeMap[shareId];
+      if (episode == null) {
+        return null;
+      }
+    }
+
+    final watchHistory = ServiceProvider.watchHistoryProvider;
+    final filePath = episode.historyItem.filePath;
+    WatchHistoryItem? existingHistory = await watchHistory.getHistoryItem(filePath);
+    existingHistory ??= episode.historyItem;
+
+    final resolvedPath = await _resolveThumbnailPath(
+      existingHistory.thumbnailPath,
+      shareId: shareId,
+      format: format,
+    );
+    if (resolvedPath == null) {
+      return existingHistory;
+    }
+
+    final thumbnailFile = File(resolvedPath);
+    await thumbnailFile.writeAsBytes(thumbnailBytes, flush: true);
+
+    final DateTime mergedWatchTime;
+    if (clientUpdatedAt != null &&
+        clientUpdatedAt.isAfter(existingHistory.lastWatchTime)) {
+      mergedWatchTime = clientUpdatedAt;
+    } else {
+      mergedWatchTime = existingHistory.lastWatchTime;
+    }
+
+    final updatedHistory = existingHistory.copyWith(
+      thumbnailPath: resolvedPath,
+      lastWatchTime: mergedWatchTime,
+    );
+
+    await watchHistory.addOrUpdateHistory(updatedHistory);
+    return updatedHistory;
+  }
+
+  Future<String?> _resolveThumbnailPath(
+    String? existingPath, {
+    required String shareId,
+    String? format,
+  }) async {
+    final sanitizedExisting = _sanitizeLocalThumbnailPath(existingPath);
+    if (sanitizedExisting != null) {
+      final dir = Directory(p.dirname(sanitizedExisting));
+      if (!dir.existsSync()) {
+        await dir.create(recursive: true);
+      }
+      return sanitizedExisting;
+    }
+
+    final appDir = await StorageService.getAppStorageDirectory();
+    final thumbnailsDir = Directory(p.join(appDir.path, 'thumbnails'));
+    if (!thumbnailsDir.existsSync()) {
+      await thumbnailsDir.create(recursive: true);
+    }
+
+    final extension = _normalizeThumbnailExtension(format);
+    return p.join(thumbnailsDir.path, 'shared_${shareId}_thumbnail.$extension');
+  }
+
+  String? _sanitizeLocalThumbnailPath(String? candidate) {
+    if (candidate == null) {
+      return null;
+    }
+    final trimmed = candidate.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  String _normalizeThumbnailExtension(String? format) {
+    if (format == null || format.trim().isEmpty) {
+      return 'png';
+    }
+    final normalized = format.toLowerCase().trim();
+    if (normalized.contains('jpeg') || normalized.contains('jpg')) {
+      return 'jpg';
+    }
+    if (normalized.contains('png')) {
+      return 'png';
+    }
+    return 'png';
   }
 }

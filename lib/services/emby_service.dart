@@ -2,22 +2,17 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/server_profile_model.dart';
-import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:path_provider/path_provider.dart'
     if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'debug_log_service.dart';
-import 'media_server_device_id_service.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/services/emby_transcode_manager.dart';
+import 'media_server_service_base.dart';
 
-import 'package:nipaplay/utils/url_name_generator.dart';
-
-class EmbyService {
+class EmbyService extends MediaServerServiceBase {
   static final EmbyService instance = EmbyService._internal();
 
   EmbyService._internal();
@@ -28,99 +23,76 @@ class EmbyService {
   String? _accessToken;
   String? _userId;
   bool _isConnected = false;
+  bool _isReady = false;
   List<EmbyLibrary> _availableLibraries = [];
   List<String> _selectedLibraryIds = [];
-
-  // 后端就绪标志与回调
-  bool _isReady = false;
-  bool get isReady => _isReady;
-  final List<VoidCallback> _readyCallbacks = [];
-
-  void addReadyListener(VoidCallback callback) {
-    _readyCallbacks.add(callback);
-  }
-
-  void removeReadyListener(VoidCallback callback) {
-    _readyCallbacks.remove(callback);
-  }
-
-  void _notifyReady() {
-    for (final cb in _readyCallbacks) {
-      try {
-        cb();
-      } catch (e) {
-        DebugLogService().addLog('Emby: ready 回调执行失败: $e');
-      }
-    }
-  }
-
-  // 多地址支持
   ServerProfile? _currentProfile;
   String? _currentAddressId;
-  final MultiAddressServerService _multiAddressService =
-      MultiAddressServerService.instance;
 
-  // 转码偏好缓存（内存）——让 Provider 能在运行时同步设置，避免 async IO
-  bool _transcodeEnabledCache = false;
-  JellyfinVideoQuality _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
-  JellyfinTranscodeSettings _settingsCache = const JellyfinTranscodeSettings();
+  @override
+  String get serviceName => 'Emby';
 
-  // Client information cache (DeviceId is stored separately)
-  String? _cachedClientAppName;
-  String? _cachedClientVersion;
-  String? _cachedClientPlatform;
+  @override
+  String get serviceType => 'emby';
 
-  // Get dynamic client information
-  Future<String> _getClientInfo() async {
-    String appName;
-    String version;
-    String platform;
+  @override
+  String get prefsKeyPrefix => 'emby';
 
+  @override
+  String get serverNameFallback => 'Emby服务器';
+
+  @override
+  bool get alwaysIncludeContentType => true;
+
+  @override
+  String get notConnectedMessage => '未连接到 Emby 服务器';
+
+  @override
+  String normalizeRequestPath(String path) => _normalizeEmbyPath(path);
+
+  @override
+  Future<bool> testConnection(String url, String username, String password) =>
+      _testEmbyConnection(url, username, password);
+
+  @override
+  Future<void> performAuthentication(
+          String serverUrl, String username, String password) =>
+      _performAuthentication(serverUrl, username, password);
+
+  @override
+  Future<String> getServerId(String url) => _getEmbyServerId(url);
+
+  @override
+  Future<String?> getServerName(String url) => _getServerName(url);
+
+  @override
+  Future<void> loadTranscodeSettings() async {
     try {
-      if (_cachedClientAppName == null ||
-          _cachedClientVersion == null ||
-          _cachedClientPlatform == null) {
-        final packageInfo = await PackageInfo.fromPlatform();
-        appName =
-            packageInfo.appName.isNotEmpty ? packageInfo.appName : 'NipaPlay';
-        version =
-            packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
-
-        platform = 'Flutter';
-        if (!kIsWeb && !kDebugMode) {
-          try {
-            platform = Platform.operatingSystem;
-            platform = platform[0].toUpperCase() + platform.substring(1);
-          } catch (_) {
-            platform = 'Flutter';
-          }
-        }
-
-        _cachedClientAppName = appName;
-        _cachedClientVersion = version;
-        _cachedClientPlatform = platform;
-      } else {
-        appName = _cachedClientAppName!;
-        version = _cachedClientVersion!;
-        platform = _cachedClientPlatform!;
-      }
-    } catch (_) {
-      appName = 'NipaPlay';
-      version = '1.4.9';
-      platform = 'Flutter';
-    }
-
-    String deviceId;
-    try {
-      deviceId = await MediaServerDeviceIdService.instance.getEffectiveDeviceId(
-        appName: appName,
-        platform: platform,
+      final transMgr = EmbyTranscodeManager.instance;
+      await transMgr.initialize();
+      final enabled = await transMgr.isTranscodingEnabled();
+      final quality = await transMgr.getDefaultVideoQuality();
+      final settings = await transMgr.getSettings();
+      updateTranscodeCache(
+        enabled: enabled,
+        defaultQuality: quality,
+        settings: settings,
       );
-    } catch (_) {
-      deviceId = '$appName-$platform';
+      DebugLogService().addLog(
+          'Emby: 已加载转码偏好 缓存 enabled=$enabled, quality=$quality');
+    } catch (e) {
+      DebugLogService().addLog('Emby: 加载转码偏好失败，使用默认值: $e');
+      updateTranscodeCache(
+        enabled: false,
+        defaultQuality: JellyfinVideoQuality.bandwidth5m,
+        settings: const JellyfinTranscodeSettings(),
+      );
     }
+  }
 
-    return 'MediaBrowser Client="$appName", Device="$platform", DeviceId="$deviceId", Version="$version"';
+  @override
+  void clearServiceData() {
+    _availableLibraries = [];
   }
 
   /// 获取服务器端的媒体技术元数据（容器/编解码器/Profile/Level/HDR/声道/码率等）
@@ -213,264 +185,47 @@ class EmbyService {
   }
 
   // Getters
+  @override
   bool get isConnected => _isConnected;
+  @override
+  set isConnected(bool value) => _isConnected = value;
+  @override
+  bool get isReady => _isReady;
+  @override
+  set isReady(bool value) => _isReady = value;
+  @override
   String? get serverUrl => _serverUrl;
+  @override
+  set serverUrl(String? value) => _serverUrl = value;
+  @override
   String? get username => _username;
+  @override
+  set username(String? value) => _username = value;
+  @override
+  String? get password => _password;
+  @override
+  set password(String? value) => _password = value;
+  @override
   String? get accessToken => _accessToken;
+  @override
+  set accessToken(String? value) => _accessToken = value;
+  @override
   String? get userId => _userId;
+  @override
+  set userId(String? value) => _userId = value;
   List<EmbyLibrary> get availableLibraries => _availableLibraries;
+  @override
   List<String> get selectedLibraryIds => _selectedLibraryIds;
-
-  Future<void> loadSavedSettings() async {
-    if (kIsWeb) {
-      _isConnected = false;
-      _isReady = false;
-      return;
-    }
-
-    // 初始化多地址服务
-    await _multiAddressService.initialize();
-
-    final prefs = await SharedPreferences.getInstance();
-
-    // 尝试加载当前配置
-    final profileId = prefs.getString('emby_current_profile_id');
-    if (profileId != null) {
-      try {
-        _currentProfile = _multiAddressService.getProfileById(profileId);
-        if (_currentProfile != null) {
-          _username = _currentProfile!.username;
-          _accessToken = _currentProfile!.accessToken;
-          _userId = _currentProfile!.userId;
-
-          // 使用当前地址
-          final currentAddress = _currentProfile!.currentAddress;
-          if (currentAddress != null) {
-            _serverUrl = currentAddress.normalizedUrl;
-            _currentAddressId = currentAddress.id;
-          }
-        }
-      } catch (e) {
-        DebugLogService().addLog('Emby: 加载配置失败: $e');
-      }
-    }
-
-    // 兼容旧版本存储
-    if (_currentProfile == null) {
-      _serverUrl = prefs.getString('emby_server_url');
-      _username = prefs.getString('emby_username');
-      _accessToken = prefs.getString('emby_access_token');
-      _userId = prefs.getString('emby_user_id');
-    }
-
-    _selectedLibraryIds = prefs.getStringList('emby_selected_libraries') ?? [];
-
-    print(
-        'Emby loadSavedSettings: serverUrl=$_serverUrl, username=$_username, hasToken=${_accessToken != null}, userId=$_userId');
-
-    if (_serverUrl != null && _accessToken != null && _userId != null) {
-      // 异步验证连接，不阻塞初始化流程
-      _validateConnectionAsync();
-    } else {
-      print('Emby: 缺少必要的连接信息，跳过自动连接');
-      _isConnected = false;
-      _isReady = false;
-    }
-
-    // 预加载转码设置到本地缓存，避免在 getStreamUrl 中做异步操作（与 Jellyfin 行为一致）
-    try {
-      final transMgr = EmbyTranscodeManager.instance;
-      await transMgr.initialize();
-      _transcodeEnabledCache = await transMgr.isTranscodingEnabled();
-      _defaultQualityCache = await transMgr.getDefaultVideoQuality();
-      _settingsCache = await transMgr.getSettings();
-      DebugLogService().addLog('Emby: 已加载转码偏好 缓存 enabled=' +
-          _transcodeEnabledCache.toString() +
-          ', quality=' +
-          _defaultQualityCache.toString());
-    } catch (e) {
-      DebugLogService().addLog('Emby: 加载转码偏好失败，使用默认值: $e');
-      _transcodeEnabledCache = false;
-      _defaultQualityCache = JellyfinVideoQuality.bandwidth5m;
-      _settingsCache = const JellyfinTranscodeSettings();
-    }
-  }
-
-  /// 异步验证连接状态，不阻塞主流程
-  Future<void> _validateConnectionAsync() async {
-    try {
-      print('Emby: 开始异步验证保存的连接信息...');
-      // 尝试验证保存的令牌是否仍然有效，设置5秒超时
-      final response = await _makeAuthenticatedRequest('/emby/System/Info')
-          .timeout(const Duration(seconds: 5));
-      _isConnected = response.statusCode == 200;
-
-      print('Emby: 令牌验证结果 - HTTP ${response.statusCode}, 连接状态: $_isConnected');
-
-      if (_isConnected) {
-        print('Emby: 连接验证成功，正在加载媒体库...');
-        // 加载可用媒体库
-        await loadAvailableLibraries();
-        print('Emby: 媒体库加载完成，可用库数量: ${_availableLibraries.length}');
-        // 通知连接状态变化
-        _notifyConnectionStateChanged();
-        // 设置后端就绪并发出信号（使用 microtask，确保在前面的通知处理完成后触发）
-        scheduleMicrotask(() {
-          _isReady = true;
-          _notifyReady();
-        });
-      } else {
-        print('Emby: 连接验证失败 - HTTP ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Emby: 连接验证过程中发生异常: $e');
-      _isConnected = false;
-      _isReady = false;
-    }
-  }
-
-  // 连接状态变化回调列表
-  final List<Function(bool)> _connectionStateCallbacks = [];
-
-  /// 添加连接状态变化监听器
-  void addConnectionStateListener(Function(bool) callback) {
-    _connectionStateCallbacks.add(callback);
-  }
-
-  /// 移除连接状态变化监听器
-  void removeConnectionStateListener(Function(bool) callback) {
-    _connectionStateCallbacks.remove(callback);
-  }
-
-  /// 通知连接状态变化
-  void _notifyConnectionStateChanged() {
-    for (final callback in _connectionStateCallbacks) {
-      try {
-        callback(_isConnected);
-      } catch (e) {
-        print('Emby: 连接状态回调执行失败: $e');
-      }
-    }
-  }
-
-  Future<bool> connect(String serverUrl, String username, String password,
-      {String? addressName}) async {
-    // 初始化多地址服务
-    await _multiAddressService.initialize();
-
-    // 规范化URL
-    final normalizedUrl = _normalizeUrl(serverUrl);
-
-    try {
-      // 先识别服务器
-      final identifyResult = await _multiAddressService.identifyServer(
-        url: normalizedUrl,
-        serverType: 'emby',
-        getServerId: _getEmbyServerId,
-      );
-
-      ServerProfile? profile;
-
-      if (identifyResult.success && identifyResult.existingProfile != null) {
-        // 服务器已存在，添加新地址或使用现有地址
-        profile = identifyResult.existingProfile!;
-
-        // 检查是否需要添加新地址
-        final hasAddress = profile.addresses.any(
-          (addr) => addr.normalizedUrl == normalizedUrl,
-        );
-
-        if (!hasAddress) {
-          profile = await _multiAddressService.addAddressToProfile(
-            profileId: profile.id,
-            url: normalizedUrl,
-            name: UrlNameGenerator.generateAddressName(normalizedUrl,
-                customName: addressName),
-          );
-        } else {
-          print('EmbyService: 地址已存在，使用现有配置');
-        }
-      } else if (identifyResult.isConflict) {
-        // 检测到冲突：URL相同但serverId不同
-        print('EmbyService: 检测到冲突，抛出异常: ${identifyResult.error}');
-        throw Exception(identifyResult.error ?? '服务器冲突');
-      } else if (identifyResult.success) {
-        // 服务器识别成功但没有现有配置，创建新配置
-        print('EmbyService: 创建新的服务器配置');
-        profile = await _multiAddressService.addProfile(
-          serverName: await _getServerName(normalizedUrl) ?? 'Emby服务器',
-          serverType: 'emby',
-          url: normalizedUrl,
-          username: username,
-          serverId: identifyResult.serverId,
-          addressName: UrlNameGenerator.generateAddressName(normalizedUrl,
-              customName: addressName),
-        );
-      } else {
-        // 服务器识别失败
-        print('EmbyService: 服务器识别失败: ${identifyResult.error}');
-        throw Exception(identifyResult.error ?? '无法识别Emby服务器');
-      }
-
-      if (profile == null) {
-        throw Exception('无法创建服务器配置');
-      }
-
-      // 使用多地址尝试连接
-      final connectionResult = await _multiAddressService.tryConnect(
-        profile: profile,
-        testConnection: (url) => _testEmbyConnection(url, username, password),
-      );
-
-      if (connectionResult.success && connectionResult.profile != null) {
-        _currentProfile = connectionResult.profile;
-        _serverUrl = connectionResult.successfulUrl;
-        _currentAddressId = connectionResult.successfulAddressId;
-        _username = username;
-        _password = password;
-
-        // 执行完整的认证流程
-        await _performAuthentication(_serverUrl!, username, password);
-
-        // 只有在认证成功后才设置连接状态为true
-        _isConnected = true;
-
-        // 更新配置中的认证信息
-        _currentProfile = _currentProfile!.copyWith(
-          accessToken: _accessToken,
-          userId: _userId,
-        );
-        await _multiAddressService.updateProfile(_currentProfile!);
-
-        // 保存连接信息
-        await _saveConnectionInfo();
-        print('Emby: 连接信息已保存到SharedPreferences');
-
-        // 加载可用媒体库
-        await loadAvailableLibraries();
-        // 连接流程结束，先通知连接状态变化，再通过 microtask 触发 ready，保证 ready 最后到达
-        _notifyConnectionStateChanged();
-        scheduleMicrotask(() {
-          _isReady = true;
-          _notifyReady();
-        });
-
-        return true;
-      } else {
-        throw Exception(connectionResult.error ?? '连接失败');
-      }
-    } catch (e) {
-      print('EmbyService: 连接过程中发生异常: $e');
-      _isConnected = false;
-
-      // 如果是服务器冲突错误，直接传递原始错误信息
-      if (e.toString().contains('已被另一个') || e.toString().contains('已被占用')) {
-        throw Exception(e.toString());
-      }
-
-      throw Exception('连接Emby服务器失败: $e');
-    }
-  }
+  @override
+  set selectedLibraryIds(List<String> value) => _selectedLibraryIds = value;
+  @override
+  ServerProfile? get currentProfile => _currentProfile;
+  @override
+  set currentProfile(ServerProfile? value) => _currentProfile = value;
+  @override
+  String? get currentAddressId => _currentAddressId;
+  @override
+  set currentAddressId(String? value) => _currentAddressId = value;
 
   /// 测试Emby连接
   Future<bool> _testEmbyConnection(
@@ -492,7 +247,7 @@ class EmbyService {
   /// 执行完整的认证流程
   Future<void> _performAuthentication(
       String serverUrl, String username, String password) async {
-    final clientInfo = await _getClientInfo();
+    final clientInfo = await getClientInfo();
     final authResponse = await http.post(
       Uri.parse('$serverUrl/emby/Users/AuthenticateByName'),
       headers: {
@@ -557,19 +312,6 @@ class EmbyService {
     return null;
   }
 
-  /// 规范化URL
-  String _normalizeUrl(String url) {
-    String normalized = url.trim();
-    if (!normalized.startsWith('http://') &&
-        !normalized.startsWith('https://')) {
-      normalized = 'http://$normalized';
-    }
-    if (normalized.endsWith('/')) {
-      normalized = normalized.substring(0, normalized.length - 1);
-    }
-    return normalized;
-  }
-
   /// 确保所有Emby API请求都包含/emby前缀，兼容反向代理子路径
   String _normalizeEmbyPath(String path) {
     if (path.isEmpty) return '/emby';
@@ -591,242 +333,15 @@ class EmbyService {
     return normalized;
   }
 
-  Future<void> _saveConnectionInfo() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // 保存当前配置ID
-    if (_currentProfile != null) {
-      await prefs.setString('emby_current_profile_id', _currentProfile!.id);
-    }
-
-    // 兼容旧版本，同时保存单地址信息
-    await prefs.setString('emby_server_url', _serverUrl!);
-    await prefs.setString('emby_username', _username!);
-    await prefs.setString('emby_access_token', _accessToken!);
-    await prefs.setString('emby_user_id', _userId!);
-
-    print(
-        'Emby: 连接信息已保存 - URL: $_serverUrl, 用户: $_username, Token: ${_accessToken?.substring(0, 8)}..., UserID: $_userId');
-  }
-
-  Future<void> disconnect() async {
-    // 保存当前配置文件ID，用于删除
-    final currentProfileId = _currentProfile?.id;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('emby_current_profile_id');
-    await prefs.remove('emby_server_url');
-    await prefs.remove('emby_username');
-    await prefs.remove('emby_access_token');
-    await prefs.remove('emby_user_id');
-    await prefs.remove('emby_selected_libraries');
-
-    _currentProfile = null;
-    _currentAddressId = null;
-    _serverUrl = null;
-    _username = null;
-    _password = null;
-    _accessToken = null;
-    _userId = null;
-    _isConnected = false;
-    _availableLibraries = [];
-    _selectedLibraryIds = [];
-    _isReady = false;
-
-    // 删除多地址配置文件
-    if (currentProfileId != null) {
-      try {
-        await _multiAddressService.deleteProfile(currentProfileId);
-        DebugLogService().addLog('EmbyService: 已删除服务器配置文件 $currentProfileId');
-      } catch (e) {
-        DebugLogService().addLog('EmbyService: 删除服务器配置文件失败: $e');
-      }
-    }
-
-    // TODO: 清除播放同步服务中的数据（待实现）
-    // 当前 EmbyPlaybackSyncService 没有清除所有数据的方法
-    // 可能需要在后续版本中添加相关方法
-  }
-
   Future<http.Response> _makeAuthenticatedRequest(String path,
       {String method = 'GET',
       Map<String, dynamic>? body,
       Duration? timeout}) async {
-    if (_accessToken == null) {
-      throw Exception('未连接到 Emby 服务器');
-    }
-
-    // 如果有多地址配置，尝试使用多地址重试机制
-    if (_currentProfile != null) {
-      return await _makeAuthenticatedRequestWithRetry(path,
-          method: method, body: body, timeout: timeout);
-    }
-
-    // 单地址模式（兼容旧版本）
-    final normalizedPath = _normalizeEmbyPath(path);
-    final uri = normalizedPath.startsWith('http://') ||
-        normalizedPath.startsWith('https://')
-      ? Uri.parse(normalizedPath)
-      : Uri.parse('$_serverUrl$normalizedPath');
-    final clientInfo = await _getClientInfo();
-    final authHeader = clientInfo + ', Token="$_accessToken"';
-    final headers = {
-      'Content-Type': 'application/json',
-      'X-Emby-Authorization': authHeader,
-    };
-
-    // 设置默认超时时间为30秒
-    final requestTimeout = timeout ?? const Duration(seconds: 30);
-
-    http.Response response;
-    try {
-      switch (method.toUpperCase()) {
-        case 'GET':
-          response =
-              await http.get(uri, headers: headers).timeout(requestTimeout);
-          break;
-        case 'POST':
-          response = await http
-              .post(uri,
-                  headers: headers,
-                  body: body != null ? json.encode(body) : null)
-              .timeout(requestTimeout);
-          break;
-        case 'PUT':
-          response = await http
-              .put(uri,
-                  headers: headers,
-                  body: body != null ? json.encode(body) : null)
-              .timeout(requestTimeout);
-          break;
-        case 'DELETE':
-          response =
-              await http.delete(uri, headers: headers).timeout(requestTimeout);
-          break;
-        default:
-          throw Exception('不支持的 HTTP 方法: $method');
-      }
-    } catch (e) {
-      if (e is TimeoutException) {
-        throw Exception('请求Emby服务器超时: ${e.message}');
-      }
-      throw Exception('请求Emby服务器失败: $e');
-    }
-    if (response.statusCode >= 400) {
-      throw Exception(
-          '服务器返回错误: ${response.statusCode} ${response.reasonPhrase ?? ''}\n${response.body}');
-    }
-    return response;
+    return makeAuthenticatedRequest(path,
+        method: method, body: body, timeout: timeout);
   }
 
-  /// 带重试的认证请求（多地址支持）
-  Future<http.Response> _makeAuthenticatedRequestWithRetry(String path,
-      {String method = 'GET',
-      Map<String, dynamic>? body,
-      Duration? timeout}) async {
-    if (_currentProfile == null || _accessToken == null) {
-      throw Exception('未连接到 Emby 服务器');
-    }
-
-    final normalizedPath = _normalizeEmbyPath(path);
-    final addresses = _currentProfile!.enabledAddresses;
-    if (addresses.isEmpty) {
-      throw Exception('没有可用的服务器地址');
-    }
-
-    final clientInfo = await _getClientInfo();
-    final authHeader = clientInfo + ', Token="$_accessToken"';
-    final headers = {
-      'Content-Type': 'application/json',
-      'X-Emby-Authorization': authHeader,
-    };
-
-    final requestTimeout = timeout ?? const Duration(seconds: 30);
-
-    Exception? lastError;
-
-    // 尝试每个地址
-    for (final address in addresses) {
-      if (!address.shouldRetry()) continue;
-
-        final uri = normalizedPath.startsWith('http://') ||
-            normalizedPath.startsWith('https://')
-          ? Uri.parse(normalizedPath)
-          : Uri.parse('${address.normalizedUrl}$normalizedPath');
-
-      try {
-        http.Response response;
-        switch (method.toUpperCase()) {
-          case 'GET':
-            response =
-                await http.get(uri, headers: headers).timeout(requestTimeout);
-            break;
-          case 'POST':
-            response = await http
-                .post(uri,
-                    headers: headers,
-                    body: body != null ? json.encode(body) : null)
-                .timeout(requestTimeout);
-            break;
-          case 'PUT':
-            response = await http
-                .put(uri,
-                    headers: headers,
-                    body: body != null ? json.encode(body) : null)
-                .timeout(requestTimeout);
-            break;
-          case 'DELETE':
-            response = await http
-                .delete(uri, headers: headers)
-                .timeout(requestTimeout);
-            break;
-          default:
-            throw Exception('不支持的 HTTP 方法: $method');
-        }
-
-        if (response.statusCode < 400) {
-          // 成功，更新当前使用的地址
-          if (_currentAddressId != address.id) {
-            _serverUrl = address.normalizedUrl;
-            _currentAddressId = address.id;
-            _currentProfile = _currentProfile!.markAddressSuccess(address.id);
-            await _multiAddressService.updateProfile(_currentProfile!);
-          }
-          return response;
-        } else {
-          // 提供更详细的错误信息
-          String errorMessage;
-          if (response.statusCode == 401) {
-            errorMessage = '认证失败: 访问令牌无效或已过期 (HTTP 401)';
-          } else if (response.statusCode == 403) {
-            errorMessage = '访问被拒绝: 用户权限不足 (HTTP 403)';
-          } else if (response.statusCode == 404) {
-            errorMessage = '请求的资源未找到 (HTTP 404)';
-          } else if (response.statusCode >= 500) {
-            errorMessage = 'Emby服务器内部错误 (HTTP ${response.statusCode})';
-          } else {
-            errorMessage =
-                '服务器返回错误: HTTP ${response.statusCode} ${response.reasonPhrase ?? ''}';
-          }
-          lastError = Exception(errorMessage);
-          DebugLogService().addLog(
-              'EmbyService: 请求失败 ${address.normalizedUrl}: $errorMessage');
-        }
-      } on TimeoutException catch (e) {
-        lastError = Exception('请求超时: ${e.message}');
-        _currentProfile = _currentProfile!.markAddressFailed(address.id);
-      } catch (e) {
-        lastError = Exception('请求失败: $e');
-        _currentProfile = _currentProfile!.markAddressFailed(address.id);
-      }
-    }
-
-    // 更新失败信息
-    await _multiAddressService.updateProfile(_currentProfile!);
-
-    throw lastError ?? Exception('所有地址连接失败');
-  }
-
+  @override
   Future<void> loadAvailableLibraries() async {
     if (kIsWeb || !_isConnected || _userId == null) return;
 
@@ -885,14 +400,6 @@ class EmbyService {
       print('Error loading available libraries: $e');
       print('Stack trace: $stackTrace');
     }
-  }
-
-  Future<void> updateSelectedLibraries(List<String> libraryIds) async {
-    _selectedLibraryIds = libraryIds;
-
-    // 保存选择的媒体库到SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('emby_selected_libraries', libraryIds);
   }
 
   // 获取媒体库或文件夹下的子项（用于混合类型文件夹导航）
@@ -987,7 +494,7 @@ class EmbyService {
       }
 
       final response = await _makeAuthenticatedRequest(
-          '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit');
+          '/Items?ParentId=$libraryId&IncludeItemTypes=$includeItemTypes&Recursive=true&SortBy=$defaultSortBy&SortOrder=$defaultSortOrder&Limit=$limit&Fields=Overview,CommunityRating');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -1478,8 +985,8 @@ class EmbyService {
       return '';
     }
     // 使用缓存的转码设置决定默认质量
-    final effectiveQuality = _transcodeEnabledCache
-        ? _defaultQualityCache
+    final effectiveQuality = transcodeEnabledCache
+        ? defaultQualityCache
         : JellyfinVideoQuality.original;
 
     // 原画或未启用转码 -> 直连
@@ -1514,8 +1021,8 @@ class EmbyService {
 
     // 计算实际清晰度
     final effective = quality ??
-        (_transcodeEnabledCache
-            ? _defaultQualityCache
+        (transcodeEnabledCache
+            ? defaultQualityCache
             : JellyfinVideoQuality.original);
 
     // 构建直连或转码 URL
@@ -1654,44 +1161,44 @@ class EmbyService {
     }
 
     // 从本地设置缓存读取编解码偏好，若未配置使用合理默认
-    final videoCodecs = _settingsCache.video.preferredCodecs.isNotEmpty
-        ? _settingsCache.video.preferredCodecs.join(',')
+    final videoCodecs = transcodeSettingsCache.video.preferredCodecs.isNotEmpty
+        ? transcodeSettingsCache.video.preferredCodecs.join(',')
         : 'h264,hevc,av1';
-    final audioCodecs = _settingsCache.audio.preferredCodecs.isNotEmpty
-        ? _settingsCache.audio.preferredCodecs.join(',')
+    final audioCodecs = transcodeSettingsCache.audio.preferredCodecs.isNotEmpty
+        ? transcodeSettingsCache.audio.preferredCodecs.join(',')
         : 'aac,mp3,opus';
     params['VideoCodec'] = videoCodecs;
     params['AudioCodec'] = audioCodecs;
 
     // 音频限制
-    if (_settingsCache.audio.maxAudioChannels > 0) {
+    if (transcodeSettingsCache.audio.maxAudioChannels > 0) {
       params['MaxAudioChannels'] =
-          _settingsCache.audio.maxAudioChannels.toString();
+          transcodeSettingsCache.audio.maxAudioChannels.toString();
     }
-    if (_settingsCache.audio.audioBitRate != null &&
-        _settingsCache.audio.audioBitRate! > 0) {
+    if (transcodeSettingsCache.audio.audioBitRate != null &&
+        transcodeSettingsCache.audio.audioBitRate! > 0) {
       params['AudioBitRate'] =
-          (_settingsCache.audio.audioBitRate! * 1000).toString();
+          (transcodeSettingsCache.audio.audioBitRate! * 1000).toString();
     }
-    if (_settingsCache.audio.audioSampleRate != null &&
-        _settingsCache.audio.audioSampleRate! > 0) {
+    if (transcodeSettingsCache.audio.audioSampleRate != null &&
+        transcodeSettingsCache.audio.audioSampleRate! > 0) {
       params['AudioSampleRate'] =
-          _settingsCache.audio.audioSampleRate!.toString();
+          transcodeSettingsCache.audio.audioSampleRate!.toString();
     }
 
     // 字幕处理：如果设置允许服务端处理并非 external/drop，则添加相应参数
-    if (_settingsCache.subtitle.enableTranscoding &&
-        _settingsCache.subtitle.deliveryMethod !=
+    if (transcodeSettingsCache.subtitle.enableTranscoding &&
+        transcodeSettingsCache.subtitle.deliveryMethod !=
             JellyfinSubtitleDeliveryMethod.external &&
-        _settingsCache.subtitle.deliveryMethod !=
+        transcodeSettingsCache.subtitle.deliveryMethod !=
             JellyfinSubtitleDeliveryMethod.drop) {
       params['SubtitleMethod'] =
-          _settingsCache.subtitle.deliveryMethod.apiValue;
+          transcodeSettingsCache.subtitle.deliveryMethod.apiValue;
       if (subtitleStreamIndex != null && subtitleStreamIndex >= 0) {
         params['SubtitleStreamIndex'] = subtitleStreamIndex.toString();
       }
       final shouldBurn = burnInSubtitle ??
-          (_settingsCache.subtitle.deliveryMethod ==
+          (transcodeSettingsCache.subtitle.deliveryMethod ==
               JellyfinSubtitleDeliveryMethod.encode);
       if (shouldBurn) {
         params['AlwaysBurnInSubtitleWhenTranscoding'] = 'true';
@@ -2063,180 +1570,12 @@ class EmbyService {
     }
   }
 
-  /// 获取当前服务器的所有地址
-  List<ServerAddress> getServerAddresses() {
-    if (_currentProfile != null) {
-      return _currentProfile!.addresses;
-    }
-    return [];
-  }
-
   String _resolveCollectionType(dynamic rawType) {
     final value = rawType?.toString().trim();
     if (value == null || value.isEmpty) {
       return 'mixed';
     }
     return value.toLowerCase();
-  }
-
-  /// 由 Provider 调用：在运行时更新本地转码缓存（避免在 getStreamUrl 中做异步 IO）
-  void setTranscodePreferences(
-      {bool? enabled, JellyfinVideoQuality? defaultQuality}) {
-    if (enabled != null) _transcodeEnabledCache = enabled;
-    if (defaultQuality != null) _defaultQualityCache = defaultQuality;
-    DebugLogService().addLog(
-        'Emby: 更新转码偏好 缓存 enabled=${enabled ?? _transcodeEnabledCache}, quality=${defaultQuality ?? _defaultQualityCache}');
-  }
-
-  /// 由 Provider 调用：更新完整转码设置缓存（用于音频/字幕等参数）
-  void setFullTranscodeSettings(JellyfinTranscodeSettings settings) {
-    _settingsCache = settings;
-    DebugLogService()
-        .addLog('Emby: 更新完整转码设置缓存 (video/audio/subtitle/adaptive)');
-  }
-
-  /// 添加新地址到当前服务器
-  Future<bool> addServerAddress(String url, String name) async {
-    if (_currentProfile == null) return false;
-
-    final normalizedUrl = _normalizeUrl(url);
-
-    try {
-      // 先验证这是否为同一台服务器
-      final identifyResult = await _multiAddressService.identifyServer(
-        url: normalizedUrl,
-        serverType: 'emby',
-        getServerId: _getEmbyServerId,
-      );
-
-      if (!identifyResult.success) {
-        DebugLogService().addLog('添加地址失败: ${identifyResult.error}');
-        throw Exception(identifyResult.error ?? '无法验证服务器身份');
-      }
-
-      if (identifyResult.isConflict) {
-        DebugLogService().addLog('添加地址失败: ${identifyResult.error}');
-        throw Exception(identifyResult.error ?? '服务器冲突');
-      }
-
-      // 验证serverId是否匹配
-      if (identifyResult.serverId != _currentProfile!.serverId) {
-        throw Exception(
-            '该地址属于不同的Emby服务器（服务器ID: ${identifyResult.serverId}），无法添加到当前配置');
-      }
-
-      final updatedProfile = await _multiAddressService.addAddressToProfile(
-        profileId: _currentProfile!.id,
-        url: normalizedUrl,
-        name: UrlNameGenerator.generateAddressName(normalizedUrl,
-            customName: name),
-      );
-
-      if (updatedProfile != null) {
-        _currentProfile = updatedProfile;
-        DebugLogService().addLog('成功添加新地址: $normalizedUrl');
-        return true;
-      }
-    } catch (e) {
-      DebugLogService().addLog('添加服务器地址失败: $e');
-      rethrow; // 重新抛出异常以便UI处理
-    }
-    return false;
-  }
-
-  /// 删除服务器地址
-  Future<bool> removeServerAddress(String addressId) async {
-    if (_currentProfile == null) return false;
-
-    try {
-      final updatedProfile =
-          await _multiAddressService.deleteAddressFromProfile(
-        profileId: _currentProfile!.id,
-        addressId: addressId,
-      );
-
-      if (updatedProfile != null) {
-        _currentProfile = updatedProfile;
-        return true;
-      }
-    } catch (e) {
-      DebugLogService().addLog('删除服务器地址失败: $e');
-    }
-    return false;
-  }
-
-  /// 切换服务器地址
-  Future<bool> switchToAddress(String addressId) async {
-    if (_currentProfile == null) return false;
-
-    final address = _currentProfile!.addresses.firstWhere(
-      (addr) => addr.id == addressId,
-      orElse: () => throw Exception('地址不存在'),
-    );
-
-    // 测试连接
-    final success = await _testEmbyConnection(
-      address.normalizedUrl,
-      _username ?? '',
-      _password ?? '',
-    );
-
-    if (success) {
-      // 验证当前用户token在新地址上的有效性
-      try {
-        final originalUrl = _serverUrl;
-        _serverUrl = address.normalizedUrl;
-
-        // 进行轻量级认证验证
-        final authResponse =
-            await _makeAuthenticatedRequest('/emby/System/Info')
-                .timeout(const Duration(seconds: 5));
-
-        if (authResponse.statusCode == 200) {
-          _currentAddressId = address.id;
-          _currentProfile = _currentProfile!.markAddressSuccess(address.id);
-          await _multiAddressService.updateProfile(_currentProfile!);
-          DebugLogService()
-              .addLog('EmbyService: 成功切换到地址: ${address.normalizedUrl}');
-          return true;
-        } else {
-          // 认证失败，恢复原地址
-          _serverUrl = originalUrl;
-          DebugLogService().addLog(
-              'EmbyService: 地址切换失败，token在新地址上无效: HTTP ${authResponse.statusCode}');
-          return false;
-        }
-      } catch (e) {
-        // 认证失败，恢复原地址
-        _serverUrl = _currentProfile!.currentAddress?.normalizedUrl;
-        DebugLogService().addLog('EmbyService: 地址切换失败，认证验证异常: $e');
-        return false;
-      }
-    }
-
-    return false;
-  }
-
-  /// 更新服务器地址优先级
-  Future<bool> updateServerPriority(String addressId, int priority) async {
-    if (_currentProfile == null) return false;
-
-    try {
-      final updatedProfile = await _multiAddressService.updateAddressPriority(
-        profileId: _currentProfile!.id,
-        addressId: addressId,
-        priority: priority,
-      );
-
-      if (updatedProfile != null) {
-        _currentProfile = updatedProfile;
-        return true;
-      }
-    } catch (e) {
-      DebugLogService().addLog('EmbyService: 更新地址优先级失败: $e');
-    }
-
-    return false;
   }
 
   /// 下载Emby外挂字幕文件

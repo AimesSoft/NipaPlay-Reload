@@ -6,6 +6,7 @@ import 'settings_hint_text.dart';
 import 'dart:ui';
 import 'settings_slider.dart';
 import 'blur_button.dart';
+import 'fluent_settings_switch.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -139,7 +140,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                         InkWell(
                           onTap: () => videoState.removeDanmakuBlockWord(word),
                           child: const Icon(Icons.close,
-                              size: 14, color: Colors.white70),
+                              size: 14, color: Colors.white),
                         ),
                       ],
                     ),
@@ -198,7 +199,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                             fontSize: 14,
                           ),
                         ),
-                        Switch(
+                        FluentSettingsSwitch(
                           value: videoState.danmakuVisible,
                           onChanged: (value) {
                             videoState.setDanmakuVisible(value);
@@ -435,7 +436,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                                   isDense: true,
                                   suffixIcon: IconButton(
                                     icon: const Icon(Icons.clear,
-                                        color: Colors.white70, size: 18),
+                                        color: Colors.white, size: 18),
                                     onPressed: () =>
                                         _blockWordController.clear(),
                                     tooltip: '',
@@ -485,7 +486,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                               fontSize: 14,
                             ),
                           ),
-                          Switch(
+                          FluentSettingsSwitch(
                             value: videoState.danmakuStacking,
                             onChanged: (value) {
                               videoState.setDanmakuStacking(value);
@@ -515,7 +516,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                               fontSize: 14,
                             ),
                           ),
-                          Switch(
+                          FluentSettingsSwitch(
                             value: videoState.mergeDanmaku,
                             onChanged: (value) {
                               videoState.setMergeDanmaku(value);
@@ -547,7 +548,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                               fontSize: 14,
                             ),
                           ),
-                          Switch(
+                          FluentSettingsSwitch(
                             value: videoState.blockTopDanmaku,
                             onChanged: (value) {
                               videoState.setBlockTopDanmaku(value);
@@ -566,7 +567,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                               fontSize: 14,
                             ),
                           ),
-                          Switch(
+                          FluentSettingsSwitch(
                             value: videoState.blockBottomDanmaku,
                             onChanged: (value) {
                               videoState.setBlockBottomDanmaku(value);
@@ -585,7 +586,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                               fontSize: 14,
                             ),
                           ),
-                          Switch(
+                          FluentSettingsSwitch(
                             value: videoState.blockScrollDanmaku,
                             onChanged: (value) {
                               videoState.setBlockScrollDanmaku(value);
@@ -614,7 +615,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                             fontSize: 14,
                           ),
                         ),
-                        Switch(
+                        FluentSettingsSwitch(
                           value: videoState.isTimelineDanmakuEnabled,
                           onChanged: (value) {
                             videoState.toggleTimelineDanmaku(value);

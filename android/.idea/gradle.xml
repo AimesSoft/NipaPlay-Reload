@@ -4,9 +4,48 @@
   <component name="GradleSettings">
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
+        <compositeConfiguration>
+          <compositeBuild compositeDefinitionSource="SCRIPT">
+            <builds>
+              <build path="$PROJECT_DIR$/../../flutter/packages/flutter_tools/gradle" name="gradle">
+                <projects>
+                  <project path="$PROJECT_DIR$/../../flutter/packages/flutter_tools/gradle" />
+                </projects>
+              </build>
+            </builds>
+          </compositeBuild>
+        </compositeConfiguration>
         <option name="testRunner" value="CHOOSE_PER_TEST" />
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
         <option name="gradleJvm" value="#GRADLE_LOCAL_JAVA_HOME" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$/../../flutter/packages/flutter_tools/gradle" />
+            <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/../packages/adaptive_platform_ui/android" />
+            <option value="$PROJECT_DIR$/../packages/nipaplay_smb2/android" />
+            <option value="$USER_HOME$/.pub-cache/git/media-kit-0c697093a2f3525a63c4d49508f2421616dea5be/libs/android/media_kit_libs_android_video/android" />
+            <option value="$USER_HOME$/.pub-cache/git/media-kit-0c697093a2f3525a63c4d49508f2421616dea5be/media_kit_video/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/charset_converter-2.3.0/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/desktop_drop-0.6.1/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/file_picker-8.3.2/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_android-0.5.1+6/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.22/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/fvp-0.33.1/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/image_picker_android-0.8.12+12/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/package_info_plus-8.3.1/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/path_provider_android-2.2.10/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/permission_handler_android-13.0.1/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/screen_brightness_android-2.1.3/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/shared_preferences_android-2.3.2/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/sqflite-2.3.3+1/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/url_launcher_android-6.3.9/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/video_player_android-2.7.1/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/volume_controller-3.4.0/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/wakelock_plus-1.3.3/android" />
+          </set>
+        </option>
       </GradleProjectSettings>
     </option>
   </component>

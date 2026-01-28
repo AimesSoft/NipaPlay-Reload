@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
@@ -9,13 +7,13 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/anime_card.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/media_library_sort_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/jellyfin_library_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/emby_library_card.dart';
@@ -33,6 +31,7 @@ abstract class NetworkMediaItem {
   int? get watchedEpisodeCount;
   double? get userRating;
   bool get isFolder;
+  String? get progress; // 新增
 }
 
 // 通用媒体库接口
@@ -63,6 +62,13 @@ class JellyfinMediaItemAdapter implements NetworkMediaItem {
   double? get userRating => null; // Convert from string if needed
   @override
   bool get isFolder => _item.isFolder;
+  
+  @override
+  String? get progress {
+    if (_item.userData?.played == true) return '已看完';
+    // Jellyfin 列表接口可能不返回具体的播放进度集数，如果需要更详细的可以后续扩展
+    return null;
+  }
   
   JellyfinMediaItem get originalItem => _item;
 }
@@ -102,6 +108,12 @@ class EmbyMediaItemAdapter implements NetworkMediaItem {
   double? get userRating => null; // Convert from string if needed
   @override
   bool get isFolder => _item.isFolder;
+
+  @override
+  String? get progress {
+    if (_item.userData?.played == true) return '已看完';
+    return null;
+  }
   
   EmbyMediaItem get originalItem => _item;
 }
@@ -136,11 +148,14 @@ class NetworkMediaLibraryView extends StatefulWidget {
 
 class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView> 
     with AutomaticKeepAliveClientMixin {
+  static const Color _accentColor = Color(0xFFFF2E55);
+
   
   List<NetworkMediaItem> _mediaItems = [];
   String? _error;
   Timer? _refreshTimer;
   final ScrollController _gridScrollController = ScrollController();
+  final GlobalKey _remoteSortDropdownKey = GlobalKey();
   
   // 库视图状态
   String? _selectedLibraryId;
@@ -151,10 +166,79 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   
   // 搜索状态
   final TextEditingController _searchController = TextEditingController();
+  LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
   bool _isSearching = false;
   bool _isSearchLoading = false;
   List<NetworkMediaItem> _searchResults = [];
+  List<NetworkMediaItem> _filteredMediaItems = [];
   Timer? _searchDebounceTimer;
+
+  ButtonStyle _plainButtonStyle({Color? baseColor}) {
+    final textColor = Theme.of(context).colorScheme.onSurface;
+    final mutedColor = textColor.withOpacity(0.5);
+    final resolvedBase = baseColor ?? textColor;
+    return ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return mutedColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return _accentColor;
+        }
+        return resolvedBase;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+    );
+  }
+
+  Widget _buildPlainActionButton({
+    required IconData icon,
+    required String text,
+    required VoidCallback? onPressed,
+    Color? baseColor,
+  }) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: _plainButtonStyle(baseColor: baseColor),
+      icon: Icon(icon, size: 18),
+      label: Text(text),
+    );
+  }
+
+  void _applySortAndFilter() {
+    if (!mounted) return;
+    setState(() {
+      String query = _searchController.text.toLowerCase().trim();
+      
+      // 基础过滤
+      List<NetworkMediaItem> source = _mediaItems;
+      if (query.isNotEmpty) {
+        source = source.where((item) => item.title.toLowerCase().contains(query)).toList();
+      }
+      
+      if (_showRemoteSortDropdown) {
+        _filteredMediaItems = source;
+        return;
+      }
+
+      // 排序
+      switch (_currentSort) {
+        case LocalLibrarySortType.name:
+          source.sort((a, b) => a.title.compareTo(b.title));
+          break;
+        case LocalLibrarySortType.dateAdded:
+          // 远程服务目前没有统一的添加日期，这里暂不做变动或使用原始顺序
+          break;
+        case LocalLibrarySortType.rating:
+          break;
+      }
+      _filteredMediaItems = source;
+    });
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -223,10 +307,22 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
+  MediaLibraryType get _mediaLibraryType {
+    switch (widget.serverType) {
+      case NetworkMediaServerType.jellyfin:
+        return MediaLibraryType.jellyfin;
+      case NetworkMediaServerType.emby:
+        return MediaLibraryType.emby;
+    }
+  }
+
   String? get _currentFolderId =>
       _folderStack.isNotEmpty ? _folderStack.last.id : null;
 
   bool get _isAtFolderRoot => _folderStack.length <= 1;
+
+  bool get _showRemoteSortDropdown =>
+      _isShowingLibraryContent && !_isSearching && !_isFolderNavigation;
 
   @override
   Widget build(BuildContext context) {
@@ -248,10 +344,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
-              BlurButton(
+              _buildPlainActionButton(
                 icon: Icons.cloud,
                 text: '添加媒体服务器',
-                onTap: _showServerDialog,
+                onPressed: _showServerDialog,
+                baseColor: _accentColor,
               ),
             ],
           ),
@@ -282,10 +379,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
-              BlurButton(
+              _buildPlainActionButton(
                 icon: Icons.refresh,
                 text: '刷新媒体库',
-                onTap: () => _loadData(),
+                onPressed: () => _loadData(),
               ),
             ],
           ),
@@ -293,67 +390,61 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       );
     }
 
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            // 主页面搜索栏
-            _buildMainSearchBar(),
-            // 媒体库网格或搜索结果
-            Expanded(
-              child: RepaintBoundary(
-                child: Scrollbar(
-                  controller: _gridScrollController,
-                  thickness: 4,
-                  radius: const Radius.circular(2),
-                  child: _isSearching
-                      ? GridView.builder(
-                          controller: _gridScrollController,
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 150,
-                            childAspectRatio: 7/12,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                          ),
-                          padding: const EdgeInsets.all(16),
-                          cacheExtent: 800,
-                          clipBehavior: Clip.hardEdge,
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          itemCount: _searchResults.length,
-                          itemBuilder: (context, index) {
-                            final item = _searchResults[index];
-                            return _buildMediaCard(item);
-                          },
-                        )
-                      : GridView.builder(
-                          controller: _gridScrollController,
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 400,
-                            childAspectRatio: 16 / 9,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                          padding: const EdgeInsets.all(20),
-                          cacheExtent: 800,
-                          clipBehavior: Clip.hardEdge,
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          itemCount: selectedLibraries.length,
-                          itemBuilder: (context, index) {
-                            final library = selectedLibraries[index];
-                            return _buildLibraryCard(library);
-                          },
-                        ),
-                ),
-              ),
+        // 主页面搜索栏
+        _buildMainSearchBar(),
+        // 媒体库网格或搜索结果
+        Expanded(
+          child: RepaintBoundary(
+            child: Scrollbar(
+              controller: _gridScrollController,
+              thickness: 4,
+              radius: const Radius.circular(2),
+              child: _isSearching
+                  ? GridView.builder(
+                      controller: _gridScrollController,
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 500,
+                        mainAxisExtent: 140,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      cacheExtent: 800,
+                      clipBehavior: Clip.hardEdge,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      addAutomaticKeepAlives: false,
+                      addRepaintBoundaries: true,
+                      itemCount: _searchResults.length,
+                      itemBuilder: (context, index) {
+                        final item = _searchResults[index];
+                        return _buildMediaCard(item);
+                      },
+                    )
+                  : GridView.builder(
+                      controller: _gridScrollController,
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 400,
+                        childAspectRatio: 16 / 9,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      padding: const EdgeInsets.all(20),
+                      cacheExtent: 800,
+                      clipBehavior: Clip.hardEdge,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      addAutomaticKeepAlives: false,
+                      addRepaintBoundaries: true,
+                      itemCount: selectedLibraries.length,
+                      itemBuilder: (context, index) {
+                        final library = selectedLibraries[index];
+                        return _buildLibraryCard(library);
+                      },
+                    ),
             ),
-          ],
+          ),
         ),
-        // 右下角按钮组
-        _buildFloatingActionButtons(),
       ],
     );
   }
@@ -375,16 +466,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  BlurButton(
+                  _buildPlainActionButton(
                     icon: Icons.refresh,
                     text: '重试',
-                    onTap: _retryCurrentView,
+                    onPressed: _retryCurrentView,
                   ),
                   const SizedBox(width: 16),
-                  BlurButton(
+                  _buildPlainActionButton(
                     icon: Icons.arrow_back,
                     text: '返回',
-                    onTap: _handleBackNavigation,
+                    onPressed: _handleBackNavigation,
                   ),
                 ],
               ),
@@ -395,188 +486,103 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
 
     if (_mediaItems.isEmpty) {
-      return Stack(
+      return Column(
         children: [
-          Column(
-            children: [
-              // 顶部导航栏
-              _buildTopNavigationBar(provider),
-              // 空内容提示
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _isFolderNavigation ? '该文件夹为空。' : '该媒体库为空。',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey, fontSize: 16),
-                        ),
-                        const SizedBox(height: 16),
-                        BlurButton(
-                          icon: Icons.arrow_back,
-                          text: _isFolderNavigation && !_isAtFolderRoot
-                              ? '返回上级文件夹'
-                              : '返回媒体库列表',
-                          onTap: _handleBackNavigation,
-                        ),
-                      ],
+          // 已整合返回按钮和标题的控制栏
+          _buildSearchBar(),
+          // 空内容提示
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _isFolderNavigation ? '该文件夹为空。' : '该媒体库为空。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    _buildPlainActionButton(
+                      icon: Icons.arrow_back,
+                      text: _isFolderNavigation && !_isAtFolderRoot
+                          ? '返回上级文件夹'
+                          : '返回媒体库列表',
+                      onPressed: _handleBackNavigation,
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-          _buildFloatingActionButtons(),
         ],
       );
     }
 
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            // 顶部导航栏
-            _buildTopNavigationBar(provider),
-            // 搜索栏（在媒体库内容视图中显示）
-            if (_isShowingLibraryContent) _buildSearchBar(),
-            // 媒体内容网格/文件夹列表
-            Expanded(
-              child: RepaintBoundary(
-                child: Scrollbar(
-                  controller: _gridScrollController,
-                  thickness: 4,
-                  radius: const Radius.circular(2),
-                  child: _isFolderNavigation
-                      ? _buildFolderListView()
-                      : GridView.builder(
-                          controller: _gridScrollController,
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 150,
-                            childAspectRatio: 7/12,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                          ),
-                          padding: const EdgeInsets.all(16),
-                          cacheExtent: 800,
-                          clipBehavior: Clip.hardEdge,
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          itemCount: _isSearching ? _searchResults.length : _mediaItems.length,
-                          itemBuilder: (context, index) {
-                            final item = _isSearching ? _searchResults[index] : _mediaItems[index];
-                            return _buildMediaCard(item);
-                          },
-                        ),
-                ),
-              ),
+        // 搜索栏（在媒体库内容视图中显示，已整合返回按钮和标题）
+        if (_isShowingLibraryContent) _buildSearchBar(),
+        // 媒体内容网格/文件夹列表
+        Expanded(
+          child: RepaintBoundary(
+            child: Scrollbar(
+              controller: _gridScrollController,
+              thickness: 4,
+              radius: const Radius.circular(2),
+              child: _isFolderNavigation
+                  ? _buildFolderListView()
+                  : GridView.builder(
+                      controller: _gridScrollController,
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 500,
+                        mainAxisExtent: 140,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      cacheExtent: 800,
+                      clipBehavior: Clip.hardEdge,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      addAutomaticKeepAlives: false,
+                      addRepaintBoundaries: true,
+                      itemCount: _isSearching ? _searchResults.length : _filteredMediaItems.length,
+                      itemBuilder: (context, index) {
+                        final item = _isSearching ? _searchResults[index] : _filteredMediaItems[index];
+                        return _buildMediaCard(item);
+                      },
+                    ),
             ),
-          ],
+          ),
         ),
-        _buildFloatingActionButtons(),
       ],
     );
-  }
-
-  Widget _buildTopNavigationBar(dynamic provider) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(24), // 圆形
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(24), // 圆形
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(24), // 圆形
-                    onTap: _handleBackNavigation,
-                    child: const Center(
-                      child: Icon(
-                        Icons.chevron_left,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              _getCurrentViewTitle(provider),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 获取选中媒体库的名称
-  String _getSelectedLibraryName(dynamic provider) {
-    if (_selectedLibraryId == null) return '媒体库';
-    
-    final selectedLibraries = _getSelectedLibraries(provider);
-    final library = selectedLibraries.where((lib) => lib.id == _selectedLibraryId);
-    
-    if (library.isEmpty) return '媒体库';
-    
-    return library.first.name;
   }
 
   String _getCurrentViewTitle(dynamic provider) {
     if (_isFolderNavigation && _folderStack.isNotEmpty) {
       return _folderStack.last.name;
     }
-    return _getSelectedLibraryName(provider);
+    
+    // 直接实现获取选中媒体库名称的逻辑
+    try {
+      final selectedLibraries = _getSelectedLibraries(provider);
+      final currentLibrary = selectedLibraries.firstWhere(
+        (l) => l.id == _selectedLibraryId,
+        orElse: () => selectedLibraries.isNotEmpty ? selectedLibraries.first : selectedLibraries.first,
+      );
+      return currentLibrary.name;
+    } catch (_) {
+      return '媒体库';
+    }
   }
 
-  Widget _buildFloatingActionButtons() {
-    return Positioned(
-      right: 16,
-      bottom: 16,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 排序按钮（仅在显示库内容且未在搜索时显示）
-          if (_isShowingLibraryContent && !_isSearching && !_isFolderNavigation) ...[
-            FloatingActionGlassButton(
-              iconData: Ionicons.swap_vertical_outline,
-              onPressed: _showSortDialog,
-              description: '排序选项\n按名称、日期或评分排序\n提升浏览体验',
-            ),
-            const SizedBox(height: 16), // 按钮之间的间距
-          ],
-          // 设置按钮
-          FloatingActionGlassButton(
-            iconData: Ionicons.settings_outline,
-            onPressed: _showServerDialog,
-            description: '$_serverName服务器设置\n管理连接信息和媒体库\n配置播放偏好设置',
-          ),
-        ],
-      ),
+  Widget _buildServerSettingsAction() {
+    return SearchBarActionButton(
+      icon: Ionicons.settings_outline,
+      tooltip: '$_serverName服务器设置',
+      onPressed: _showServerDialog,
     );
   }
 
@@ -621,17 +627,15 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         break;
     }
 
-    return AnimeCard(
+    return HorizontalAnimeCard(
       key: ValueKey(uniqueId),
-      name: item.title,
+      title: item.title,
       imageUrl: imageUrl,
       source: _serverName,
-      useLegacyImageLoadMode: true, // 恢复旧版图片加载方式，减少并发请求
-      // 在网格中使用轻微毛玻璃，实际是否启用由全局设置控制
-      enableBackgroundBlur: true,
-      backgroundBlurSigma: 6.0,
-      enableShadow: false, // 网格中禁用阴影以降低绘制成本
+      rating: item.userRating,
       onTap: () => _openMediaDetail(item),
+      summary: item.overview,
+      progress: item.progress,
     );
   }
 
@@ -747,6 +751,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       if (mounted && !_isShowingLibraryContent) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
+          _applySortAndFilter();
         });
       }
       _setupRefreshTimer();
@@ -761,112 +766,48 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   // 构建搜索栏（单个媒体库视图）
   Widget _buildSearchBar() {
-    return Consumer<UIThemeProvider>(
-      builder: (context, uiThemeProvider, child) {
-        if (uiThemeProvider.isFluentUITheme) {
-          return _buildFluentSearchBar('搜索 ${_getCurrentViewTitle(_provider)} 中的内容...', _onSearchChanged);
-        } else {
-          return _buildMaterialSearchBar('搜索 ${_getCurrentViewTitle(_provider)} 中的内容...', _onSearchChanged);
-        }
-      },
+    String? title;
+    if (_isShowingLibraryContent) {
+      title = _getCurrentViewTitle(_provider);
+    }
+
+    final showLocalSort = !_showRemoteSortDropdown;
+    final trailingActions = [
+      _buildServerSettingsAction(),
+      if (_showRemoteSortDropdown) _buildRemoteSortDropdown(),
+    ];
+
+    return LocalLibraryControlBar(
+      showBackButton: _isShowingLibraryContent,
+      onBack: _handleBackNavigation,
+      title: title,
+      searchController: _searchController,
+      currentSort: _currentSort,
+      onSearchChanged: _onSearchChanged,
+      onSortChanged: showLocalSort
+          ? (type) {
+              setState(() => _currentSort = type);
+              _applySortAndFilter();
+            }
+          : null,
+      showSort: showLocalSort,
+      trailingActions: trailingActions,
     );
   }
 
   // 构建主页面搜索栏（媒体库列表视图）
   Widget _buildMainSearchBar() {
-    return Consumer<UIThemeProvider>(
-      builder: (context, uiThemeProvider, child) {
-        if (uiThemeProvider.isFluentUITheme) {
-          return _buildFluentSearchBar('搜索所有媒体库中的内容...', _onMainSearchChanged);
-        } else {
-          return _buildMaterialSearchBar('搜索所有媒体库中的内容...', _onMainSearchChanged);
-        }
+    return LocalLibraryControlBar(
+      searchController: _searchController,
+      currentSort: _currentSort,
+      onSearchChanged: _onMainSearchChanged,
+      onSortChanged: (type) {
+        setState(() => _currentSort = type);
+        _applySortAndFilter();
       },
-    );
-  }
-
-  // 构建 Material Design 搜索栏
-  Widget _buildMaterialSearchBar(String hintText, Function(String) onChanged) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16),
-                prefixIcon: _isSearchLoading
-                    ? Container(
-                        width: 20,
-                        height: 20,
-                        padding: const EdgeInsets.all(12),
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Icon(Icons.search, color: Colors.white.withValues(alpha: 0.7)),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear, color: Colors.white.withValues(alpha: 0.7)),
-                        onPressed: _clearSearch,
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              onChanged: onChanged,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 构建 Fluent UI 搜索栏
-  Widget _buildFluentSearchBar(String hintText, Function(String) onChanged) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: fluent.TextBox(
-        controller: _searchController,
-        placeholder: hintText,
-        style: const TextStyle(fontSize: 16),
-        prefix: _isSearchLoading
-            ? Container(
-                width: 20,
-                height: 20,
-                padding: const EdgeInsets.all(8),
-                child: const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: fluent.ProgressRing(strokeWidth: 2),
-                ),
-              )
-            : const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(fluent.FluentIcons.search, size: 16),
-              ),
-        suffix: _searchController.text.isNotEmpty
-            ? fluent.IconButton(
-                icon: const Icon(fluent.FluentIcons.chrome_close, size: 16),
-                onPressed: _clearSearch,
-              )
-            : null,
-        onChanged: onChanged,
-      ),
+      trailingActions: [
+        _buildServerSettingsAction(),
+      ],
     );
   }
 
@@ -1206,6 +1147,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       if (mounted) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
+          _applySortAndFilter();
           _isLoadingLibraryContent = false;
           _error = null;
         });
@@ -1253,6 +1195,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       if (mounted) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
+          _applySortAndFilter();
           _isLoadingLibraryContent = false;
           _error = null;
         });
@@ -1356,50 +1299,79 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     }
   }
 
-  // 显示排序对话框
-  Future<void> _showSortDialog() async {
-    final MediaLibraryType libraryType = widget.serverType == NetworkMediaServerType.jellyfin 
-        ? MediaLibraryType.jellyfin 
-        : MediaLibraryType.emby;
-    
+  Widget _buildRemoteSortDropdown() {
     final provider = _provider;
-    
-    // 获取当前媒体库的排序设置，如果没有则使用全局设置
-    Map<String, String> currentSortSettings;
-    if (_isShowingLibraryContent && _selectedLibraryId != null) {
-      currentSortSettings = provider.getLibrarySortSettings(_selectedLibraryId!);
-    } else {
-      currentSortSettings = {
-        'sortBy': provider.currentSortBy,
-        'sortOrder': provider.currentSortOrder,
-      };
-    }
-    
-    final result = await MediaLibrarySortDialog.show(
-      context, 
-      currentSortBy: currentSortSettings['sortBy']!,
-      currentSortOrder: currentSortSettings['sortOrder']!,
-      libraryType: libraryType,
+    final currentSortSettings = _getCurrentRemoteSortSettings(provider);
+    final items = _buildRemoteSortItems(
+      currentSortSettings['sortBy']!,
+      currentSortSettings['sortOrder']!,
     );
-    
-    if (result != null && mounted) {
-      if (_isShowingLibraryContent && _selectedLibraryId != null) {
-        // 保存当前媒体库的排序设置
-        provider.setLibrarySortSettings(
-          _selectedLibraryId!,
-          result['sortBy']!,
-          result['sortOrder']!,
+
+    return BlurDropdown<_RemoteSortSelection>(
+      dropdownKey: _remoteSortDropdownKey,
+      items: items,
+      onItemSelected: _applyRemoteSortSelection,
+    );
+  }
+
+  Map<String, String> _getCurrentRemoteSortSettings(dynamic provider) {
+    if (_isShowingLibraryContent && _selectedLibraryId != null) {
+      return provider.getLibrarySortSettings(_selectedLibraryId!);
+    }
+    return {
+      'sortBy': provider.currentSortBy,
+      'sortOrder': provider.currentSortOrder,
+    };
+  }
+
+  List<DropdownMenuItemData<_RemoteSortSelection>> _buildRemoteSortItems(
+    String currentSortBy,
+    String currentSortOrder,
+  ) {
+    final options = getMediaSortOptions(_mediaLibraryType);
+    final items = <DropdownMenuItemData<_RemoteSortSelection>>[];
+
+    for (final option in options) {
+      for (final order in mediaLibrarySortOrders) {
+        final sortOrderValue = order['value'];
+        final sortOrderLabel = order['label'];
+        if (sortOrderValue == null || sortOrderLabel == null) {
+          continue;
+        }
+
+        final selection = _RemoteSortSelection(
+          sortBy: option.value,
+          sortOrder: sortOrderValue,
+          label: '${option.label} ($sortOrderLabel)',
+          description: option.description,
         );
-        
-        // 重新加载当前媒体库内容
-        _loadLibraryContent(_selectedLibraryId!);
-      } else {
-        // 更新全局排序设置
-        provider.updateSortSettingsOnly(
-          result['sortBy']!,
-          result['sortOrder']!,
+
+        items.add(
+          DropdownMenuItemData<_RemoteSortSelection>(
+            title: selection.label,
+            value: selection,
+            isSelected: option.value == currentSortBy &&
+                sortOrderValue == currentSortOrder,
+            description: selection.description,
+          ),
         );
       }
+    }
+
+    return items;
+  }
+
+  void _applyRemoteSortSelection(_RemoteSortSelection selection) {
+    final provider = _provider;
+    if (_isShowingLibraryContent && _selectedLibraryId != null) {
+      provider.setLibrarySortSettings(
+        _selectedLibraryId!,
+        selection.sortBy,
+        selection.sortOrder,
+      );
+      _loadLibraryContent(_selectedLibraryId!);
+    } else {
+      provider.updateSortSettingsOnly(selection.sortBy, selection.sortOrder);
     }
   }
 
@@ -1414,4 +1386,29 @@ class _FolderNode {
     required this.id,
     required this.name,
   });
+}
+
+class _RemoteSortSelection {
+  final String sortBy;
+  final String sortOrder;
+  final String label;
+  final String? description;
+
+  const _RemoteSortSelection({
+    required this.sortBy,
+    required this.sortOrder,
+    required this.label,
+    this.description,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _RemoteSortSelection &&
+          runtimeType == other.runtimeType &&
+          sortBy == other.sortBy &&
+          sortOrder == other.sortOrder;
+
+  @override
+  int get hashCode => Object.hash(sortBy, sortOrder);
 }

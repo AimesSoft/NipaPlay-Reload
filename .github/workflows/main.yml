@@ -151,7 +151,7 @@ jobs:
           name: Release v${{ needs.Build-Android.outputs.version }}
           bodyFile: "release_notes.md"
           allowUpdates: true
-          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm
+          artifacts: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm
           artifactErrorsFailBuild: true
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}

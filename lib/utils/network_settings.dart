@@ -6,7 +6,7 @@ class NetworkSettings {
 
   // 服务器常量
   static const String primaryServer = 'https://api.dandanplay.net';
-  static const String backupServer = 'http://139.217.235.62:16001';
+  static const String backupServer = 'http://139.224.252.88:16001';
 
   // 默认服务器（主服务器）
   static const String defaultServer = primaryServer;
@@ -48,7 +48,7 @@ class NetworkSettings {
       {
         'name': '备用服务器',
         'url': backupServer,
-        'description': '139.217.235.62:16001（镜像服务器）',
+        'description': '139.224.252.88:16001（镜像服务器）',
       },
     ];
   }

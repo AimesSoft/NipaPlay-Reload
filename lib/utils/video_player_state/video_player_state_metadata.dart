@@ -20,8 +20,9 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
   Future<void> _removeHistoryEntry(String filePath) async {
     try {
-      if (_context != null && _context!.mounted) {
-        await _context!.read<WatchHistoryProvider>().removeHistory(filePath);
+      final watchHistoryProvider = _resolveWatchHistoryProvider();
+      if (watchHistoryProvider != null) {
+        await watchHistoryProvider.removeHistory(filePath);
       } else {
         await WatchHistoryManager.removeHistory(filePath);
       }
@@ -72,9 +73,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
           '[VideoPlayerState] 成功更新历史记录: ${updatedHistory.animeName} - ${updatedHistory.episodeTitle}');
 
       // 通知UI刷新历史记录
-      if (_context != null && _context!.mounted) {
-        _context!.read<WatchHistoryProvider>().refresh();
-      }
+      _resolveWatchHistoryProvider()?.refresh();
     } catch (e) {
       debugPrint('[VideoPlayerState] 更新历史记录时出错: $e');
     }
@@ -325,8 +324,8 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       // 获取现有记录
       WatchHistoryItem? existingHistory;
 
-      if (_context != null && _context!.mounted) {
-        final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
+      final watchHistoryProvider = _resolveWatchHistoryProvider();
+      if (watchHistoryProvider != null) {
         existingHistory = await watchHistoryProvider.getHistoryItem(path);
       } else {
         existingHistory =
@@ -422,10 +421,8 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
           '准备保存更新后的观看记录，动画名: ${updatedHistory.animeName}, 集数: ${updatedHistory.episodeTitle}');
 
       // 保存更新后的记录
-      if (_context != null && _context!.mounted) {
-        await _context!
-            .read<WatchHistoryProvider>()
-            .addOrUpdateHistory(updatedHistory);
+      if (watchHistoryProvider != null) {
+        await watchHistoryProvider.addOrUpdateHistory(updatedHistory);
       } else {
         await WatchHistoryDatabase.instance
             .insertOrUpdateWatchHistory(updatedHistory);
@@ -498,8 +495,8 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       // 获取当前播放记录
       WatchHistoryItem? existingHistory;
 
-      if (_context != null && _context!.mounted) {
-        final watchHistoryProvider = _context!.read<WatchHistoryProvider>();
+      final watchHistoryProvider = _resolveWatchHistoryProvider();
+      if (watchHistoryProvider != null) {
         existingHistory =
             await watchHistoryProvider.getHistoryItem(_currentVideoPath!);
       } else {
@@ -525,10 +522,8 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
         );
 
         // 保存更新后的记录
-        if (_context != null && _context!.mounted) {
-          await _context!
-              .read<WatchHistoryProvider>()
-              .addOrUpdateHistory(updatedHistory);
+        if (watchHistoryProvider != null) {
+          await watchHistoryProvider.addOrUpdateHistory(updatedHistory);
         } else {
           await WatchHistoryDatabase.instance
               .insertOrUpdateWatchHistory(updatedHistory);
@@ -541,6 +536,16 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
         // 尝试刷新已显示的缩略图
         _triggerImageCacheRefresh(thumbnailPath);
+
+        if (SharedRemoteHistoryHelper.isSharedRemoteStreamPath(_currentVideoPath!)) {
+          unawaited(
+            SharedRemotePlaybackSyncService.instance.syncThumbnail(
+              videoUrl: _currentVideoPath!,
+              thumbnailPath: thumbnailPath,
+              clientUpdatedAt: DateTime.now(),
+            ),
+          );
+        }
       }
     } catch (e) {
       // 添加 stackTrace

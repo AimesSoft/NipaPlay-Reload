@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/background_image_compositor.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
@@ -16,6 +17,9 @@ String backgroundImageUrl2 = (globals.isDesktop || globals.isTablet)
     ? 'assets/images/main_image2.png'
     : 'assets/images/main_image_mobile2.png';
 
+const _themeTransitionDuration = Duration(milliseconds: 420);
+const _themeTransitionCurve = Curves.easeInOutCubic;
+
 class BackgroundWithBlur extends StatelessWidget {
   final Widget child;
 
@@ -29,15 +33,8 @@ class BackgroundWithBlur extends StatelessWidget {
           children: [
             // 背景图像
             Positioned.fill(
-              child: _buildBackgroundImage(),
+              child: _buildBackgroundImage(context, themeNotifier),
             ),
-            // 自定义颜色遮罩
-            if (themeNotifier.useCustomThemeColor)
-              Positioned.fill(
-                child: Container(
-                  color: themeNotifier.customOverlayColor,
-                ),
-              ),
             // 使用 GlassmorphicContainer 实现毛玻璃效果
             if (settingsProvider.isBlurEnabled)
               Positioned.fill(
@@ -76,52 +73,91 @@ class BackgroundWithBlur extends StatelessWidget {
     );
   }
 
-  Widget _buildBackgroundImage() {
+  Widget _buildBackgroundImage(
+      BuildContext context, ThemeNotifier themeNotifier) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final baseColor =
+        isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+
+    Widget buildComposite(Widget image) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedContainer(
+            duration: _themeTransitionDuration,
+            curve: _themeTransitionCurve,
+            color: baseColor,
+          ),
+          BackgroundImageCompositor(
+            image: image,
+            overlayColor: baseColor,
+            renderMode: themeNotifier.backgroundImageRenderMode,
+            overlayOpacity: themeNotifier.backgroundImageOverlayOpacity,
+            duration: _themeTransitionDuration,
+            curve: _themeTransitionCurve,
+          ),
+        ],
+      );
+    }
+
     if (globals.backgroundImageMode == '关闭') {
-      return Image.asset(
-        'assets/backempty.png',
-        fit: BoxFit.cover,
+      return AnimatedContainer(
+        duration: _themeTransitionDuration,
+        curve: _themeTransitionCurve,
+        color: baseColor,
       );
     } else if (globals.backgroundImageMode == '看板娘') {
-      return Image.asset(
-        backgroundImageUrl,
-        fit: BoxFit.cover,
+      return buildComposite(
+        Image.asset(
+          backgroundImageUrl,
+          fit: BoxFit.cover,
+        ),
       );
     } else if (globals.backgroundImageMode == '看板娘2') {
-      return Image.asset(
-        backgroundImageUrl2,
-        fit: BoxFit.cover,
+      return buildComposite(
+        Image.asset(
+          backgroundImageUrl2,
+          fit: BoxFit.cover,
+        ),
       );
     } else if (globals.backgroundImageMode == '自定义') {
       if (kIsWeb) {
         // Web平台不支持本地文件，回退到默认图片
-        return Image.asset(
-          backgroundImageUrl,
-          fit: BoxFit.cover,
+        return buildComposite(
+          Image.asset(
+            backgroundImageUrl,
+            fit: BoxFit.cover,
+          ),
         );
       }
       final file = File(globals.customBackgroundPath);
       if (file.existsSync()) {
-        return Image.file(
-          file,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Image.asset(
-              backgroundImageUrl,
-              fit: BoxFit.cover,
-            );
-          },
+        return buildComposite(
+          Image.file(
+            file,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Image.asset(
+                backgroundImageUrl,
+                fit: BoxFit.cover,
+              );
+            },
+          ),
         );
       } else {
-        return Image.asset(
-          backgroundImageUrl,
-          fit: BoxFit.cover,
+        return buildComposite(
+          Image.asset(
+            backgroundImageUrl,
+            fit: BoxFit.cover,
+          ),
         );
       }
     }
-    return Image.asset(
-      backgroundImageUrl,
-      fit: BoxFit.cover,
+    return buildComposite(
+      Image.asset(
+        backgroundImageUrl,
+        fit: BoxFit.cover,
+      ),
     );
   }
 }

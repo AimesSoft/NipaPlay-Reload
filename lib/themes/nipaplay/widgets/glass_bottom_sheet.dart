@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
-import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:provider/provider.dart';
 
 /// 通用的毛玻璃底部弹出菜单
 class GlassBottomSheet extends StatelessWidget {
@@ -22,11 +23,16 @@ class GlassBottomSheet extends StatelessWidget {
     required Widget child,
     double? height,
   }) {
-    return showModalBottomSheet<T>(
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    return NipaplayWindow.show<T>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => GlassBottomSheet(
+      enableAnimation: enableAnimation,
+      barrierDismissible: true,
+      child: GlassBottomSheet(
         title: title,
         child: child,
         height: height,
@@ -36,74 +42,48 @@ class GlassBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enableBlur = context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect;
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
     final sheetHeight = height ?? MediaQuery.of(context).size.height * 0.6;
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      height: sheetHeight,
-      decoration: const BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      child: GlassmorphicContainer(
-        width: double.infinity,
-        height: double.infinity,
-        borderRadius: 20,
-        blur: enableBlur ? 20 : 0,
-        alignment: Alignment.center,
-        border: 1,
-        linearGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.3),
-            Colors.white.withOpacity(0.25),
-          ],
-        ),
-        borderGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.5),
-            Colors.white.withOpacity(0.5),
-          ],
-        ),
-        child: Column(
-          children: [
-            // 拖拽条
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(2),
+    return NipaplayWindowScaffold(
+      maxWidth: dialogWidth,
+      maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.9),
+      onClose: () => Navigator.of(context).maybePop(),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: keyboardHeight),
+        child: SizedBox(
+          height: sheetHeight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    locale: const Locale('zh', 'CN'),
+                    style: textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                        ) ??
+                        TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                        ),
+                    textAlign: TextAlign.left,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                Expanded(child: child),
+              ],
             ),
-
-            // 标题
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(
-                title,
-                locale: const Locale('zh', 'CN'),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-
-            // 内容
-            Expanded(child: child),
-          ],
+          ),
         ),
       ),
     );

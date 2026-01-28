@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/backup_service.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
@@ -177,11 +177,11 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         title: '确认恢复',
         content: '恢复操作将会合并备份文件中的观看进度（包括截图）到当前记录中，且只会恢复本地存在的媒体文件的进度。是否继续？',
         actions: [
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('取消', style: TextStyle(color: Colors.white70)),
           ),
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('确认', style: TextStyle(color: Colors.white)),
           ),
@@ -218,160 +218,153 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
           // 自动同步设置卡片
-          SettingsCard(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: const Text(
-                    '自动云同步',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '自动云同步',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
                 ),
-                SettingsItem.toggle(
-                  title: '启用自动同步',
-                  subtitle: _autoSyncEnabled 
-                    ? '观看进度会自动同步到本地路径或云端' 
-                    : '启用后可实现多设备同步',
-                  enabled: !_isProcessing,
-                  value: _autoSyncEnabled,
-                  onChanged: _toggleAutoSync,
-                  icon: Icons.cloud_sync,
-                ),
-                if (_autoSyncEnabled && _autoSyncPath != null) ...[
-                  const SizedBox(height: 8),
-                  SettingsItem.button(
-                    title: '同步路径',
-                    subtitle: _autoSyncPath!.length > 50 
-                        ? '...${_autoSyncPath!.substring(_autoSyncPath!.length - 50)}'
-                        : _autoSyncPath!,
-                    enabled: !_isProcessing,
-                    onTap: _selectAutoSyncPath,
-                    icon: Icons.folder,
-                  ),
-                  const SizedBox(height: 8),
-                  SettingsItem.button(
-                    title: '立即同步',
-                    subtitle: '手动执行一次同步',
-                    enabled: !_isProcessing,
-                    onTap: _manualSync,
-                    icon: Icons.sync,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          // 手动备份恢复卡片
-          SettingsCard(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: const Text(
-                    '手动备份与恢复',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+              ),
+              const SizedBox(height: 16),
+              SettingsItem.toggle(
+                title: '启用自动同步',
+                subtitle: _autoSyncEnabled 
+                  ? '观看进度会自动同步到本地路径或云端' 
+                  : '启用后可实现多设备同步',
+                enabled: !_isProcessing,
+                value: _autoSyncEnabled,
+                onChanged: _toggleAutoSync,
+                icon: Icons.cloud_sync,
+              ),
+              if (_autoSyncEnabled && _autoSyncPath != null) ...[
+                const SizedBox(height: 8),
                 SettingsItem.button(
-                  title: '备份观看进度',
-                  subtitle: '将观看进度导出为.nph文件',
+                  title: '同步路径',
+                  subtitle: _autoSyncPath!.length > 50 
+                      ? '...${_autoSyncPath!.substring(_autoSyncPath!.length - 50)}'
+                      : _autoSyncPath!,
                   enabled: !_isProcessing,
-                  onTap: _backupHistory,
-                  icon: Icons.backup,
+                  onTap: _selectAutoSyncPath,
+                  icon: Icons.folder,
                 ),
                 const SizedBox(height: 8),
                 SettingsItem.button(
-                  title: '恢复观看进度',
-                  subtitle: '从.nph文件恢复观看进度',
+                  title: '立即同步',
+                  subtitle: '手动执行一次同步',
                   enabled: !_isProcessing,
-                  onTap: _restoreHistory,
-                  icon: Icons.restore,
+                  onTap: _manualSync,
+                  icon: Icons.sync,
                 ),
               ],
-            ),
+            ],
           ),
           const SizedBox(height: 16),
-          const SettingsCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '说明',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+          // 手动备份恢复卡片
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '手动备份与恢复',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
                 ),
-                SizedBox(height: 16),
-                Text(
-                  '• 自动同步：启用后观看进度会自动保存到指定路径',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              SettingsItem.button(
+                title: '备份观看进度',
+                subtitle: '将观看进度导出为.nph文件',
+                enabled: !_isProcessing,
+                onTap: _backupHistory,
+                icon: Icons.backup,
+              ),
+              const SizedBox(height: 8),
+              SettingsItem.button(
+                title: '恢复观看进度',
+                subtitle: '从.nph文件恢复观看进度',
+                enabled: !_isProcessing,
+                onTap: _restoreHistory,
+                icon: Icons.restore,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '说明',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
                 ),
-                SizedBox(height: 8),
-                Text(
-                  '• 云同步：同步路径可以是SMB/NFS等网络位置',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '• 固定文件：自动同步使用固定文件名 nipaplay_auto_sync.nph',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '• 手动备份：支持自定义文件名的一次性备份',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '• 备份内容：包含集数信息、观看时间戳和截图',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '• 恢复规则：只恢复本地扫描到的媒体文件的观看进度',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '• 截图存储：恢复的截图保存在应用缓存目录',
-                  style: TextStyle(fontSize: 14, color: Colors.white70),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '• 此功能仅在桌面端可用',
-                  style: TextStyle(fontSize: 14, color: Colors.white70, fontStyle: FontStyle.italic),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '• 自动同步：启用后观看进度会自动保存到指定路径',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• 云同步：同步路径可以是SMB/NFS等网络位置',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• 固定文件：自动同步使用固定文件名 nipaplay_auto_sync.nph',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• 手动备份：支持自定义文件名的一次性备份',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• 备份内容：包含集数信息、观看时间戳和截图',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• 恢复规则：只恢复本地扫描到的媒体文件的观看进度',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• 截图存储：恢复的截图保存在应用缓存目录',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• 此功能仅在桌面端可用',
+                style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withOpacity(0.7), fontStyle: FontStyle.italic),
+              ),
+            ],
           ),
           if (_isProcessing)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Center(
                 child: Column(
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
                     Text(
                       '处理中...',
-                      style: TextStyle(color: Colors.white70),
+                      style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                     ),
                   ],
                 ),

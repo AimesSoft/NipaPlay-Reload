@@ -7,10 +7,10 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
 
 // Define the key for SharedPreferences
 const String globalFilterAdultContentKey = 'global_filter_adult_content';
@@ -30,7 +30,7 @@ class _GeneralPageState extends State<GeneralPage> {
   DesktopExitBehavior _desktopExitBehavior = DesktopExitBehavior.askEveryTime;
   final GlobalKey _desktopExitBehaviorDropdownKey = GlobalKey();
 
-  // 根据平台生成默认页面选项
+  // 生成默认页面选项
   List<DropdownMenuItemData<int>> _getDefaultPageItems() {
     List<DropdownMenuItemData<int>> items = [
       DropdownMenuItemData(title: "主页", value: 0, isSelected: _defaultPageIndex == 0),
@@ -38,14 +38,7 @@ class _GeneralPageState extends State<GeneralPage> {
       DropdownMenuItemData(title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
     ];
 
-    // 仅在非iOS平台添加新番更新选项
-    if (!Platform.isIOS) {
-      items.add(DropdownMenuItemData(title: "新番更新", value: 3, isSelected: _defaultPageIndex == 3));
-    }
-
-    // 添加设置选项，根据平台调整索引
-    final settingsIndex = Platform.isIOS ? 3 : 4;
-    items.add(DropdownMenuItemData(title: "设置", value: settingsIndex, isSelected: _defaultPageIndex == settingsIndex));
+    items.add(DropdownMenuItemData(title: "个人中心", value: 3, isSelected: _defaultPageIndex == 3));
 
     return items;
   }
@@ -86,10 +79,10 @@ class _GeneralPageState extends State<GeneralPage> {
         var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
         _desktopExitBehavior = desktopExitBehavior;
 
-        // 在iOS平台上，如果存储的索引是新番更新页面(3)，调整为设置页面(3)
-        // 如果存储的索引是设置页面(4)，也调整为设置页面(3)
-        if (Platform.isIOS && storedIndex >= 3) {
-          storedIndex = 3; // iOS上设置页面的索引
+        if (storedIndex < 0) {
+          storedIndex = 0;
+        } else if (storedIndex > 3) {
+          storedIndex = 3;
         }
 
         _defaultPageIndex = storedIndex;
@@ -128,6 +121,8 @@ class _GeneralPageState extends State<GeneralPage> {
 
             _defaultPageIndex = snapshot.data ?? 0;
 
+            final colorScheme = Theme.of(context).colorScheme;
+
             return ListView(
               children: [
                 if (globals.isDesktop)
@@ -145,7 +140,7 @@ class _GeneralPageState extends State<GeneralPage> {
                   dropdownKey: _desktopExitBehaviorDropdownKey,
                 ),
                 if (globals.isDesktop)
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 SettingsItem.dropdown(
                   title: "默认展示页面",
                   subtitle: "选择应用启动后默认显示的页面",
@@ -159,7 +154,7 @@ class _GeneralPageState extends State<GeneralPage> {
                   },
                   dropdownKey: _defaultPageDropdownKey,
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 SettingsItem.dropdown(
                   title: "番剧卡片点击行为",
                   subtitle: "选择点击番剧卡片后默认展示的内容",
@@ -180,7 +175,7 @@ class _GeneralPageState extends State<GeneralPage> {
                     appearanceSettings.setAnimeCardAction(action);
                   },
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 if (!globals.isPhone)
                 SettingsItem.toggle(
                   title: "过滤成人内容 (全局)",
@@ -194,7 +189,7 @@ class _GeneralPageState extends State<GeneralPage> {
                     _saveFilterPreference(value);
                   },
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
                 SettingsItem.button(
                   title: "清除图片缓存",
                   subtitle: "清除所有缓存的图片文件",
@@ -207,19 +202,19 @@ class _GeneralPageState extends State<GeneralPage> {
                       title: '确认清除缓存',
                       content: '确定要清除所有缓存的图片文件吗？',
                       actions: [
-                        TextButton(
-                          child: const Text(
+                        HoverScaleTextButton(
+                          child: Text(
                             '取消',
                             locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                           ),
                           onPressed: () => Navigator.of(context).pop(false),
                         ),
-                        TextButton(
-                          child: const Text(
+                        HoverScaleTextButton(
+                          child: Text(
                             '确定',
                             locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white),
+style: TextStyle(color: colorScheme.onSurface),
                           ),
                           onPressed: () => Navigator.of(context).pop(true),
                         ),
@@ -240,7 +235,7 @@ style: TextStyle(color: Colors.white),
                     }
                   },
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               ],
             );
           },
@@ -252,6 +247,13 @@ style: TextStyle(color: Colors.white),
 
 Future<int> _loadDefaultPageIndex() async {
   final prefs = await SharedPreferences.getInstance();
-  return prefs.getInt(defaultPageIndexKey) ?? 0;
+  final index = prefs.getInt(defaultPageIndexKey) ?? 0;
+  if (index < 0) {
+    return 0;
+  }
+  if (index > 3) {
+    return 3;
+  }
+  return index;
 }
  

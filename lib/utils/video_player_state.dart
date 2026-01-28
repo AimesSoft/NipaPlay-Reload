@@ -224,6 +224,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Timer? _autoHideTimer;
   Timer? _screenshotTimer; // 添加截图定时器
   bool _isControlsHovered = false;
+  bool _controlsVisibilityLocked = false;
   bool _isSeeking = false;
   final FocusNode _focusNode = FocusNode();
   final GlobalKey screenshotBoundaryKey =
@@ -249,8 +250,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 多轨道弹幕系统
   final Map<String, Map<String, dynamic>> _danmakuTracks = {};
   final Map<String, bool> _danmakuTrackEnabled = {};
-  final String _controlBarHeightKey = 'control_bar_height';
-  double _controlBarHeight = 20.0; // 默认高度
+  final double _controlBarHeight = 20.0; // 固定高度
   final String _minimalProgressBarEnabledKey = 'minimal_progress_bar_enabled';
   bool _minimalProgressBarEnabled = false; // 默认关闭
   final String _minimalProgressBarColorKey = 'minimal_progress_bar_color';
@@ -258,6 +258,22 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   final String _timelinePreviewEnabledKey = 'timeline_preview_enabled';
+
+  WatchHistoryProvider? _resolveWatchHistoryProvider() {
+    final context = _context;
+    if (context != null && context.mounted) {
+      try {
+        return context.read<WatchHistoryProvider>();
+      } catch (_) {}
+    }
+    final rootContext = globals.navigatorKey.currentState?.overlay?.context;
+    if (rootContext != null) {
+      try {
+        return rootContext.read<WatchHistoryProvider>();
+      } catch (_) {}
+    }
+    return null;
+  }
   bool _timelinePreviewEnabled = true; // 默认开启时间轴缩略图
   bool _timelinePreviewSupported = false;
   int _timelinePreviewIntervalMs = 15000;

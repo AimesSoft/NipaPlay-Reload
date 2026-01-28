@@ -1,0 +1,31 @@
+# Codecov Configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 5%
+    patch:
+      default:
+        target: 80%
+
+ignore:
+  - "lib/src/widgets/ios26/**"  # Native iOS 26 implementations
+  - "**/*.g.dart"               # Generated files
+  - "**/*.freezed.dart"         # Generated files
+  - "example/**"                # Example app
+
+comment:
+  layout: "reach,diff,flags,tree,betaprofiling"
+  behavior: default
+  require_changes: false
+
+# Note: iOS 26 native code cannot be tested without a real iOS device
+# These implementations use Platform Views (UiKitView) which require
+# native iOS runtime and cannot be unit tested in Dart test environment.

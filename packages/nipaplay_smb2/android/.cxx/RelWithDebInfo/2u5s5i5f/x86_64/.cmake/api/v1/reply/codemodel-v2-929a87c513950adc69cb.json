@@ -1,0 +1,121 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-RelWithDebInfo-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.6.0"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "libsmb2",
+					"childIndexes" : 
+					[
+						2
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-libsmb2-RelWithDebInfo-31b57a7b105a1a8cabf7.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.5"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2"
+				},
+				{
+					"build" : "libsmb2/lib",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-libsmb2.lib-RelWithDebInfo-4234e99f023aca03c2c0.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.5"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 1,
+					"source" : "/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/third_party/libsmb2/lib",
+					"targetIndexes" : 
+					[
+						1
+					]
+				}
+			],
+			"name" : "RelWithDebInfo",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "nipaplay_smb2_library",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1,
+						2
+					],
+					"name" : "libsmb2",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						1
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "nipaplay_smb2::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-nipaplay_smb2-RelWithDebInfo-1c46b0e20c85f14e8969.json",
+					"name" : "nipaplay_smb2",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "smb2::@130cf677f8ffb0db15d1",
+					"jsonFile" : "target-smb2-RelWithDebInfo-adcf564cf15bdab2b4ac.json",
+					"name" : "smb2",
+					"projectIndex" : 1
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/android/.cxx/RelWithDebInfo/2u5s5i5f/x86_64",
+		"source" : "/Library/Afolder/FlutterProject/nipaplay/packages/nipaplay_smb2/src"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

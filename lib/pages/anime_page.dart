@@ -5,9 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
-import 'package:nipaplay/themes/fluent/widgets/fluent_history_all_dialog.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_media_library_tabs.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -20,10 +17,18 @@ import 'package:nipaplay/pages/media_library_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_tab.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_all_modal.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/media_server_selection_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
@@ -33,6 +38,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/pages/tab_labels.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -212,14 +219,6 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
                   },
                   body: Builder(
                     builder: (context) {
-                      final uiThemeProvider = Provider.of<UIThemeProvider>(context);
-                      if (uiThemeProvider.isFluentUITheme) {
-                        return FluentMediaLibraryTabs(
-                          initialIndex: _currentTabIndex,
-                          onPlayEpisode: _onWatchHistoryItemTap,
-                          mediaLibraryVersion: _mediaLibraryVersion,
-                        );
-                      }
                       return _MediaLibraryTabs(
                         initialIndex: _currentTabIndex,
                         onPlayEpisode: _onWatchHistoryItemTap,
@@ -269,11 +268,19 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   bool _isEmbyConnected = false;
   bool _hasSharedRemoteHosts = false;
   bool _isDandanConnected = false;
+  bool _hasWebDAVConnections = false;
+  bool _hasSMBConnections = false;
+  bool _localConnectionsReady = false;
+
+  // 添加变量追踪“添加媒体服务器”入口的悬停状态
+  bool _isAddEntryHovered = false;
   
   // 动态计算标签页数量
   int get _tabCount {
-    int count = 2; // 基础标签: 媒体库, 库管理
-    if (_hasSharedRemoteHosts) count++;
+    int count = 2; // 基础标签: 本地媒体库, 本地库管理
+    if (_hasWebDAVConnections) count++;
+    if (_hasSMBConnections) count++;
+    if (_hasSharedRemoteHosts) count += 2; // 共享媒体库, 共享库管理
     if (_isDandanConnected) count++;
     if (_isJellyfinConnected) count++;
     if (_isEmbyConnected) count++;
@@ -294,6 +301,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     
     // 监听子标签切换通知
     _setupSubTabListener();
+    _initLocalConnectionStates();
     
     // 立即检查是否有待处理的子标签切换请求
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -313,6 +321,35 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     _hasSharedRemoteHosts = sharedProvider.hasReachableActiveHost;
     _isDandanConnected = dandanProvider.isConnected;
     print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected, Dandan: $_isDandanConnected');
+  }
+
+  Future<void> _initLocalConnectionStates() async {
+    await Future.wait([
+      WebDAVService.instance.initialize(),
+      SMBService.instance.initialize(),
+    ]);
+
+    if (!mounted) return;
+    _localConnectionsReady = true;
+    _refreshLocalConnectionStates();
+  }
+
+  void _refreshLocalConnectionStates() {
+    final hasWebdav = WebDAVService.instance.connections.isNotEmpty;
+    final hasSmb = SMBService.instance.connections.isNotEmpty;
+
+    if (hasWebdav == _hasWebDAVConnections && hasSmb == _hasSMBConnections) {
+      return;
+    }
+
+    _updateTabController(
+      _isJellyfinConnected,
+      _isEmbyConnected,
+      _hasSharedRemoteHosts,
+      _isDandanConnected,
+      hasWebdav,
+      hasSmb,
+    );
   }
 
   TabChangeNotifier? _tabChangeNotifierRef;
@@ -404,6 +441,162 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     }
   }
 
+  Future<void> _showServerSelectionDialog() async {
+    final result = await MediaServerSelectionSheet.show(context);
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    switch (result) {
+      case 'jellyfin':
+        await _showJellyfinServerDialog();
+        break;
+      case 'emby':
+        await _showEmbyServerDialog();
+        break;
+      case 'webdav':
+        await _showWebDAVConnectionDialog();
+        break;
+      case 'smb':
+        await _showSMBConnectionDialog();
+        break;
+      case 'nipaplay':
+        await _showNipaplayServerDialog();
+        break;
+      case 'dandanplay':
+        await _showDandanplayServerDialog();
+        break;
+    }
+  }
+
+  Future<void> _showJellyfinServerDialog() async {
+    await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
+  }
+
+  Future<void> _showEmbyServerDialog() async {
+    await NetworkMediaServerDialog.show(context, MediaServerType.emby);
+  }
+
+  Future<void> _showWebDAVConnectionDialog() async {
+    if (!_localConnectionsReady) {
+      await _initLocalConnectionStates();
+    }
+
+    final result = await WebDAVConnectionDialog.show(context);
+    if (result == true && mounted) {
+      _refreshLocalConnectionStates();
+    }
+  }
+
+  Future<void> _showSMBConnectionDialog() async {
+    if (!_localConnectionsReady) {
+      await _initLocalConnectionStates();
+    }
+
+    final result = await SMBConnectionDialog.show(context);
+    if (result == true && mounted) {
+      _refreshLocalConnectionStates();
+    }
+  }
+
+  Future<void> _showNipaplayServerDialog() async {
+    await SharedRemoteHostSelectionSheet.show(context);
+  }
+
+  Future<void> _showDandanplayServerDialog() async {
+    final provider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+    if (!provider.isInitialized) {
+      await provider.initialize();
+    }
+    final hasExisting = provider.serverUrl?.isNotEmpty == true;
+
+    final result = await BlurLoginDialog.show(
+      context,
+      title: hasExisting ? '更新弹弹play远程连接' : '连接弹弹play远程服务',
+      loginButtonText: hasExisting ? '保存' : '连接',
+      fields: [
+        LoginField(
+          key: 'baseUrl',
+          label: '远程服务地址',
+          hint: '例如 http://192.168.1.2:23333',
+          initialValue: provider.serverUrl ?? '',
+        ),
+        LoginField(
+          key: 'token',
+          label: 'API密钥 (可选)',
+          hint: provider.tokenRequired
+              ? '服务器已启用 API 验证'
+              : '若服务器开启验证请填写',
+          isPassword: true,
+          required: false,
+        ),
+      ],
+      onLogin: (values) async {
+        final baseUrl = values['baseUrl'] ?? '';
+        final token = values['token'];
+        if (baseUrl.isEmpty) {
+          return const LoginResult(success: false, message: '请输入远程服务地址');
+        }
+        try {
+          await provider.connect(baseUrl, token: token);
+          return const LoginResult(
+            success: true,
+            message: '已连接至弹弹play远程服务',
+          );
+        } catch (e) {
+          return LoginResult(success: false, message: e.toString());
+        }
+      },
+    );
+
+    if (result == true && mounted) {
+      BlurSnackBar.show(context, '弹弹play远程服务配置已更新');
+    }
+  }
+
+  Widget _buildAddMediaServerEntry({
+    required Color iconColor,
+    required Color textColor,
+  }) {
+    const Color hoverColor = Color(0xFFFF2E55);
+    final Color displayColor = _isAddEntryHovered ? hoverColor : textColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _isAddEntryHovered = true),
+        onExit: (_) => setState(() => _isAddEntryHovered = false),
+        child: GestureDetector(
+          onTap: _showServerSelectionDialog,
+          child: AnimatedScale(
+            scale: _isAddEntryHovered ? 1.1 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_outlined,
+                    size: 18, color: displayColor),
+                const SizedBox(width: 6),
+                Text(
+                  '添加媒体服务器',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: displayColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
@@ -417,12 +610,20 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         final currentEmbyConnectionState = embyProvider.isConnected;
         final currentSharedState = sharedProvider.hasReachableActiveHost;
         final currentDandanState = dandanProvider.isConnected;
+        final currentHasWebdav = _localConnectionsReady
+            ? WebDAVService.instance.connections.isNotEmpty
+            : _hasWebDAVConnections;
+        final currentHasSmb = _localConnectionsReady
+            ? SMBService.instance.connections.isNotEmpty
+            : _hasSMBConnections;
         
         // 检查连接状态是否改变
         if (_isJellyfinConnected != currentJellyfinConnectionState || 
             _isEmbyConnected != currentEmbyConnectionState ||
             _hasSharedRemoteHosts != currentSharedState ||
-            _isDandanConnected != currentDandanState) {
+            _isDandanConnected != currentDandanState ||
+            _hasWebDAVConnections != currentHasWebdav ||
+            _hasSMBConnections != currentHasSmb) {
           print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState, Dandan: $_isDandanConnected -> $currentDandanState');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -431,6 +632,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 currentEmbyConnectionState,
                 currentSharedState,
                 currentDandanState,
+                currentHasWebdav,
+                currentHasSmb,
               );
             }
           });
@@ -442,20 +645,60 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             child: MediaLibraryPage(
               key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
               onPlayEpisode: widget.onPlayEpisode,
+              onSourcesUpdated: _refreshLocalConnectionStates,
             ),
           ),
           RepaintBoundary(
             child: LibraryManagementTab(
+              key: const ValueKey('library_management_local'),
               onPlayEpisode: widget.onPlayEpisode,
+              section: LibraryManagementSection.local,
             ),
           ),
         ];
-        
+
+        if (_hasWebDAVConnections) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: LibraryManagementTab(
+                key: const ValueKey('library_management_webdav'),
+                onPlayEpisode: widget.onPlayEpisode,
+                section: LibraryManagementSection.webdav,
+              ),
+            ),
+          );
+        }
+
+        if (_hasSMBConnections) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: LibraryManagementTab(
+                key: const ValueKey('library_management_smb'),
+                onPlayEpisode: widget.onPlayEpisode,
+                section: LibraryManagementSection.smb,
+              ),
+            ),
+          );
+        }
+
         if (_hasSharedRemoteHosts) {
+          // 共享媒体库
           pageChildren.add(
             RepaintBoundary(
               child: SharedRemoteLibraryView(
+                key: const ValueKey('shared_media_library'),
                 onPlayEpisode: widget.onPlayEpisode,
+                mode: SharedRemoteViewMode.mediaLibrary,
+              ),
+            ),
+          );
+          // 共享库管理
+          pageChildren.add(
+            RepaintBoundary(
+              child: SharedRemoteLibraryView(
+                key: const ValueKey('shared_library_management'),
+                onPlayEpisode: widget.onPlayEpisode,
+                mode: SharedRemoteViewMode.libraryManagement,
               ),
             ),
           );
@@ -481,7 +724,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             ),
           );
         }
-        
+
         if (_isEmbyConnected) {
           pageChildren.add(
             RepaintBoundary(
@@ -492,40 +735,142 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             ),
           );
         }
-        
+
         // 动态生成标签
-        final List<Tab> tabs = [
-          const Tab(text: "本地媒体库"),
-          const Tab(text: "库管理"),
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        const Color activeColor = Color(0xFFFF2E55);
+        final unselectedLabelColor =
+            isDarkMode ? Colors.white60 : Colors.black54;
+
+        final List<Widget> tabs = [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "本地媒体库",
+              fontSize: 18,
+              icon: Icon(Icons.tv_outlined, size: 18),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "本地库管理",
+              fontSize: 18,
+              icon: Icon(Icons.folder_open_outlined,
+                  size: 18),
+            ),
+          ),
         ];
-        
+
+        if (_hasWebDAVConnections) {
+          tabs.add(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "WebDAV库管理",
+                fontSize: 18,
+                icon: Icon(Icons.cloud_outlined, size: 18),
+              ),
+            ),
+          );
+        }
+
+        if (_hasSMBConnections) {
+          tabs.add(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "SMB库管理",
+                fontSize: 18,
+                icon: Icon(Icons.lan_outlined, size: 18),
+              ),
+            ),
+          );
+        }
+
         if (_hasSharedRemoteHosts) {
-          tabs.add(const Tab(text: "共享媒体"));
+          // 共享媒体库
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "共享媒体库",
+              fontSize: 18,
+              icon: Image(
+                image: AssetImage('assets/nipaplay.png'),
+                width: 18,
+                height: 18,
+              ),
+            ),
+          ));
+          // 共享库管理
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "共享库管理",
+              fontSize: 18,
+              icon: Icon(Icons.settings_suggest_outlined,
+                  size: 18),
+            ),
+          ));
         }
 
         if (_isDandanConnected) {
-          tabs.add(const Tab(text: "弹弹play"));
+          tabs.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "弹弹play",
+              fontSize: 18,
+              icon: Image(
+                image: AssetImage('assets/dandanplay.png'),
+                width: 18,
+                height: 18,
+              ),
+            ),
+          ));
         }
 
         if (_isJellyfinConnected) {
-          tabs.add(const Tab(text: "Jellyfin"));
+          tabs.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "Jellyfin",
+              fontSize: 18,
+              icon: SvgPicture.asset(
+                'assets/jellyfin.svg',
+                width: 18,
+                height: 18,
+              ),
+            ),
+          ));
         }
-        
+
         if (_isEmbyConnected) {
-          tabs.add(const Tab(text: "Emby"));
+          tabs.add(Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: HoverZoomTab(
+              text: "Emby",
+              fontSize: 18,
+              icon: SvgPicture.asset(
+                'assets/emby.svg',
+                width: 18,
+                height: 18,
+              ),
+            ),
+          ));
         }
-        
+
         // 验证标签数量与内容数量是否匹配
         if (tabs.length != pageChildren.length || tabs.length != _tabCount) {
-          print('警告：标签数量(${tabs.length})、内容数量(${pageChildren.length})与预期数量($_tabCount)不匹配');
+          print(
+              '警告：标签数量(${tabs.length})、内容数量(${pageChildren.length})与预期数量($_tabCount)不匹配');
         }
-        
+
         return LayoutBuilder(
           builder: (context, constraints) {
             // 检查可用高度，如果太小则使用最小安全布局
             final availableHeight = constraints.maxHeight;
             final isHeightConstrained = availableHeight < 100; // 小于100像素视为高度受限
-            
+
             if (isHeightConstrained) {
               // 高度受限时，使用简化布局避免溢出
               return SizedBox(
@@ -533,41 +878,54 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 child: const Center(
                   child: Text(
                     '布局空间不足',
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 12),
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ),
               );
             }
-            
+
             return Column(
               children: [
                 // TabBar - 使用Flexible包装以防溢出
                 Flexible(
                   flex: 0,
-                  child: TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    tabs: tabs,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.white70,
-                    labelStyle: const TextStyle(
-                      fontSize: 24, 
-                      fontWeight: FontWeight.bold
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12.0, right: 32.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: TabBar(
+                            controller: _tabController,
+                            isScrollable: true,
+                            tabs: tabs,
+                            labelColor: activeColor,
+                            unselectedLabelColor: unselectedLabelColor,
+                            labelPadding: const EdgeInsets.only(bottom: 12.0),
+                            indicatorPadding: EdgeInsets.zero,
+                            indicator: const _CustomTabIndicator(
+                              indicatorHeight: 3.0,
+                              indicatorColor: activeColor,
+                              radius: 30.0,
+                            ),
+                            tabAlignment: TabAlignment.start,
+                            splashFactory: NoSplash.splashFactory,
+                            overlayColor:
+                                WidgetStateProperty.all(Colors.transparent),
+                            // 移除灰色滑轨
+                            dividerColor: Colors.transparent,
+                            dividerHeight: 3.0,
+                            indicatorSize: TabBarIndicatorSize.label,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildAddMediaServerEntry(
+                          iconColor: activeColor,
+                          textColor: unselectedLabelColor,
+                        ),
+                      ],
                     ),
-                    indicatorPadding: const EdgeInsets.only(
-                      top: 45, 
-                      left: 0, 
-                      right: 0
-                    ),
-                    indicator: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    tabAlignment: TabAlignment.start,
-                    dividerColor: const Color.fromARGB(59, 255, 255, 255),
-                    dividerHeight: 3.0,
-                    indicatorSize: TabBarIndicatorSize.tab,
                   ),
                 ),
                 // 内容区域 - 确保占用剩余所有空间
@@ -604,11 +962,15 @@ style: TextStyle(color: Colors.white70, fontSize: 12),
     bool isEmbyConnected,
     bool hasSharedHosts,
     bool isDandanConnected,
+    bool hasWebdavConnections,
+    bool hasSmbConnections,
   ) {
     if (_isJellyfinConnected == isJellyfinConnected &&
         _isEmbyConnected == isEmbyConnected &&
         _hasSharedRemoteHosts == hasSharedHosts &&
-        _isDandanConnected == isDandanConnected) {
+        _isDandanConnected == isDandanConnected &&
+        _hasWebDAVConnections == hasWebdavConnections &&
+        _hasSMBConnections == hasSmbConnections) {
       return;
     }
     
@@ -617,6 +979,8 @@ style: TextStyle(color: Colors.white70, fontSize: 12),
     _isEmbyConnected = isEmbyConnected;
     _hasSharedRemoteHosts = hasSharedHosts;
     _isDandanConnected = isDandanConnected;
+    _hasWebDAVConnections = hasWebdavConnections;
+    _hasSMBConnections = hasSmbConnections;
     
     // 创建新的TabController
     final newController = TabController(
@@ -678,18 +1042,12 @@ class _MouseDragScrollWrapperState extends State<_MouseDragScrollWrapper> {
         if (_isDragging && widget.scrollController.hasClients) {
           final double delta = _lastPanPosition - event.position.dx;
           _lastPanPosition = event.position.dx;
-          
-          // 计算新的滚动位置
-          final double newScrollOffset = widget.scrollController.offset + delta;
-          
-          // 限制滚动范围
-          final double maxScrollExtent = widget.scrollController.position.maxScrollExtent;
-          final double minScrollExtent = widget.scrollController.position.minScrollExtent;
-          
-          final double clampedOffset = newScrollOffset.clamp(minScrollExtent, maxScrollExtent);
-          
-          // 应用滚动
-          widget.scrollController.jumpTo(clampedOffset);
+          widget.scrollController.jumpTo(
+            (widget.scrollController.offset + delta).clamp(
+              0.0,
+              widget.scrollController.position.maxScrollExtent,
+            ),
+          );
         }
       },
       onPointerUp: (PointerUpEvent event) {
@@ -698,10 +1056,49 @@ class _MouseDragScrollWrapperState extends State<_MouseDragScrollWrapper> {
       onPointerCancel: (PointerCancelEvent event) {
         _isDragging = false;
       },
-      child: MouseRegion(
-        cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-        child: widget.child,
-      ),
+      child: widget.child,
+    );
+  }
+}
+
+// 自定义Tab指示器
+class _CustomTabIndicator extends Decoration {
+  final double indicatorHeight;
+  final Color indicatorColor;
+  final double radius;
+
+  const _CustomTabIndicator({
+    required this.indicatorHeight,
+    required this.indicatorColor,
+    required this.radius,
+  });
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _CustomPainter(this, onChanged);
+  }
+}
+
+class _CustomPainter extends BoxPainter {
+  final _CustomTabIndicator decoration;
+
+  _CustomPainter(this.decoration, VoidCallback? onChanged) : super(onChanged);
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    assert(configuration.size != null);
+    // 将指示器绘制在TabBar的底部
+    final Rect rect = Offset(
+          offset.dx,
+          (configuration.size!.height - decoration.indicatorHeight),
+        ) &
+        Size(configuration.size!.width, decoration.indicatorHeight);
+    final Paint paint = Paint();
+    paint.color = decoration.indicatorColor;
+    paint.style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
+      paint,
     );
   }
 }

@@ -4,7 +4,6 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/services/video_file_scanner.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
@@ -56,6 +55,29 @@ class FolderChangeInfo {
       return changes.isEmpty ? '内容有变化' : changes.join('，');
     }
   }
+}
+
+class _FolderFileDiff {
+  final int currentCount;
+  final int cachedCount;
+  final List<String> currentFiles;
+  final List<String> newFiles;
+  final List<String> modifiedFiles;
+  final List<String> deletedFiles;
+
+  _FolderFileDiff({
+    required this.currentCount,
+    required this.cachedCount,
+    required this.currentFiles,
+    required this.newFiles,
+    required this.modifiedFiles,
+    required this.deletedFiles,
+  });
+
+  List<String> get filesToProcess => [...newFiles, ...modifiedFiles];
+
+  bool get hasChanges =>
+      newFiles.isNotEmpty || modifiedFiles.isNotEmpty || deletedFiles.isNotEmpty;
 }
 
 class ScanService with ChangeNotifier {
@@ -391,54 +413,17 @@ class ScanService with ChangeNotifier {
       );
     }
 
-    // 检查主文件夹是否有变化
-    final hasMainFolderChanged = await _hasFolderChanged(folderPath);
-    if (!hasMainFolderChanged) {
+    final diff = await _calculateFolderFileDiff(folderPath);
+    if (!diff.hasChanges) {
       return null; // 没有变化
-    }
-
-    // 如果主文件夹有变化，进行详细分析
-    final currentSubFolderHashes = await _calculateSubFolderHashes(folderPath);
-    final cachedSubFolderHashes = _subFolderHashCache[folderPath] ?? {};
-
-    List<String> newFiles = [];
-    List<String> deletedFiles = [];
-    List<String> changedFiles = [];
-
-    // 检查新增和修改的子文件夹/文件
-    for (final entry in currentSubFolderHashes.entries) {
-      final subPath = entry.key;
-      final currentHash = entry.value;
-      final cachedHash = cachedSubFolderHashes[subPath];
-
-      if (cachedHash == null) {
-        newFiles.add(subPath);
-      } else if (cachedHash != currentHash) {
-        changedFiles.add(subPath);
-      }
-    }
-
-    // 检查删除的子文件夹/文件
-    for (final cachedPath in cachedSubFolderHashes.keys) {
-      if (!currentSubFolderHashes.containsKey(cachedPath)) {
-        deletedFiles.add(cachedPath);
-      }
-    }
-
-    // 更新子文件夹hash缓存
-    _subFolderHashCache[folderPath] = currentSubFolderHashes;
-    await _saveSubFolderHashCache();
-
-    if (newFiles.isEmpty && deletedFiles.isEmpty && changedFiles.isEmpty) {
-      return null; // 虽然主文件夹hash变了，但可能是其他原因，没有实际的文件变化
     }
 
     return FolderChangeInfo(
       folderPath: folderPath,
       changeType: 'modified',
-      newFiles: newFiles,
-      deletedFiles: deletedFiles,
-      changedFiles: changedFiles,
+      newFiles: diff.newFiles,
+      deletedFiles: diff.deletedFiles,
+      changedFiles: diff.modifiedFiles,
       detectedAt: DateTime.now(),
     );
   }
@@ -478,6 +463,49 @@ class ScanService with ChangeNotifier {
     }
 
     return subHashes;
+  }
+
+  /// 计算文件夹内视频文件的变化明细
+  Future<_FolderFileDiff> _calculateFolderFileDiff(String folderPath) async {
+    final currentSubFolderHashes = await _calculateSubFolderHashes(folderPath);
+    final cachedSubFolderHashes = _subFolderHashCache[folderPath] ?? {};
+
+    final List<String> newFiles = [];
+    final List<String> modifiedFiles = [];
+    final List<String> deletedFiles = [];
+
+    for (final entry in currentSubFolderHashes.entries) {
+      final subPath = entry.key;
+      final currentHash = entry.value;
+      final cachedHash = cachedSubFolderHashes[subPath];
+
+      if (cachedHash == null) {
+        newFiles.add(subPath);
+      } else if (cachedHash != currentHash) {
+        modifiedFiles.add(subPath);
+      }
+    }
+
+    for (final cachedPath in cachedSubFolderHashes.keys) {
+      if (!currentSubFolderHashes.containsKey(cachedPath)) {
+        deletedFiles.add(cachedPath);
+      }
+    }
+
+    final List<String> currentFiles =
+        currentSubFolderHashes.keys.toList()..sort();
+    newFiles.sort();
+    modifiedFiles.sort();
+    deletedFiles.sort();
+
+    return _FolderFileDiff(
+      currentCount: currentSubFolderHashes.length,
+      cachedCount: cachedSubFolderHashes.length,
+      currentFiles: currentFiles,
+      newFiles: newFiles,
+      modifiedFiles: modifiedFiles,
+      deletedFiles: deletedFiles,
+    );
   }
 
   /// 获取变化检测结果的摘要
@@ -668,22 +696,6 @@ class ScanService with ChangeNotifier {
 
     if (!isPartOfBatch) {
       _updateScanState(scanning: true, progress: 0.0, message: "准备智能扫描: $directoryPath");
-      
-      // 对于单个文件夹扫描，先检查是否有变化
-      _updateScanState(message: "检查文件夹是否有变化...");
-      final hasChanged = await _hasFolderChanged(directoryPath);
-      
-      if (!hasChanged) {
-        _updateScanState(
-          scanning: false, 
-          progress: 1.0, 
-          message: "智能扫描完成：文件夹 ${p.basename(directoryPath)} 没有变化，无需重新扫描。", 
-          completed: true
-        );
-        return;
-      } else {
-        _updateScanState(message: "检测到文件夹有变化，开始扫描...");
-      }
     } else {
        _updateScanState(message: "开始扫描子文件夹: ${p.basename(directoryPath)} (${skipPreviouslyMatchedUnwatched ? "跳过已匹配" : "全面扫描"})");
     }
@@ -699,34 +711,73 @@ class ScanService with ChangeNotifier {
       notifyListeners();
     }
     
-    // 第一阶段：统计视频文件数量
-    _updateScanState(message: "正在统计视频文件...");
-    int videoFileCount;
-    List<File> videoFiles;
-    
-    try {
-      // 先快速统计文件数量，给用户反馈
-      videoFileCount = await VideoFileScanner.countVideoFiles(directoryPath);
-      if (videoFileCount == 0) {
-        if (!isPartOfBatch) {
-          _totalFilesFound = 0;
-          _justFinishedScanning = true;
-          _updateScanState(scanning: false, message: "在 $directoryPath 中没有找到 mp4 或 mkv 文件。", completed: true);
-          debugPrint("扫描结束，没有找到文件，已设置 _justFinishedScanning=$_justFinishedScanning, _totalFilesFound=$_totalFilesFound");
-        } else {
-          _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。");
-        }
-        return;
+    // 第一阶段：分析文件变化
+    _updateScanState(message: "正在分析文件变化...");
+    final diff = await _calculateFolderFileDiff(directoryPath);
+    if (diff.currentCount == 0 && diff.cachedCount == 0) {
+      if (!isPartOfBatch) {
+        _totalFilesFound = 0;
+        _justFinishedScanning = true;
+        _updateScanState(scanning: false, message: "在 $directoryPath 中没有找到 mp4 或 mkv 文件。", completed: true);
+        debugPrint("扫描结束，没有找到文件，已设置 _justFinishedScanning=$_justFinishedScanning, _totalFilesFound=$_totalFilesFound");
+      } else {
+        _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。");
       }
-      
-      _updateScanState(message: "发现 $videoFileCount 个视频文件，开始并发扫描...");
-      
-      // 获取完整的视频文件列表
-      videoFiles = await VideoFileScanner.scanFolder(directoryPath);
-    } catch (e) {
-      _updateScanState(scanning: false, message: "列出 $directoryPath 中的文件失败: $e", completed: true);
       return;
     }
+
+    List<String> filesToProcess = diff.filesToProcess..sort();
+    if (filesToProcess.isEmpty && diff.deletedFiles.isEmpty && diff.currentFiles.isNotEmpty) {
+      final hasChanged = await _hasFolderChanged(directoryPath);
+      if (hasChanged) {
+        filesToProcess = List<String>.from(diff.currentFiles);
+      }
+    }
+    if (filesToProcess.isEmpty) {
+      if (diff.deletedFiles.isNotEmpty) {
+        final deletionMessage = "检测到 ${diff.deletedFiles.length} 个文件被删除，无需重新刮削。";
+        if (!isPartOfBatch) {
+          await _updateFolderHash(directoryPath);
+          _updateScanState(
+            scanning: false,
+            progress: 1.0,
+            message: "智能扫描完成：$deletionMessage",
+            completed: true,
+          );
+        } else {
+          _updateScanMessage("${p.basename(directoryPath)} $deletionMessage");
+        }
+      } else {
+        if (!isPartOfBatch) {
+          _updateScanState(
+            scanning: false,
+            progress: 1.0,
+            message: "智能扫描完成：文件夹 ${p.basename(directoryPath)} 没有变化，无需重新扫描。",
+            completed: true,
+          );
+        } else {
+          _updateScanMessage("文件夹 ${p.basename(directoryPath)} 没有变化，已跳过。");
+        }
+      }
+      return;
+    }
+
+    final List<String> detailParts = [];
+    if (diff.newFiles.isNotEmpty) {
+      detailParts.add("新增 ${diff.newFiles.length} 个");
+    }
+    if (diff.modifiedFiles.isNotEmpty) {
+      detailParts.add("修改 ${diff.modifiedFiles.length} 个");
+    }
+    final String detail = detailParts.isEmpty ? "" : "（${detailParts.join('，')}）";
+
+    _updateScanState(
+      message: "发现 ${filesToProcess.length} 个需要处理的视频文件$detail，开始并发扫描..."
+    );
+
+    final List<File> videoFiles = filesToProcess
+        .map((relativePath) => File(p.join(directoryPath, relativePath)))
+        .toList();
 
     if (!_isScanning && !isPartOfBatch) {
       _updateScanState(scanning: false, message: "扫描已取消: $directoryPath", completed: true);

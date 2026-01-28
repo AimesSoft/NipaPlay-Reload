@@ -80,7 +80,7 @@ class BangumiService {
             if (now - timestamp <= cacheDuration.inMilliseconds) {
               final Map<String, dynamic> animeData = data['animeDetail'];
 
-              final animeDetail = BangumiAnime.fromDandanplayDetail(animeData);
+              final animeDetail = BangumiAnime.fromJson(animeData);
               _detailsCache[animeId] = animeDetail;
               _detailsCacheTime[animeId] =
                   DateTime.fromMillisecondsSinceEpoch(timestamp);
@@ -100,6 +100,15 @@ class BangumiService {
     } catch (e) {
       //debugPrint('[番剧服务] 预加载番剧详情缓存失败: $e');
     }
+  }
+
+  // 同步获取内存缓存中的番剧详情
+  BangumiAnime? getAnimeDetailsFromMemory(int animeId) {
+    if (_detailsCache.containsKey(animeId)) {
+      // 即使缓存过期也返回数据，优先保证显示
+      return _detailsCache[animeId];
+    }
+    return null;
   }
 
   Future<void> loadData() async {
@@ -197,6 +206,20 @@ class BangumiService {
 
   Future<List<BangumiAnime>> getCalendar(
       {bool forceRefresh = false, bool filterAdultContent = true}) async {
+    // 优先尝试从缓存加载
+    if (!forceRefresh) {
+      try {
+        final cachedData = await _loadFromCache();
+        if (cachedData != null && cachedData.isNotEmpty) {
+          //debugPrint('[新番-弹弹play] 命中本地缓存，直接返回');
+          _preloadedAnimes = List.from(cachedData);
+          return cachedData;
+        }
+      } catch (e) {
+        //debugPrint('[新番-弹弹play] 读取缓存失败: $e');
+      }
+    }
+
     //debugPrint('[新番-弹弹play] getCalendar - Strategy: Network first, then cache. forceRefresh: $forceRefresh, filterAdultContent: $filterAdultContent');
 
     // If forceRefresh is true, we definitely skip trying memory cache first before network.
@@ -318,7 +341,7 @@ class BangumiService {
           final List<dynamic> animesData = data['animes'];
           final animes = animesData
               .map((d) =>
-                  BangumiAnime.fromDandanplayIntro(d as Map<String, dynamic>))
+                  BangumiAnime.fromJson(d as Map<String, dynamic>))
               .toList();
           for (var anime in animes) {
             _listCache[anime.id.toString()] = anime;
@@ -523,7 +546,7 @@ class BangumiService {
           final Map<String, dynamic> animeData = data['animeDetail'];
 
           // 加载到内存缓存
-          final animeDetail = BangumiAnime.fromDandanplayDetail(animeData);
+          final animeDetail = BangumiAnime.fromJson(animeData);
           _detailsCache[animeId] = animeDetail;
           _detailsCacheTime[animeId] =
               DateTime.fromMillisecondsSinceEpoch(timestamp);

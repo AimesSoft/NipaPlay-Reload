@@ -10,7 +10,7 @@ final strokeWidth = isPhone ? 0.7 : 1.0;
 double mobileThreshold = 550;
 // ignore: non_constant_identifier_names
 String Appversion = "1.0.0";
-String backgroundImageMode = "看板娘2"; // 添加背景图像模式变量
+String backgroundImageMode = "关闭"; // 添加背景图像模式变量
 String customBackgroundPath = 'assets/images/main_image.png'; // 添加自定义背景图片路径变量
 //////全局变量/////
 ///
@@ -33,14 +33,13 @@ bool get isPhone {
   return Platform.isIOS || Platform.isAndroid;
 }
 
-// 判断是否为平板设备（屏幕宽度大于高度的移动设备）
+// 判断是否为平板设备（移动设备短边 >= 600）
 bool get isTablet {
-  // 由于 isPhone 对于移动端和Web端现在都返回 true，
-  // 这个 getter 现在等同于一个纯粹的横屏方向检测器。
   if (!isPhone) return false;
   final window = WidgetsBinding.instance.window;
   final size = window.physicalSize / window.devicePixelRatio;
-  return size.width > size.height;
+  final shortestSide = size.width < size.height ? size.width : size.height;
+  return shortestSide >= 600;
 }
 bool get isTouch {
   //移动平台
@@ -68,7 +67,7 @@ bool get isDesktop {
 }
 
 bool get isDesktopOrTablet {
-  //桌面平台或平板设备（横屏移动设备）
+  //桌面平台或平板设备
   return isDesktop || isTablet;
 }
 //////设备类型判断/////

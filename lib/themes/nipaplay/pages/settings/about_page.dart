@@ -1,13 +1,12 @@
 // about_page.dart
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/constants/acknowledgements.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
 
@@ -22,6 +21,7 @@ class _AboutPageState extends State<AboutPage> {
   String _version = '加载中...';
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
+  bool _isUpdateButtonHovered = false;
 
   @override
   void initState() {
@@ -89,6 +89,7 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Future<void> _showUpdateDialog(UpdateInfo info) async {
+    final colorScheme = Theme.of(context).colorScheme;
     final notes = info.releaseNotes.trim().isNotEmpty
         ? info.releaseNotes.trim()
         : '暂无更新内容';
@@ -105,21 +106,21 @@ class _AboutPageState extends State<AboutPage> {
           children: [
             Text(
               '当前版本: ${info.currentVersion}',
-              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
             ),
             Text(
               '最新版本: ${info.latestVersion}',
-              style: TextStyle(color: Colors.white.withOpacity(0.9)),
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
             ),
             if (info.releaseName.trim().isNotEmpty)
               Text(
                 '版本名称: ${info.releaseName.trim()}',
-                style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
               ),
             if (publishedAt.isNotEmpty)
               Text(
                 '发布时间: $publishedAt',
-                style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
               ),
             if (info.error != null && info.error!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -129,34 +130,33 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ],
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '更新内容',
               style: TextStyle(
-                color: Colors.white,
+                color: colorScheme.onSurface,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            Container(
+            SizedBox(
               width: double.infinity,
-              constraints: const BoxConstraints(maxHeight: 280),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
-              ),
-              child: SingleChildScrollView(
-                child: AdaptiveMarkdown(
-                  data: notes,
-                  brightness: Brightness.dark,
-                  baseTextStyle:
-                      TextStyle(color: Colors.white.withOpacity(0.9)),
-                  linkColor: Colors.lightBlueAccent,
-                  onTapLink: (href) {
-                    _launchURL(href);
-                  },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SingleChildScrollView(
+                    child: AdaptiveMarkdown(
+                      data: notes,
+                      brightness: Theme.of(context).brightness,
+                      baseTextStyle:
+                          TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
+                      linkColor: Colors.lightBlueAccent,
+                      onTapLink: (href) {
+                        _launchURL(href);
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -165,21 +165,21 @@ class _AboutPageState extends State<AboutPage> {
       ),
       actions: [
         if (info.releaseUrl.trim().isNotEmpty)
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _launchURL(info.releaseUrl);
             },
-            child: const Text(
+            child: Text(
               '查看发布页',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
+          child: Text(
             '关闭',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: colorScheme.onSurface),
           ),
         ),
       ],
@@ -208,16 +208,17 @@ class _AboutPageState extends State<AboutPage> {
     });
 
     if (info == null) {
+      final colorScheme = Theme.of(context).colorScheme;
       await BlurDialog.show(
         context: context,
         title: '检查更新失败',
         content: '请稍后再试',
         actions: [
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
+            child: Text(
               '关闭',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
         ],
@@ -240,10 +241,11 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   void _showAppreciationQR() {
+    final colorScheme = Theme.of(context).colorScheme;
     BlurDialog.show(
       context: context,
       title: '赞赏码',
-      contentWidget: Container(
+      contentWidget: ConstrainedBox(
         constraints: const BoxConstraints(
           maxWidth: 300,
           maxHeight: 400,
@@ -254,25 +256,21 @@ class _AboutPageState extends State<AboutPage> {
             'others/赞赏码.jpg',
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
-              return Container(
+              return Padding(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Column(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Ionicons.image_outline,
                       size: 60,
-                      color: Colors.white70,
+                      color: colorScheme.onSurface.withOpacity(0.7),
                     ),
-                    SizedBox(height: 10),
+                    const SizedBox(height: 10),
                     Text(
                       '赞赏码图片加载失败',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: colorScheme.onSurface.withOpacity(0.7),
                         fontSize: 14,
                       ),
                     ),
@@ -284,11 +282,11 @@ class _AboutPageState extends State<AboutPage> {
         ),
       ),
       actions: [
-        TextButton(
+        HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
+          child: Text(
             '关闭',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: colorScheme.onSurface),
           ),
         ),
       ],
@@ -297,370 +295,382 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Using a dark theme context for text styles as an example,
-    // assuming the page is shown over a dark-ish blurred background from TabBarView
+    final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme.apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
+          bodyColor: colorScheme.onSurface,
+          displayColor: colorScheme.onSurface,
         );
-    // Use getTextStyle if it provides better themed styles
-    // final baseTextStyle = getTextStyle(context);
-
+    final bool isUpdateButtonEnabled = !_isCheckingUpdate;
+    final bool showUpdateButtonHover =
+        isUpdateButtonEnabled && _isUpdateButtonHovered;
+    const Color updateAccentColor = Color(0xFFFF2E55);
+    final Color updateIdleColor = colorScheme.onSurface
+        .withOpacity(isUpdateButtonEnabled ? 0.75 : 0.4);
+    final Color updateButtonColor =
+        showUpdateButtonHover ? updateAccentColor : updateIdleColor;
+    
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24.0),
-      child: ConstrainedBox(
-        // Limit max width for better readability on wide screens
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start, // Change to start
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(height: 40), // Add some space at the top
-            Image.asset(
-              'assets/logo.png', // Ensure this path is correct
-              height: 120, // Adjust size as needed
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(Ionicons.image_outline,
-                    size: 100,
-                    color: Colors.white70); // Placeholder if logo fails
-              },
-            ),
-            const SizedBox(height: 24),
-            // 版本信息，点击跳转到releases页面（如果有更新）
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  GestureDetector(
-                    onTap: _updateInfo?.hasUpdate == true
-                        ? () => _launchURL(_updateInfo!.releaseUrl)
-                        : null,
-                    child: MouseRegion(
-                      cursor: _updateInfo?.hasUpdate == true
-                          ? SystemMouseCursors.click
-                          : SystemMouseCursors.basic,
-                      child: Text(
-                        'NipaPlay Reload 当前版本: $_version',
-                        style: textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start, // Change to start
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 40), // Add some space at the top
+          Image.asset(
+            'assets/logo.png', // Ensure this path is correct
+            height: 120, // Adjust size as needed
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Ionicons.image_outline,
+                  size: 100,
+                  color: colorScheme.onSurface.withOpacity(0.7)); // Placeholder if logo fails
+            },
+          ),
+          const SizedBox(height: 24),
+          // 版本信息，点击跳转到releases页面（如果有更新）
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                GestureDetector(
+                  onTap: _updateInfo?.hasUpdate == true
+                      ? () => _launchURL(_updateInfo!.releaseUrl)
+                      : null,
+                  child: MouseRegion(
+                    cursor: _updateInfo?.hasUpdate == true
+                        ? SystemMouseCursors.click
+                        : SystemMouseCursors.basic,
+                    child: Text(
+                      'NipaPlay Reload 当前版本: $_version',
+                      style: textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+                // NEW 标识 - 独立定位
+                if (_updateInfo?.hasUpdate == true)
+                  Positioned(
+                    top: -8,
+                    right: -8,
+                    child: const Text(
+                      'NEW',
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
-                  // NEW 标识 - 独立定位
-                  if (_updateInfo?.hasUpdate == true)
-                    Positioned(
-                      top: -8,
-                      right: -8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.red.withOpacity(0.3),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          MouseRegion(
+            onEnter: (_) => isUpdateButtonEnabled
+                ? setState(() => _isUpdateButtonHovered = true)
+                : null,
+            onExit: (_) => isUpdateButtonEnabled
+                ? setState(() => _isUpdateButtonHovered = false)
+                : null,
+            cursor: isUpdateButtonEnabled
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.basic,
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: isUpdateButtonEnabled ? _manualCheckForUpdates : null,
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: AnimatedScale(
+                    scale: showUpdateButtonHover ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutBack,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isCheckingUpdate)
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  updateButtonColor),
                             ),
-                          ],
-                        ),
-                        child: const Text(
-                          'NEW',
-                          locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                          )
+                        else
+                          Icon(
+                            Icons.system_update_alt,
+                            size: 18,
+                            color: updateButtonColor,
                           ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isCheckingUpdate ? '检测中...' : '检测更新',
+                          style: textTheme.labelLarge?.copyWith(
+                                color: updateButtonColor,
+                              ) ??
+                              TextStyle(color: updateButtonColor),
                         ),
-                      ),
+                      ],
                     ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          _buildInfoCard(
+            context: context,
+            children: [
+              _buildRichText(
+                context,
+                [
+                  const TextSpan(
+                      text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
+                  TextSpan(
+                      text: 'にぱ〜☆',
+                      locale: Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                          color: Colors.pinkAccent[100],
+                          fontWeight: FontWeight.bold,
+                          fontStyle: FontStyle.italic)),
+                  const TextSpan(
+                      text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
-            TextButton.icon(
-              onPressed: _isCheckingUpdate ? null : _manualCheckForUpdates,
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.white.withOpacity(0.08),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  side: BorderSide(color: Colors.white.withOpacity(0.12)),
-                ),
-              ),
-              icon: _isCheckingUpdate
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.white70),
-                      ),
-                    )
-                  : const Icon(Icons.system_update_alt, size: 18),
-              label: Text(_isCheckingUpdate ? '检测中...' : '检测更新'),
-            ),
-            const SizedBox(height: 20),
+            ],
+          ),
+          const SizedBox(height: 20),
 
-            _buildInfoCard(
-              context: context,
-              children: [
-                _buildRichText(
-                  context,
-                  [
-                    const TextSpan(
-                        text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
-                    TextSpan(
-                        text: 'にぱ〜☆',
+          _buildInfoCard(
+            context: context,
+            title: '致谢',
+            children: [
+              _buildRichText(context, [
+                const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
+                TextSpan(
+                    text: 'Kaedei',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                        color: Colors.lightBlueAccent[100],
+                        fontWeight: FontWeight.bold)),
+                const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
+              ]),
+              _buildRichText(context, [
+                const TextSpan(text: '感谢开发者 '),
+                TextSpan(
+                    text: 'Sakiko',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                        color: Colors.lightBlueAccent[100],
+                        fontWeight: FontWeight.bold)),
+                const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
+              ]),
+              const SizedBox(height: 12),
+              _buildRichText(
+                context,
+                const [
+                  TextSpan(text: '感谢下列用户的赞助支持：'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: kAcknowledgementNames
+                    .map((name) => _buildAcknowledgementBadge(context, name))
+                    .toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          _buildInfoCard(
+            context: context,
+            title: '开源与社区',
+            children: [
+              _buildRichText(context, [
+                const TextSpan(
+                    text:
+                        '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
+              ]),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => _launchURL(
+                    'https://www.github.com/MCDFsteve/NipaPlay-Reload'),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Ionicons.logo_github,
+                          color: colorScheme.onSurface.withOpacity(0.8), size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'MCDFsteve/NipaPlay-Reload',
                         locale: Locale("zh-Hans", "zh"),
                         style: TextStyle(
-                            color: Colors.pinkAccent[100],
-                            fontWeight: FontWeight.bold,
-                            fontStyle: FontStyle.italic)),
-                    const TextSpan(
-                        text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
-                  ],
+                          color: Colors.cyanAccent[100],
+                          decoration: TextDecoration.underline,
+                          decorationColor:
+                              Colors.cyanAccent[100]?.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 20),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => _launchURL('https://qm.qq.com/q/w9j09QJn4Q'),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Ionicons.chatbubbles_outline,
+                          color: colorScheme.onSurface.withOpacity(0.8), size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'QQ群: 961207150',
+                        locale: Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color: Colors.cyanAccent[100],
+                          decoration: TextDecoration.underline,
+                          decorationColor:
+                              Colors.cyanAccent[100]?.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => _launchURL('https://nipaplay.aimes-soft.com'),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Ionicons.globe_outline,
+                          color: colorScheme.onSurface.withOpacity(0.8), size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'NipaPlay 官方网站',
+                        locale: Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color: Colors.cyanAccent[100],
+                          decoration: TextDecoration.underline,
+                          decorationColor:
+                              Colors.cyanAccent[100]?.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
 
-            _buildInfoCard(
-              context: context,
-              title: '致谢',
-              children: [
-                _buildRichText(context, [
-                  const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
-                  TextSpan(
-                      text: 'Kaedei',
-                      locale: Locale("zh-Hans", "zh"),
-                      style: TextStyle(
-                          color: Colors.lightBlueAccent[100],
-                          fontWeight: FontWeight.bold)),
-                  const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
-                ]),
-                _buildRichText(context, [
-                  const TextSpan(text: '感谢开发者 '),
-                  TextSpan(
-                      text: 'Sakiko',
-                      locale: Locale("zh-Hans", "zh"),
-                      style: TextStyle(
-                          color: Colors.lightBlueAccent[100],
-                          fontWeight: FontWeight.bold)),
-                  const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
-                ]),
-                const SizedBox(height: 12),
-                _buildRichText(
-                  context,
-                  const [
-                    TextSpan(text: '感谢下列用户的赞助支持：'),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: kAcknowledgementNames
-                      .map((name) => _buildAcknowledgementBadge(context, name))
-                      .toList(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            _buildInfoCard(
-              context: context,
-              title: '开源与社区',
-              children: [
-                _buildRichText(context, [
-                  const TextSpan(
-                      text:
-                          '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
-                ]),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () => _launchURL(
-                      'https://www.github.com/MCDFsteve/NipaPlay-Reload'),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Ionicons.logo_github,
-                            color: Colors.white.withOpacity(0.8), size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'MCDFsteve/NipaPlay-Reload',
-                          locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                            color: Colors.cyanAccent[100],
-                            decoration: TextDecoration.underline,
-                            decorationColor:
-                                Colors.cyanAccent[100]?.withOpacity(0.7),
-                          ),
+          _buildInfoCard(
+            context: context,
+            title: '赞助支持',
+            children: [
+              _buildRichText(context, [
+                const TextSpan(
+                    text:
+                        '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。'),
+              ]),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => _launchURL('https://afdian.com/a/irigas'),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Ionicons.heart,
+                          color: Colors.pinkAccent[100], size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        '爱发电赞助页面',
+                        style: TextStyle(
+                          color: Colors.pinkAccent[100],
+                          decoration: TextDecoration.underline,
+                          decorationColor:
+                              Colors.pinkAccent[100]?.withOpacity(0.7),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () => _launchURL('https://qm.qq.com/q/w9j09QJn4Q'),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Ionicons.chatbubbles_outline,
-                            color: Colors.white.withOpacity(0.8), size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'QQ群: 961207150',
-                          locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                            color: Colors.cyanAccent[100],
-                            decoration: TextDecoration.underline,
-                            decorationColor:
-                                Colors.cyanAccent[100]?.withOpacity(0.7),
-                          ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: _showAppreciationQR,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Ionicons.qr_code,
+                          color: Colors.orangeAccent[100], size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        '赞赏码',
+                        style: TextStyle(
+                          color: Colors.orangeAccent[100],
+                          decoration: TextDecoration.underline,
+                          decorationColor:
+                              Colors.orangeAccent[100]?.withOpacity(0.7),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () => _launchURL('https://nipaplay.aimes-soft.com'),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Ionicons.globe_outline,
-                            color: Colors.white.withOpacity(0.8), size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'NipaPlay 官方网站',
-                          locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                            color: Colors.cyanAccent[100],
-                            decoration: TextDecoration.underline,
-                            decorationColor:
-                                Colors.cyanAccent[100]?.withOpacity(0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            _buildInfoCard(
-              context: context,
-              title: '赞助支持',
-              children: [
-                _buildRichText(context, [
-                  const TextSpan(
-                      text:
-                          '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。'),
-                ]),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () => _launchURL('https://afdian.com/a/irigas'),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Ionicons.heart,
-                            color: Colors.pinkAccent[100], size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          '爱发电赞助页面',
-                          style: TextStyle(
-                            color: Colors.pinkAccent[100],
-                            decoration: TextDecoration.underline,
-                            decorationColor:
-                                Colors.pinkAccent[100]?.withOpacity(0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: _showAppreciationQR,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Ionicons.qr_code,
-                            color: Colors.orangeAccent[100], size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          '赞赏码',
-                          style: TextStyle(
-                            color: Colors.orangeAccent[100],
-                            decoration: TextDecoration.underline,
-                            decorationColor:
-                                Colors.orangeAccent[100]?.withOpacity(0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-          ],
-        ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 30),
+        ],
       ),
     );
   }
 
   Widget _buildAcknowledgementBadge(BuildContext context, String name) {
+    final colorScheme = Theme.of(context).colorScheme;
     final accentColor = Colors.amberAccent[100] ?? Colors.amberAccent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Ionicons.ribbon_outline,
-            size: 16,
-            color: accentColor,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            name,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Ionicons.ribbon_outline,
+          size: 16,
+          color: accentColor,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          name,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+      ],
     );
   }
 
@@ -668,7 +678,9 @@ class _AboutPageState extends State<AboutPage> {
       {required BuildContext context,
       String? title,
       required List<Widget> children}) {
-    return SettingsCard(
+    final colorScheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -677,7 +689,7 @@ class _AboutPageState extends State<AboutPage> {
             Text(
               title,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
+                    color: colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
                   ),
             ),
@@ -690,11 +702,12 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Widget _buildRichText(BuildContext context, List<InlineSpan> spans) {
+    final colorScheme = Theme.of(context).colorScheme;
     return RichText(
       textAlign: TextAlign.start, // Or TextAlign.justify if preferred
       text: TextSpan(
         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Colors.white.withOpacity(0.9),
+              color: colorScheme.onSurface.withOpacity(0.9),
               height: 1.6, // Improved line spacing
             ), // Default text style for spans
         children: spans,

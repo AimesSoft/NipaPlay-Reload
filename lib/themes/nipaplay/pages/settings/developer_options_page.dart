@@ -7,13 +7,12 @@ import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
-import 'package:flutter/services.dart';
-import 'package:nipaplay/providers/service_provider.dart';
 // 证书相关的主机快捷信任按钮应用户要求移除，仅保留全局开关
 
 /// 开发者选项设置页面
@@ -22,6 +21,7 @@ class DeveloperOptionsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Consumer<DeveloperOptionsProvider>(
       builder: (context, devOptions, child) {
         return ListView(
@@ -40,7 +40,7 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
 
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             // 显示系统资源监控开关（所有平台可用）
             SettingsItem.toggle(
               title: '显示系统资源监控',
@@ -52,7 +52,7 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             
             // 调试日志收集开关
             SettingsItem.toggle(
@@ -73,7 +73,7 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             
             // 终端输出查看器
             SettingsItem.button(
@@ -86,57 +86,45 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
-            const Divider(color: Colors.white12, height: 1),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
-            SettingsItem.button(
-              title: '开发模式远程访问端口',
-              subtitle: devOptions.devRemoteAccessWebUiPort > 0
-                  ? '将 Web UI 代理到本机端口：${devOptions.devRemoteAccessWebUiPort}'
-                  : '未设置（默认使用内置 Web UI 资源）',
-              icon: Ionicons.globe_outline,
-              trailingIcon: Ionicons.chevron_forward_outline,
-              onTap: () => _showDevRemoteAccessWebUiPortDialog(context, devOptions),
-            ),
-
-            const Divider(color: Colors.white12, height: 1),
-            
             // Linux存储迁移选项（仅Linux平台显示，Web环境下不显示）
             if (!kIsWeb && platform.Platform.isLinux) ...[
               // 检查迁移状态
               ListTile(
-                title: const Text(
+                title: Text(
                   '检查Linux存储迁移状态',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '查看Linux平台数据目录迁移状态',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: const Icon(Ionicons.information_circle_outline, color: Colors.white),
+                trailing: Icon(Ionicons.information_circle_outline, color: colorScheme.onSurface),
                 onTap: () => _checkLinuxMigrationStatus(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               
               // 手动触发迁移
               ListTile(
-                title: const Text(
+                title: Text(
                   '手动触发存储迁移',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '强制重新执行数据目录迁移（仅用于测试）',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
                 trailing: const Icon(Ionicons.refresh_outline, color: Colors.orange),
                 onTap: () => _manualTriggerMigration(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               
               // 紧急恢复个人文件
               ListTile(
@@ -145,34 +133,34 @@ style: TextStyle(color: Colors.white70),
                   locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '将误迁移的个人文件恢复到Documents目录',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
                 trailing: const Icon(Ionicons.medical_outline, color: Colors.red),
                 onTap: () => _emergencyRestorePersonalFiles(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               
               // 显示存储目录信息
               ListTile(
-                title: const Text(
+                title: Text(
                   '显示存储目录信息',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   '查看当前使用的数据和缓存目录路径',
                   locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: const Icon(Ionicons.folder_outline, color: Colors.white),
+                trailing: Icon(Ionicons.folder_outline, color: colorScheme.onSurface),
                 onTap: () => _showStorageDirectoryInfo(context),
               ),
               
-              const Divider(color: Colors.white12, height: 1),
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             ],
             
             // 这里可以添加更多开发者选项
@@ -183,82 +171,48 @@ style: TextStyle(color: Colors.white70),
   }
 
   void _openDebugLogViewer(BuildContext context) {
-    showGeneralDialog(
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    NipaplayWindow.show<void>(
       context: context,
+      enableAnimation: enableAnimation,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.5),
-      barrierLabel: '关闭终端输出',
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(16),
-          child: GlassmorphicContainer(
-            width: MediaQuery.of(context).size.width * 0.95,
-            height: MediaQuery.of(context).size.height * 0.85,
-            borderRadius: 12,
-            blur: Provider.of<AppearanceSettingsProvider>(context).enableWidgetBlurEffect ? 25 : 0,
-            alignment: Alignment.center,
-            border: 1,
-            linearGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.15),
-                Colors.white.withOpacity(0.05),
-              ],
-            ),
-            borderGradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.5),
-                Colors.white.withOpacity(0.2),
-              ],
-            ),
+      barrierColor: Colors.transparent,
+      child: Builder(
+        builder: (BuildContext dialogContext) {
+          final colorScheme = Theme.of(dialogContext).colorScheme;
+          final screenSize = MediaQuery.of(dialogContext).size;
+          final maxWidth = (screenSize.width * 0.95).clamp(320.0, 1200.0);
+
+          return NipaplayWindowScaffold(
+            maxWidth: maxWidth,
+            maxHeightFactor: 0.85,
+            onClose: () => Navigator.of(dialogContext).maybePop(),
             child: Column(
               children: [
-                // 标题栏
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.terminal,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
+                      Text(
                         '终端输出',
-                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                          color: Colors.white,
+                        locale: const Locale('zh', 'CN'),
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.white70,
-                          size: 24,
-                        ),
-                        splashRadius: 20,
-                      ),
                     ],
                   ),
                 ),
-                // 日志查看器内容
+                Divider(
+                  height: 1,
+                  color: colorScheme.onSurface.withOpacity(0.12),
+                ),
                 const Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.only(
@@ -270,93 +224,10 @@ style: TextStyle(
                 ),
               ],
             ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curvedAnimation = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutBack,
-        );
-        
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
-          child: FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _showDevRemoteAccessWebUiPortDialog(
-    BuildContext context,
-    DeveloperOptionsProvider devOptions,
-  ) async {
-    final portController = TextEditingController(
-      text: devOptions.devRemoteAccessWebUiPort > 0
-          ? devOptions.devRemoteAccessWebUiPort.toString()
-          : '',
-    );
-    final newPort = await BlurDialog.show<int>(
-      context: context,
-      title: '开发模式远程访问端口',
-      contentWidget: TextField(
-        controller: portController,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: const InputDecoration(
-          labelText: '端口 (1-65535)，留空/0 关闭',
-          labelStyle: TextStyle(color: Colors.white70),
-          focusedBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: Colors.white),
-          ),
-          enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: Colors.white38),
-          ),
-        ),
-        style: const TextStyle(color: Colors.white),
+          );
+        },
       ),
-      actions: [
-        TextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        TextButton(
-          child: const Text('确定', style: TextStyle(color: Colors.white)),
-          onPressed: () {
-            final raw = portController.text.trim();
-            final parsed = raw.isEmpty ? 0 : int.tryParse(raw);
-            final isValid = parsed != null && (parsed == 0 || (parsed > 0 && parsed < 65536));
-            if (isValid) {
-              Navigator.of(context).pop(parsed);
-            } else {
-              BlurSnackBar.show(context, '请输入有效的端口号 (1-65535)，或留空/0 关闭');
-            }
-          },
-        ),
-      ],
     );
-
-    portController.dispose();
-    if (newPort == null) return;
-    await devOptions.setDevRemoteAccessWebUiPort(newPort);
-
-    final server = ServiceProvider.webServer;
-    if (server.isRunning) {
-      final currentPort = server.port;
-      await server.stopServer();
-      final restarted = await server.startServer(port: currentPort);
-      if (!context.mounted) return;
-      BlurSnackBar.show(
-        context,
-        restarted ? '已保存，远程访问服务已重启生效' : '已保存，但远程访问服务重启失败',
-      );
-    } else {
-      if (!context.mounted) return;
-      BlurSnackBar.show(context, '已保存，下次开启远程访问时生效');
-    }
   }
 
   // 检查Linux存储迁移状态
@@ -382,7 +253,7 @@ XDG缓存目录: $cacheDir
 遵循XDG Base Directory规范，提供更好的Linux用户体验。
         """.trim(),
         actions: <Widget>[
-          TextButton(
+          HoverScaleTextButton(
             child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
@@ -405,12 +276,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       title: "确认迁移",
       content: "这将重新执行数据目录迁移过程。\n\n注意：这是一个测试功能，在正常情况下不应该使用。",
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("确认", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
           onPressed: () => Navigator.of(context).pop(true),
@@ -443,7 +314,7 @@ ${result.message}
 - 失败项目: ${result.failedItems}
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
@@ -461,7 +332,7 @@ ${result.message}
 ${result.errors.join('\n')}
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),
@@ -511,7 +382,7 @@ XDG_CACHE_HOME: $xdgCacheHome
 • 提供与其他Linux应用一致的用户体验
         """.trim(),
         actions: <Widget>[
-          TextButton(
+          HoverScaleTextButton(
             child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
@@ -542,12 +413,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
 是否继续？
       """.trim(),
       actions: <Widget>[
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("取消", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        TextButton(
+        HoverScaleTextButton(
           child: const Text("确认恢复", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.red)),
           onPressed: () => Navigator.of(context).pop(true),
@@ -578,7 +449,7 @@ ${result.message}
 您的个人文件已恢复到 ~/Documents 目录。
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
@@ -596,7 +467,7 @@ ${result.message}
 ${result.errors.join('\n')}
             """.trim(),
             actions: <Widget>[
-              TextButton(
+              HoverScaleTextButton(
                 child: const Text("知道了", locale:Locale("zh-Hans","zh"),
 style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),

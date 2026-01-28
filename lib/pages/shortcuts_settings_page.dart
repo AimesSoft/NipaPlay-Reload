@@ -6,6 +6,7 @@ import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/message_helper.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'dart:ui';
 
 class ShortcutsSettingsPage extends StatefulWidget {
@@ -358,7 +359,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
         title: '快捷键冲突',
         content: '快捷键"$shortcut"已被"$conflictAction"使用，是否替换？',
         actions: [
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _stopRecording();
@@ -367,7 +368,7 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
                 locale: Locale("zh", "CN"),
                 style: TextStyle(color: Colors.white70)),
           ),
-          TextButton(
+          HoverScaleTextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _updateShortcut(_recordingAction!, shortcut);

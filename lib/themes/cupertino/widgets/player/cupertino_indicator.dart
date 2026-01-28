@@ -1,6 +1,6 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class CupertinoPlayerIndicator extends StatelessWidget {

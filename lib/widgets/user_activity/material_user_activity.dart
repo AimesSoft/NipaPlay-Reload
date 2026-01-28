@@ -1,9 +1,14 @@
 import 'dart:ui';
+
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
+import 'package:nipaplay/pages/tab_labels.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 
-/// Material Design版本的用户活动记录组件
+/// Fluent UI版本的用户活动记录组件
 class MaterialUserActivity extends StatefulWidget {
   const MaterialUserActivity({super.key});
 
@@ -13,9 +18,18 @@ class MaterialUserActivity extends StatefulWidget {
 
 class _MaterialUserActivityState extends State<MaterialUserActivity> 
     with SingleTickerProviderStateMixin, UserActivityController {
+  static const Color _ratingAccentColor = Color(0xFFFF2E55);
+  static const double _buttonHoverScale = 1.06;
 
   @override
   Widget build(BuildContext context) {
+    final theme = fluent.FluentTheme.of(context);
+    final textPrimary = theme.resources.textFillColorPrimary;
+    final textSecondary = theme.resources.textFillColorSecondary;
+    final accent = theme.accentColor.defaultBrushFor(theme.brightness);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final unselectedLabelColor =
+        isDarkMode ? Colors.white60 : Colors.black54;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -24,122 +38,163 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
         // 标题和刷新按钮
         Row(
           children: [
-            const Text(
+            Text(
               '我的活动记录',
               locale:Locale("zh-Hans","zh"),
-style: TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: textPrimary,
               ),
             ),
             const Spacer(),
-            IconButton(
-              onPressed: isLoading ? null : loadUserActivity,
-              icon: Icon(
-                Ionicons.refresh_outline,
-                color: isLoading ? Colors.white30 : Colors.white70,
-                size: 20,
-              ),
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(),
+            BlurButton(
+              icon: Ionicons.refresh_outline,
+              text: '刷新',
+              flatStyle: true,
+              hoverScale: _buttonHoverScale,
+              onTap: () {
+                if (isLoading) return;
+                loadUserActivity();
+              },
             ),
           ],
         ),
         const SizedBox(height: 8),
-        
-        // Material Design标签栏
         TabBar(
           controller: tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: Colors.blue,
-          indicatorSize: TabBarIndicatorSize.tab,
+          isScrollable: true,
           tabs: [
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Ionicons.play_circle_outline, size: 16),
-                  const SizedBox(width: 4),
-                  Text('观看(${recentWatched.length})'),
-                ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: '观看(${recentWatched.length})',
+                fontSize: 18,
+                icon: const Icon(
+                  Ionicons.play_circle_outline,
+                  size: 18,
+                ),
               ),
             ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Ionicons.heart_outline, size: 16),
-                  const SizedBox(width: 4),
-                  Text('收藏(${favorites.length})'),
-                ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: '收藏(${favorites.length})',
+                fontSize: 18,
+                icon: const Icon(
+                  Ionicons.heart_outline,
+                  size: 18,
+                ),
               ),
             ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Ionicons.star_outline, size: 16),
-                  const SizedBox(width: 4),
-                  Text('评分(${rated.length})'),
-                ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: '评分(${rated.length})',
+                fontSize: 18,
+                icon: const Icon(
+                  Ionicons.star_outline,
+                  size: 18,
+                ),
               ),
             ),
           ],
+          labelColor: accent,
+          unselectedLabelColor: unselectedLabelColor,
+          labelPadding: const EdgeInsets.only(bottom: 12.0),
+          indicatorPadding: EdgeInsets.zero,
+          indicator: _CustomTabIndicator(
+            indicatorHeight: 3.0,
+            indicatorColor: accent,
+            radius: 30.0,
+          ),
+          tabAlignment: TabAlignment.start,
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: WidgetStateProperty.all(Colors.transparent),
+          dividerColor: Colors.transparent,
+          dividerHeight: 3.0,
+          indicatorSize: TabBarIndicatorSize.label,
         ),
-        
+        const SizedBox(height: 8),
         // 内容区域
         Expanded(
-          child: isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                )
-              : error != null
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Ionicons.warning_outline,
-                            color: Colors.white60,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            error!,
-                            style: const TextStyle(color: Colors.white60),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: loadUserActivity,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                            ),
-                            child: const Text(
-                              '重试',
-                              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : TabBarView(
-                      controller: tabController,
-                      children: [
-                        _buildRecentWatchedList(),
-                        _buildFavoritesList(),
-                        _buildRatedList(),
-                      ],
-                    ),
+          child: SwitchableView(
+            enableAnimation: false,
+            keepAlive: true,
+            currentIndex: tabController.index,
+            controller: tabController,
+            children: [
+              _buildTabBody(0, accent, textSecondary),
+              _buildTabBody(1, accent, textSecondary),
+              _buildTabBody(2, accent, textSecondary),
+            ],
+          ),
         ),
       ],
     );
   }
 
+  Widget _buildTabBody(
+    int index,
+    Color accent,
+    Color textSecondary,
+  ) {
+    if (isLoading) {
+      return Center(
+        child: fluent.ProgressRing(
+          activeColor: accent,
+          strokeWidth: 2,
+        ),
+      );
+    }
+
+    if (error != null) {
+      return _buildErrorState(textSecondary);
+    }
+
+    switch (index) {
+      case 0:
+        return _buildRecentWatchedList();
+      case 1:
+        return _buildFavoritesList();
+      default:
+        return _buildRatedList();
+    }
+  }
+
+  Widget _buildErrorState(Color textSecondary) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          fluent.Icon(
+            Ionicons.warning_outline,
+            color: textSecondary,
+            size: 48,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error!,
+            style: TextStyle(color: textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          BlurButton(
+            icon: Ionicons.refresh_outline,
+            text: '重试',
+            flatStyle: true,
+            hoverScale: _buttonHoverScale,
+            onTap: loadUserActivity,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecentWatchedList() {
+    final theme = fluent.FluentTheme.of(context);
+    final textSecondary = theme.resources.textFillColorSecondary;
+
     if (recentWatched.isEmpty) {
       return _buildEmptyState('暂无观看记录', Ionicons.play_circle_outline);
     }
@@ -157,8 +212,8 @@ style: TextStyle(color: Colors.white),
           trailing: item['lastWatchedTime'] != null
               ? Text(
                   formatTime(item['lastWatchedTime']),
-                  style: const TextStyle(
-                    color: Colors.white60,
+                  style: TextStyle(
+                    color: textSecondary,
                     fontSize: 12,
                   ),
                 )
@@ -169,6 +224,8 @@ style: TextStyle(color: Colors.white),
   }
 
   Widget _buildFavoritesList() {
+    final theme = fluent.FluentTheme.of(context);
+
     if (favorites.isEmpty) {
       return _buildEmptyState('暂无收藏', Ionicons.heart_outline);
     }
@@ -187,16 +244,16 @@ style: TextStyle(color: Colors.white),
               ? Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    fluent.Icon(
                       Ionicons.star,
-                      color: Colors.yellow,
+                      color: _ratingAccentColor,
                       size: 14,
                     ),
                     const SizedBox(width: 2),
                     Text(
                       '${item['rating']}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: _ratingAccentColor,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -225,16 +282,16 @@ style: TextStyle(color: Colors.white),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              fluent.Icon(
                 Ionicons.star,
-                color: Colors.yellow,
+                color: _ratingAccentColor,
                 size: 16,
               ),
               const SizedBox(width: 4),
               Text(
                 '${item['rating']}',
-                style: const TextStyle(
-                  color: Colors.yellow,
+                style: TextStyle(
+                  color: _ratingAccentColor,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -251,74 +308,143 @@ style: TextStyle(color: Colors.white),
     required String subtitle,
     Widget? trailing,
   }) {
-    final imageUrl = processImageUrl(item['imageUrl']);
+    return _ActivityListItem(
+      item: item,
+      subtitle: subtitle,
+      trailing: trailing,
+      onPressed: () => openAnimeDetail(item['animeId']),
+      processImageUrl: processImageUrl,
+    );
+  }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
+  Widget _buildEmptyState(String message, IconData icon) {
+    final theme = fluent.FluentTheme.of(context);
+    final textSecondary = theme.resources.textFillColorSecondary;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          fluent.Icon(
+            icon,
+            color: textSecondary,
+            size: 48,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: TextStyle(
+              color: textSecondary,
+              fontSize: 14,
             ),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => openAnimeDetail(item['animeId']),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityListItem extends StatefulWidget {
+  final Map<String, dynamic> item;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback onPressed;
+  final String? Function(String?) processImageUrl;
+
+  const _ActivityListItem({
+    required this.item,
+    required this.subtitle,
+    this.trailing,
+    required this.onPressed,
+    required this.processImageUrl,
+  });
+
+  @override
+  State<_ActivityListItem> createState() => _ActivityListItemState();
+}
+
+class _ActivityListItemState extends State<_ActivityListItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = fluent.FluentTheme.of(context);
+    final textPrimary = theme.resources.textFillColorPrimary;
+    final textSecondary = theme.resources.textFillColorSecondary;
+    final imageUrl = widget.processImageUrl(widget.item['imageUrl']);
+    const coverWidth = 48.0;
+    const coverHeight = 60.0;
+    const coverRadius = 4.0;
+    const accentColor = Color(0xFFFF2E55);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: theme.resources.cardBackgroundFillColorDefault,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _isHovered ? accentColor : theme.resources.cardStrokeColorDefault,
+            width: _isHovered ? 1.5 : 0.5,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: GestureDetector(
+              onTap: widget.onPressed,
+              behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    // 封面图片
+                    // Leading
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(coverRadius),
                       child: imageUrl != null
                           ? Image.network(
                               imageUrl,
-                              width: 40,
-                              height: 60,
+                              width: coverWidth,
+                              height: coverHeight,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
-                                  width: 40,
-                                  height: 60,
-                                  color: Colors.white.withOpacity(0.1),
-                                  child: const Icon(
+                                  width: coverWidth,
+                                  height: coverHeight,
+                                  color: theme.resources.cardBackgroundFillColorSecondary,
+                                  child: fluent.Icon(
                                     Ionicons.image_outline,
-                                    color: Colors.white60,
+                                    color: textSecondary,
                                     size: 20,
                                   ),
                                 );
                               },
                             )
                           : Container(
-                              width: 40,
-                              height: 60,
-                              color: Colors.white.withOpacity(0.1),
-                              child: const Icon(
+                              width: coverWidth,
+                              height: coverHeight,
+                              color: theme.resources.cardBackgroundFillColorSecondary,
+                              child: fluent.Icon(
                                 Ionicons.image_outline,
-                                color: Colors.white60,
+                                color: textSecondary,
                                 size: 20,
                               ),
                             ),
                     ),
                     const SizedBox(width: 12),
-                    
-                    // 标题和副标题
+                    // Title and Subtitle
                     Expanded(
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            item['animeTitle'] ?? '未知标题',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            widget.item['animeTitle'] ?? '未知标题',
+                            style: TextStyle(
+                              color: textPrimary,
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                             ),
@@ -327,9 +453,9 @@ style: TextStyle(color: Colors.white),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            subtitle,
-                            style: const TextStyle(
-                              color: Colors.white60,
+                            widget.subtitle,
+                            style: TextStyle(
+                              color: textSecondary,
                               fontSize: 12,
                             ),
                             maxLines: 1,
@@ -338,11 +464,10 @@ style: TextStyle(color: Colors.white),
                         ],
                       ),
                     ),
-                    
-                    // 右侧内容
-                    if (trailing != null) ...[
+                    // Trailing
+                    if (widget.trailing != null) ...[
                       const SizedBox(width: 8),
-                      trailing,
+                      widget.trailing!,
                     ],
                   ],
                 ),
@@ -353,27 +478,46 @@ style: TextStyle(color: Colors.white),
       ),
     );
   }
+}
 
-  Widget _buildEmptyState(String message, IconData icon) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            color: Colors.white30,
-            size: 48,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
+// 自定义Tab指示器
+class _CustomTabIndicator extends Decoration {
+  final double indicatorHeight;
+  final Color indicatorColor;
+  final double radius;
+
+  const _CustomTabIndicator({
+    required this.indicatorHeight,
+    required this.indicatorColor,
+    required this.radius,
+  });
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _CustomPainter(this, onChanged);
+  }
+}
+
+class _CustomPainter extends BoxPainter {
+  final _CustomTabIndicator decoration;
+
+  _CustomPainter(this.decoration, VoidCallback? onChanged) : super(onChanged);
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    assert(configuration.size != null);
+    // 将指示器绘制在TabBar的底部
+    final Rect rect = Offset(
+          offset.dx,
+          (configuration.size!.height - decoration.indicatorHeight),
+        ) &
+        Size(configuration.size!.width, decoration.indicatorHeight);
+    final Paint paint = Paint();
+    paint.color = decoration.indicatorColor;
+    paint.style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
+      paint,
     );
   }
 }

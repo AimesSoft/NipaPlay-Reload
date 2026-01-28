@@ -43,13 +43,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
   }
 
-  // 加载控制栏高度
-  Future<void> _loadControlBarHeight() async {
-    final prefs = await SharedPreferences.getInstance();
-    _controlBarHeight = prefs.getDouble(_controlBarHeightKey) ?? 20.0;
-    notifyListeners();
-  }
-
   // 加载最小化进度条设置
   Future<void> _loadMinimalProgressBarSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -168,14 +161,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (!enabled) {
       setShowRightMenu(false);
     }
-    notifyListeners();
-  }
-
-  // 保存控制栏高度
-  Future<void> setControlBarHeight(double height) async {
-    _controlBarHeight = height;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_controlBarHeightKey, height);
     notifyListeners();
   }
 

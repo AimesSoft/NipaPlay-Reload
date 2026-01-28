@@ -1,9 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'dart:ui';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
@@ -14,21 +13,11 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    Color? backgroundColor,
     bool barrierDismissible = true,
   }) {
     // 根据主题设置选择使用哪个dialog
     final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
-    
-    if (uiThemeProvider.isFluentUITheme) {
-      return FluentDialog.show<T>(
-        context: context,
-        title: title,
-        content: content,
-        contentWidget: contentWidget,
-        actions: actions,
-        barrierDismissible: barrierDismissible,
-      );
-    }
 
     if (uiThemeProvider.isCupertinoTheme) {
       return _showCupertinoDialog<T>(
@@ -48,6 +37,7 @@ class BlurDialog {
       content: content,
       contentWidget: contentWidget,
       actions: actions,
+      backgroundColor: backgroundColor,
       barrierDismissible: barrierDismissible,
     );
   }
@@ -58,150 +48,103 @@ class BlurDialog {
     String? content,
     Widget? contentWidget,
     List<Widget>? actions,
+    Color? backgroundColor,
     bool barrierDismissible = true,
   }) {
-    return showDialog<T>(
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    return NipaplayWindow.show<T>(
       context: context,
+      enableAnimation: enableAnimation,
       barrierDismissible: barrierDismissible,
-      barrierColor: Colors.black.withOpacity(0.5),
-      builder: (BuildContext context) {
-        final screenSize = MediaQuery.of(context).size;
-        
-        // 使用预计算的对话框宽度
-        final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
-        
-        // 获取键盘高度，用于动态调整底部间距
-        final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-        
-        // 检查是否为手机设备和是否有标题
-        final shortestSide = screenSize.width < screenSize.height ? screenSize.width : screenSize.height;
-        final bool isRealPhone = globals.isPhone && shortestSide < 600;
-        final bool hasTitle = title.isNotEmpty;
-        
-        Widget dialogContent = ConstrainedBox(
-          constraints: BoxConstraints(
-            //maxHeight: screenSize.height * 0.8, // 降低到75%，避免溢出
-            maxWidth: dialogWidth, // 最大宽度限制
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.15),
-                  Colors.white.withOpacity(0.05),
+      child: Builder(
+        builder: (BuildContext dialogContext) {
+          final colorScheme = Theme.of(dialogContext).colorScheme;
+          final screenSize = MediaQuery.of(dialogContext).size;
+          final dialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
+          final keyboardHeight = MediaQuery.of(dialogContext).viewInsets.bottom;
+          final shortestSide = screenSize.shortestSide;
+          final bool isRealPhone = globals.isPhone && shortestSide < 600;
+          final bool hasTitle = title.isNotEmpty;
+
+          Widget dialogContent = Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (hasTitle) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.left,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                 ],
-              ),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.3),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  spreadRadius: 1,
-                ),
+                if (content != null)
+                  Text(
+                    content,
+                    style: TextStyle(
+                      color: colorScheme.onSurface.withOpacity(0.9),
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                if (contentWidget != null)
+                  contentWidget,
+                if (actions != null) ...[
+                  const SizedBox(height: 24),
+                  if ((globals.isPhone && !globals.isTablet) && actions.length > 2)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: actions
+                          .map((action) => Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: action,
+                              ))
+                          .toList(),
+                    )
+                  else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: actions
+                          .map((action) => Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: action,
+                              ))
+                          .toList(),
+                    ),
+                ],
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0,
-                  sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min, // 关键：让Column根据内容自适应
-                    crossAxisAlignment: CrossAxisAlignment.center, // 居中对齐
-                    children: [
-                      // 标题区域 - 只在有标题时显示
-                      if (hasTitle) ...[
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center, // 标题居中
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-                            
-                            // 内容区域 - 居中，真正的内容自适应
-                            if (content != null)
-                              Text(
-                                content,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  height: 1.4,
-                                ),
-                                textAlign: TextAlign.center, // 内容文本居中
-                              ),
-                            if (contentWidget != null)
-                              contentWidget,
-                            
-                            // 按钮区域 - 底部居中
-                            if (actions != null) ...[
-                              const SizedBox(height: 24),
-                              if ((globals.isPhone && !globals.isTablet) && actions.length > 2)
-                                // 手机垂直布局
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: actions.map((action) => 
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: action,
-                                    )
-                                  ).toList(),
-                                )
-                              else
-                                // 正常横向布局 - 居中
-                                Row(
-                                  mainAxisSize: MainAxisSize.min, // 让Row也根据内容自适应
-                                  mainAxisAlignment: MainAxisAlignment.center, // 按钮居中
-                                  children: actions
-                                      .map((action) => Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                                            child: action,
-                                          ))
-                                      .toList(),
-                                ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
+          );
+
+          return NipaplayWindowScaffold(
+            maxWidth: dialogWidth,
+            maxHeightFactor: isRealPhone ? 0.85 : 0.8,
+            onClose: barrierDismissible
+                ? () => Navigator.of(dialogContext).maybePop()
+                : null,
+            backgroundColor: backgroundColor,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(bottom: keyboardHeight),
+              child: dialogContent,
             ),
-          ),
-        );
-        
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: isRealPhone 
-            // 手机设备：固定在屏幕中央，避免键盘遮挡
-            ? Center(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxHeight: screenSize.height - keyboardHeight - 100, // 留出键盘空间
-                    maxWidth: dialogWidth,
-                  ),
-                  child: dialogContent,
-                ),
-              )
-            // 非手机设备保持原有的ScrollView
-            : SingleChildScrollView(
-                padding: EdgeInsets.only(bottom: keyboardHeight),
-                child: dialogContent,
-              ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

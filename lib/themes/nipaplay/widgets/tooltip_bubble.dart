@@ -185,8 +185,8 @@ class _TooltipBubbleState extends State<TooltipBubble> {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.14),
+            blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
@@ -197,10 +197,10 @@ class _TooltipBubbleState extends State<TooltipBubble> {
           filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withOpacity(0.12),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withOpacity(0.22),
                 width: 0.5,
               ),
             ),

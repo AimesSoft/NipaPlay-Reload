@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart'; // Import the base menu
+import 'fluent_settings_switch.dart';
 import 'dart:async';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
@@ -383,7 +384,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                           fontSize: 14,
                         ),
                       ),
-                      Switch(
+                      FluentSettingsSwitch(
                         value: _showFilteredDanmaku,
                         onChanged: (value) {
                           setState(() {
@@ -391,7 +392,6 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                           });
                           _loadDanmakus();
                         },
-                        activeColor: const Color.fromARGB(255, 255, 255, 255),
                       ),
                     ],
                   ),
@@ -413,7 +413,7 @@ class _DanmakuListMenuState extends State<DanmakuListMenu> {
                     child: Center(
                       child: Text(
                         _errorMessage.isEmpty ? '当前没有弹幕' : _errorMessage,
-                        style: const TextStyle(color: Colors.white70),
+                        style: const TextStyle(color: Colors.white),
                         textAlign: TextAlign.center,
                       ),
                     ),

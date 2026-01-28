@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 import 'package:nipaplay/utils/shortcut_tooltip_manager.dart'; // 添加新的快捷键提示管理器
@@ -7,20 +6,26 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 import 'tooltip_bubble.dart';
 import 'video_progress_bar.dart';
+import 'control_shadow.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
 
 class ModernVideoControls extends StatefulWidget {
-  const ModernVideoControls({super.key});
+  final bool showFullscreenButton;
+
+  const ModernVideoControls({
+    super.key,
+    this.showFullscreenButton = true,
+  });
 
   @override
   State<ModernVideoControls> createState() => _ModernVideoControlsState();
 }
 
 class _ModernVideoControlsState extends State<ModernVideoControls> {
+  final GlobalKey _settingsButtonKey = GlobalKey();
   bool _isRewindPressed = false;
   bool _isForwardPressed = false;
   bool _isPlayPressed = false;
@@ -109,18 +114,16 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => onHover(true),
         onExit: (_) => onHover(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (_) => onPressed(true),
-          onTapUp: (_) => onPressed(false),
-          onTapCancel: () => onPressed(false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => onPressed(true),
+              onTapUp: (_) => onPressed(false),
+              onTapCancel: () => onPressed(false),
           onTap: onTap,
           child: BounceHoverScale(
             isHovered: isHovered,
             isPressed: isPressed,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: isHovered ? 1.0 : 0.6,
+            child: ControlIconShadow(
               child: iconWidget,
             ),
           ),
@@ -129,19 +132,40 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     );
   }
 
-  void _showSettingsMenu(BuildContext context) {
+  void _showSettingsMenu(BuildContext buttonContext) {
+    final videoState =
+        Provider.of<VideoPlayerState>(buttonContext, listen: false);
     _settingsOverlay?.remove();
-    
+    videoState.setControlsVisibilityLocked(true);
+
+    Rect? anchorRect;
+    final RenderBox? renderBox =
+        buttonContext.findRenderObject() as RenderBox?;
+    if (renderBox != null && renderBox.hasSize) {
+      final position = renderBox.localToGlobal(Offset.zero);
+      anchorRect = position & renderBox.size;
+    } else {
+      final RenderBox? keyRenderBox =
+          _settingsButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      if (keyRenderBox != null && keyRenderBox.hasSize) {
+        final position = keyRenderBox.localToGlobal(Offset.zero);
+        anchorRect = position & keyRenderBox.size;
+      }
+    }
+
     _settingsOverlay = OverlayEntry(
       builder: (context) => VideoSettingsMenu(
+        anchorRect: anchorRect,
+        anchorKey: _settingsButtonKey,
         onClose: () {
+          videoState.setControlsVisibilityLocked(false);
           _settingsOverlay?.remove();
           _settingsOverlay = null;
         },
       ),
     );
 
-    Overlay.of(context).insert(_settingsOverlay!);
+    Overlay.of(buttonContext).insert(_settingsOverlay!);
   }
 
   @override
@@ -197,10 +221,6 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       builder: (context, child) {
         return Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            // 移除颜色随模式变化的逻辑，直接使用统一的毛玻璃效果
-            final backgroundColor = Colors.white.withOpacity(0.08);
-            final borderColor = Colors.white.withOpacity(0.2);
-
             return Focus(
               canRequestFocus: true,
               autofocus: true,
@@ -216,52 +236,52 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                         child: Padding(
                           padding: EdgeInsets.only(
                             bottom: videoState.controlBarHeight,
-                            left:20,
-                            right:20,
+                            left: 20,
+                            right: 20,
                           ),
                           child: MouseRegion(
                             onEnter: (_) => videoState.setControlsHovered(true),
-                        onExit: (_) => videoState.setControlsHovered(false),
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.horizontal(
-                            left: Radius.circular(30),
-                            right: Radius.circular(30),
-                          ),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: const BorderRadius.horizontal(
-                                  left: Radius.circular(30),
-                                  right: Radius.circular(30),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
-                                    spreadRadius: 0,
-                                  ),
-                                ],
+                            onExit: (_) => videoState.setControlsHovered(false),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: globals.isPhone ? 6 : 20,
                               ),
-                              child: Container(
-                                //height: globals.isPhone && !globals.isTablet? 30.0 : 60.0,
-                                decoration: BoxDecoration(
-                                  color: backgroundColor,
-                                  borderRadius: const BorderRadius.horizontal(
-                                    left: Radius.circular(30),
-                                    right: Radius.circular(30),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  VideoProgressBar(
+                                    videoState: videoState,
+                                    hoverTime: null,
+                                    isDragging: _isDragging,
+                                    onPositionUpdate: (position) {},
+                                    onDraggingStateChange: (isDragging) {
+                                      if (isDragging) {
+                                        // 开始拖动时，保存当前的播放状态
+                                        _wasPlayingBeforeDrag =
+                                            videoState.status == PlayerStatus.playing;
+                                        // 如果是暂停状态，开始拖动时恢复播放
+                                        if (videoState.status ==
+                                            PlayerStatus.paused) {
+                                          _playStateChangedByDrag = true;
+                                          videoState.togglePlayPause();
+                                        }
+                                      } else {
+                                        // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
+                                        if (_playStateChangedByDrag) {
+                                          videoState.togglePlayPause();
+                                          _playStateChangedByDrag = false;
+                                        }
+                                        _wasPlayingBeforeDrag = null;
+                                      }
+                                      setState(() {
+                                        _isDragging = isDragging;
+                                      });
+                                    },
+                                    formatDuration: _formatDuration,
                                   ),
-                                  border: Border.all(
-                                    color: borderColor,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: globals.isPhone ? 6 : 20,
-                                  ),
-                                  child: Row(
+                                  const SizedBox(height: 8),
+                                  Row(
                                     children: [
                                         // 上一话按钮
                                         Consumer<VideoPlayerState>(
@@ -393,54 +413,20 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           },
                                         ),
                                       
-                                      const SizedBox(width: 20),
-                                      
-                                      // 进度条
-                                      Expanded(
-                                        child: VideoProgressBar(
-                                          videoState: videoState,
-                                          hoverTime: null,
-                                          isDragging: _isDragging,
-                                          onPositionUpdate: (position) {},
-                                          onDraggingStateChange: (isDragging) {
-                                            if (isDragging) {
-                                              // 开始拖动时，保存当前的播放状态
-                                              _wasPlayingBeforeDrag = videoState.status == PlayerStatus.playing;
-                                              // 如果是暂停状态，开始拖动时恢复播放
-                                              if (videoState.status == PlayerStatus.paused) {
-                                                _playStateChangedByDrag = true;
-                                                videoState.togglePlayPause();
-                                              }
-                                            } else {
-                                              // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
-                                              if (_playStateChangedByDrag) {
-                                                videoState.togglePlayPause();
-                                                _playStateChangedByDrag = false;
-                                              }
-                                              _wasPlayingBeforeDrag = null;
-                                            }
-                                            setState(() {
-                                              _isDragging = isDragging;
-                                            });
-                                          },
-                                          formatDuration: _formatDuration,
-                                        ),
-                                      ),
-                                      
-                                      const SizedBox(width: 6),
+                                      const Spacer(),
                                       
                                       // 时间显示
-                                      DefaultTextStyle(
-                                        style: const TextStyle(
-                                          color: Colors.white60,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.normal,
-                                          height: 1.0,
-                                          textBaseline: TextBaseline.alphabetic,
-                                        ),
-                                        textAlign: TextAlign.center,
+                                      ControlTextShadow(
                                         child: Text(
                                           '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.normal,
+                                            height: 1.0,
+                                            textBaseline: TextBaseline.alphabetic,
+                                          ),
+                                          textAlign: TextAlign.center,
                                           softWrap: false,
                                           overflow: TextOverflow.visible,
                                         ),
@@ -449,65 +435,87 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       const SizedBox(width: 12),
                                       
                                       // 设置按钮
-                                      _buildControlButton(
-                                        icon: Icon(
-                                          Icons.tune_rounded,
-                                          key: const ValueKey('settings'),
-                                          color: Colors.white,
-                                          size: globals.isPhone ? 36 : 28,
-                                        ),
-                                        onTap: () {
-                                          _showSettingsMenu(context);
+                                      Builder(
+                                        builder: (buttonContext) {
+                                          return SizedBox(
+                                            key: _settingsButtonKey,
+                                            child: _buildControlButton(
+                                              icon: Icon(
+                                                Icons.tune_rounded,
+                                                key: const ValueKey('settings'),
+                                                color: Colors.white,
+                                                size: globals.isPhone ? 36 : 28,
+                                              ),
+                                              onTap: () {
+                                                _showSettingsMenu(buttonContext);
+                                              },
+                                              isPressed: _isSettingsPressed,
+                                              isHovered: _isSettingsHovered,
+                                              onHover: (value) =>
+                                                  setState(() => _isSettingsHovered = value),
+                                              onPressed: (value) =>
+                                                  setState(() => _isSettingsPressed = value),
+                                              tooltip: '设置',
+                                              useAnimatedSwitcher: true,
+                                            ),
+                                          );
                                         },
-                                        isPressed: _isSettingsPressed,
-                                        isHovered: _isSettingsHovered,
-                                        onHover: (value) => setState(() => _isSettingsHovered = value),
-                                        onPressed: (value) => setState(() => _isSettingsPressed = value),
-                                        tooltip: '设置',
-                                        useAnimatedSwitcher: true,
                                       ),
                                       
                                       // 全屏按钮（所有平台）或菜单栏切换按钮（平板）
-                                      _buildControlButton(
-                                        icon: Icon(
-                                          globals.isTablet 
-                                            ? (videoState.isAppBarHidden 
-                                                ? Icons.fullscreen_exit_rounded 
-                                                : Icons.fullscreen_rounded)
-                                            : (videoState.isFullscreen 
-                                                ? Icons.fullscreen_exit_rounded 
-                                                : Icons.fullscreen_rounded),
-                                          key: ValueKey<bool>(globals.isTablet ? videoState.isAppBarHidden : videoState.isFullscreen),
-                                          color: Colors.white,
-                                          size: globals.isPhone ? 36 : 32,
+                                      if (widget.showFullscreenButton)
+                                        _buildControlButton(
+                                          icon: Icon(
+                                            globals.isTablet
+                                                ? (videoState.isAppBarHidden
+                                                    ? Icons.fullscreen_exit_rounded
+                                                    : Icons.fullscreen_rounded)
+                                                : (videoState.isFullscreen
+                                                    ? Icons.fullscreen_exit_rounded
+                                                    : Icons.fullscreen_rounded),
+                                            key: ValueKey<bool>(
+                                              globals.isTablet
+                                                  ? videoState.isAppBarHidden
+                                                  : videoState.isFullscreen,
+                                            ),
+                                            color: Colors.white,
+                                            size: globals.isPhone ? 36 : 32,
+                                          ),
+                                          onTap: () => globals.isTablet
+                                              ? videoState
+                                                  .toggleAppBarVisibility()
+                                              : videoState.toggleFullscreen(),
+                                          isPressed: _isFullscreenPressed,
+                                          isHovered: _isFullscreenHovered,
+                                          onHover: (value) => setState(
+                                              () => _isFullscreenHovered = value),
+                                          onPressed: (value) => setState(
+                                              () => _isFullscreenPressed = value),
+                                          tooltip: globals.isTablet
+                                              ? (videoState.isAppBarHidden
+                                                  ? '显示菜单栏'
+                                                  : '隐藏菜单栏')
+                                              : globals.isPhone
+                                                  ? (videoState.isFullscreen
+                                                      ? '退出全屏'
+                                                      : '全屏')
+                                                  : _tooltipManager
+                                                      .formatActionWithShortcut(
+                                                        'fullscreen',
+                                                        videoState.isFullscreen
+                                                            ? '退出全屏'
+                                                            : '全屏',
+                                                      ),
+                                          useCustomAnimation: true,
                                         ),
-                                        onTap: () => globals.isTablet 
-                                          ? videoState.toggleAppBarVisibility() 
-                                          : videoState.toggleFullscreen(),
-                                        isPressed: _isFullscreenPressed,
-                                        isHovered: _isFullscreenHovered,
-                                        onHover: (value) => setState(() => _isFullscreenHovered = value),
-                                        onPressed: (value) => setState(() => _isFullscreenPressed = value),
-                                        tooltip: globals.isTablet 
-                                          ? (videoState.isAppBarHidden ? '显示菜单栏' : '隐藏菜单栏')
-                                          : globals.isPhone
-                                            ? (videoState.isFullscreen ? '退出全屏' : '全屏')
-                                            : _tooltipManager.formatActionWithShortcut(
-                                                'fullscreen',
-                                                videoState.isFullscreen ? '退出全屏' : '全屏'
-                                              ),
-                                        useCustomAnimation: true,
-                                      ),
                                     ],
                                   ),
+                                ],
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

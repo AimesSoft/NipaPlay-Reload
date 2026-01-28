@@ -1,16 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_video_upload_control.dart';
 import 'dart:io' as io;
 import 'package:universal_html/html.dart' as web_html;
 import 'package:image_picker/image_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -23,158 +20,114 @@ class VideoUploadUI extends StatefulWidget {
   State<VideoUploadUI> createState() => _VideoUploadUIState();
 }
 
-class _VideoUploadUIState extends State<VideoUploadUI> {
+class _VideoUploadUIState extends State<VideoUploadUI>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   bool _isPressed = false;
+  late final AnimationController _mascotController;
+  late final Animation<double> _mascotScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _mascotController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    _mascotScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 1.18)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.18, end: 0.95)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 30,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.95, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 30,
+      ),
+    ]).animate(_mascotController);
+  }
+
+  @override
+  void dispose() {
+    _mascotController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(context, listen: false);
-
-    if (uiThemeProvider.isFluentUITheme) {
-      // 使用 FluentUI 版本
-      return FluentVideoUploadControl(
-        title: '选择视频文件',
-        subtitle: '支持 MP4, AVI, MKV 等格式\n单击选择文件开始播放',
-        onVideoSelected: (filePath) async {
-          final videoState =
-              Provider.of<VideoPlayerState>(context, listen: false);
-          videoState.setPreInitLoadingState('正在准备视频文件...');
-
-          Future.microtask(() async {
-            await videoState.initializePlayer(filePath);
-          });
-        },
-      );
-    }
-
-    // 使用 Material 版本（保持原有逻辑）
-    final appearanceProvider = Provider.of<AppearanceSettingsProvider>(context);
-    final bool enableBlur = appearanceProvider.enableWidgetBlurEffect;
+    // 使用 Material 版本（新的设计）
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final mascotSize = globals.isPhone ? 80.0 : 120.0;
 
     return Center(
-      child: GlassmorphicContainer(
-        width: 300,
-        height: 250,
-        borderRadius: 20,
-        blur: enableBlur ? 20 : 0,
-        alignment: Alignment.center,
-        border: 1,
-        linearGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFffffff).withOpacity(0.1),
-            const Color(0xFFFFFFFF).withOpacity(0.05),
-          ],
-        ),
-        borderGradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFffffff).withOpacity(0.5),
-            const Color((0xFFFFFFFF)).withOpacity(0.5),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.video_library,
-              size: 64,
-              color: Colors.white,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '上传视频开始播放',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 24),
-            MouseRegion(
-              onEnter: (_) => setState(() => _isHovered = true),
-              onExit: (_) => setState(() => _isHovered = false),
-              cursor: SystemMouseCursors.click,
-              child: AnimatedScale(
-                duration: const Duration(milliseconds: 150),
-                scale: _isPressed
-                    ? 0.95
-                    : _isHovered
-                        ? 1.05
-                        : 1.0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 150),
-                  opacity: _isHovered ? 0.8 : 1.0,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Stack(
-                      children: [
-                        GlassmorphicContainer(
-                          width: 150,
-                          height: 50,
-                          borderRadius: 12,
-                          blur: enableBlur ? 10 : 0,
-                          alignment: Alignment.center,
-                          border: 1,
-                          linearGradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              const Color(0xFFffffff)
-                                  .withOpacity(_isHovered ? 0.15 : 0.1),
-                              const Color(0xFFFFFFFF)
-                                  .withOpacity(_isHovered ? 0.1 : 0.05),
-                            ],
-                          ),
-                          borderGradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              const Color(0xFFffffff)
-                                  .withOpacity(_isHovered ? 0.7 : 0.5),
-                              const Color((0xFFFFFFFF))
-                                  .withOpacity(_isHovered ? 0.7 : 0.5),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Text(
-                              '选择视频',
-                              locale: Locale("zh-Hans", "zh"),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTapDown: (_) =>
-                                  setState(() => _isPressed = true),
-                              onTapUp: (_) =>
-                                  setState(() => _isPressed = false),
-                              onTapCancel: () =>
-                                  setState(() => _isPressed = false),
-                              onTap: _handleUploadVideo,
-                              splashColor: Colors.white.withOpacity(0.2),
-                              highlightColor: Colors.white.withOpacity(0.1),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => _mascotController.forward(from: 0.0),
+              child: ScaleTransition(
+                scale: _mascotScale,
+                child: Image.asset(
+                  'assets/girl.png',
+                  width: mascotSize,
+                  height: mascotSize,
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                Text(
+                  '诶？还没有在播放的视频！',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => setState(() => _isHovered = true),
+                  onExit: (_) => setState(() => _isHovered = false),
+                  child: GestureDetector(
+                    onTap: _handleUploadVideo,
+                    child: AnimatedScale(
+                      duration: const Duration(milliseconds: 200),
+                      scale: _isHovered ? 1.2 : 1.0, // 悬浮时放大 1.2 倍
+                      child: Text(
+                        '选择文件',
+                        locale: const Locale("zh-Hans", "zh"),
+                        style: TextStyle(
+                          color:
+                              _isHovered ? const Color(0xFFFF2E55) : textColor,
+                          fontSize: 32, // 大号字体
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -214,7 +167,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
           title: '选择来源',
           content: '请选择视频来源',
           actions: [
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () {
                 Navigator.of(context).pop('album');
               },
@@ -223,7 +176,7 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                 style: TextStyle(color: Colors.white),
               ),
             ),
-            TextButton(
+            HoverScaleTextButton(
               onPressed: () {
                 Navigator.of(context).pop('file'); // 先 pop
               },
@@ -265,14 +218,14 @@ class _VideoUploadUIState extends State<VideoUploadUI> {
                   title: '权限被永久拒绝',
                   content: '您已永久拒绝相关权限。请前往系统设置手动为NipaPlay开启所需权限。',
                   actions: [
-                    TextButton(
+                    HoverScaleTextButton(
                       onPressed: () {
                         Navigator.of(context).pop();
                         openAppSettings();
                       },
                       child: const Text('前往设置'),
                     ),
-                    TextButton(
+                    HoverScaleTextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('取消'),
                     ),

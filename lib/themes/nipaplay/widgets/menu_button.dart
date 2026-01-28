@@ -1,134 +1,8 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:window_manager/window_manager.dart';
-import 'dart:ui';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:provider/provider.dart';
+import 'control_shadow.dart';
 
-const double iconSize = 25.0; // 图标大小
-const double buttonSize = 28.0; // 按钮大小
-const double containerHeight = 32.0; // 容器高度
-const double containerPadding = 2.0; // 容器内边距
-const double borderRadius = 8.0; // 圆角半径
-
-class WindowControlButton extends StatefulWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool isCloseButton;
-  final double? customIconSize;
-
-  const WindowControlButton({
-    super.key,
-    required this.icon,
-    required this.onPressed,
-    this.isCloseButton = false,
-    this.customIconSize,
-  });
-
-  @override
-  _WindowControlButtonState createState() => _WindowControlButtonState();
-}
-
-class _WindowControlButtonState extends State<WindowControlButton>
-    with SingleTickerProviderStateMixin {
-  bool _isHovered = false;
-  bool _isPressed = false;
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 100),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.9,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // 悬停时的背景颜色 - 参考blur_snackbar的设计
-    Color hoverColor = Colors.transparent;
-    if (_isHovered) {
-      if (widget.isCloseButton) {
-        hoverColor = const Color(0x40FF4444); // 红色悬停
-      } else {
-        hoverColor = Colors.white.withOpacity(0.1); // 白色悬停
-      }
-    }
-
-    return MouseRegion(
-      onEnter: (_) {
-        setState(() {
-          _isHovered = true;
-        });
-      },
-      onExit: (_) {
-        setState(() {
-          _isHovered = false;
-        });
-      },
-      child: GestureDetector(
-        onTapDown: (_) {
-          setState(() {
-            _isPressed = true;
-          });
-          _animationController.forward();
-        },
-        onTapUp: (_) {
-          setState(() {
-            _isPressed = false;
-          });
-          _animationController.reverse();
-          widget.onPressed();
-        },
-        onTapCancel: () {
-          setState(() {
-            _isPressed = false;
-          });
-          _animationController.reverse();
-        },
-        child: AnimatedBuilder(
-          animation: _scaleAnimation,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _isPressed ? _scaleAnimation.value : 1.0,
-              child: Container(
-                width: buttonSize,
-                height: buttonSize,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4.0),
-                  color: hoverColor,
-                ),
-                child: Icon(
-                  widget.icon,
-                  size: widget.customIconSize ?? iconSize,
-                  color: Colors.white,
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class WindowControlButtons extends StatefulWidget {
+class WindowControlButtons extends StatelessWidget {
   final bool isMaximized;
   final VoidCallback onMinimize;
   final VoidCallback onMaximizeRestore;
@@ -143,95 +17,106 @@ class WindowControlButtons extends StatefulWidget {
   });
 
   @override
-  State<WindowControlButtons> createState() => _WindowControlButtonsState();
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _WindowControlIconButton(
+          icon: Icons.remove_rounded,
+          size: 22,
+          tooltip: '最小化',
+          onPressed: onMinimize,
+        ),
+        const SizedBox(width: 8),
+        _WindowControlIconButton(
+          icon: isMaximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
+          size: isMaximized ? 18 : 22,
+          isFlipped: isMaximized,
+          tooltip: isMaximized ? '还原' : '最大化',
+          onPressed: onMaximizeRestore,
+        ),
+        const SizedBox(width: 8),
+        _WindowControlIconButton(
+          icon: Icons.close_rounded,
+          size: 22,
+          tooltip: '关闭',
+          onPressed: onClose,
+        ),
+      ],
+    );
+  }
 }
 
-class _WindowControlButtonsState extends State<WindowControlButtons> with WindowListener {
-  @override
-  void initState() {
-    super.initState();
-    if (globals.winLinDesktop) {
-      windowManager.addListener(this);
-    }
-  }
+class _WindowControlIconButton extends StatefulWidget {
+  final IconData icon;
+  final double size;
+  final bool isFlipped;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _WindowControlIconButton({
+    required this.icon,
+    this.size = 22,
+    this.isFlipped = false,
+    required this.tooltip,
+    required this.onPressed,
+  });
 
   @override
-  void dispose() {
-    if (globals.winLinDesktop) {
-      windowManager.removeListener(this);
-    }
-    super.dispose();
-  }
+  State<_WindowControlIconButton> createState() =>
+      _WindowControlIconButtonState();
+}
 
-  // WindowListener回调
-  @override
-  void onWindowMaximize() {
-    // 窗口最大化时强制更新UI
-    if (mounted) {
-      setState(() {});
-    }
-  }
+class _WindowControlIconButtonState extends State<_WindowControlIconButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
 
-  @override
-  void onWindowUnmaximize() {
-    // 窗口还原时强制更新UI
-    if (mounted) {
-      setState(() {});
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
     }
+    setState(() {
+      _isHovered = value;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // 参考system_resource_display的毛玻璃设计
-    return Container(
-      margin: const EdgeInsets.all(4.0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
-          child: Container(
-            height: containerHeight,
-            padding: const EdgeInsets.symmetric(
-              horizontal: containerPadding * 2,
-              vertical: containerPadding,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(borderRadius),
-              color: const Color.fromARGB(255, 253, 253, 253).withOpacity(0.2),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 0.5,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // 最小化按钮
-                WindowControlButton(
-                  icon: Icons.horizontal_rule_rounded,
-                  onPressed: widget.onMinimize,
-                ),
-                const SizedBox(width: 8),
-                
-                // 最大化/恢复按钮
-                WindowControlButton(
-                  icon: widget.isMaximized 
-                      ? Icons.filter_none_rounded 
-                      : Icons.crop_square_rounded,
-                  onPressed: widget.onMaximizeRestore,
-                  customIconSize: widget.isMaximized ? 18.0 : null,
-                ),
-                const SizedBox(width: 8),
-                
-                // 关闭按钮
-                WindowControlButton(
-                  icon: Icons.close_rounded,
-                  onPressed: widget.onClose,
-                  isCloseButton: true,
-                ),
-              ],
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final Color iconColor = _isHovered
+        ? const Color(0xFFFF2E55)
+        : (isDarkMode ? Colors.white : Colors.black87);
+
+    Widget iconWidget = Icon(
+      widget.icon,
+      size: widget.size,
+      color: iconColor,
+    );
+
+    // 如果需要翻转（垂直+水平翻转等同于旋转180度）
+    if (widget.isFlipped) {
+      iconWidget = Transform.rotate(
+        angle: 3.14159, // 180度 (PI)
+        child: iconWidget,
+      );
+    }
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: ControlIconShadow(
+              child: iconWidget,
             ),
           ),
         ),

@@ -62,4 +62,4 @@
 
 ---
 
-**⬅️ 上一篇: [5. 实战教程：添加一个“贡献者名单”页面](05-Example-Add-A-New-Page.md)** | **➡️ 下一篇: [7. 如何开发主题和自定义样式](07-Theme-Development.md)**
+**⬅️ 上一篇: [5. 实战教程：添加一个“贡献者名单”页面](05-Example-Add-A-New-Page.md)** | **➡️ 下一篇: [8. (进阶) 如何添加新的播放器内核](08-Adding-a-New-Player-Kernel.md)**

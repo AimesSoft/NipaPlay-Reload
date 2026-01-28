@@ -67,7 +67,30 @@ runs:
         APP_NAME_LOWER="nipaplay"
         VERSION="${{ inputs.app-version }}"
         ARCH="${{ inputs.arch }}"
-        BUILD_OUTPUT_DIR="build/linux/x64/release/bundle"
+        FLUTTER_ARCH_DIR="x64"
+        RPM_ARCH_DIR="x86_64"
+        BUILD_APPIMAGE=true
+        LIB_SEARCH_DIRS="/usr/lib"
+
+        case "${ARCH}" in
+          amd64)
+            FLUTTER_ARCH_DIR="x64"
+            RPM_ARCH_DIR="x86_64"
+            LIB_SEARCH_DIRS="${LIB_SEARCH_DIRS} /usr/lib/x86_64-linux-gnu"
+            ;;
+          arm64)
+            FLUTTER_ARCH_DIR="arm64"
+            RPM_ARCH_DIR="aarch64"
+            BUILD_APPIMAGE=false
+            LIB_SEARCH_DIRS="${LIB_SEARCH_DIRS} /usr/lib/aarch64-linux-gnu"
+            ;;
+          *)
+            echo "Unsupported arch: ${ARCH}"
+            exit 1
+            ;;
+        esac
+
+        BUILD_OUTPUT_DIR="build/linux/${FLUTTER_ARCH_DIR}/release/bundle"
         LINUX_BUILD_DIR="build/linux"
         DEB_PKG_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}"
         APPIMAGE_NAME="${APP_NAME}-${VERSION}-Linux-${ARCH}.AppImage"
@@ -104,7 +127,7 @@ runs:
           echo "Bundled libmpv detected in build output; skipping system libmpv copy."
         else
           echo "No bundled libmpv found; copying system libmpv libraries to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/"
-          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+          find ${LIB_SEARCH_DIRS} -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
             cp -n "$mpv_lib" "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/" 2>/dev/null || true
           done
         fi
@@ -143,9 +166,11 @@ runs:
         dpkg-deb --build --root-owner-group "${DEB_ROOT}" "${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb"
         echo ".deb package created at ${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb"
         
-        # --- Create AppImage using linuxdeployqt ---
-        echo "--- Creating AppImage ---"
         APPDIR="${LINUX_BUILD_DIR}/${APP_NAME}-AppDir"
+
+        # --- Create AppImage using linuxdeployqt ---
+        if [ "${BUILD_APPIMAGE}" = "true" ]; then
+          echo "--- Creating AppImage ---"
         
         mkdir -p "${APPDIR}/lib"
         mkdir -p "${APPDIR}/data"
@@ -167,7 +192,7 @@ runs:
           echo "Bundled libmpv detected in build output; skipping system libmpv copy."
         else
           echo "No bundled libmpv found; copying system libmpv libraries to AppImage"
-          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+          find ${LIB_SEARCH_DIRS} -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
             cp -n "$mpv_lib" "${APPDIR}/lib/" 2>/dev/null || true
           done
         fi
@@ -242,6 +267,9 @@ runs:
           echo "AppImage generation failed or file not found by find command!"
         fi
         rm -f linuxdeployqt # Clean up downloaded tool
+        else
+          echo "--- Skipping AppImage for ${ARCH} (linuxdeployqt only supports x86_64) ---"
+        fi
         
         # --- Create compressed binary archive (.tar.gz) ---
         echo "--- Creating .tar.gz archive ---"
@@ -258,7 +286,7 @@ runs:
           echo "Bundled libmpv detected in build output; skipping system libmpv copy for tar.gz."
         else
           echo "No bundled libmpv found; copying system libmpv libraries to tar.gz archive"
-          find /usr/lib /usr/lib/x86_64-linux-gnu -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
+          find ${LIB_SEARCH_DIRS} -name "libmpv*.so*" -type f 2>/dev/null | while read mpv_lib; do
             cp -n "$mpv_lib" "${ARCHIVE_CONTENT_DIR}/lib/" 2>/dev/null || true
           done
         fi
@@ -410,7 +438,6 @@ runs:
         
         # Move the generated RPM to the final artifact directory
         echo "Moving RPM package..."
-        RPM_ARCH_DIR="x86_64"
         GENERATED_RPM_PATH=$(find "${RPM_BUILD_ROOT}/RPMS/${RPM_ARCH_DIR}/" -name "nipaplay-${VERSION}*.rpm" -print -quit)
         DESIRED_RPM_NAME="NipaPlay-${VERSION}-Linux-${ARCH}.rpm"
         if [ -n "${GENERATED_RPM_PATH}" ]; then
@@ -427,9 +454,11 @@ runs:
           echo "Error: .deb file not found! Expected: ${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb"
           MISSING_FILES=true
         fi
-        if [ ! -f "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" ]; then
-          echo "Error: AppImage file not found! Expected: ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
-          MISSING_FILES=true
+        if [ "${BUILD_APPIMAGE}" = "true" ]; then
+          if [ ! -f "${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" ]; then
+            echo "Error: AppImage file not found! Expected: ${LINUX_BUILD_DIR}/${APPIMAGE_NAME}"
+            MISSING_FILES=true
+          fi
         fi
         if [ ! -f "${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" ]; then
           echo "Error: .tar.gz file not found! Expected: ${LINUX_BUILD_DIR}/${ARCHIVE_NAME}"
@@ -456,6 +485,10 @@ runs:
         
         # Set outputs
         echo "deb_path=${LINUX_BUILD_DIR}/${DEB_PKG_NAME}.deb" >> $GITHUB_OUTPUT
-        echo "appimage_path=${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" >> $GITHUB_OUTPUT
+        if [ "${BUILD_APPIMAGE}" = "true" ]; then
+          echo "appimage_path=${LINUX_BUILD_DIR}/${APPIMAGE_NAME}" >> $GITHUB_OUTPUT
+        else
+          echo "appimage_path=" >> $GITHUB_OUTPUT
+        fi
         echo "archive_path=${LINUX_BUILD_DIR}/${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
         echo "rpm_path=${LINUX_BUILD_DIR}/${DESIRED_RPM_NAME_FOR_CHECK}" >> $GITHUB_OUTPUT

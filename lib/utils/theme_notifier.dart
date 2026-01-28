@@ -3,51 +3,53 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
+import 'package:nipaplay/models/background_image_render_mode.dart';
 
 class ThemeNotifier with ChangeNotifier {
-  static const String useCustomThemeColorKey = 'use_custom_theme_color';
-  static const String customOverlayColorKey = 'custom_overlay_color';
-  static const Color defaultOverlayMaskColor = Color(0xAA000000);
+  static const String backgroundImageRenderModeKey =
+      'background_image_render_mode';
+  static const String backgroundImageOverlayOpacityKey =
+      'background_image_overlay_opacity';
+  static const double defaultBackgroundImageOverlayOpacity = 0.3;
 
   ThemeMode _themeMode;
   String _backgroundImageMode;
   String _customBackgroundPath;
   AnimeDetailDisplayMode _animeDetailDisplayMode;
-  bool _useCustomThemeColor;
-  Color _customOverlayColor;
+  BackgroundImageRenderMode _backgroundImageRenderMode;
+  double _backgroundImageOverlayOpacity;
 
   ThemeNotifier({
     ThemeMode initialThemeMode = ThemeMode.system,
-    String initialBackgroundImageMode = "看板娘2",
+    String initialBackgroundImageMode = "关闭",
     String initialCustomBackgroundPath = 'assets/backempty.png',
     AnimeDetailDisplayMode initialAnimeDetailDisplayMode =
         AnimeDetailDisplayMode.simple,
-    bool initialUseCustomThemeColor = false,
-    Color initialCustomOverlayColor = defaultOverlayMaskColor,
+    BackgroundImageRenderMode initialBackgroundImageRenderMode =
+        BackgroundImageRenderMode.opacity,
+    double initialBackgroundImageOverlayOpacity =
+        defaultBackgroundImageOverlayOpacity,
   })  : _themeMode = initialThemeMode,
         _backgroundImageMode = initialBackgroundImageMode,
         _customBackgroundPath = initialCustomBackgroundPath,
         _animeDetailDisplayMode = initialAnimeDetailDisplayMode,
-        _useCustomThemeColor = initialUseCustomThemeColor,
-        _customOverlayColor = initialCustomOverlayColor;
+        _backgroundImageRenderMode = initialBackgroundImageRenderMode,
+        _backgroundImageOverlayOpacity = initialBackgroundImageOverlayOpacity;
 
   ThemeMode get themeMode => _themeMode;
   String get backgroundImageMode => _backgroundImageMode;
   String get customBackgroundPath => _customBackgroundPath;
   AnimeDetailDisplayMode get animeDetailDisplayMode =>
       _animeDetailDisplayMode;
-  bool get useCustomThemeColor => _useCustomThemeColor;
-  Color get customOverlayColor => _customOverlayColor;
+  BackgroundImageRenderMode get backgroundImageRenderMode =>
+      _backgroundImageRenderMode;
+  double get backgroundImageOverlayOpacity => _backgroundImageOverlayOpacity;
 
   set themeMode(ThemeMode mode) {
     _themeMode = mode;
     SettingsStorage.saveString('themeMode', mode.toString().split('.').last).then((_) {
       ////////debugPrint('Theme mode saved: ${mode.toString().split('.').last}'); // 添加日志输出
     });
-    if (_useCustomThemeColor) {
-      _useCustomThemeColor = false;
-      SettingsStorage.saveBool(useCustomThemeColorKey, false);
-    }
     notifyListeners();
   }
 
@@ -85,18 +87,22 @@ class ThemeNotifier with ChangeNotifier {
     }
   }
 
-  set useCustomThemeColor(bool enabled) {
-    if (_useCustomThemeColor != enabled) {
-      _useCustomThemeColor = enabled;
-      SettingsStorage.saveBool(useCustomThemeColorKey, enabled);
+  set backgroundImageRenderMode(BackgroundImageRenderMode mode) {
+    if (_backgroundImageRenderMode != mode) {
+      _backgroundImageRenderMode = mode;
+      SettingsStorage.saveString(backgroundImageRenderModeKey, mode.storageKey);
       notifyListeners();
     }
   }
 
-  set customOverlayColor(Color color) {
-    if (_customOverlayColor.value != color.value) {
-      _customOverlayColor = color;
-      SettingsStorage.saveInt(customOverlayColorKey, color.value);
+  set backgroundImageOverlayOpacity(double value) {
+    final double clampedValue = value.clamp(0.0, 1.0);
+    if (_backgroundImageOverlayOpacity != clampedValue) {
+      _backgroundImageOverlayOpacity = clampedValue;
+      SettingsStorage.saveDouble(
+        backgroundImageOverlayOpacityKey,
+        clampedValue,
+      );
       notifyListeners();
     }
   }

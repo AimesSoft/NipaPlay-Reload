@@ -8,8 +8,6 @@ import 'package:nipaplay/utils/theme_utils.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
-// Assume getTitleTextStyle is defined elsewhere, e.g., in theme_utils.dart
-// import 'package:nipaplay/utils/theme_utils.dart';
 
 class BlurDropdown<T> extends StatefulWidget {
   final GlobalKey dropdownKey;
@@ -60,14 +58,6 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
         curve: Curves.easeOut,
       ),
     );
-
-    // No need for status listener to remove overlay here anymore,
-    // as _closeDropdown handles the animation and removal logic.
-    // _animationController.addStatusListener((status) {
-    //   if (status == AnimationStatus.dismissed && !_isDropdownOpen) {
-    //     _removeOverlay();
-    //   }
-    // });
   }
 
   @override
@@ -95,15 +85,12 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
 
   @override
   void dispose() {
-    // Ensure overlay is removed first if it exists
     _removeOverlay();
     _animationController.dispose();
     super.dispose();
   }
 
-  // --- Helper to safely remove the overlay ---
   void _removeOverlay() {
-    // Check if overlayEntry exists before trying to remove
     if (_overlayEntry != null) {
       _overlayEntry!.remove();
       _overlayEntry = null;
@@ -130,45 +117,63 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
 
   @override
   Widget build(BuildContext context) {
-    // Use the key provided to the parent Row for positioning calculations
-    return Row(
-      key: widget.dropdownKey, // Apply the key here
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Wrap the trigger content in a GestureDetector
-        GestureDetector(
-          onTap: () {
-            if (_animationController.isAnimating) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const activeColor = Color(0xFFFF2E55);
+    final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1);
+    final bgColor = isDark 
+        ? Colors.white.withValues(alpha: 0.12) 
+        : Colors.white;
 
-            if (_isDropdownOpen) {
-              _closeDropdown();
-            } else {
-              _openDropdown();
-            }
-          },
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: Row(
-              mainAxisSize: MainAxisSize.min, // Keep original layout
-              children: [
-                Text(
-                  _getSelectedItemText(),
-                  style: getTitleTextStyle(context),
-                ),
-                const SizedBox(width: 10),
-                RotationTransition(
-                  turns:
-                      Tween(begin: 0.0, end: 0.5).animate(_animationController),
-                  child: const Icon(
-                    Ionicons.chevron_down_outline,
-                    color: Colors.white,
+    return Container(
+      height: 40, // 统一高度
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _isDropdownOpen ? activeColor : idleBorderColor,
+          width: _isDropdownOpen ? 1.5 : 1,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        key: widget.dropdownKey,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () {
+              if (_animationController.isAnimating) return;
+              if (_isDropdownOpen) {
+                _closeDropdown();
+              } else {
+                _openDropdown();
+              }
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _getSelectedItemText(),
+                    style: getTitleTextStyle(context),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  RotationTransition(
+                    turns:
+                        Tween(begin: 0.0, end: 0.5).animate(_animationController),
+                    child: Icon(
+                      Ionicons.chevron_down_outline,
+                      color: _isDropdownOpen 
+                          ? activeColor 
+                          : (isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -176,53 +181,46 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     if (widget.items.isEmpty) {
       return '';
     }
-
     for (final DropdownMenuItemData<T> item in widget.items) {
       if (item.value == _currentSelectedValue) {
         return item.title;
       }
     }
-
     return widget.items.first.title;
   }
 
   void _openDropdown() {
-    // If already open or animating, do nothing
     if (_isDropdownOpen || _animationController.isAnimating) return;
-    // Ensure any previous overlay is removed (shouldn't happen often, but safe)
     _removeOverlay();
 
-    // Find the RenderBox of the trigger element using the key
     final RenderBox? renderBox =
         widget.dropdownKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return; // Safety check
+    if (renderBox == null) return;
 
     final size = renderBox.size;
     final position = renderBox.localToGlobal(Offset.zero);
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // 计算下拉菜单的初始位置
     double top = position.dy + size.height + 5;
-    double maxHeight = screenHeight * 0.7; // 最大高度为屏幕高度的70%
-
-    // 检查下拉菜单是否会超出屏幕底部
-    double estimatedHeight = widget.items.length * 50.0; // 估算每个项目的高度
+    double estimatedHeight = widget.items.length * 50.0;
     if (top + estimatedHeight > screenHeight) {
-      // 如果会超出底部，则向上调整位置
-      top = screenHeight - estimatedHeight - 10; // 留出10像素的边距
+      top = screenHeight - estimatedHeight - 10;
     }
-
-    // 确保top不会小于0
-    top = top.clamp(0.0, screenHeight - 100.0); // 确保至少留出100像素的高度
+    top = top.clamp(0.0, screenHeight - 100.0);
 
     final right = screenWidth - position.dx - size.width;
     final safeRight = (right < 10.0) ? 10.0 : right;
     final left = position.dx;
 
-    final Color borderColor = Theme.of(context).brightness == Brightness.light
-        ? const Color.fromARGB(255, 201, 201, 201)
-        : const Color.fromARGB(255, 130, 130, 130);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : Colors.black.withValues(alpha: 0.1);
+    
+    final Color dropdownBgColor = isDark
+        ? const Color(0xFF2C2C2C)
+        : const Color(0xFFFFFFFF);
 
     _overlayEntry = OverlayEntry(
       builder: (context) {
@@ -261,89 +259,74 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                     maxWidth: screenWidth - left - safeRight > 100
                         ? screenWidth - left - safeRight
                         : size.width * 1.5,
-                    maxHeight: screenHeight - top - 10, // 动态计算最大高度
+                    maxHeight: screenHeight - top - 10,
                   ),
                   decoration: BoxDecoration(
                     border: Border.all(color: borderColor, width: 0.5),
-                    color: const Color.fromARGB(255, 130, 130, 130)
-                        .withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(10),
+                    color: dropdownBgColor,
+                    borderRadius: BorderRadius.circular(6),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 5,
-                        spreadRadius: 1,
-                        offset: const Offset(1, 1),
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 10,
+                        spreadRadius: 0,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
                   clipBehavior: Clip.hardEdge,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(
-                        sigmaX: Provider.of<AppearanceSettingsProvider>(context)
-                                .enableWidgetBlurEffect
-                            ? 25
-                            : 0,
-                        sigmaY: Provider.of<AppearanceSettingsProvider>(context)
-                                .enableWidgetBlurEffect
-                            ? 25
-                            : 0,
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        itemCount: widget.items.length,
-                        itemBuilder: (context, index) {
-                          final item = widget.items[index];
-                          final Widget menuItem = InkWell(
-                            onTap: () {
-                              setState(() {
-                                _currentSelectedValue = item.value;
-                              });
-                              widget.onItemSelected(item.value);
-                              _closeDropdown();
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: item.value == _currentSelectedValue
-                                    ? Colors.white.withOpacity(0.1)
-                                    : Colors.transparent,
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: Colors.white.withOpacity(0.1),
-                                    width: 0.5,
-                                  ),
+                    borderRadius: BorderRadius.circular(6),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      itemCount: widget.items.length,
+                      itemBuilder: (context, index) {
+                        final item = widget.items[index];
+                        final Widget menuItem = InkWell(
+                          onTap: () {
+                            setState(() {
+                              _currentSelectedValue = item.value;
+                            });
+                            widget.onItemSelected(item.value);
+                            _closeDropdown();
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: item.value == _currentSelectedValue
+                                  ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05))
+                                  : Colors.transparent,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                                  width: 0.5,
                                 ),
                               ),
-                              child: Text(
-                                item.title,
-                                style: getTitleTextStyle(context),
-                              ),
                             ),
-                          );
+                            child: Text(
+                              item.title,
+                              style: getTitleTextStyle(context),
+                            ),
+                          ),
+                        );
 
-                          // 如果有描述，则包装在HoverTooltipBubble中
-                          if (item.description != null &&
-                              item.description!.isNotEmpty) {
-                            return HoverTooltipBubble(
-                              text: item.description!,
-                              showDelay: const Duration(milliseconds: 300),
-                              hideDelay: const Duration(milliseconds: 100),
-                              child: menuItem,
-                            );
-                          } else {
-                            return menuItem;
-                          }
-                        },
-                      ),
+                        if (item.description != null && item.description!.isNotEmpty) {
+                          return HoverTooltipBubble(
+                            text: item.description!,
+                            showDelay: const Duration(milliseconds: 300),
+                            hideDelay: const Duration(milliseconds: 100),
+                            child: menuItem,
+                          );
+                        } else {
+                          return menuItem;
+                        }
+                      },
                     ),
                   ),
                 ),
@@ -354,38 +337,18 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       },
     );
 
-    // Insert the overlay and start the animation
     Overlay.of(context).insert(_overlayEntry!);
     setState(() {
       _isDropdownOpen = true;
     });
-    _animationController.forward(); // Play open animation
+    _animationController.forward();
   }
 
-  // --- Updated Close Dropdown Method ---
   void _closeDropdown() {
-    // Only proceed if the dropdown is actually open and not already animating closed
-    if (!_isDropdownOpen ||
-        (_animationController.status == AnimationStatus.reverse)) {
+    if (!_isDropdownOpen || (_animationController.status == AnimationStatus.reverse)) {
       return;
     }
-
-    // Start the reverse animation (fade/scale out)
     _animationController.reverse().then((_) {
-      // This code runs *after* the reverse animation completes
-      // Safely remove the overlay *after* the animation finishes
-      _removeOverlay();
-      // Update the state *after* removal to prevent build errors if widget disposed quickly
-      if (mounted) {
-        // Check if the widget is still in the tree
-        setState(() {
-          _isDropdownOpen = false;
-        });
-      }
-    }).catchError((error) {
-      // Handle potential errors during animation reversal if needed
-      //////debugPrint("Error closing dropdown animation: $error");
-      // Still try to remove overlay and update state in case of error
       _removeOverlay();
       if (mounted) {
         setState(() {
@@ -394,65 +357,21 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       }
     });
   }
-
-  Widget _buildMenuItem(DropdownMenuItemData<T> item) {
-    bool isSelected = item.value == _currentSelectedValue;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          widget.onItemSelected(item.value);
-          // Update state immediately for visual feedback if desired
-          if (mounted) {
-            // Check if widget is still mounted
-            setState(() {
-              _currentSelectedValue = item.value;
-            });
-          }
-          _closeDropdown(); // Close dropdown after selecting
-        },
-        borderRadius:
-            BorderRadius.circular(4), // Optional: for InkWell splash shape
-        child: Container(
-          width: double.infinity, // Ensure item takes full width
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: isSelected
-              ? Colors.white.withOpacity(0.1)
-              : Colors.transparent, // Subtle selection highlight
-          child: Text(
-            item.title,
-            locale: Locale("zh-Hans", "zh"),
-            style: TextStyle(
-              fontSize: 15,
-              color: Colors.white
-                  .withOpacity(isSelected ? 1.0 : 0.8), // Adjust opacity
-              fontWeight: isSelected
-                  ? FontWeight.w900
-                  : FontWeight.normal, // Adjust font weight
-            ),
-            textAlign: TextAlign.start, // Ensure text aligns left
-          ),
-        ),
-      ),
-    );
-  }
 }
 
-// Data class for menu items (no changes needed here)
 class DropdownMenuItemData<T> {
   final String title;
   final T value;
-  final bool isSelected; // Used for initial selection hint
-  final String? description; // 新增：描述信息
+  final bool isSelected;
+  final String? description;
 
   DropdownMenuItemData({
     required this.title,
     required this.value,
     this.isSelected = false,
-    this.description, // 新增：描述信息
+    this.description,
   });
 
-  // Added for easy comparison, especially for finding the initial value
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

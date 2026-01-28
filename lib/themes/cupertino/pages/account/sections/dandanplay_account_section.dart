@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import '../widgets/account_action_button.dart';
 import '../widgets/account_profile_card.dart';

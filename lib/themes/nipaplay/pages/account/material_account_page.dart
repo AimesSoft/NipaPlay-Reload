@@ -1,17 +1,14 @@
-import 'dart:ui';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
-import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:flutter/material.dart';
 import 'package:nipaplay/pages/account/account_controller.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
+import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Material Design版本的账号页面
+/// Fluent UI版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
   const MaterialAccountPage({super.key});
 
@@ -21,19 +18,183 @@ class MaterialAccountPage extends StatefulWidget {
 
 class _MaterialAccountPageState extends State<MaterialAccountPage>
     with AccountPageController {
-
-  // 页面切换状态：true为弹弹play页面，false为Bangumi页面
-  bool _showDandanplayPage = true;
+  static const Color _accentColor = Color(0xFFFF2E55);
+  static const double _buttonHoverScale = 1.06;
 
   @override
   void showMessage(String message) {
-    BlurSnackBar.show(context, message);
+    if (!mounted) return;
+    fluent.displayInfoBar(
+      context,
+      builder: (context, close) {
+        return fluent.InfoBar(
+          title: Text(message),
+          action: fluent.IconButton(
+            icon: const fluent.Icon(fluent.FluentIcons.chrome_close),
+            onPressed: close,
+          ),
+        );
+      },
+    );
+  }
+
+  fluent.FluentThemeData _buildFluentThemeData(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return fluent.FluentThemeData(
+      brightness: brightness,
+      accentColor: fluent.AccentColor.swatch({'normal': _accentColor}),
+      micaBackgroundColor: Colors.transparent,
+      scaffoldBackgroundColor: Colors.transparent,
+    );
+  }
+
+  Future<void> _showFluentLoginDialog({
+    required String title,
+    required List<LoginField> fields,
+    required String actionText,
+    required Future<LoginResult> Function(Map<String, String> values) onSubmit,
+  }) async {
+    final controllers = <String, TextEditingController>{};
+    final focusNodes = <String, FocusNode>{};
+
+    for (final field in fields) {
+      controllers[field.key] = TextEditingController(text: field.initialValue);
+      focusNodes[field.key] = FocusNode();
+    }
+
+    bool isLoading = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setState) {
+            Future<void> handleSubmit() async {
+              final values = <String, String>{};
+              for (final field in fields) {
+                final value = controllers[field.key]?.text ?? '';
+                if (field.required && value.trim().isEmpty) {
+                  showMessage('请输入${field.label}');
+                  return;
+                }
+                values[field.key] = value.trim();
+              }
+
+              setState(() {
+                isLoading = true;
+              });
+
+              try {
+                final result = await onSubmit(values);
+                if (!mounted) return;
+                setState(() {
+                  isLoading = false;
+                });
+                if (result.success) {
+                  Navigator.of(dialogContext).pop();
+                }
+                if (result.message != null) {
+                  showMessage(result.message!);
+                }
+              } catch (e) {
+                if (!mounted) return;
+                setState(() {
+                  isLoading = false;
+                });
+                showMessage('$actionText失败: $e');
+              }
+            }
+
+            void handleFieldSubmitted(int index) {
+              final isLast = index == fields.length - 1;
+              if (isLast) {
+                if (!isLoading) {
+                  handleSubmit();
+                }
+                return;
+              }
+              final nextField = fields[index + 1];
+              focusNodes[nextField.key]?.requestFocus();
+            }
+
+            return fluent.ContentDialog(
+              title: Text(title),
+              content: SizedBox(
+                width: 360,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int i = 0; i < fields.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: fluent.InfoLabel(
+                            label: fields[i].label,
+                            child: fields[i].isPassword
+                                ? fluent.PasswordBox(
+                                    controller: controllers[fields[i].key],
+                                    focusNode: focusNodes[fields[i].key],
+                                    placeholder: fields[i].hint,
+                                    autofocus: i == 0,
+                                    onSubmitted: (_) => handleFieldSubmitted(i),
+                                  )
+                                : fluent.TextBox(
+                                    controller: controllers[fields[i].key],
+                                    focusNode: focusNodes[fields[i].key],
+                                    placeholder: fields[i].hint,
+                                    autofocus: i == 0,
+                                    textInputAction:
+                                        i == fields.length - 1
+                                            ? TextInputAction.done
+                                            : TextInputAction.next,
+                                    onSubmitted: (_) => handleFieldSubmitted(i),
+                                  ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                BlurButton(
+                  icon: fluent.FluentIcons.cancel,
+                  text: '取消',
+                  flatStyle: true,
+                  hoverScale: _buttonHoverScale,
+                  onTap: () {
+                    if (isLoading) return;
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+                BlurButton(
+                  icon: fluent.FluentIcons.check_mark,
+                  text: isLoading ? '$actionText中...' : actionText,
+                  flatStyle: true,
+                  hoverScale: _buttonHoverScale,
+                  onTap: () {
+                    if (isLoading) return;
+                    handleSubmit();
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    for (final controller in controllers.values) {
+      controller.dispose();
+    }
+    for (final focusNode in focusNodes.values) {
+      focusNode.dispose();
+    }
   }
 
   @override
   void showLoginDialog() {
-    BlurLoginDialog.show(
-      context,
+    _showFluentLoginDialog(
       title: '登录弹弹play账号',
       fields: [
         LoginField(
@@ -49,8 +210,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           initialValue: passwordController.text,
         ),
       ],
-      loginButtonText: '登录',
-      onLogin: (values) async {
+      actionText: '登录',
+      onSubmit: (values) async {
         usernameController.text = values['username']!;
         passwordController.text = values['password']!;
         await performLogin();
@@ -61,8 +222,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   void showRegisterDialog() {
-    BlurLoginDialog.show(
-      context,
+    _showFluentLoginDialog(
       title: '注册弹弹play账号',
       fields: [
         LoginField(
@@ -91,13 +251,13 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           initialValue: registerScreenNameController.text,
         ),
       ],
-      loginButtonText: '注册',
-      onLogin: (values) async {
+      actionText: '注册',
+      onSubmit: (values) async {
         final logService = DebugLogService();
         try {
           // 先记录日志
-          logService.addLog('[Material账号页面] 注册对话框onLogin回调被调用', level: 'INFO', tag: 'AccountPage');
-          logService.addLog('[Material账号页面] 收到的values: ${values.toString()}', level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] 注册对话框onLogin回调被调用', level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] 收到的values: ${values.toString()}', level: 'INFO', tag: 'AccountPage');
 
           // 设置控制器的值
           registerUsernameController.text = values['username'] ?? '';
@@ -105,18 +265,18 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           registerEmailController.text = values['email'] ?? '';
           registerScreenNameController.text = values['screenName'] ?? '';
 
-          logService.addLog('[Material账号页面] 准备调用performRegister', level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] 准备调用performRegister', level: 'INFO', tag: 'AccountPage');
 
           // 调用注册方法
           await performRegister();
 
-          logService.addLog('[Material账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn', level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn', level: 'INFO', tag: 'AccountPage');
 
           return LoginResult(success: isLoggedIn, message: isLoggedIn ? '注册成功' : '注册失败');
         } catch (e) {
           // 捕获并记录详细错误
           print('[REGISTRATION ERROR]: $e');
-          logService.addLog('[Material账号页面] performRegister时发生异常: $e', level: 'ERROR', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] performRegister时发生异常: $e', level: 'ERROR', tag: 'AccountPage');
           return LoginResult(success: false, message: '注册失败: $e');
         }
       },
@@ -125,465 +285,295 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   @override
   void showDeleteAccountDialog(String deleteAccountUrl) {
-    BlurDialog.show(
+    final colorScheme = Theme.of(context).colorScheme;
+    showDialog<void>(
       context: context,
-      title: '账号注销确认',
-      contentWidget: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '警告：账号注销是不可逆操作！',
-            style: TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            '注销后将：',
-            style: TextStyle(color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '• 永久删除您的弹弹play账号\n• 清除所有个人数据和收藏\n• 无法恢复已发送的弹幕\n• 失去所有积分和等级',
-            style: TextStyle(color: Colors.white70),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '点击"继续注销"将在浏览器中打开注销页面，请在页面中完成最终确认。',
-            style: TextStyle(color: Colors.yellow),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
-            '取消',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
-        TextButton(
-          onPressed: () async {
-            Navigator.of(context).pop();
-            try {
-              // Web和其他平台分别处理URL打开
-              if (kIsWeb) {
-                // Web平台暂时显示URL让用户手动复制
-                showMessage('请复制以下链接到浏览器中打开：$deleteAccountUrl');
-              } else {
-                // 移动端和桌面端使用url_launcher
-                final uri = Uri.parse(deleteAccountUrl);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(
-                    uri,
-                    mode: LaunchMode.externalApplication,
-                  );
-                } else {
-                  showMessage('无法打开注销页面');
-                }
-              }
-            } catch (e) {
-              showMessage('打开注销页面失败: $e');
-            }
-          },
-          child: const Text(
-            '继续注销',
-            style: TextStyle(color: Colors.red),
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
-    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 自定义TabView样式的选择器
-            _buildCustomTabSelector(blurValue),
-            const SizedBox(height: 16),
-            // 根据状态显示不同的内容
-            Expanded(
-              child: _showDandanplayPage 
-                  ? _buildDandanplayPage(blurValue) 
-                  : _buildBangumiPage(blurValue),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 构建自定义Tab选择器
-  Widget _buildCustomTabSelector(double blurValue) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // 计算每个选项的准确宽度
-              final optionWidth = (constraints.maxWidth - 8) / 2; // 减去左右边距
-              
-              return Stack(
-                children: [
-                  // 滑动指示器（放在底层）
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
-                    left: _showDandanplayPage ? 4 : null,
-                    right: _showDandanplayPage ? null : 4,
-                    top: 4,
-                    bottom: 4,
-                    width: optionWidth,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 1,
-                        ),
+      builder: (dialogContext) {
+        return fluent.FluentTheme(
+          data: _buildFluentThemeData(context),
+          child: Builder(
+            builder: (_) {
+              return fluent.ContentDialog(
+                title: const Text('账号注销确认'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '警告：账号注销是不可逆操作！',
+                      style: TextStyle(
+                        color: fluent.Colors.errorPrimaryColor,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '注销后将：',
+                      style: TextStyle(color: colorScheme.onSurface),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '• 永久删除您的弹弹play账号\n• 清除所有个人数据和收藏\n• 无法恢复已发送的弹幕\n• 失去所有积分和等级',
+                      style:
+                          TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '点击"继续注销"将在浏览器中打开注销页面，请在页面中完成最终确认。',
+                      style: TextStyle(color: fluent.Colors.warningPrimaryColor),
+                    ),
+                  ],
+                ),
+                actions: [
+                  BlurButton(
+                    icon: fluent.FluentIcons.cancel,
+                    text: '取消',
+                    flatStyle: true,
+                    hoverScale: _buttonHoverScale,
+                    onTap: () => Navigator.of(dialogContext).pop(),
                   ),
-                  // 可点击选项（只有一层，带文字）
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildTabOption('Dandanplay账户', true),
-                      ),
-                      Expanded(
-                        child: _buildTabOption('Bangumi同步', false),
-                      ),
-                    ],
+                  BlurButton(
+                    icon: fluent.FluentIcons.delete,
+                    text: '继续注销',
+                    flatStyle: true,
+                    hoverScale: _buttonHoverScale,
+                    onTap: () async {
+                      Navigator.of(dialogContext).pop();
+                      try {
+                        // Web和其他平台分别处理URL打开
+                        if (kIsWeb) {
+                          // Web平台暂时显示URL让用户手动复制
+                          showMessage('请复制以下链接到浏览器中打开：$deleteAccountUrl');
+                        } else {
+                          // 移动端和桌面端使用url_launcher
+                          final uri = Uri.parse(deleteAccountUrl);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          } else {
+                            showMessage('无法打开注销页面');
+                          }
+                        }
+                      } catch (e) {
+                        showMessage('打开注销页面失败: $e');
+                      }
+                    },
                   ),
                 ],
               );
             },
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabOption(String text, bool isDandanplay) {
-    final isActive = _showDandanplayPage == isDandanplay;
-    
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _showDandanplayPage = isDandanplay;
-        });
+        );
       },
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        alignment: Alignment.center,
-        child: Text(
-          text,
-          locale: const Locale("zh-Hans", "zh"),
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.white70,
-            fontSize: 14,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return fluent.FluentTheme(
+      data: _buildFluentThemeData(context),
+      child: fluent.ScaffoldPage(
+        padding: EdgeInsets.zero,
+        content: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _buildDandanplayPage(),
+              ),
+              Container(
+                width: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                color: colorScheme.onSurface.withOpacity(0.12),
+              ),
+              Expanded(
+                child: _buildBangumiPage(),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLoggedInView(double blurValue) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 0.5,
-            ),
-          ),
-          child: Row(
-            children: [
-              // 头像
-              avatarUrl != null
-                  ? ClipOval(
-                      child: Image.network(
-                        avatarUrl!,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
-                            Icons.account_circle,
-                            size: 48,
-                            color: Colors.white60,
-                          );
-                        },
-                      ),
-                    )
-                  : const Icon(
-                      Icons.account_circle,
-                      size: 48,
-                      color: Colors.white60,
-                    ),
-              const SizedBox(width: 16),
-              // 用户信息
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      username,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      '已登录',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+  Widget _buildLoggedInView() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          // 头像
+          avatarUrl != null
+              ? ClipOval(
+                  child: Image.network(
+                    avatarUrl!,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return fluent.Icon(
+                        fluent.FluentIcons.contact,
+                        size: 48,
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                      );
+                    },
+                  ),
+                )
+              : fluent.Icon(
+                  fluent.FluentIcons.contact,
+                  size: 48,
+                  color: colorScheme.onSurface.withOpacity(0.6),
                 ),
-              ),
-              // 退出按钮
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: performLogout,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.logout,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          '退出',
-                          locale: Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
+          const SizedBox(width: 16),
+          // 用户信息
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  username,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '已登录',
+                  locale:const Locale("zh-Hans","zh"),
+style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
                   ),
                 ),
+              ],
+            ),
+          ),
+          // 退出按钮
+          _buildActionButton(
+            '退出',
+            fluent.FluentIcons.sign_out,
+            performLogout,
+          ),
+          const SizedBox(width: 8),
+          // 账号注销按钮
+          _buildActionButton(
+            isLoading ? '处理中...' : '注销账号',
+            fluent.FluentIcons.delete,
+            isLoading ? null : startDeleteAccount,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoggedOutView() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final subtitleStyle = TextStyle(
+      color: colorScheme.onSurface.withOpacity(0.7),
+      fontSize: 12,
+    );
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          BlurButton(
+            icon: fluent.FluentIcons.signin,
+            text: "登录弹弹play账号",
+            flatStyle: true,
+            hoverScale: _buttonHoverScale,
+            onTap: showLoginDialog,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "登录后可以同步观看记录和个人设置",
+            locale:const Locale("zh-Hans","zh"),
+style: subtitleStyle,
+          ),
+          const SizedBox(height: 16),
+          BlurButton(
+            icon: fluent.FluentIcons.add_friend,
+            text: "注册弹弹play账号",
+            flatStyle: true,
+            hoverScale: _buttonHoverScale,
+            onTap: showRegisterDialog,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "创建新的弹弹play账号，享受完整功能",
+            locale:const Locale("zh-Hans","zh"),
+style: subtitleStyle,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBangumiSyncSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              fluent.Icon(
+                fluent.FluentIcons.sync,
+                color: colorScheme.onSurface,
+                size: 24,
               ),
               const SizedBox(width: 8),
-              // 账号注销按钮
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: isLoading ? null : startDeleteAccount,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.red.withOpacity(0.3),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isLoading)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                            ),
-                          )
-                        else
-                          const Icon(
-                            Icons.delete_forever,
-                            color: Colors.red,
-                            size: 16,
-                          ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isLoading ? '处理中...' : '注销账号',
-                          locale: const Locale("zh-Hans", "zh"),
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+              Text(
+                'Bangumi观看记录同步',
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
+          const SizedBox(height: 16),
 
-  Widget _buildLoggedOutView(double blurValue) {
-    return Column(
-      children: [
-        ListTile(
-          title: const Text(
-            "登录弹弹play账号",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          subtitle: const Text(
-            "登录后可以同步观看记录和个人设置",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-          ),
-          trailing: const Icon(Icons.login, color: Colors.white),
-          onTap: showLoginDialog,
-        ),
-        const Divider(color: Colors.white12, height: 1),
-        ListTile(
-          title: const Text(
-            "注册弹弹play账号",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          subtitle: const Text(
-            "创建新的弹弹play账号，享受完整功能",
-            locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-          ),
-          trailing: const Icon(Icons.person_add, color: Colors.white),
-          onTap: showRegisterDialog,
-        ),
-        const Divider(color: Colors.white12, height: 1),
-      ],
-    );
-  }
-
-  Widget _buildBangumiSyncSection(double blurValue) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.sync, color: Colors.white, size: 24),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Bangumi观看记录同步',
-                    locale: Locale("zh-Hans", "zh"),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              if (isBangumiLoggedIn) ...[
-                // 已登录状态
-                _buildBangumiLoggedInView(),
-              ] else ...[
-                // 未登录状态
-                _buildBangumiLoggedOutView(),
-              ],
-            ],
-          ),
-        ),
+          if (isBangumiLoggedIn) ...[
+            // 已登录状态
+            _buildBangumiLoggedInView(),
+          ] else ...[
+            // 未登录状态
+            _buildBangumiLoggedOutView(),
+          ],
+        ],
       ),
     );
   }
 
   Widget _buildBangumiLoggedInView() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 用户信息
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+              const fluent.Icon(
+                fluent.FluentIcons.accept,
+                color: Colors.green,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -592,8 +582,8 @@ style: TextStyle(color: Colors.white70),
                     Text(
                       '已连接到 ${bangumiUserInfo?['nickname'] ?? bangumiUserInfo?['username'] ?? 'Bangumi'}',
                       locale: const Locale("zh-Hans", "zh"),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -601,8 +591,8 @@ style: TextStyle(color: Colors.white70),
                       Text(
                         '上次同步: ${_formatDateTime(lastBangumiSyncTime!)}',
                         locale: const Locale("zh-Hans", "zh"),
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.7),
                           fontSize: 12,
                         ),
                       ),
@@ -619,21 +609,21 @@ style: TextStyle(color: Colors.white70),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.2),
+              color: _accentColor.withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: Colors.blue.withOpacity(0.3),
+                color: _accentColor.withOpacity(0.3),
                 width: 0.5,
               ),
             ),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(
+                  child: fluent.ProgressRing(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    activeColor: _accentColor,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -641,7 +631,7 @@ style: TextStyle(color: Colors.white70),
                   child: Text(
                     bangumiSyncStatus,
                     locale: const Locale("zh-Hans", "zh"),
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: colorScheme.onSurface),
                   ),
                 ),
               ],
@@ -657,29 +647,28 @@ style: TextStyle(color: Colors.white70),
           children: [
             _buildActionButton(
               '同步到Bangumi',
-              Icons.sync,
+              fluent.FluentIcons.sync,
               isBangumiSyncing ? null : () => performBangumiSync(forceFullSync: false),
             ),
             _buildActionButton(
               '同步所有本地记录',
-              Icons.sync_alt,
+              fluent.FluentIcons.sync_folder,
               isBangumiSyncing ? null : () => performBangumiSync(forceFullSync: true),
             ),
             _buildActionButton(
               '验证令牌',
-              Icons.wifi_protected_setup,
+              fluent.FluentIcons.wifi,
               isLoading ? null : testBangumiConnection,
             ),
             _buildActionButton(
               '清除同步记录缓存',
-              Icons.clear_all,
+              fluent.FluentIcons.clear,
               clearBangumiSyncCache,
             ),
             _buildActionButton(
               '删除Bangumi令牌',
-              Icons.logout,
+              fluent.FluentIcons.sign_out,
               clearBangumiToken,
-              isDestructive: true,
             ),
           ],
         ),
@@ -688,109 +677,85 @@ style: TextStyle(color: Colors.white70),
   }
 
   Widget _buildBangumiLoggedOutView() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '同步本地观看历史到Bangumi收藏',
-          locale: Locale("zh-Hans", "zh"),
+          locale: const Locale("zh-Hans", "zh"),
           style: TextStyle(
-            color: Colors.white,
+            color: colorScheme.onSurface,
             fontSize: 14,
           ),
         ),
         const SizedBox(height: 8),
 
-        // 可点击的URL链接
-        Row(
-          children: [
-            const Text(
-              '需要在 ',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-              ),
-            ),
-            GestureDetector(
-              onTap: () async {
-                const url = 'https://next.bgm.tv/demo/access-token';
-                try {
-                  if (kIsWeb) {
-                    // Web平台暂时显示URL让用户手动复制
-                    showMessage('请复制以下链接到浏览器中打开：$url');
-                  } else {
-                    // 移动端和桌面端使用url_launcher
-                    final uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    } else {
-                      if (mounted) {
-                        BlurSnackBar.show(context, '无法打开链接');
-                      }
-                    }
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    BlurSnackBar.show(context, '打开链接失败：$e');
-                  }
+        Text(
+          '需要在以下页面创建访问令牌',
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.7),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 8),
+        BlurButton(
+          icon: fluent.FluentIcons.link,
+          text: '打开访问令牌页面',
+          flatStyle: true,
+          hoverScale: _buttonHoverScale,
+          onTap: () async {
+            const url = 'https://next.bgm.tv/demo/access-token';
+            try {
+              if (kIsWeb) {
+                // Web平台暂时显示URL让用户手动复制
+                showMessage('请复制以下链接到浏览器中打开：$url');
+              } else {
+                // 移动端和桌面端使用url_launcher
+                final uri = Uri.parse(url);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                } else {
+                  showMessage('无法打开链接');
                 }
-              },
-              child: const Text(
-                'https://next.bgm.tv/demo/access-token',
-                locale: Locale("zh-Hans", "zh"),
-                style: TextStyle(
-                  color: Color(0xFF53A8DC), // 使用弹弹play的蓝色作为链接色
-                  fontSize: 12,
-                  decoration: TextDecoration.underline,
-                  decorationColor: Color(0xFF53A8DC),
-                ),
-              ),
-            ),
-            const Text(
-              ' 创建访问令牌',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-              ),
-            ),
-          ],
+              }
+            } catch (e) {
+              showMessage('打开链接失败：$e');
+            }
+          },
+        ),
+        const SizedBox(height: 4),
+        SelectableText(
+          'https://next.bgm.tv/demo/access-token',
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.7),
+            fontSize: 12,
+          ),
         ),
         const SizedBox(height: 16),
         
         // 令牌输入框
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
-          child: TextField(
-            controller: bangumiTokenController,
-            decoration: const InputDecoration(
-              hintText: '请输入Bangumi访问令牌',
-              hintStyle: TextStyle(color: Colors.white54),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.all(16),
-            ),
-            style: const TextStyle(color: Colors.white),
-            obscureText: true,
-          ),
+        fluent.PasswordBox(
+          controller: bangumiTokenController,
+          placeholder: '请输入Bangumi访问令牌',
         ),
         const SizedBox(height: 16),
 
         // 保存按钮
-        SizedBox(
-          width: double.infinity,
-          child: _buildActionButton(
-            '保存令牌',
-            Icons.save,
-            isLoading ? null : saveBangumiToken,
-          ),
+        BlurButton(
+          icon: fluent.FluentIcons.save,
+          text: '保存令牌',
+          expandHorizontally: true,
+          flatStyle: true,
+          hoverScale: _buttonHoverScale,
+          onTap: () {
+            if (isLoading) return;
+            saveBangumiToken();
+          },
         ),
       ],
     );
@@ -799,53 +764,20 @@ style: TextStyle(color: Colors.white70),
   Widget _buildActionButton(
     String text,
     IconData icon,
-    VoidCallback? onPressed, {
-    bool isDestructive = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onPressed,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDestructive 
-                ? Colors.red.withOpacity(0.2)
-                : Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isDestructive
-                  ? Colors.red.withOpacity(0.3)
-                  : Colors.white.withOpacity(0.2),
-              width: 0.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: onPressed != null 
-                    ? (isDestructive ? Colors.red : Colors.white)
-                    : Colors.white38,
-                size: 16,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                text,
-                locale: const Locale("zh-Hans", "zh"),
-                style: TextStyle(
-                  color: onPressed != null 
-                      ? (isDestructive ? Colors.red : Colors.white)
-                      : Colors.white38,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
+    VoidCallback? onPressed,
+  ) {
+    final isDisabled = onPressed == null;
+    return IgnorePointer(
+      ignoring: isDisabled,
+      child: BlurButton(
+        icon: icon,
+        text: text,
+        flatStyle: true,
+        hoverScale: _buttonHoverScale,
+        onTap: () {
+          if (isDisabled) return;
+          onPressed?.call();
+        },
       ),
     );
   }
@@ -866,43 +798,29 @@ style: TextStyle(color: Colors.white70),
   }
 
   // 构建弹弹play页面内容
-  Widget _buildDandanplayPage(double blurValue) {
+  Widget _buildDandanplayPage() {
     return Column(
       children: [
         if (isLoggedIn) ...[
-          _buildLoggedInView(blurValue),
+          _buildLoggedInView(),
           const SizedBox(height: 16),
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: MaterialUserActivity(key: ValueKey(username)),
-                ),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: MaterialUserActivity(key: ValueKey(username)),
             ),
           ),
         ] else ...[
-          _buildLoggedOutView(blurValue),
+          _buildLoggedOutView(),
         ],
       ],
     );
   }
 
   // 构建Bangumi页面内容
-  Widget _buildBangumiPage(double blurValue) {
+  Widget _buildBangumiPage() {
     return SingleChildScrollView(
-      child: _buildBangumiSyncSection(blurValue),
+      child: _buildBangumiSyncSection(),
     );
   }
 }

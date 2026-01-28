@@ -3,10 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/services/system_share_service.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_loading_overlay.dart';
-import 'package:nipaplay/themes/fluent/widgets/fluent_right_edge_menu.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
@@ -16,6 +13,7 @@ import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
 import 'blur_dialog.dart';
 import 'blur_snackbar.dart';
+import 'hover_scale_text_button.dart';
 import 'right_edge_hover_menu.dart';
 import 'minimal_progress_bar.dart';
 import 'danmaku_density_bar.dart';
@@ -28,7 +26,12 @@ import 'playback_info_menu.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class VideoPlayerUI extends StatefulWidget {
-  const VideoPlayerUI({super.key});
+  final Widget? emptyPlaceholder;
+
+  const VideoPlayerUI({
+    super.key,
+    this.emptyPlaceholder,
+  });
 
   @override
   State<VideoPlayerUI> createState() => _VideoPlayerUIState();
@@ -122,7 +125,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
               title: '播放错误',
               content: errorMessage,
               actions: [
-                TextButton(
+                HoverScaleTextButton(
                   child: const Text('确定'),
                   onPressed: () {
                     // 1. Pop the dialog
@@ -554,38 +557,27 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
-        final uiThemeProvider = Provider.of<UIThemeProvider>(context);
         final textureId = videoState.player.textureId.value;
 
         // 更新番剧封面URL（如果有番剧ID）
         _updateAnimeCoverUrl(videoState.animeId);
 
         if (!videoState.hasVideo) {
+          final placeholder = widget.emptyPlaceholder ?? const VideoUploadUI();
           return Stack(
             children: [
-              const VideoUploadUI(),
+              placeholder,
               if (videoState.status == PlayerStatus.recognizing ||
                   videoState.status == PlayerStatus.loading)
-                uiThemeProvider.isFluentUITheme
-                    ? FluentLoadingOverlay(
-                        messages: videoState.statusMessages,
-                        highPriorityAnimation:
-                            !videoState.isInFinalLoadingPhase,
-                        animeTitle: videoState.animeTitle,
-                        episodeTitle: videoState.episodeTitle,
-                        fileName: videoState.currentVideoPath?.split('/').last,
-                        coverImageUrl: _currentAnimeCoverUrl,
-                      )
-                    : LoadingOverlay(
-                        messages: videoState.statusMessages,
-                        backgroundOpacity: 0.5,
-                        highPriorityAnimation:
-                            !videoState.isInFinalLoadingPhase,
-                        animeTitle: videoState.animeTitle,
-                        episodeTitle: videoState.episodeTitle,
-                        fileName: videoState.currentVideoPath?.split('/').last,
-                        coverImageUrl: _currentAnimeCoverUrl,
-                      ),
+                LoadingOverlay(
+                  messages: videoState.statusMessages,
+                  backgroundOpacity: 0.5,
+                  highPriorityAnimation: !videoState.isInFinalLoadingPhase,
+                  animeTitle: videoState.animeTitle,
+                  episodeTitle: videoState.episodeTitle,
+                  fileName: videoState.currentVideoPath?.split('/').last,
+                  coverImageUrl: _currentAnimeCoverUrl,
+                ),
             ],
           );
         }
@@ -699,30 +691,17 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       PlayerStatus.recognizing ||
                                   videoState.status == PlayerStatus.loading)
                                 Positioned.fill(
-                                  child: uiThemeProvider.isFluentUITheme
-                                      ? FluentLoadingOverlay(
-                                          messages: videoState.statusMessages,
-                                          highPriorityAnimation:
-                                              !videoState.isInFinalLoadingPhase,
-                                          animeTitle: videoState.animeTitle,
-                                          episodeTitle: videoState.episodeTitle,
-                                          fileName: videoState.currentVideoPath
-                                              ?.split('/')
-                                              .last,
-                                          coverImageUrl: _currentAnimeCoverUrl,
-                                        )
-                                      : LoadingOverlay(
-                                          messages: videoState.statusMessages,
-                                          backgroundOpacity: 0.5,
-                                          highPriorityAnimation:
-                                              !videoState.isInFinalLoadingPhase,
-                                          animeTitle: videoState.animeTitle,
-                                          episodeTitle: videoState.episodeTitle,
-                                          fileName: videoState.currentVideoPath
-                                              ?.split('/')
-                                              .last,
-                                          coverImageUrl: _currentAnimeCoverUrl,
-                                        ),
+                                  child: LoadingOverlay(
+                                    messages: videoState.statusMessages,
+                                    backgroundOpacity: 0.5,
+                                    highPriorityAnimation:
+                                        !videoState.isInFinalLoadingPhase,
+                                    animeTitle: videoState.animeTitle,
+                                    episodeTitle: videoState.episodeTitle,
+                                    fileName:
+                                        videoState.currentVideoPath?.split('/').last,
+                                    coverImageUrl: _currentAnimeCoverUrl,
+                                  ),
                                 ),
 
                               if (videoState.hasVideo)
@@ -813,36 +792,17 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         PlayerStatus.recognizing ||
                                     videoState.status == PlayerStatus.loading)
                                   Positioned.fill(
-                                    child: uiThemeProvider.isFluentUITheme
-                                        ? FluentLoadingOverlay(
-                                            messages: videoState.statusMessages,
-                                            highPriorityAnimation: !videoState
-                                                .isInFinalLoadingPhase,
-                                            animeTitle: videoState.animeTitle,
-                                            episodeTitle:
-                                                videoState.episodeTitle,
-                                            fileName: videoState
-                                                .currentVideoPath
-                                                ?.split('/')
-                                                .last,
-                                            coverImageUrl:
-                                                _currentAnimeCoverUrl,
-                                          )
-                                        : LoadingOverlay(
-                                            messages: videoState.statusMessages,
-                                            backgroundOpacity: 0.5,
-                                            highPriorityAnimation: !videoState
-                                                .isInFinalLoadingPhase,
-                                            animeTitle: videoState.animeTitle,
-                                            episodeTitle:
-                                                videoState.episodeTitle,
-                                            fileName: videoState
-                                                .currentVideoPath
-                                                ?.split('/')
-                                                .last,
-                                            coverImageUrl:
-                                                _currentAnimeCoverUrl,
-                                          ),
+                                    child: LoadingOverlay(
+                                      messages: videoState.statusMessages,
+                                      backgroundOpacity: 0.5,
+                                      highPriorityAnimation: !videoState
+                                          .isInFinalLoadingPhase,
+                                      animeTitle: videoState.animeTitle,
+                                      episodeTitle: videoState.episodeTitle,
+                                      fileName:
+                                          videoState.currentVideoPath?.split('/').last,
+                                      coverImageUrl: _currentAnimeCoverUrl,
+                                    ),
                                   ),
 
                                 if (videoState.hasVideo)
@@ -854,12 +814,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                   ),
 
                                 // 右边缘悬浮菜单（仅桌面版）
-                                if (uiThemeProvider.isFluentUITheme)
-                                  FluentRightEdgeMenu(
-                                    enableHoverToOpen:
-                                        videoState.desktopHoverSettingsMenuEnabled,
-                                  )
-                                else if (videoState.desktopHoverSettingsMenuEnabled)
+                                if (videoState.desktopHoverSettingsMenuEnabled)
                                   const RightEdgeHoverMenu(),
 
                                 // 底部1像素白色进度条

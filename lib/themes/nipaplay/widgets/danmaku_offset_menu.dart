@@ -207,7 +207,7 @@ style: TextStyle(
                       '弹幕后退',
                       locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                        color: Colors.white70,
+                        color: Colors.white,
                         fontSize: 12,
                       ),
                     ),
@@ -226,7 +226,7 @@ style: TextStyle(
                       '默认',
                       locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                        color: Colors.white70,
+                        color: Colors.white,
                         fontSize: 12,
                       ),
                     ),
@@ -239,7 +239,7 @@ style: TextStyle(
                       '弹幕前进',
                       locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                        color: Colors.white70,
+                        color: Colors.white,
                         fontSize: 12,
                       ),
                     ),
@@ -333,7 +333,7 @@ style: TextStyle(
                               ),
                               suffixText: '秒',
                               suffixStyle: const TextStyle(
-                                color: Colors.white54,
+                                color: Colors.white,
                               ),
                               errorText: _customOffsetError,
                               errorStyle: const TextStyle(
