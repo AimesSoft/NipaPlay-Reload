@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:glassmorphism/glassmorphism.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 class BangumiCollectionDialog extends StatefulWidget {
@@ -37,31 +39,24 @@ class BangumiCollectionDialog extends StatefulWidget {
     required Future<void> Function(BangumiCollectionSubmitResult result)
         onSubmit,
   }) {
-    return showGeneralDialog(
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    return NipaplayWindow.show(
       context: context,
+      enableAnimation: enableAnimation,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.5),
-      barrierLabel: '关闭Bangumi收藏对话框',
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, __, ___) {
-        return BangumiCollectionDialog(
-          animeTitle: animeTitle,
-          initialRating: initialRating,
-          initialCollectionType: initialCollectionType,
-          initialComment: initialComment,
-          initialEpisodeStatus: initialEpisodeStatus,
-          totalEpisodes: totalEpisodes,
-          onSubmit: onSubmit,
-        );
-      },
-      transitionBuilder: (_, animation, __, child) {
-        final curved =
-            CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curved),
-          child: FadeTransition(opacity: animation, child: child),
-        );
-      },
+      child: BangumiCollectionDialog(
+        animeTitle: animeTitle,
+        initialRating: initialRating,
+        initialCollectionType: initialCollectionType,
+        initialComment: initialComment,
+        initialEpisodeStatus: initialEpisodeStatus,
+        totalEpisodes: totalEpisodes,
+        onSubmit: onSubmit,
+      ),
     );
   }
 
@@ -71,7 +66,7 @@ class BangumiCollectionDialog extends StatefulWidget {
 }
 
 class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
-  static const Color _accentColor = Color(0xFFEB4994);
+  static const Color _accentColor = Color(0xFFFF2E55);
   static const Map<int, String> _ratingEvaluationMap = {
     1: '不忍直视',
     2: '很差',
@@ -100,6 +95,67 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
   late int _selectedEpisodeStatus;
   bool _isSubmitting = false;
 
+  bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
+  Color get _textColor => Theme.of(context).colorScheme.onSurface;
+  Color get _subTextColor => _textColor.withOpacity(0.7);
+  Color get _mutedTextColor => _textColor.withOpacity(0.5);
+  Color get _borderColor => _textColor.withOpacity(_isDarkMode ? 0.12 : 0.2);
+  Color get _surfaceColor =>
+      _isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+  Color get _panelColor =>
+      _isDarkMode ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
+  Color get _panelAltColor =>
+      _isDarkMode ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
+
+  TextSelectionThemeData get _selectionTheme => TextSelectionThemeData(
+        cursorColor: _accentColor,
+        selectionColor: _accentColor.withOpacity(0.3),
+        selectionHandleColor: _accentColor,
+      );
+
+  ButtonStyle _textButtonStyle({Color? baseColor}) {
+    final resolvedBase = baseColor ?? _textColor;
+    return ButtonStyle(
+      foregroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return _mutedTextColor;
+        }
+        if (states.contains(MaterialState.hovered)) {
+          return _accentColor;
+        }
+        return resolvedBase;
+      }),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+    );
+  }
+
+  ButtonStyle _primaryButtonStyle() {
+    return ButtonStyle(
+      backgroundColor: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.disabled)) {
+          return _accentColor.withOpacity(0.5);
+        }
+        return _accentColor;
+      }),
+      foregroundColor: MaterialStateProperty.all(Colors.white),
+      overlayColor: MaterialStateProperty.all(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      padding: MaterialStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      ),
+      minimumSize: MaterialStateProperty.all(const Size(96, 44)),
+      elevation: MaterialStateProperty.all(0),
+      shadowColor: MaterialStateProperty.all(Colors.transparent),
+      shape: MaterialStateProperty.all(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -127,82 +183,97 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final enableBlur =
-        context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect;
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = screenSize.width >= 760
+        ? 620.0
+        : globals.DialogSizes.getDialogWidth(screenSize.width);
+    final maxHeightFactor = (globals.isPhone && screenSize.shortestSide < 600)
+        ? 0.9
+        : 0.85;
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: IntrinsicWidth(
-        child: IntrinsicHeight(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 340, maxWidth: 420),
-            child: GlassmorphicContainer(
-              width: double.infinity,
-              height: double.infinity,
-              borderRadius: 16,
-              blur: enableBlur ? 25 : 0,
-              alignment: Alignment.center,
-              border: 1,
-              linearGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.18),
-                  Colors.white.withOpacity(0.05),
-                ],
-              ),
-              borderGradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withOpacity(0.5),
-                  Colors.white.withOpacity(0.15),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
+    return TextSelectionTheme(
+      data: _selectionTheme,
+      child: NipaplayWindowScaffold(
+        maxWidth: dialogWidth,
+        maxHeightFactor: maxHeightFactor,
+        onClose: () => Navigator.of(context).maybePop(),
+        backgroundColor: _surfaceColor,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 16),
+              Expanded(
                 child: SingleChildScrollView(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '编辑Bangumi评分',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: _accentColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        widget.animeTitle,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 18),
                       _buildRatingSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
                       _buildCollectionSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
                       _buildEpisodeStatusSection(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
                       _buildCommentInput(),
-                      const SizedBox(height: 24),
-                      _buildActionButtons(),
                     ],
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 16),
+              _buildActionButtons(),
+            ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: _accentColor.withOpacity(0.18),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.star_rate_rounded,
+            color: _accentColor,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '编辑 Bangumi 评分',
+                style: TextStyle(
+                  color: _textColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.animeTitle,
+                style: TextStyle(
+                  color: _subTextColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -210,10 +281,10 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '评分',
           style: TextStyle(
-            color: Colors.white,
+            color: _textColor,
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -224,8 +295,8 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
             children: [
               Text(
                 _selectedRating > 0 ? '$_selectedRating 分' : '未评分',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: _textColor,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
@@ -235,7 +306,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                 Text(
                   _ratingEvaluationMap[_selectedRating] ?? '',
                   style: TextStyle(
-                    color: _accentColor.withOpacity(0.9),
+                    color: _accentColor,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
@@ -259,21 +330,17 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                   height: 32,
                   decoration: BoxDecoration(
                     color: isActive
-                        ? Colors.yellow[600]?.withOpacity(0.3)
-                        : Colors.white.withOpacity(0.08),
+                        ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.12)
+                        : _panelAltColor,
                     border: Border.all(
-                      color: isActive
-                          ? Colors.yellow[600]!
-                          : Colors.white.withOpacity(0.3),
+                      color: isActive ? _accentColor : _borderColor,
                       width: 1,
                     ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(
                     isActive ? Ionicons.star : Ionicons.star_outline,
-                    color: isActive
-                        ? Colors.yellow[600]
-                        : Colors.white.withOpacity(0.6),
+                    color: isActive ? _accentColor : _mutedTextColor,
                     size: 18,
                   ),
                 ),
@@ -294,12 +361,10 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                 height: 28,
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? _accentColor.withOpacity(0.3)
-                      : Colors.transparent,
+                      ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.12)
+                      : _panelAltColor,
                   border: Border.all(
-                    color: isSelected
-                        ? _accentColor
-                        : Colors.white.withOpacity(0.3),
+                    color: isSelected ? _accentColor : _borderColor,
                     width: 1,
                   ),
                   borderRadius: BorderRadius.circular(4),
@@ -308,9 +373,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                   child: Text(
                     '$rating',
                     style: TextStyle(
-                      color: isSelected
-                          ? _accentColor
-                          : Colors.white.withOpacity(0.8),
+                      color: isSelected ? _accentColor : _textColor,
                       fontSize: 12,
                       fontWeight:
                           isSelected ? FontWeight.bold : FontWeight.normal,
@@ -329,10 +392,10 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '收藏状态',
           style: TextStyle(
-            color: Colors.white,
+            color: _textColor,
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -354,12 +417,10 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? _accentColor.withOpacity(0.25)
-                      : Colors.white.withOpacity(0.08),
+                      ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.12)
+                      : _panelAltColor,
                   border: Border.all(
-                    color: isSelected
-                        ? _accentColor
-                        : Colors.white.withOpacity(0.25),
+                    color: isSelected ? _accentColor : _borderColor,
                     width: 1,
                   ),
                   borderRadius: BorderRadius.circular(6),
@@ -367,9 +428,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isSelected
-                        ? _accentColor
-                        : Colors.white.withOpacity(0.85),
+                    color: isSelected ? _accentColor : _textColor,
                     fontSize: 13,
                     fontWeight:
                         isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -404,7 +463,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: _accentColor.withOpacity(0.15),
+            color: _accentColor.withOpacity(_isDarkMode ? 0.18 : 0.12),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: _accentColor.withOpacity(0.4),
@@ -419,10 +478,10 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '观看进度',
           style: TextStyle(
-            color: Colors.white,
+            color: _textColor,
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -440,22 +499,20 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+                style: TextStyle(color: _textColor, fontSize: 14),
                 decoration: InputDecoration(
                   isDense: true,
                   contentPadding:
                       const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.08),
+                  fillColor: _panelAltColor,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.25)),
+                    borderSide: BorderSide(color: _borderColor),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.25)),
+                    borderSide: BorderSide(color: _borderColor),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(6),
@@ -482,14 +539,15 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
             if (hasTotal) ...[
               const SizedBox(width: 16),
               Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    activeTrackColor: _accentColor,
-                    inactiveTrackColor: Colors.white.withOpacity(0.2),
-                    thumbColor: _accentColor,
-                    overlayColor: _accentColor.withOpacity(0.2),
+                child: fluent.FluentTheme(
+                  data: fluent.FluentThemeData(
+                    brightness: Theme.of(context).brightness,
+                    accentColor: fluent.AccentColor.swatch({
+                      'normal': _accentColor,
+                      'default': _accentColor,
+                    }),
                   ),
-                  child: Slider(
+                  child: fluent.Slider(
                     value: _selectedEpisodeStatus.clamp(0, maxValue).toDouble(),
                     min: 0,
                     max: maxValue.toDouble(),
@@ -497,6 +555,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                     onChanged: _isSubmitting
                         ? null
                         : (value) => _updateEpisodeStatus(value.round()),
+                    label: _selectedEpisodeStatus.toString(),
                   ),
                 ),
               ),
@@ -508,7 +567,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
           hasTotal
               ? '当前进度：$_selectedEpisodeStatus/$total 集'
               : '当前进度：$_selectedEpisodeStatus 集',
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: TextStyle(color: _subTextColor, fontSize: 12),
         ),
       ],
     );
@@ -534,10 +593,10 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           '短评',
           style: TextStyle(
-            color: Colors.white,
+            color: _textColor,
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -548,19 +607,17 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
           minLines: 3,
           maxLines: 4,
           maxLength: 200,
-          style:
-              const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+          style: TextStyle(color: _textColor, fontSize: 13, height: 1.4),
           cursorColor: _accentColor,
           decoration: InputDecoration(
-            counterStyle: const TextStyle(color: Colors.white54, fontSize: 11),
+            counterStyle: TextStyle(color: _mutedTextColor, fontSize: 11),
             hintText: '写下你的短评（可选）',
-            hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+            hintStyle: TextStyle(color: _mutedTextColor, fontSize: 13),
             filled: true,
-            fillColor: Colors.black.withOpacity(0.2),
+            fillColor: _panelAltColor,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide:
-                  BorderSide(color: Colors.white.withOpacity(0.25), width: 1),
+              borderSide: BorderSide(color: _borderColor, width: 1),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -576,53 +633,36 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
     return Row(
       children: [
         if (_selectedRating > 0)
-          Expanded(
-            child: TextButton(
-              onPressed: _isSubmitting
-                  ? null
-                  : () => setState(() => _selectedRating = 0),
-              child: const Text(
-                '清除评分',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-            ),
+          TextButton(
+            onPressed:
+                _isSubmitting ? null : () => setState(() => _selectedRating = 0),
+            style: _textButtonStyle(baseColor: _accentColor),
+            child: const Text('清除评分'),
           ),
-        if (_selectedRating > 0) const SizedBox(width: 8),
-        Expanded(
-          child: TextButton(
-            onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
-            child: const Text(
-              '取消',
-              style: TextStyle(color: Colors.white, fontSize: 13),
-            ),
-          ),
+        const Spacer(),
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          style: _textButtonStyle(),
+          child: const Text('取消'),
         ),
         const SizedBox(width: 8),
-        Expanded(
-          child: ElevatedButton(
-            onPressed:
-                _isSubmitting || _selectedRating == 0 ? null : _handleSubmit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _accentColor.withOpacity(0.9),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6)),
-            ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    '确定',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ElevatedButton(
+          onPressed:
+              _isSubmitting || _selectedRating == 0 ? null : _handleSubmit,
+          style: _primaryButtonStyle(),
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
-          ),
+                )
+              : const Text(
+                  '确定',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
         ),
       ],
     );
