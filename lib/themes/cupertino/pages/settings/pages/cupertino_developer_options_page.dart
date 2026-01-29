@@ -3,6 +3,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_build_info_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dependency_versions_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_debug_log_viewer_sheet.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -28,6 +29,15 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
       title: '依赖库版本',
       floatingTitle: true,
       child: const CupertinoDependencyVersionsSheet(),
+    );
+  }
+
+  Future<void> _openBuildInfo(BuildContext context) async {
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '构建信息',
+      floatingTitle: true,
+      child: const CupertinoBuildInfoSheet(),
     );
   }
 
@@ -82,6 +92,17 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                         backgroundColor: resolveSettingsTileBackground(context),
                         showChevron: true,
                         onTap: () => _openDependencyVersions(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.info_circle,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('构建信息'),
+                        subtitle: const Text('查看构建时间、处理器、内存与系统架构'),
+                        backgroundColor: resolveSettingsTileBackground(context),
+                        showChevron: true,
+                        onTap: () => _openBuildInfo(context),
                       ),
                     ],
                   ),

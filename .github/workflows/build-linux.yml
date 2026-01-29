@@ -30,6 +30,10 @@ jobs:
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
+
+      - name: Generate build info json
+        shell: bash
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
       
       - name: Build Linux Packages
         uses: ./.github/actions/build-linux
@@ -62,6 +66,10 @@ jobs:
       - name: Setup Flutter Environment
         id: setup
         uses: ./.github/actions/setup-flutter
+
+      - name: Generate build info json
+        shell: bash
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
       
       - name: Build Linux Packages
         uses: ./.github/actions/build-linux

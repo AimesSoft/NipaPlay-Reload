@@ -160,6 +160,7 @@ flutter:
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml
     - third_party/smb_connect/pubspec.yaml
+    - assets/build_info.json
     - assets/logo.png
     - assets/logo2.png
     - assets/images/logo512.png

@@ -15,7 +15,7 @@ class CupertinoDeveloperSettingTile extends StatelessWidget {
     return CupertinoSettingsTile(
       leading: Icon(CupertinoIcons.command, color: iconColor),
       title: const Text('开发者选项'),
-      subtitle: const Text('终端输出、复制、二维码分享'),
+      subtitle: const Text('终端输出、依赖版本、构建信息'),
       backgroundColor: tileColor,
       showChevron: true,
       onTap: () {

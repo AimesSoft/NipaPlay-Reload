@@ -6,6 +6,7 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/dependency_versions_wind
 import 'package:nipaplay/themes/nipaplay/pages/settings/debug_log_viewer_page.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
+import 'package:nipaplay/utils/build_info.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -96,6 +97,18 @@ class DeveloperOptionsPage extends StatelessWidget {
               trailingIcon: Ionicons.chevron_forward_outline,
               onTap: () {
                 _openDependencyVersions(context);
+              },
+            ),
+
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+            SettingsItem.button(
+              title: '构建信息',
+              subtitle: '查看构建时间、处理器、内存与系统架构',
+              icon: Ionicons.information_circle_outline,
+              trailingIcon: Ionicons.chevron_forward_outline,
+              onTap: () {
+                _showBuildInfo(context);
               },
             ),
 
@@ -255,6 +268,128 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
       barrierDismissible: true,
       barrierColor: Colors.transparent,
       child: const DependencyVersionsWindow(),
+    );
+  }
+
+  void _showBuildInfo(BuildContext context) {
+    final infoFuture = loadBuildInfoSections();
+    BlurDialog.show<void>(
+      context: context,
+      title: '构建信息',
+      contentWidget: FutureBuilder<List<BuildInfoSection>>(
+        future: infoFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text('正在收集构建信息...'),
+                ],
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return Text('读取构建信息失败: ${snapshot.error}');
+          }
+          return _buildBuildInfoContent(context, snapshot.data ?? []);
+        },
+      ),
+      actions: <Widget>[
+        HoverScaleTextButton(
+          child: const Text(
+            "知道了",
+            locale: Locale("zh-Hans", "zh"),
+            style: TextStyle(color: Colors.lightBlueAccent),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBuildInfoContent(
+    BuildContext context,
+    List<BuildInfoSection> sections,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final labelStyle = TextStyle(
+      color: colorScheme.onSurface.withOpacity(0.65),
+      fontSize: 13,
+    );
+    final valueStyle = TextStyle(
+      color: colorScheme.onSurface.withOpacity(0.9),
+      fontSize: 14,
+    );
+    final titleStyle = TextStyle(
+      color: colorScheme.onSurface,
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
+    );
+    final noteStyle = TextStyle(
+      color: colorScheme.onSurface.withOpacity(0.6),
+      fontSize: 12,
+      height: 1.4,
+    );
+
+    if (sections.isEmpty) {
+      return const Text('暂无构建信息');
+    }
+
+    final children = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      final section = sections[i];
+      children.add(
+        Text(section.title, style: titleStyle, textAlign: TextAlign.left),
+      );
+      children.add(const SizedBox(height: 8));
+      for (final entry in section.entries) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 86,
+                  child: Text(
+                    entry.label,
+                    style: labelStyle,
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    entry.value,
+                    style: valueStyle,
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      if (i != sections.length - 1) {
+        children.add(const SizedBox(height: 12));
+      }
+    }
+
+    children.add(const SizedBox(height: 6));
+    children.add(
+      Text(
+        '注：构建前需生成 assets/build_info.json，未生成将显示“未注入”。',
+        style: noteStyle,
+        textAlign: TextAlign.left,
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
     );
   }
 

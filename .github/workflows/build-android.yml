@@ -69,6 +69,10 @@ jobs:
         id: setup
         uses: ./.github/actions/setup-flutter
 
+      - name: Generate build info json
+        shell: bash
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
       - name: Pre-download Gradle Wrapper
         run: |
           cd android
