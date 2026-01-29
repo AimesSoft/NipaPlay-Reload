@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'jellyfin_service.dart';
 
@@ -16,6 +17,8 @@ class JellyfinPlaybackSyncService {
   // 当前播放状态
   String? _currentItemId;
   String? _currentPlaySessionId;
+  String? _currentMediaSourceId;
+  String? _currentPlayMethod;
   bool _isPlaying = false;
   
   /// 开始播放时调用，拉取服务器记录并与本地记录做冲突处理
@@ -60,7 +63,8 @@ class JellyfinPlaybackSyncService {
   }
   
   /// 开始播放时调用，向服务器报告播放开始
-  Future<void> reportPlaybackStart(String itemId, WatchHistoryItem historyItem) async {
+  Future<void> reportPlaybackStart(String itemId, WatchHistoryItem historyItem,
+      {PlaybackSession? playbackSession}) async {
     try {
       if (!_jellyfinService.isConnected) return;
       
@@ -70,23 +74,33 @@ class JellyfinPlaybackSyncService {
       _stopProgressSync();
       _currentItemId = null;
       _currentPlaySessionId = null;
+      _currentMediaSourceId = null;
+      _currentPlayMethod = null;
       _isPlaying = false;
-      
-      final playSessionId = _generatePlaySessionId();
+
+      final resolvedSessionId = playbackSession?.playSessionId?.trim();
+      if (resolvedSessionId == null || resolvedSessionId.isEmpty) {
+        debugPrint('[JellyfinSync] 无有效PlaySessionId，跳过播放开始上报');
+        return;
+      }
+
       _currentItemId = itemId;
-      _currentPlaySessionId = playSessionId;
+      _currentPlaySessionId = resolvedSessionId;
+      _currentMediaSourceId = playbackSession?.mediaSourceId;
+      _currentPlayMethod =
+          playbackSession?.isTranscoding == true ? 'Transcode' : 'DirectPlay';
       _isPlaying = true;
-      debugPrint('[JellyfinSync] 新播放会话已初始化: $playSessionId');
+      debugPrint('[JellyfinSync] 新播放会话已初始化: $resolvedSessionId');
       
       // 构建播放开始信息
       final startInfo = {
         'ItemId': itemId,
         'PositionTicks': (historyItem.lastPosition * 10000).round(), // 转换为ticks
-        'PlaySessionId': playSessionId,
+        'PlaySessionId': resolvedSessionId,
         'CanSeek': true,
         'IsPaused': false,
         'IsMuted': false,
-        'PlayMethod': 'DirectPlay', // 假设直接播放
+        'PlayMethod': _currentPlayMethod ?? 'DirectPlay',
         'VolumeLevel': 100,
       };
       
@@ -111,7 +125,8 @@ class JellyfinPlaybackSyncService {
   }
   
   /// 播放结束时调用，向服务器报告播放结束
-  Future<void> reportPlaybackStopped(String itemId, WatchHistoryItem historyItem, {bool isCompleted = false}) async {
+  Future<void> reportPlaybackStopped(String itemId, WatchHistoryItem historyItem,
+      {bool isCompleted = false}) async {
     try {
       if (!_jellyfinService.isConnected) return;
       
@@ -120,6 +135,11 @@ class JellyfinPlaybackSyncService {
       // 停止定时器
       _stopProgressSync();
       
+      if (_currentPlaySessionId == null || _currentPlaySessionId!.isEmpty) {
+        debugPrint('[JellyfinSync] 无有效PlaySessionId，跳过播放结束上报');
+        return;
+      }
+
       // 构建播放结束信息
       final stopInfo = {
         'ItemId': itemId,
@@ -152,6 +172,8 @@ class JellyfinPlaybackSyncService {
       // 清理状态
       _currentItemId = null;
       _currentPlaySessionId = null;
+      _currentMediaSourceId = null;
+      _currentPlayMethod = null;
       _isPlaying = false;
       debugPrint('[JellyfinSync] 播放状态已清理，准备下一集播放');
     }
@@ -259,9 +281,12 @@ class JellyfinPlaybackSyncService {
     }
   }
   
-  /// 生成播放会话ID
-  String _generatePlaySessionId() {
-    return 'nipaplay_${DateTime.now().millisecondsSinceEpoch}_$_currentItemId';
+  void updatePlaybackSession(PlaybackSession session) {
+    _currentItemId = session.itemId;
+    _currentPlaySessionId = session.playSessionId;
+    _currentMediaSourceId = session.mediaSourceId;
+    _currentPlayMethod =
+        session.isTranscoding ? 'Transcode' : 'DirectPlay';
   }
   
   /// 发送认证请求
@@ -297,7 +322,11 @@ class JellyfinPlaybackSyncService {
   
   /// 手动同步播放进度（供外部调用）
   Future<void> syncCurrentProgress(int positionMs) async {
-    if (!_isPlaying || _currentItemId == null) return;
+    if (!_isPlaying ||
+        _currentItemId == null ||
+        _currentPlaySessionId == null) {
+      return;
+    }
     
     try {
       final progressInfo = {
@@ -307,7 +336,7 @@ class JellyfinPlaybackSyncService {
         'CanSeek': true,
         'IsPaused': false,
         'IsMuted': false,
-        'PlayMethod': 'DirectPlay',
+        'PlayMethod': _currentPlayMethod ?? 'DirectPlay',
         'VolumeLevel': 100,
       };
       
@@ -330,7 +359,11 @@ class JellyfinPlaybackSyncService {
 
   /// 报告播放暂停状态
   Future<void> reportPlaybackPaused(int positionMs) async {
-    if (!_isPlaying || _currentItemId == null) return;
+    if (!_isPlaying ||
+        _currentItemId == null ||
+        _currentPlaySessionId == null) {
+      return;
+    }
     
     try {
       final progressInfo = {
@@ -340,7 +373,7 @@ class JellyfinPlaybackSyncService {
         'CanSeek': true,
         'IsPaused': true, // 设置为暂停状态
         'IsMuted': false,
-        'PlayMethod': 'DirectPlay',
+        'PlayMethod': _currentPlayMethod ?? 'DirectPlay',
         'VolumeLevel': 100,
       };
       

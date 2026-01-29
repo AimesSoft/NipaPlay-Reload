@@ -36,7 +36,8 @@ class PlaybackService {
     await videoPlayerState.initializePlayer(
       item.videoPath,
       historyItem: item.historyItem,
-      actualPlayUrl: item.actualPlayUrl, // <-- 添加这行
+      actualPlayUrl: item.actualPlayUrl,
+      playbackSession: item.playbackSession,
     );
   }
 }

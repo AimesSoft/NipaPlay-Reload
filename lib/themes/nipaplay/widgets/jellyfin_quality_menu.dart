@@ -45,12 +45,14 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       if (videoState.currentVideoPath != null && videoState.currentVideoPath!.startsWith('emby://')) {
         final embyProv = Provider.of<EmbyTranscodeProvider>(context, listen: false);
         await embyProv.initialize();
+        if (!mounted) return;
         setState(() {
           _currentQuality = embyProv.currentVideoQuality;
         });
       } else {
         final transcodeProvider = Provider.of<JellyfinTranscodeProvider>(context, listen: false);
         await transcodeProvider.initialize();
+        if (!mounted) return;
         setState(() {
           _currentQuality = transcodeProvider.currentVideoQuality;
         });
@@ -62,29 +64,63 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       if (path != null && path.startsWith('jellyfin://')) {
         final itemId = path.replaceFirst('jellyfin://', '');
         final tracks = await JellyfinService.instance.getSubtitleTracks(itemId);
-        setState(() {
-          _serverSubtitles = tracks;
+        final bool hasSavedSelection =
+            vp.hasJellyfinServerSubtitleSelection(itemId);
+        int? resolvedSelection = hasSavedSelection
+            ? vp.getJellyfinServerSubtitleSelection(itemId)
+            : null;
+        bool resolvedBurnIn =
+            hasSavedSelection ? vp.getJellyfinServerSubtitleBurnIn(itemId) : false;
+        if (resolvedSelection != null &&
+            !tracks.any((t) => t['index'] == resolvedSelection)) {
+          resolvedSelection = null;
+          resolvedBurnIn = false;
+        }
+        if (!hasSavedSelection) {
           final def = tracks.firstWhere(
             (t) => (t['isDefault'] == true),
             orElse: () => {},
           );
-          _selectedServerSubtitleIndex = def.isEmpty ? null : def['index'] as int?;
+          resolvedSelection = def.isEmpty ? null : def['index'] as int?;
+        }
+        if (!mounted) return;
+        setState(() {
+          _serverSubtitles = tracks;
+          _selectedServerSubtitleIndex = resolvedSelection;
+          _burnIn = resolvedBurnIn;
         });
       } else if (path != null && path.startsWith('emby://')) {
         final itemId = path.replaceFirst('emby://', '');
         final tracks = await EmbyService.instance.getSubtitleTracks(itemId);
-        setState(() {
-          _serverSubtitles = tracks;
-          // 预选默认字幕（如果存在）
+        final bool hasSavedSelection =
+            vp.hasEmbyServerSubtitleSelection(itemId);
+        int? resolvedSelection = hasSavedSelection
+            ? vp.getEmbyServerSubtitleSelection(itemId)
+            : null;
+        bool resolvedBurnIn =
+            hasSavedSelection ? vp.getEmbyServerSubtitleBurnIn(itemId) : false;
+        if (resolvedSelection != null &&
+            !tracks.any((t) => t['index'] == resolvedSelection)) {
+          resolvedSelection = null;
+          resolvedBurnIn = false;
+        }
+        if (!hasSavedSelection) {
           final def = tracks.firstWhere(
             (t) => (t['isDefault'] == true),
             orElse: () => {},
           );
-          _selectedServerSubtitleIndex = def.isEmpty ? null : def['index'] as int?;
+          resolvedSelection = def.isEmpty ? null : def['index'] as int?;
+        }
+        if (!mounted) return;
+        setState(() {
+          _serverSubtitles = tracks;
+          _selectedServerSubtitleIndex = resolvedSelection;
+          _burnIn = resolvedBurnIn;
         });
       }
     } catch (e) {
       debugPrint('加载当前转码质量失败: $e');
+      if (!mounted) return;
       setState(() {
         _currentQuality = JellyfinVideoQuality.bandwidth5m; // 默认值
       });
@@ -103,9 +139,11 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
   Future<void> _applySelection() async {
     if (_currentQuality == null) return;
     
-    setState(() {
-      _isLoading = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
     
     try {
       // 先保存默认清晰度设置
@@ -134,12 +172,24 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
       final vp = Provider.of<VideoPlayerState>(context, listen: false);
       final path = vp.currentVideoPath;
       if (path != null && path.startsWith('jellyfin://')) {
+        final itemId = path.replaceFirst('jellyfin://', '');
+        vp.setJellyfinServerSubtitleSelection(
+          itemId,
+          _selectedServerSubtitleIndex,
+          burnIn: _burnIn,
+        );
         await vp.reloadCurrentJellyfinStream(
           quality: _currentQuality!,
           serverSubtitleIndex: _selectedServerSubtitleIndex,
           burnInSubtitle: _burnIn,
         );
       } else if (path != null && path.startsWith('emby://')) {
+        final itemId = path.replaceFirst('emby://', '');
+        vp.setEmbyServerSubtitleSelection(
+          itemId,
+          _selectedServerSubtitleIndex,
+          burnIn: _burnIn,
+        );
         await vp.reloadCurrentEmbyStream(
           quality: _currentQuality!,
           serverSubtitleIndex: _selectedServerSubtitleIndex,
@@ -147,9 +197,11 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
         );
       }
       
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       
       // 显示成功通知并关闭菜单
       if (mounted) {
@@ -177,9 +229,11 @@ class _JellyfinQualityMenuState extends State<JellyfinQualityMenu> {
         widget.onClose();
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       debugPrint('应用清晰度/字幕选择失败: $e');
       if (mounted) {
         BlurSnackBar.show(context, '设置失败: $e');

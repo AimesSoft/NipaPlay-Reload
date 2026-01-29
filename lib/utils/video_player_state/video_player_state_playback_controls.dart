@@ -435,6 +435,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _subtitleManager.clearExternalSubtitle(notifyListenersToo: false);
     _currentVideoPath = null;
     _currentActualPlayUrl = null; // 清除实际播放URL
+    _currentPlaybackSession = null;
     _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
     _currentVideoHash = null;
     _currentThumbnailPath = null;
@@ -486,6 +487,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _error = null;
     }
     _currentVideoPath = null;
+    _currentActualPlayUrl = null;
+    _currentPlaybackSession = null;
     _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
     _currentVideoHash = null;
     _currentThumbnailPath = null;

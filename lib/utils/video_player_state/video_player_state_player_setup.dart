@@ -4,7 +4,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
   Future<void> initializePlayer(String videoPath,
       {WatchHistoryItem? historyItem,
       String? historyFilePath,
-      String? actualPlayUrl}) async {
+      String? actualPlayUrl,
+      PlaybackSession? playbackSession}) async {
     // 每次切换新视频时，重置自动连播倒计时状态，防止高强度测试下卡死
     try {
       AutoNextEpisodeService.instance.cancelAutoNext();
@@ -39,6 +40,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     // 检查是否是流媒体（jellyfin://协议、emby://协议）
     bool isJellyfinStream = videoPath.startsWith('jellyfin://');
     bool isEmbyStream = videoPath.startsWith('emby://');
+    PlaybackSession? resolvedSession = playbackSession;
+    String? resolvedActualPlayUrl = actualPlayUrl;
 
     // 对于本地文件才检查存在性，网络URL和流媒体默认认为"存在"
     bool fileExists =
@@ -50,13 +53,15 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       _statusMessages.add('正在准备流媒体播放...');
       notifyListeners();
     } else if (isJellyfinStream) {
+      final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
       debugPrint(
-          '检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
+          '检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl');
       _statusMessages.add('正在准备Jellyfin流媒体播放...');
       notifyListeners();
     } else if (isEmbyStream) {
+      final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
       debugPrint(
-          '检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$actualPlayUrl');
+          '检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl');
       _statusMessages.add('正在准备Emby流媒体播放...');
       notifyListeners();
     }
@@ -115,6 +120,32 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       return;
     }
 
+    if (isJellyfinStream || isEmbyStream) {
+      if (resolvedSession == null) {
+        try {
+          resolvedSession = await _createPlaybackSessionForStream(
+            videoPath,
+            historyItem: historyItem,
+          );
+        } catch (e) {
+          debugPrint('VideoPlayerState: 创建播放会话失败: $e');
+        }
+      }
+      if (resolvedSession != null) {
+        resolvedActualPlayUrl = resolvedSession!.streamUrl;
+        if (isJellyfinStream) {
+          JellyfinPlaybackSyncService().updatePlaybackSession(resolvedSession!);
+        } else if (isEmbyStream) {
+          EmbyPlaybackSyncService().updatePlaybackSession(resolvedSession!);
+        }
+      }
+      if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
+        _setStatus(PlayerStatus.error, message: '无法获取播放会话');
+        _error = '无法获取播放会话';
+        return;
+      }
+    }
+
     // 对网络URL和Jellyfin流媒体进行特殊处理
     if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
       debugPrint('VideoPlayerState: 准备流媒体URL: $videoPath');
@@ -128,15 +159,17 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             videoPath, e is Exception ? e : Exception(e.toString()));
         return; // 避免继续处理
       }
-    } else if ((isJellyfinStream || isEmbyStream) && actualPlayUrl != null) {
-      debugPrint('VideoPlayerState: 准备流媒体URL: $actualPlayUrl');
+    } else if ((isJellyfinStream || isEmbyStream) &&
+        resolvedActualPlayUrl != null) {
+      debugPrint('VideoPlayerState: 准备流媒体URL: $resolvedActualPlayUrl');
       // 对Jellyfin流媒体测试实际播放URL的连接
       try {
-        await http.head(Uri.parse(actualPlayUrl));
+        await http.head(Uri.parse(resolvedActualPlayUrl));
       } catch (e) {
         // 如果网络请求失败，使用专门的错误处理逻辑
         await _handleStreamUrlLoadingError(
-            actualPlayUrl, e is Exception ? e : Exception(e.toString()));
+            resolvedActualPlayUrl,
+            e is Exception ? e : Exception(e.toString()));
         return; // 避免继续处理
       }
     }
@@ -145,7 +178,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _subtitleManager.setCurrentVideoPath(videoPath);
 
     _currentVideoPath = videoPath;
-    _currentActualPlayUrl = actualPlayUrl; // 存储实际播放URL
+    _currentActualPlayUrl = resolvedActualPlayUrl; // 存储实际播放URL
+    _currentPlaybackSession = resolvedSession;
     print('historyItem: $historyItem');
     _animeTitle = historyItem?.animeName; // 从历史记录获取动画标题
     _episodeTitle = historyItem?.episodeTitle; // 从历史记录获取集数标题
@@ -198,8 +232,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       _setStatus(PlayerStatus.idle);
 
       //debugPrint('3. 设置媒体源...');
-      // 设置媒体源 - 如果提供了actualPlayUrl则使用它，否则使用videoPath
-      String playUrl = actualPlayUrl ?? videoPath;
+      // 设置媒体源 - 如果提供了播放会话URL则使用它，否则使用videoPath
+      String playUrl = resolvedActualPlayUrl ?? videoPath;
       player.media = playUrl;
 
       //debugPrint('4. 准备播放器...');
@@ -636,6 +670,30 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     }
   }
 
+  Future<PlaybackSession?> _createPlaybackSessionForStream(
+    String videoPath, {
+    WatchHistoryItem? historyItem,
+  }) async {
+    final startPosition = historyItem?.lastPosition ?? 0;
+    if (videoPath.startsWith('jellyfin://')) {
+      final itemId = videoPath.replaceFirst('jellyfin://', '');
+      return await JellyfinService.instance.createPlaybackSession(
+        itemId: itemId,
+        startPositionMs: startPosition > 0 ? startPosition : null,
+      );
+    }
+    if (videoPath.startsWith('emby://')) {
+      final embyPath = videoPath.replaceFirst('emby://', '');
+      final parts = embyPath.split('/');
+      final itemId = parts.isNotEmpty ? parts.last : embyPath;
+      return await EmbyService.instance.createPlaybackSession(
+        itemId: itemId,
+        startPositionMs: startPosition > 0 ? startPosition : null,
+      );
+    }
+    return null;
+  }
+
   // 初始化观看记录
   Future<void> _initializeWatchHistory(String path) async {
     try {
@@ -740,10 +798,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               await _saveVideoPosition(path, syncedHistory.lastPosition);
               debugPrint(
                   'Jellyfin同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-              await syncService.reportPlaybackStart(itemId, syncedHistory);
+              await syncService.reportPlaybackStart(itemId, syncedHistory,
+                  playbackSession: _currentPlaybackSession);
             } else {
               await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-              await syncService.reportPlaybackStart(itemId, updatedHistory);
+              await syncService.reportPlaybackStart(itemId, updatedHistory,
+                  playbackSession: _currentPlaybackSession);
             }
           } catch (e) {
             debugPrint('Jellyfin同步失败，使用本地记录: $e');
@@ -760,10 +820,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               await _saveVideoPosition(path, syncedHistory.lastPosition);
               debugPrint(
                   'Emby同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-              await syncService.reportPlaybackStart(itemId, syncedHistory);
+              await syncService.reportPlaybackStart(itemId, syncedHistory,
+                  playbackSession: _currentPlaybackSession);
             } else {
               await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
-              await syncService.reportPlaybackStart(itemId, updatedHistory);
+              await syncService.reportPlaybackStart(itemId, updatedHistory,
+                  playbackSession: _currentPlaybackSession);
             }
           } catch (e) {
             debugPrint('Emby同步失败，使用本地记录: $e');
@@ -843,10 +905,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             await _saveVideoPosition(path, syncedHistory.lastPosition);
             debugPrint(
                 'Jellyfin同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-            await syncService.reportPlaybackStart(itemId, syncedHistory);
+            await syncService.reportPlaybackStart(itemId, syncedHistory,
+                playbackSession: _currentPlaybackSession);
           } else {
             await WatchHistoryManager.addOrUpdateHistory(item);
-            await syncService.reportPlaybackStart(itemId, item);
+            await syncService.reportPlaybackStart(itemId, item,
+                playbackSession: _currentPlaybackSession);
           }
         } catch (e) {
           debugPrint('Jellyfin同步失败（新记录），使用本地记录: $e');
@@ -862,10 +926,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             await _saveVideoPosition(path, syncedHistory.lastPosition);
             debugPrint(
                 'Emby同步成功（新记录），更新SharedPreferences位置: ${syncedHistory.lastPosition}ms');
-            await syncService.reportPlaybackStart(itemId, syncedHistory);
+            await syncService.reportPlaybackStart(itemId, syncedHistory,
+                playbackSession: _currentPlaybackSession);
           } else {
             await WatchHistoryManager.addOrUpdateHistory(item);
-            await syncService.reportPlaybackStart(itemId, item);
+            await syncService.reportPlaybackStart(itemId, item,
+                playbackSession: _currentPlaybackSession);
           }
         } catch (e) {
           debugPrint('Emby同步失败（新记录），使用本地记录: $e');

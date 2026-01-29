@@ -34,6 +34,7 @@ import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -203,6 +204,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
   String? _currentActualPlayUrl; // 存储实际播放URL，用于判断转码状态
+  PlaybackSession? _currentPlaybackSession;
+  final Map<String, int?> _jellyfinServerSubtitleSelections = {};
+  final Map<String, bool> _jellyfinServerSubtitleBurnInSelections = {};
+  final Map<String, int?> _embyServerSubtitleSelections = {};
+  final Map<String, bool> _embyServerSubtitleBurnInSelections = {};
   String _danmakuOverlayKey = 'idle'; // 弹幕覆盖层的稳定key
   Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
   // 观看记录节流：记录上一次更新所处的10秒分桶，避免同一时间窗内重复写DB与通知Provider
@@ -650,6 +656,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
+  PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
   String get danmakuOverlayKey => _danmakuOverlayKey; // 弹幕覆盖层的稳定key
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
