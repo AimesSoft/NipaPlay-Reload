@@ -75,16 +75,10 @@ dependencies:
   sqflite: ^2.3.2
   sqflite_common_ffi: ^2.3.3  # 用于桌面平台
   video_player: 2.9.5
-  media_kit: 
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./media_kit
+  media_kit:
+    path: packages/media_kit
   media_kit_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./media_kit_video
+    path: packages/media_kit_video
   media_kit_libs_video:
     git:
       url: https://github.com/Shinokawa/media-kit.git
@@ -215,15 +209,9 @@ flutter:
 # Add dependency_overrides for all media_kit related packages
 dependency_overrides:
   media_kit:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./media_kit
+    path: packages/media_kit
   media_kit_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./media_kit_video
+    path: packages/media_kit_video
   media_kit_libs_video:
     git:
       url: https://github.com/Shinokawa/media-kit.git
