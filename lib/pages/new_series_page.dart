@@ -180,13 +180,19 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   SliverPadding _buildAnimeGridSliver(List<BangumiAnime> animes, int weekdayKey) {
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       sliver: SliverGrid(
         key: ValueKey<String>('sliver_grid_for_weekday_$weekdayKey'),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 500,
-          mainAxisExtent: 140,
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: showSummary
+              ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
+              : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+          mainAxisExtent: showSummary
+              ? HorizontalAnimeCard.detailedCardHeight
+              : HorizontalAnimeCard.compactCardHeight,
           mainAxisSpacing: 16,
           crossAxisSpacing: 16,
         ),

@@ -13,7 +13,6 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
@@ -53,6 +52,7 @@ import 'package:nipaplay/utils/storage_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
+import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/splash_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,6 +75,7 @@ import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
 import 'constants/settings_keys.dart';
 import 'player_abstraction/media_kit_player_adapter.dart';
+import 'utils/launch_file_handler.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
@@ -110,6 +111,23 @@ void main(List<String> args) async {
     return;
   }
 
+  String? launchFilePath;
+  if (globals.isDesktop && args.isNotEmpty) {
+    final filePath = args.first;
+    if (await File(filePath).exists()) {
+      launchFilePath = filePath;
+    }
+  }
+
+  if (globals.isDesktop) {
+    final isPrimary = await SingleInstanceService.ensureSingleInstance(
+      launchFilePath: launchFilePath,
+    );
+    if (!isPrimary) {
+      return;
+    }
+  }
+
   WatchHistoryDatabase.ensureInitialized();
 
   // 安装 HTTP 客户端覆盖（自签名证书信任规则），尽早生效
@@ -124,17 +142,9 @@ void main(List<String> args) async {
   final debugLogService = DebugLogService();
   debugLogService.initialize();
 
-  // 检查是否有文件路径参数传入
-  String? launchFilePath;
-
-  // 桌面平台通过命令行参数传入
-  if (!kIsWeb && args.isNotEmpty && globals.isDesktop) {
-    final filePath = args.first;
-    if (await File(filePath).exists()) {
-      launchFilePath = filePath;
-      debugLogService.addLog('应用启动时收到命令行文件路径: $filePath',
-          level: 'INFO', tag: 'FileAssociation');
-    }
+  if (launchFilePath != null) {
+    debugLogService.addLog('应用启动时收到命令行文件路径: $launchFilePath',
+        level: 'INFO', tag: 'FileAssociation');
   }
 
   // Android平台通过Intent传入
@@ -394,7 +404,7 @@ void main(List<String> args) async {
           if (uiThemeProvider.isCupertinoTheme) {
             _navigateToPage(context, 3); // Cupertino 主题保留底部设置页
           } else {
-            _showSettingsWindow(context); // Nipaplay 主题使用弹窗设置页
+            SettingsPage.showWindow(context); // Nipaplay 主题使用弹窗设置页
           }
         });
 
@@ -658,6 +668,11 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
     super.initState();
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (globals.isDesktop) {
+        SingleInstanceService.registerMessageHandler(
+          _handleSingleInstanceMessage,
+        );
+      }
       DesktopExitHandler.instance.initialize(navigatorKey);
 
       // 调试：启动时打印数据库内容
@@ -683,6 +698,44 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
         debugPrint('_NipaPlayAppState: 设置监听器时出错: $e');
       }
     });
+  }
+
+  Future<void> _handleSingleInstanceMessage(
+    SingleInstanceMessage message,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    if (message.focus) {
+      await _focusMainWindow();
+    }
+    final filePath = message.filePath;
+    if (filePath != null) {
+      await LaunchFileHandler.handle(
+        filePath,
+        onError: (error) {
+          if (mounted) {
+            BlurSnackBar.show(context, error);
+          }
+        },
+      );
+    }
+  }
+
+  Future<void> _focusMainWindow() async {
+    if (!globals.isDesktop) {
+      return;
+    }
+    try {
+      final isMinimized = await windowManager.isMinimized();
+      if (isMinimized) {
+        await windowManager.restore();
+      }
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (e) {
+      debugPrint('[SingleInstance] 唤起窗口失败: $e');
+    }
   }
 
   @override
@@ -1000,37 +1053,14 @@ class MainPageState extends State<MainPage>
 
   // 处理启动文件
   Future<void> _handleLaunchFile(String filePath) async {
-    try {
-      debugPrint('[FileAssociation] 处理启动文件: $filePath');
-
-      // 检查是否存在历史记录
-      WatchHistoryItem? historyItem =
-          await WatchHistoryManager.getHistoryItem(filePath);
-
-      historyItem ??= WatchHistoryItem(
-        filePath: filePath,
-        animeName: path.basenameWithoutExtension(filePath),
-        watchProgress: 0,
-        lastPosition: 0,
-        duration: 0,
-        lastWatchTime: DateTime.now(),
-      );
-
-      final playableItem = PlayableItem(
-        videoPath: filePath,
-        title: historyItem.animeName,
-        historyItem: historyItem,
-      );
-
-      await PlaybackService().play(playableItem);
-
-      debugPrint('[FileAssociation] 启动文件已提交给PlaybackService');
-    } catch (e) {
-      debugPrint('[FileAssociation] 启动文件播放失败: $e');
-      if (mounted) {
-        BlurSnackBar.show(context, '无法播放启动文件: $e');
-      }
-    }
+    await LaunchFileHandler.handle(
+      filePath,
+      onError: (error) {
+        if (mounted) {
+          BlurSnackBar.show(context, error);
+        }
+      },
+    );
   }
 
   // 检查窗口是否已最大化
@@ -1246,7 +1276,7 @@ class MainPageState extends State<MainPage>
                     height: kWindowCaptionHeight,
                     child: Center(
                       child: _SettingsEntryButton(
-                        onPressed: () => _showSettingsWindow(context),
+                        onPressed: () => SettingsPage.showWindow(context),
                       ),
                     ),
                   ),
@@ -1522,49 +1552,4 @@ void _navigateToPage(BuildContext context, int pageIndex) {
     debugPrint(
         '[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
   }
-}
-
-void _showSettingsWindow(BuildContext context) {
-  final appearanceSettings =
-      Provider.of<AppearanceSettingsProvider>(context, listen: false);
-  final enableAnimation = appearanceSettings.enablePageAnimation;
-  final screenSize = MediaQuery.of(context).size;
-  final isCompactLayout = screenSize.width < 900;
-  final maxWidth = isCompactLayout ? screenSize.width * 0.95 : 980.0;
-  final maxHeightFactor = isCompactLayout ? 0.9 : 0.85;
-
-  NipaplayWindow.show(
-    context: context,
-    enableAnimation: enableAnimation,
-    child: NipaplayWindowScaffold(
-      maxWidth: maxWidth,
-      maxHeightFactor: maxHeightFactor,
-      onClose: () => Navigator.of(context).pop(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Builder(
-            builder: (innerContext) {
-              final titleStyle = Theme.of(innerContext)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold);
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanUpdate: (details) {
-                  NipaplayWindowPositionProvider.of(innerContext)
-                      ?.onMove(details.delta);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text('设置', style: titleStyle),
-                ),
-              );
-            },
-          ),
-          const Expanded(child: SettingsPage()),
-        ],
-      ),
-    ),
-  );
 }

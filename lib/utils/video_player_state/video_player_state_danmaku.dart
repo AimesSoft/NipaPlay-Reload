@@ -179,7 +179,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     for (final match in matches) {
       try {
         final String pAttr = match.group(1) ?? '';
-        final String textContent = match.group(2) ?? '';
+        final String rawTextContent = match.group(2) ?? '';
+        final String textContent = decodeDanmakuXmlText(rawTextContent);
 
         if (textContent.isEmpty) continue;
 
@@ -554,6 +555,138 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     debugPrint('弹幕轨道合并及过滤完成，显示${_danmakuList.length}条，总计${mergedList.length}条');
     notifyListeners(); // 确保通知UI更新
+  }
+
+  List<Map<String, dynamic>> collectDanmakuForExport({
+    bool includeDisabledTracks = false,
+    bool includeTimeline = false,
+  }) {
+    final List<Map<String, dynamic>> exportList = [];
+
+    for (final entry in _danmakuTracks.entries) {
+      final trackId = entry.key;
+      if (!includeTimeline && trackId == 'timeline') continue;
+      if (!includeDisabledTracks && _danmakuTrackEnabled[trackId] != true) {
+        continue;
+      }
+
+      final trackDanmaku = entry.value['danmakuList'];
+      if (trackDanmaku is List<Map<String, dynamic>>) {
+        exportList.addAll(trackDanmaku);
+      } else if (trackDanmaku is List) {
+        for (final item in trackDanmaku) {
+          if (item is Map<String, dynamic>) {
+            exportList.add(item);
+          } else if (item is Map) {
+            exportList.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+    }
+
+    exportList.sort((a, b) {
+      final timeA = _resolveDanmakuTimeValue(a['time'] ?? a['t']);
+      final timeB = _resolveDanmakuTimeValue(b['time'] ?? b['t']);
+      return timeA.compareTo(timeB);
+    });
+
+    return exportList;
+  }
+
+  String buildDanmakuJsonExport(List<Map<String, dynamic>> danmakuList) {
+    final payload = <String, dynamic>{
+      'count': danmakuList.length,
+      'comments': danmakuList,
+    };
+    return json.encode(payload);
+  }
+
+  String buildDanmakuXmlExport(List<Map<String, dynamic>> danmakuList) {
+    final buffer = StringBuffer();
+    buffer.writeln('<?xml version="1.0" encoding="UTF-8"?>');
+    buffer.writeln('<i>');
+
+    for (final item in danmakuList) {
+      final content = _resolveDanmakuContent(item);
+      if (content.isEmpty) continue;
+
+      final timeValue = _resolveDanmakuTimeValue(item['time'] ?? item['t']);
+      final timeText = _formatDanmakuTime(timeValue);
+      final typeCode = _resolveDanmakuTypeCode(item);
+      final fontSize = _resolveDanmakuFontSize(item);
+      final colorCode = parseDanmakuColorToInt(item['color'] ?? item['r']);
+      final timestamp = _resolveDanmakuTimestamp(item);
+      final escaped = encodeDanmakuXmlText(content);
+
+      buffer.writeln(
+        '<d p="$timeText,$typeCode,$fontSize,$colorCode,$timestamp,0,0,0">$escaped</d>',
+      );
+    }
+
+    buffer.writeln('</i>');
+    return buffer.toString();
+  }
+
+  double _resolveDanmakuTimeValue(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  String _resolveDanmakuContent(Map<String, dynamic> item) {
+    final content = item['content'] ?? item['c'];
+    if (content == null) return '';
+    return content.toString();
+  }
+
+  int _resolveDanmakuTypeCode(Map<String, dynamic> item) {
+    final originalType = item['originalType'];
+    if (originalType is num) {
+      final code = originalType.toInt();
+      if (code > 0) return code;
+    }
+
+    final typeValue = item['type'] ?? item['y'];
+    if (typeValue is num) {
+      final code = typeValue.toInt();
+      if (code > 0) return code;
+    }
+
+    final typeText = typeValue?.toString().toLowerCase();
+    switch (typeText) {
+      case 'top':
+        return 5;
+      case 'bottom':
+        return 4;
+      case 'scroll':
+      case 'right':
+      default:
+        return 1;
+    }
+  }
+
+  int _resolveDanmakuFontSize(Map<String, dynamic> item) {
+    final sizeValue = item['fontSize'] ?? item['size'] ?? item['fontsize'];
+    if (sizeValue is num) return sizeValue.round();
+    if (sizeValue is String) {
+      final parsed = double.tryParse(sizeValue);
+      if (parsed != null) return parsed.round();
+    }
+    return 25;
+  }
+
+  int _resolveDanmakuTimestamp(Map<String, dynamic> item) {
+    final value = item['timestamp'] ?? item['d'];
+    if (value is num) return value.round();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  String _formatDanmakuTime(double value) {
+    if (value.isNaN || value.isInfinite) return '0';
+    final safeValue = value < 0 ? 0.0 : value;
+    final text = safeValue.toStringAsFixed(3);
+    return text.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
   void _maybeStartSpoilerDanmakuAnalysis(List<Map<String, dynamic>> mergedList) {

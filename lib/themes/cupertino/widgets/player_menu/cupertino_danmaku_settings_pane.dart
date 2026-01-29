@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io' as io;
+
+import 'package:file_selector/file_selector.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
@@ -8,6 +12,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
+
+enum _DanmakuExportFormat { json, xml }
 
 class CupertinoDanmakuSettingsPane extends StatefulWidget {
   const CupertinoDanmakuSettingsPane({
@@ -28,6 +34,7 @@ class _CupertinoDanmakuSettingsPaneState
     extends State<CupertinoDanmakuSettingsPane> {
   final TextEditingController _blockWordController = TextEditingController();
   String? _blockWordError;
+  bool _isSavingDanmaku = false;
 
   @override
   void dispose() {
@@ -107,6 +114,78 @@ class _CupertinoDanmakuSettingsPaneState
     }
   }
 
+  Future<void> _saveDanmaku(_DanmakuExportFormat format) async {
+    if (_isSavingDanmaku) return;
+
+    final exportList = widget.videoState.collectDanmakuForExport();
+    if (exportList.isEmpty) {
+      _showMessage('当前没有可保存的弹幕');
+      return;
+    }
+
+    setState(() => _isSavingDanmaku = true);
+    try {
+      final extension =
+          format == _DanmakuExportFormat.xml ? 'xml' : 'json';
+      final fileName =
+          _buildDanmakuExportFileName(widget.videoState, extension);
+      final savePath = await getSaveLocation(
+        suggestedName: fileName,
+        acceptedTypeGroups: [
+          XTypeGroup(
+            label: extension.toUpperCase(),
+            extensions: [extension],
+          ),
+        ],
+      );
+
+      if (savePath == null) return;
+
+      final content = format == _DanmakuExportFormat.xml
+          ? widget.videoState.buildDanmakuXmlExport(exportList)
+          : widget.videoState.buildDanmakuJsonExport(exportList);
+      final file = io.File(savePath.path);
+      await file.writeAsString(content, encoding: utf8);
+
+      _showMessage('弹幕已保存到: ${savePath.path}');
+    } catch (e) {
+      _showMessage('保存弹幕失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingDanmaku = false);
+      }
+    }
+  }
+
+  String _buildDanmakuExportFileName(
+    VideoPlayerState videoState,
+    String extension,
+  ) {
+    final title = videoState.animeTitle?.trim();
+    final fallback = videoState.currentVideoPath == null
+        ? 'danmaku'
+        : p.basenameWithoutExtension(videoState.currentVideoPath!);
+    final baseName =
+        (title == null || title.isEmpty) ? fallback : title;
+    final timestamp = _formatTimestamp(DateTime.now());
+    return '${baseName}_danmaku_$timestamp.$extension';
+  }
+
+  String _formatTimestamp(DateTime time) {
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${time.year}'
+        '${twoDigits(time.month)}'
+        '${twoDigits(time.day)}_'
+        '${twoDigits(time.hour)}'
+        '${twoDigits(time.minute)}'
+        '${twoDigits(time.second)}';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    BlurSnackBar.show(context, message);
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoBottomSheetContentLayout(
@@ -159,6 +238,23 @@ class _CupertinoDanmakuSettingsPaneState
                   subtitle: const Text('选择指定番剧/剧集的弹幕'),
                   trailing: const Icon(CupertinoIcons.right_chevron),
                   onTap: _handleManualMatch,
+                ),
+              ],
+            ),
+            CupertinoListSection.insetGrouped(
+              header: const Text('保存弹幕'),
+              children: [
+                CupertinoListTile(
+                  title: const Text('保存为 JSON'),
+                  subtitle: const Text('通用格式，便于再次导入'),
+                  trailing: const Icon(CupertinoIcons.right_chevron),
+                  onTap: () => _saveDanmaku(_DanmakuExportFormat.json),
+                ),
+                CupertinoListTile(
+                  title: const Text('保存为 XML'),
+                  subtitle: const Text('Bilibili XML 格式'),
+                  trailing: const Icon(CupertinoIcons.right_chevron),
+                  onTap: () => _saveDanmaku(_DanmakuExportFormat.xml),
                 ),
               ],
             ),

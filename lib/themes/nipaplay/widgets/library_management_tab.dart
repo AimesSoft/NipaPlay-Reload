@@ -580,6 +580,15 @@ style: TextStyle(color: Colors.redAccent)),
     }
   }
 
+  void _refreshExpandedFolderContents(String folderPath) {
+    if (!mounted) return;
+    final existing = _expandedFolderContents[folderPath];
+    if (existing == null) return;
+    setState(() {
+      _expandedFolderContents[folderPath] = List<io.FileSystemEntity>.from(existing);
+    });
+  }
+
   List<Widget> _buildFileSystemNodes(List<io.FileSystemEntity> entities, String parentPath, int depth) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
@@ -1696,10 +1705,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
 
     if (!mounted) return;
     BlurSnackBar.show(context, '批量匹配完成：成功更新 $successCount/${mappings.length} 个文件');
-    setState(() {
-      _expandedFolderContents.clear();
-      _expandedLocalFolders.clear();
-    });
+    _refreshExpandedFolderContents(folderPath);
   }
 
   // 显示手动匹配弹幕对话框
@@ -1767,11 +1773,7 @@ style: TextStyle(color: Colors.lightBlueAccent)),
               BlurSnackBar.show(context, '弹幕匹配成功：$animeTitle - $episodeTitle');
               
               // 刷新UI以显示新的动画信息
-              setState(() {
-                // 清空已展开的文件夹内容，强制重新加载
-                _expandedFolderContents.clear();
-                _expandedLocalFolders.clear();
-              });
+              _refreshExpandedFolderContents(p.dirname(filePath));
             }
           } catch (e) {
             debugPrint('❌ 更新弹幕匹配信息失败：$e');
@@ -1866,12 +1868,8 @@ style: TextStyle(color: Colors.redAccent)),
           BlurSnackBar.show(context, '已移除 "$fileName" 的扫描结果');
           
           // 刷新UI
-      setState(() {
-        // 清空已展开的文件夹内容，强制重新加载
-        _expandedFolderContents.clear();
-        _expandedLocalFolders.clear();
-      });
-    }
+          _refreshExpandedFolderContents(p.dirname(filePath));
+        }
       } catch (e) {
         debugPrint('❌ 移除扫描结果失败：$e');
         if (mounted) {

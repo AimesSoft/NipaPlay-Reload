@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'settings_hint_text.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 import 'settings_slider.dart';
 import 'blur_button.dart';
@@ -10,7 +12,11 @@ import 'fluent_settings_switch.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
+
+enum _DanmakuExportFormat { json, xml }
 
 class DanmakuSettingsMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -53,6 +59,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   bool _hasBlockWordError = false;
   // 错误消息
   String _blockWordErrorMessage = '';
+  bool _isSavingDanmaku = false;
 
   @override
   void dispose() {
@@ -90,6 +97,88 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
       _hasBlockWordError = false;
       _blockWordErrorMessage = '';
     });
+  }
+
+  Future<void> _saveDanmaku(_DanmakuExportFormat format) async {
+    if (_isSavingDanmaku) return;
+
+    final exportList = widget.videoState.collectDanmakuForExport();
+    if (exportList.isEmpty) {
+      if (mounted) {
+        BlurSnackBar.show(context, '当前没有可保存的弹幕');
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _isSavingDanmaku = true);
+    } else {
+      _isSavingDanmaku = true;
+    }
+
+    try {
+      final extension =
+          format == _DanmakuExportFormat.xml ? 'xml' : 'json';
+      final fileName =
+          _buildDanmakuExportFileName(widget.videoState, extension);
+      final savePath = await getSaveLocation(
+        suggestedName: fileName,
+        acceptedTypeGroups: [
+          XTypeGroup(
+            label: extension.toUpperCase(),
+            extensions: [extension],
+          ),
+        ],
+      );
+
+      if (savePath == null) {
+        return;
+      }
+
+      final content = format == _DanmakuExportFormat.xml
+          ? widget.videoState.buildDanmakuXmlExport(exportList)
+          : widget.videoState.buildDanmakuJsonExport(exportList);
+      final file = File(savePath.path);
+      await file.writeAsString(content, encoding: utf8);
+
+      if (mounted) {
+        BlurSnackBar.show(context, '弹幕已保存到: ${savePath.path}');
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '保存弹幕失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingDanmaku = false);
+      } else {
+        _isSavingDanmaku = false;
+      }
+    }
+  }
+
+  String _buildDanmakuExportFileName(
+    VideoPlayerState videoState,
+    String extension,
+  ) {
+    final title = videoState.animeTitle?.trim();
+    final fallback = videoState.currentVideoPath == null
+        ? 'danmaku'
+        : p.basenameWithoutExtension(videoState.currentVideoPath!);
+    final baseName =
+        (title == null || title.isEmpty) ? fallback : title;
+    final timestamp = _formatTimestamp(DateTime.now());
+    return '${baseName}_danmaku_$timestamp.$extension';
+  }
+
+  String _formatTimestamp(DateTime time) {
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${time.year}'
+        '${twoDigits(time.month)}'
+        '${twoDigits(time.day)}_'
+        '${twoDigits(time.hour)}'
+        '${twoDigits(time.minute)}'
+        '${twoDigits(time.second)}';
   }
 
   // 构建屏蔽词展示UI
@@ -287,6 +376,46 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       expandHorizontally: true,
                     ),
                     const SettingsHintText('手动搜索并选择匹配的弹幕文件'),
+                  ],
+                ),
+              ),
+              // 保存弹幕
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '保存弹幕',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: BlurButton(
+                            text: '保存为 JSON',
+                            icon: Icons.save_alt,
+                            onTap: () => _saveDanmaku(_DanmakuExportFormat.json),
+                            expandHorizontally: true,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: BlurButton(
+                            text: '保存为 XML',
+                            icon: Icons.save_alt,
+                            onTap: () => _saveDanmaku(_DanmakuExportFormat.xml),
+                            expandHorizontally: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const SettingsHintText('保存当前启用轨道的弹幕到本地文件'),
                   ],
                 ),
               ),

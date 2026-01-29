@@ -240,6 +240,16 @@ class _ThemeModePageState extends State<ThemeModePage> {
               },
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.toggle(
+              title: "番剧卡片显示介绍",
+              subtitle: "关闭后仅显示封面和标题",
+              icon: Ionicons.document_text_outline,
+              value: appearanceSettings.showAnimeCardSummary,
+              onChanged: (value) {
+                appearanceSettings.setShowAnimeCardSummary(value);
+              },
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.slider(
               title: "界面缩放",
               subtitle: "调整 NipaPlay 界面的整体大小",

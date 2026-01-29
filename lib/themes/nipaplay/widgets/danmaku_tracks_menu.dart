@@ -4,6 +4,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/utils/danmaku_xml_utils.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:file_selector/file_selector.dart';
@@ -161,7 +162,8 @@ class _DanmakuTracksMenuState extends State<DanmakuTracksMenu> {
     for (final match in matches) {
       try {
         final String pAttr = match.group(1) ?? '';
-        final String textContent = match.group(2) ?? '';
+        final String rawTextContent = match.group(2) ?? '';
+        final String textContent = decodeDanmakuXmlText(rawTextContent);
         
         if (textContent.isEmpty) continue;
         

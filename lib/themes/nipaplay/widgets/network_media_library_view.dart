@@ -5,6 +5,7 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -366,6 +367,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
 
   Widget _buildLibrariesView(dynamic provider, dynamic service) {
     final selectedLibraries = _getSelectedLibraries(provider);
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     
     if (selectedLibraries.isEmpty) {
       return Center(
@@ -401,12 +404,16 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               controller: _gridScrollController,
               thickness: 4,
               radius: const Radius.circular(2),
-              child: _isSearching
+                child: _isSearching
                   ? GridView.builder(
                       controller: _gridScrollController,
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 500,
-                        mainAxisExtent: 140,
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: showSummary
+                            ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
+                            : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+                        mainAxisExtent: showSummary
+                            ? HorizontalAnimeCard.detailedCardHeight
+                            : HorizontalAnimeCard.compactCardHeight,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
                       ),
@@ -450,6 +457,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   }
 
   Widget _buildLibraryContentView(dynamic provider, dynamic service) {
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     if (_isLoadingLibraryContent) {
       return const Center(child: CircularProgressIndicator(color: _accentColor));
     }
@@ -535,9 +544,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                   ? _buildFolderListView()
                   : GridView.builder(
                       controller: _gridScrollController,
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 500,
-                        mainAxisExtent: 140,
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: showSummary
+                            ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
+                            : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+                        mainAxisExtent: showSummary
+                            ? HorizontalAnimeCard.detailedCardHeight
+                            : HorizontalAnimeCard.compactCardHeight,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
                       ),

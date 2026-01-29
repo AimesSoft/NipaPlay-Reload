@@ -242,6 +242,11 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     List<Widget> actionWidgets = const [],
   }) {
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
+    final listHeight = showSummary
+        ? HorizontalAnimeCard.detailedListHeight
+        : HorizontalAnimeCard.compactListHeight;
     final headerActions = <Widget>[];
     if (!isPhone && (items.isNotEmpty || isLoading)) {
       headerActions.add(_buildScrollButtons(scrollController, 162));
@@ -277,7 +282,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 160,
+          height: listHeight,
           child: ListView.builder(
             controller: scrollController,
             scrollDirection: Axis.horizontal,
@@ -434,8 +439,14 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       detailFuture = BangumiService.instance.getAnimeDetails(item.id);
     }
 
-    const double cardWidth = 320;
-    const double cardHeight = 140;
+    final bool showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
+    final double cardWidth = showSummary
+        ? HorizontalAnimeCard.detailedCardWidth
+        : HorizontalAnimeCard.compactCardWidth;
+    final double cardHeight = showSummary
+        ? HorizontalAnimeCard.detailedCardHeight
+        : HorizontalAnimeCard.compactCardHeight;
 
     Widget buildCard(String? summary, {String? progress}) {
       return SizedBox(

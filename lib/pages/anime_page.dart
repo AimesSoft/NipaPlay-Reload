@@ -40,6 +40,8 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings_page.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -274,6 +276,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
   // 添加变量追踪“添加媒体服务器”入口的悬停状态
   bool _isAddEntryHovered = false;
+  bool _isRemoteAccessHovered = false;
   
   // 动态计算标签页数量
   int get _tabCount {
@@ -553,6 +556,54 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     if (result == true && mounted) {
       BlurSnackBar.show(context, '弹弹play远程服务配置已更新');
     }
+  }
+
+  void _openRemoteAccessSettings() {
+    SettingsPage.showWindow(
+      context,
+      initialEntryId: SettingsPage.entryRemoteAccess,
+    );
+  }
+
+  Widget _buildRemoteAccessEntry({
+    required Color iconColor,
+    required Color textColor,
+  }) {
+    const Color hoverColor = Color(0xFFFF2E55);
+    final Color displayColor = _isRemoteAccessHovered ? hoverColor : textColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _isRemoteAccessHovered = true),
+        onExit: (_) => setState(() => _isRemoteAccessHovered = false),
+        child: GestureDetector(
+          onTap: _openRemoteAccessSettings,
+          child: AnimatedScale(
+            scale: _isRemoteAccessHovered ? 1.1 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.link, size: 18, color: displayColor),
+                const SizedBox(width: 6),
+                Text(
+                  '远程访问',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    color: displayColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildAddMediaServerEntry({
@@ -920,6 +971,13 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                           ),
                         ),
                         const SizedBox(width: 8),
+                        if (!globals.isPhone) ...[
+                          _buildRemoteAccessEntry(
+                            iconColor: activeColor,
+                            textColor: unselectedLabelColor,
+                          ),
+                          const SizedBox(width: 12),
+                        ],
                         _buildAddMediaServerEntry(
                           iconColor: activeColor,
                           textColor: unselectedLabelColor,

@@ -15,6 +15,8 @@ import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
@@ -22,7 +24,58 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  static const String entryRemoteAccess = 'remote_access';
+  final String? initialEntryId;
+
+  const SettingsPage({super.key, this.initialEntryId});
+
+  static Future<void> showWindow(
+    BuildContext context, {
+    String? initialEntryId,
+  }) {
+    final appearanceSettings =
+        Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    final enableAnimation = appearanceSettings.enablePageAnimation;
+    final screenSize = MediaQuery.of(context).size;
+    final isCompactLayout = screenSize.width < 900;
+    final maxWidth = isCompactLayout ? screenSize.width * 0.95 : 980.0;
+    final maxHeightFactor = isCompactLayout ? 0.9 : 0.85;
+
+    return NipaplayWindow.show(
+      context: context,
+      enableAnimation: enableAnimation,
+      child: NipaplayWindowScaffold(
+        maxWidth: maxWidth,
+        maxHeightFactor: maxHeightFactor,
+        onClose: () => Navigator.of(context).pop(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Builder(
+              builder: (innerContext) {
+                final titleStyle = Theme.of(innerContext)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold);
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanUpdate: (details) {
+                    NipaplayWindowPositionProvider.of(innerContext)
+                        ?.onMove(details.delta);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Text('设置', style: titleStyle),
+                  ),
+                );
+              },
+            ),
+            Expanded(child: SettingsPage(initialEntryId: initialEntryId)),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   // ignore: library_private_types_in_public_api
@@ -44,7 +97,6 @@ class _SettingsPageState extends State<SettingsPage>
   static const String _entryBackupRestore = 'backup_restore';
   static const String _entryPlayer = 'player';
   static const String _entryShortcuts = 'shortcuts';
-  static const String _entryRemoteAccess = 'remote_access';
   static const String _entryRemoteMediaLibrary = 'remote_media_library';
   static const String _entryDeveloperOptions = 'developer_options';
   static const String _entryAbout = 'about';
@@ -61,12 +113,41 @@ class _SettingsPageState extends State<SettingsPage>
       currentPage = const AboutPage(); // 例如默认显示 AboutPage
       _selectedEntryId = _entryAbout;
     }
+
+    _applyInitialEntry();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _applyInitialEntry() {
+    final entryId = widget.initialEntryId;
+    if (entryId == null) return;
+    final entry = _findEntryById(entryId);
+    if (entry == null) return;
+
+    if (globals.isDesktop || globals.isTablet) {
+      currentPage = entry.page;
+      _selectedEntryId = entry.id;
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _handleItemTap(entry.id, entry.page, entry.pageTitle);
+      });
+    }
+  }
+
+  _SettingEntry? _findEntryById(String entryId) {
+    final entries = _buildSettingEntries(context);
+    for (final entry in entries) {
+      if (entry.id == entryId) {
+        return entry;
+      }
+    }
+    return null;
   }
 
   // 封装导航或更新状态的逻辑
@@ -147,10 +228,8 @@ class _SettingsPageState extends State<SettingsPage>
         id: _entryAppearance,
         title: "外观",
         icon: Ionicons.color_palette_outline,
-        onTap: () => _handleItemTap(
-            _entryAppearance,
-            ThemeModePage(themeNotifier: themeNotifier),
-            "外观设置"),
+        pageTitle: "外观设置",
+        page: ThemeModePage(themeNotifier: themeNotifier),
       ),
     ];
 
@@ -159,22 +238,22 @@ class _SettingsPageState extends State<SettingsPage>
         id: _entryGeneral,
         title: "通用",
         icon: Ionicons.settings_outline,
-        onTap: () =>
-            _handleItemTap(_entryGeneral, const GeneralPage(), "通用设置"),
+        pageTitle: "通用设置",
+        page: const GeneralPage(),
       ),
       _SettingEntry(
         id: _entryStorage,
         title: "存储",
         icon: Ionicons.folder_open_outline,
-        onTap: () =>
-            _handleItemTap(_entryStorage, const StoragePage(), "存储设置"),
+        pageTitle: "存储设置",
+        page: const StoragePage(),
       ),
       _SettingEntry(
         id: _entryNetwork,
         title: "网络",
         icon: Ionicons.wifi_outline,
-        onTap: () => _handleItemTap(
-            _entryNetwork, const NetworkSettingsPage(), "网络设置"),
+        pageTitle: "网络设置",
+        page: const NetworkSettingsPage(),
       ),
     ]);
 
@@ -184,8 +263,8 @@ class _SettingsPageState extends State<SettingsPage>
           id: _entryBackupRestore,
           title: "备份与恢复",
           icon: Ionicons.cloud_upload_outline,
-          onTap: () => _handleItemTap(
-              _entryBackupRestore, const BackupRestorePage(), "备份与恢复"),
+          pageTitle: "备份与恢复",
+          page: const BackupRestorePage(),
         ),
       );
     }
@@ -195,8 +274,8 @@ class _SettingsPageState extends State<SettingsPage>
         id: _entryPlayer,
         title: "播放器",
         icon: Ionicons.play_circle_outline,
-        onTap: () => _handleItemTap(
-            _entryPlayer, const PlayerSettingsPage(), "播放器设置"),
+        pageTitle: "播放器设置",
+        page: const PlayerSettingsPage(),
       ),
     );
 
@@ -206,15 +285,15 @@ class _SettingsPageState extends State<SettingsPage>
           id: _entryShortcuts,
           title: "快捷键",
           icon: Ionicons.key_outline,
-          onTap: () => _handleItemTap(
-              _entryShortcuts, const ShortcutsSettingsPage(), "快捷键设置"),
+          pageTitle: "快捷键设置",
+          page: const ShortcutsSettingsPage(),
         ),
         _SettingEntry(
-          id: _entryRemoteAccess,
+          id: SettingsPage.entryRemoteAccess,
           title: "远程访问",
           icon: Ionicons.link_outline,
-          onTap: () => _handleItemTap(
-              _entryRemoteAccess, const RemoteAccessPage(), "远程访问"),
+          pageTitle: "远程访问",
+          page: const RemoteAccessPage(),
         ),
       ]);
     }
@@ -224,21 +303,22 @@ class _SettingsPageState extends State<SettingsPage>
         id: _entryRemoteMediaLibrary,
         title: "远程媒体库",
         icon: Ionicons.library_outline,
-        onTap: () => _handleItemTap(
-            _entryRemoteMediaLibrary, const RemoteMediaLibraryPage(), "远程媒体库"),
+        pageTitle: "远程媒体库",
+        page: const RemoteMediaLibraryPage(),
       ),
       _SettingEntry(
         id: _entryDeveloperOptions,
         title: "开发者选项",
         icon: Ionicons.code_slash_outline,
-        onTap: () => _handleItemTap(
-            _entryDeveloperOptions, const DeveloperOptionsPage(), "开发者选项"),
+        pageTitle: "开发者选项",
+        page: const DeveloperOptionsPage(),
       ),
       _SettingEntry(
         id: _entryAbout,
         title: "关于",
         icon: Ionicons.information_circle_outline,
-        onTap: () => _handleItemTap(_entryAbout, const AboutPage(), "关于"),
+        pageTitle: "关于",
+        page: const AboutPage(),
       ),
     ]);
 
@@ -255,7 +335,7 @@ class _SettingsPageState extends State<SettingsPage>
           locale: _titleLocale,
           style: TextStyle(
               color: itemColor, fontWeight: FontWeight.bold)),
-      onTap: entry.onTap,
+      onTap: () => _handleItemTap(entry.id, entry.page, entry.pageTitle),
     );
   }
 }
@@ -265,11 +345,13 @@ class _SettingEntry {
     required this.id,
     required this.title,
     required this.icon,
-    required this.onTap,
+    required this.pageTitle,
+    required this.page,
   });
 
   final String id;
   final String title;
   final IconData icon;
-  final VoidCallback onTap;
+  final String pageTitle;
+  final Widget page;
 }

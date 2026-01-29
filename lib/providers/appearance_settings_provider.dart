@@ -20,6 +20,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _showDanmakuDensityKey = 'show_danmaku_density_chart';
   static const String _recentWatchingStyleKey = 'recent_watching_style';
   static const String _uiScaleKey = 'ui_scale_factor';
+  static const String _showAnimeCardSummaryKey = 'show_anime_card_summary';
 
   static const double uiScaleMin = 1.0;
   static const double uiScaleMax = 1.3;
@@ -32,6 +33,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late bool _showDanmakuDensityChart;
   late RecentWatchingStyle _recentWatchingStyle;
   late double _uiScale;
+  late bool _showAnimeCardSummary;
 
   // 获取设置值
   // 页面滑动动画始终启用
@@ -42,6 +44,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   bool get showDanmakuDensityChart => _showDanmakuDensityChart;
   RecentWatchingStyle get recentWatchingStyle => _recentWatchingStyle;
   double get uiScale => _uiScale;
+  bool get showAnimeCardSummary => _showAnimeCardSummary;
 
   // 构造函数
   AppearanceSettingsProvider() {
@@ -51,6 +54,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _showDanmakuDensityChart = true; // 默认显示弹幕密度曲线图
     _recentWatchingStyle = RecentWatchingStyle.simple; // 默认简洁版
     _uiScale = _resolveDefaultUiScale();
+    _showAnimeCardSummary = true; // 默认显示番剧卡片简介
     _loadSettings();
   }
 
@@ -64,6 +68,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _enableWidgetBlurEffect = prefs.getBool(_widgetBlurEffectKey) ?? true;
       _showDanmakuDensityChart = prefs.getBool(_showDanmakuDensityKey) ?? true;
+      _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
       final savedUiScale = prefs.getDouble(_uiScaleKey);
       _uiScale = (savedUiScale ?? _resolveDefaultUiScale())
           .clamp(uiScaleMin, uiScaleMax)
@@ -164,6 +169,20 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setDouble(_uiScaleKey, clampedValue);
     } catch (e) {
       debugPrint('保存界面缩放设置时出错: $e');
+    }
+  }
+
+  Future<void> setShowAnimeCardSummary(bool value) async {
+    if (_showAnimeCardSummary == value) return;
+
+    _showAnimeCardSummary = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_showAnimeCardSummaryKey, value);
+    } catch (e) {
+      debugPrint('保存番剧卡片简介显示设置时出错: $e');
     }
   }
 }

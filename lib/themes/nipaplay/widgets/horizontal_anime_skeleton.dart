@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:provider/provider.dart';
 
 class HorizontalAnimeSkeleton extends StatefulWidget {
   const HorizontalAnimeSkeleton({super.key});
@@ -35,15 +38,65 @@ class _HorizontalAnimeSkeletonState extends State<HorizontalAnimeSkeleton>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final baseColor = isDark ? Colors.white10 : Colors.black.withOpacity(0.05);
     final highlightColor = isDark ? Colors.white24 : Colors.black.withOpacity(0.1);
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
+    final cardWidth = showSummary
+        ? HorizontalAnimeCard.detailedCardWidth
+        : HorizontalAnimeCard.compactCardWidth;
+    final cardHeight = showSummary
+        ? HorizontalAnimeCard.detailedCardHeight
+        : HorizontalAnimeCard.compactCardHeight;
 
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
+        if (!showSummary) {
+          const double coverAspectRatio = 0.7;
+          const double compactTitleHeight = 32;
+          const double compactTitleSpacing = 6;
+          final coverHeight =
+              cardHeight - compactTitleHeight - compactTitleSpacing;
+          final coverWidth = coverHeight * coverAspectRatio;
+          return Opacity(
+            opacity: _animation.value,
+            child: Container(
+              width: cardWidth,
+              height: cardHeight,
+              padding: const EdgeInsets.only(right: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: coverWidth,
+                    height: coverHeight,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: baseColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: coverWidth,
+                    child: Container(
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: highlightColor,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         return Opacity(
           opacity: _animation.value,
           child: Container(
-            width: 320,
-            height: 140,
+            width: cardWidth,
+            height: cardHeight,
             padding: const EdgeInsets.only(right: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -172,7 +172,9 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 160,
+          height: context.watch<AppearanceSettingsProvider>().showAnimeCardSummary
+              ? HorizontalAnimeCard.detailedListHeight
+              : HorizontalAnimeCard.compactListHeight,
           child: ListView.builder(
             controller: scrollController,
             scrollDirection: Axis.horizontal,
@@ -203,9 +205,16 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
         : anime.typeDescription;
     final sourceLabel = _formatRandomTagLabel(item.tag);
 
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
+
     return SizedBox(
-      width: 320,
-      height: 140,
+      width: showSummary
+          ? HorizontalAnimeCard.detailedCardWidth
+          : HorizontalAnimeCard.compactCardWidth,
+      height: showSummary
+          ? HorizontalAnimeCard.detailedCardHeight
+          : HorizontalAnimeCard.compactCardHeight,
       child: HorizontalAnimeCard(
         key: ValueKey('random_${anime.animeId}_${item.tag.hashCode}'),
         title: anime.animeTitle,

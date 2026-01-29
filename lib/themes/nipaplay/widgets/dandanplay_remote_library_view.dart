@@ -9,6 +9,7 @@ import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -180,6 +181,8 @@ class _DandanplayRemoteLibraryViewState
     List<DandanplayRemoteAnimeGroup> groups,
     DandanplayRemoteProvider provider,
   ) {
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     return RepaintBoundary(
       child: Scrollbar(
         controller: _gridScrollController,
@@ -191,9 +194,13 @@ class _DandanplayRemoteLibraryViewState
           physics: const AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics(),
           ),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 500,
-            mainAxisExtent: 140,
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: showSummary
+                ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
+                : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+            mainAxisExtent: showSummary
+                ? HorizontalAnimeCard.detailedCardHeight
+                : HorizontalAnimeCard.compactCardHeight,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
           ),

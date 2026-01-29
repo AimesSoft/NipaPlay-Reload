@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/utils/danmaku_xml_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoDanmakuTracksPane extends StatefulWidget {
@@ -120,7 +121,8 @@ class _CupertinoDanmakuTracksPaneState
     for (final match in matches) {
       try {
         final String pAttr = match.group(1) ?? '';
-        final String textContent = match.group(2) ?? '';
+        final String rawTextContent = match.group(2) ?? '';
+        final String textContent = decodeDanmakuXmlText(rawTextContent);
 
         if (textContent.isEmpty) continue;
 

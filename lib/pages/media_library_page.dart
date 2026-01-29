@@ -25,6 +25,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'dart:ui' as ui;
 
 // Define a callback type for when an episode is selected for playing
@@ -697,9 +698,17 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
                   radius: const Radius.circular(2),
                   child: GridView.builder(
                     controller: _gridScrollController,
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 500,
-                      mainAxisExtent: 140,
+                    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: context
+                              .watch<AppearanceSettingsProvider>()
+                              .showAnimeCardSummary
+                          ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
+                          : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
+                      mainAxisExtent: context
+                              .watch<AppearanceSettingsProvider>()
+                              .showAnimeCardSummary
+                          ? HorizontalAnimeCard.detailedCardHeight
+                          : HorizontalAnimeCard.compactCardHeight,
                       mainAxisSpacing: 16,
                       crossAxisSpacing: 16,
                     ),

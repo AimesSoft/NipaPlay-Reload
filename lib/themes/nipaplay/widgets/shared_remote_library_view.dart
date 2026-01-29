@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/pages/media_library_page.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
@@ -251,6 +252,9 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       return _buildEmptyLibraryPlaceholder(context, provider.activeHost);
     }
 
+    final showSummary =
+        context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
+
     return RepaintBoundary(
       child: Scrollbar(
         controller: _gridScrollController,
@@ -258,11 +262,15 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         child: GridView.builder(
           controller: _gridScrollController,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 500,
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: showSummary
+                ? HorizontalAnimeCard.detailedGridMaxCrossAxisExtent
+                : HorizontalAnimeCard.compactGridMaxCrossAxisExtent,
             mainAxisSpacing: 16,
             crossAxisSpacing: 16,
-            mainAxisExtent: 140,
+            mainAxisExtent: showSummary
+                ? HorizontalAnimeCard.detailedCardHeight
+                : HorizontalAnimeCard.compactCardHeight,
           ),
           itemCount: animeSummaries.length,
           itemBuilder: (context, index) {
