@@ -103,17 +103,23 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     final server = ServiceProvider.webServer;
     if (enabled) {
       final success = await server.startServer(port: _currentPort);
+      if (!mounted) return;
       if (success) {
         BlurSnackBar.show(context, '远程访问服务已启动');
         _updateAccessUrls();
       } else {
-        BlurSnackBar.show(context, '远程访问服务启动失败');
         setState(() {
           _webServerEnabled = false;
+          _accessUrls = [];
+          _publicIpUrl = null;
         });
+        _showStartServerErrorDialog(
+          server.lastStartErrorMessage ?? '未知原因',
+        );
       }
     } else {
       await server.stopServer();
+      if (!mounted) return;
       BlurSnackBar.show(context, '远程访问服务已停止');
       setState(() {
         _accessUrls = [];
@@ -143,6 +149,22 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   void _copyUrl(String url) {
     Clipboard.setData(ClipboardData(text: url));
     BlurSnackBar.show(context, '访问地址已复制到剪贴板');
+  }
+
+  void _showStartServerErrorDialog(String message) {
+    final colorScheme = Theme.of(context).colorScheme;
+    BlurDialog.show(
+      context: context,
+      title: '远程访问服务启动失败',
+      content: message,
+      actions: [
+        HoverScaleTextButton(
+          text: '确定',
+          idleColor: colorScheme.onSurface,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
   }
 
   void _showPortDialog() async {
@@ -190,12 +212,30 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     );
 
     if (newPort != null && newPort != _currentPort) {
+      final wasRunning = _webServerEnabled;
       setState(() {
         _currentPort = newPort;
       });
-      await ServiceProvider.webServer.setPort(newPort);
-      BlurSnackBar.show(context, '远程访问端口已更新，正在重启服务...');
-      _updateAccessUrls();
+      final server = ServiceProvider.webServer;
+      await server.setPort(newPort);
+      if (!mounted) return;
+      if (wasRunning) {
+        if (server.isRunning) {
+          BlurSnackBar.show(context, '远程访问端口已更新，服务已重启');
+          _updateAccessUrls();
+        } else {
+          setState(() {
+            _webServerEnabled = false;
+            _accessUrls = [];
+            _publicIpUrl = null;
+          });
+          _showStartServerErrorDialog(
+            server.lastStartErrorMessage ?? '未知原因',
+          );
+        }
+      } else {
+        BlurSnackBar.show(context, '远程访问端口已更新');
+      }
     }
   }
 
@@ -276,30 +316,31 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             onChanged: _toggleAutoStart,
           ),
         ),
-        
+
+        const SizedBox(height: 8),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        const SizedBox(height: 8),
+
         if (_webServerEnabled) ...[
-          const SizedBox(height: 8),
-          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-          const SizedBox(height: 8),
-          
           // 访问地址
           _buildAccessAddressSection(),
-          
+
           const SizedBox(height: 8),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
           const SizedBox(height: 8),
-          
-          // 端口设置
-          _buildSettingItem(
-            icon: Icons.settings_ethernet,
-            title: '端口设置',
-            subtitle: '当前端口: $_currentPort',
-            trailing: IconButton(
-              icon: Icon(Icons.edit, color: colorScheme.onSurface),
-              onPressed: _showPortDialog,
-            ),
-          ),
         ],
+
+        // 端口设置
+        _buildSettingItem(
+          icon: Icons.settings_ethernet,
+          title: '端口设置',
+          subtitle: '当前端口: $_currentPort',
+          trailing: _HoverScaleIconButton(
+            icon: Icons.edit,
+            onPressed: _showPortDialog,
+            idleColor: colorScheme.onSurface,
+          ),
+        ),
       ],
     );
   }
@@ -475,4 +516,57 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       ),
     );
   }
-} 
+}
+
+class _HoverScaleIconButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color? idleColor;
+  final Color hoverColor;
+  final double size;
+  final double hoverScale;
+  final EdgeInsetsGeometry padding;
+
+  const _HoverScaleIconButton({
+    required this.icon,
+    required this.onPressed,
+    this.idleColor,
+    this.hoverColor = const Color(0xFFFF2E55),
+    this.size = 20,
+    this.hoverScale = 1.1,
+    this.padding = const EdgeInsets.all(6),
+  });
+
+  @override
+  State<_HoverScaleIconButton> createState() => _HoverScaleIconButtonState();
+}
+
+class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseColor =
+        widget.idleColor ?? Theme.of(context).colorScheme.onSurface;
+    final color = _isHovered ? widget.hoverColor : baseColor;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: AnimatedScale(
+          scale: _isHovered ? widget.hoverScale : 1.0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutBack,
+          child: Padding(
+            padding: widget.padding,
+            child: Icon(widget.icon, size: widget.size, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -17,6 +17,7 @@ class WebServerService {
   int _port = 1180;
   bool _isRunning = false;
   bool _autoStart = false;
+  String? _lastStartErrorMessage;
   final WebApiService _webApiService = WebApiService();
   final NipaPlayLanDiscoveryResponder _lanDiscoveryResponder =
       NipaPlayLanDiscoveryResponder();
@@ -24,6 +25,7 @@ class WebServerService {
   bool get isRunning => _isRunning;
   int get port => _port;
   bool get autoStart => _autoStart;
+  String? get lastStartErrorMessage => _lastStartErrorMessage;
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,8 +50,34 @@ class WebServerService {
     await prefs.setInt(_portKey, _port);
   }
 
+  String _formatStartError(Object error) {
+    if (error is SocketException) {
+      final osError = error.osError;
+      final errorCode = osError?.errorCode;
+      final rawMessage = (osError?.message ?? error.message).trim();
+      final lowerMessage = rawMessage.toLowerCase();
+      if (errorCode == 48 ||
+          errorCode == 98 ||
+          errorCode == 10048 ||
+          lowerMessage.contains('address already in use')) {
+        return '端口 $_port 已被占用，请修改端口后重试。';
+      }
+      if (errorCode == 13 ||
+          errorCode == 10013 ||
+          lowerMessage.contains('permission denied') ||
+          lowerMessage.contains('access is denied')) {
+        return '没有权限绑定端口 $_port，请尝试 1024 以上端口或以更高权限运行。';
+      }
+      if (rawMessage.isNotEmpty) {
+        return '无法监听端口 $_port：$rawMessage';
+      }
+    }
+    return '远程访问服务启动失败：$error';
+  }
+
   Future<bool> startServer({int? port}) async {
     if (_isRunning) {
+      _lastStartErrorMessage = null;
       print('Remote access server is already running.');
       return true;
     }
@@ -78,12 +106,15 @@ class WebServerService {
           
       _server = await shelf_io.serve(handler, '0.0.0.0', _port);
       _isRunning = true;
+      _lastStartErrorMessage = null;
       print('Remote access server started on port ${_server!.port}');
       await _lanDiscoveryResponder.start(webPort: _server!.port);
       await saveSettings();
       return true;
     } catch (e) {
       _isRunning = false;
+      _server = null;
+      _lastStartErrorMessage = _formatStartError(e);
       await _lanDiscoveryResponder.stop();
       return false;
     }

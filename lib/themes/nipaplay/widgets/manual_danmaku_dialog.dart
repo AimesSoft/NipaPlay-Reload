@@ -597,6 +597,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        splashFactory: NoSplash.splashFactory,
         onTap: () {
           setState(() {
             _selectedEpisode = episode;
