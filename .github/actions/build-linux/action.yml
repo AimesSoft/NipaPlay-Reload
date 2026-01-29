@@ -53,9 +53,99 @@ runs:
         chmod +x build_and_copy_web.sh
         ./build_and_copy_web.sh
 
+    - name: Download bundled libmpv2
+      shell: bash
+      run: |
+        set -e
+        ARCH="${{ inputs.arch }}"
+        LIBMPV_ROOT="${RUNNER_TEMP}/libmpv-${ARCH}"
+        LIBMPV_PKG_DIR="${RUNNER_TEMP}/libmpv-pkgs-${ARCH}"
+        LIBMPV_PKGCONFIG_DIR="${RUNNER_TEMP}/libmpv-pkgconfig-${ARCH}"
+        mkdir -p "${LIBMPV_ROOT}" "${LIBMPV_PKG_DIR}" "${LIBMPV_PKGCONFIG_DIR}"
+
+        case "${ARCH}" in
+          amd64)
+            APT_ARCH="amd64"
+            APT_MIRROR="http://archive.ubuntu.com/ubuntu"
+            TRIPLET="x86_64-linux-gnu"
+            ;;
+          arm64)
+            APT_ARCH="arm64"
+            APT_MIRROR="http://ports.ubuntu.com/ubuntu-ports"
+            TRIPLET="aarch64-linux-gnu"
+            ;;
+          *)
+            echo "Unsupported arch: ${ARCH}"
+            exit 1
+            ;;
+        esac
+
+        LIBMPV_APT_LIST="${RUNNER_TEMP}/libmpv-${ARCH}.list"
+        cat > "${LIBMPV_APT_LIST}" <<EOF
+        deb [arch=${APT_ARCH}] ${APT_MIRROR} noble main universe
+        deb [arch=${APT_ARCH}] ${APT_MIRROR} noble-updates main universe
+        deb [arch=${APT_ARCH}] ${APT_MIRROR} noble-security main universe
+        EOF
+
+        sudo apt-get update \
+          -o Dir::Etc::sourcelist="${LIBMPV_APT_LIST}" \
+          -o Dir::Etc::sourceparts="-" \
+          -o APT::Get::List-Cleanup=0
+
+        (
+          cd "${LIBMPV_PKG_DIR}"
+          sudo apt-get download \
+            -o Dir::Etc::sourcelist="${LIBMPV_APT_LIST}" \
+            -o Dir::Etc::sourceparts="-" \
+            -o APT::Get::List-Cleanup=0 \
+            libmpv2 libmpv-dev
+        )
+
+        for pkg in "${LIBMPV_PKG_DIR}"/libmpv2_*.deb "${LIBMPV_PKG_DIR}"/libmpv-dev_*.deb; do
+          if [ ! -f "${pkg}" ]; then
+            echo "Missing package: ${pkg}"
+            exit 1
+          fi
+          dpkg-deb -x "${pkg}" "${LIBMPV_ROOT}"
+        done
+
+        LIBMPV_LIB_DIR="${LIBMPV_ROOT}/usr/lib/${TRIPLET}"
+        if [ ! -d "${LIBMPV_LIB_DIR}" ]; then
+          LIBMPV_LIB_DIR="${LIBMPV_ROOT}/usr/lib"
+        fi
+
+        MPV_PC_SOURCE="${LIBMPV_LIB_DIR}/pkgconfig/mpv.pc"
+        if [ ! -f "${MPV_PC_SOURCE}" ]; then
+          MPV_PC_SOURCE="${LIBMPV_ROOT}/usr/lib/pkgconfig/mpv.pc"
+        fi
+        if [ ! -f "${MPV_PC_SOURCE}" ]; then
+          echo "mpv.pc not found in downloaded libmpv-dev."
+          exit 1
+        fi
+
+        cp "${MPV_PC_SOURCE}" "${LIBMPV_PKGCONFIG_DIR}/mpv.pc"
+        sed -i \
+          -e "s|^prefix=.*|prefix=${LIBMPV_ROOT}/usr|" \
+          -e "s|^libdir=.*|libdir=${LIBMPV_LIB_DIR}|" \
+          -e "s|^includedir=.*|includedir=${LIBMPV_ROOT}/usr/include|" \
+          "${LIBMPV_PKGCONFIG_DIR}/mpv.pc"
+
+        if ! find "${LIBMPV_LIB_DIR}" -name "libmpv.so.*" -type f | grep -q .; then
+          echo "Downloaded libmpv libraries not found in ${LIBMPV_LIB_DIR}"
+          exit 1
+        fi
+
+        echo "LIBMPV_ROOT=${LIBMPV_ROOT}" >> "$GITHUB_ENV"
+        echo "LIBMPV_LIB_DIR=${LIBMPV_LIB_DIR}" >> "$GITHUB_ENV"
+        echo "LIBMPV_PKGCONFIG_DIR=${LIBMPV_PKGCONFIG_DIR}" >> "$GITHUB_ENV"
+
     - name: Build Linux
       shell: bash
       run: |
+        if [ -n "${LIBMPV_PKGCONFIG_DIR:-}" ]; then
+          export PKG_CONFIG_PATH="${LIBMPV_PKGCONFIG_DIR}${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+          export LD_LIBRARY_PATH="${LIBMPV_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+        fi
         flutter build linux --release
     
     - name: Linux packaging and cleanup
@@ -70,19 +160,32 @@ runs:
         FLUTTER_ARCH_DIR="x64"
         RPM_ARCH_DIR="x86_64"
         BUILD_APPIMAGE=true
-        LIB_SEARCH_DIRS="/usr/lib"
+        LIB_SEARCH_DIRS=""
+        if [ -n "${LIBMPV_LIB_DIR:-}" ] && [ -d "${LIBMPV_LIB_DIR}" ]; then
+          LIB_SEARCH_DIRS="${LIBMPV_LIB_DIR}"
+          if [ -n "${LIBMPV_ROOT:-}" ] && [ -d "${LIBMPV_ROOT}/usr/lib" ] && [ "${LIBMPV_ROOT}/usr/lib" != "${LIBMPV_LIB_DIR}" ]; then
+            LIB_SEARCH_DIRS="${LIB_SEARCH_DIRS} ${LIBMPV_ROOT}/usr/lib"
+          fi
+        fi
+        if [ -z "${LIB_SEARCH_DIRS}" ]; then
+          LIB_SEARCH_DIRS="/usr/lib"
+        fi
 
         case "${ARCH}" in
           amd64)
             FLUTTER_ARCH_DIR="x64"
             RPM_ARCH_DIR="x86_64"
-            LIB_SEARCH_DIRS="${LIB_SEARCH_DIRS} /usr/lib/x86_64-linux-gnu"
+            if [ -z "${LIBMPV_LIB_DIR:-}" ]; then
+              LIB_SEARCH_DIRS="${LIB_SEARCH_DIRS} /usr/lib/x86_64-linux-gnu"
+            fi
             ;;
           arm64)
             FLUTTER_ARCH_DIR="arm64"
             RPM_ARCH_DIR="aarch64"
             BUILD_APPIMAGE=false
-            LIB_SEARCH_DIRS="${LIB_SEARCH_DIRS} /usr/lib/aarch64-linux-gnu"
+            if [ -z "${LIBMPV_LIB_DIR:-}" ]; then
+              LIB_SEARCH_DIRS="${LIB_SEARCH_DIRS} /usr/lib/aarch64-linux-gnu"
+            fi
             ;;
           *)
             echo "Unsupported arch: ${ARCH}"

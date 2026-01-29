@@ -13,7 +13,7 @@ on:
 jobs:
   build:
     name: Build Linux Packages (amd64)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-Linux-amd64
