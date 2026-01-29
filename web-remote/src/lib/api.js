@@ -41,6 +41,10 @@ export async function getSharedAnimeEpisodes(baseUrl, animeId) {
   return fetchJson(`${baseUrl}/api/media/local/share/animes/${animeId}`);
 }
 
+export async function getBangumiDetail(baseUrl, animeId) {
+  return fetchJson(`${baseUrl}/api/bangumi/detail/${animeId}`);
+}
+
 export async function getManagementFolders(baseUrl) {
   return fetchJson(`${baseUrl}/api/media/local/manage/folders`);
 }
@@ -87,6 +91,12 @@ export async function getDanmaku(baseUrl, episodeId, animeId) {
   const url = new URL(`${baseUrl}/api/danmaku/load`);
   url.searchParams.set("episodeId", episodeId);
   url.searchParams.set("animeId", String(animeId));
+  return fetchJson(url.toString());
+}
+
+export async function getVideoInfo(baseUrl, videoPath) {
+  const url = new URL(`${baseUrl}/api/danmaku/video_info`);
+  url.searchParams.set("videoPath", videoPath);
   return fetchJson(url.toString());
 }
 
