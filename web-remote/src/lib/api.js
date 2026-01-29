@@ -111,7 +111,7 @@ export function buildStreamUrl(baseUrl, streamPath) {
     const path = streamPath.startsWith("/") ? streamPath.slice(1) : streamPath;
     return new URL(path, base).toString();
   } catch {
-    return `${baseUrl}/${streamPath.replace(/^\\//, "")}`;
+    return `${baseUrl}/${streamPath.replace(/^\/+/, "")}`;
   }
 }
 
