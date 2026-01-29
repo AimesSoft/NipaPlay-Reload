@@ -34,6 +34,7 @@ abstract class _Track {
   final int? rotate; /* demux-rotate */
   final double? par; /* demux-par */
   final int? audiochannels; /* audio-channels */
+  final bool isExternal; /* external */
   // ----------------------------------------
 
   /// {@macro _track}
@@ -56,6 +57,7 @@ abstract class _Track {
     this.rotate,
     this.par,
     this.audiochannels,
+    this.isExternal = false,
   });
 
   @override
@@ -94,7 +96,8 @@ abstract class _Track {
       'bitrate: $bitrate, '
       'rotate: $rotate, '
       'par: $par, '
-      'audiochannels: $audiochannels'
+      'audiochannels: $audiochannels, '
+      'isExternal: $isExternal'
       ')';
 }
 
@@ -127,6 +130,7 @@ class VideoTrack extends _Track {
     super.rotate,
     super.par,
     super.audiochannels,
+    super.isExternal,
   });
 
   /// No video track. Disables video output.
@@ -168,6 +172,7 @@ class AudioTrack extends _Track {
     super.rotate,
     super.par,
     super.audiochannels,
+    super.isExternal,
     this.uri = false,
   });
 
@@ -191,6 +196,7 @@ class AudioTrack extends _Track {
         uri,
         title,
         language,
+        isExternal: true,
         uri: true,
       );
 
@@ -244,6 +250,7 @@ class SubtitleTrack extends _Track {
     super.rotate,
     super.par,
     super.audiochannels,
+    super.isExternal,
     this.uri = false,
     this.data = false,
   });
@@ -264,7 +271,7 @@ class SubtitleTrack extends _Track {
     String? title,
     String? language,
   }) =>
-      SubtitleTrack(uri, title, language, uri: true);
+      SubtitleTrack(uri, title, language, isExternal: true, uri: true);
 
   /// [SubtitleTrack] loaded with data.
   ///
@@ -276,7 +283,7 @@ class SubtitleTrack extends _Track {
     String? title,
     String? language,
   }) =>
-      SubtitleTrack(data, title, language, data: true);
+      SubtitleTrack(data, title, language, isExternal: true, data: true);
 
   @override
   bool operator ==(Object other) {

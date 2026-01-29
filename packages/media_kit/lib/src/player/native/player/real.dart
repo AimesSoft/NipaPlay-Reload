@@ -1737,6 +1737,7 @@ class NativePlayer extends PlatformPlayer {
               int? rotate;
               double? par;
               int? audiochannels;
+              bool isExternal = false;
               for (int j = 0; j < map.num; j++) {
                 final property = map.keys[j].cast<Utf8>().toDartString();
                 if (map.values[j].format ==
@@ -1779,6 +1780,9 @@ class NativePlayer extends PlatformPlayer {
                       break;
                     case 'default':
                       isDefault = map.values[j].u.flag > 0;
+                      break;
+                    case 'external':
+                      isExternal = map.values[j].u.flag > 0;
                       break;
                   }
                 }
@@ -1841,6 +1845,7 @@ class NativePlayer extends PlatformPlayer {
                       rotate: rotate,
                       par: par,
                       audiochannels: audiochannels,
+                      isExternal: isExternal,
                     ),
                   );
                   break;
@@ -1865,6 +1870,7 @@ class NativePlayer extends PlatformPlayer {
                       rotate: rotate,
                       par: par,
                       audiochannels: audiochannels,
+                      isExternal: isExternal,
                     ),
                   );
                   break;
@@ -1889,6 +1895,7 @@ class NativePlayer extends PlatformPlayer {
                       rotate: rotate,
                       par: par,
                       audiochannels: audiochannels,
+                      isExternal: isExternal,
                     ),
                   );
                   break;

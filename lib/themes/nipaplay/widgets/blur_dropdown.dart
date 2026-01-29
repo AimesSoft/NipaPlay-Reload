@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -316,16 +315,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                           ),
                         );
 
-                        if (item.description != null && item.description!.isNotEmpty) {
-                          return HoverTooltipBubble(
-                            text: item.description!,
-                            showDelay: const Duration(milliseconds: 300),
-                            hideDelay: const Duration(milliseconds: 100),
-                            child: menuItem,
-                          );
-                        } else {
-                          return menuItem;
-                        }
+                        return menuItem;
                       },
                     ),
                   ),

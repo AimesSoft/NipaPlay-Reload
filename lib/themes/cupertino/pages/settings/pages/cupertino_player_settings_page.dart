@@ -1,6 +1,7 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -15,7 +16,6 @@ import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
-import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -447,6 +447,50 @@ class _CupertinoPlayerSettingsPageState
     );
   }
 
+  Widget _buildAutoNextCountdownSlider(
+    BuildContext context,
+    VideoPlayerState videoState,
+    bool isAutoNext,
+  ) {
+    final double value = videoState.autoNextCountdownSeconds.toDouble();
+    final double minValue =
+        AutoNextEpisodeService.minCountdownSeconds.toDouble();
+    final double maxValue =
+        AutoNextEpisodeService.maxCountdownSeconds.toDouble();
+    final ValueChanged<double>? onChanged = isAutoNext
+        ? (value) {
+            videoState.setAutoNextCountdownSeconds(value.round());
+          }
+        : null;
+    final Color accentColor = CupertinoTheme.of(context).primaryColor;
+
+    final Widget slider = PlatformInfo.isIOS26OrHigher()
+        ? AdaptiveSlider(
+            value: value,
+            min: minValue,
+            max: maxValue,
+            onChanged: onChanged,
+            activeColor: accentColor,
+          )
+        : fluent.FluentTheme(
+            data: fluent.FluentThemeData(
+              brightness: CupertinoTheme.brightnessOf(context),
+              accentColor: fluent.AccentColor.swatch({
+                'normal': accentColor,
+                'default': accentColor,
+              }),
+            ),
+            child: fluent.Slider(
+              value: value,
+              min: minValue,
+              max: maxValue,
+              onChanged: onChanged,
+            ),
+          );
+
+    return SizedBox(width: double.infinity, child: slider);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
@@ -582,69 +626,35 @@ class _CupertinoPlayerSettingsPageState
                 ),
                 backgroundColor: tileBackground,
               ),
-              CupertinoSettingsTile(
-                leading: Icon(
-                  CupertinoIcons.timer,
-                  color: resolveSettingsIconColor(context),
-                ),
-                title: const Text('自动连播倒计时'),
-                subtitle: Text(
-                  isAutoNext
-                      ? '自动跳转下一话前等待 ${videoState.autoNextCountdownSeconds} 秒'
-                      : '需先启用自动播放下一话',
-                ),
-                trailing: SizedBox(
-                  width: 220,
-                  child: CupertinoSlider(
-                    value: videoState.autoNextCountdownSeconds.toDouble(),
-                    min: AutoNextEpisodeService.minCountdownSeconds.toDouble(),
-                    max: AutoNextEpisodeService.maxCountdownSeconds.toDouble(),
-                    onChanged: isAutoNext
-                        ? (value) {
-                            videoState
-                                .setAutoNextCountdownSeconds(value.round());
-                          }
-                        : null,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.timer,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: const Text('自动连播倒计时'),
+                    subtitle: Text(
+                      isAutoNext
+                          ? '自动跳转下一话前等待 ${videoState.autoNextCountdownSeconds} 秒'
+                          : '需先启用自动播放下一话',
+                    ),
+                    backgroundColor: tileBackground,
+                    contentPadding:
+                        const EdgeInsetsDirectional.fromSTEB(20, 12, 16, 8),
                   ),
-                ),
-                backgroundColor: tileBackground,
-              ),
-            ],
-          );
-        },
-      ),
-      const SizedBox(height: 16),
-      Consumer<VideoPlayerState>(
-        builder: (context, videoState, child) {
-          final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
-          return CupertinoSettingsGroupCard(
-            margin: EdgeInsets.zero,
-            backgroundColor: sectionBackground,
-            addDividers: true,
-            dividerIndent: 16,
-            children: [
-              CupertinoSettingsTile(
-                leading: Icon(
-                  CupertinoIcons.camera,
-                  color: resolveSettingsIconColor(context),
-                ),
-                title: const Text('截图保存位置'),
-                subtitle: Text(currentPath.isEmpty ? '默认：下载目录' : currentPath),
-                showChevron: true,
-                onTap: () async {
-                  final selected = await FilePickerService().pickDirectory(
-                    initialDirectory: currentPath.isEmpty ? null : currentPath,
-                  );
-                  if (selected == null || selected.trim().isEmpty) return;
-                  await videoState.setScreenshotSaveDirectory(selected);
-                  if (!mounted) return;
-                  AdaptiveSnackBar.show(
-                    context,
-                    message: '截图保存位置已更新',
-                    type: AdaptiveSnackBarType.success,
-                  );
-                },
-                backgroundColor: tileBackground,
+                  Container(
+                    color: tileBackground,
+                    padding:
+                        const EdgeInsetsDirectional.fromSTEB(20, 0, 16, 12),
+                    child: _buildAutoNextCountdownSlider(
+                      context,
+                      videoState,
+                      isAutoNext,
+                    ),
+                  ),
+                ],
               ),
             ],
           );
@@ -987,53 +997,6 @@ class _CupertinoPlayerSettingsPageState
                               message: newValue
                                   ? '已开启自定义 AI Key'
                                   : '已关闭自定义 AI Key',
-                              type: AdaptiveSnackBarType.success,
-                            );
-                          }
-                        : null,
-                    backgroundColor: tileBackground,
-                  );
-                },
-              ),
-              Consumer<VideoPlayerState>(
-                builder: (context, videoState, child) {
-                  final enabled = videoState.spoilerPreventionEnabled;
-                  return CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.info_circle,
-                      color: resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('调试：打印 AI 返回内容'),
-                    subtitle: const Text('开启后会在日志里打印 AI 返回的原始文本与命中弹幕。'),
-                    trailing: AdaptiveSwitch(
-                      value: videoState.spoilerAiDebugPrintResponse,
-                      onChanged: enabled
-                          ? (value) async {
-                              await videoState.setSpoilerAiDebugPrintResponse(
-                                  value);
-                              if (!mounted) return;
-                              AdaptiveSnackBar.show(
-                                context,
-                                message: value
-                                    ? '已开启 AI 调试打印'
-                                    : '已关闭 AI 调试打印',
-                                type: AdaptiveSnackBarType.success,
-                              );
-                            }
-                          : null,
-                    ),
-                    onTap: enabled
-                        ? () async {
-                            final bool newValue =
-                                !videoState.spoilerAiDebugPrintResponse;
-                            await videoState
-                                .setSpoilerAiDebugPrintResponse(newValue);
-                            if (!mounted) return;
-                            AdaptiveSnackBar.show(
-                              context,
-                              message: newValue
-                                  ? '已开启 AI 调试打印'
-                                  : '已关闭 AI 调试打印',
                               type: AdaptiveSnackBarType.success,
                             );
                           }

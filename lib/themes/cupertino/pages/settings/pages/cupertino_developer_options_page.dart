@@ -9,6 +9,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_debug_log_viewer_she
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class CupertinoDeveloperOptionsPage extends StatelessWidget {
@@ -105,6 +106,71 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                         onTap: () => _openBuildInfo(context),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  Consumer<VideoPlayerState>(
+                    builder: (context, videoState, child) {
+                      final enabled = videoState.spoilerPreventionEnabled;
+                      return CupertinoSettingsGroupCard(
+                        margin: EdgeInsets.zero,
+                        backgroundColor:
+                            resolveSettingsSectionBackground(context),
+                        addDividers: true,
+                        children: [
+                          CupertinoSettingsTile(
+                            leading: Icon(
+                              CupertinoIcons.info_circle,
+                              color: resolveSettingsIconColor(context),
+                            ),
+                            title: const Text('调试：打印 AI 返回内容'),
+                            subtitle: Text(
+                              enabled
+                                  ? '开启后会在日志里打印 AI 返回的原始文本与命中弹幕。'
+                                  : '需先启用防剧透模式',
+                            ),
+                            trailing: AdaptiveSwitch(
+                              value: videoState.spoilerAiDebugPrintResponse,
+                              onChanged: enabled
+                                  ? (value) async {
+                                      await videoState
+                                          .setSpoilerAiDebugPrintResponse(
+                                        value,
+                                      );
+                                      if (!context.mounted) return;
+                                      AdaptiveSnackBar.show(
+                                        context,
+                                        message: value
+                                            ? '已开启 AI 调试打印'
+                                            : '已关闭 AI 调试打印',
+                                        type: AdaptiveSnackBarType.success,
+                                      );
+                                    }
+                                  : null,
+                            ),
+                            onTap: enabled
+                                ? () async {
+                                    final newValue =
+                                        !videoState.spoilerAiDebugPrintResponse;
+                                    await videoState
+                                        .setSpoilerAiDebugPrintResponse(
+                                      newValue,
+                                    );
+                                    if (!context.mounted) return;
+                                    AdaptiveSnackBar.show(
+                                      context,
+                                      message: newValue
+                                          ? '已开启 AI 调试打印'
+                                          : '已关闭 AI 调试打印',
+                                      type: AdaptiveSnackBarType.success,
+                                    );
+                                  }
+                                : null,
+                            backgroundColor:
+                                resolveSettingsTileBackground(context),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   const SizedBox(height: 24),

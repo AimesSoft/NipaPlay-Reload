@@ -64,11 +64,16 @@ class CupertinoSettingsTile extends StatelessWidget {
       ),
       subtitle: subtitle == null
           ? null
-          : DefaultTextStyle.merge(
-              style: TextStyle(
-                fontSize: 13,
-                color: resolveSettingsSecondaryTextColor(context),
-              ),
+          : DefaultTextStyle(
+              style: DefaultTextStyle.of(context).style.merge(
+                    TextStyle(
+                      fontSize: 13,
+                      color: resolveSettingsSecondaryTextColor(context),
+                    ),
+                  ),
+              softWrap: true,
+              overflow: TextOverflow.visible,
+              maxLines: null,
               child: subtitle!,
             ),
       trailing: _buildTrailing(context),
@@ -83,10 +88,7 @@ class CupertinoSettingsTile extends StatelessWidget {
       return Icon(
         CupertinoIcons.check_mark,
         size: 18,
-        color: CupertinoDynamicColor.resolve(
-          CupertinoColors.activeBlue,
-          context,
-        ),
+        color: CupertinoTheme.of(context).primaryColor,
       );
     }
     if (showChevron) {

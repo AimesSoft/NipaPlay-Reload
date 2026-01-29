@@ -23,7 +23,6 @@ import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
-import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
@@ -618,28 +617,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
-            return SettingsItem.button(
-              title: '截图保存位置',
-              subtitle: currentPath.isEmpty ? '默认：下载目录' : currentPath,
-              icon: Icons.camera_alt_outlined,
-              onTap: () async {
-                final selected = await FilePickerService().pickDirectory(
-                  initialDirectory: currentPath.isEmpty ? null : currentPath,
-                );
-                if (selected == null || selected.trim().isEmpty) return;
-                await videoState.setScreenshotSaveDirectory(selected);
-                if (!context.mounted) return;
-                BlurSnackBar.show(context, '截图保存位置已更新');
-              },
-            );
-          },
-        ),
-
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
             return SettingsItem.toggle(
               title: '时间轴截图预览',
               subtitle: '进度条悬停时显示缩略图（仅本地/WebDAV/SMB/共享媒体库生效）',
@@ -829,28 +806,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                     BlurSnackBar.show(
                       context,
                       value ? '已开启自定义 AI Key' : '已关闭自定义 AI Key',
-                    );
-                  },
-                ),
-              );
-              widgets.add(
-                Divider(
-                  color: colorScheme.onSurface.withOpacity(0.12),
-                  height: 1,
-                ),
-              );
-              widgets.add(
-                SettingsItem.toggle(
-                  title: "调试：打印 AI 返回内容",
-                  subtitle: "开启后会在日志里打印 AI 返回的原始文本与命中弹幕",
-                  icon: Ionicons.information_circle_outline,
-                  value: videoState.spoilerAiDebugPrintResponse,
-                  onChanged: (bool value) async {
-                    await videoState.setSpoilerAiDebugPrintResponse(value);
-                    if (!context.mounted) return;
-                    BlurSnackBar.show(
-                      context,
-                      value ? '已开启 AI 调试打印' : '已关闭 AI 调试打印',
                     );
                   },
                 ),

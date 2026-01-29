@@ -43,6 +43,7 @@ import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as path;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
@@ -803,11 +804,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     super.build(context);
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
     final bool isIOS = Platform.isIOS;
+    final homeSections = context.watch<HomeSectionsSettingsProvider>();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Consumer2<JellyfinProvider, EmbyProvider>(
         builder: (context, jellyfinProvider, embyProvider, child) {
+          final configuredSections = _buildConfiguredSections(
+            isPhone: isPhone,
+            isIOS: isIOS,
+            sectionsProvider: homeSections,
+          );
           return SingleChildScrollView(
             controller: _mainScrollController,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -818,70 +825,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
                   _buildHeroBanner(isPhone: isPhone),
                   
                   SizedBox(height: isPhone ? 16 : 32),
-
-                  if (!isIOS) ...[
-                    // 今日新番区域
-                    _buildTodaySeriesSection(),
-
-                    if (_todayAnimes.isNotEmpty || _isLoadingTodayAnimes)
-                      SizedBox(height: isPhone ? 16 : 32),
-
-                    // 随机推荐区域
-                    _buildRandomRecommendationsSection(),
-
-                    if (_randomRecommendations.isNotEmpty ||
-                        _isLoadingRandomRecommendations)
-                      SizedBox(height: isPhone ? 16 : 32),
-                  ],
-                  
-                  // 继续播放区域
-                  _buildContinueWatching(isPhone: isPhone),
-                  
-                  SizedBox(height: isPhone ? 12 : 32), // 手机端进一步减少间距
-                  
-                  // Jellyfin按媒体库显示最近添加
-                  ..._recentJellyfinItemsByLibrary.entries.map((entry) => [
-                    _buildRecentSection(
-                      title: 'Jellyfin - 新增${entry.key}',
-                      items: entry.value,
-                      scrollController: _getJellyfinLibraryScrollController(entry.key),
-                      onItemTap: (item) => _onJellyfinItemTap(item as JellyfinMediaItem),
-                    ),
-                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
-                  ]).expand((x) => x),
-                  
-                  // Emby按媒体库显示最近添加
-                  ..._recentEmbyItemsByLibrary.entries.map((entry) => [
-                    _buildRecentSection(
-                      title: 'Emby - 新增${entry.key}',
-                      items: entry.value,
-                      scrollController: _getEmbyLibraryScrollController(entry.key),
-                      onItemTap: (item) => _onEmbyItemTap(item as EmbyMediaItem),
-                    ),
-                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
-                  ]).expand((x) => x),
-                  
-                  if (_recentDandanplayGroups.isNotEmpty) ...[
-                    _buildRecentSection(
-                      title: '弹弹play - 最近添加',
-                      items: _recentDandanplayGroups,
-                      scrollController: _getDandanplayLibraryScrollController(),
-                      onItemTap: (item) => _onDandanplayGroupTap(item as DandanplayRemoteAnimeGroup),
-                    ),
-                    SizedBox(height: isPhone ? 16 : 32),
-                  ],
-
-                  // 本地媒体库显示最近添加
-                  if (_localAnimeItems.isNotEmpty) ...[
-                    _buildRecentSection(
-                      title: '本地媒体库 - 最近添加',
-                      items: _localAnimeItems,
-                      scrollController: _getLocalLibraryScrollController(),
-                      onItemTap: (item) => _onLocalAnimeItemTap(item as LocalAnimeItem),
-                    ),
-                    SizedBox(height: isPhone ? 16 : 32), // 手机端减少间距
-                  ],
-                  
+                  ...configuredSections,
 
                   
                   // 底部间距

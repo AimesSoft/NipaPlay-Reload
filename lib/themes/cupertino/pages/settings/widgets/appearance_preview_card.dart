@@ -18,9 +18,7 @@ class CupertinoAppearancePreviewCard extends StatelessWidget {
       context,
     );
 
-    final Color accentColor = isDark
-        ? CupertinoColors.systemYellow
-        : CupertinoColors.activeBlue;
+    final Color accentColor = CupertinoTheme.of(context).primaryColor;
 
     final String title;
     final String description;

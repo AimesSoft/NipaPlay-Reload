@@ -245,13 +245,86 @@ class SettingsItem extends StatelessWidget {
     );
   }
 
+  Widget? _buildDropdownSubtitle(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final List<DropdownMenuItemData> items =
+        dropdownItems ?? const <DropdownMenuItemData>[];
+    final descriptionItems = items
+        .where((item) =>
+            item.description != null && item.description!.trim().isNotEmpty)
+        .toList();
+
+    if (subtitle == null && descriptionItems.isEmpty) {
+      return null;
+    }
+
+    final subtitleStyle = TextStyle(
+      color: enabled
+          ? colorScheme.onSurface.withOpacity(0.7)
+          : colorScheme.onSurface.withOpacity(0.38),
+    );
+    final descriptionStyle = TextStyle(
+      fontSize: 12,
+      height: 1.3,
+      color: enabled
+          ? colorScheme.onSurface.withOpacity(0.6)
+          : colorScheme.onSurface.withOpacity(0.38),
+    );
+
+    final List<Widget> children = [];
+    if (subtitle != null) {
+      children.add(
+        Text(
+          subtitle!,
+          locale: const Locale("zh-Hans", "zh"),
+          style: subtitleStyle,
+        ),
+      );
+    }
+
+    if (descriptionItems.isNotEmpty) {
+      if (children.isNotEmpty) {
+        children.add(const SizedBox(height: 4));
+      }
+      for (int i = 0; i < descriptionItems.length; i++) {
+        final item = descriptionItems[i];
+        children.add(
+          Text(
+            '${item.title}: ${item.description!.trim()}',
+            locale: const Locale("zh-Hans", "zh"),
+            style: descriptionStyle,
+          ),
+        );
+        if (i != descriptionItems.length - 1) {
+          children.add(const SizedBox(height: 2));
+        }
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
+  bool _hasDropdownDescriptions() {
+    final List<DropdownMenuItemData> items =
+        dropdownItems ?? const <DropdownMenuItemData>[];
+    return items.any((item) =>
+        item.description != null && item.description!.trim().isNotEmpty);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     switch (type) {
       case SettingsItemType.dropdown:
+        final bool alignDropdownToTop = _hasDropdownDescriptions();
         return ListTile(
+          titleAlignment:
+              alignDropdownToTop ? ListTileTitleAlignment.top : null,
           leading: icon != null
               ? Icon(icon, color: colorScheme.onSurface.withOpacity(0.7))
               : null,
@@ -265,17 +338,7 @@ class SettingsItem extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          subtitle: subtitle != null
-              ? Text(
-                  subtitle!,
-                  locale: const Locale("zh-Hans", "zh"),
-                  style: TextStyle(
-                    color: enabled
-                        ? colorScheme.onSurface.withOpacity(0.7)
-                        : colorScheme.onSurface.withOpacity(0.38),
-                  ),
-                )
-              : null,
+          subtitle: _buildDropdownSubtitle(context),
           trailing: enabled && dropdownItems != null
               ? ConstrainedBox(
                   constraints: BoxConstraints(

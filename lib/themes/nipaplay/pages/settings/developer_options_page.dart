@@ -15,6 +15,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 // 证书相关的主机快捷信任按钮应用户要求移除，仅保留全局开关
 
 /// 开发者选项设置页面
@@ -75,6 +76,30 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+            Consumer<VideoPlayerState>(
+              builder: (context, videoState, child) {
+                final enabled = videoState.spoilerPreventionEnabled;
+                return SettingsItem.toggle(
+                  title: '调试：打印 AI 返回内容',
+                  subtitle: enabled
+                      ? '开启后会在日志里打印 AI 返回的原始文本与命中弹幕'
+                      : '需先启用防剧透模式',
+                  icon: Ionicons.information_circle_outline,
+                  enabled: enabled,
+                  value: videoState.spoilerAiDebugPrintResponse,
+                  onChanged: (bool value) async {
+                    await videoState.setSpoilerAiDebugPrintResponse(value);
+                    BlurSnackBar.show(
+                      context,
+                      value ? '已开启 AI 调试打印' : '已关闭 AI 调试打印',
+                    );
+                  },
+                );
+              },
+            ),
+
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             
             // 终端输出查看器

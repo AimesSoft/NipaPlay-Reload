@@ -96,10 +96,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       CupertinoColors.label,
       context,
     );
-    final linkColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.activeBlue,
-      context,
-    );
+    final linkColor = CupertinoTheme.of(context).primaryColor;
 
     await BlurDialog.show(
       context: context,
@@ -312,6 +309,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       CupertinoColors.secondaryLabel,
       context,
     );
+    final accentColor = CupertinoTheme.of(context).primaryColor;
 
     return AdaptiveScaffold(
       appBar: const AdaptiveAppBar(
@@ -364,25 +362,27 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                       _buildRichSection(
                         context,
                         title: '致谢',
-                        content: const [
-                          TextSpan(text: '感谢弹弹play (DandanPlay) 以及开发者 '),
+                        content: [
+                          const TextSpan(
+                            text: '感谢弹弹play (DandanPlay) 以及开发者 ',
+                          ),
                           TextSpan(
                             text: 'Kaedei',
                             style: TextStyle(
-                              color: CupertinoColors.activeBlue,
+                              color: accentColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          TextSpan(text: ' 提供的接口与开发帮助。\n\n'),
-                          TextSpan(text: '感谢开发者 '),
+                          const TextSpan(text: ' 提供的接口与开发帮助。\n\n'),
+                          const TextSpan(text: '感谢开发者 '),
                           TextSpan(
                             text: 'Sakiko',
                             style: TextStyle(
-                              color: CupertinoColors.activeBlue,
+                              color: accentColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          TextSpan(text: ' 帮助实现 Emby 与 Jellyfin 媒体库支持。'),
+                          const TextSpan(text: ' 帮助实现 Emby 与 Jellyfin 媒体库支持。'),
                         ],
                         trailing: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

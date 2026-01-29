@@ -36,6 +36,7 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
@@ -583,6 +584,7 @@ void main(List<String> args) async {
           ChangeNotifierProvider.value(value: ServiceProvider.scanService),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => HomeSectionsSettingsProvider()),
           ChangeNotifierProvider(create: (_) => UIThemeProvider()),
           ChangeNotifierProvider(create: (_) => SharedRemoteLibraryProvider()),
           ChangeNotifierProvider(create: (_) => JellyfinTranscodeProvider()),

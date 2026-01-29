@@ -1,12 +1,14 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:flutter/material.dart' show Locale, ThemeMode;
+import 'package:flutter/material.dart' show ColorScheme, Locale, ThemeMode;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/utils/app_theme.dart';
+
+const Color _cupertinoAccentColor = Color(0xFFFF2E55);
 
 class CupertinoThemeDescriptor extends ThemeDescriptor {
   const CupertinoThemeDescriptor()
@@ -31,9 +33,15 @@ class CupertinoThemeDescriptor extends ThemeDescriptor {
 
   static Widget _buildApp(ThemeBuildContext context) {
     return DynamicColorBuilder(
-      builder: (lightDynamic, darkDynamic) {
-        final lightScheme = AppTheme.material3LightScheme(lightDynamic);
-        final darkScheme = AppTheme.material3DarkScheme(darkDynamic);
+      builder: (_, __) {
+        final lightScheme = ColorScheme.fromSeed(
+          seedColor: _cupertinoAccentColor,
+          brightness: Brightness.light,
+        );
+        final darkScheme = ColorScheme.fromSeed(
+          seedColor: _cupertinoAccentColor,
+          brightness: Brightness.dark,
+        );
         return AdaptiveApp(
           title: 'NipaPlay',
           navigatorKey: context.navigatorKey,
@@ -42,9 +50,11 @@ class CupertinoThemeDescriptor extends ThemeDescriptor {
           materialDarkTheme: AppTheme.material3DarkTheme(darkScheme),
           cupertinoLightTheme: const CupertinoThemeData(
             brightness: Brightness.light,
+            primaryColor: _cupertinoAccentColor,
           ),
           cupertinoDarkTheme: const CupertinoThemeData(
             brightness: Brightness.dark,
+            primaryColor: _cupertinoAccentColor,
           ),
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,

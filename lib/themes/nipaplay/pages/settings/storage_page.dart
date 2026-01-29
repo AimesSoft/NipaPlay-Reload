@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
+import 'package:provider/provider.dart';
 
 class StoragePage extends StatefulWidget {
   const StoragePage({super.key});
@@ -171,6 +174,26 @@ class _StoragePageState extends State<StoragePage> {
                 .bodySmall
                 ?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
           ),
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
+            return SettingsItem.button(
+              title: '截图保存位置',
+              subtitle: currentPath.isEmpty ? '默认：下载目录' : currentPath,
+              icon: Icons.camera_alt_outlined,
+              onTap: () async {
+                final selected = await FilePickerService().pickDirectory(
+                  initialDirectory: currentPath.isEmpty ? null : currentPath,
+                );
+                if (selected == null || selected.trim().isEmpty) return;
+                await videoState.setScreenshotSaveDirectory(selected);
+                if (!context.mounted) return;
+                BlurSnackBar.show(context, '截图保存位置已更新');
+              },
+            );
+          },
         ),
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         SettingsItem.button(

@@ -34,7 +34,7 @@ Color resolveSettingsCardBackground(BuildContext context) {
 
 Color resolveSettingsIconColor(BuildContext context) {
   return CupertinoDynamicColor.resolve(
-    CupertinoColors.systemBlue,
+    CupertinoTheme.of(context).primaryColor,
     context,
   );
 }

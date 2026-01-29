@@ -1,6 +1,138 @@
 part of dashboard_home_page;
 
 extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
+  double _homeSectionSpacing(
+    HomeSectionType previous,
+    HomeSectionType next,
+    bool isPhone,
+  ) {
+    if (isPhone && previous == HomeSectionType.continueWatching) {
+      return 12;
+    }
+    return isPhone ? 16 : 32;
+  }
+
+  List<Widget> _buildRemoteLibrarySections({required bool isPhone}) {
+    final widgets = <Widget>[];
+
+    void addSection(Widget section) {
+      if (widgets.isNotEmpty) {
+        widgets.add(SizedBox(height: isPhone ? 16 : 32));
+      }
+      widgets.add(section);
+    }
+
+    for (final entry in _recentJellyfinItemsByLibrary.entries) {
+      addSection(
+        _buildRecentSection(
+          title: 'Jellyfin - 新增${entry.key}',
+          items: entry.value,
+          scrollController: _getJellyfinLibraryScrollController(entry.key),
+          onItemTap: (item) => _onJellyfinItemTap(item as JellyfinMediaItem),
+        ),
+      );
+    }
+
+    for (final entry in _recentEmbyItemsByLibrary.entries) {
+      addSection(
+        _buildRecentSection(
+          title: 'Emby - 新增${entry.key}',
+          items: entry.value,
+          scrollController: _getEmbyLibraryScrollController(entry.key),
+          onItemTap: (item) => _onEmbyItemTap(item as EmbyMediaItem),
+        ),
+      );
+    }
+
+    if (_recentDandanplayGroups.isNotEmpty) {
+      addSection(
+        _buildRecentSection(
+          title: '弹弹play - 最近添加',
+          items: _recentDandanplayGroups,
+          scrollController: _getDandanplayLibraryScrollController(),
+          onItemTap: (item) =>
+              _onDandanplayGroupTap(item as DandanplayRemoteAnimeGroup),
+        ),
+      );
+    }
+
+    return widgets;
+  }
+
+  List<Widget> _buildConfiguredSections({
+    required bool isPhone,
+    required bool isIOS,
+    required HomeSectionsSettingsProvider sectionsProvider,
+  }) {
+    final widgets = <Widget>[];
+    HomeSectionType? lastSection;
+
+    void addSectionWidgets(HomeSectionType type, List<Widget> sectionWidgets) {
+      if (sectionWidgets.isEmpty) {
+        return;
+      }
+      if (lastSection != null) {
+        widgets.add(SizedBox(
+          height: _homeSectionSpacing(lastSection!, type, isPhone),
+        ));
+      }
+      widgets.addAll(sectionWidgets);
+      lastSection = type;
+    }
+
+    for (final section in sectionsProvider.orderedSections) {
+      if (!sectionsProvider.isSectionEnabled(section)) {
+        continue;
+      }
+      switch (section) {
+        case HomeSectionType.todaySeries:
+          if (isIOS) {
+            continue;
+          }
+          if (_todayAnimes.isEmpty && !_isLoadingTodayAnimes) {
+            continue;
+          }
+          addSectionWidgets(section, [_buildTodaySeriesSection()]);
+          break;
+        case HomeSectionType.randomRecommendations:
+          if (isIOS) {
+            continue;
+          }
+          if (_randomRecommendations.isEmpty &&
+              !_isLoadingRandomRecommendations) {
+            continue;
+          }
+          addSectionWidgets(section, [_buildRandomRecommendationsSection()]);
+          break;
+        case HomeSectionType.continueWatching:
+          addSectionWidgets(section, [_buildContinueWatching(isPhone: isPhone)]);
+          break;
+        case HomeSectionType.remoteLibraries:
+          final remoteSections = _buildRemoteLibrarySections(isPhone: isPhone);
+          addSectionWidgets(section, remoteSections);
+          break;
+        case HomeSectionType.localLibrary:
+          if (_localAnimeItems.isEmpty) {
+            continue;
+          }
+          addSectionWidgets(
+            section,
+            [
+              _buildRecentSection(
+                title: '本地媒体库 - 最近添加',
+                items: _localAnimeItems,
+                scrollController: _getLocalLibraryScrollController(),
+                onItemTap: (item) => _onLocalAnimeItemTap(item as LocalAnimeItem),
+              ),
+            ],
+          );
+          break;
+      }
+    }
+
+    return widgets;
+  }
+
   Widget _buildContinueWatching({required bool isPhone}) {
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {

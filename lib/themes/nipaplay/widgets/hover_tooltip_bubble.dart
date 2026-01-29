@@ -98,6 +98,10 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   final GlobalKey _childKey = GlobalKey();
   OverlayEntry? _overlayEntry;
   final _TooltipManager _manager = _TooltipManager();
+  Offset? _mousePosition;
+  Size? _bubbleSize;
+  double _overlayLeft = 0;
+  double _overlayTop = 0;
   
   // 添加定时器管理
   Timer? _showTimer;
@@ -143,6 +147,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       _overlayEntry = null;
       _isOverlayVisible = false;
       _isHovered = false;
+      _bubbleSize = null;
     } catch (e) {
       // 忽略清理时的异常
     } finally {
@@ -178,65 +183,29 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       // 先注册到管理器（这会自动关闭其他气泡）
       _manager.registerTooltip(this);
       
-      final RenderBox? renderBox = _childKey.currentContext?.findRenderObject() as RenderBox?;
-      if (renderBox == null) {
+      // 计算气泡尺寸
+      final bubbleSize = _calculateBubbleSize();
+      _bubbleSize = bubbleSize;
+
+      final offset = _calculateOverlayOffset(context, bubbleSize);
+      if (offset == null) {
         _isOperating = false;
         return;
       }
-      
-      final position = renderBox.localToGlobal(Offset.zero);
-      final size = renderBox.size;
-      final screenSize = MediaQuery.of(context).size;
-    
-    // 计算气泡尺寸
-    final bubbleSize = _calculateBubbleSize();
-    
-    // 智能定位
-    double left, top;
-    
-    if (widget.autoAlign) {
-      // 检查右侧是否有足够空间
-      final rightSpace = screenSize.width - (position.dx + size.width + widget.horizontalOffset);
-      final leftSpace = position.dx - widget.horizontalOffset;
-      
-      if (rightSpace >= bubbleSize.width) {
-        // 右侧有足够空间，在右侧显示
-        left = position.dx + size.width + widget.horizontalOffset;
-      } else if (leftSpace >= bubbleSize.width) {
-        // 左侧有足够空间，在左侧显示
-        left = position.dx - bubbleSize.width - widget.horizontalOffset;
-      } else {
-        // 两侧都没有足够空间，选择空间更大的一侧
-        if (rightSpace > leftSpace) {
-          left = position.dx + size.width + widget.horizontalOffset;
-        } else {
-          left = position.dx - bubbleSize.width - widget.horizontalOffset;
-        }
-      }
-      
-      // 垂直居中对齐
-      top = position.dy + (size.height - bubbleSize.height) / 2;
-    } else {
-      // 原有逻辑
-      left = position.dx + (size.width - bubbleSize.width) / 2;
-      if (widget.showOnTop) {
-        top = position.dy - bubbleSize.height - widget.verticalOffset;
-      } else {
-        top = position.dy + size.height + widget.verticalOffset;
-      }
-    }
-    
-    // 边界检查和调整
-    left = left.clamp(10.0, screenSize.width - bubbleSize.width - 10);
-    top = top.clamp(10.0, screenSize.height - bubbleSize.height - 10);
+
+      _overlayLeft = offset.dx;
+      _overlayTop = offset.dy;
     
       _overlayEntry = OverlayEntry(
         builder: (context) => Positioned(
-          left: left,
-          top: top,
-          child: Material(
-            color: Colors.transparent,
-            child: _buildBubble(bubbleSize),
+          left: _overlayLeft,
+          top: _overlayTop,
+          child: IgnorePointer(
+            ignoring: true,
+            child: Material(
+              color: Colors.transparent,
+              child: _buildBubble(bubbleSize),
+            ),
           ),
         ),
       );
@@ -265,13 +234,96 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       _overlayEntry?.remove();
       _overlayEntry = null;
       _isOverlayVisible = false;
+      _bubbleSize = null;
     } catch (e) {
       // 忽略隐藏时的异常，但确保状态正确
       _overlayEntry = null;
       _isOverlayVisible = false;
+      _bubbleSize = null;
     } finally {
       _isOperating = false;
     }
+  }
+
+  Offset? _calculateOverlayOffset(BuildContext context, Size bubbleSize) {
+    final screenSize = MediaQuery.of(context).size;
+    double left;
+    double top;
+
+    if (_mousePosition != null) {
+      if (widget.autoAlign) {
+        final rightSpace = screenSize.width - _mousePosition!.dx - widget.horizontalOffset;
+        final leftSpace = _mousePosition!.dx - widget.horizontalOffset;
+        final showOnRight = rightSpace >= bubbleSize.width || rightSpace >= leftSpace;
+
+        left = showOnRight
+            ? _mousePosition!.dx + widget.horizontalOffset
+            : _mousePosition!.dx - bubbleSize.width - widget.horizontalOffset;
+        top = _mousePosition!.dy - bubbleSize.height / 2;
+      } else {
+        left = _mousePosition!.dx - bubbleSize.width / 2;
+        top = widget.showOnTop
+            ? _mousePosition!.dy - bubbleSize.height - widget.verticalOffset
+            : _mousePosition!.dy + widget.verticalOffset;
+      }
+    } else {
+      final RenderBox? renderBox = _childKey.currentContext?.findRenderObject() as RenderBox?;
+      if (renderBox == null) {
+        return null;
+      }
+
+      final position = renderBox.localToGlobal(Offset.zero);
+      final size = renderBox.size;
+
+      if (widget.autoAlign) {
+        // 检查右侧是否有足够空间
+        final rightSpace = screenSize.width - (position.dx + size.width + widget.horizontalOffset);
+        final leftSpace = position.dx - widget.horizontalOffset;
+
+        if (rightSpace >= bubbleSize.width) {
+          // 右侧有足够空间，在右侧显示
+          left = position.dx + size.width + widget.horizontalOffset;
+        } else if (leftSpace >= bubbleSize.width) {
+          // 左侧有足够空间，在左侧显示
+          left = position.dx - bubbleSize.width - widget.horizontalOffset;
+        } else {
+          // 两侧都没有足够空间，选择空间更大的一侧
+          if (rightSpace > leftSpace) {
+            left = position.dx + size.width + widget.horizontalOffset;
+          } else {
+            left = position.dx - bubbleSize.width - widget.horizontalOffset;
+          }
+        }
+
+        // 垂直居中对齐
+        top = position.dy + (size.height - bubbleSize.height) / 2;
+      } else {
+        // 原有逻辑
+        left = position.dx + (size.width - bubbleSize.width) / 2;
+        if (widget.showOnTop) {
+          top = position.dy - bubbleSize.height - widget.verticalOffset;
+        } else {
+          top = position.dy + size.height + widget.verticalOffset;
+        }
+      }
+    }
+
+    // 边界检查和调整
+    left = left.clamp(10.0, screenSize.width - bubbleSize.width - 10);
+    top = top.clamp(10.0, screenSize.height - bubbleSize.height - 10);
+
+    return Offset(left, top);
+  }
+
+  void _updateOverlayPosition() {
+    if (_isOperating || !_isOverlayVisible || _overlayEntry == null) return;
+    final bubbleSize = _bubbleSize ?? _calculateBubbleSize();
+    _bubbleSize ??= bubbleSize;
+    final offset = _calculateOverlayOffset(context, bubbleSize);
+    if (offset == null) return;
+    _overlayLeft = offset.dx;
+    _overlayTop = offset.dy;
+    _overlayEntry?.markNeedsBuild();
   }
 
   Size _calculateBubbleSize() {
@@ -301,6 +353,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (event) {
+        _mousePosition = event.position;
         
         // 取消之前的所有定时器
         _cancelAllTimers();
@@ -316,6 +369,10 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
           }
           _showTimer = null; // 清空引用
         });
+      },
+      onHover: (event) {
+        _mousePosition = event.position;
+        _updateOverlayPosition();
       },
       onExit: (_) {
         // 取消之前的所有定时器
