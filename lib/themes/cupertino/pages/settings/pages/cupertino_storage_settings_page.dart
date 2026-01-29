@@ -2,6 +2,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -20,6 +21,7 @@ class _CupertinoStorageSettingsPageState
   bool _clearOnLaunch = false;
   bool _isLoading = true;
   bool _isClearing = false;
+  bool _isClearingImageCache = false;
 
   @override
   void initState() {
@@ -90,6 +92,63 @@ class _CupertinoStorageSettingsPageState
     }
   }
 
+  Future<void> _clearImageCache({bool showMessage = true}) async {
+    if (_isClearingImageCache) return;
+    setState(() {
+      _isClearingImageCache = true;
+    });
+    try {
+      await ImageCacheManager.instance.clearCache();
+      if (mounted && showMessage) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '图片缓存已清除',
+          type: AdaptiveSnackBarType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '清理失败: $e',
+          type: AdaptiveSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isClearingImageCache = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _confirmClearImageCache() async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('确认清除缓存'),
+        content: const Text('确定要清除封面与缩略图等图片缓存吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (confirm == true) {
+      await _clearImageCache(showMessage: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -152,11 +211,51 @@ class _CupertinoStorageSettingsPageState
                                 ),
                               ),
                       ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.trash,
+                          color: CupertinoColors.destructiveRed.resolveFrom(
+                            context,
+                          ),
+                        ),
+                        title: const Text('清除图片缓存'),
+                        subtitle: Text(
+                          _isClearingImageCache
+                              ? '正在清理...'
+                              : '清除封面与缩略图等图片缓存',
+                        ),
+                        onTap: _isClearingImageCache
+                            ? null
+                            : _confirmClearImageCache,
+                        trailing: _isClearingImageCache
+                            ? const CupertinoActivityIndicator()
+                            : Icon(
+                                CupertinoIcons.chevron_forward,
+                                color: CupertinoDynamicColor.resolve(
+                                  CupertinoColors.systemGrey2,
+                                  context,
+                                ),
+                              ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Text(
                     '弹幕缓存将存储在应用缓存目录 cache/danmaku/ 中，启用自动清理可减轻空间占用。',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .textStyle
+                        .copyWith(
+                          fontSize: 13,
+                          color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.systemGrey,
+                            context,
+                          ),
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '图片缓存包含封面与播放缩略图，存储在应用缓存目录中，可按需清理。',
                     style: CupertinoTheme.of(context)
                         .textTheme
                         .textStyle

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
+import 'package:nipaplay/utils/image_cache_manager.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 
@@ -17,6 +20,7 @@ class _StoragePageState extends State<StoragePage> {
   bool _clearOnLaunch = false;
   bool _isLoading = true;
   bool _isClearing = false;
+  bool _isClearingImageCache = false;
 
   @override
   void initState() {
@@ -75,6 +79,61 @@ class _StoragePageState extends State<StoragePage> {
     }
   }
 
+  Future<void> _clearImageCache() async {
+    if (_isClearingImageCache) return;
+    setState(() {
+      _isClearingImageCache = true;
+    });
+    try {
+      await ImageCacheManager.instance.clearCache();
+      if (mounted) {
+        BlurSnackBar.show(context, '图片缓存已清除');
+      }
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '清除图片缓存失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isClearingImageCache = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _confirmClearImageCache() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final bool? confirm = await BlurDialog.show<bool>(
+      context: context,
+      title: '确认清除缓存',
+      content: '确定要清除封面与缩略图等图片缓存吗？',
+      actions: [
+        HoverScaleTextButton(
+          child: Text(
+            '取消',
+            locale: const Locale('zh-Hans', 'zh'),
+            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+          ),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        HoverScaleTextButton(
+          child: Text(
+            '确定',
+            locale: const Locale('zh-Hans', 'zh'),
+            style: TextStyle(color: colorScheme.onSurface),
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+
+    if (!mounted) return;
+    if (confirm == true) {
+      await _clearImageCache();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -107,6 +166,27 @@ class _StoragePageState extends State<StoragePage> {
           padding: const EdgeInsets.all(16.0),
           child: Text(
             '弹幕缓存文件存储在 cache/danmaku/ 目录下，占用空间较大时可随时清理。',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: colorScheme.onSurface.withOpacity(0.7)),
+          ),
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        SettingsItem.button(
+          title: '清除图片缓存',
+          subtitle: _isClearingImageCache ? '正在清理...' : '清除封面与缩略图等图片缓存',
+          icon: Ionicons.trash_outline,
+          trailingIcon: Ionicons.chevron_forward_outline,
+          isDestructive: true,
+          enabled: !_isClearingImageCache,
+          onTap: _confirmClearImageCache,
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            '图片缓存包含封面与播放缩略图，存储在应用缓存目录中，可定期清理。',
             style: Theme.of(context)
                 .textTheme
                 .bodySmall

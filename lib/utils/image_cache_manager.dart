@@ -29,10 +29,15 @@ class ImageCacheManager {
   final Map<String, int> _refCount = {};
   final Map<String, DateTime> _lastAccessed = {}; // 跟踪图片最后访问时间
   static const Duration _maxCacheAge = Duration(minutes: 10); // 最大缓存时间
+  static const Duration _diskCleanupInterval = Duration(hours: 12);
+  static const Duration _compressedImageMaxAge = Duration(days: 30);
+  static const Duration _thumbnailMaxAge = Duration(days: 30);
+  static const Duration _timelineThumbnailMaxAge = Duration(days: 14);
   Directory? _cacheDir;
   bool _isInitialized = false;
   bool _isClearingCache = false;
   Timer? _cleanupTimer;
+  DateTime? _lastDiskCleanupAt;
 
   ImageCacheManager._() {
     _initCacheDir();
@@ -230,7 +235,9 @@ class ImageCacheManager {
   void _startPeriodicCleanup() {
     _cleanupTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       _cleanupExpiredImages();
+      _maybeCleanupDiskCaches();
     });
+    unawaited(_cleanupDiskCaches(force: true));
   }
 
   void _cleanupExpiredImages() {
@@ -265,6 +272,87 @@ class ImageCacheManager {
         _refCount.remove(url);
       }
     }
+  }
+
+  void _maybeCleanupDiskCaches() {
+    if (kIsWeb || _isClearingCache) return;
+    final now = DateTime.now();
+    final lastCleanup = _lastDiskCleanupAt;
+    if (lastCleanup != null &&
+        now.difference(lastCleanup) < _diskCleanupInterval) {
+      return;
+    }
+    unawaited(_cleanupDiskCaches());
+  }
+
+  Future<void> _cleanupDiskCaches({bool force = false}) async {
+    if (kIsWeb || _isClearingCache) return;
+
+    final now = DateTime.now();
+    if (!force &&
+        _lastDiskCleanupAt != null &&
+        now.difference(_lastDiskCleanupAt!) < _diskCleanupInterval) {
+      return;
+    }
+    _lastDiskCleanupAt = now;
+
+    try {
+      final appDir = await StorageService.getAppStorageDirectory();
+      final compressedDir = Directory('${appDir.path}/compressed_images');
+      final thumbnailsDir = Directory('${appDir.path}/thumbnails');
+      final timelineDir = Directory('${appDir.path}/timeline_thumbnails');
+
+      await _cleanupDirectoryByAge(compressedDir, _compressedImageMaxAge);
+      await _cleanupDirectoryByAge(thumbnailsDir, _thumbnailMaxAge);
+      await _cleanupDirectoryByAge(
+        timelineDir,
+        _timelineThumbnailMaxAge,
+        removeEmptyDirs: true,
+      );
+    } catch (e) {
+      //////debugPrint('清理磁盘图片缓存失败: $e');
+    }
+  }
+
+  Future<void> _cleanupDirectoryByAge(
+    Directory dir,
+    Duration maxAge, {
+    bool removeEmptyDirs = false,
+  }) async {
+    if (!await dir.exists()) return;
+    final now = DateTime.now();
+    final dirs = <Directory>[];
+
+    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      if (entity is File) {
+        try {
+          final stat = await entity.stat();
+          if (now.difference(stat.modified) > maxAge) {
+            await entity.delete();
+          }
+        } catch (_) {}
+      } else if (removeEmptyDirs && entity is Directory) {
+        dirs.add(entity);
+      }
+    }
+
+    if (!removeEmptyDirs) return;
+    dirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final subDir in dirs) {
+      try {
+        if (await subDir.list(followLinks: false).isEmpty) {
+          await subDir.delete();
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _deleteDirectoryIfExists(Directory dir) async {
+    try {
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+    } catch (_) {}
   }
 
   void clear() {
@@ -303,6 +391,19 @@ class ImageCacheManager {
           }
         } catch (e) {
           //////debugPrint('清除压缩图片缓存失败: $e');
+        }
+
+        // 清除播放器生成的缩略图缓存
+        try {
+          final appDir = await StorageService.getAppStorageDirectory();
+          await _deleteDirectoryIfExists(
+            Directory('${appDir.path}/thumbnails'),
+          );
+          await _deleteDirectoryIfExists(
+            Directory('${appDir.path}/timeline_thumbnails'),
+          );
+        } catch (e) {
+          //////debugPrint('清除缩略图缓存失败: $e');
         }
 
         // 清除 cached_network_image 的缓存
@@ -349,6 +450,9 @@ class ImageCacheManager {
       // 清除 Flutter 的图片缓存
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
+      if (_cleanupTimer == null) {
+        _startPeriodicCleanup();
+      }
     } finally {
       _isClearingCache = false;
     }

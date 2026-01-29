@@ -655,11 +655,21 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
       final String videoHash = md5.convert(utf8.encode(_mediaPath.split('/').last)).toString();
       
       // 查找可能存在的缩略图文件
-      final thumbnailPath = '${appDir.path}/thumbnails/$videoHash.png';
-      final thumbnailFile = File(thumbnailPath);
+      final thumbnailDir = Directory('${appDir.path}/thumbnails');
+      final thumbnailJpgPath = '${thumbnailDir.path}/$videoHash.jpg';
+      final thumbnailPngPath = '${thumbnailDir.path}/$videoHash.png';
+      File? thumbnailFile;
+      String? resolvedThumbnailPath;
+      if (File(thumbnailJpgPath).existsSync()) {
+        resolvedThumbnailPath = thumbnailJpgPath;
+        thumbnailFile = File(thumbnailJpgPath);
+      } else if (File(thumbnailPngPath).existsSync()) {
+        resolvedThumbnailPath = thumbnailPngPath;
+        thumbnailFile = File(thumbnailPngPath);
+      }
       
-      if (thumbnailFile.existsSync()) {
-        print("[VideoPlayerAdapter] 找到媒体库缓存的封面图: $thumbnailPath");
+      if (thumbnailFile != null) {
+        print("[VideoPlayerAdapter] 找到媒体库缓存的封面图: $resolvedThumbnailPath");
         
         // 读取封面图并转换为PlayerFrame
         final Uint8List imageBytes = await thumbnailFile.readAsBytes();

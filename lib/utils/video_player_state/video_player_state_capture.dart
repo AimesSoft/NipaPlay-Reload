@@ -12,6 +12,20 @@ class _RawFrameSpec {
   });
 }
 
+class _ThumbnailTargetSize {
+  final int width;
+  final int height;
+
+  const _ThumbnailTargetSize({
+    required this.width,
+    required this.height,
+  });
+}
+
+const int _thumbnailMaxHeight = 240;
+const int _thumbnailMaxWidth = 480;
+const int _thumbnailJpegQuality = 70;
+
 extension VideoPlayerStateCapture on VideoPlayerState {
   bool _isPngBytes(Uint8List bytes) {
     return bytes.length >= 8 &&
@@ -46,7 +60,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     return image;
   }
 
-  Uint8List? _encodeFrameToPngBytes(PlayerFrame frame) {
+  img.Image? _decodeFrameToImage(PlayerFrame frame) {
     final frameBytes = frame.bytes;
     final isPng = _isPngBytes(frameBytes);
     final isJpeg = _isJpegBytes(frameBytes);
@@ -57,16 +71,14 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         decoded = img.decodeImage(frameBytes);
       } catch (_) {}
       if (decoded != null) {
-        final opaque = _forceOpaqueImage(decoded);
-        return Uint8List.fromList(img.encodePng(opaque));
+        return _forceOpaqueImage(decoded);
       }
     } else {
       try {
         decoded = img.decodeImage(frameBytes);
       } catch (_) {}
       if (decoded != null) {
-        final opaque = _forceOpaqueImage(decoded);
-        return Uint8List.fromList(img.encodePng(opaque));
+        return _forceOpaqueImage(decoded);
       }
     }
 
@@ -103,8 +115,57 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       order: channelOrder,
     );
 
-    final pngBytes = img.encodePng(image);
-    return Uint8List.fromList(pngBytes);
+    return _forceOpaqueImage(image);
+  }
+
+  img.Image _resizeThumbnailImage(img.Image image) {
+    if (image.width <= _thumbnailMaxWidth &&
+        image.height <= _thumbnailMaxHeight) {
+      return image;
+    }
+
+    final widthRatio = image.width / _thumbnailMaxWidth;
+    final heightRatio = image.height / _thumbnailMaxHeight;
+    if (widthRatio >= heightRatio) {
+      return img.copyResize(image, width: _thumbnailMaxWidth);
+    }
+    return img.copyResize(image, height: _thumbnailMaxHeight);
+  }
+
+  Uint8List? _encodeFrameToThumbnailBytes(PlayerFrame frame) {
+    final decoded = _decodeFrameToImage(frame);
+    if (decoded == null) {
+      return null;
+    }
+    final resized = _resizeThumbnailImage(decoded);
+    return Uint8List.fromList(
+      img.encodeJpg(resized, quality: _thumbnailJpegQuality),
+    );
+  }
+
+  _ThumbnailTargetSize _resolveThumbnailTargetSize() {
+    int targetHeight = _thumbnailMaxHeight;
+    int targetWidth = (_thumbnailMaxHeight * 16 / 9).round();
+
+    final videoTracks = player.mediaInfo.video;
+    if (videoTracks != null && videoTracks.isNotEmpty) {
+      final codec = videoTracks.first.codec;
+      if (codec.width > 0 && codec.height > 0) {
+        final aspectRatio = codec.width / codec.height;
+        targetWidth = (targetHeight * aspectRatio).round();
+        if (targetWidth > _thumbnailMaxWidth) {
+          targetWidth = _thumbnailMaxWidth;
+          targetHeight = (targetWidth / aspectRatio)
+              .round()
+              .clamp(1, _thumbnailMaxHeight)
+              .toInt();
+        }
+      }
+    }
+
+    targetWidth = targetWidth.clamp(1, _thumbnailMaxWidth).toInt();
+    targetHeight = targetHeight.clamp(1, _thumbnailMaxHeight).toInt();
+    return _ThumbnailTargetSize(width: targetWidth, height: targetHeight);
   }
 
   _RawFrameSpec? _matchRawFrameSpec(PlayerFrame frame) {
@@ -187,13 +248,13 @@ extension VideoPlayerStateCapture on VideoPlayerState {
     if (_currentVideoPath == null || !hasVideo) return null;
 
     try {
-      // 使用适当的宽高比计算图像尺寸
-      const int targetWidth = 0; // 使用0表示使用原始宽度
-      const int targetHeight = 0; // 使用0表示使用原始高度
+      final targetSize = _resolveThumbnailTargetSize();
 
       // 使用Player的snapshot方法获取当前帧，保留原始宽高比
-      final videoFrame =
-          await player.snapshot(width: targetWidth, height: targetHeight);
+      final videoFrame = await player.snapshot(
+        width: targetSize.width,
+        height: targetSize.height,
+      );
       if (videoFrame == null) {
         debugPrint('截图失败: 播放器返回了null');
         return null;
@@ -220,17 +281,24 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       }
 
       // 保存缩略图文件路径
-      final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.png';
+      final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.jpg';
+      final legacyPngPath = '${thumbnailDir.path}/$videoFileHash.png';
       final thumbnailFile = File(thumbnailPath);
 
-      final pngBytes = _encodeFrameToPngBytes(videoFrame);
-      if (pngBytes == null || pngBytes.isEmpty) {
+      final jpegBytes = _encodeFrameToThumbnailBytes(videoFrame);
+      if (jpegBytes == null || jpegBytes.isEmpty) {
         debugPrint('无法转换截图数据，跳过保存');
         return null;
       }
 
-      await thumbnailFile.writeAsBytes(pngBytes, flush: true);
-      debugPrint('成功保存截图，大小: ${pngBytes.length} 字节');
+      await thumbnailFile.writeAsBytes(jpegBytes, flush: true);
+      final legacyPngFile = File(legacyPngPath);
+      if (legacyPngFile.existsSync()) {
+        try {
+          legacyPngFile.deleteSync();
+        } catch (_) {}
+      }
+      debugPrint('成功保存截图，大小: ${jpegBytes.length} 字节');
       return thumbnailPath;
     } catch (e) {
       debugPrint('无暂停截图时出错: $e');
@@ -252,23 +320,13 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       // 等待一段时间确保暂停完成
       await Future.delayed(const Duration(milliseconds: 50));
 
-      // 计算保持原始宽高比的图像尺寸
-      const int targetHeight = 128;
-      int targetWidth = 128; // 默认值
-
-      // 从视频媒体信息获取宽高比
-      if (player.mediaInfo.video != null &&
-          player.mediaInfo.video!.isNotEmpty) {
-        final videoTrack = player.mediaInfo.video![0];
-        if (videoTrack.codec.width > 0 && videoTrack.codec.height > 0) {
-          final aspectRatio = videoTrack.codec.width / videoTrack.codec.height;
-          targetWidth = (targetHeight * aspectRatio).round();
-        }
-      }
+      final targetSize = _resolveThumbnailTargetSize();
 
       // 使用Player的snapshot方法获取当前帧，保持宽高比
-      final videoFrame =
-          await player.snapshot(width: targetWidth, height: targetHeight);
+      final videoFrame = await player.snapshot(
+        width: targetSize.width,
+        height: targetSize.height,
+      );
       if (videoFrame == null) {
         //debugPrint('无法捕获视频帧');
 
@@ -290,8 +348,8 @@ extension VideoPlayerStateCapture on VideoPlayerState {
       }
 
       try {
-        final pngBytes = _encodeFrameToPngBytes(videoFrame);
-        if (pngBytes == null || pngBytes.isEmpty) {
+        final jpegBytes = _encodeFrameToThumbnailBytes(videoFrame);
+        if (jpegBytes == null || jpegBytes.isEmpty) {
           // 恢复播放状态
           if (isPlaying) {
             player.state = PlaybackState.playing;
@@ -307,9 +365,16 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         }
 
         // 保存缩略图文件
-        final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.png';
+        final thumbnailPath = '${thumbnailDir.path}/$videoFileHash.jpg';
+        final legacyPngPath = '${thumbnailDir.path}/$videoFileHash.png';
         final thumbnailFile = File(thumbnailPath);
-        await thumbnailFile.writeAsBytes(pngBytes, flush: true);
+        await thumbnailFile.writeAsBytes(jpegBytes, flush: true);
+        final legacyPngFile = File(legacyPngPath);
+        if (legacyPngFile.existsSync()) {
+          try {
+            legacyPngFile.deleteSync();
+          } catch (_) {}
+        }
 
         // 恢复播放状态
         if (isPlaying) {
@@ -317,7 +382,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
         }
 
         debugPrint(
-            '视频帧缩略图已保存: $thumbnailPath, 尺寸: ${targetWidth}x$targetHeight');
+            '视频帧缩略图已保存: $thumbnailPath, 尺寸: ${targetSize.width}x${targetSize.height}');
 
         // 更新当前缩略图路径
         _currentThumbnailPath = thumbnailPath;

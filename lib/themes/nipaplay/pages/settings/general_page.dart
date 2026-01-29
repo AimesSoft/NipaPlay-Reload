@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/image_cache_manager.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -141,52 +137,6 @@ class _GeneralPageState extends State<GeneralPage> {
                 _saveDefaultPagePreference(index);
               },
               dropdownKey: _defaultPageDropdownKey,
-            ),
-            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            SettingsItem.button(
-              title: "清除图片缓存",
-              subtitle: "清除所有缓存的图片文件",
-              icon: Ionicons.trash_outline,
-              trailingIcon: Ionicons.trash_outline,
-              isDestructive: true,
-              onTap: () async {
-                final bool? confirm = await BlurDialog.show<bool>(
-                  context: context,
-                  title: '确认清除缓存',
-                  content: '确定要清除所有缓存的图片文件吗？',
-                  actions: [
-                    HoverScaleTextButton(
-                      child: Text(
-                        '取消',
-                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(false),
-                    ),
-                    HoverScaleTextButton(
-                      child: Text(
-                        '确定',
-                        locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(true),
-                    ),
-                  ],
-                );
-
-                if (confirm == true) {
-                  try {
-                    await ImageCacheManager.instance.clearCache();
-                    if (context.mounted) {
-                      BlurSnackBar.show(context, '图片缓存已清除');
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      BlurSnackBar.show(context, '清除缓存失败: $e');
-                    }
-                  }
-                }
-              },
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
           ],
