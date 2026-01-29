@@ -1,18 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  IoPlay,
-  IoPause,
-  IoVolumeHigh,
-  IoVolumeMedium,
-  IoVolumeMute,
-  IoExpand,
-  IoContract,
-  IoChevronBackOutline,
-  IoChatbubblesOutline,
-  IoLogoClosedCaptioning,
-  IoPlayBack,
-  IoPlayForward,
-} from "react-icons/io5";
+  MdPlayArrow,
+  MdPause,
+  MdVolumeUp,
+  MdVolumeDown,
+  MdVolumeOff,
+  MdFullscreen,
+  MdFullscreenExit,
+  MdChevronLeft,
+  MdChatBubbleOutline,
+  MdSubtitles,
+  MdFastRewind,
+  MdFastForward,
+  MdSkipPrevious,
+  MdSkipNext,
+  MdTune,
+} from "react-icons/md";
 import { getDanmaku, getVideoInfo } from "../lib/api.js";
 import Modal from "./Modal.jsx";
 
@@ -81,6 +84,7 @@ export default function VideoPlayer({ playback, host, onBack }) {
   const [mascotActive, setMascotActive] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [controlsHovered, setControlsHovered] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const hideControlsTimer = useRef(null);
   const isEmpty = !playback;
 
@@ -254,6 +258,7 @@ export default function VideoPlayer({ playback, host, onBack }) {
   useEffect(() => {
     if (isEmpty) {
       setControlsVisible(false);
+      setSettingsOpen(false);
       if (hideControlsTimer.current) {
         window.clearTimeout(hideControlsTimer.current);
         hideControlsTimer.current = null;
@@ -282,6 +287,12 @@ export default function VideoPlayer({ playback, host, onBack }) {
       }
     };
   }, [controlsHovered, isEmpty, isPlaying]);
+
+  useEffect(() => {
+    if (!controlsVisible) {
+      setSettingsOpen(false);
+    }
+  }, [controlsVisible]);
 
   const triggerMascot = () => {
     setMascotActive(false);
@@ -341,7 +352,10 @@ export default function VideoPlayer({ playback, host, onBack }) {
   const handleSeekBy = (deltaSeconds) => {
     const video = videoRef.current;
     if (!video) return;
-    const nextTime = Math.max(0, Math.min(video.currentTime + deltaSeconds, duration || 0));
+    const totalDuration =
+      Number.isFinite(video.duration) && video.duration > 0 ? video.duration : duration;
+    const maxTime = totalDuration > 0 ? totalDuration : Number.MAX_VALUE;
+    const nextTime = Math.max(0, Math.min(video.currentTime + deltaSeconds, maxTime));
     video.currentTime = nextTime;
     setCurrentTime(nextTime);
     showControls();
@@ -404,15 +418,21 @@ export default function VideoPlayer({ playback, host, onBack }) {
     }
   };
 
-  const VolumeIcon = volume === 0 ? IoVolumeMute : volume < 0.5 ? IoVolumeMedium : IoVolumeHigh;
+  const VolumeIcon = volume === 0 ? MdVolumeOff : volume < 0.5 ? MdVolumeDown : MdVolumeUp;
   const progressPercent = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
   const volumePercent = Math.min(volume * 100, 100);
   const mascotUrl = `${import.meta.env.BASE_URL}assets/girl.png`;
+  const shouldHideCursor = !isEmpty && isPlaying && !controlsVisible;
+  const canSkipEpisode = false;
+  const canSendDanmaku = true;
+  const canSkipSegment = true;
 
   return (
     <div className="player-view">
       <div
-        className={`player-container ${isEmpty ? "is-empty" : "has-video"}`}
+        className={`player-container ${isEmpty ? "is-empty" : "has-video"}${
+          shouldHideCursor ? " hide-cursor" : ""
+        }`}
         onMouseMove={handleContainerMouseMove}
         onMouseLeave={handleContainerMouseLeave}
       >
@@ -444,7 +464,23 @@ export default function VideoPlayer({ playback, host, onBack }) {
                   onClick={onBack}
                   aria-label="返回媒体库"
                 >
-                  <IoChevronBackOutline />
+                  <MdChevronLeft />
+                </button>
+                <button
+                  type="button"
+                  className="player-overlay-button"
+                  aria-label="发送弹幕"
+                  onClick={showControls}
+                >
+                  <MdChatBubbleOutline />
+                </button>
+                <button
+                  type="button"
+                  className="player-overlay-button"
+                  aria-label="跳过"
+                  onClick={showControls}
+                >
+                  <MdSkipNext />
                 </button>
                 <div className="player-overlay-title">
                   <div className="player-overlay-main">
@@ -478,10 +514,19 @@ export default function VideoPlayer({ playback, host, onBack }) {
                   <button
                     type="button"
                     className="control-button"
+                    disabled={!canSkipEpisode}
+                    aria-disabled={!canSkipEpisode}
+                    aria-label="上一话"
+                  >
+                    <MdSkipPrevious />
+                  </button>
+                  <button
+                    type="button"
+                    className="control-button"
                     onClick={() => handleSeekBy(-10)}
                     aria-label="快退 10 秒"
                   >
-                    <IoPlayBack />
+                    <MdFastRewind />
                   </button>
                   <button
                     type="button"
@@ -489,7 +534,7 @@ export default function VideoPlayer({ playback, host, onBack }) {
                     onClick={togglePlay}
                     aria-label={isPlaying ? "暂停" : "播放"}
                   >
-                    {isPlaying ? <IoPause /> : <IoPlay />}
+                    {isPlaying ? <MdPause /> : <MdPlayArrow />}
                   </button>
                   <button
                     type="button"
@@ -497,7 +542,16 @@ export default function VideoPlayer({ playback, host, onBack }) {
                     onClick={() => handleSeekBy(10)}
                     aria-label="快进 10 秒"
                   >
-                    <IoPlayForward />
+                    <MdFastForward />
+                  </button>
+                  <button
+                    type="button"
+                    className="control-button"
+                    disabled={!canSkipEpisode}
+                    aria-disabled={!canSkipEpisode}
+                    aria-label="下一话"
+                  >
+                    <MdSkipNext />
                   </button>
                 </div>
                 <div className="player-spacer" />
@@ -506,19 +560,14 @@ export default function VideoPlayer({ playback, host, onBack }) {
                 </div>
                 <button
                   type="button"
-                  className={`control-button ${danmakuEnabled ? "active" : ""}`}
-                  onClick={() => setDanmakuEnabled((prev) => !prev)}
-                  aria-label="弹幕开关"
+                  className={`control-button ${settingsOpen ? "active" : ""}`}
+                  onClick={() => {
+                    showControls();
+                    setSettingsOpen((prev) => !prev);
+                  }}
+                  aria-label="设置"
                 >
-                  <IoChatbubblesOutline />
-                </button>
-                <button
-                  type="button"
-                  className="control-button"
-                  onClick={() => setShowSubtitleModal(true)}
-                  aria-label="加载字幕"
-                >
-                  <IoLogoClosedCaptioning />
+                  <MdTune />
                 </button>
                 <button
                   type="button"
@@ -526,12 +575,34 @@ export default function VideoPlayer({ playback, host, onBack }) {
                   onClick={handleFullscreen}
                   aria-label={isFullscreen ? "退出全屏" : "进入全屏"}
                 >
-                  {isFullscreen ? <IoContract /> : <IoExpand />}
+                  {isFullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
                 </button>
-                <div className="volume-control">
-                  <span className="control-button">
-                    <VolumeIcon />
-                  </span>
+              </div>
+            </div>
+            {settingsOpen && (
+              <div
+                className="player-settings-panel"
+                onMouseEnter={handleControlsEnter}
+                onMouseLeave={handleControlsLeave}
+              >
+                <button
+                  type="button"
+                  className={`player-settings-item ${danmakuEnabled ? "active" : ""}`}
+                  onClick={() => setDanmakuEnabled((prev) => !prev)}
+                >
+                  <MdChatBubbleOutline />
+                  <span>弹幕</span>
+                </button>
+                <button
+                  type="button"
+                  className="player-settings-item"
+                  onClick={() => setShowSubtitleModal(true)}
+                >
+                  <MdSubtitles />
+                  <span>字幕</span>
+                </button>
+                <div className="player-settings-item player-settings-volume">
+                  <VolumeIcon />
                   <input
                     className="player-range"
                     type="range"
@@ -544,7 +615,7 @@ export default function VideoPlayer({ playback, host, onBack }) {
                   />
                 </div>
               </div>
-            </div>
+            )}
           </>
         )}
         {isEmpty && (

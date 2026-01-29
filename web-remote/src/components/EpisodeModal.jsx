@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  IoAlertCircleOutline,
   IoCheckmarkCircle,
   IoCloudOutline,
   IoClose,
@@ -18,16 +17,6 @@ import {
   getBangumiDetail,
   getSharedAnimeEpisodes,
 } from "../lib/api.js";
-
-const WEEKDAYS = {
-  0: "周日",
-  1: "周一",
-  2: "周二",
-  3: "周三",
-  4: "周四",
-  5: "周五",
-  6: "周六",
-};
 
 const RATING_EVALUATION = {
   1: "不忍直视",
@@ -294,6 +283,7 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
     (event) => {
       if (event.button !== undefined && event.button !== 0) return;
       if (event.target?.closest?.("button")) return;
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
       event.preventDefault();
       dragStateRef.current = {
         active: true,
@@ -406,23 +396,38 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
   const ratingValue = resolveRatingValue(displayAnime);
   const ratingEvaluation =
     ratingValue != null ? RATING_EVALUATION[Math.round(ratingValue)] : "";
-  const weekdayLabel =
-    displayAnime.airWeekday != null
-      ? WEEKDAYS[displayAnime.airWeekday] || "待定"
-      : "";
+  const airDateText = displayAnime.airDate
+    ? String(displayAnime.airDate).split("T")[0]
+    : "未知";
+
+  const otherRatings = useMemo(() => {
+    const details = displayAnime?.ratingDetails ?? {};
+    return Object.entries(details)
+      .map(([key, value]) => ({
+        key,
+        value: Number(value),
+      }))
+      .filter(({ key, value }) => key !== "Bangumi评分" && Number.isFinite(value) && value > 0)
+      .map(({ key, value }) => ({
+        label: key.endsWith("评分") ? key.slice(0, -2) : key,
+        value,
+      }));
+  }, [displayAnime?.ratingDetails]);
 
   const detailEpisodes = useMemo(() => {
     if (!Array.isArray(displayAnime.episodes) || displayAnime.episodes.length === 0) {
       return [];
     }
-    return displayAnime.episodes.map((item, index) => ({
-      episodeId: item.episodeId ?? item.id ?? null,
-      title: item.episodeTitle || item.title || "未命名剧集",
-      airDate: item.airDate || "",
-      episodeNumber:
-        extractEpisodeNumber(item.episodeTitle) ?? extractEpisodeNumber(item.title),
-      _index: index,
-    }));
+    return displayAnime.episodes
+      .map((item, index) => ({
+        episodeId: item.episodeId ?? item.id ?? null,
+        title: item.episodeTitle || item.title || "未命名剧集",
+        airDate: item.airDate || "",
+        episodeNumber:
+          extractEpisodeNumber(item.episodeTitle) ?? extractEpisodeNumber(item.title),
+        _index: index,
+      }))
+      .sort(compareEpisodes);
   }, [displayAnime.episodes]);
 
   const sharedEpisodeMap = useMemo(() => {
@@ -467,13 +472,6 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
     return list;
   }, [mergedEpisodes, isReversed]);
 
-  const episodeCount =
-    detailEpisodes.length ||
-    displayAnime.totalEpisodes ||
-    episodes.length ||
-    anime?.episodeCount ||
-    0;
-
   const sourceLabel = host?.displayName || "";
   const tags = displayAnime.tags || [];
   const metadata = displayAnime.metadata || [];
@@ -497,16 +495,16 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
           <div className="anime-detail-cover">
             <img src={displayAnime.imageUrl} alt={displayTitle} />
           </div>
-        ) : (
-          <div className="anime-detail-cover placeholder">暂无封面</div>
-        )}
-        <div className="anime-detail-summary-text">{summaryText}</div>
+        ) : null}
+        <div className="anime-detail-summary-text-scroll">
+          <div className="anime-detail-summary-text">{summaryText}</div>
+        </div>
       </div>
       <div className="anime-detail-divider" />
       {ratingValue != null && (
         <div className="anime-detail-rating">
-          <span className="anime-detail-label">Bangumi评分</span>
-          <div className="anime-detail-stars">{renderStars(ratingValue)}</div>
+          <span className="anime-detail-key">Bangumi评分: </span>
+          <span className="anime-detail-stars">{renderStars(ratingValue)}</span>
           <span className="anime-detail-rating-value">
             {ratingValue.toFixed(1)}
           </span>
@@ -515,47 +513,55 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
           )}
         </div>
       )}
-      <div className="anime-detail-info">
-        {displayAnime.airDate && (
-          <div className="anime-detail-info-row">
-            <span className="anime-detail-label">首播</span>
-            <span>{displayAnime.airDate}</span>
-          </div>
-        )}
-        {weekdayLabel && (
-          <div className="anime-detail-info-row">
-            <span className="anime-detail-label">放送日</span>
-            <span>{weekdayLabel}</span>
+      {otherRatings.length > 0 && (
+        <div className="anime-detail-rating-others">
+          {otherRatings.map((item) => (
+            <div key={item.label} className="anime-detail-rating-other">
+              <span className="anime-detail-key secondary">{item.label}: </span>
+              <span className="anime-detail-value">
+                {item.value.toFixed(1)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="anime-detail-info-list">
+        <div className="anime-detail-info-line">
+          <span className="anime-detail-key">开播: </span>
+          <span className="anime-detail-value">{airDateText}</span>
+        </div>
+        {displayAnime.typeDescription && (
+          <div className="anime-detail-info-line">
+            <span className="anime-detail-key">类型: </span>
+            <span className="anime-detail-value">
+              {displayAnime.typeDescription}
+            </span>
           </div>
         )}
         {displayAnime.totalEpisodes != null && (
-          <div className="anime-detail-info-row">
-            <span className="anime-detail-label">总集数</span>
-            <span>{displayAnime.totalEpisodes}</span>
-          </div>
-        )}
-        {displayAnime.typeDescription && (
-          <div className="anime-detail-info-row">
-            <span className="anime-detail-label">类型</span>
-            <span>{displayAnime.typeDescription}</span>
+          <div className="anime-detail-info-line">
+            <span className="anime-detail-key">话数: </span>
+            <span className="anime-detail-value">{displayAnime.totalEpisodes}</span>
           </div>
         )}
         {displayAnime.isOnAir != null && (
-          <div className="anime-detail-info-row">
-            <span className="anime-detail-label">状态</span>
-            <span>{displayAnime.isOnAir ? "正连载" : "已完结"}</span>
+          <div className="anime-detail-info-line">
+            <span className="anime-detail-key">状态: </span>
+            <span className="anime-detail-value">
+              {displayAnime.isOnAir ? "正连载" : "已完结"}
+            </span>
           </div>
         )}
         {displayAnime.isNSFW && (
-          <div className="anime-detail-info-row warning">
-            <span className="anime-detail-label">限制内容</span>
-            <span>是</span>
+          <div className="anime-detail-info-line warning">
+            <span className="anime-detail-key">限制内容: </span>
+            <span className="anime-detail-value">是</span>
           </div>
         )}
       </div>
       {metadata.length > 0 && (
         <div className="anime-detail-section">
-          <div className="anime-detail-section-title">制作信息</div>
+          <div className="anime-detail-section-title">制作信息:</div>
           <div className="anime-detail-meta-list">
             {metadata
               .filter((item) => !String(item).trim().startsWith("别名"))
@@ -566,15 +572,15 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
                   return (
                     <div key={text} className="anime-detail-meta-row">
                       <span className="anime-detail-meta-key">
-                        {parts[0].trim()}
+                        {parts[0].trim()}:
                       </span>
-                      <span>{parts[1].trim()}</span>
+                      <span className="anime-detail-value">{parts[1].trim()}</span>
                     </div>
                   );
                 }
                 return (
                   <div key={text} className="anime-detail-meta-row">
-                    {text}
+                    <span className="anime-detail-value">{text}</span>
                   </div>
                 );
               })}
@@ -583,7 +589,7 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
       )}
       {titles.length > 0 && (
         <div className="anime-detail-section">
-          <div className="anime-detail-section-title">其他标题</div>
+          <div className="anime-detail-section-title">其他标题:</div>
           <div className="anime-detail-title-list">
             {titles.map((item) => (
               <div
@@ -599,7 +605,7 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
       )}
       {tags.length > 0 && (
         <div className="anime-detail-section">
-          <div className="anime-detail-section-title">标签</div>
+          <div className="anime-detail-section-title">标签:</div>
           <div className="anime-detail-tag-list">
             {tags.map((tag) => (
               <span key={tag} className="anime-detail-tag">
@@ -615,7 +621,7 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
   const episodesView = (
     <div className="anime-detail-episodes">
       <div className="anime-detail-episode-header">
-        <span>共{episodeCount}集</span>
+        <span>共{displayEpisodes.length}集</span>
         <button
           type="button"
           className="anime-detail-sort"
@@ -646,75 +652,44 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
             const isCompleted = progress >= 0.95;
             const isInProgress = progress > 0.01 && !isCompleted;
             const canPlay = Boolean(episode.streamPath && episode.fileExists);
-            let progressText = "";
+            let status = "missing";
+            let progressText = "未找到";
             if (isCompleted) {
+              status = "completed";
               progressText = "已看完";
             } else if (isInProgress) {
-              progressText = `观看进度 ${Math.round(progress * 100)}%`;
+              status = "in-progress";
+              progressText = `${Math.round(progress * 100)}%`;
+            } else if (canPlay) {
+              status = "shared";
+              progressText = "共享媒体";
             }
-            const rowClass = [
-              "anime-detail-episode",
-              episode.fileExists ? "" : "missing",
-              isCompleted ? "completed" : "",
-              isInProgress ? "in-progress" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
+            const rowClass = ["anime-detail-episode", status].join(" ");
             return (
               <div
                 key={episode.shareId || episode.episodeId || `${episode.title}-${index}`}
                 className={rowClass}
+                role={canPlay ? "button" : "presentation"}
+                onClick={() => {
+                  if (!canPlay) return;
+                  const url = buildStreamUrl(host.baseUrl, episode.streamPath);
+                  onPlayEpisode({
+                    url,
+                    title: displayTitle,
+                    episodeTitle: episode.title,
+                    animeId: episode.animeId ?? displayAnime.id ?? anime.id,
+                    episodeId: episode.episodeId,
+                  });
+                  onClose();
+                }}
               >
-                <div className="anime-detail-episode-main">
-                  <div className="anime-detail-episode-icon">
-                    {episode.fileExists ? (
-                      isCompleted ? (
-                        <IoCheckmarkCircle />
-                      ) : isInProgress ? (
-                        <IoPlayCircleOutline />
-                      ) : null
-                    ) : (
-                      <IoAlertCircleOutline />
-                    )}
-                  </div>
-                  <div className="anime-detail-episode-info">
-                    <div className="anime-detail-episode-title">
-                      {episode.title}
-                    </div>
-                    {progressText && (
-                      <div className="anime-detail-episode-sub">
-                        {progressText}
-                      </div>
-                    )}
-                    {episode.airDate && (
-                      <div className="anime-detail-episode-sub">
-                        播出 {episode.airDate}
-                      </div>
-                    )}
-                    {!episode.fileExists && (
-                      <div className="anime-detail-episode-sub warning">文件缺失</div>
-                    )}
-                  </div>
+                <div className="anime-detail-episode-leading">
+                  {isCompleted ? <IoCheckmarkCircle /> : <IoPlayCircleOutline />}
                 </div>
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={!canPlay}
-                  onClick={() => {
-                    if (!canPlay) return;
-                    const url = buildStreamUrl(host.baseUrl, episode.streamPath);
-                    onPlayEpisode({
-                      url,
-                      title: displayTitle,
-                      episodeTitle: episode.title,
-                      animeId: episode.animeId ?? displayAnime.id ?? anime.id,
-                      episodeId: episode.episodeId,
-                    });
-                    onClose();
-                  }}
-                >
-                  播放
-                </button>
+                <div className="anime-detail-episode-title">{episode.title}</div>
+                <div className={`anime-detail-episode-progress ${status}`}>
+                  {progressText}
+                </div>
               </div>
             );
           })}
@@ -741,32 +716,35 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
           />
         )}
         <div className="anime-detail-gradient" />
+        <div
+          className={`anime-detail-drag-bar ${isDragging ? "dragging" : ""}`}
+          onPointerDown={handleDragStart}
+        />
+        <div className="anime-detail-top-actions">
+          <button
+            type="button"
+            className="anime-detail-close"
+            onClick={onClose}
+            aria-label="关闭"
+          >
+            <IoClose />
+          </button>
+        </div>
         <div className="anime-detail-content">
           <div
             className={`anime-detail-header ${isDragging ? "dragging" : ""}`}
             onPointerDown={handleDragStart}
           >
-            <div className="anime-detail-title-group">
-              <div className="anime-detail-title">{displayTitle}</div>
-              {displaySubtitle && (
-                <div className="anime-detail-subtitle">{displaySubtitle}</div>
-              )}
-            </div>
-            <div className="anime-detail-header-actions">
-              {sourceLabel && (
-                <div className="anime-detail-source">
-                  <IoCloudOutline />
-                  {sourceLabel}
-                </div>
-              )}
-              <button
-                type="button"
-                className="anime-detail-close"
-                onClick={onClose}
-              >
-                <IoClose />
-              </button>
-            </div>
+            <div className="anime-detail-title">{displayTitle}</div>
+            {displaySubtitle && (
+              <div className="anime-detail-subtitle">{displaySubtitle}</div>
+            )}
+            {sourceLabel && (
+              <div className="anime-detail-source">
+                <IoCloudOutline />
+                <span>{sourceLabel}</span>
+              </div>
+            )}
           </div>
           {!isDesktop && (
             <div className="anime-detail-tabs">
@@ -796,6 +774,7 @@ export default function EpisodeModal({ anime, host, onClose, onPlayEpisode }) {
             {isDesktop ? (
               <>
                 <div className="anime-detail-panel">{summaryView}</div>
+                <div className="anime-detail-divider-vertical" />
                 <div className="anime-detail-panel">{episodesView}</div>
               </>
             ) : activeTab === "summary" ? (
