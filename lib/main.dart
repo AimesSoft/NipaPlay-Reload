@@ -432,7 +432,10 @@ void main(List<String> args) async {
     // 加载设置
     Future.wait(<Future<dynamic>>[
       SettingsStorage.loadString('themeMode', defaultValue: 'system'),
-      SettingsStorage.loadString('backgroundImageMode'),
+      SettingsStorage.loadString(
+        'backgroundImageMode',
+        defaultValue: kIsWeb ? '关闭' : globals.backgroundImageMode,
+      ),
       SettingsStorage.loadString('customBackgroundPath'),
       SettingsStorage.loadString('anime_detail_display_mode',
           defaultValue: 'simple'),
