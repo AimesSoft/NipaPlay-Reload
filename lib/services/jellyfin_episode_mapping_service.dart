@@ -25,6 +25,10 @@ class JellyfinEpisodeMappingService {
   /// 初始化数据库
   Future<void> initialize() async {
     if (_database != null) return;
+    if (kIsWeb) {
+      debugPrint('[映射服务] Web 平台跳过数据库初始化');
+      return;
+    }
     
     final mainDb = await WatchHistoryDatabase.instance.database;
     _database = mainDb;
@@ -84,6 +88,7 @@ class JellyfinEpisodeMappingService {
     required int dandanplayAnimeId,
     required String dandanplayAnimeTitle,
   }) async {
+    if (kIsWeb) return 0;
     await initialize();
 
     debugPrint('[映射服务] 创建动画映射: $jellyfinSeriesName -> $dandanplayAnimeTitle');
@@ -135,6 +140,7 @@ class JellyfinEpisodeMappingService {
     required int mappingId,
     bool confirmed = true,
   }) async {
+    if (kIsWeb) return;
     await initialize();
 
     debugPrint('[映射服务] 记录剧集映射: Jellyfin集$jellyfinIndexNumber -> DandanPlay集$dandanplayEpisodeId');
@@ -171,6 +177,7 @@ class JellyfinEpisodeMappingService {
     required String jellyfinSeriesId,
     String? jellyfinSeasonId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     // 生成缓存键
@@ -202,6 +209,7 @@ class JellyfinEpisodeMappingService {
   Future<int?> predictEpisodeMapping({
     required JellyfinEpisodeInfo jellyfinEpisode,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     // 如果没有集号信息，无法预测
@@ -296,6 +304,7 @@ class JellyfinEpisodeMappingService {
   Future<Map<String, dynamic>?> getNextEpisodeMapping({
     required JellyfinEpisodeInfo currentEpisode,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[映射服务] 查找下一集: ${currentEpisode.seriesName} 当前第${currentEpisode.indexNumber}集');
@@ -335,6 +344,7 @@ class JellyfinEpisodeMappingService {
   Future<Map<String, dynamic>?> getPreviousEpisodeMapping({
     required JellyfinEpisodeInfo currentEpisode,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[映射服务] 查找上一集: ${currentEpisode.seriesName} 当前第${currentEpisode.indexNumber}集');
@@ -373,6 +383,7 @@ class JellyfinEpisodeMappingService {
     required int currentAnimeId,
     required int currentEpisodeId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[映射服务] ========== 开始查找下一集映射 ==========');
@@ -497,6 +508,7 @@ class JellyfinEpisodeMappingService {
     required int currentAnimeId,
     required int currentEpisodeId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[映射服务] 查找上一集: animeId=$currentAnimeId, episodeId=$currentEpisodeId');
@@ -588,6 +600,7 @@ class JellyfinEpisodeMappingService {
 
   /// 清除所有映射数据
   Future<void> clearAllMappings() async {
+    if (kIsWeb) return;
     await initialize();
 
     debugPrint('[映射服务] 清除所有映射数据');
@@ -612,6 +625,7 @@ class JellyfinEpisodeMappingService {
 
   /// 批量记录剧集映射
   Future<void> batchRecordEpisodeMappings(List<Map<String, dynamic>> mappings) async {
+    if (kIsWeb) return;
     await initialize();
 
     debugPrint('[映射服务] 批量记录${mappings.length}个剧集映射');
@@ -657,6 +671,7 @@ class JellyfinEpisodeMappingService {
 
   /// 清除指定系列的映射（用于重新配置）
   Future<void> clearSeriesMapping(String jellyfinSeriesId, {String? seasonId}) async {
+    if (kIsWeb) return;
     await initialize();
 
     debugPrint('[映射服务] 清除系列映射: $jellyfinSeriesId');
@@ -685,6 +700,16 @@ class JellyfinEpisodeMappingService {
 
   /// 获取映射统计信息（增强版本）
   Future<Map<String, dynamic>> getMappingStats() async {
+    if (kIsWeb) {
+      return {
+        'animeCount': 0,
+        'episodeCount': 0,
+        'confirmedCount': 0,
+        'predictedCount': 0,
+        'recentMappings': const [],
+        'accuracyStats': const [],
+      };
+    }
     await initialize();
 
     // 基础统计
@@ -725,6 +750,7 @@ class JellyfinEpisodeMappingService {
 
   /// 获取单个剧集的映射信息
   Future<Map<String, dynamic>?> getEpisodeMapping(String jellyfinEpisodeId) async {
+    if (kIsWeb) return null;
     await initialize();
 
     final results = await _database!.query(

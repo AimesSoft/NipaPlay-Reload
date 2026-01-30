@@ -14,6 +14,7 @@ class WatchHistoryDatabase {
   static const int _dbVersion = 1;
   static bool _migrationCompleted = false;
   static bool _ffiInitialized = false;
+  static final Map<String, WatchHistoryItem> _webStore = {};
   
   // 私有构造函数
   WatchHistoryDatabase._init();
@@ -93,6 +94,7 @@ class WatchHistoryDatabase {
   
   // 关闭数据库连接
   Future<void> close() async {
+    if (kIsWeb) return;
     final db = _database;
     if (db != null) {
       await db.close();
@@ -102,6 +104,10 @@ class WatchHistoryDatabase {
   
   // 从JSON迁移数据
   Future<void> migrateFromJson() async {
+    if (kIsWeb) {
+      _migrationCompleted = true;
+      return;
+    }
     // 避免重复迁移
     if (_migrationCompleted) return;
     
@@ -227,6 +233,10 @@ class WatchHistoryDatabase {
   
   // 插入或更新一条观看记录
   Future<void> insertOrUpdateWatchHistory(WatchHistoryItem item) async {
+    if (kIsWeb) {
+      _webStore[item.filePath] = item;
+      return;
+    }
     final db = await database;
     
     // 添加调试日志
@@ -280,6 +290,11 @@ class WatchHistoryDatabase {
   
   // 获取所有观看历史，按最后观看时间排序
   Future<List<WatchHistoryItem>> getAllWatchHistory() async {
+    if (kIsWeb) {
+      final items = _webStore.values.toList();
+      items.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+      return items;
+    }
     final db = await database;
     
     try {
@@ -297,6 +312,9 @@ class WatchHistoryDatabase {
   
   // 根据文件路径获取单个历史记录
   Future<WatchHistoryItem?> getHistoryByFilePath(String filePath) async {
+    if (kIsWeb) {
+      return _webStore[filePath];
+    }
     final db = await database;
     
     try {
@@ -340,6 +358,13 @@ class WatchHistoryDatabase {
 
   // 根据共享媒体的 episode shareId 获取历史记录列表
   Future<List<WatchHistoryItem>> getHistoriesBySharedEpisodeId(String shareEpisodeId) async {
+    if (kIsWeb) {
+      final items = _webStore.values
+          .where((item) => item.filePath.contains(shareEpisodeId))
+          .toList();
+      items.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+      return items;
+    }
     final db = await database;
 
     try {
@@ -359,6 +384,14 @@ class WatchHistoryDatabase {
   
   // 根据番剧ID和集数ID获取历史记录
   Future<WatchHistoryItem?> getHistoryByEpisode(int animeId, int episodeId) async {
+    if (kIsWeb) {
+      for (final item in _webStore.values) {
+        if (item.animeId == animeId && item.episodeId == episodeId) {
+          return item;
+        }
+      }
+      return null;
+    }
     final db = await database;
     
     try {
@@ -380,6 +413,13 @@ class WatchHistoryDatabase {
   
   // 根据动画ID获取该动画的所有剧集历史记录，按集数排序
   Future<List<WatchHistoryItem>> getHistoryByAnimeId(int animeId) async {
+    if (kIsWeb) {
+      final items = _webStore.values
+          .where((item) => item.animeId == animeId && item.episodeId != null)
+          .toList();
+      items.sort((a, b) => (a.episodeId ?? 0).compareTo(b.episodeId ?? 0));
+      return items;
+    }
     final db = await database;
     
     try {
@@ -399,6 +439,16 @@ class WatchHistoryDatabase {
   
   // 获取指定动画的上一集
   Future<WatchHistoryItem?> getPreviousEpisode(int animeId, int currentEpisodeId) async {
+    if (kIsWeb) {
+      final items = _webStore.values
+          .where((item) =>
+              item.animeId == animeId &&
+              item.episodeId != null &&
+              item.episodeId! < currentEpisodeId)
+          .toList();
+      items.sort((a, b) => (b.episodeId ?? 0).compareTo(a.episodeId ?? 0));
+      return items.isEmpty ? null : items.first;
+    }
     final db = await database;
     
     try {
@@ -421,6 +471,16 @@ class WatchHistoryDatabase {
   
   // 获取指定动画的下一集
   Future<WatchHistoryItem?> getNextEpisode(int animeId, int currentEpisodeId) async {
+    if (kIsWeb) {
+      final items = _webStore.values
+          .where((item) =>
+              item.animeId == animeId &&
+              item.episodeId != null &&
+              item.episodeId! > currentEpisodeId)
+          .toList();
+      items.sort((a, b) => (a.episodeId ?? 0).compareTo(b.episodeId ?? 0));
+      return items.isEmpty ? null : items.first;
+    }
     final db = await database;
     
     try {
@@ -443,6 +503,10 @@ class WatchHistoryDatabase {
   
   // 删除单个历史记录
   Future<void> deleteHistory(String filePath) async {
+    if (kIsWeb) {
+      _webStore.remove(filePath);
+      return;
+    }
     final db = await database;
     
     try {
@@ -459,6 +523,14 @@ class WatchHistoryDatabase {
   
   // 根据路径前缀删除多个历史记录
   Future<int> deleteHistoryByPathPrefix(String pathPrefix) async {
+    if (kIsWeb) {
+      final keysToRemove =
+          _webStore.keys.where((key) => key.startsWith(pathPrefix)).toList();
+      for (final key in keysToRemove) {
+        _webStore.remove(key);
+      }
+      return keysToRemove.length;
+    }
     final db = await database;
     
     try {
@@ -475,6 +547,10 @@ class WatchHistoryDatabase {
   
   // 清空所有历史记录
   Future<void> clearAllHistory() async {
+    if (kIsWeb) {
+      _webStore.clear();
+      return;
+    }
     final db = await database;
     
     try {

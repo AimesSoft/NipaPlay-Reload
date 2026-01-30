@@ -25,6 +25,10 @@ class EmbyEpisodeMappingService {
   /// 初始化数据库
   Future<void> initialize() async {
     if (_database != null) return;
+    if (kIsWeb) {
+      debugPrint('[Emby映射服务] Web 平台跳过数据库初始化');
+      return;
+    }
     
     final mainDb = await WatchHistoryDatabase.instance.database;
     _database = mainDb;
@@ -84,6 +88,7 @@ class EmbyEpisodeMappingService {
     required int dandanplayAnimeId,
     required String dandanplayAnimeTitle,
   }) async {
+    if (kIsWeb) return 0;
     await initialize();
 
     debugPrint('[Emby映射服务] 创建动画映射: $embySeriesName -> $dandanplayAnimeTitle');
@@ -135,6 +140,7 @@ class EmbyEpisodeMappingService {
     required int mappingId,
     bool confirmed = true,
   }) async {
+    if (kIsWeb) return;
     await initialize();
 
     debugPrint('[Emby映射服务] 记录剧集映射: Emby集$embyIndexNumber -> DandanPlay集$dandanplayEpisodeId');

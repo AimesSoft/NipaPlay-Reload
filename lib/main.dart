@@ -96,22 +96,6 @@ void main(List<String> args) async {
     debugPaintSizeEnabled = false;
   });
 
-  // Web 端不再提供 UI，仅保留客户端连接的远程访问 API。
-  if (kIsWeb) {
-    runApp(const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: Center(
-          child: Text(
-            'Web UI 已移除，请使用客户端连接远程访问服务。',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    ));
-    return;
-  }
-
   String? launchFilePath;
   if (globals.isDesktop && args.isNotEmpty) {
     final filePath = args.first;
@@ -603,6 +587,7 @@ void main(List<String> args) async {
 
 // 初始化应用所需的所有目录
 Future<void> _initializeAppDirectories() async {
+  if (kIsWeb) return;
   try {
     // Linux平台先处理数据迁移，然后创建目录
     // 其他平台直接创建目录（getAppStorageDirectory内部会处理Linux迁移）
