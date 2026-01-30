@@ -517,6 +517,10 @@ class SubtitleManager extends ChangeNotifier {
 
   // 自动检测并加载同名字幕文件
   Future<void> autoDetectAndLoadSubtitle(String videoPath) async {
+    if (kIsWeb) {
+      debugPrint('SubtitleManager: Web平台跳过自动检测字幕文件');
+      return;
+    }
     try {
       debugPrint('SubtitleManager: 自动检测字幕文件...');
 

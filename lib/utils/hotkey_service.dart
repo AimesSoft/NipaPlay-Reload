@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -39,10 +40,15 @@ class HotkeyService extends ChangeNotifier {
   // 初始化热键服务
   Future<void> initialize(BuildContext context) async {
     _context = context;
-    
+
+    if (kIsWeb) {
+      await loadShortcuts();
+      return;
+    }
+
     // 初始化hotkey_manager，但不注册任何热键
     await hotKeyManager.unregisterAll();
-    
+
     // 加载快捷键配置
     await loadShortcuts();
     
@@ -52,6 +58,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 注册热键
   Future<void> registerHotkeys() async {
+    if (kIsWeb) return;
     // 先清理已注册的热键，再重新注册
     if (_registeredHotkeys.isNotEmpty) {
       //debugPrint('[HotkeyService] 清理现有热键后重新注册');
@@ -62,6 +69,10 @@ class HotkeyService extends ChangeNotifier {
   
   // 注销热键
   Future<void> unregisterHotkeys() async {
+    if (kIsWeb) {
+      _registeredHotkeys.clear();
+      return;
+    }
     if (_registeredHotkeys.isEmpty) {
       //debugPrint('[HotkeyService] 没有已注册的热键需要注销');
       return;
@@ -128,6 +139,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 注册所有热键
   Future<void> registerAllHotkeys() async {
+    if (kIsWeb) return;
     //debugPrint('[HotkeyService] 开始注册所有热键');
     // 先清除所有已注册的热键
     await hotKeyManager.unregisterAll();
@@ -680,7 +692,9 @@ class HotkeyService extends ChangeNotifier {
   @override
   Future<void> dispose() async {
     _longPressTimer?.cancel();
-    await hotKeyManager.unregisterAll();
+    if (!kIsWeb) {
+      await hotKeyManager.unregisterAll();
+    }
     _registeredHotkeys.clear();
   }
 }

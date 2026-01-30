@@ -33,6 +33,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_settings_menu.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
+import 'package:video_player/video_player.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
   final String? videoPath;
@@ -398,7 +399,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       return _buildNipaplayBody(videoState);
     }
     final textureId = videoState.player.textureId.value;
-    final hasVideo = videoState.hasVideo && textureId != null && textureId >= 0;
+    final controller = kIsWeb ? videoState.player.videoPlayerController : null;
+    final hasVideo =
+        videoState.hasVideo && (kIsWeb || (textureId != null && textureId >= 0));
     final progressValue = _isDragging
         ? (_dragProgress ?? videoState.progress)
         : videoState.progress;
@@ -463,9 +466,13 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     ? Center(
                         child: AspectRatio(
                           aspectRatio: videoState.aspectRatio,
-                          child: Texture(
-                            textureId: textureId,
-                          ),
+                          child: kIsWeb
+                              ? (controller == null
+                                  ? const SizedBox.shrink()
+                                  : VideoPlayer(controller))
+                              : (textureId == null
+                                  ? const SizedBox.shrink()
+                                  : Texture(textureId: textureId)),
                         ),
                       )
                     : _buildPlaceholder(videoState),

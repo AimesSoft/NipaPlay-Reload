@@ -24,6 +24,7 @@ import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
 import 'playback_info_menu.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 
 class VideoPlayerUI extends StatefulWidget {
   final Widget? emptyPlaceholder;
@@ -90,6 +91,23 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   double getFontSize(VideoPlayerState videoState) {
     return videoState.actualDanmakuFontSize;
+  }
+
+  Widget _buildVideoSurface(VideoPlayerState videoState, int? textureId) {
+    if (kIsWeb) {
+      final controller = videoState.player.videoPlayerController;
+      if (controller == null) {
+        return const SizedBox.shrink();
+      }
+      return VideoPlayer(controller);
+    }
+    if (textureId == null || textureId < 0) {
+      return const SizedBox.shrink();
+    }
+    return Texture(
+      textureId: textureId,
+      filterQuality: FilterQuality.medium,
+    );
   }
 
   @override
@@ -586,7 +604,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           return const SizedBox.shrink();
         }
 
-        if (textureId != null && textureId >= 0) {
+        if (kIsWeb || (textureId != null && textureId >= 0)) {
           return MouseRegion(
             onHover: _handleMouseMove,
             cursor: _isMouseVisible
@@ -643,9 +661,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     child: Center(
                                       child: AspectRatio(
                                         aspectRatio: videoState.aspectRatio,
-                                        child: Texture(
-                                          textureId: textureId,
-                                          filterQuality: FilterQuality.medium,
+                                        child: _buildVideoSurface(
+                                          videoState,
+                                          textureId,
                                         ),
                                       ),
                                     ),
@@ -739,18 +757,18 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                   child: RepaintBoundary(
                                     child: ColoredBox(
                                       color: Colors.black,
-                                      child: Center(
-                                        child: AspectRatio(
-                                          aspectRatio: videoState.aspectRatio,
-                                          child: Texture(
-                                            textureId: textureId,
-                                            filterQuality: FilterQuality.medium,
-                                          ),
+                                    child: Center(
+                                      child: AspectRatio(
+                                        aspectRatio: videoState.aspectRatio,
+                                        child: _buildVideoSurface(
+                                          videoState,
+                                          textureId,
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
+                              ),
 
                                 if (videoState.hasVideo &&
                                     videoState.danmakuVisible)
