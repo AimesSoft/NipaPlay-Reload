@@ -47,6 +47,8 @@ class JellyfinService extends MediaServerServiceBase
   @override
   String get notConnectedMessage => '未连接到Jellyfin服务器';
 
+  bool get isTranscodeEnabled => transcodeEnabledCache;
+
   @override
   String normalizeRequestPath(String path) {
     if (path.isEmpty) return '';
@@ -1038,9 +1040,32 @@ class JellyfinService extends MediaServerServiceBase
         (transcodeEnabledCache
             ? defaultQualityCache
             : JellyfinVideoQuality.original);
+
+    if (!transcodeEnabledCache) {
+      final resolvedPlaySessionId = playSessionId?.isNotEmpty == true
+          ? playSessionId
+          : _generateLocalPlaySessionId(itemId);
+      final resolvedMediaSourceId =
+          (mediaSourceId?.isNotEmpty ?? false) ? mediaSourceId! : itemId;
+      final directUrl = _buildDirectPlayUrl(
+        itemId,
+        mediaSourceId: resolvedMediaSourceId,
+        playSessionId: resolvedPlaySessionId,
+      );
+      return PlaybackSession(
+        itemId: itemId,
+        mediaSourceId: resolvedMediaSourceId,
+        playSessionId: resolvedPlaySessionId,
+        streamUrl: directUrl,
+        isTranscoding: false,
+      );
+    }
+
     final enableTranscoding = transcodeEnabledCache &&
-        effectiveQuality != JellyfinVideoQuality.original;
-    final maxStreamingBitrate = enableTranscoding ? effectiveQuality.bitrate : null;
+      effectiveQuality != JellyfinVideoQuality.original;
+    final maxStreamingBitrate =
+      enableTranscoding ? effectiveQuality.bitrate : null;
+    final resolvedPlaySessionId = playSessionId;
 
     final deviceProfile = PlaybackDeviceProfileBuilder.build(
       deviceName: 'NipaPlay',
@@ -1054,7 +1079,6 @@ class JellyfinService extends MediaServerServiceBase
       'EnableDirectStream': true,
       'EnableTranscoding': enableTranscoding,
     };
-
     if (maxStreamingBitrate != null) {
       request['MaxStreamingBitrate'] = maxStreamingBitrate * 1000;
     }
@@ -1064,19 +1088,21 @@ class JellyfinService extends MediaServerServiceBase
     if (audioStreamIndex != null) {
       request['AudioStreamIndex'] = audioStreamIndex;
     }
-    if (subtitleStreamIndex != null) {
-      request['SubtitleStreamIndex'] = subtitleStreamIndex;
+    if (enableTranscoding) {
+      if (subtitleStreamIndex != null) {
+        request['SubtitleStreamIndex'] = subtitleStreamIndex;
+      }
+      final subtitleMethod = _resolveSubtitleMethod(
+        enableTranscoding: enableTranscoding,
+        subtitleStreamIndex: subtitleStreamIndex,
+        burnInSubtitle: burnInSubtitle,
+      );
+      if (subtitleMethod != null && subtitleMethod.isNotEmpty) {
+        request['SubtitleMethod'] = subtitleMethod;
+      }
     }
-    final subtitleMethod = _resolveSubtitleMethod(
-      enableTranscoding: enableTranscoding,
-      subtitleStreamIndex: subtitleStreamIndex,
-      burnInSubtitle: burnInSubtitle,
-    );
-    if (subtitleMethod != null && subtitleMethod.isNotEmpty) {
-      request['SubtitleMethod'] = subtitleMethod;
-    }
-    if (playSessionId != null && playSessionId.isNotEmpty) {
-      request['PlaySessionId'] = playSessionId;
+    if (resolvedPlaySessionId != null && resolvedPlaySessionId.isNotEmpty) {
+      request['PlaySessionId'] = resolvedPlaySessionId;
     }
     if (mediaSourceId != null && mediaSourceId.isNotEmpty) {
       request['MediaSourceId'] = mediaSourceId;
@@ -1093,6 +1119,8 @@ class JellyfinService extends MediaServerServiceBase
       itemId: itemId,
       data: data,
       preferTranscoding: enableTranscoding,
+      forceDirectPlay: false,
+      forcedPlaySessionId: resolvedPlaySessionId,
       requestedMediaSourceId: mediaSourceId,
     );
   }
@@ -1122,9 +1150,12 @@ class JellyfinService extends MediaServerServiceBase
     required String itemId,
     required Map<String, dynamic> data,
     required bool preferTranscoding,
+    required bool forceDirectPlay,
+    String? forcedPlaySessionId,
     String? requestedMediaSourceId,
   }) {
-    final playSessionId = data['PlaySessionId']?.toString();
+    final playSessionId =
+      forcedPlaySessionId ?? data['PlaySessionId']?.toString();
     final rawSources = data['MediaSources'];
     final sources = <PlaybackMediaSource>[];
     if (rawSources is List) {
@@ -1153,7 +1184,7 @@ class JellyfinService extends MediaServerServiceBase
 
     bool useTranscoding = false;
     String? chosenUrl;
-    if (transcodingUrl != null && transcodingUrl.isNotEmpty) {
+    if (!forceDirectPlay && transcodingUrl != null && transcodingUrl.isNotEmpty) {
       if (preferTranscoding ||
           directStreamUrl == null ||
           directStreamUrl.isEmpty) {
@@ -1186,6 +1217,11 @@ class JellyfinService extends MediaServerServiceBase
       mediaSources: sources,
       selectedSource: selected,
     );
+  }
+
+  String _generateLocalPlaySessionId(String itemId) {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return 'nipaplay_${timestamp}_$itemId';
   }
 
   String _resolvePlaybackUrl(String url) {

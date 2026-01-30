@@ -82,7 +82,8 @@ class PlayerMenuDefinitionBuilder {
         category: PlayerMenuCategory.streaming,
         icon: PlayerMenuIconToken.jellyfinQuality,
         title: '清晰度',
-        visibilityPredicate: (ctx) => ctx.isServerStreaming,
+        visibilityPredicate: (ctx) =>
+          ctx.isServerStreaming && ctx.isTranscodeEnabledForCurrentSource,
       ),
       PlayerMenuItemDefinition(
         paneId: PlayerMenuPaneId.playbackInfo,

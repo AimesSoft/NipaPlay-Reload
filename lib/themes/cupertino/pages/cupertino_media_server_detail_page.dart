@@ -10,6 +10,7 @@ import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/services/emby_service.dart';
@@ -359,7 +360,7 @@ class _CupertinoMediaServerDetailPageState
     try {
       dynamic matcher;
       WatchHistoryItem? historyItem;
-      String? streamUrl;
+      PlaybackSession? playbackSession;
 
       if (widget.serverType == MediaServerType.jellyfin) {
         final movieInfo = JellyfinMovieInfo(
@@ -388,7 +389,12 @@ class _CupertinoMediaServerDetailPageState
           ),
         );
         if (historyItem != null) {
-          streamUrl = JellyfinService.instance.getStreamUrl(_mediaDetail!.id);
+          final jellyfinId = historyItem.filePath.replaceFirst('jellyfin://', '');
+          playbackSession = await JellyfinService.instance.createPlaybackSession(
+            itemId: jellyfinId,
+            startPositionMs:
+                historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+          );
         }
       } else {
         final movieInfo = EmbyMovieInfo(
@@ -417,7 +423,14 @@ class _CupertinoMediaServerDetailPageState
           ),
         );
         if (historyItem != null) {
-          streamUrl = await EmbyService.instance.getStreamUrl(_mediaDetail!.id);
+          final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+          final parts = embyPath.split('/');
+          final embyId = parts.isNotEmpty ? parts.last : embyPath;
+          playbackSession = await EmbyService.instance.createPlaybackSession(
+            itemId: embyId,
+            startPositionMs:
+                historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+          );
         }
       }
 
@@ -437,7 +450,7 @@ class _CupertinoMediaServerDetailPageState
         animeId: historyItem.animeId,
         episodeId: historyItem.episodeId,
         historyItem: historyItem,
-        actualPlayUrl: streamUrl,
+        playbackSession: playbackSession,
       );
 
       // 先关闭详情页
@@ -628,18 +641,30 @@ class _CupertinoMediaServerDetailPageState
       throw '未找到剧集信息';
     }
 
-    String streamUrl;
-    if (widget.serverType == MediaServerType.jellyfin) {
-      streamUrl = JellyfinDandanplayMatcher.instance.getPlayUrl(detail);
-    } else {
-      streamUrl = await EmbyDandanplayMatcher.instance.getPlayUrl(detail);
-    }
-
     final historyItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(
       () => _createWatchHistoryItem(detail),
     );
     if (historyItem == null) {
       throw const CupertinoDetailMatchCancelled();
+    }
+
+    PlaybackSession? playbackSession;
+    if (historyItem.filePath.startsWith('jellyfin://')) {
+      final jellyfinId = historyItem.filePath.replaceFirst('jellyfin://', '');
+      playbackSession = await JellyfinService.instance.createPlaybackSession(
+        itemId: jellyfinId,
+        startPositionMs:
+            historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+      );
+    } else if (historyItem.filePath.startsWith('emby://')) {
+      final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+      final parts = embyPath.split('/');
+      final embyId = parts.isNotEmpty ? parts.last : embyPath;
+      playbackSession = await EmbyService.instance.createPlaybackSession(
+        itemId: embyId,
+        startPositionMs:
+            historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+      );
     }
 
     return PlayableItem(
@@ -649,7 +674,7 @@ class _CupertinoMediaServerDetailPageState
       animeId: historyItem.animeId,
       episodeId: historyItem.episodeId,
       historyItem: historyItem,
-      actualPlayUrl: streamUrl,
+      playbackSession: playbackSession,
     );
   }
 
@@ -660,7 +685,7 @@ class _CupertinoMediaServerDetailPageState
 
     dynamic matcher;
     WatchHistoryItem? historyItem;
-    String? streamUrl;
+    PlaybackSession? playbackSession;
 
     if (widget.serverType == MediaServerType.jellyfin) {
       final movieInfo = JellyfinMovieInfo(
@@ -689,7 +714,12 @@ class _CupertinoMediaServerDetailPageState
         ),
       );
       if (historyItem != null) {
-        streamUrl = JellyfinService.instance.getStreamUrl(_mediaDetail!.id);
+        final jellyfinId = historyItem.filePath.replaceFirst('jellyfin://', '');
+        playbackSession = await JellyfinService.instance.createPlaybackSession(
+          itemId: jellyfinId,
+          startPositionMs:
+              historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+        );
       }
     } else {
       final movieInfo = EmbyMovieInfo(
@@ -718,7 +748,14 @@ class _CupertinoMediaServerDetailPageState
         ),
       );
       if (historyItem != null) {
-        streamUrl = await EmbyService.instance.getStreamUrl(_mediaDetail!.id);
+        final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final embyId = parts.isNotEmpty ? parts.last : embyPath;
+        playbackSession = await EmbyService.instance.createPlaybackSession(
+          itemId: embyId,
+          startPositionMs:
+              historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+        );
       }
     }
 
@@ -733,7 +770,7 @@ class _CupertinoMediaServerDetailPageState
       animeId: historyItem.animeId,
       episodeId: historyItem.episodeId,
       historyItem: historyItem,
-      actualPlayUrl: streamUrl,
+      playbackSession: playbackSession,
     );
   }
 
@@ -1630,13 +1667,6 @@ class _CupertinoMediaServerDetailPageState
         type: AdaptiveSnackBarType.info,
       );
 
-      String streamUrl;
-      if (widget.serverType == MediaServerType.jellyfin) {
-        streamUrl = JellyfinDandanplayMatcher.instance.getPlayUrl(episode);
-      } else {
-        streamUrl = await EmbyDandanplayMatcher.instance.getPlayUrl(episode);
-      }
-
       AdaptiveSnackBar.show(
         context,
         message: '正在匹配弹幕信息...',
@@ -1650,6 +1680,25 @@ class _CupertinoMediaServerDetailPageState
         return;
       }
 
+      PlaybackSession? playbackSession;
+      if (historyItem.filePath.startsWith('jellyfin://')) {
+        final jellyfinId = historyItem.filePath.replaceFirst('jellyfin://', '');
+        playbackSession = await JellyfinService.instance.createPlaybackSession(
+          itemId: jellyfinId,
+          startPositionMs:
+              historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+        );
+      } else if (historyItem.filePath.startsWith('emby://')) {
+        final embyPath = historyItem.filePath.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final embyId = parts.isNotEmpty ? parts.last : embyPath;
+        playbackSession = await EmbyService.instance.createPlaybackSession(
+          itemId: embyId,
+          startPositionMs:
+              historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+        );
+      }
+
       // 创建 PlayableItem
       final playableItem = PlayableItem(
         videoPath: historyItem.filePath,
@@ -1658,7 +1707,7 @@ class _CupertinoMediaServerDetailPageState
         animeId: historyItem.animeId,
         episodeId: historyItem.episodeId,
         historyItem: historyItem,
-        actualPlayUrl: streamUrl,
+        playbackSession: playbackSession,
       );
 
       // 先关闭详情页

@@ -141,7 +141,7 @@ class JellyfinDandanplayMatcher {
 
     try {
       // 获取Jellyfin流媒体URL（仅用于日志）
-      final streamUrl = getPlayUrl(episode);
+      final streamUrl = await getPlayUrl(episode);
       debugPrint(
           '正在为Jellyfin内容创建可播放项: ${episode.seriesName} - ${episode.name}');
       debugPrint('Jellyfin流媒体URL: $streamUrl');
@@ -244,9 +244,12 @@ class JellyfinDandanplayMatcher {
   /// 获取播放URL
   ///
   /// 根据Jellyfin剧集信息获取媒体流URL
-  String getPlayUrl(JellyfinEpisodeInfo episode) {
-    final url = JellyfinService.instance.getStreamUrl(episode.id);
-    debugPrint('Jellyfin流媒体URL: $url');
+  Future<String> getPlayUrl(JellyfinEpisodeInfo episode) async {
+    final url = JellyfinService.instance.getStreamUrlWithOptions(
+      episode.id,
+      forceDirectPlay: true,
+    );
+    debugPrint('Jellyfin直连URL: $url');
     return url;
   }
 

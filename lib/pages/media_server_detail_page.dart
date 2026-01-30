@@ -4,6 +4,7 @@ import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -876,6 +877,8 @@ style: TextStyle(color: secondaryTextColor)));
                     BlurButton(
                       icon: Icons.play_arrow,
                       text: '播放',
+                      foregroundColor: const Color(0xFF3B82F6),
+                      hoverForegroundColor: const Color(0xFF60A5FA),
                       onTap: () {
                         if (_isDetailAutoMatching) {
                           BlurSnackBar.show(context, '正在自动匹配，请稍候');
@@ -1184,16 +1187,7 @@ style: TextStyle(color: secondaryTextColor)));
                 try {
                   BlurSnackBar.show(context, '准备播放: ${episode.name}');
                   
-                  // 获取流媒体URL但暂不播放
-                  String streamUrl;
-                  if (widget.serverType == MediaServerType.jellyfin) {
-                    streamUrl =
-                        JellyfinDandanplayMatcher.instance.getPlayUrl(episode);
-                  } else {
-                    streamUrl =
-                        await EmbyDandanplayMatcher.instance.getPlayUrl(episode);
-                  }
-                  debugPrint('获取到流媒体URL: $streamUrl');
+                  debugPrint('准备创建播放会话');
                   
                   // 显示加载指示器
                   if (mounted) {
@@ -1279,11 +1273,39 @@ style: TextStyle(color: secondaryTextColor)));
                   Future.delayed(const Duration(milliseconds: 100), () async {
                     try {
                       debugPrint('异步初始化播放器 - 开始');
-                      // 使用稳定的jellyfin://协议URL作为标识符，临时HTTP URL作为实际播放源
+                      // 基于 PlaybackInfo 创建播放会话
+                      PlaybackSession? playbackSession;
+                      if (playableHistoryItem.filePath
+                          .startsWith('jellyfin://')) {
+                        final jellyfinId = playableHistoryItem.filePath
+                            .replaceFirst('jellyfin://', '');
+                        playbackSession =
+                            await JellyfinService.instance.createPlaybackSession(
+                          itemId: jellyfinId,
+                          startPositionMs: playableHistoryItem.lastPosition > 0
+                              ? playableHistoryItem.lastPosition
+                              : null,
+                        );
+                      } else if (playableHistoryItem.filePath
+                          .startsWith('emby://')) {
+                        final embyPath = playableHistoryItem.filePath
+                            .replaceFirst('emby://', '');
+                        final parts = embyPath.split('/');
+                        final embyId =
+                            parts.isNotEmpty ? parts.last : embyPath;
+                        playbackSession =
+                            await EmbyService.instance.createPlaybackSession(
+                          itemId: embyId,
+                          startPositionMs: playableHistoryItem.lastPosition > 0
+                              ? playableHistoryItem.lastPosition
+                              : null,
+                        );
+                      }
+
                       await videoPlayerState.initializePlayer(
-                        historyItem.filePath, // 使用稳定的jellyfin://协议
+                        historyItem.filePath,
                         historyItem: playableHistoryItem,
-                        actualPlayUrl: streamUrl, // 临时HTTP流媒体URL仅用于播放
+                        playbackSession: playbackSession,
                       );
                       debugPrint('异步初始化播放器 - 完成');
                       

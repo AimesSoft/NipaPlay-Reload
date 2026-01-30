@@ -39,6 +39,7 @@ import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -572,7 +573,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('DashboardHomePage: Jellyfin连接完成，立即刷新数据');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _loadData();
+            _loadData(forceRefreshRecommended: true);
           }
         });
       }
@@ -584,7 +585,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _jfDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
       debugPrint('DashboardHomePage: Jellyfin provider 状态变化（防抖触发）刷新');
-      _loadData();
+      _loadData(forceRefreshRecommended: true);
     });
   }
   
@@ -631,7 +632,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('DashboardHomePage: Emby连接完成，立即刷新数据');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _loadData();
+            _loadData(forceRefreshRecommended: true);
           }
         });
       }
@@ -643,7 +644,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _emDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
       debugPrint('DashboardHomePage: Emby provider 状态变化（防抖触发）刷新');
-      _loadData();
+      _loadData(forceRefreshRecommended: true);
     });
   }
   

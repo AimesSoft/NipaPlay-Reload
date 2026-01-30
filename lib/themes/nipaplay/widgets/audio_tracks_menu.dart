@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
+import 'package:nipaplay/providers/emby_transcode_provider.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
 import 'base_settings_menu.dart';
 
 class AudioTracksMenu extends StatelessWidget {
@@ -57,10 +62,193 @@ class AudioTracksMenu extends StatelessWidget {
     return language;
   }
 
+  List<_ServerAudioTrack> _getServerAudioTracks(VideoPlayerState videoState) {
+    final session = videoState.currentPlaybackSession;
+    final source = session?.selectedSource ??
+        (session?.mediaSources.isNotEmpty == true
+            ? session!.mediaSources.first
+            : null);
+    final streams = source?.mediaStreams ?? const [];
+    final tracks = <_ServerAudioTrack>[];
+    for (final stream in streams) {
+      if (stream['Type']?.toString() != 'Audio') continue;
+      final index = stream['Index'];
+      final parsedIndex = index is int
+          ? index
+          : int.tryParse(index?.toString() ?? '');
+      if (parsedIndex == null) continue;
+      tracks.add(
+        _ServerAudioTrack(
+          index: parsedIndex,
+          title: stream['Title']?.toString(),
+          language: stream['Language']?.toString(),
+          codec: stream['Codec']?.toString(),
+          isDefault: stream['IsDefault'] == true,
+        ),
+      );
+    }
+    return tracks;
+  }
+
+  Future<void> _switchServerAudioTrack({
+    required BuildContext context,
+    required VideoPlayerState videoState,
+    required _ServerAudioTrack track,
+  }) async {
+    final path = videoState.currentVideoPath;
+    if (path == null) return;
+    if (path.startsWith('jellyfin://')) {
+      final itemId = path.replaceFirst('jellyfin://', '');
+      final jellyfinProvider =
+          Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+      await jellyfinProvider.initialize();
+      videoState.setJellyfinServerAudioSelection(itemId, track.index);
+      await videoState.reloadCurrentJellyfinStream(
+        quality: jellyfinProvider.currentVideoQuality,
+        serverSubtitleIndex: videoState.getJellyfinServerSubtitleSelection(
+          itemId,
+        ),
+        burnInSubtitle: videoState.getJellyfinServerSubtitleBurnIn(itemId),
+        audioStreamIndex: track.index,
+      );
+      return;
+    }
+    if (path.startsWith('emby://')) {
+      final embyPath = path.replaceFirst('emby://', '');
+      final parts = embyPath.split('/');
+      final itemId = parts.isNotEmpty ? parts.last : embyPath;
+      final embyProvider =
+          Provider.of<EmbyTranscodeProvider>(context, listen: false);
+      await embyProvider.initialize();
+      videoState.setEmbyServerAudioSelection(itemId, track.index);
+      await videoState.reloadCurrentEmbyStream(
+        quality: embyProvider.currentVideoQuality,
+        serverSubtitleIndex: videoState.getEmbyServerSubtitleSelection(itemId),
+        burnInSubtitle: videoState.getEmbyServerSubtitleBurnIn(itemId),
+        audioStreamIndex: track.index,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final path = videoState.currentVideoPath ?? '';
+        final isJellyfin = path.startsWith('jellyfin://');
+        final isEmby = path.startsWith('emby://');
+        final isServerStream = isJellyfin || isEmby;
+        final useServerTracks = (isJellyfin &&
+                JellyfinService.instance.isTranscodeEnabled) ||
+            (isEmby && EmbyService.instance.isTranscodeEnabled);
+        final serverTracks = useServerTracks
+            ? _getServerAudioTracks(videoState)
+            : <_ServerAudioTrack>[];
+        final audioTracks = videoState.player.mediaInfo.audio;
+        if (isServerStream && useServerTracks && serverTracks.isNotEmpty) {
+          int? selectedIndex;
+          if (isJellyfin) {
+            final itemId = path.replaceFirst('jellyfin://', '');
+            selectedIndex = videoState.getJellyfinServerAudioSelection(itemId);
+            selectedIndex ??= serverTracks
+                .firstWhere((t) => t.isDefault, orElse: () => serverTracks.first)
+                .index;
+          } else if (isEmby) {
+            final embyPath = path.replaceFirst('emby://', '');
+            final parts = embyPath.split('/');
+            final itemId = parts.isNotEmpty ? parts.last : embyPath;
+            selectedIndex = videoState.getEmbyServerAudioSelection(itemId);
+            selectedIndex ??= serverTracks
+                .firstWhere((t) => t.isDefault, orElse: () => serverTracks.first)
+                .index;
+          }
+          return BaseSettingsMenu(
+            title: '音频轨道',
+            onClose: onClose,
+            onHoverChanged: onHoverChanged,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: serverTracks.map((track) {
+                final isActive = track.index == selectedIndex;
+                final language = track.language == null ||
+                        track.language!.isEmpty ||
+                        track.language == '未知'
+                    ? '未知'
+                    : _getLanguageName(track.language!);
+                String title = track.title?.isNotEmpty == true
+                    ? track.title!
+                    : '轨道 ${track.index + 1}';
+                if (track.codec != null && track.codec!.isNotEmpty) {
+                  title += ' (${track.codec})';
+                }
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      if (isActive) return;
+                      await _switchServerAudioTrack(
+                        context: context,
+                        videoState: videoState,
+                        track: track,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? Colors.white.withOpacity(0.1)
+                            : Colors.transparent,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Colors.white.withOpacity(0.5),
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isActive
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  '语言: $language',
+                                  locale: const Locale("zh", "Hans"),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          );
+        }
         return BaseSettingsMenu(
           title: '音频轨道',
           onClose: onClose,
@@ -68,8 +256,8 @@ class AudioTracksMenu extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (videoState.player.mediaInfo.audio != null)
-                ...videoState.player.mediaInfo.audio!.asMap().entries.map((entry) {
+              if (audioTracks != null)
+                ...audioTracks.asMap().entries.map((entry) {
                   final index = entry.key;
                   final track = entry.value; // track is PlayerAudioStreamInfo
                   final isActive = videoState.player.activeAudioTracks.contains(index);
@@ -160,3 +348,19 @@ style: TextStyle(
     );
   }
 } 
+
+class _ServerAudioTrack {
+  final int index;
+  final String? title;
+  final String? language;
+  final String? codec;
+  final bool isDefault;
+
+  const _ServerAudioTrack({
+    required this.index,
+    this.title,
+    this.language,
+    this.codec,
+    this.isDefault = false,
+  });
+}

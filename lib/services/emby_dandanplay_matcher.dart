@@ -260,8 +260,11 @@ class EmbyDandanplayMatcher {
   ///
   /// 根据Emby剧集信息获取媒体流URL
   Future<String> getPlayUrl(EmbyEpisodeInfo episode) async {
-    final url = await EmbyService.instance.getStreamUrl(episode.id);
-    debugPrint('Emby流媒体URL: $url');
+    final url = EmbyService.instance.getStreamUrlWithOptions(
+      episode.id,
+      forceDirectPlay: true,
+    );
+    debugPrint('Emby直连URL: $url');
     return url;
   }
 

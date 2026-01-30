@@ -39,6 +39,7 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
@@ -2618,7 +2619,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   Future<PlayableItem?> _buildPlayableItem(WatchHistoryItem item) async {
     WatchHistoryItem currentItem = item;
     String filePath = currentItem.filePath;
-    String? actualPlayUrl;
+    PlaybackSession? playbackSession;
     bool fileExists = false;
 
     final bool isNetworkUrl = filePath.startsWith('http');
@@ -2633,7 +2634,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final jellyfinId = filePath.replaceFirst('jellyfin://', '');
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
-            actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            playbackSession = await jellyfinService.createPlaybackSession(
+              itemId: jellyfinId,
+              startPositionMs:
+                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+            );
           } else {
             AdaptiveSnackBar.show(
               context,
@@ -2657,7 +2662,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final embyId = filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = await embyService.getStreamUrl(embyId);
+            playbackSession = await embyService.createPlaybackSession(
+              itemId: embyId,
+              startPositionMs:
+                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+            );
           } else {
             AdaptiveSnackBar.show(
               context,
@@ -2702,7 +2711,22 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     }
 
     if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
-      final matchablePath = actualPlayUrl ?? filePath;
+      String matchablePath = filePath;
+      if (filePath.startsWith('jellyfin://')) {
+        final itemId = filePath.replaceFirst('jellyfin://', '');
+        matchablePath = JellyfinService.instance.getStreamUrlWithOptions(
+          itemId,
+          forceDirectPlay: true,
+        );
+      } else if (filePath.startsWith('emby://')) {
+        final embyPath = filePath.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final itemId = parts.isNotEmpty ? parts.last : embyPath;
+        matchablePath = EmbyService.instance.getStreamUrlWithOptions(
+          itemId,
+          forceDirectPlay: true,
+        );
+      }
       currentItem = await _performHistoryAutoMatch(
         currentItem,
         matchablePath,
@@ -2716,7 +2740,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       animeId: currentItem.animeId,
       episodeId: currentItem.episodeId,
       historyItem: currentItem,
-      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
     );
   }
 

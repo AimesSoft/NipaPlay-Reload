@@ -210,6 +210,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final Map<String, bool> _jellyfinServerSubtitleBurnInSelections = {};
   final Map<String, int?> _embyServerSubtitleSelections = {};
   final Map<String, bool> _embyServerSubtitleBurnInSelections = {};
+  final Map<String, int?> _jellyfinServerAudioSelections = {};
+  final Map<String, int?> _embyServerAudioSelections = {};
   String _danmakuOverlayKey = 'idle'; // 弹幕覆盖层的稳定key
   Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
   // 观看记录节流：记录上一次更新所处的10秒分桶，避免同一时间窗内重复写DB与通知Provider
@@ -663,6 +665,30 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
   int? get animeId => _animeId; // 添加动画ID getter
   int? get episodeId => _episodeId; // 添加剧集ID getter
+
+  bool hasJellyfinServerAudioSelection(String itemId) =>
+      _jellyfinServerAudioSelections.containsKey(itemId);
+
+  int? getJellyfinServerAudioSelection(String itemId) =>
+      _jellyfinServerAudioSelections[itemId];
+
+  void setJellyfinServerAudioSelection(String itemId, int? index) {
+    if (_jellyfinServerAudioSelections[itemId] == index) return;
+    _jellyfinServerAudioSelections[itemId] = index;
+    notifyListeners();
+  }
+
+  bool hasEmbyServerAudioSelection(String itemId) =>
+      _embyServerAudioSelections.containsKey(itemId);
+
+  int? getEmbyServerAudioSelection(String itemId) =>
+      _embyServerAudioSelections[itemId];
+
+  void setEmbyServerAudioSelection(String itemId, int? index) {
+    if (_embyServerAudioSelections[itemId] == index) return;
+    _embyServerAudioSelections[itemId] = index;
+    notifyListeners();
+  }
 
   // 获取时间轴告知弹幕轨道状态
   bool get isTimelineDanmakuEnabled => _isTimelineDanmakuEnabled;

@@ -12,6 +12,7 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
@@ -324,7 +325,7 @@ style: TextStyle(
     
     bool fileExists = false;
     String filePath = currentItem.filePath;
-    String? actualPlayUrl;
+    PlaybackSession? playbackSession;
 
     if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
       fileExists = true;
@@ -333,13 +334,17 @@ style: TextStyle(
           final jellyfinId = currentItem.filePath.replaceFirst('jellyfin://', '');
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
-            actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            playbackSession = await jellyfinService.createPlaybackSession(
+              itemId: jellyfinId,
+              startPositionMs:
+                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+            );
           } else {
             BlurSnackBar.show(context, '未连接到Jellyfin服务器');
             return;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Jellyfin播放会话失败: $e');
           return;
         }
       }
@@ -349,13 +354,17 @@ style: TextStyle(
           final embyId = currentItem.filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = await embyService.getStreamUrl(embyId);
+            playbackSession = await embyService.createPlaybackSession(
+              itemId: embyId,
+              startPositionMs:
+                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+            );
           } else {
             BlurSnackBar.show(context, '未连接到Emby服务器');
             return;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Emby播放会话失败: $e');
           return;
         }
       }
@@ -383,7 +392,22 @@ style: TextStyle(
     }
 
     if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
-      final matchablePath = actualPlayUrl ?? currentItem.filePath;
+      String matchablePath = currentItem.filePath;
+      if (currentItem.filePath.startsWith('jellyfin://')) {
+        final itemId = currentItem.filePath.replaceFirst('jellyfin://', '');
+        matchablePath = JellyfinService.instance.getStreamUrlWithOptions(
+          itemId,
+          forceDirectPlay: true,
+        );
+      } else if (currentItem.filePath.startsWith('emby://')) {
+        final embyPath = currentItem.filePath.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final itemId = parts.isNotEmpty ? parts.last : embyPath;
+        matchablePath = EmbyService.instance.getStreamUrlWithOptions(
+          itemId,
+          forceDirectPlay: true,
+        );
+      }
       currentItem = await _performAutoMatch(currentItem, matchablePath);
     }
 
@@ -394,7 +418,7 @@ style: TextStyle(
       animeId: currentItem.animeId,
       episodeId: currentItem.episodeId,
       historyItem: currentItem,
-      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
     );
 
     await PlaybackService().play(playableItem);

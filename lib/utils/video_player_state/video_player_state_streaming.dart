@@ -413,6 +413,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
     required JellyfinVideoQuality quality,
     int? serverSubtitleIndex,
     bool burnInSubtitle = false,
+    int? audioStreamIndex,
   }) async {
     try {
       if (_currentVideoPath == null ||
@@ -448,6 +449,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
         itemId: itemId,
         quality: quality,
         startPositionMs: currentPosition.inMilliseconds,
+        audioStreamIndex: audioStreamIndex,
         subtitleStreamIndex: serverSubtitleIndex,
         burnInSubtitle: burnInSubtitle,
         playSessionId: _currentPlaybackSession?.playSessionId,
@@ -494,6 +496,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
     required JellyfinVideoQuality quality,
     int? serverSubtitleIndex,
     bool burnInSubtitle = false,
+    int? audioStreamIndex,
   }) async {
     try {
       if (_currentVideoPath == null ||
@@ -528,6 +531,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
         itemId: itemId,
         quality: quality,
         startPositionMs: currentPosition.inMilliseconds,
+        audioStreamIndex: audioStreamIndex,
         subtitleStreamIndex: serverSubtitleIndex,
         burnInSubtitle: burnInSubtitle,
         playSessionId: _currentPlaybackSession?.playSessionId,

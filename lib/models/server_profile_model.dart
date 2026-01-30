@@ -205,7 +205,7 @@ class ServerAddress {
   }
 
   /// 是否应该重试（基于失败次数和时间）
-  bool shouldRetry({int maxFailures = 3, Duration cooldownPeriod = const Duration(minutes: 2)}) {
+  bool shouldRetry({int maxFailures = 3, Duration cooldownPeriod = const Duration(seconds: 1)}) {
     if (failureCount < maxFailures) return true;
     
     if (lastFailureTime != null) {

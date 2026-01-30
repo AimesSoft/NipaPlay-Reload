@@ -37,6 +37,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart
 import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -118,7 +119,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     
     bool fileExists = false;
     String filePath = item.filePath;
-    String? actualPlayUrl;
+    PlaybackSession? playbackSession;
 
     if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
       fileExists = true;
@@ -127,13 +128,16 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           final jellyfinId = item.filePath.replaceFirst('jellyfin://', '');
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
-            actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            playbackSession = await jellyfinService.createPlaybackSession(
+              itemId: jellyfinId,
+              startPositionMs: item.lastPosition > 0 ? item.lastPosition : null,
+            );
           } else {
             BlurSnackBar.show(context, '未连接到Jellyfin服务器');
             return;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Jellyfin播放会话失败: $e');
           return;
         }
       }
@@ -143,13 +147,16 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           final embyId = item.filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = await embyService.getStreamUrl(embyId);
+            playbackSession = await embyService.createPlaybackSession(
+              itemId: embyId,
+              startPositionMs: item.lastPosition > 0 ? item.lastPosition : null,
+            );
           } else {
             BlurSnackBar.show(context, '未连接到Emby服务器');
             return;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Emby播放会话失败: $e');
           return;
         }
       }
@@ -184,7 +191,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       animeId: item.animeId,
       episodeId: item.episodeId,
       historyItem: item,
-      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
     );
 
     await PlaybackService().play(playableItem);

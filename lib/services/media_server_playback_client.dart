@@ -40,25 +40,52 @@ class PlaybackDeviceProfileBuilder {
     required JellyfinTranscodeSettings settings,
   }) {
     final videoCodecs = settings.video.preferredCodecs.isNotEmpty
-        ? settings.video.preferredCodecs
-        : const ['h264', 'hevc', 'av1'];
+      ? settings.video.preferredCodecs
+      : const [
+        'h264',
+        'hevc',
+        'av1',
+        'vp9',
+        'vp8',
+        'mpeg2video',
+        'mpeg4',
+        'vc1',
+        'wmv3',
+        'theora',
+        'prores',
+        'mjpeg',
+        ];
     final audioCodecs = settings.audio.preferredCodecs.isNotEmpty
-        ? settings.audio.preferredCodecs
-        : const ['aac', 'mp3', 'opus'];
+      ? settings.audio.preferredCodecs
+      : const [
+        'aac',
+        'mp3',
+        'opus',
+        'flac',
+        'alac',
+        'vorbis',
+        'ac3',
+        'eac3',
+        'dts',
+        'truehd',
+        'pcm',
+        'wma',
+        ];
     final subtitleCodecs = settings.subtitle.preferredCodecs.isNotEmpty
-        ? settings.subtitle.preferredCodecs
-        : const ['srt', 'ass', 'ssa', 'vtt', 'sub', 'pgs'];
+      ? settings.subtitle.preferredCodecs
+      : const ['srt', 'ass', 'ssa', 'vtt', 'sub', 'pgs', 'idx', 'sup'];
 
     final directPlayProfiles = <DirectPlayProfile>[
       DirectPlayProfile(
         type: 'Video',
-        container: 'mp4,mkv,webm,avi,mov,flv,ts,m2ts,m4v',
+        container:
+            'mp4,mkv,webm,avi,mov,flv,ts,m2ts,m4v,mpg,mpeg,wmv,3gp,3g2,ogv',
         videoCodec: videoCodecs.join(','),
         audioCodec: audioCodecs.join(','),
       ),
       DirectPlayProfile(
         type: 'Audio',
-        container: 'aac,mp3,flac,opus,ogg,wav',
+        container: 'aac,mp3,flac,opus,ogg,wav,alac,m4a,ac3,eac3,dts,wma',
         audioCodec: audioCodecs.join(','),
       ),
     ];
