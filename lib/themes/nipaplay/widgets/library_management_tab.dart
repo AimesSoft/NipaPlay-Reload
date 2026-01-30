@@ -2386,8 +2386,9 @@ style: TextStyle(color: Colors.lightBlueAccent)),
               file.name,
               style: TextStyle(color: textColor, fontSize: 13),
             ),
-            trailing: IconButton(
-              icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
+            trailing: SearchBarActionButton(
+              icon: Icons.play_circle_outline,
+              tooltip: '播放',
               onPressed: () => _playWebDAVFile(connection, file),
             ),
             onTap: () => _playWebDAVFile(connection, file),
@@ -2486,8 +2487,9 @@ style: TextStyle(color: Colors.lightBlueAccent)),
             file.name,
             style: TextStyle(color: textColor, fontSize: 13),
           ),
-          trailing: IconButton(
-            icon: Icon(Icons.play_circle_outline, color: iconColor, size: 20),
+          trailing: SearchBarActionButton(
+            icon: Icons.play_circle_outline,
+            tooltip: '播放',
             onPressed: () => _playSMBFile(connection, file),
           ),
           onTap: () => _playSMBFile(connection, file),
