@@ -262,6 +262,7 @@ extension DashboardHomePageActions on _DashboardHomePageState {
     final isJellyfinProtocol = currentItem.filePath.startsWith('jellyfin://');
     final isEmbyProtocol = currentItem.filePath.startsWith('emby://');
     
+    final bool isIOS = !kIsWeb && Platform.isIOS;
     bool fileExists = false;
     String filePath = currentItem.filePath;
     String? actualPlayUrl;
@@ -303,7 +304,7 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       final videoFile = File(currentItem.filePath);
       fileExists = videoFile.existsSync();
       
-      if (!fileExists && Platform.isIOS) {
+      if (!fileExists && isIOS) {
         String altPath = filePath.startsWith('/private') 
             ? filePath.replaceFirst('/private', '') 
             : '/private$filePath';

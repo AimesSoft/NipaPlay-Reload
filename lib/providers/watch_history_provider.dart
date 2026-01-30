@@ -103,6 +103,9 @@ class WatchHistoryProvider extends ChangeNotifier {
 
   // 验证文件路径并修复iOS路径问题
   Future<List<WatchHistoryItem>> _validateFilePaths(List<WatchHistoryItem> items) async {
+    if (kIsWeb) {
+      return items;
+    }
     List<WatchHistoryItem> validItems = [];
     List<String> invalidPaths = [];
     

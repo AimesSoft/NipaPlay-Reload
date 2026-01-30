@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -803,7 +804,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
-    final bool isIOS = Platform.isIOS;
+    final bool isIOS = !kIsWeb && Platform.isIOS;
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
 
     return Scaffold(

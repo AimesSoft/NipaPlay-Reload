@@ -7,7 +7,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     bool forceRefreshToday = false,
   }) async {
     final stopwatch = Stopwatch()..start();
-    final bool isIOS = Platform.isIOS;
+    final bool isIOS = !kIsWeb && Platform.isIOS;
     _lastLoadTime = DateTime.now();
     
     // 检查Widget状态
