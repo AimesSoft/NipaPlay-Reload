@@ -177,6 +177,7 @@ class EmbyEpisodeMappingService {
     required String embySeriesId,
     String? embySeasonId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     // 生成缓存键
@@ -206,6 +207,7 @@ class EmbyEpisodeMappingService {
 
   /// 获取剧集映射
   Future<Map<String, dynamic>?> getEpisodeMapping(String embyEpisodeId) async {
+    if (kIsWeb) return null;
     await initialize();
 
     final results = await _database!.query(
