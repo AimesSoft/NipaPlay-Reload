@@ -44,6 +44,7 @@ class PlayerKernelManager {
       videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
       videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
       await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
+      await videoPlayerState.applyHardwareDecoderPreference();
       debugPrint('[PlayerKernelManager] 已创建新的空播放器实例');
       return;
     }
@@ -56,6 +57,7 @@ class PlayerKernelManager {
     videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
     await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
+    await videoPlayerState.applyHardwareDecoderPreference();
 
     // 4. 重新初始化播放
     await videoPlayerState.initializePlayer(currentPath,

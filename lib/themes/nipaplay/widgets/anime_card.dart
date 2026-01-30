@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class AnimeCard extends StatefulWidget {
   final String name;
@@ -74,8 +75,8 @@ class _AnimeCardState extends State<AnimeCard> {
 
   void _updateDisplayImageUrl() {
     if (kIsWeb && widget.imageUrl.startsWith('http')) {
-      _displayImageUrl =
-          '/api/image_proxy?url=${Uri.encodeComponent(widget.imageUrl)}';
+      _displayImageUrl = WebRemoteAccessService.imageProxyUrl(widget.imageUrl) ??
+          widget.imageUrl;
     } else {
       _displayImageUrl = widget.imageUrl;
     }

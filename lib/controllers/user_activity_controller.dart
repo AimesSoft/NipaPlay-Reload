@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 /// 用户活动记录的业务逻辑控制器
 /// 包含所有共享的功能和状态管理
@@ -223,20 +223,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
   /// 处理图片URL（Web代理）
   String? processImageUrl(String? imageUrl) {
     if (kIsWeb && imageUrl != null && imageUrl.isNotEmpty) {
-      try {
-        final currentUrl = Uri.base.toString();
-        final uri = Uri.parse(currentUrl);
-        String baseUrl = '${uri.scheme}://${uri.host}';
-        
-        if (uri.port != 80 && uri.port != 443) {
-          baseUrl += ':${uri.port}';
-        }
-        
-        final encodedUrl = base64Url.encode(utf8.encode(imageUrl));
-        return '$baseUrl/api/image_proxy?url=$encodedUrl';
-      } catch (e) {
-        return imageUrl;
-      }
+      return WebRemoteAccessService.imageProxyUrl(imageUrl) ?? imageUrl;
     }
     return imageUrl;
   }

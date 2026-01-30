@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -99,7 +100,12 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       if (kIsWeb) {
         // Web environment: fetch from the local API
         try {
-          final response = await http.get(Uri.parse('/api/bangumi/calendar'));
+          final apiUri =
+              WebRemoteAccessService.apiUri('/api/bangumi/calendar');
+          if (apiUri == null) {
+            throw Exception('未配置远程访问地址');
+          }
+          final response = await http.get(apiUri);
           if (response.statusCode == 200) {
             final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
             animes = data.map((d) => BangumiAnime.fromJson(d as Map<String, dynamic>)).toList();

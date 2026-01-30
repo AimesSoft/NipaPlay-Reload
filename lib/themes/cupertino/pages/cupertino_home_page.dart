@@ -28,6 +28,7 @@ import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
@@ -895,7 +896,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       final uri = Uri.parse(
           'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large');
       final response = await http.head(
-        uri,
+        WebRemoteAccessService.proxyUri(uri),
         headers: const {'User-Agent': 'NipaPlay/1.0'},
       ).timeout(const Duration(seconds: 5));
       if (response.statusCode == 302) {

@@ -31,6 +31,7 @@ import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
 import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -268,6 +269,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   final String _timelinePreviewEnabledKey = 'timeline_preview_enabled';
+  final String _useHardwareDecoderKey = 'use_hardware_decoder';
+  bool _useHardwareDecoder = true;
 
   WatchHistoryProvider? _resolveWatchHistoryProvider() {
     final context = _context;
@@ -525,6 +528,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 获取菜单栏隐藏状态
   bool get isAppBarHidden => _isAppBarHidden;
+  bool get useHardwareDecoder => _useHardwareDecoder;
 
   // 检查是否为平板设备（使用globals中的判定逻辑）
   bool get isTablet => globals.isTablet;

@@ -7,6 +7,7 @@ import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:path_provider/path_provider.dart'
     if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'debug_log_service.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
@@ -1850,7 +1851,8 @@ class EmbyService extends MediaServerServiceBase
           '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
       debugPrint('EmbyService: 下载字幕文件: $subtitleUrl');
       // 下载字幕文件
-      final subtitleResponse = await http.get(Uri.parse(subtitleUrl));
+      final subtitleResponse =
+          await http.get(WebRemoteAccessService.proxyUri(Uri.parse(subtitleUrl)));
       if (subtitleResponse.statusCode == 200) {
         // 保存到临时文件
         final tempDir = await getTemporaryDirectory();

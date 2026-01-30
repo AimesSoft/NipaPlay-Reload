@@ -486,6 +486,29 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
+        if (_selectedKernelType == PlayerKernelType.mdk ||
+            _selectedKernelType == PlayerKernelType.mediaKit) ...[
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
+                title: '硬件解码',
+                subtitle: '仅对 MDK / Libmpv 生效',
+                icon: Ionicons.hardware_chip_outline,
+                value: videoState.useHardwareDecoder,
+                onChanged: (bool value) async {
+                  await videoState.setHardwareDecoderEnabled(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启硬件解码' : '已关闭硬件解码',
+                  );
+                },
+              );
+            },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
+
         SettingsItem.dropdown(
           title: "弹幕渲染引擎",
           subtitle: "选择弹幕的渲染方式",

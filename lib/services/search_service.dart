@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/search_model.dart';
 import './dandanplay_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class SearchService {
   static final SearchService instance = SearchService._();
@@ -21,7 +22,12 @@ class SearchService {
     // Web环境下的实现
     if (kIsWeb) {
       try {
-        final response = await http.get(Uri.parse('/api/search/config'));
+        final apiUri =
+            WebRemoteAccessService.apiUri('/api/search/config');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
+        final response = await http.get(apiUri);
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes));
           return SearchConfig.fromJson(data);
@@ -95,8 +101,13 @@ class SearchService {
     // Web环境下的实现
     if (kIsWeb) {
       try {
+        final apiUri =
+            WebRemoteAccessService.apiUri('/api/search/by-tags');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
         final response = await http.post(
-          Uri.parse('/api/search/by-tags'),
+          apiUri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({'tags': tags}),
         );
@@ -174,8 +185,13 @@ class SearchService {
           'maxRate': maxRate,
           'sort': sort,
         };
+        final apiUri =
+            WebRemoteAccessService.apiUri('/api/search/advanced');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
         final response = await http.post(
-          Uri.parse('/api/search/advanced'),
+          apiUri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(body),
         );
@@ -277,7 +293,7 @@ class SearchService {
 
       final response = await http
           .get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: headers,
       )
           .timeout(

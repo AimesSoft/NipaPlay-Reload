@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/global_hotkey_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -176,7 +177,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
       final url = '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword)}';
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,
@@ -253,7 +254,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
       debugPrint('API请求URL: $url');
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,

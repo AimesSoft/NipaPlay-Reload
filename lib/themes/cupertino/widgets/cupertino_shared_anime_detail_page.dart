@@ -19,6 +19,7 @@ import 'package:http/http.dart' as http;
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_rating_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bangumi_collection_sheet.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class CupertinoDetailCastMember {
   const CupertinoDetailCastMember({
@@ -2327,7 +2328,7 @@ class _CupertinoSharedAnimeDetailPageState
       );
       debugPrint('[共享番剧详情] 请求Bangumi高清封面: $uri');
       final response = await http.head(
-        uri,
+        WebRemoteAccessService.proxyUri(uri),
         headers: const {'User-Agent': 'NipaPlay/1.0'},
       ).timeout(const Duration(seconds: 5));
 

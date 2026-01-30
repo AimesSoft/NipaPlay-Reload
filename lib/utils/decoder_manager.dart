@@ -8,7 +8,7 @@ import 'system_resource_monitor.dart'; // 导入系统资源监视器
 /// 解码器管理类，负责视频解码器的配置和管理
 class DecoderManager {
   Player player; // Type remains Player, but now it's our abstracted Player
-  // static const String _useHardwareDecoderKey = 'use_hardware_decoder'; // REMOVED
+  static const String _useHardwareDecoderKey = 'use_hardware_decoder';
   static const String _selectedDecodersKey = 'selected_decoders';
   
   // 当前活跃解码器信息
@@ -31,48 +31,28 @@ class DecoderManager {
     if (kIsWeb) return;
     // 设置硬件解码器
     final prefs = await SharedPreferences.getInstance();
-    // final useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true; // REMOVED
+    final useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true;
 
-    // ALWAYS try to use hardware decoders
     final savedDecoders = prefs.getStringList(_selectedDecodersKey);
+    List<String> decoders = [];
     if (savedDecoders != null && savedDecoders.isNotEmpty) {
-      player.setDecoders(MediaType.video, savedDecoders); // Use our MediaType
-      // 更新活跃解码器信息
-      _updateActiveDecoderInfo(savedDecoders);
+      decoders = List<String>.from(savedDecoders);
     } else {
-      // 获取当前平台的所有解码器
-      List<String> decoders = [];
-      final allDecoders = getAllSupportedDecoders();
-      
-      if (Platform.isMacOS) {
-        decoders = allDecoders['macos']!;
-        debugPrint('macOS平台默认解码器设置: $decoders');
-      } else if (Platform.isIOS) {
-        decoders = allDecoders['ios']!;
-        debugPrint('iOS平台默认解码器设置: $decoders');
-      } else if (Platform.isWindows) {
-        decoders = allDecoders['windows']!;
-        debugPrint('Windows平台默认解码器设置: $decoders');
-      } else if (Platform.isLinux) {
-        decoders = allDecoders['linux']!;
-        debugPrint('Linux平台默认解码器设置: $decoders');
-      } else if (Platform.isAndroid) {
-        decoders = allDecoders['android']!;
-        debugPrint('Android平台默认解码器设置: $decoders');
-      } else {
-        // 未知平台，使用FFmpeg作为兜底方案
-        decoders = ["FFmpeg"];
-        debugPrint('未知平台，使用FFmpeg解码器');
-      }
-      
-      // 如果解码器列表不为空，则设置解码器
-      if (decoders.isNotEmpty) {
-        debugPrint('设置平台解码器: $decoders');
-        player.setDecoders(MediaType.video, decoders); // Use our MediaType
-        _updateActiveDecoderInfo(decoders);
-        
-        // 保存设置的解码器列表
-        await prefs.setStringList(_selectedDecodersKey, decoders);
+      decoders = _getPlatformDefaultDecoders();
+      debugPrint('使用平台默认解码器设置: $decoders');
+    }
+
+    final adjustedDecoders =
+        _applyHardwarePreference(decoders, useHardwareDecoder);
+
+    if (adjustedDecoders.isNotEmpty) {
+      player.setDecoders(MediaType.video, adjustedDecoders); // Use our MediaType
+      _updateActiveDecoderInfo(adjustedDecoders);
+
+      if (savedDecoders == null ||
+          savedDecoders.isEmpty ||
+          !listEquals(savedDecoders, adjustedDecoders)) {
+        await prefs.setStringList(_selectedDecodersKey, adjustedDecoders);
       }
     }
     
@@ -141,17 +121,77 @@ class DecoderManager {
     return platformDecoders;
   }
 
+  List<String> _getPlatformDefaultDecoders() {
+    if (kIsWeb) return [];
+    final allDecoders = getAllSupportedDecoders();
+    if (Platform.isMacOS) {
+      return List<String>.from(allDecoders['macos']!);
+    } else if (Platform.isIOS) {
+      return List<String>.from(allDecoders['ios']!);
+    } else if (Platform.isWindows) {
+      return List<String>.from(allDecoders['windows']!);
+    } else if (Platform.isLinux) {
+      return List<String>.from(allDecoders['linux']!);
+    } else if (Platform.isAndroid) {
+      return List<String>.from(allDecoders['android']!);
+    }
+    return ["FFmpeg"];
+  }
+
+  bool _isSoftwareDecoder(String decoder) {
+    final lower = decoder.toLowerCase();
+    return lower.contains('ffmpeg') || lower.contains('dav1d');
+  }
+
+  List<String> _applyHardwarePreference(
+      List<String> decoders, bool preferHardware) {
+    if (decoders.isEmpty) return decoders;
+    final software = <String>[];
+    final hardware = <String>[];
+    for (final decoder in decoders) {
+      if (_isSoftwareDecoder(decoder)) {
+        software.add(decoder);
+      } else {
+        hardware.add(decoder);
+      }
+    }
+    return preferHardware
+        ? <String>[...hardware, ...software]
+        : <String>[...software, ...hardware];
+  }
+
+  Future<void> applyHardwareDecodingPreference(bool enabled) async {
+    if (kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    final savedDecoders = prefs.getStringList(_selectedDecodersKey);
+    final baseDecoders = (savedDecoders != null && savedDecoders.isNotEmpty)
+        ? List<String>.from(savedDecoders)
+        : _getPlatformDefaultDecoders();
+    final adjustedDecoders = _applyHardwarePreference(baseDecoders, enabled);
+
+    if (adjustedDecoders.isEmpty) return;
+    player.setDecoders(MediaType.video, adjustedDecoders);
+    _updateActiveDecoderInfo(adjustedDecoders);
+
+    if (savedDecoders == null ||
+        savedDecoders.isEmpty ||
+        !listEquals(savedDecoders, adjustedDecoders)) {
+      await prefs.setStringList(_selectedDecodersKey, adjustedDecoders);
+    }
+  }
+
   /// 更新解码器设置
   Future<void> updateDecoders(List<String> decoders) async {
     if (kIsWeb) return;
     if (decoders.isNotEmpty) {
-      player.setDecoders(MediaType.video, decoders); // Use our MediaType
-      // 更新活跃解码器信息
-      _updateActiveDecoderInfo(decoders);
-      
-      // 保存设置
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_selectedDecodersKey, decoders);
+      final useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true;
+      final adjustedDecoders =
+          _applyHardwarePreference(decoders, useHardwareDecoder);
+      player.setDecoders(MediaType.video, adjustedDecoders); // Use our MediaType
+      _updateActiveDecoderInfo(adjustedDecoders);
+
+      await prefs.setStringList(_selectedDecodersKey, adjustedDecoders);
     }
   }
 
@@ -251,15 +291,23 @@ class DecoderManager {
       else if (Platform.isAndroid) platformDefaultDecoders = allSupported['android']!;
       else platformDefaultDecoders = ["FFmpeg"];
 
-      if (platformDefaultDecoders.isNotEmpty && !platformDefaultDecoders[0].toLowerCase().contains("ffmpeg")) {
-        _currentDecoder = "硬解 - ${platformDefaultDecoders[0]} (默认)";
+      if (platformDefaultDecoders.isNotEmpty) {
+        final primaryDecoder = platformDefaultDecoders[0];
+        if (_isSoftwareDecoder(primaryDecoder)) {
+          _currentDecoder = "软解 - $primaryDecoder (默认)";
+        } else {
+          _currentDecoder = "硬解 - $primaryDecoder (默认)";
+        }
       } else {
-        _currentDecoder = "软解 - FFmpeg (默认)";
+        _currentDecoder = "未知 (默认)";
       }
-    } else if (decoders.length == 1 && decoders[0].toLowerCase().contains("ffmpeg")) {
-      _currentDecoder = "软解 - FFmpeg (配置)";
     } else if (decoders.isNotEmpty) {
-      _currentDecoder = "硬解 - ${decoders[0]} (配置)";
+      final primaryDecoder = decoders[0];
+      if (_isSoftwareDecoder(primaryDecoder)) {
+        _currentDecoder = "软解 - $primaryDecoder (配置)";
+      } else {
+        _currentDecoder = "硬解 - $primaryDecoder (配置)";
+      }
     } else {
        _currentDecoder = "未知 (配置检查失败)";
     }
@@ -329,6 +377,12 @@ class DecoderManager {
   /// 强制启用硬件解码（如果当前是软解）
   Future<void> forceEnableHardwareDecoder() async {
     if (kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    final useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true;
+    if (!useHardwareDecoder) {
+      debugPrint('硬件解码开关已关闭，跳过强制启用硬件解码');
+      return;
+    }
     // Now that hardware decoding is default, this function primarily re-applies default hardware-first settings.
     // This can be useful if the player somehow ended up on software decoding despite hardware availability.
     debugPrint('尝试重新应用硬件优先的解码器设置...');
@@ -360,32 +414,33 @@ class DecoderManager {
           // 在macOS上检查VideoToolbox状态
           if (Platform.isMacOS) {
             try {
-              final vtHardware = player.getProperty('vt.hardware');
-              final hwdec = player.getProperty('hwdec');
-              final vtFormat = player.getProperty('videotoolbox.format');
-              
-              if (vtHardware == "1" || 
-                  (hwdec != null && hwdec.contains('videotoolbox')) ||
-                  (vtFormat != null && vtFormat.isNotEmpty)) {
-                debugPrint('截图后确认VideoToolbox正在工作');
+              final prefs = await SharedPreferences.getInstance();
+              final useHardwareDecoder =
+                  prefs.getBool(_useHardwareDecoderKey) ?? true;
+              if (!useHardwareDecoder) {
+                debugPrint('硬件解码开关已关闭，跳过VideoToolbox重新启用');
               } else {
-                debugPrint('截图后发现VideoToolbox可能未激活，尝试重新启用硬件解码...');
-                
-                // 重新应用VideoToolbox设置
-                player.setProperty("videotoolbox.format", "nv12");
-                player.setProperty("vt.async", "1");
-                player.setProperty("vt.hardware", "1");
-                player.setProperty("hwdec", "videotoolbox");
-                
-                // 刷新解码器列表
-                // SharedPreferences prefs = await SharedPreferences.getInstance(); // No longer need prefs for this
-                // final useHardwareDecoder = prefs.getBool(_useHardwareDecoderKey) ?? true; // REMOVED, always true logic now
-                
-                // if (useHardwareDecoder) { // REMOVED conditional
-                List<String> decoders = ["VT", "hap", "dav1d", "FFmpeg"]; // Default hardware-first for macOS
-                player.setDecoders(MediaType.video, decoders);
-                debugPrint('截图后重新应用解码器设置: $decoders');
-                // } // REMOVED conditional
+                final vtHardware = player.getProperty('vt.hardware');
+                final hwdec = player.getProperty('hwdec');
+                final vtFormat = player.getProperty('videotoolbox.format');
+              
+                if (vtHardware == "1" ||
+                    (hwdec != null && hwdec.contains('videotoolbox')) ||
+                    (vtFormat != null && vtFormat.isNotEmpty)) {
+                  debugPrint('截图后确认VideoToolbox正在工作');
+                } else {
+                  debugPrint('截图后发现VideoToolbox可能未激活，尝试重新启用硬件解码...');
+                  
+                  // 重新应用VideoToolbox设置
+                  player.setProperty("videotoolbox.format", "nv12");
+                  player.setProperty("vt.async", "1");
+                  player.setProperty("vt.hardware", "1");
+                  player.setProperty("hwdec", "videotoolbox");
+                  
+                  List<String> decoders = ["VT", "hap", "dav1d", "FFmpeg"]; // Default hardware-first for macOS
+                  player.setDecoders(MediaType.video, decoders);
+                  debugPrint('截图后重新应用解码器设置: $decoders');
+                }
               }
             } catch (e) {
               debugPrint('截图后检查VideoToolbox状态失败: $e');

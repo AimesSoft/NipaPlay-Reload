@@ -9,6 +9,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class TranslationButton extends StatefulWidget {
   final int animeId;
@@ -49,7 +50,9 @@ class _TranslationButtonState extends State<TranslationButton> {
       ////debugPrint('开始请求翻译...');
       
       final response = await http.post(
-        Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
+        WebRemoteAccessService.proxyUri(
+          Uri.parse('https://nipaplay.aimes-soft.com/tran.php'),
+        ),
         headers: {
           'Content-Type': 'application/json',
         },

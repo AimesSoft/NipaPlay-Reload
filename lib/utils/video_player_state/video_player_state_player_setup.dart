@@ -195,7 +195,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 添加网络错误处理的尝试/捕获块
       try {
         // 测试网络连接
-        await http.head(Uri.parse(videoPath));
+        await http.head(
+          WebRemoteAccessService.proxyUri(Uri.parse(videoPath)),
+        );
       } catch (e) {
         // 如果网络请求失败，使用专门的错误处理逻辑
         await _handleStreamUrlLoadingError(
@@ -207,7 +209,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       debugPrint('VideoPlayerState: 准备流媒体URL: $resolvedActualPlayUrl');
       // 对Jellyfin流媒体测试实际播放URL的连接
       try {
-        await http.head(Uri.parse(resolvedActualPlayUrl));
+        await http.head(
+          WebRemoteAccessService.proxyUri(Uri.parse(resolvedActualPlayUrl)),
+        );
       } catch (e) {
         // 如果网络请求失败，使用专门的错误处理逻辑
         await _handleStreamUrlLoadingError(
@@ -376,11 +380,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
         // 如果检测到使用软解，但硬件解码开关已打开，尝试强制启用硬件解码
         if (activeDecoder.contains("软解")) {
-          final prefs = await SharedPreferences.getInstance();
-          final useHardwareDecoder =
-              prefs.getBool('use_hardware_decoder') ?? true;
-
-          if (useHardwareDecoder) {
+          if (_useHardwareDecoder) {
             debugPrint('检测到使用软解但硬件解码已启用，尝试强制启用硬件解码...');
             // 延迟执行以避免干扰视频初始化
             Future.delayed(const Duration(seconds: 2), () async {

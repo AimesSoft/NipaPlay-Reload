@@ -56,6 +56,7 @@ import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/splash_screen.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/web_remote_access_gate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -794,12 +795,22 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             environment: environment,
             settings: uiThemeProvider.currentThemeSettings,
             overlayBuilder: overlayBuilder,
-            materialHomeBuilder: () =>
-                MainPage(launchFilePath: widget.launchFilePath),
-            fluentHomeBuilder: () =>
-                MainPage(launchFilePath: widget.launchFilePath),
-            cupertinoHomeBuilder: () =>
-                CupertinoMainPage(launchFilePath: widget.launchFilePath),
+            materialHomeBuilder: () => kIsWeb
+                ? WebRemoteAccessGate(
+                    child: MainPage(launchFilePath: widget.launchFilePath),
+                  )
+                : MainPage(launchFilePath: widget.launchFilePath),
+            fluentHomeBuilder: () => kIsWeb
+                ? WebRemoteAccessGate(
+                    child: MainPage(launchFilePath: widget.launchFilePath),
+                  )
+                : MainPage(launchFilePath: widget.launchFilePath),
+            cupertinoHomeBuilder: () => kIsWeb
+                ? WebRemoteAccessGate(
+                    child:
+                        CupertinoMainPage(launchFilePath: widget.launchFilePath),
+                  )
+                : CupertinoMainPage(launchFilePath: widget.launchFilePath),
           );
 
           return descriptor.buildApp(themeContext);

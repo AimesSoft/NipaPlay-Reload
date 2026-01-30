@@ -27,6 +27,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'dart:ui' as ui;
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -287,7 +288,12 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         List<BangumiAnime> animes;
         
         try {
-          final response = await http.get(Uri.parse('/api/media/local/items'));
+          final apiUri =
+              WebRemoteAccessService.apiUri('/api/media/local/items');
+          if (apiUri == null) {
+            throw Exception('未配置远程访问地址');
+          }
+          final response = await http.get(apiUri);
           if (response.statusCode == 200) {
             final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
             animes = data.map((d) => BangumiAnime.fromJson(d as Map<String, dynamic>)).toList();
@@ -397,7 +403,11 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   
   Future<void> _fetchSingleAnimeDetail(int animeId, SharedPreferences prefs) async {
     try {
-      final response = await http.get(Uri.parse('/api/bangumi/detail/$animeId'));
+      final apiUri = WebRemoteAccessService.apiUri('/api/bangumi/detail/$animeId');
+      if (apiUri == null) {
+        throw Exception('未配置远程访问地址');
+      }
+      final response = await http.get(apiUri);
       if (response.statusCode == 200) {
         final Map<String, dynamic> animeDetailData = json.decode(utf8.decode(response.bodyBytes));
         final animeDetail = BangumiAnime.fromJson(animeDetailData);

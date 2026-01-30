@@ -8,6 +8,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -701,7 +702,9 @@ class JellyfinDandanplayMatcher {
 
       debugPrint('发送匹配请求到弹弹play API');
       final response = await http.post(
-        Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
+        WebRemoteAccessService.proxyUri(
+          Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
+        ),
         headers: headers,
         body: body,
       );
@@ -792,7 +795,7 @@ class JellyfinDandanplayMatcher {
       debugPrint('请求URL: $url');
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,
@@ -891,7 +894,7 @@ class JellyfinDandanplayMatcher {
       debugPrint('请求URL (使用标题搜索剧集): $url');
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,

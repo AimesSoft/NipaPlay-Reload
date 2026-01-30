@@ -9,6 +9,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'storage_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 // 用于在 isolate 中处理图片的函数
 Future<Uint8List> _processImageInIsolate(Uint8List imageData) async {
@@ -142,7 +143,8 @@ class ImageCacheManager {
         }
 
         // 从网络下载
-        final response = await http.get(Uri.parse(url));
+        final response =
+            await http.get(WebRemoteAccessService.proxyUri(Uri.parse(url)));
         if (response.statusCode != 200) {
           throw Exception('Failed to load image with status code ${response.statusCode}');
         }

@@ -47,6 +47,10 @@ class DandanplayService {
     final currentServer = await NetworkSettings.getDandanplayServer();
   }
 
+  static Future<void> refreshWebApiBaseUrl({bool syncLogin = true}) async {
+    return;
+  }
+
   /// 获取当前弹弹play API 基础 URL（包含用户自定义设置）
   static Future<String> getApiBaseUrl() async {
     return await NetworkSettings.getDandanplayServer();

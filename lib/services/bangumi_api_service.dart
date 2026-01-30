@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 /// Bangumi API服务
 ///
@@ -63,7 +64,7 @@ class BangumiApiService {
 
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/v0/me'),
+        WebRemoteAccessService.proxyUri(Uri.parse('$_baseUrl/v0/me')),
         headers: {
           'Authorization': 'Bearer $_accessToken',
           'User-Agent': _userAgent,
@@ -97,7 +98,7 @@ class BangumiApiService {
     try {
       // 验证Token有效性
       final response = await http.get(
-        Uri.parse('$_baseUrl/v0/me'),
+        WebRemoteAccessService.proxyUri(Uri.parse('$_baseUrl/v0/me')),
         headers: {
           'Authorization': 'Bearer $token',
           'User-Agent': _userAgent,
@@ -199,10 +200,11 @@ class BangumiApiService {
     }
 
     try {
-      Uri uri = Uri.parse('$_baseUrl$path');
+      Uri targetUri = Uri.parse('$_baseUrl$path');
       if (queryParams != null && queryParams.isNotEmpty) {
-        uri = uri.replace(queryParameters: queryParams);
+        targetUri = targetUri.replace(queryParameters: queryParams);
       }
+      final uri = WebRemoteAccessService.proxyUri(targetUri);
 
       final headers = {
         'Authorization': 'Bearer $_accessToken',

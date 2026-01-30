@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'loading_placeholder.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 // 图片加载模式
 enum CachedImageLoadMode {
@@ -136,7 +137,9 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     }
     
     try {
-      final response = await http.get(Uri.parse(widget.imageUrl));
+      final response = await http.get(
+        WebRemoteAccessService.proxyUri(Uri.parse(widget.imageUrl)),
+      );
       
       if (response.statusCode == 200) {
         final codec = await ui.instantiateImageCodec(response.bodyBytes);
@@ -156,7 +159,9 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
 
   // 新增方法：直接加载原始图片，不进行压缩
   Future<ui.Image> _loadOriginalImage(String imageUrl) async {
-    final response = await http.get(Uri.parse(imageUrl));
+    final response = await http.get(
+      WebRemoteAccessService.proxyUri(Uri.parse(imageUrl)),
+    );
     if (response.statusCode != 200) {
       throw Exception('Failed to load image');
     }

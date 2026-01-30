@@ -106,7 +106,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
       
       
       final response = await http.head(
-        Uri.parse(imageApiUrl),
+        WebRemoteAccessService.proxyUri(Uri.parse(imageApiUrl)),
         headers: {
           'User-Agent': 'NipaPlay/1.0',
         },
@@ -456,7 +456,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   // 辅助方法：验证图片URL是否有效（HEAD校验，确保非404并且为图片）
   Future<bool> _validateImageUrl(String url) async {
     try {
-      final response = await http.head(Uri.parse(url)).timeout(
+      final response = await http
+          .head(WebRemoteAccessService.proxyUri(Uri.parse(url)))
+          .timeout(
         const Duration(seconds: 2),
         onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
       );

@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart'; // 导入debugPrint
 import '../providers/service_provider.dart';
 import 'local_media_share_api.dart';
 import 'local_media_management_api.dart';
+import 'web_ui_proxy_api.dart';
 
 class WebApiService {
   final Router _router = Router();
@@ -18,6 +19,7 @@ class WebApiService {
   final LocalMediaShareApi _localMediaShareApi = LocalMediaShareApi();
   final LocalMediaManagementApi _localMediaManagementApi =
       LocalMediaManagementApi();
+  final WebUiProxyApi _webUiProxyApi = WebUiProxyApi();
 
   WebApiService() {
     _router.get('/info', handleInfoRequest);
@@ -26,6 +28,13 @@ class WebApiService {
     _router.get('/danmaku/video_info', handleVideoInfoRequest);
     _router.get('/danmaku/load', handleDanmakuLoadRequest);
     _router.get('/image_proxy', handleImageProxyRequest);
+    _router.add('GET', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('POST', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('PUT', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('PATCH', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('DELETE', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('HEAD', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('OPTIONS', '/web_proxy', _webUiProxyApi.handleOptions);
 
     // 新增搜索相关的API路由
     _router.get('/search/config', handleSearchConfigRequest);

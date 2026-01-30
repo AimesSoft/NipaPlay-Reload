@@ -20,6 +20,7 @@ import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';

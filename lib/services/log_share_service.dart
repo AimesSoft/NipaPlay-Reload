@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class LogShareService {
   static const String _baseUrl = 'https://www.aimes-soft.com/nipaplay.php';  // 这个地址是正确的
@@ -20,7 +21,7 @@ class LogShareService {
       debugPrint('[LogShareService] 开始上传日志...');
       
       final response = await http.post(
-        Uri.parse(_baseUrl),
+        WebRemoteAccessService.proxyUri(Uri.parse(_baseUrl)),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

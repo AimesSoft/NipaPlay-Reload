@@ -8,6 +8,7 @@ import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -31,27 +32,8 @@ class DandanplayService {
   static String _baseUrl = '';
   static String? _webApiBaseUrl;
   static bool _webApiProbeCompleted = false;
+  static String? _lastWebApiCandidate;
   static bool _useWebApiProxy = false;
-
-  static String? _resolveWebApiBaseUrlOverride() {
-    final uri = Uri.base;
-    final rawBaseUrl = uri.queryParameters['api'] ??
-        uri.queryParameters['apiBase'] ??
-        uri.queryParameters['baseUrl'];
-    final normalizedBaseUrl = rawBaseUrl?.trim();
-    if (normalizedBaseUrl != null && normalizedBaseUrl.isNotEmpty) {
-      return _normalizeBaseUrl(normalizedBaseUrl);
-    }
-    final origin = uri.origin.trim();
-    if (origin.isNotEmpty && origin != 'null') {
-      return _normalizeBaseUrl(origin);
-    }
-    return null;
-  }
-
-  static String _normalizeBaseUrl(String url) {
-    return url.replaceAll(RegExp(r'/+$'), '');
-  }
 
   static Future<bool> _probeWebApiBaseUrl(String baseUrl) async {
     try {
@@ -69,21 +51,35 @@ class DandanplayService {
   }
 
   static Future<void> _ensureApiBaseUrl() async {
-    if (_webApiProbeCompleted) return;
+    final explicitOverride =
+        WebRemoteAccessService.resolveBaseUrlFromQuery();
+    String? candidate = explicitOverride;
+    if (candidate == null) {
+      await WebRemoteAccessService.ensureInitialized();
+      candidate = WebRemoteAccessService.cachedBaseUrl ??
+          WebRemoteAccessService.resolveBaseUrlFromOrigin();
+    }
+    if (_webApiProbeCompleted && candidate == _lastWebApiCandidate) {
+      return;
+    }
     _webApiProbeCompleted = true;
+    _lastWebApiCandidate = candidate;
+    _useWebApiProxy = false;
+    _webApiBaseUrl = null;
 
-    final candidate = _resolveWebApiBaseUrlOverride();
     if (candidate != null && candidate.isNotEmpty) {
       if (await _probeWebApiBaseUrl(candidate)) {
         _webApiBaseUrl = candidate;
         _useWebApiProxy = true;
       } else {
-        // 用户显式传入的地址但不是本地Web API，则作为直连弹弹play地址使用
-        _baseUrl = candidate;
+        // 仅当显式传入地址时才作为直连弹弹play地址使用
+        if (explicitOverride != null) {
+          _baseUrl = candidate;
+        }
       }
     }
 
-    if (_baseUrl.isEmpty) {
+    if (_baseUrl.isEmpty || explicitOverride == null) {
       _baseUrl = await NetworkSettings.getDandanplayServer();
     }
   }
@@ -112,6 +108,17 @@ class DandanplayService {
       await _syncLoginStatus(webApiBaseUrl);
     } else if (_token != null && _token!.isNotEmpty) {
       _isLoggedIn = true;
+    }
+  }
+
+  static Future<void> refreshWebApiBaseUrl({bool syncLogin = true}) async {
+    _webApiProbeCompleted = false;
+    await _ensureApiBaseUrl();
+    if (syncLogin) {
+      final webApiBaseUrl = await _getWebApiBaseUrl();
+      if (kIsWeb && webApiBaseUrl != null) {
+        await _syncLoginStatus(webApiBaseUrl);
+      }
     }
   }
   
