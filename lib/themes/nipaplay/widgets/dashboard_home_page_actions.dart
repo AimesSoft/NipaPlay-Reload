@@ -326,6 +326,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           return;
         }
       }
+    } else if (kIsWeb) {
+      fileExists = true;
     } else {
       final videoFile = File(currentItem.filePath);
       fileExists = videoFile.existsSync();

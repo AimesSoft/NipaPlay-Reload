@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:intl/intl.dart';
@@ -265,6 +266,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           return !item.filePath.startsWith('jellyfin://') &&
               !item.filePath.startsWith('emby://') &&
               !MediaSourceUtils.isSmbPath(item.filePath) &&
+              !MediaSourceUtils.isWebDavPath(item.filePath) &&
               !item.isDandanplayRemote;
         }).toList();
 
@@ -683,6 +685,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             return !item.filePath.startsWith('jellyfin://') &&
                 !item.filePath.startsWith('emby://') &&
                 !MediaSourceUtils.isSmbPath(item.filePath) &&
+                !MediaSourceUtils.isWebDavPath(item.filePath) &&
                 !item.isDandanplayRemote;
           }).toList();
 
@@ -2327,6 +2330,19 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Widget _getVideoThumbnail(WatchHistoryItem item) {
     final now = DateTime.now();
+    final thumbnailPath = item.thumbnailPath;
+
+    if (thumbnailPath != null &&
+        (thumbnailPath.startsWith('http://') ||
+            thumbnailPath.startsWith('https://'))) {
+      return CachedNetworkImage(
+        imageUrl: thumbnailPath,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorWidget: (_, __, ___) => _buildDefaultThumbnail(item),
+      );
+    }
 
     // iOS平台特殊处理：检查截图文件的修改时间
     if (Platform.isIOS && item.thumbnailPath != null) {
@@ -2685,18 +2701,22 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         }
       }
     } else {
-      final file = File(filePath);
-      fileExists = file.existsSync();
+      if (kIsWeb) {
+        fileExists = true;
+      } else {
+        final file = File(filePath);
+        fileExists = file.existsSync();
 
-      if (!fileExists && Platform.isIOS) {
-        final altPath = filePath.startsWith('/private')
-            ? filePath.replaceFirst('/private', '')
-            : '/private$filePath';
-        final altFile = File(altPath);
-        if (altFile.existsSync()) {
-          filePath = altPath;
-          currentItem = currentItem.copyWith(filePath: altPath);
-          fileExists = true;
+        if (!fileExists && Platform.isIOS) {
+          final altPath = filePath.startsWith('/private')
+              ? filePath.replaceFirst('/private', '')
+              : '/private$filePath';
+          final altFile = File(altPath);
+          if (altFile.existsSync()) {
+            filePath = altPath;
+            currentItem = currentItem.copyWith(filePath: altPath);
+            fileExists = true;
+          }
         }
       }
     }

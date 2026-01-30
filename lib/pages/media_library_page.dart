@@ -31,16 +31,24 @@ import 'dart:ui' as ui;
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
 
+enum MediaLibrarySourceType {
+  local,
+  webdav,
+  smb,
+}
+
 class MediaLibraryPage extends StatefulWidget {
   final OnPlayEpisodeCallback? onPlayEpisode; // Add this callback
   final bool jellyfinMode; // 是否为Jellyfin媒体库模式
   final VoidCallback? onSourcesUpdated;
+  final MediaLibrarySourceType sourceType;
 
   const MediaLibraryPage({
     super.key, 
     this.onPlayEpisode,
     this.jellyfinMode = false,
     this.onSourcesUpdated,
+    this.sourceType = MediaLibrarySourceType.local,
   }); // Modify constructor
 
   @override
@@ -144,6 +152,53 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     });
   }
 
+  String get _sourceDisplayName {
+    switch (widget.sourceType) {
+      case MediaLibrarySourceType.webdav:
+        return 'WebDAV媒体库';
+      case MediaLibrarySourceType.smb:
+        return 'SMB媒体库';
+      case MediaLibrarySourceType.local:
+      default:
+        return '本地媒体库';
+    }
+  }
+
+  String get _emptyMessage {
+    switch (widget.sourceType) {
+      case MediaLibrarySourceType.webdav:
+        return 'WebDAV媒体库为空。\n刮削后的动画将显示在这里。';
+      case MediaLibrarySourceType.smb:
+        return 'SMB媒体库为空。\n刮削后的动画将显示在这里。';
+      case MediaLibrarySourceType.local:
+      default:
+        return '媒体库为空。\n观看过的动画将显示在这里。';
+    }
+  }
+
+  bool _isLocalSourceItem(WatchHistoryItem item) {
+    return !item.filePath.startsWith('jellyfin://') &&
+        !item.filePath.startsWith('emby://') &&
+        !MediaSourceUtils.isSmbPath(item.filePath) &&
+        !MediaSourceUtils.isWebDavPath(item.filePath) &&
+        !item.filePath.contains('/api/media/local/share/') &&
+        !item.isDandanplayRemote;
+  }
+
+  bool _matchesSource(WatchHistoryItem item) {
+    switch (widget.sourceType) {
+      case MediaLibrarySourceType.webdav:
+        return MediaSourceUtils.isWebDavPath(item.filePath) &&
+            !item.isDandanplayRemote;
+      case MediaLibrarySourceType.smb:
+        return MediaSourceUtils.isSmbPath(item.filePath) &&
+            !item.isDandanplayRemote;
+      case MediaLibrarySourceType.local:
+      default:
+        return _isLocalSourceItem(item);
+    }
+  }
+
   Future<void> _processAndSortHistory(List<WatchHistoryItem> watchHistory) async {
     if (!mounted) return;
     
@@ -164,12 +219,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       return;
     }
 
-    final filteredHistory = watchHistory.where((item) =>
-        !item.filePath.startsWith('jellyfin://') &&
-        !item.filePath.startsWith('emby://') &&
-        !MediaSourceUtils.isSmbPath(item.filePath) &&
-        !item.filePath.contains('/api/media/local/share/') &&
-        !item.isDandanplayRemote).toList();
+    final filteredHistory = watchHistory.where(_matchesSource).toList();
 
     final Map<int, WatchHistoryItem> latestHistoryItemMap = {};
     for (var item in filteredHistory) {
@@ -223,6 +273,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
     try {
       if (kIsWeb) {
+        if (widget.sourceType != MediaLibrarySourceType.local) {
+          if (mounted) {
+            setState(() {
+              _uniqueLibraryItems = [];
+              _isLoadingInitial = false;
+              _hasWebDataLoaded = true;
+            });
+          }
+          return;
+        }
         // Web environment: 完全模仿新番更新页面的逻辑
         List<BangumiAnime> animes;
         
@@ -591,7 +651,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
     
     // 获取该动画的所有历史记录并去重（按episodeId或标题，如果有的话）
-    final allHistory = watchHistoryProvider.history.where((h) => h.animeId == animeId).toList();
+    final allHistory = watchHistoryProvider.history
+        .where((h) => h.animeId == animeId && _matchesSource(h))
+        .toList();
     
     // 如果没有历史记录（理论上不应该，因为这里是媒体库），显示未观看
     if (allHistory.isEmpty) return '未观看';
@@ -664,11 +726,11 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                '媒体库为空。\n观看过的动画将显示在这里。',
+              Text(
+                _emptyMessage,
                 textAlign: TextAlign.center,
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.grey, fontSize: 16),
+                locale: const Locale("zh-Hans","zh"),
+                style: const TextStyle(color: Colors.grey, fontSize: 16),
               ),
               const SizedBox(height: 16),
             ],
@@ -682,6 +744,9 @@ style: TextStyle(color: Colors.grey, fontSize: 16),
         LocalLibraryControlBar(
           searchController: _searchController,
           currentSort: _currentSort,
+          title: widget.sourceType == MediaLibrarySourceType.local
+              ? null
+              : _sourceDisplayName,
           onSearchChanged: (val) => _applyFilter(),
           onSortChanged: (type) {
             _currentSort = type;

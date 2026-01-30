@@ -29,11 +29,6 @@ class MultiAddressServerService {
   
   /// 从存储加载服务器配置
   Future<void> loadProfiles() async {
-    if (kIsWeb) {
-      _profiles = [];
-      return;
-    }
-    
     try {
       final prefs = await SharedPreferences.getInstance();
       final profilesJson = prefs.getString(_profilesKey);
@@ -54,8 +49,6 @@ class MultiAddressServerService {
   
   /// 保存服务器配置到存储
   Future<void> saveProfiles() async {
-    if (kIsWeb) return;
-    
     try {
       final prefs = await SharedPreferences.getInstance();
       final profilesJson = json.encode(_profiles.map((p) => p.toJson()).toList());

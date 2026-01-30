@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:path/path.dart' as path;
@@ -217,6 +218,11 @@ class _HistoryAllModalState extends State<HistoryAllModal> {
 
   Future<Uint8List?> _loadThumbnail(String? path) {
     if (path == null) return Future.value(null);
+    final lowerPath = path.toLowerCase();
+    if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
+      return Future.value(null);
+    }
+    if (kIsWeb) return Future.value(null);
     return _thumbnailFutures.putIfAbsent(path, () async {
       try {
         final file = File(path);
@@ -289,23 +295,11 @@ class HistoryListItem extends StatelessWidget {
                   // 缩略图
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
-                          child: SizedBox(
-                            width: 72,
-                            height: 48,
-                            child: FutureBuilder<Uint8List?>(
-                              future: thumbnailLoader(item.thumbnailPath),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData && snapshot.data != null) {
-                                  return Image.memory(
-                                    snapshot.data!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
-                                  );
-                                }
-                                return _buildDefaultThumbnail();
-                              },
-                            ),
-                          ),
+                    child: SizedBox(
+                      width: 72,
+                      height: 48,
+                      child: _buildThumbnail(item),
+                    ),
                         ),
                   const SizedBox(width: 12),
                   // 标题和副标题
@@ -366,6 +360,37 @@ style: TextStyle(
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildThumbnail(WatchHistoryItem item) {
+    final path = item.thumbnailPath;
+    if (path != null) {
+      final lowerPath = path.toLowerCase();
+      if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
+        return Image.network(
+          path,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
+        );
+      }
+      if (kIsWeb) {
+        return _buildDefaultThumbnail();
+      }
+    }
+
+    return FutureBuilder<Uint8List?>(
+      future: thumbnailLoader(item.thumbnailPath),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data != null) {
+          return Image.memory(
+            snapshot.data!,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _buildDefaultThumbnail(),
+          );
+        }
+        return _buildDefaultThumbnail();
+      },
     );
   }
 

@@ -30,6 +30,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/local_media_share_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -1275,6 +1276,28 @@ enum _LibrarySource {
   smb,
 }
 
+class _RemoteScrapeCandidate {
+  final String filePath;
+  final String fileName;
+
+  const _RemoteScrapeCandidate({
+    required this.filePath,
+    required this.fileName,
+  });
+}
+
+class _RemoteScrapeResult {
+  final int total;
+  final int matched;
+  final int failed;
+
+  const _RemoteScrapeResult({
+    required this.total,
+    required this.matched,
+    required this.failed,
+  });
+}
+
 class CupertinoLocalMediaLibraryCard extends StatefulWidget {
   const CupertinoLocalMediaLibraryCard({
     super.key,
@@ -1995,23 +2018,27 @@ class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
         throw '获取 Emby 播放地址失败：$e';
       }
     } else {
-      final file = File(filePath);
-      fileExists = file.existsSync();
+      if (kIsWeb) {
+        fileExists = true;
+      } else {
+        final file = File(filePath);
+        fileExists = file.existsSync();
 
-      if (!fileExists && Platform.isIOS) {
-        final altPath = filePath.startsWith('/private')
-            ? filePath.replaceFirst('/private', '')
-            : '/private$filePath';
-        final altFile = File(altPath);
-        if (altFile.existsSync()) {
-          filePath = altPath;
-          historyItem.filePath = altPath;
-          fileExists = true;
+        if (!fileExists && Platform.isIOS) {
+          final altPath = filePath.startsWith('/private')
+              ? filePath.replaceFirst('/private', '')
+              : '/private$filePath';
+          final altFile = File(altPath);
+          if (altFile.existsSync()) {
+            filePath = altPath;
+            historyItem.filePath = altPath;
+            fileExists = true;
+          }
         }
-      }
 
-      if (!fileExists) {
-        throw '文件不存在或无法访问：${p.basename(filePath)}';
+        if (!fileExists) {
+          throw '文件不存在或无法访问：${p.basename(filePath)}';
+        }
       }
     }
 
@@ -3187,7 +3214,7 @@ class _CupertinoLibraryManagementSheetState
                       minSize: 30,
                       onPressed: () =>
                           _scanWebDAVFolder(connection, file.path, file.name),
-                      child: const Text('扫描'),
+                      child: const Text('刮削'),
                     ),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
@@ -3396,6 +3423,96 @@ class _CupertinoLibraryManagementSheetState
     }
   }
 
+  int? _parseMatchId(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  Future<_RemoteScrapeResult> _scrapeRemoteFiles({
+    required String sourceLabel,
+    required List<_RemoteScrapeCandidate> candidates,
+  }) async {
+    int matched = 0;
+    int failed = 0;
+
+    for (final candidate in candidates) {
+      try {
+        final videoInfo = await DandanplayService.getVideoInfo(candidate.filePath);
+        final matches = videoInfo['matches'];
+        if (videoInfo['isMatched'] != true ||
+            matches is! List ||
+            matches.isEmpty ||
+            matches.first is! Map) {
+          failed++;
+          continue;
+        }
+
+        final match = Map<String, dynamic>.from(matches.first as Map);
+        final animeId = _parseMatchId(match['animeId']);
+        final episodeId = _parseMatchId(match['episodeId']);
+        if (animeId == null || episodeId == null) {
+          failed++;
+          continue;
+        }
+
+        final existingHistory =
+            await WatchHistoryManager.getHistoryItem(candidate.filePath);
+        final rawAnimeTitle = videoInfo['animeTitle'] ?? match['animeTitle'];
+        final rawEpisodeTitle =
+            videoInfo['episodeTitle'] ?? match['episodeTitle'];
+        final rawHash = videoInfo['fileHash'] ?? videoInfo['hash'];
+        final animeTitle = rawAnimeTitle?.toString();
+        final episodeTitle = rawEpisodeTitle?.toString();
+        final hashString = rawHash?.toString();
+        final durationFromMatch = (videoInfo['duration'] is int)
+            ? videoInfo['duration'] as int
+            : (existingHistory?.duration ?? 0);
+        final preserveProgress = existingHistory != null &&
+            existingHistory.watchProgress > 0.01 &&
+            !existingHistory.isFromScan;
+
+        final historyItem = WatchHistoryItem(
+          filePath: candidate.filePath,
+          animeName: animeTitle?.isNotEmpty == true
+              ? animeTitle!
+              : (existingHistory?.animeName ??
+                  p.basenameWithoutExtension(candidate.fileName)),
+          episodeTitle: episodeTitle?.isNotEmpty == true
+              ? episodeTitle
+              : existingHistory?.episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: preserveProgress
+              ? existingHistory!.watchProgress
+              : (existingHistory?.watchProgress ?? 0.0),
+          lastPosition: preserveProgress
+              ? existingHistory!.lastPosition
+              : (existingHistory?.lastPosition ?? 0),
+          duration: durationFromMatch,
+          lastWatchTime: DateTime.now(),
+          thumbnailPath: existingHistory?.thumbnailPath,
+          isFromScan: !preserveProgress,
+          videoHash: hashString?.isNotEmpty == true
+              ? hashString
+              : existingHistory?.videoHash,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        matched++;
+      } catch (e) {
+        failed++;
+        debugPrint('$sourceLabel 刮削失败: ${candidate.fileName} -> $e');
+      }
+    }
+
+    return _RemoteScrapeResult(
+      total: candidates.length,
+      matched: matched,
+      failed: failed,
+    );
+  }
+
   Future<void> _scanWebDAVFolder(
     WebDAVConnection connection,
     String folderPath,
@@ -3404,8 +3521,8 @@ class _CupertinoLibraryManagementSheetState
     final confirm = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('扫描 WebDAV 文件夹'),
-        content: Text('确定要扫描“$folderName”吗？\n扫描后将把其中的视频文件添加到本地媒体库。'),
+        title: const Text('刮削 WebDAV 文件夹'),
+        content: Text('确定要刮削“$folderName”吗？\n刮削后将把其中的视频文件匹配到 WebDAV 媒体库。'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -3413,7 +3530,7 @@ class _CupertinoLibraryManagementSheetState
           ),
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('扫描'),
+            child: const Text('刮削'),
           ),
         ],
       ),
@@ -3424,32 +3541,36 @@ class _CupertinoLibraryManagementSheetState
     }
 
     try {
-      _showSnack('正在扫描 $folderName…');
+      _showSnack('正在刮削 $folderName…');
       final files = await _getWebDAVVideoFiles(connection, folderPath);
       if (files.isEmpty) {
-        _showSnack('未找到可导入的视频文件');
+        _showSnack('未找到可刮削的视频文件');
         return;
       }
 
-      for (final file in files) {
-        final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
-        final historyItem = WatchHistoryItem(
-          filePath: fileUrl,
-          animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-          episodeTitle: '',
-          duration: 0,
-          lastPosition: 0,
-          watchProgress: 0.0,
-          lastWatchTime: DateTime.now(),
-          isFromScan: true,
-        );
-        await WatchHistoryManager.addOrUpdateHistory(historyItem);
-      }
+      final candidates = files
+          .map((file) => _RemoteScrapeCandidate(
+                filePath:
+                    WebDAVService.instance.getFileUrl(connection, file.path),
+                fileName: file.name,
+              ))
+          .toList();
+      final result = await _scrapeRemoteFiles(
+        sourceLabel: 'WebDAV',
+        candidates: candidates,
+      );
 
+      if (!mounted) return;
       await context.read<WatchHistoryProvider>().refresh();
-      _showSnack('已添加 ${files.length} 个视频文件');
+      if (result.matched == 0) {
+        _showSnack('刮削完成，但未匹配到番剧信息');
+      } else if (result.failed > 0) {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}');
+      } else {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}');
+      }
     } catch (e) {
-      _showSnack('扫描失败：$e');
+      _showSnack('刮削失败：$e');
     }
   }
 
@@ -3902,7 +4023,7 @@ class _CupertinoLibraryManagementSheetState
                       minSize: 30,
                       onPressed: () =>
                           _scanSMBFolder(connection, file.path, file.name),
-                      child: const Text('扫描'),
+                      child: const Text('刮削'),
                     ),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
@@ -4145,8 +4266,8 @@ class _CupertinoLibraryManagementSheetState
     final confirm = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('扫描 SMB 文件夹'),
-        content: Text('确定要扫描“$folderName”吗？\n扫描后将把其中的视频文件添加到本地媒体库。'),
+        title: const Text('刮削 SMB 文件夹'),
+        content: Text('确定要刮削“$folderName”吗？\n刮削后将把其中的视频文件匹配到 SMB 媒体库。'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -4154,7 +4275,7 @@ class _CupertinoLibraryManagementSheetState
           ),
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('扫描'),
+            child: const Text('刮削'),
           ),
         ],
       ),
@@ -4165,32 +4286,36 @@ class _CupertinoLibraryManagementSheetState
     }
 
     try {
-      _showSnack('正在扫描 $folderName…');
+      _showSnack('正在刮削 $folderName…');
       final files = await _getSMBVideoFiles(connection, folderPath);
       if (files.isEmpty) {
-        _showSnack('未找到可导入的视频文件');
+        _showSnack('未找到可刮削的视频文件');
         return;
       }
 
-      for (final file in files) {
-        final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
-        final historyItem = WatchHistoryItem(
-          filePath: fileUrl,
-          animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-          episodeTitle: '',
-          duration: 0,
-          lastPosition: 0,
-          watchProgress: 0.0,
-          lastWatchTime: DateTime.now(),
-          isFromScan: true,
-        );
-        await WatchHistoryManager.addOrUpdateHistory(historyItem);
-      }
+      final candidates = files
+          .map((file) => _RemoteScrapeCandidate(
+                filePath:
+                    SMBProxyService.instance.buildStreamUrl(connection, file.path),
+                fileName: file.name,
+              ))
+          .toList();
+      final result = await _scrapeRemoteFiles(
+        sourceLabel: 'SMB',
+        candidates: candidates,
+      );
 
+      if (!mounted) return;
       await context.read<WatchHistoryProvider>().refresh();
-      _showSnack('已添加 ${files.length} 个视频文件');
+      if (result.matched == 0) {
+        _showSnack('刮削完成，但未匹配到番剧信息');
+      } else if (result.failed > 0) {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}');
+      } else {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}');
+      }
     } catch (e) {
-      _showSnack('扫描失败：$e');
+      _showSnack('刮削失败：$e');
     }
   }
 

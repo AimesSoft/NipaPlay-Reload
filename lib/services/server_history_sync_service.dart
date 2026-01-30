@@ -37,12 +37,6 @@ class ServerHistorySyncService {
     _initialized = true;
     _onHistoryUpdated = onHistoryUpdated;
 
-    if (kIsWeb) {
-      DebugLogService().addLog('ServerHistorySyncService: Web 环境跳过初始化');
-      debugPrint('ServerHistorySyncService.initialize -> skip on web');
-      return;
-    }
-
     _jellyfinService.addReadyListener(_handleJellyfinReady);
     _embyService.addReadyListener(_handleEmbyReady);
 
@@ -150,7 +144,6 @@ class ServerHistorySyncService {
     required bool isConnected,
     required String serverLabel,
   }) {
-    if (kIsWeb) return false;
     if (isSyncing) {
       debugPrint(
           'ServerHistorySyncService: $serverLabel 正在同步中，忽略新的请求');
@@ -406,6 +399,34 @@ class ServerHistorySyncService {
     if (selected == null) return null;
     final imageType = selected.key;
     final imageTag = selected.value;
+
+    if (kIsWeb) {
+      try {
+        if (isJellyfin) {
+          return _jellyfinService.getImageUrl(
+            itemId,
+            type: imageType,
+            width: 640,
+            height: 360,
+            quality: 90,
+            tag: imageTag,
+          );
+        }
+        return _embyService.getImageUrl(
+          itemId,
+          type: imageType,
+          width: 640,
+          height: 360,
+          quality: 90,
+          tag: imageTag,
+        );
+      } catch (e, stack) {
+        DebugLogService().addLog(
+          'ServerHistorySyncService: $serverLabel 生成缩略图URL失败: $e\n$stack',
+        );
+        return null;
+      }
+    }
 
     try {
       final dir = await _ensureThumbnailDirectory();

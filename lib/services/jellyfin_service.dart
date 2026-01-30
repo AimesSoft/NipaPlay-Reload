@@ -337,7 +337,7 @@ class JellyfinService extends MediaServerServiceBase
 
   @override
   Future<void> loadAvailableLibraries() async {
-    if (kIsWeb || !_isConnected || _userId == null) return;
+    if (!_isConnected || _userId == null) return;
 
     try {
       final response =
@@ -397,7 +397,6 @@ class JellyfinService extends MediaServerServiceBase
     String parentId, {
     int limit = 99999,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected) {
       return [];
     }
@@ -451,7 +450,6 @@ class JellyfinService extends MediaServerServiceBase
     String? sortBy,
     String? sortOrder,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected) {
       return [];
     }
@@ -504,7 +502,6 @@ class JellyfinService extends MediaServerServiceBase
     String libraryId, {
     int limit = 20,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected) {
       return [];
     }
@@ -554,7 +551,6 @@ class JellyfinService extends MediaServerServiceBase
     String? sortBy,
     String? sortOrder,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty) {
       return [];
     }
@@ -627,7 +623,6 @@ class JellyfinService extends MediaServerServiceBase
 
   // 获取最新电影列表
   Future<List<JellyfinMovieInfo>> getLatestMovies({int limit = 99999}) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty) {
       return [];
     }
@@ -668,7 +663,6 @@ class JellyfinService extends MediaServerServiceBase
 
   /// 获取服务器 resume 列表，用于同步播放进度。
   Future<List<Map<String, dynamic>>> fetchResumeItems({int limit = 5}) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _userId == null) {
       return [];
     }
@@ -1701,7 +1695,6 @@ class JellyfinService extends MediaServerServiceBase
     int limit = 50,
     String? parentId,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || searchTerm.trim().isEmpty) {
       return [];
     }
@@ -1759,7 +1752,6 @@ class JellyfinService extends MediaServerServiceBase
     String searchTerm, {
     int limit = 50,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || searchTerm.trim().isEmpty) {
       return [];
     }
@@ -1803,7 +1795,11 @@ class JellyfinService extends MediaServerServiceBase
 
   // 获取图片URL
   String getImageUrl(String itemId,
-      {String type = 'Primary', int? width, int? height, int? quality}) {
+      {String type = 'Primary',
+      int? width,
+      int? height,
+      int? quality,
+      String? tag}) {
     if (!_isConnected) {
       throw Exception('未连接到Jellyfin服务器');
     }
@@ -1814,6 +1810,7 @@ class JellyfinService extends MediaServerServiceBase
     if (width != null) params.add('width=$width');
     if (height != null) params.add('height=$height');
     if (quality != null) params.add('quality=$quality');
+    if (tag != null && tag.isNotEmpty) params.add('tag=$tag');
 
     if (params.isNotEmpty) {
       url += '?${params.join('&')}';

@@ -138,7 +138,9 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     }
     
     // 检查是否强制刷新或缓存已过期
+    final shouldBypassCache = _shouldBypassRecommendedCache();
     if (!forceRefresh &&
+        !shouldBypassCache &&
         _DashboardHomePageState._cachedRecommendedItems.isNotEmpty &&
         _DashboardHomePageState._lastRecommendedLoadTime != null &&
         DateTime.now()
@@ -237,6 +239,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             !item.filePath.startsWith('jellyfin://') &&
             !item.filePath.startsWith('emby://') &&
             !MediaSourceUtils.isSmbPath(item.filePath) &&
+            !MediaSourceUtils.isWebDavPath(item.filePath) &&
             !item.isDandanplayRemote
           ).toList();
           
@@ -531,6 +534,52 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     }
   }
 
+  bool _shouldBypassRecommendedCache() {
+    if (_DashboardHomePageState._cachedRecommendedItems.isEmpty) {
+      return false;
+    }
+
+    bool jellyfinConnected = false;
+    bool jellyfinHasLibraries = false;
+    bool embyConnected = false;
+    bool embyHasLibraries = false;
+    bool dandanConnected = false;
+    bool dandanHasGroups = false;
+
+    try {
+      final jellyfinProvider =
+          Provider.of<JellyfinProvider>(context, listen: false);
+      jellyfinConnected = jellyfinProvider.isConnected;
+      jellyfinHasLibraries = jellyfinProvider.selectedLibraryIds.isNotEmpty;
+    } catch (_) {}
+    try {
+      final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
+      embyConnected = embyProvider.isConnected;
+      embyHasLibraries = embyProvider.selectedLibraryIds.isNotEmpty;
+    } catch (_) {}
+    try {
+      final dandanProvider =
+          Provider.of<DandanplayRemoteProvider>(context, listen: false);
+      dandanConnected = dandanProvider.isConnected;
+      dandanHasGroups = dandanProvider.animeGroups.isNotEmpty;
+    } catch (_) {}
+
+    final cached = _DashboardHomePageState._cachedRecommendedItems;
+    final hasJellyfin =
+        cached.any((item) => item.source == RecommendedItemSource.jellyfin);
+    final hasEmby =
+        cached.any((item) => item.source == RecommendedItemSource.emby);
+    final hasDandan =
+        cached.any((item) => item.source == RecommendedItemSource.dandanplay);
+
+    if (jellyfinConnected && jellyfinHasLibraries && !hasJellyfin) {
+      return true;
+    }
+    if (embyConnected && embyHasLibraries && !hasEmby) return true;
+    if (dandanConnected && dandanHasGroups && !hasDandan) return true;
+    return false;
+  }
+
   String _normalizeRecommendationTitle(String title) {
     final trimmed = title.trim().toLowerCase();
     if (trimmed.isEmpty) {
@@ -646,6 +695,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             !item.filePath.startsWith('jellyfin://') &&
             !item.filePath.startsWith('emby://') &&
             !MediaSourceUtils.isSmbPath(item.filePath) &&
+            !MediaSourceUtils.isWebDavPath(item.filePath) &&
             !item.isDandanplayRemote
           ).toList();
 

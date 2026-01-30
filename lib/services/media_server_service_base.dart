@@ -204,12 +204,6 @@ abstract class MediaServerServiceBase {
   }
 
   Future<void> loadSavedSettings() async {
-    if (kIsWeb) {
-      isConnected = false;
-      isReady = false;
-      return;
-    }
-
     await _multiAddressService.initialize();
 
     final prefs = await SharedPreferences.getInstance();

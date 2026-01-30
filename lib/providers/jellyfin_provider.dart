@@ -73,8 +73,6 @@ class JellyfinProvider extends ChangeNotifier {
   
   // 保存排序设置到SharedPreferences
   Future<void> _saveSortSettings() async {
-    if (kIsWeb) return;
-    
     try {
       final prefs = await SharedPreferences.getInstance();
       final jsonString = json.encode(_librarySpecificSortSettings);
@@ -87,8 +85,6 @@ class JellyfinProvider extends ChangeNotifier {
   
   // 加载排序设置
   Future<void> _loadSortSettings() async {
-    if (kIsWeb) return;
-    
     try {
       final prefs = await SharedPreferences.getInstance();
       final sortSettingsJson = prefs.getString('jellyfin_library_sort_settings');

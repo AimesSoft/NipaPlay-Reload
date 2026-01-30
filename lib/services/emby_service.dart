@@ -348,7 +348,7 @@ class EmbyService extends MediaServerServiceBase
 
   @override
   Future<void> loadAvailableLibraries() async {
-    if (kIsWeb || !_isConnected || _userId == null) return;
+    if (!_isConnected || _userId == null) return;
 
     try {
       final response =
@@ -412,7 +412,6 @@ class EmbyService extends MediaServerServiceBase
     String parentId, {
     int limit = 99999,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _userId == null) {
       return [];
     }
@@ -466,7 +465,6 @@ class EmbyService extends MediaServerServiceBase
     String? sortBy,
     String? sortOrder,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected) {
       return [];
     }
@@ -519,7 +517,6 @@ class EmbyService extends MediaServerServiceBase
     String libraryId, {
     int limit = 20,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected) {
       return [];
     }
@@ -570,7 +567,6 @@ class EmbyService extends MediaServerServiceBase
     String? sortBy,
     String? sortOrder,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
       return [];
     }
@@ -666,7 +662,6 @@ class EmbyService extends MediaServerServiceBase
 
   // 获取最新电影列表
   Future<List<EmbyMovieInfo>> getLatestMovies({int limit = 99999}) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
       return [];
     }
@@ -707,7 +702,6 @@ class EmbyService extends MediaServerServiceBase
 
   /// 获取 Resume 列表用于同步播放记录
   Future<List<Map<String, dynamic>>> fetchResumeItems({int limit = 5}) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _userId == null) {
       debugPrint('EmbyService.fetchResumeItems -> skip, connected=$_isConnected userId=$_userId');
       return [];
@@ -1635,7 +1629,6 @@ class EmbyService extends MediaServerServiceBase
     int limit = 50,
     String? parentId,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || searchTerm.trim().isEmpty || _userId == null) {
       return [];
     }
@@ -1693,7 +1686,6 @@ class EmbyService extends MediaServerServiceBase
     String searchTerm, {
     int limit = 50,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || searchTerm.trim().isEmpty || _userId == null) {
       return [];
     }

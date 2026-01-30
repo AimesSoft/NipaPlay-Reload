@@ -1,6 +1,7 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:crypto/crypto.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,8 @@ class FilePickerService {
   static final FilePickerService _instance = FilePickerService._internal();
   static final Map<String, String> _webObjectUrls = <String, String>{};
   static final Map<String, String> _webMimeTypes = <String, String>{};
+  static final Map<String, _WebFileInfo> _webFileInfo = <String, _WebFileInfo>{};
+  static const int _webHashMaxBytes = 16 * 1024 * 1024;
 
   factory FilePickerService() {
     return _instance;
@@ -340,6 +343,11 @@ class FilePickerService {
       if (bytes == null || bytes.isEmpty) {
         return null;
       }
+      final hashBytes = bytes.length > _webHashMaxBytes
+          ? bytes.sublist(0, _webHashMaxBytes)
+          : bytes;
+      final fileHash = md5.convert(hashBytes).toString();
+      _registerWebFileInfo(file.name, fileHash, bytes.length);
 
       final resolvedMimeType = resolveWebMimeType(fileName: file.name);
       final blob =
@@ -359,6 +367,14 @@ class FilePickerService {
 
   String? getWebMimeType(String key) {
     return _webMimeTypes[key];
+  }
+
+  String? getWebFileHash(String key) {
+    return _webFileInfo[key]?.hash;
+  }
+
+  int? getWebFileSize(String key) {
+    return _webFileInfo[key]?.size;
   }
 
   String? resolveWebMimeType({String? mimeType, String? fileName}) {
@@ -401,6 +417,7 @@ class FilePickerService {
       web_html.Url.revokeObjectUrl(url);
     }
     _webMimeTypes.remove(key);
+    _webFileInfo.remove(key);
   }
 
   void _registerWebObjectUrl(String key, String url, {String? mimeType}) {
@@ -415,6 +432,11 @@ class FilePickerService {
     } else {
       _webMimeTypes.remove(key);
     }
+  }
+
+  void _registerWebFileInfo(String key, String hash, int size) {
+    if (!kIsWeb) return;
+    _webFileInfo[key] = _WebFileInfo(hash: hash, size: size);
   }
 
   // Android平台特定的视频文件选择方法
@@ -758,4 +780,11 @@ class FilePickerService {
       }
     }
   }
+}
+
+class _WebFileInfo {
+  final String hash;
+  final int size;
+
+  const _WebFileInfo({required this.hash, required this.size});
 }

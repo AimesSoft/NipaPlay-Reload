@@ -450,11 +450,13 @@ class _TagSearchModalState extends State<TagSearchModal> {
     debugPrint('[TagSearchWidget] 文件路径: ${historyItem.filePath}');
 
     // 检查文件是否存在
-    final videoFile = File(historyItem.filePath);
-    if (!videoFile.existsSync()) {
-      debugPrint('[TagSearchWidget] 文件不存在: ${historyItem.filePath}');
-      BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
-      return;
+    if (!kIsWeb) {
+      final videoFile = File(historyItem.filePath);
+      if (!videoFile.existsSync()) {
+        debugPrint('[TagSearchWidget] 文件不存在: ${historyItem.filePath}');
+        BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
+        return;
+      }
     }
 
     bool tabChangeLogicExecuted = false;

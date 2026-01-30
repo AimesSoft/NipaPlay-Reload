@@ -22,9 +22,11 @@ import 'package:nipaplay/utils/globals.dart'; // 导入全局变量和设备检�
 // Import MethodChannel
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/webdav_service.dart'; // 导入WebDAV服务
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
@@ -35,6 +37,28 @@ import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 
 enum LibraryManagementSection { local, webdav, smb }
+
+class _RemoteScrapeCandidate {
+  final String filePath;
+  final String fileName;
+
+  const _RemoteScrapeCandidate({
+    required this.filePath,
+    required this.fileName,
+  });
+}
+
+class _RemoteScrapeResult {
+  final int total;
+  final int matched;
+  final int failed;
+
+  const _RemoteScrapeResult({
+    required this.total,
+    required this.matched,
+    required this.failed,
+  });
+}
 
 class LibraryManagementTab extends StatefulWidget {
   final void Function(WatchHistoryItem item) onPlayEpisode;
@@ -2317,6 +2341,15 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                 iconColor: iconColor,
                 textColor: textColor,
                 secondaryTextColor: secondaryTextColor,
+                trailingActions: [
+                  SearchBarActionButton(
+                    icon: Icons.auto_fix_high,
+                    size: 18,
+                    tooltip: '刮削',
+                    onPressed: () =>
+                        _scanWebDAVFolder(connection, file.path, file.name),
+                  ),
+                ],
                 onTap: () {
                   if (expanded) {
                     setState(() => _expandedWebDAVFolders.remove(folderKey));
@@ -2408,6 +2441,15 @@ style: TextStyle(color: Colors.lightBlueAccent)),
               iconColor: iconColor,
               textColor: textColor,
               secondaryTextColor: secondaryTextColor,
+              trailingActions: [
+                SearchBarActionButton(
+                  icon: Icons.auto_fix_high,
+                  size: 18,
+                  tooltip: '刮削',
+                  onPressed: () =>
+                      _scanSMBFolder(connection, file.path, file.name),
+                ),
+              ],
               onTap: () {
                 if (expanded) {
                   setState(() => _expandedSMBFolders.remove(folderKey));
@@ -2486,20 +2528,110 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       }
     }
   }
+
+  int? _parseMatchId(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  Future<_RemoteScrapeResult> _scrapeRemoteFiles({
+    required String sourceLabel,
+    required List<_RemoteScrapeCandidate> candidates,
+  }) async {
+    int matched = 0;
+    int failed = 0;
+
+    for (final candidate in candidates) {
+      try {
+        final videoInfo = await DandanplayService.getVideoInfo(candidate.filePath);
+        final matches = videoInfo['matches'];
+        if (videoInfo['isMatched'] != true ||
+            matches is! List ||
+            matches.isEmpty ||
+            matches.first is! Map) {
+          failed++;
+          continue;
+        }
+
+        final match = Map<String, dynamic>.from(matches.first as Map);
+        final animeId = _parseMatchId(match['animeId']);
+        final episodeId = _parseMatchId(match['episodeId']);
+        if (animeId == null || episodeId == null) {
+          failed++;
+          continue;
+        }
+
+        final existingHistory =
+            await WatchHistoryManager.getHistoryItem(candidate.filePath);
+        final rawAnimeTitle = videoInfo['animeTitle'] ?? match['animeTitle'];
+        final rawEpisodeTitle =
+            videoInfo['episodeTitle'] ?? match['episodeTitle'];
+        final rawHash = videoInfo['fileHash'] ?? videoInfo['hash'];
+        final animeTitle = rawAnimeTitle?.toString();
+        final episodeTitle = rawEpisodeTitle?.toString();
+        final hashString = rawHash?.toString();
+        final durationFromMatch = (videoInfo['duration'] is int)
+            ? videoInfo['duration'] as int
+            : (existingHistory?.duration ?? 0);
+        final preserveProgress = existingHistory != null &&
+            existingHistory.watchProgress > 0.01 &&
+            !existingHistory.isFromScan;
+
+        final historyItem = WatchHistoryItem(
+          filePath: candidate.filePath,
+          animeName: animeTitle?.isNotEmpty == true
+              ? animeTitle!
+              : (existingHistory?.animeName ??
+                  p.basenameWithoutExtension(candidate.fileName)),
+          episodeTitle: episodeTitle?.isNotEmpty == true
+              ? episodeTitle
+              : existingHistory?.episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: preserveProgress
+              ? existingHistory!.watchProgress
+              : (existingHistory?.watchProgress ?? 0.0),
+          lastPosition: preserveProgress
+              ? existingHistory!.lastPosition
+              : (existingHistory?.lastPosition ?? 0),
+          duration: durationFromMatch,
+          lastWatchTime: DateTime.now(),
+          thumbnailPath: existingHistory?.thumbnailPath,
+          isFromScan: !preserveProgress,
+          videoHash: hashString?.isNotEmpty == true
+              ? hashString
+              : existingHistory?.videoHash,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        matched++;
+      } catch (e) {
+        failed++;
+        debugPrint('$sourceLabel 刮削失败: ${candidate.fileName} -> $e');
+      }
+    }
+
+    return _RemoteScrapeResult(
+      total: candidates.length,
+      matched: matched,
+      failed: failed,
+    );
+  }
   
-  // 扫描WebDAV文件夹
+  // 刮削WebDAV文件夹
   Future<void> _scanWebDAVFolder(WebDAVConnection connection, String folderPath, String folderName) async {
     final confirm = await BlurDialog.show<bool>(
       context: context,
-      title: '扫描WebDAV文件夹',
-      content: '确定要扫描WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
+      title: '刮削WebDAV文件夹',
+      content: '确定要刮削WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 WebDAV 媒体库中。',
       actions: [
         HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
-          child: const Text('扫描', style: TextStyle(color: Colors.white)),
+          child: const Text('刮削', style: TextStyle(color: Colors.white)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],
@@ -2509,30 +2641,53 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       try {
         // 递归获取文件夹中的所有视频文件
         final files = await _getWebDAVVideoFiles(connection, folderPath);
-        
-        // 将视频文件添加到媒体库
-        for (final file in files) {
-          final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
-          final historyItem = WatchHistoryItem(
-            filePath: fileUrl,
-            animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''), // 移除扩展名
-            episodeTitle: '',
-            duration: 0,
-            lastPosition: 0,
-            watchProgress: 0.0,
-            lastWatchTime: DateTime.now(),
-            isFromScan: true,
-          );
-          
-          await WatchHistoryManager.addOrUpdateHistory(historyItem);
+
+        if (files.isEmpty) {
+          if (mounted) {
+            BlurSnackBar.show(context, '未找到可刮削的视频文件');
+          }
+          return;
         }
-        
+
         if (mounted) {
-          BlurSnackBar.show(context, '已添加 ${files.length} 个视频文件到媒体库');
+          BlurSnackBar.show(context, '正在刮削 $folderName...');
+        }
+
+        final candidates = files
+            .map((file) => _RemoteScrapeCandidate(
+                  filePath: WebDAVService.instance.getFileUrl(
+                    connection,
+                    file.path,
+                  ),
+                  fileName: file.name,
+                ))
+            .toList();
+        final result = await _scrapeRemoteFiles(
+          sourceLabel: 'WebDAV',
+          candidates: candidates,
+        );
+        if (mounted) {
+          await context.read<WatchHistoryProvider>().refresh();
+        }
+
+        if (mounted) {
+          if (result.matched == 0) {
+            BlurSnackBar.show(context, '刮削完成，但未匹配到番剧信息');
+          } else if (result.failed > 0) {
+            BlurSnackBar.show(
+              context,
+              '刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}',
+            );
+          } else {
+            BlurSnackBar.show(
+              context,
+              '刮削完成：成功 ${result.matched}/${result.total}',
+            );
+          }
         }
       } catch (e) {
         if (mounted) {
-          BlurSnackBar.show(context, '扫描WebDAV文件夹失败: $e');
+          BlurSnackBar.show(context, '刮削WebDAV文件夹失败: $e');
         }
       }
     }
@@ -2613,15 +2768,15 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   Future<void> _scanSMBFolder(SMBConnection connection, String folderPath, String folderName) async {
     final confirm = await BlurDialog.show<bool>(
       context: context,
-      title: '扫描SMB文件夹',
-      content: '确定要扫描SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件添加到媒体库中。',
+      title: '刮削SMB文件夹',
+      content: '确定要刮削SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 SMB 媒体库中。',
       actions: [
         HoverScaleTextButton(
           child: const Text('取消', style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
-          child: const Text('扫描', style: TextStyle(color: Colors.white)),
+          child: const Text('刮削', style: TextStyle(color: Colors.white)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],
@@ -2630,27 +2785,52 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     if (confirm == true && mounted) {
       try {
         final files = await _getSMBVideoFiles(connection, folderPath);
-        for (final file in files) {
-          final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
-          final historyItem = WatchHistoryItem(
-            filePath: fileUrl,
-            animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-            episodeTitle: '',
-            duration: 0,
-            lastPosition: 0,
-            watchProgress: 0.0,
-            lastWatchTime: DateTime.now(),
-            isFromScan: true,
-          );
-          await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        if (files.isEmpty) {
+          if (mounted) {
+            BlurSnackBar.show(context, '未找到可刮削的视频文件');
+          }
+          return;
         }
 
         if (mounted) {
-          BlurSnackBar.show(context, '已添加 ${files.length} 个视频文件到媒体库');
+          BlurSnackBar.show(context, '正在刮削 $folderName...');
+        }
+
+        final candidates = files
+            .map((file) => _RemoteScrapeCandidate(
+                  filePath: SMBProxyService.instance.buildStreamUrl(
+                    connection,
+                    file.path,
+                  ),
+                  fileName: file.name,
+                ))
+            .toList();
+        final result = await _scrapeRemoteFiles(
+          sourceLabel: 'SMB',
+          candidates: candidates,
+        );
+        if (mounted) {
+          await context.read<WatchHistoryProvider>().refresh();
+        }
+
+        if (mounted) {
+          if (result.matched == 0) {
+            BlurSnackBar.show(context, '刮削完成，但未匹配到番剧信息');
+          } else if (result.failed > 0) {
+            BlurSnackBar.show(
+              context,
+              '刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}',
+            );
+          } else {
+            BlurSnackBar.show(
+              context,
+              '刮削完成：成功 ${result.matched}/${result.total}',
+            );
+          }
         }
       } catch (e) {
         if (mounted) {
-          BlurSnackBar.show(context, '扫描SMB文件夹失败: $e');
+          BlurSnackBar.show(context, '刮削SMB文件夹失败: $e');
         }
       }
     }

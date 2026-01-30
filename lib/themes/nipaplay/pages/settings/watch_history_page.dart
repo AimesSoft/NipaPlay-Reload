@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -162,6 +163,22 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
   Widget _buildThumbnail(WatchHistoryItem item) {
     final path = item.thumbnailPath;
     if (path != null) {
+      final lowerPath = path.toLowerCase();
+      if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Image.network(
+            path,
+            width: 80,
+            height: 45,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _buildDefaultThumbnail(item),
+          ),
+        );
+      }
+      if (kIsWeb) {
+        return _buildDefaultThumbnail(item);
+      }
       return FutureBuilder<Uint8List?>(
         future: _getThumbnailBytes(path),
         builder: (context, snapshot) {
@@ -369,19 +386,23 @@ style: TextStyle(
         }
       }
     } else {
-      final videoFile = File(currentItem.filePath);
-      fileExists = videoFile.existsSync();
-      
-      if (!fileExists && Platform.isIOS) {
-        String altPath = filePath.startsWith('/private') 
-            ? filePath.replaceFirst('/private', '') 
-            : '/private$filePath';
+      if (kIsWeb) {
+        fileExists = true;
+      } else {
+        final videoFile = File(currentItem.filePath);
+        fileExists = videoFile.existsSync();
         
-        final File altFile = File(altPath);
-        if (altFile.existsSync()) {
-          filePath = altPath;
-          currentItem = currentItem.copyWith(filePath: filePath);
-          fileExists = true;
+        if (!fileExists && Platform.isIOS) {
+          String altPath = filePath.startsWith('/private') 
+              ? filePath.replaceFirst('/private', '') 
+              : '/private$filePath';
+          
+          final File altFile = File(altPath);
+          if (altFile.existsSync()) {
+            filePath = altPath;
+            currentItem = currentItem.copyWith(filePath: filePath);
+            fileExists = true;
+          }
         }
       }
     }
@@ -536,6 +557,13 @@ style: TextStyle(color: Colors.red)),
   }
 
   Future<Uint8List?> _getThumbnailBytes(String path) {
+    final lowerPath = path.toLowerCase();
+    if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
+      return Future.value(null);
+    }
+    if (kIsWeb) {
+      return Future.value(null);
+    }
     return _thumbnailFutures.putIfAbsent(path, () async {
       try {
         final file = File(path);

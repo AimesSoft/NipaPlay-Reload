@@ -1,6 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'watch_history_model.dart';
@@ -15,6 +18,10 @@ class WatchHistoryDatabase {
   static bool _migrationCompleted = false;
   static bool _ffiInitialized = false;
   static final Map<String, WatchHistoryItem> _webStore = {};
+  static const String _webStoreKey = 'watch_history_web_store';
+  static const Duration _webPersistDelay = Duration(milliseconds: 500);
+  static bool _webStoreLoaded = false;
+  static Timer? _webPersistTimer;
   
   // 私有构造函数
   WatchHistoryDatabase._init();
@@ -230,11 +237,75 @@ class WatchHistoryDatabase {
       return null;
     }
   }
+
+  static Future<void> _ensureWebStoreLoaded() async {
+    if (!kIsWeb || _webStoreLoaded) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_webStoreKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = json.decode(raw);
+        if (decoded is List) {
+          for (final entry in decoded) {
+            if (entry is Map<String, dynamic>) {
+              try {
+                final item = WatchHistoryItem.fromJson(entry);
+                _webStore[item.filePath] = item;
+              } catch (_) {}
+            } else if (entry is Map) {
+              try {
+                final map = Map<String, dynamic>.from(entry);
+                final item = WatchHistoryItem.fromJson(map);
+                _webStore[item.filePath] = item;
+              } catch (_) {}
+            }
+          }
+        } else if (decoded is Map) {
+          decoded.forEach((key, value) {
+            try {
+              if (value is Map<String, dynamic>) {
+                _webStore[key.toString()] = WatchHistoryItem.fromJson(value);
+              } else if (value is Map) {
+                _webStore[key.toString()] =
+                    WatchHistoryItem.fromJson(Map<String, dynamic>.from(value));
+              }
+            } catch (_) {}
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('加载Web观看记录缓存失败: $e');
+    } finally {
+      _webStoreLoaded = true;
+    }
+  }
+
+  static void _scheduleWebStorePersist() {
+    if (!kIsWeb) return;
+    _webPersistTimer?.cancel();
+    _webPersistTimer = Timer(_webPersistDelay, () {
+      // ignore: discarded_futures
+      _persistWebStore();
+    });
+  }
+
+  static Future<void> _persistWebStore() async {
+    if (!kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final items = _webStore.values.map((item) => item.toJson()).toList();
+      await prefs.setString(_webStoreKey, json.encode(items));
+    } catch (e) {
+      debugPrint('保存Web观看记录缓存失败: $e');
+    }
+  }
   
   // 插入或更新一条观看记录
   Future<void> insertOrUpdateWatchHistory(WatchHistoryItem item) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       _webStore[item.filePath] = item;
+      _scheduleWebStorePersist();
       return;
     }
     final db = await database;
@@ -291,6 +362,7 @@ class WatchHistoryDatabase {
   // 获取所有观看历史，按最后观看时间排序
   Future<List<WatchHistoryItem>> getAllWatchHistory() async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       final items = _webStore.values.toList();
       items.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
       return items;
@@ -313,6 +385,7 @@ class WatchHistoryDatabase {
   // 根据文件路径获取单个历史记录
   Future<WatchHistoryItem?> getHistoryByFilePath(String filePath) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       return _webStore[filePath];
     }
     final db = await database;
@@ -359,6 +432,7 @@ class WatchHistoryDatabase {
   // 根据共享媒体的 episode shareId 获取历史记录列表
   Future<List<WatchHistoryItem>> getHistoriesBySharedEpisodeId(String shareEpisodeId) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       final items = _webStore.values
           .where((item) => item.filePath.contains(shareEpisodeId))
           .toList();
@@ -385,6 +459,7 @@ class WatchHistoryDatabase {
   // 根据番剧ID和集数ID获取历史记录
   Future<WatchHistoryItem?> getHistoryByEpisode(int animeId, int episodeId) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       for (final item in _webStore.values) {
         if (item.animeId == animeId && item.episodeId == episodeId) {
           return item;
@@ -414,6 +489,7 @@ class WatchHistoryDatabase {
   // 根据动画ID获取该动画的所有剧集历史记录，按集数排序
   Future<List<WatchHistoryItem>> getHistoryByAnimeId(int animeId) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       final items = _webStore.values
           .where((item) => item.animeId == animeId && item.episodeId != null)
           .toList();
@@ -440,6 +516,7 @@ class WatchHistoryDatabase {
   // 获取指定动画的上一集
   Future<WatchHistoryItem?> getPreviousEpisode(int animeId, int currentEpisodeId) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       final items = _webStore.values
           .where((item) =>
               item.animeId == animeId &&
@@ -472,6 +549,7 @@ class WatchHistoryDatabase {
   // 获取指定动画的下一集
   Future<WatchHistoryItem?> getNextEpisode(int animeId, int currentEpisodeId) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       final items = _webStore.values
           .where((item) =>
               item.animeId == animeId &&
@@ -504,7 +582,9 @@ class WatchHistoryDatabase {
   // 删除单个历史记录
   Future<void> deleteHistory(String filePath) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       _webStore.remove(filePath);
+      _scheduleWebStorePersist();
       return;
     }
     final db = await database;
@@ -524,11 +604,13 @@ class WatchHistoryDatabase {
   // 根据路径前缀删除多个历史记录
   Future<int> deleteHistoryByPathPrefix(String pathPrefix) async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       final keysToRemove =
           _webStore.keys.where((key) => key.startsWith(pathPrefix)).toList();
       for (final key in keysToRemove) {
         _webStore.remove(key);
       }
+      _scheduleWebStorePersist();
       return keysToRemove.length;
     }
     final db = await database;
@@ -548,7 +630,9 @@ class WatchHistoryDatabase {
   // 清空所有历史记录
   Future<void> clearAllHistory() async {
     if (kIsWeb) {
+      await _ensureWebStoreLoaded();
       _webStore.clear();
+      _scheduleWebStorePersist();
       return;
     }
     final db = await database;
