@@ -377,7 +377,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     }
 
     // 2. iOS平台：尝试修复容器路径查找进度
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       final fixedPath = await iOSContainerPathFixer.fixContainerPath(path);
       if (fixedPath != null) {
         position = positionMap[fixedPath] ?? 0;

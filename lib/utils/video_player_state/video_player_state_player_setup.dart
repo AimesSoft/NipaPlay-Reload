@@ -112,6 +112,49 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       debugPrint('检测到网络URL或流媒体: $videoPath');
     }
 
+    if (kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+      final filePickerService = FilePickerService();
+      if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
+        if (videoPath.startsWith('blob:')) {
+          resolvedActualPlayUrl = videoPath;
+        } else {
+          final webUrl = filePickerService.getWebObjectUrl(videoPath);
+          if (webUrl != null && webUrl.isNotEmpty) {
+            resolvedActualPlayUrl = webUrl;
+          }
+        }
+      }
+      if (resolvedActualPlayUrl != null &&
+          resolvedActualPlayUrl.isNotEmpty &&
+          resolvedActualPlayUrl.startsWith('blob:') &&
+          !videoPath.startsWith('blob:')) {
+        final existingUrl = filePickerService.getWebObjectUrl(videoPath);
+        if (existingUrl == null || existingUrl.isEmpty) {
+          final mimeType = filePickerService.getWebMimeType(videoPath) ??
+              filePickerService.resolveWebMimeType(fileName: videoPath);
+          filePickerService.registerWebObjectUrl(
+            videoPath,
+            resolvedActualPlayUrl,
+            mimeType: mimeType,
+          );
+        }
+      }
+
+      final webMimeType = filePickerService.getWebMimeType(videoPath) ??
+          filePickerService.resolveWebMimeType(fileName: videoPath);
+      if (webMimeType != null &&
+          webMimeType.isNotEmpty &&
+          webMimeType.startsWith('video/')) {
+        final canPlay = web_html.VideoElement().canPlayType(webMimeType);
+        if (canPlay.isEmpty) {
+          const message = '浏览器不支持该视频格式/编码，请转换为 H.264/AAC 的 MP4 或更换支持的浏览器';
+          _setStatus(PlayerStatus.error, message: message);
+          _error = message;
+          return;
+        }
+      }
+    }
+
     if (!fileExists) {
       debugPrint('VideoPlayerState: 文件不存在或无法访问: $videoPath');
       _setStatus(PlayerStatus.error,
@@ -644,6 +687,23 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
     } catch (e) {
       //debugPrint('初始化视频播放器时出错: $e');
+      if (kIsWeb) {
+        final errorText = e.toString();
+        final bool isUnsupportedFormat = e is PlatformException &&
+                (e.code == 'MEDIA_ERR_SRC_NOT_SUPPORTED' ||
+                    e.message?.contains('MEDIA_ERR_SRC_NOT_SUPPORTED') ==
+                        true ||
+                    e.message?.contains('Format error') == true) ||
+            errorText.contains('MEDIA_ERR_SRC_NOT_SUPPORTED') ||
+            errorText.contains('Format error');
+        if (isUnsupportedFormat) {
+          const message =
+              '浏览器不支持该视频格式/编码，请转换为 H.264/AAC 的 MP4 或更换支持的浏览器';
+          _error = message;
+          _setStatus(PlayerStatus.error, message: message);
+          return;
+        }
+      }
       _error = '初始化视频播放器时出错: $e';
       _setStatus(PlayerStatus.error, message: '播放器初始化失败');
       // 尝试恢复

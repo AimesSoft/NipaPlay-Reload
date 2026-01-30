@@ -1,9 +1,11 @@
 import 'package:file_selector/file_selector.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:universal_html/html.dart' as web_html;
 import 'security_bookmark_service.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'dart:io' as io;
@@ -11,6 +13,8 @@ import 'dart:io' as io;
 class FilePickerService {
   // 单例模式
   static final FilePickerService _instance = FilePickerService._internal();
+  static final Map<String, String> _webObjectUrls = <String, String>{};
+  static final Map<String, String> _webMimeTypes = <String, String>{};
 
   factory FilePickerService() {
     return _instance;
@@ -238,6 +242,9 @@ class FilePickerService {
 
   // 选择视频文件
   Future<String?> pickVideoFile({String? initialDirectory}) async {
+    if (kIsWeb) {
+      return _pickVideoFileWeb();
+    }
     try {
       // 获取上次目录
       initialDirectory ??= await _getLastDirectory(_lastVideoDirKey);
@@ -316,6 +323,97 @@ class FilePickerService {
     } catch (e) {
       print('选择视频文件时出错: $e');
       return null;
+    }
+  }
+
+  Future<String?> _pickVideoFileWeb() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) {
+        return null;
+      }
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        return null;
+      }
+
+      final resolvedMimeType = resolveWebMimeType(fileName: file.name);
+      final blob =
+          web_html.Blob([bytes], resolvedMimeType ?? 'application/octet-stream');
+      final url = web_html.Url.createObjectUrlFromBlob(blob);
+      _registerWebObjectUrl(file.name, url, mimeType: resolvedMimeType);
+      return file.name;
+    } catch (e) {
+      print('Web选择视频文件时出错: $e');
+      return null;
+    }
+  }
+
+  String? getWebObjectUrl(String key) {
+    return _webObjectUrls[key];
+  }
+
+  String? getWebMimeType(String key) {
+    return _webMimeTypes[key];
+  }
+
+  String? resolveWebMimeType({String? mimeType, String? fileName}) {
+    if (mimeType != null && mimeType.isNotEmpty) {
+      return mimeType;
+    }
+    if (fileName == null || fileName.isEmpty) {
+      return null;
+    }
+    final extension = p.extension(fileName).toLowerCase().replaceFirst('.', '');
+    switch (extension) {
+      case 'mp4':
+      case 'm4v':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      case 'webm':
+        return 'video/webm';
+      case 'mkv':
+        return 'video/x-matroska';
+      case 'avi':
+        return 'video/x-msvideo';
+      case 'wmv':
+        return 'video/x-ms-wmv';
+      case 'flv':
+        return 'video/x-flv';
+      default:
+        return null;
+    }
+  }
+
+  void registerWebObjectUrl(String key, String url, {String? mimeType}) {
+    _registerWebObjectUrl(key, url, mimeType: mimeType);
+  }
+
+  void releaseWebObjectUrl(String key) {
+    if (!kIsWeb) return;
+    final url = _webObjectUrls.remove(key);
+    if (url != null) {
+      web_html.Url.revokeObjectUrl(url);
+    }
+    _webMimeTypes.remove(key);
+  }
+
+  void _registerWebObjectUrl(String key, String url, {String? mimeType}) {
+    if (!kIsWeb) return;
+    final previous = _webObjectUrls[key];
+    if (previous != null && previous != url) {
+      web_html.Url.revokeObjectUrl(previous);
+    }
+    _webObjectUrls[key] = url;
+    if (mimeType != null && mimeType.isNotEmpty) {
+      _webMimeTypes[key] = mimeType;
+    } else {
+      _webMimeTypes.remove(key);
     }
   }
 

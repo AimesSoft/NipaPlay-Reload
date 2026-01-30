@@ -105,10 +105,21 @@ class _IOS26AlertDialogState extends State<IOS26AlertDialog> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   int? _lastTint;
+  TextEditingController? _textController;
 
   bool get _isDark =>
       MediaQuery.platformBrightnessOf(context) == Brightness.dark;
   Color? get _effectiveTint => CupertinoTheme.of(context).primaryColor;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.input != null) {
+      _textController = TextEditingController(
+        text: widget.input?.initialValue ?? '',
+      );
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -118,6 +129,7 @@ class _IOS26AlertDialogState extends State<IOS26AlertDialog> {
 
   @override
   void dispose() {
+    _textController?.dispose();
     _channel?.setMethodCallHandler(null);
     super.dispose();
   }
@@ -192,13 +204,60 @@ class _IOS26AlertDialogState extends State<IOS26AlertDialog> {
     }
 
     // Fallback to CupertinoAlertDialog
+    Widget? contentWidget;
+    if (widget.message != null || widget.input != null) {
+      final input = widget.input;
+      contentWidget = ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 60, maxHeight: 300),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.message != null) ...[
+                Text(
+                  widget.message!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                if (input != null) const SizedBox(height: 12),
+              ],
+              if (input != null)
+                CupertinoTextField(
+                  controller: _textController,
+                  placeholder: input.placeholder,
+                  keyboardType: input.keyboardType,
+                  obscureText: input.obscureText,
+                  maxLength: input.maxLength,
+                  autofocus: true,
+                  padding: const EdgeInsets.all(12),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return CupertinoAlertDialog(
       title: Text(widget.title),
-      content: widget.message != null ? Text(widget.message!) : null,
+      content: contentWidget != null
+          ? Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: contentWidget,
+            )
+          : null,
       actions: widget.actions.map((action) {
         return CupertinoDialogAction(
           onPressed: () {
-            Navigator.of(context).pop();
+            if (widget.input != null) {
+              if (action.style == AlertActionStyle.cancel) {
+                Navigator.of(context).pop<String?>(null);
+              } else {
+                Navigator.of(context).pop<String?>(_textController?.text ?? '');
+              }
+            } else {
+              Navigator.of(context).pop();
+            }
             action.onPressed();
           },
           isDefaultAction: action.style == AlertActionStyle.defaultAction,

@@ -301,6 +301,13 @@ abstract class MediaServerServiceBase {
     await _multiAddressService.initialize();
 
     final normalizedUrl = normalizeUrl(serverUrl);
+    final logService = DebugLogService();
+    final addressLabel =
+        (addressName == null || addressName.trim().isEmpty) ? '默认' : addressName.trim();
+    logService.addLog(
+      '$serviceName: 开始连接服务器 $normalizedUrl (用户: $username, 地址名: $addressLabel)',
+      tag: 'Network',
+    );
 
     try {
       final identifyResult = await _multiAddressService.identifyServer(
@@ -330,6 +337,11 @@ abstract class MediaServerServiceBase {
         }
       } else if (identifyResult.isConflict) {
         print('$serviceNameService: 检测到冲突，抛出异常: ${identifyResult.error}');
+        logService.addLog(
+          '$serviceName: 服务器地址冲突，无法连接: ${identifyResult.error}',
+          level: 'ERROR',
+          tag: 'Network',
+        );
         throw Exception(identifyResult.error ?? '服务器冲突');
       } else if (identifyResult.success) {
         print('$serviceNameService: 创建新的服务器配置');
@@ -344,6 +356,11 @@ abstract class MediaServerServiceBase {
         );
       } else {
         print('$serviceNameService: 服务器识别失败: ${identifyResult.error}');
+        logService.addLog(
+          '$serviceName: 服务器识别失败: ${identifyResult.error}',
+          level: 'ERROR',
+          tag: 'Network',
+        );
         throw Exception(identifyResult.error ?? '无法识别服务器');
       }
 
@@ -376,6 +393,10 @@ abstract class MediaServerServiceBase {
         await _saveConnectionInfo();
 
         await loadAvailableLibraries();
+        logService.addLog(
+          '$serviceName: 连接成功，服务器: ${this.serverUrl}',
+          tag: 'Network',
+        );
         _notifyConnectionStateChanged();
         scheduleMicrotask(() {
           isReady = true;
@@ -389,6 +410,11 @@ abstract class MediaServerServiceBase {
     } catch (e) {
       print('$serviceNameService: 连接过程中发生异常: $e');
       isConnected = false;
+      logService.addLog(
+        '$serviceName: 连接失败: $e',
+        level: 'ERROR',
+        tag: 'Network',
+      );
 
       if (e.toString().contains('已被另一个') || e.toString().contains('已被占用')) {
         throw Exception(e.toString());
