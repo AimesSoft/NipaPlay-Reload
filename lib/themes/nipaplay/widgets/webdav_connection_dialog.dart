@@ -8,6 +8,7 @@ class WebDAVConnectionDialog {
     BuildContext context, {
     WebDAVConnection? editConnection,
     Future<bool> Function(WebDAVConnection)? onSave,
+    Future<bool> Function(WebDAVConnection)? onTest,
   }) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor =
@@ -19,6 +20,7 @@ class WebDAVConnectionDialog {
       contentWidget: _WebDAVForm(
         editConnection: editConnection,
         onSave: onSave,
+        onTest: onTest,
       ),
     );
   }
@@ -27,10 +29,12 @@ class WebDAVConnectionDialog {
 class _WebDAVForm extends StatefulWidget {
   final WebDAVConnection? editConnection;
   final Future<bool> Function(WebDAVConnection)? onSave;
+  final Future<bool> Function(WebDAVConnection)? onTest;
   
   const _WebDAVForm({
     this.editConnection,
     this.onSave,
+    this.onTest,
   });
   
   @override
@@ -323,7 +327,9 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       print('  用户名: ${connection.username}');
       print('  密码: ${connection.password.isNotEmpty ? '[已设置]' : '[未设置]'}');
       
-      final isValid = await WebDAVService.instance.testConnection(connection);
+      final isValid = widget.onTest != null
+          ? await widget.onTest!(connection)
+          : await WebDAVService.instance.testConnection(connection);
       
       if (mounted) {
         if (isValid) {

@@ -906,6 +906,467 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
+  Future<List<WebDAVFile>> listRemoteWebDAVDirectory({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('WebDAV 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/list')
+          .replace(queryParameters: {'name': sanitizedName, 'path': path});
+      final response =
+          await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? true;
+      if (!success) {
+        final message = payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final data = payloadMap['data'];
+      final entriesRaw = data is Map<String, dynamic>
+          ? data['entries']
+          : payloadMap['entries'];
+
+      int? parseInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value);
+        return null;
+      }
+
+      DateTime? parseDate(dynamic value) {
+        if (value is String) {
+          return DateTime.tryParse(value);
+        }
+        return null;
+      }
+
+      final entries = <WebDAVFile>[];
+      if (entriesRaw is List) {
+        for (final item in entriesRaw) {
+          final Map<String, dynamic>? map = item is Map<String, dynamic>
+              ? item
+              : (item is Map ? item.cast<String, dynamic>() : null);
+          if (map == null) continue;
+          entries.add(WebDAVFile(
+            name: map['name'] as String? ?? '',
+            path: map['path'] as String? ?? '',
+            isDirectory: map['isDirectory'] == true,
+            size: parseInt(map['size']),
+            lastModified: parseDate(map['lastModified']),
+          ));
+        }
+      }
+
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+
+      return entries;
+    } catch (e) {
+      final existing = _managementErrorMessage;
+      final rawMessage = e.toString();
+      final friendly = existing != null && existing.trim().isNotEmpty
+          ? existing
+          : _buildManagementFriendlyError(e, host);
+      _managementErrorMessage = friendly;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> testWebDAVConnection({
+    String? name,
+    WebDAVConnection? connection,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    if ((name == null || name.trim().isEmpty) && connection == null) {
+      throw Exception('WebDAV 连接参数为空');
+    }
+
+    try {
+      Uri uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/test');
+      http.Response response;
+      if (connection != null) {
+        response = await _sendPostRequest(
+          uri,
+          jsonBody: connection.toJson(),
+          timeout: const Duration(seconds: 15),
+        );
+      } else {
+        uri = uri.replace(queryParameters: {'name': name!.trim()});
+        response = await _sendPostRequest(
+          uri,
+          timeout: const Duration(seconds: 15),
+        );
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      final bool connected = data is Map<String, dynamic>
+          ? data['isConnected'] == true
+          : payloadMap['isConnected'] == true;
+      if (name != null && name.trim().isNotEmpty) {
+        await refreshManagement(userInitiated: true);
+      }
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+      return connected;
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<Map<String, int>> scanRemoteWebDAVFolder({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('WebDAV 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/scan');
+      final response = await _sendPostRequest(
+        uri,
+        jsonBody: {'name': sanitizedName, 'path': path},
+        timeout: const Duration(seconds: 60),
+      );
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      int readInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value) ?? 0;
+        return 0;
+      }
+
+      return {
+        'total': readInt(data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
+        'matched': readInt(data is Map<String, dynamic> ? data['matched'] : payloadMap['matched']),
+        'failed': readInt(data is Map<String, dynamic> ? data['failed'] : payloadMap['failed']),
+      };
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<List<SMBFileEntry>> listRemoteSMBDirectory({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('SMB 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/list')
+          .replace(queryParameters: {'name': sanitizedName, 'path': path});
+      final response =
+          await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? true;
+      if (!success) {
+        final message = payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final data = payloadMap['data'];
+      final entriesRaw = data is Map<String, dynamic>
+          ? data['entries']
+          : payloadMap['entries'];
+
+      int? parseInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value);
+        return null;
+      }
+
+      final entries = <SMBFileEntry>[];
+      if (entriesRaw is List) {
+        for (final item in entriesRaw) {
+          final Map<String, dynamic>? map = item is Map<String, dynamic>
+              ? item
+              : (item is Map ? item.cast<String, dynamic>() : null);
+          if (map == null) continue;
+          entries.add(SMBFileEntry(
+            name: map['name'] as String? ?? '',
+            path: map['path'] as String? ?? '',
+            isDirectory: map['isDirectory'] == true,
+            size: parseInt(map['size']),
+            isShare: map['isShare'] == true,
+          ));
+        }
+      }
+
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+
+      return entries;
+    } catch (e) {
+      final existing = _managementErrorMessage;
+      final friendly = existing != null && existing.trim().isNotEmpty
+          ? existing
+          : _buildManagementFriendlyError(e, host);
+      _managementErrorMessage = friendly;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> testSMBConnection(String name) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('SMB 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/test')
+          .replace(queryParameters: {'name': sanitizedName});
+      final response =
+          await _sendPostRequest(uri, timeout: const Duration(seconds: 15));
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      final bool connected = data is Map<String, dynamic>
+          ? data['isConnected'] == true
+          : payloadMap['isConnected'] == true;
+      await refreshManagement(userInitiated: true);
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+      return connected;
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<Map<String, int>> scanRemoteSMBFolder({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('SMB 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/scan');
+      final response = await _sendPostRequest(
+        uri,
+        jsonBody: {'name': sanitizedName, 'path': path},
+        timeout: const Duration(seconds: 60),
+      );
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      int readInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value) ?? 0;
+        return 0;
+      }
+
+      return {
+        'total': readInt(data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
+        'matched': readInt(data is Map<String, dynamic> ? data['matched'] : payloadMap['matched']),
+        'failed': readInt(data is Map<String, dynamic> ? data['failed'] : payloadMap['failed']),
+      };
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Uri buildRemoteFileStreamUri(String filePath) {
     final host = activeHost;
     if (host == null) {

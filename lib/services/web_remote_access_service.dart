@@ -155,7 +155,6 @@ class WebRemoteAccessService {
     // 本地路径或普通网络图片，都走代理
     final encodedUrl = base64Url.encode(utf8.encode(imageUrl));
     final proxyUrl = '$base/api/image_proxy?url=$encodedUrl';
-    debugPrint('[WebRemote] Generated proxy URL: $proxyUrl for original: $imageUrl');
     return proxyUrl;
   }
 

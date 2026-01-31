@@ -321,7 +321,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     
     // 监听子标签切换通知
     _setupSubTabListener();
-    _initLocalConnectionStates();
+    if (!kIsWeb) {
+      _initLocalConnectionStates();
+    }
     
     // 立即检查是否有待处理的子标签切换请求
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -355,6 +357,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   }
 
   void _refreshLocalConnectionStates() {
+    if (kIsWeb) {
+      return;
+    }
     final hasWebdav = WebDAVService.instance.connections.isNotEmpty;
     final hasSmb = SMBService.instance.connections.isNotEmpty;
 
@@ -530,6 +535,27 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   }
 
   Future<void> _showWebDAVConnectionDialog() async {
+    if (kIsWeb) {
+      final provider =
+          Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+      final result = await WebDAVConnectionDialog.show(
+        context,
+        onSave: (connection) async {
+          await provider.addWebDAVConnection(connection);
+          if (provider.managementErrorMessage != null) {
+            throw provider.managementErrorMessage!;
+          }
+          return true;
+        },
+        onTest: (connection) =>
+            provider.testWebDAVConnection(connection: connection),
+      );
+      if (result == true && mounted) {
+        await provider.refreshManagement(userInitiated: true);
+      }
+      return;
+    }
+
     if (!_localConnectionsReady) {
       await _initLocalConnectionStates();
     }
@@ -541,6 +567,22 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   }
 
   Future<void> _showSMBConnectionDialog() async {
+    if (kIsWeb) {
+      final provider =
+          Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+      final result = await SMBConnectionDialog.show(
+        context,
+        onSave: (connection) async {
+          await provider.addSMBConnection(connection);
+          return provider.managementErrorMessage == null;
+        },
+      );
+      if (result == true && mounted) {
+        await provider.refreshManagement(userInitiated: true);
+      }
+      return;
+    }
+
     if (!_localConnectionsReady) {
       await _initLocalConnectionStates();
     }
@@ -709,12 +751,16 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         final currentEmbyConnectionState = embyProvider.isConnected;
         final currentSharedState = sharedProvider.hasReachableActiveHost;
         final currentDandanState = dandanProvider.isConnected;
-        final currentHasWebdav = _localConnectionsReady
-            ? WebDAVService.instance.connections.isNotEmpty
-            : _hasWebDAVConnections;
-        final currentHasSmb = _localConnectionsReady
-            ? SMBService.instance.connections.isNotEmpty
-            : _hasSMBConnections;
+        final currentHasWebdav = kIsWeb
+            ? sharedProvider.webdavConnections.isNotEmpty
+            : (_localConnectionsReady
+                ? WebDAVService.instance.connections.isNotEmpty
+                : _hasWebDAVConnections);
+        final currentHasSmb = kIsWeb
+            ? sharedProvider.smbConnections.isNotEmpty
+            : (_localConnectionsReady
+                ? SMBService.instance.connections.isNotEmpty
+                : _hasSMBConnections);
         final currentHasWebdavLibrary = watchHistoryProvider.isLoaded
             ? _hasLibraryItemsForSource(
                 watchHistoryProvider,
