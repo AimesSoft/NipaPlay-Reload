@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -70,6 +71,32 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       if (savedActiveHost != null &&
           _hosts.any((element) => element.id == savedActiveHost)) {
         _activeHostId = savedActiveHost;
+      }
+
+      // Web Remote Auto-Discovery
+      if (kIsWeb) {
+        final origin = WebRemoteAccessService.resolveBaseUrlFromOrigin();
+        if (origin != null) {
+          final existingIndex = _hosts.indexWhere((h) => h.baseUrl == origin);
+          if (existingIndex == -1) {
+            final id = 'web-origin-${origin.hashCode}';
+            final host = SharedRemoteHost(
+              id: id,
+              displayName: 'NipaPlay Server (Auto)',
+              baseUrl: origin,
+              isOnline: true,
+            );
+            _hosts.insert(0, host);
+            if (_activeHostId == null) {
+              _activeHostId = id;
+            }
+          } else {
+            // Ensure it's active if no other host is selected
+            if (_activeHostId == null) {
+              _activeHostId = _hosts[existingIndex].id;
+            }
+          }
+        }
       }
     } catch (e) {
       _errorMessage = '加载远程媒体库配置失败: $e';

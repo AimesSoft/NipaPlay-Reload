@@ -24,21 +24,34 @@ class SharedEpisodeInfo {
   final WatchHistoryItem historyItem;
 
   Future<Map<String, dynamic>> toJson() async {
-    final file = File(historyItem.filePath);
     bool exists = false;
     int? fileSize;
     DateTime? modifiedTime;
+    String? streamPath;
 
-    try {
-      exists = await file.exists();
-      if (exists) {
-        fileSize = await file.length();
-        modifiedTime = await file.lastModified();
+    final lowerPath = historyItem.filePath.toLowerCase();
+    final isNetwork = lowerPath.startsWith('http://') ||
+        lowerPath.startsWith('https://') ||
+        lowerPath.startsWith('jellyfin://') ||
+        lowerPath.startsWith('emby://');
+
+    if (!isNetwork) {
+      final file = File(historyItem.filePath);
+      try {
+        exists = await file.exists();
+        if (exists) {
+          fileSize = await file.length();
+          modifiedTime = await file.lastModified();
+        }
+      } catch (_) {
+        exists = false;
+        fileSize = null;
+        modifiedTime = null;
       }
-    } catch (_) {
-      exists = false;
-      fileSize = null;
-      modifiedTime = null;
+      streamPath = '/api/media/local/share/episodes/$shareId/stream';
+    } else {
+      exists = true; // Assume network resources exist if they are in history
+      streamPath = null; // No direct stream path for network resources, client uses filePath
     }
 
     return {
@@ -54,9 +67,10 @@ class SharedEpisodeInfo {
       'duration': historyItem.duration,
       'lastPosition': historyItem.lastPosition,
       'progress': historyItem.watchProgress,
-      'streamPath': '/api/media/local/share/episodes/$shareId/stream',
+      'streamPath': streamPath,
       'videoHash': historyItem.videoHash,
       'source': _detectSource(historyItem.filePath),
+      'originalFilePath': historyItem.filePath, // Explicitly pass original path
     };
   }
 
@@ -126,13 +140,7 @@ class LocalMediaShareService {
       return;
     }
 
-    final localItems = watchHistory.history.where((item) {
-      final lower = item.filePath.toLowerCase();
-      return !lower.startsWith('jellyfin://') &&
-          !lower.startsWith('emby://') &&
-          !lower.startsWith('http://') &&
-          !lower.startsWith('https://');
-    }).toList();
+    final localItems = watchHistory.history.toList();
 
     final Map<String, SharedEpisodeInfo> shareIdMap = {};
     final Map<int, List<SharedEpisodeInfo>> animeMap = {};

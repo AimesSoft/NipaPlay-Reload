@@ -58,9 +58,9 @@ class WebApiService {
     // 本地媒体库相关API路由
     _router.get('/media/libraries', handleGetLibrariesRequest);
     _router.get('/media/local/items', handleGetLocalMediaItemsRequest);
-    _router.get(
-        '/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
-    _router.mount('/media/local/share/', _localMediaShareApi.router);
+        _router.get('/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
+        _router.get('/history', handleGetHistoryRequest);
+        _router.mount('/media/local/share/', _localMediaShareApi.router);
     _router.mount('/media/local/manage/', _localMediaManagementApi.router);
   }
 
@@ -512,6 +512,37 @@ class WebApiService {
     }
   }
 
+  Future<Response> handleGetHistoryRequest(Request request) async {
+    try {
+      final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
+      if (!watchHistoryProvider.isLoaded) {
+        await watchHistoryProvider.loadHistory();
+      }
+
+      final history = watchHistoryProvider.history.map((item) => {
+        'filePath': item.filePath,
+        'animeName': item.animeName,
+        'episodeTitle': item.episodeTitle,
+        'episodeId': item.episodeId,
+        'animeId': item.animeId,
+        'watchProgress': item.watchProgress,
+        'lastPosition': item.lastPosition,
+        'duration': item.duration,
+        'lastWatchTime': item.lastWatchTime.toIso8601String(),
+        'thumbnailPath': item.thumbnailPath,
+        'isFromScan': item.isFromScan,
+        'videoHash': item.videoHash,
+      }).toList();
+
+      return Response.ok(
+        json.encode({'success': true, 'data': history}),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Error getting history: $e');
+    }
+  }
+
   // 本地媒体库相关处理函数
   Future<Response> handleGetLibrariesRequest(Request request) async {
     try {
@@ -522,9 +553,6 @@ class WebApiService {
       if (watchHistoryProvider.isLoaded &&
           watchHistoryProvider.history.isNotEmpty) {
         final localMediaCount = watchHistoryProvider.history
-            .where((item) =>
-                !item.filePath.startsWith('jellyfin://') &&
-                !item.filePath.startsWith('emby://'))
             .map((item) => item.animeId)
             .where((animeId) => animeId != null)
             .toSet()

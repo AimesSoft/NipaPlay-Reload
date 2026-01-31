@@ -149,4 +149,22 @@ class WebRemoteAccessService {
     final encodedUrl = base64Url.encode(utf8.encode(imageUrl));
     return '$base/api/image_proxy?url=$encodedUrl';
   }
+
+  static Future<List<Map<String, dynamic>>> fetchHistory() async {
+    final base = await resolveCandidateBaseUrl();
+    if (base == null) return [];
+
+    try {
+      final response = await http.get(Uri.parse('$base/api/history'));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        if (data['success'] == true && data['data'] is List) {
+          return List<Map<String, dynamic>>.from(data['data']);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching remote history: $e');
+    }
+    return [];
+  }
 }

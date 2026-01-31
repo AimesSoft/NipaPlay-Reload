@@ -7,6 +7,7 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/storage_service.dart' show StorageService;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
@@ -79,6 +80,35 @@ class WatchHistoryProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
+      if (kIsWeb) {
+        // 尝试从远程 API 获取历史记录
+        final remoteHistory = await WebRemoteAccessService.fetchHistory();
+        if (remoteHistory.isNotEmpty) {
+          _history = remoteHistory.map((data) => WatchHistoryItem(
+            filePath: data['filePath'],
+            animeName: data['animeName'],
+            episodeTitle: data['episodeTitle'],
+            episodeId: data['episodeId'],
+            animeId: data['animeId'],
+            watchProgress: (data['watchProgress'] as num).toDouble(),
+            lastPosition: (data['lastPosition'] as num).toInt(),
+            duration: (data['duration'] as num).toInt(),
+            lastWatchTime: DateTime.parse(data['lastWatchTime']),
+            thumbnailPath: data['thumbnailPath'],
+            isFromScan: data['isFromScan'] ?? false,
+            videoHash: data['videoHash'],
+          )).toList();
+          
+          // 排序
+          _history.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+          
+          _isLoaded = true;
+          _isLoading = false;
+          notifyListeners();
+          return;
+        }
+      }
+
       // 迁移JSON数据到SQLite (如果需要)
       await _database.migrateFromJson();
       
