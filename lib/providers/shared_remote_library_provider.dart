@@ -313,7 +313,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     final sanitizedUri = _sanitizeUri(uri);
     final headers = <String, String>{
       'Accept': 'application/json',
-      'User-Agent': 'NipaPlay/1.0',
+      if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
     };
 
     final authHeader = _buildBasicAuthHeader(uri);
@@ -321,7 +321,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       headers['Authorization'] = authHeader;
     }
 
-    final client = IOClient(_createHttpClient(uri));
+    final client = _createClient(uri);
     try {
       return await client
           .get(sanitizedUri, headers: headers)
@@ -341,7 +341,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     final sanitizedUri = _sanitizeUri(uri);
     final headers = <String, String>{
       'Accept': 'application/json',
-      'User-Agent': 'NipaPlay/1.0',
+      if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
       'Content-Type': 'application/json; charset=utf-8',
     };
 
@@ -350,7 +350,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       headers['Authorization'] = authHeader;
     }
 
-    final client = IOClient(_createHttpClient(uri));
+    final client = _createClient(uri);
     try {
       return await client
           .post(
@@ -373,7 +373,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     final sanitizedUri = _sanitizeUri(uri);
     final headers = <String, String>{
       'Accept': 'application/json',
-      'User-Agent': 'NipaPlay/1.0',
+      if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
     };
 
     final authHeader = _buildBasicAuthHeader(uri);
@@ -381,7 +381,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       headers['Authorization'] = authHeader;
     }
 
-    final client = IOClient(_createHttpClient(uri));
+    final client = _createClient(uri);
     try {
       return await client
           .delete(sanitizedUri, headers: headers)
@@ -424,6 +424,13 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     password = Uri.decodeComponent(password);
 
     return 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+  }
+
+  http.Client _createClient(Uri uri) {
+    if (kIsWeb) {
+      return http.Client();
+    }
+    return IOClient(_createHttpClient(uri));
   }
 
   HttpClient _createHttpClient(Uri uri) {
