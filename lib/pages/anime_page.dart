@@ -289,15 +289,18 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   // 添加变量追踪“添加媒体服务器”入口的悬停状态
   bool _isAddEntryHovered = false;
   bool _isRemoteAccessHovered = false;
+
+  bool get _showLocalTabs => !kIsWeb;
+  bool get _showSharedRemoteTabs => _hasSharedRemoteHosts || kIsWeb;
   
   // 动态计算标签页数量
   int get _tabCount {
-    int count = 2; // 基础标签: 本地媒体库, 本地库管理
+    int count = _showLocalTabs ? 2 : 0; // 基础标签: 本地媒体库, 本地库管理
     if (_hasWebDAVLibrary) count++;
     if (_hasWebDAVConnections) count++;
     if (_hasSMBLibrary) count++;
     if (_hasSMBConnections) count++;
-    if (_hasSharedRemoteHosts) count += 2; // 共享媒体库, 共享库管理
+    if (_showSharedRemoteTabs) count += 2; // 共享媒体库, 共享库管理
     if (_isDandanConnected) count++;
     if (_isJellyfinConnected) count++;
     if (_isEmbyConnected) count++;
@@ -752,23 +755,27 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         }
         
         // 动态生成标签页内容
-        final List<Widget> pageChildren = [
-          RepaintBoundary(
-            child: MediaLibraryPage(
-              key: ValueKey('mediaLibrary_local_${widget.mediaLibraryVersion}'),
-              onPlayEpisode: widget.onPlayEpisode,
-              onSourcesUpdated: _refreshLocalConnectionStates,
-              sourceType: MediaLibrarySourceType.local,
+        final List<Widget> pageChildren = [];
+
+        if (_showLocalTabs) {
+          pageChildren.addAll([
+            RepaintBoundary(
+              child: MediaLibraryPage(
+                key: ValueKey('mediaLibrary_local_${widget.mediaLibraryVersion}'),
+                onPlayEpisode: widget.onPlayEpisode,
+                onSourcesUpdated: _refreshLocalConnectionStates,
+                sourceType: MediaLibrarySourceType.local,
+              ),
             ),
-          ),
-          RepaintBoundary(
-            child: LibraryManagementTab(
-              key: const ValueKey('library_management_local'),
-              onPlayEpisode: widget.onPlayEpisode,
-              section: LibraryManagementSection.local,
+            RepaintBoundary(
+              child: LibraryManagementTab(
+                key: const ValueKey('library_management_local'),
+                onPlayEpisode: widget.onPlayEpisode,
+                section: LibraryManagementSection.local,
+              ),
             ),
-          ),
-        ];
+          ]);
+        }
 
         if (_hasWebDAVLibrary) {
           pageChildren.add(
@@ -818,7 +825,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           );
         }
 
-        if (_hasSharedRemoteHosts) {
+        if (_showSharedRemoteTabs) {
           // 共享媒体库
           pageChildren.add(
             RepaintBoundary(
@@ -879,25 +886,28 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         final unselectedLabelColor =
             isDarkMode ? Colors.white60 : Colors.black54;
 
-        final List<Widget> tabs = [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(
-              text: "本地媒体库",
-              fontSize: 18,
-              icon: Icon(Icons.tv_outlined, size: 18),
+        final List<Widget> tabs = [];
+
+        if (_showLocalTabs) {
+          tabs.addAll([
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "本地媒体库",
+                fontSize: 18,
+                icon: Icon(Icons.tv_outlined, size: 18),
+              ),
             ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(
-              text: "本地库管理",
-              fontSize: 18,
-              icon: Icon(Icons.folder_open_outlined,
-                  size: 18),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "本地库管理",
+                fontSize: 18,
+                icon: Icon(Icons.folder_open_outlined, size: 18),
+              ),
             ),
-          ),
-        ];
+          ]);
+        }
 
         if (_hasWebDAVLibrary) {
           tabs.add(
@@ -951,7 +961,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           );
         }
 
-        if (_hasSharedRemoteHosts) {
+        if (_showSharedRemoteTabs) {
           // 共享媒体库
           tabs.add(const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4.0),

@@ -122,21 +122,23 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       onRefresh: () => _refreshActiveHost(sharedProvider),
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: _buildSectionTitle('本地媒体库'),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: CupertinoLocalMediaLibraryCard(
-                        onViewLibrary: _showLocalMediaLibraryBottomSheet,
-                        onManageLibrary: _showLibraryManagementBottomSheet,
+                  if (!kIsWeb) ...[
+                    SliverToBoxAdapter(
+                      child: _buildSectionTitle('本地媒体库'),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: CupertinoLocalMediaLibraryCard(
+                          onViewLibrary: _showLocalMediaLibraryBottomSheet,
+                          onManageLibrary: _showLibraryManagementBottomSheet,
+                        ),
                       ),
                     ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 12),
-                  ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 12),
+                    ),
+                  ],
                   ..._buildNetworkMediaSection(
                     context,
                     jellyfinProvider,

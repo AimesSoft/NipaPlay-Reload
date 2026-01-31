@@ -470,13 +470,31 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     setState(() => _isLoadingTodayAnimes = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final bool filterAdultContentGlobally =
-          prefs.getBool('global_filter_adult_content') ?? true;
-      final allAnimes = await BangumiService.instance.getCalendar(
-        forceRefresh: forceRefresh,
-        filterAdultContent: filterAdultContentGlobally,
-      );
+      List<BangumiAnime> allAnimes;
+      if (kIsWeb) {
+        final apiUri = WebRemoteAccessService.apiUri('/api/bangumi/calendar');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
+        final response = await http.get(apiUri);
+        if (response.statusCode == 200) {
+          final List<dynamic> data =
+              json.decode(utf8.decode(response.bodyBytes));
+          allAnimes = data
+              .map((d) => BangumiAnime.fromJson(d as Map<String, dynamic>))
+              .toList();
+        } else {
+          throw Exception('Failed to load from API: ${response.statusCode}');
+        }
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        final bool filterAdultContentGlobally =
+            prefs.getBool('global_filter_adult_content') ?? true;
+        allAnimes = await BangumiService.instance.getCalendar(
+          forceRefresh: forceRefresh,
+          filterAdultContent: filterAdultContentGlobally,
+        );
+      }
 
       final now = DateTime.now();
       int weekday = now.weekday;
