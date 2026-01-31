@@ -7,6 +7,9 @@ class WebRemoteAccessService {
   static const String _baseUrlKey = 'web_remote_access_base_url';
   static String? _cachedBaseUrl;
   static bool _initialized = false;
+  
+  /// Base URL 变更通知器
+  static final ValueNotifier<String?> baseUrlNotifier = ValueNotifier<String?>(null);
 
   static String? get cachedBaseUrl => _cachedBaseUrl;
 
@@ -16,6 +19,7 @@ class WebRemoteAccessService {
     final stored = prefs.getString(_baseUrlKey);
     if (stored != null && stored.trim().isNotEmpty) {
       _cachedBaseUrl = normalizeBaseUrl(stored);
+      baseUrlNotifier.value = _cachedBaseUrl;
     }
     _initialized = true;
   }
@@ -27,9 +31,12 @@ class WebRemoteAccessService {
 
   static Future<void> setBaseUrl(String url) async {
     final normalized = normalizeBaseUrl(url);
-    _cachedBaseUrl = normalized;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_baseUrlKey, normalized);
+    if (_cachedBaseUrl != normalized) {
+      _cachedBaseUrl = normalized;
+      baseUrlNotifier.value = normalized;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_baseUrlKey, normalized);
+    }
     _initialized = true;
   }
 

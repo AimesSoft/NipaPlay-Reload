@@ -85,13 +85,28 @@ class WebServerService {
     _port = port ?? _port;
 
     try {
-      final apiRouter = Router()..mount('/api/', _webApiService.handler);
+      // 挂载在 '/api'，剥离前缀后保留子路径的前导斜杠 (e.g. /api/info -> /info)
+      final apiRouter = Router()..mount('/api', _webApiService.handler);
 
-      final Handler rootHandler = (Request request) {
+      final Handler rootHandler = (Request request) async {
         final path = request.url.path;
+        print('[WebServer] 收到请求: "$path", handlerPath: "${request.handlerPath}"');
+        
         if (path == 'api' || path.startsWith('api/')) {
-          return apiRouter.call(request);
+          print('[WebServer] 匹配到API路径，尝试分发...');
+          try {
+            final response = await apiRouter.call(request);
+            print('[WebServer] API路由器响应状态码: ${response.statusCode}');
+            if (response.statusCode == 404) {
+               print('[WebServer] 警告：API路由器返回404。请检查 web_api_service.dart 中的路由定义是否与请求路径匹配。');
+            }
+            return response;
+          } catch (e) {
+            print('[WebServer] API处理异常: $e');
+            return Response.internalServerError(body: 'API Error: $e');
+          }
         }
+        print('[WebServer] 未匹配API路径，返回404');
         return Response(
           404,
           body: 'Web UI 已移除，请使用 NipaPlay 客户端连接远程访问 API。',

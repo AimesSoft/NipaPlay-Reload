@@ -34,7 +34,8 @@ class BangumiApiService {
   /// 初始化服务，加载保存的Token
   static Future<void> initialize() async {
     try {
-      if (_initialized && !kIsWeb) {
+      // 防止重复初始化
+      if (_initialized) {
         return;
       }
       final prefs = await SharedPreferences.getInstance();
@@ -53,6 +54,7 @@ class BangumiApiService {
       }
 
       if (kIsWeb) {
+        WebRemoteAccessService.baseUrlNotifier.addListener(_onBaseUrlChanged);
         await _syncLoginStatusFromServer();
         _initialized = true;
         _startSyncTimer();
@@ -78,9 +80,17 @@ class BangumiApiService {
     }
   }
   
+  /// 监听BaseURL变化
+  static void _onBaseUrlChanged() {
+    debugPrint('[Bangumi API] 检测到BaseURL变化，重新启动同步');
+    // 无论当前定时器状态如何，都重置并立即开始同步
+    _startSyncTimer();
+    _syncLoginStatusFromServer();
+  }
+  
   /// 启动Web端同步定时器
   static void _startSyncTimer() {
-    if (_syncTimer != null) return;
+    _syncTimer?.cancel(); // 先取消旧的，防止重复
     debugPrint('[Bangumi API] 启动Web端状态同步定时器');
     _syncTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       _syncLoginStatusFromServer();
@@ -90,27 +100,32 @@ class BangumiApiService {
   static Future<bool> _syncLoginStatusFromServer() async {
     try {
       final baseUrl = await WebRemoteAccessService.resolveCandidateBaseUrl();
-      debugPrint('[Bangumi API] 同步登录状态，BaseURL: $baseUrl');
+      // 减少日志刷屏，仅在非localhost或明确配置时打印详细信息，或者降低频率
+      // debugPrint('[Bangumi API] 同步登录状态，BaseURL: $baseUrl');
       
       if (baseUrl == null || baseUrl.isEmpty) {
-        debugPrint('[Bangumi API] BaseURL为空，无法同步');
         return false;
       }
 
       final uri = Uri.parse('$baseUrl/api/bangumi/login_status');
-      debugPrint('[Bangumi API] 请求地址: $uri');
 
       final response = await http
           .get(uri)
           .timeout(const Duration(seconds: 3));
 
-      debugPrint('[Bangumi API] 响应状态码: ${response.statusCode}');
+      // debugPrint('[Bangumi API] 响应状态码: ${response.statusCode}');
+      if (response.statusCode == 404) {
+        debugPrint('[Bangumi API] 接口未找到 (404) - $baseUrl。请检查服务端版本或API路径配置。');
+        // 不停止定时器，允许自动恢复
+        return false;
+      }
+      
       if (response.statusCode != 200) {
-        debugPrint('[Bangumi API] 请求失败，响应体: ${response.body}');
+        debugPrint('[Bangumi API] 请求失败 (${response.statusCode})');
         return false;
       }
 
-      debugPrint('[Bangumi API] 响应内容: ${response.body}');
+      // debugPrint('[Bangumi API] 响应内容: ${response.body}');
       final data = json.decode(response.body);
       final newLoginStatus = data['isLoggedIn'] == true;
       
