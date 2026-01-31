@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'bangumi_service.dart';
+import 'bangumi_api_service.dart';
 import 'dandanplay_service.dart';
 import 'package:http/http.dart' as http;
 import 'search_service.dart'; // 导入SearchService
@@ -25,6 +26,7 @@ class WebApiService {
     _router.get('/info', handleInfoRequest);
     _router.get('/bangumi/calendar', handleBangumiCalendarRequest);
     _router.get('/bangumi/detail/<id>', handleBangumiDetailRequest);
+    _router.get('/bangumi/login_status', handleBangumiLoginStatusRequest);
     _router.get('/danmaku/video_info', handleVideoInfoRequest);
     _router.get('/danmaku/load', handleDanmakuLoadRequest);
     _router.get('/image_proxy', handleImageProxyRequest);
@@ -114,6 +116,24 @@ class WebApiService {
     } catch (e) {
       return Response.internalServerError(
           body: 'Error getting anime details: $e');
+    }
+  }
+
+  Future<Response> handleBangumiLoginStatusRequest(Request request) async {
+    try {
+      await BangumiApiService.initialize();
+      final status = {
+        'isLoggedIn': BangumiApiService.isLoggedIn,
+        'userInfo': BangumiApiService.userInfo,
+      };
+      return Response.ok(
+        json.encode(status),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error getting bangumi login status: $e',
+      );
     }
   }
 

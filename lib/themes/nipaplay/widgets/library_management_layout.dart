@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart';
@@ -101,7 +102,7 @@ class LibraryManagementList<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isPhone) {
+    if (isPhone && !kIsWeb) {
       return ListView.builder(
         controller: scrollController,
         padding: padding,

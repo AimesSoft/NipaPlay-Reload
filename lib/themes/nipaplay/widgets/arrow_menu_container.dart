@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 class ArrowMenuContainer extends StatelessWidget {
@@ -42,6 +43,7 @@ class ArrowMenuContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool useSimpleClip = kIsWeb && !showPointer;
     final shape = ArrowMenuShape(
       radius: borderRadius,
       pointerWidth: showPointer ? pointerWidth : 0,
@@ -61,32 +63,55 @@ class ArrowMenuContainer extends StatelessWidget {
         width: borderWidth,
       ),
     );
+    final borderRadiusValue = BorderRadius.circular(borderRadius);
+    final backgroundDecoration = BoxDecoration(
+      color: backgroundColor,
+      borderRadius: borderRadiusValue,
+      boxShadow: shadows,
+    );
+    final Widget blurredBody = useSimpleClip
+        ? ClipRRect(
+            borderRadius: borderRadiusValue,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+              child: DecoratedBox(
+                decoration: backgroundDecoration,
+                child: Padding(
+                  padding: contentPadding,
+                  child: child,
+                ),
+              ),
+            ),
+          )
+        : ClipPath(
+            clipper: ShapeBorderClipper(shape: shape),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+              child: DecoratedBox(
+                decoration: ShapeDecoration(
+                  shape: shape,
+                  color: backgroundColor,
+                  shadows: shadows,
+                ),
+                child: Padding(
+                  padding: contentPadding,
+                  child: child,
+                ),
+              ),
+            ),
+          );
+    final ShapeBorder resolvedBorderShape =
+        useSimpleClip ? RoundedRectangleBorder(borderRadius: borderRadiusValue) : borderShape;
 
     return Stack(
       fit: StackFit.passthrough,
       children: [
-        ClipPath(
-          clipper: ShapeBorderClipper(shape: shape),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                shape: shape,
-                color: backgroundColor,
-                shadows: shadows,
-              ),
-              child: Padding(
-                padding: contentPadding,
-                child: child,
-              ),
-            ),
-          ),
-        ),
+        blurredBody,
         Positioned.fill(
           child: IgnorePointer(
             child: DecoratedBox(
               decoration: ShapeDecoration(
-                shape: borderShape,
+                shape: resolvedBorderShape,
                 color: Colors.transparent,
               ),
             ),
