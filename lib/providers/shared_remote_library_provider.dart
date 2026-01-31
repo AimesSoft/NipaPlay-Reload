@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
 
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -31,7 +33,11 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   bool _isInitializing = true;
   bool _autoRefreshPaused = false;
   DateTime? _lastRefreshFailureAt;
+  
   List<SharedRemoteScannedFolder> _scannedFolders = [];
+  List<WebDAVConnection> _webdavConnections = [];
+  List<SMBConnection> _smbConnections = [];
+  
   SharedRemoteScanStatus? _scanStatus;
   bool _isManagementLoading = false;
   String? _managementErrorMessage;
@@ -52,7 +58,11 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get hasActiveHost => _activeHostId != null && _hosts.any((h) => h.id == _activeHostId);
   bool get hasReachableActiveHost => activeHost?.isOnline == true;
+  
   List<SharedRemoteScannedFolder> get scannedFolders => List.unmodifiable(_scannedFolders);
+  List<WebDAVConnection> get webdavConnections => List.unmodifiable(_webdavConnections);
+  List<SMBConnection> get smbConnections => List.unmodifiable(_smbConnections);
+  
   SharedRemoteScanStatus? get scanStatus => _scanStatus;
   bool get isManagementLoading => _isManagementLoading;
   String? get managementErrorMessage => _managementErrorMessage;
@@ -645,6 +655,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
       if (response.statusCode == HttpStatus.notFound) {
         _scannedFolders = [];
+        _webdavConnections = [];
+        _smbConnections = [];
         _scanStatus = null;
         _managementErrorMessage = _managementUnsupportedMessage;
         _updateHostStatus(host.id, isOnline: true, lastError: null);
@@ -666,6 +678,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
 
       final data = payloadMap['data'];
+      
+      // Parse Folders
       final foldersRaw = data is Map<String, dynamic>
           ? data['folders']
           : payloadMap['folders'];
@@ -683,10 +697,36 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
       _scannedFolders = folders;
 
+      // Parse WebDAV
+      final webdavRaw = data is Map<String, dynamic> ? data['webdav'] : null;
+      final webdav = <WebDAVConnection>[];
+      if (webdavRaw is List) {
+        for (final item in webdavRaw) {
+          if (item is Map<String, dynamic>) {
+            webdav.add(WebDAVConnection.fromJson(item));
+          }
+        }
+      }
+      _webdavConnections = webdav;
+
+      // Parse SMB
+      final smbRaw = data is Map<String, dynamic> ? data['smb'] : null;
+      final smb = <SMBConnection>[];
+      if (smbRaw is List) {
+        for (final item in smbRaw) {
+          if (item is Map<String, dynamic>) {
+            smb.add(SMBConnection.fromJson(item));
+          }
+        }
+      }
+      _smbConnections = smb;
+
       await refreshScanStatus(showLoading: false);
       _updateHostStatus(host.id, isOnline: true, lastError: null);
     } catch (e) {
       _scannedFolders = [];
+      _webdavConnections = [];
+      _smbConnections = [];
       _scanStatus = null;
       _managementErrorMessage = _buildManagementFriendlyError(e, host);
       _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
@@ -1089,6 +1129,112 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _isManagementLoading = false;
       notifyListeners();
       await _persistHosts();
+    }
+  }
+
+  // --- WebDAV Methods ---
+
+  Future<void> addWebDAVConnection(WebDAVConnection connection) async {
+    final host = activeHost;
+    if (host == null) return;
+    
+    _isManagementLoading = true;
+    notifyListeners();
+    
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav');
+      final response = await _sendPostRequest(uri, jsonBody: connection.toJson());
+      
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to add WebDAV');
+      }
+      
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeWebDAVConnection(String name) async {
+    final host = activeHost;
+    if (host == null) return;
+
+    _isManagementLoading = true;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav')
+          .replace(queryParameters: {'name': name});
+      final response = await _sendDeleteRequest(uri);
+
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to remove WebDAV');
+      }
+
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // --- SMB Methods ---
+
+  Future<void> addSMBConnection(SMBConnection connection) async {
+    final host = activeHost;
+    if (host == null) return;
+
+    _isManagementLoading = true;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb');
+      final response = await _sendPostRequest(uri, jsonBody: connection.toJson());
+
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to add SMB');
+      }
+
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeSMBConnection(String name) async {
+    final host = activeHost;
+    if (host == null) return;
+
+    _isManagementLoading = true;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb')
+          .replace(queryParameters: {'name': name});
+      final response = await _sendDeleteRequest(uri);
+
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to remove SMB');
+      }
+
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
     }
   }
 

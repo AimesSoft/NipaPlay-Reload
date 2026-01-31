@@ -12,6 +12,7 @@ import '../providers/service_provider.dart';
 import 'local_media_share_api.dart';
 import 'local_media_management_api.dart';
 import 'web_ui_proxy_api.dart';
+import 'network_media_settings_api.dart';
 
 class WebApiService {
   final Router _router = Router();
@@ -20,6 +21,8 @@ class WebApiService {
   final LocalMediaShareApi _localMediaShareApi = LocalMediaShareApi();
   final LocalMediaManagementApi _localMediaManagementApi =
       LocalMediaManagementApi();
+  final NetworkMediaSettingsApi _networkMediaSettingsApi =
+      NetworkMediaSettingsApi();
   final WebUiProxyApi _webUiProxyApi = WebUiProxyApi();
 
   WebApiService() {
@@ -62,6 +65,7 @@ class WebApiService {
         _router.get('/history', handleGetHistoryRequest);
         _router.mount('/media/local/share/', _localMediaShareApi.router);
     _router.mount('/media/local/manage/', _localMediaManagementApi.router);
+    _router.mount('/settings/network/', _networkMediaSettingsApi.router);
   }
 
   Handler get handler => _router;
@@ -139,33 +143,79 @@ class WebApiService {
 
   Future<Response> handleImageProxyRequest(Request request) async {
     final urlParam = request.url.queryParameters['url'];
+    debugPrint('[ImageProxy] Request received. Raw param: $urlParam');
+
     if (urlParam == null || urlParam.isEmpty) {
+      debugPrint('[ImageProxy] Error: Missing image URL');
       return Response.badRequest(body: 'Missing image URL');
     }
 
     try {
       String imageUrl;
-      // URL可能未编码，也可能经过了Base64编码。
-      // 我们先尝试进行Base64解码，如果失败，就认为它是一个普通URL。
       try {
         imageUrl = utf8.decode(base64Url.decode(urlParam));
+        debugPrint('[ImageProxy] Decoded URL: $imageUrl');
       } catch (e) {
-        // 解码失败（非法的Base64格式），则假定它是一个未经编码的普通URL
         imageUrl = urlParam;
+        debugPrint('[ImageProxy] Base64 decode failed, using raw: $imageUrl');
       }
 
-      final response = await http.get(Uri.parse(imageUrl));
-      if (response.statusCode == 200) {
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        debugPrint('[ImageProxy] Fetching network image: $imageUrl');
+        final response = await http.get(Uri.parse(imageUrl));
+        debugPrint('[ImageProxy] Network fetch status: ${response.statusCode}');
+        if (response.statusCode == 200) {
+          return Response.ok(
+            response.bodyBytes,
+            headers: {
+              'Content-Type': response.headers['content-type'] ?? 'image/jpeg',
+              'Access-Control-Allow-Origin': '*',
+            },
+          );
+        } else {
+          return Response(response.statusCode, body: 'Failed to fetch image');
+        }
+      } else {
+        debugPrint('[ImageProxy] Reading local file: $imageUrl');
+        final file = File(imageUrl);
+        final exists = await file.exists();
+        debugPrint('[ImageProxy] File exists: $exists');
+        
+        if (!exists) {
+          return Response.notFound('Image file not found');
+        }
+
+        // 简单的安全检查
+        final ext = imageUrl.toLowerCase();
+        if (!ext.endsWith('.jpg') && 
+            !ext.endsWith('.jpeg') && 
+            !ext.endsWith('.png') && 
+            !ext.endsWith('.webp') && 
+            !ext.endsWith('.gif') && 
+            !ext.endsWith('.bmp')) {
+          debugPrint('[ImageProxy] Forbidden extension: $ext');
+          return Response.forbidden('Access to non-image files is forbidden');
+        }
+
+        final bytes = await file.readAsBytes();
+        String contentType = 'image/jpeg';
+        if (ext.endsWith('.png')) contentType = 'image/png';
+        if (ext.endsWith('.webp')) contentType = 'image/webp';
+        if (ext.endsWith('.gif')) contentType = 'image/gif';
+        if (ext.endsWith('.bmp')) contentType = 'image/bmp';
+
+        debugPrint('[ImageProxy] Serving file with Content-Type: $contentType, Size: ${bytes.length}');
         return Response.ok(
-          response.bodyBytes,
+          bytes,
           headers: {
-            'Content-Type': response.headers['content-type'] ?? 'image/jpeg'
+            'Content-Type': contentType,
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=3600',
           },
         );
-      } else {
-        return Response(response.statusCode, body: 'Failed to fetch image');
       }
     } catch (e) {
+      debugPrint('[ImageProxy] Exception: $e');
       return Response.internalServerError(body: 'Error proxying image: $e');
     }
   }

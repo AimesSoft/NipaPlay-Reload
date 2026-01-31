@@ -142,12 +142,21 @@ class WebRemoteAccessService {
   static String? imageProxyUrl(String imageUrl) {
     if (!kIsWeb) return imageUrl;
     final base = _cachedBaseUrl;
-    if (base == null || base.isEmpty) return imageUrl;
-    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+    if (base == null || base.isEmpty) {
+      debugPrint('[WebRemote] imageProxyUrl: Base URL is empty, returning original: $imageUrl');
       return imageUrl;
     }
+    
+    // 如果是网络图片但不是 http/https，直接返回（可能是一些 data:image 或 blob:）
+    if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+      return imageUrl;
+    }
+
+    // 本地路径或普通网络图片，都走代理
     final encodedUrl = base64Url.encode(utf8.encode(imageUrl));
-    return '$base/api/image_proxy?url=$encodedUrl';
+    final proxyUrl = '$base/api/image_proxy?url=$encodedUrl';
+    debugPrint('[WebRemote] Generated proxy URL: $proxyUrl for original: $imageUrl');
+    return proxyUrl;
   }
 
   static Future<List<Map<String, dynamic>>> fetchHistory() async {

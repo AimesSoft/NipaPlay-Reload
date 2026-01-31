@@ -5213,6 +5213,14 @@ class _SharedRemoteLibraryManagementContentState
             const SizedBox(height: 16),
             _buildActionButtons(context, provider),
             const SizedBox(height: 16),
+            if (provider.webdavConnections.isNotEmpty) ...[
+              _buildWebDAVSection(context, provider),
+              const SizedBox(height: 16),
+            ],
+            if (provider.smbConnections.isNotEmpty) ...[
+              _buildSMBSection(context, provider),
+              const SizedBox(height: 16),
+            ],
             _buildFolderSection(context, provider),
             const SizedBox(height: 32),
           ];
@@ -5365,6 +5373,18 @@ class _SharedRemoteLibraryManagementContentState
           label: '智能刷新',
           icon: CupertinoIcons.refresh,
           onPressed: busy ? null : () => _handleRescanAll(provider),
+        ),
+        _buildActionButton(
+          context,
+          label: '添加 WebDAV',
+          icon: CupertinoIcons.cloud,
+          onPressed: busy ? null : () => _handleAddWebDAV(provider),
+        ),
+        _buildActionButton(
+          context,
+          label: '添加 SMB',
+          icon: CupertinoIcons.share,
+          onPressed: busy ? null : () => _handleAddSMB(provider),
         ),
         _buildActionButton(
           context,
@@ -5593,6 +5613,293 @@ class _SharedRemoteLibraryManagementContentState
         ),
       ),
     );
+  }
+
+  Widget _buildWebDAVSection(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'WebDAV 连接',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...provider.webdavConnections.map((connection) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.secondarySystemBackground, context),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.cloud,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.activeBlue, context),
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connection.name,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.label, context),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        connection.url,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.secondaryLabel, context),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 32,
+                  onPressed: () => _handleRemoveWebDAV(provider, connection),
+                  child: Icon(
+                    CupertinoIcons.delete,
+                    size: 18,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.systemRed, context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildSMBSection(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'SMB 连接',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...provider.smbConnections.map((connection) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.secondarySystemBackground, context),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.share,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemIndigo, context),
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connection.name,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.label, context),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${connection.host}:${connection.port}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.secondaryLabel, context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 32,
+                  onPressed: () => _handleEditSMB(provider, connection),
+                  child: Icon(
+                    CupertinoIcons.pencil,
+                    size: 18,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.label, context),
+                  ),
+                ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 32,
+                  onPressed: () => _handleRemoveSMB(provider, connection),
+                  child: Icon(
+                    CupertinoIcons.delete,
+                    size: 18,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.systemRed, context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Future<void> _handleAddWebDAV(SharedRemoteLibraryProvider provider) async {
+    await WebDAVConnectionDialog.show(
+      context,
+      onSave: (connection) async {
+        await provider.addWebDAVConnection(connection);
+        if (provider.managementErrorMessage != null) {
+          throw provider.managementErrorMessage!;
+        }
+        return true;
+      },
+    );
+  }
+
+  Future<void> _handleRemoveWebDAV(
+    SharedRemoteLibraryProvider provider,
+    WebDAVConnection connection,
+  ) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('删除 WebDAV 连接'),
+        content: Text('确定要删除“${connection.name}”吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await provider.removeWebDAVConnection(connection.name);
+      _checkError(provider, '已删除 WebDAV 连接');
+    }
+  }
+
+  Future<void> _handleAddSMB(SharedRemoteLibraryProvider provider) async {
+    await CupertinoSmbConnectionDialog.show(
+      context,
+      onSave: (connection) async {
+        await provider.addSMBConnection(connection);
+        if (provider.managementErrorMessage != null) {
+          return false;
+        }
+        return true;
+      },
+    );
+  }
+
+  Future<void> _handleEditSMB(
+    SharedRemoteLibraryProvider provider,
+    SMBConnection connection,
+  ) async {
+    await CupertinoSmbConnectionDialog.show(
+      context,
+      editConnection: connection,
+      onSave: (updated) async {
+        await provider.addSMBConnection(updated);
+        if (provider.managementErrorMessage != null) {
+          return false;
+        }
+        return true;
+      },
+    );
+  }
+
+  Future<void> _handleRemoveSMB(
+    SharedRemoteLibraryProvider provider,
+    SMBConnection connection,
+  ) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('删除 SMB 连接'),
+        content: Text('确定要删除“${connection.name}”吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await provider.removeSMBConnection(connection.name);
+      _checkError(provider, '已删除 SMB 连接');
+    }
+  }
+
+  void _checkError(SharedRemoteLibraryProvider provider, String successMessage) {
+    if (!mounted) return;
+    if (provider.managementErrorMessage != null) {
+      AdaptiveSnackBar.show(
+        context,
+        message: provider.managementErrorMessage!,
+        type: AdaptiveSnackBarType.error,
+      );
+    } else {
+      AdaptiveSnackBar.show(
+        context,
+        message: successMessage,
+        type: AdaptiveSnackBarType.success,
+      );
+    }
   }
 
   Future<void> _handleAddFolder(SharedRemoteLibraryProvider provider) async {

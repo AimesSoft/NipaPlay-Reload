@@ -4,7 +4,11 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 
 class WebDAVConnectionDialog {
-  static Future<bool?> show(BuildContext context, {WebDAVConnection? editConnection}) async {
+  static Future<bool?> show(
+    BuildContext context, {
+    WebDAVConnection? editConnection,
+    Future<bool> Function(WebDAVConnection)? onSave,
+  }) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
@@ -12,15 +16,22 @@ class WebDAVConnectionDialog {
       context: context,
       title: editConnection == null ? '添加WebDAV服务器' : '编辑WebDAV服务器',
       backgroundColor: backgroundColor,
-      contentWidget: _WebDAVForm(editConnection: editConnection),
+      contentWidget: _WebDAVForm(
+        editConnection: editConnection,
+        onSave: onSave,
+      ),
     );
   }
 }
 
 class _WebDAVForm extends StatefulWidget {
   final WebDAVConnection? editConnection;
+  final Future<bool> Function(WebDAVConnection)? onSave;
   
-  const _WebDAVForm({this.editConnection});
+  const _WebDAVForm({
+    this.editConnection,
+    this.onSave,
+  });
   
   @override
   State<_WebDAVForm> createState() => _WebDAVFormState();
@@ -365,12 +376,16 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         password: _passwordController.text.trim(),
       );
       
-      if (widget.editConnection != null) {
-        // 如果是编辑模式，先删除旧连接
-        await WebDAVService.instance.removeConnection(widget.editConnection!.name);
+      bool success;
+      if (widget.onSave != null) {
+        success = await widget.onSave!(connection);
+      } else {
+        if (widget.editConnection != null) {
+          // 如果是编辑模式，先删除旧连接
+          await WebDAVService.instance.removeConnection(widget.editConnection!.name);
+        }
+        success = await WebDAVService.instance.addConnection(connection);
       }
-      
-      final success = await WebDAVService.instance.addConnection(connection);
       
       if (mounted) {
         if (success) {

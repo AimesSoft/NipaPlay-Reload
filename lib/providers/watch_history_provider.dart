@@ -84,20 +84,33 @@ class WatchHistoryProvider extends ChangeNotifier {
         // 尝试从远程 API 获取历史记录
         final remoteHistory = await WebRemoteAccessService.fetchHistory();
         if (remoteHistory.isNotEmpty) {
-          _history = remoteHistory.map((data) => WatchHistoryItem(
-            filePath: data['filePath'],
-            animeName: data['animeName'],
-            episodeTitle: data['episodeTitle'],
-            episodeId: data['episodeId'],
-            animeId: data['animeId'],
-            watchProgress: (data['watchProgress'] as num).toDouble(),
-            lastPosition: (data['lastPosition'] as num).toInt(),
-            duration: (data['duration'] as num).toInt(),
-            lastWatchTime: DateTime.parse(data['lastWatchTime']),
-            thumbnailPath: data['thumbnailPath'],
-            isFromScan: data['isFromScan'] ?? false,
-            videoHash: data['videoHash'],
-          )).toList();
+          _history = remoteHistory.map((data) {
+            String? thumbnail = data['thumbnailPath'];
+            // 如果缩略图是本地路径（不含协议头），则转换为远程代理 URL
+            if (thumbnail != null && 
+                thumbnail.isNotEmpty && 
+                !thumbnail.startsWith('http://') && 
+                !thumbnail.startsWith('https://')) {
+              final original = thumbnail;
+              thumbnail = WebRemoteAccessService.imageProxyUrl(thumbnail);
+              debugPrint('[WatchHistory] Converted local thumbnail: $original -> $thumbnail');
+            }
+            
+            return WatchHistoryItem(
+              filePath: data['filePath'],
+              animeName: data['animeName'],
+              episodeTitle: data['episodeTitle'],
+              episodeId: data['episodeId'],
+              animeId: data['animeId'],
+              watchProgress: (data['watchProgress'] as num).toDouble(),
+              lastPosition: (data['lastPosition'] as num).toInt(),
+              duration: (data['duration'] as num).toInt(),
+              lastWatchTime: DateTime.parse(data['lastWatchTime']),
+              thumbnailPath: thumbnail,
+              isFromScan: data['isFromScan'] ?? false,
+              videoHash: data['videoHash'],
+            );
+          }).toList();
           
           // 排序
           _history.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));

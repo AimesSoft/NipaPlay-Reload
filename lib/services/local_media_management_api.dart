@@ -9,12 +9,22 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
 
 class LocalMediaManagementApi {
   LocalMediaManagementApi() {
     router.get('/folders', _handleListFolders);
     router.post('/folders', _handleAddFolder);
     router.delete('/folders', _handleRemoveFolder);
+
+    // WebDAV Management
+    router.post('/webdav', _handleAddWebDAV);
+    router.delete('/webdav', _handleRemoveWebDAV);
+
+    // SMB Management
+    router.post('/smb', _handleAddSMB);
+    router.delete('/smb', _handleRemoveSMB);
 
     router.get('/browse', _handleBrowse);
     router.get('/stream', _handleStream);
@@ -27,6 +37,9 @@ class LocalMediaManagementApi {
   final Router router = Router();
 
   ScanService get _scanService => ServiceProvider.scanService;
+  WebDAVService get _webdavService => WebDAVService.instance;
+  SMBService get _smbService => SMBService.instance;
+
   static const Set<String> _allowedMediaExtensions = {
     '.mp4',
     '.m4v',
@@ -50,14 +63,94 @@ class LocalMediaManagementApi {
   Future<Response> _handleListFolders(Request request) async {
     try {
       final folders = await _buildFolderPayload(_scanService.scannedFolders);
+      final webdav = _webdavService.connections.map((c) => c.toJson()).toList();
+      final smb = _smbService.connections.map((c) => c.toJson()).toList();
+      
       return _jsonOk({
         'success': true,
-        'data': {'folders': folders},
+        'data': {
+          'folders': folders,
+          'webdav': webdav,
+          'smb': smb,
+        },
       });
     } catch (e) {
-      return _jsonError(HttpStatus.internalServerError, '读取扫描文件夹列表失败: $e');
+      return _jsonError(HttpStatus.internalServerError, '读取库列表失败: $e');
     }
   }
+
+  // --- WebDAV Handlers ---
+
+  Future<Response> _handleAddWebDAV(Request request) async {
+    try {
+      final body = await request.readAsString();
+      final payload = json.decode(body) as Map<String, dynamic>;
+      final connection = WebDAVConnection.fromJson(payload);
+      
+      final success = await _webdavService.addConnection(connection);
+      if (success) {
+        return _jsonOk({'success': true, 'message': 'WebDAV 连接已添加'});
+      } else {
+        return _jsonError(HttpStatus.badRequest, 'WebDAV 连接测试失败');
+      }
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '添加 WebDAV 失败: $e');
+    }
+  }
+
+  Future<Response> _handleRemoveWebDAV(Request request) async {
+    final name = request.url.queryParameters['name'];
+    if (name == null || name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing name');
+    }
+    try {
+      await _webdavService.removeConnection(name);
+      return _jsonOk({'success': true});
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '移除 WebDAV 失败: $e');
+    }
+  }
+
+  // --- SMB Handlers ---
+
+  Future<Response> _handleAddSMB(Request request) async {
+    try {
+      final body = await request.readAsString();
+      final payload = json.decode(body) as Map<String, dynamic>;
+      final connection = SMBConnection.fromJson(payload);
+      
+      // Check if updating or adding
+      final existing = _smbService.getConnection(connection.name);
+      bool success;
+      if (existing != null) {
+        success = await _smbService.updateConnection(connection.name, connection);
+      } else {
+        success = await _smbService.addConnection(connection);
+      }
+
+      if (success) {
+        return _jsonOk({'success': true, 'message': 'SMB 连接已保存'});
+      } else {
+        return _jsonError(HttpStatus.badRequest, 'SMB 连接测试失败');
+      }
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '保存 SMB 失败: $e');
+    }
+  }
+
+  Future<Response> _handleRemoveSMB(Request request) async {
+    final name = request.url.queryParameters['name'];
+    if (name == null || name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing name');
+    }
+    try {
+      await _smbService.removeConnection(name);
+      return _jsonOk({'success': true});
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '移除 SMB 失败: $e');
+    }
+  }
+
 
   Future<Response> _handleAddFolder(Request request) async {
     Map<String, dynamic> payload = const {};

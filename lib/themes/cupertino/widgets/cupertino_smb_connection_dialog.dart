@@ -7,6 +7,7 @@ class CupertinoSmbConnectionDialog {
   static Future<bool?> show(
     BuildContext context, {
     SMBConnection? editConnection,
+    Future<bool> Function(SMBConnection)? onSave,
   }) async {
     final bool isEditing = editConnection != null;
     final String title = isEditing ? '编辑 SMB 服务器' : '添加 SMB 服务器';
@@ -155,6 +156,10 @@ class CupertinoSmbConnectionDialog {
       password: passwordInput,
       domain: domain,
     );
+
+    if (onSave != null) {
+      return onSave(connection);
+    }
 
     if (isEditing) {
       return SMBService.instance.updateConnection(editConnection!.name, connection);
