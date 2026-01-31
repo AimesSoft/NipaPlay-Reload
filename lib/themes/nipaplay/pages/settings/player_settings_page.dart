@@ -440,51 +440,44 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    // Web 平台不显示此页面内容，或者显示一个提示信息
-    if (kIsWeb) {
-      return Center(
-        child: Text(
-          '播放器设置在Web平台不可用',
-          locale: const Locale("zh-Hans", "zh"),
-          style: TextStyle(color: colorScheme.onSurface),
-        ),
-      );
-    }
+    // Web 平台现在允许访问此页面，但部分功能受限
     return ListView(
       children: [
-        SettingsItem.dropdown(
-          title: "播放器内核",
-          subtitle: "选择播放器使用的核心引擎",
-          icon: Ionicons.play_circle_outline,
-          items: [
-            DropdownMenuItemData(
-              title: "MDK",
-              value: PlayerKernelType.mdk,
-              isSelected: _selectedKernelType == PlayerKernelType.mdk,
-              description: _getPlayerKernelDescription(PlayerKernelType.mdk),
-            ),
-            DropdownMenuItemData(
-              title: "Video Player",
-              value: PlayerKernelType.videoPlayer,
-              isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
-              description:
-                  _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
-            ),
-            DropdownMenuItemData(
-              title: "Libmpv",
-              value: PlayerKernelType.mediaKit,
-              isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
-              description:
-                  _getPlayerKernelDescription(PlayerKernelType.mediaKit),
-            ),
-          ],
-          onChanged: (kernelType) {
-            _savePlayerKernelSettings(kernelType);
-          },
-          dropdownKey: _playerKernelDropdownKey,
-        ),
+        if (!kIsWeb) ...[
+          SettingsItem.dropdown(
+            title: "播放器内核",
+            subtitle: "选择播放器使用的核心引擎",
+            icon: Ionicons.play_circle_outline,
+            items: [
+              DropdownMenuItemData(
+                title: "MDK",
+                value: PlayerKernelType.mdk,
+                isSelected: _selectedKernelType == PlayerKernelType.mdk,
+                description: _getPlayerKernelDescription(PlayerKernelType.mdk),
+              ),
+              DropdownMenuItemData(
+                title: "Video Player",
+                value: PlayerKernelType.videoPlayer,
+                isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
+                description:
+                    _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
+              ),
+              DropdownMenuItemData(
+                title: "Libmpv",
+                value: PlayerKernelType.mediaKit,
+                isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
+                description:
+                    _getPlayerKernelDescription(PlayerKernelType.mediaKit),
+              ),
+            ],
+            onChanged: (kernelType) {
+              _savePlayerKernelSettings(kernelType);
+            },
+            dropdownKey: _playerKernelDropdownKey,
+          ),
 
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
 
         if (_selectedKernelType == PlayerKernelType.mdk ||
             _selectedKernelType == PlayerKernelType.mediaKit) ...[

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/main.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ class BlurSnackBar {
   static AnimationController? _controller; // 防止泄漏：保存当前动画控制器
 
   static bool _shouldUseGlassBackground(BuildContext context) {
+    if (kIsWeb) return false;
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     final mainPageState = MainPageState.of(context);
     final isOnVideoPage = mainPageState?.globalTabController?.index == 1;

@@ -180,6 +180,7 @@ class _CupertinoSharedAnimeDetailPageState
       }
       _maybeLoadVividCover();
     });
+    BangumiApiService.loginStatusNotifier.addListener(_onBangumiLoginStatusChanged);
   }
 
   @override
@@ -3764,8 +3765,15 @@ class _CupertinoSharedAnimeDetailPageState
     return url;
   }
 
+  void _onBangumiLoginStatusChanged() {
+    if (mounted && widget.enableBangumiFeatures) {
+      _loadBangumiAnime();
+    }
+  }
+
   @override
   void dispose() {
+    BangumiApiService.loginStatusNotifier.removeListener(_onBangumiLoginStatusChanged);
     _scrollController.dispose();
     super.dispose();
   }

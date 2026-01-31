@@ -1,5 +1,6 @@
 // ThemeModePage.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
@@ -230,16 +231,19 @@ class _ThemeModePageState extends State<ThemeModePage> {
               dropdownKey: _dropdownKey,
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            SettingsItem.toggle(
-              title: "控件毛玻璃效果",
-              subtitle: "关闭后可提升性能，但会失去部分UI透明感",
-              icon: Ionicons.radio_button_on_outline,
-              value: appearanceSettings.enableWidgetBlurEffect,
-              onChanged: (value) {
-                appearanceSettings.setEnableWidgetBlurEffect(value);
-              },
-            ),
-            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            if (!kIsWeb) ...[
+              SettingsItem.toggle(
+                title: "控件毛玻璃效果",
+                subtitle: "关闭后可提升性能，但会失去部分UI透明感",
+                icon: Ionicons.radio_button_on_outline,
+                value: appearanceSettings.enableWidgetBlurEffect,
+                onChanged: (value) {
+                  appearanceSettings.setEnableWidgetBlurEffect(value);
+                },
+              ),
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            ],
             SettingsItem.toggle(
               title: "番剧卡片显示介绍",
               subtitle: "关闭后仅显示封面和标题",

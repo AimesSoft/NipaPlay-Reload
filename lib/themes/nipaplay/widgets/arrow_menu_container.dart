@@ -64,42 +64,67 @@ class ArrowMenuContainer extends StatelessWidget {
       ),
     );
     final borderRadiusValue = BorderRadius.circular(borderRadius);
+    final bool isWeb = kIsWeb;
+    // Web 使用深灰色纯色背景
+    final Color effectiveBackgroundColor = isWeb ? const Color(0xFF222222) : backgroundColor;
+    
     final backgroundDecoration = BoxDecoration(
-      color: backgroundColor,
+      color: effectiveBackgroundColor,
       borderRadius: borderRadiusValue,
       boxShadow: shadows,
     );
-    final Widget blurredBody = useSimpleClip
-        ? ClipRRect(
-            borderRadius: borderRadiusValue,
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-              child: DecoratedBox(
+
+    final Widget blurredBody = isWeb
+        ? (useSimpleClip
+            ? Container(
                 decoration: backgroundDecoration,
                 child: Padding(
                   padding: contentPadding,
                   child: child,
                 ),
-              ),
-            ),
-          )
-        : ClipPath(
-            clipper: ShapeBorderClipper(shape: shape),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-              child: DecoratedBox(
+              )
+            : DecoratedBox(
                 decoration: ShapeDecoration(
                   shape: shape,
-                  color: backgroundColor,
+                  color: effectiveBackgroundColor,
                   shadows: shadows,
                 ),
                 child: Padding(
                   padding: contentPadding,
                   child: child,
                 ),
-              ),
-            ),
-          );
+              ))
+        : (useSimpleClip
+            ? ClipRRect(
+                borderRadius: borderRadiusValue,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                  child: DecoratedBox(
+                    decoration: backgroundDecoration,
+                    child: Padding(
+                      padding: contentPadding,
+                      child: child,
+                    ),
+                  ),
+                ),
+              )
+            : ClipPath(
+                clipper: ShapeBorderClipper(shape: shape),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      shape: shape,
+                      color: backgroundColor,
+                      shadows: shadows,
+                    ),
+                    child: Padding(
+                      padding: contentPadding,
+                      child: child,
+                    ),
+                  ),
+                ),
+              ));
     final ShapeBorder resolvedBorderShape =
         useSimpleClip ? RoundedRectangleBorder(borderRadius: borderRadiusValue) : borderShape;
 

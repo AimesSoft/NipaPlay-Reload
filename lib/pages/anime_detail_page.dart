@@ -191,6 +191,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     // 添加TabController监听
     _tabController!.addListener(_handleTabChange);
+    
+    // 添加Bangumi登录状态监听
+    BangumiApiService.loginStatusNotifier.addListener(_onBangumiLoginStatusChanged);
 
     // 启动时异步清理过期缓存
     _bangumiService.cleanExpiredDetailCache().then((_) {
@@ -255,9 +258,19 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     if (_openPageContext == context) {
       _openPageContext = null;
     }
+    BangumiApiService.loginStatusNotifier.removeListener(_onBangumiLoginStatusChanged);
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
     super.dispose();
+  }
+
+  void _onBangumiLoginStatusChanged() {
+    if (mounted) {
+      if (_detailedAnime != null) {
+        _loadBangumiUserData(_detailedAnime!);
+      }
+      setState(() {});
+    }
   }
 
   // 处理标签切换
