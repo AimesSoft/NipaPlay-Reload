@@ -525,9 +525,19 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     if (host == null) {
       throw Exception('未选择远程媒体库');
     }
-    return Uri.parse(host.baseUrl).resolve(episode.streamPath.startsWith('/')
-        ? episode.streamPath.substring(1)
-        : episode.streamPath);
+    final streamPath = episode.streamPath.trim();
+    if (streamPath.isEmpty) {
+      throw Exception('该剧集缺少可用的播放地址');
+    }
+    final resolved = Uri.parse(host.baseUrl).resolve(
+      streamPath.startsWith('/') ? streamPath.substring(1) : streamPath,
+    );
+    if (kIsWeb &&
+        resolved.isAbsolute &&
+        (resolved.scheme == 'http' || resolved.scheme == 'https')) {
+      return WebRemoteAccessService.proxyUri(resolved);
+    }
+    return resolved;
   }
 
   WatchHistoryItem buildWatchHistoryItem({

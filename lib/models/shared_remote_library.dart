@@ -150,11 +150,17 @@ class SharedRemoteEpisode {
   final String? videoHash;
 
   factory SharedRemoteEpisode.fromJson(Map<String, dynamic> json) {
+    final rawStreamPath = json['streamPath'] as String?;
+    final originalFilePath = json['originalFilePath'] as String?;
+    final resolvedStreamPath = (rawStreamPath ?? '').trim().isNotEmpty
+        ? rawStreamPath!.trim()
+        : (originalFilePath ?? '').trim();
+
     return SharedRemoteEpisode(
-      shareId: json['shareId'] as String,
+      shareId: json['shareId']?.toString() ?? '',
       title: json['title'] as String? ?? '未知剧集',
       fileName: json['fileName'] as String? ?? 'unknown',
-      streamPath: json['streamPath'] as String,
+      streamPath: resolvedStreamPath,
       fileExists: json['fileExists'] as bool? ?? true,
       animeId: json['animeId'] as int?,
       episodeId: json['episodeId'] as int?,
