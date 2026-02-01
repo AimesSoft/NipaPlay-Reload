@@ -31,7 +31,9 @@ doc/api/
 
 # 原有的 MCDFsteve/ 规则可以保留，但要确保不影响 .gitignore
 /MCDFsteve/
-/assets/web
+/assets/web/*
+!/assets/web/
+!/assets/web/.gitkeep
 docs/error.txt
 
 # 忽略 Mac 的隐藏文件
