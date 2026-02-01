@@ -7,6 +7,8 @@ class WebRemoteAccessService {
   static const String _baseUrlKey = 'web_remote_access_base_url';
   static String? _cachedBaseUrl;
   static bool _initialized = false;
+  static final Map<String, bool> _probeCache = {};
+  static final Map<String, Future<bool>> _probeInFlight = {};
   
   /// Base URL 变更通知器
   static final ValueNotifier<String?> baseUrlNotifier = ValueNotifier<String?>(null);
@@ -37,6 +39,7 @@ class WebRemoteAccessService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_baseUrlKey, normalized);
     }
+    _probeCache[normalized] = true;
     _initialized = true;
   }
 
@@ -62,14 +65,28 @@ class WebRemoteAccessService {
 
   static Future<String?> resolveCandidateBaseUrl() async {
     final queryOverride = resolveBaseUrlFromQuery();
-    if (queryOverride != null) return queryOverride;
+    if (queryOverride != null) {
+      final ok = await _probeCached(queryOverride);
+      if (ok) {
+        return queryOverride;
+      }
+    }
 
     await ensureInitialized();
     if (_cachedBaseUrl != null && _cachedBaseUrl!.isNotEmpty) {
-      return _cachedBaseUrl;
+      if (!kIsWeb) {
+        return _cachedBaseUrl;
+      }
+      final ok = await _probeCached(_cachedBaseUrl!);
+      if (ok) {
+        return _cachedBaseUrl;
+      }
     }
 
-    return resolveBaseUrlFromOrigin();
+    final origin = resolveBaseUrlFromOrigin();
+    if (origin == null) return null;
+    final ok = await _probeCached(origin);
+    return ok ? origin : null;
   }
 
   static String normalizeBaseUrl(String url) {
@@ -106,6 +123,26 @@ class WebRemoteAccessService {
       }
     } catch (_) {}
     return false;
+  }
+
+  static Future<bool> _probeCached(String baseUrl) async {
+    final normalized = normalizeBaseUrl(baseUrl);
+    if (!isValidBaseUrl(normalized)) {
+      _probeCache[normalized] = false;
+      return false;
+    }
+    if (_probeCache.containsKey(normalized)) {
+      return _probeCache[normalized] ?? false;
+    }
+    final inflight = _probeInFlight[normalized];
+    if (inflight != null) return inflight;
+    final future = probe(normalized).then((ok) {
+      _probeCache[normalized] = ok;
+      _probeInFlight.remove(normalized);
+      return ok;
+    });
+    _probeInFlight[normalized] = future;
+    return future;
   }
 
   static Uri? apiUri(String path) {

@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_cors_headers/shelf_cors_headers.dart';
+import 'package:shelf_static/shelf_static.dart';
 import 'web_api_service.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 
@@ -12,6 +14,7 @@ class WebServerService {
   static const String _legacyAutoStartKey = 'web_server_enabled';
   static const String _autoStartKey = 'web_server_auto_start';
   static const String _portKey = 'web_server_port';
+  static const String _webAssetsRelativePath = 'assets/web';
   
   HttpServer? _server;
   int _port = 1180;
@@ -21,11 +24,263 @@ class WebServerService {
   final WebApiService _webApiService = WebApiService();
   final NipaPlayLanDiscoveryResponder _lanDiscoveryResponder =
       NipaPlayLanDiscoveryResponder();
+  Handler? _webUiHandler;
+  File? _webUiIndexFile;
 
   bool get isRunning => _isRunning;
   int get port => _port;
   bool get autoStart => _autoStart;
   String? get lastStartErrorMessage => _lastStartErrorMessage;
+
+  Directory? _resolveWebUiRoot() {
+    final candidates = <String>[
+      path.join(Directory.current.path, _webAssetsRelativePath),
+      if (Platform.isLinux || Platform.isWindows)
+        path.join(
+          path.dirname(Platform.resolvedExecutable),
+          'data',
+          'flutter_assets',
+          _webAssetsRelativePath,
+        ),
+      if (Platform.isMacOS)
+        path.join(
+          path.dirname(Platform.resolvedExecutable),
+          '..',
+          'Frameworks',
+          'App.framework',
+          'Resources',
+          'flutter_assets',
+          _webAssetsRelativePath,
+        ),
+      if (Platform.isIOS)
+        path.join(
+          path.dirname(Platform.resolvedExecutable),
+          'Frameworks',
+          'App.framework',
+          'flutter_assets',
+          _webAssetsRelativePath,
+        ),
+    ];
+
+    for (final candidate in candidates) {
+      final dir = Directory(path.normalize(candidate));
+      if (dir.existsSync()) {
+        return dir;
+      }
+    }
+    return null;
+  }
+
+  bool _shouldInjectApiParam(Request request) {
+    if (_webUiHandler == null) return false;
+    final query = request.url.queryParameters;
+    if (query.containsKey('api') ||
+        query.containsKey('apiBase') ||
+        query.containsKey('baseUrl')) {
+      return false;
+    }
+    final pathValue = request.url.path;
+    if (pathValue.isEmpty || pathValue == 'index.html') {
+      return true;
+    }
+    final segments = request.url.pathSegments;
+    if (segments.isNotEmpty) {
+      final first = segments.first;
+      if (first == 'assets' || first == 'canvaskit' || first == 'icons') {
+        return false;
+      }
+    }
+    if (pathValue.contains('.')) {
+      return false;
+    }
+    return true;
+  }
+
+  Response _redirectWithApiParam(Request request) {
+    final origin = request.requestedUri.origin;
+    final updatedQuery = Map<String, String>.from(request.url.queryParameters);
+    updatedQuery['api'] = origin;
+    final redirectUri = request.requestedUri.replace(queryParameters: updatedQuery);
+    return Response.found(redirectUri.toString());
+  }
+
+  Future<Response> _handleWebUiRequest(Request request) async {
+    final handler = _webUiHandler;
+    final indexFile = _webUiIndexFile;
+    if (handler == null || indexFile == null || !indexFile.existsSync()) {
+      return Response(
+        404,
+        body: 'Web UI 资源未找到，请先运行 build_and_copy_web.sh 构建。',
+        headers: const {'Content-Type': 'text/plain; charset=utf-8'},
+      );
+    }
+    final patchedIndex = _tryServePatchedIndex(request, indexFile);
+    if (patchedIndex != null) {
+      return patchedIndex;
+    }
+    final patchedBootstrap = await _tryServePatchedBootstrap(request, indexFile);
+    if (patchedBootstrap != null) {
+      return patchedBootstrap;
+    }
+    final response = await handler(request);
+    if (response.statusCode != 404) {
+      return response;
+    }
+    final isAssetRequest = _isLikelyAssetRequest(request);
+    if (isAssetRequest) {
+      _logStaticNotFound(request, indexFile);
+      return response;
+    }
+    _logFallback(request, indexFile);
+    final headers = <String, String>{
+      HttpHeaders.contentTypeHeader: 'text/html; charset=utf-8',
+      'X-WebUi-Fallback': '1',
+    };
+    if (request.method == 'HEAD') {
+      return Response.ok(null, headers: headers);
+    }
+    return Response.ok(indexFile.openRead(), headers: headers);
+  }
+
+  Response? _tryServePatchedIndex(Request request, File indexFile) {
+    final pathValue = request.url.path;
+    if (pathValue.isNotEmpty && pathValue != 'index.html') {
+      return null;
+    }
+    final original = indexFile.readAsStringSync();
+    final patched = _patchIndexForRemote(original);
+    if (patched == original && request.method == 'HEAD') {
+      return Response.ok(null, headers: const {
+        HttpHeaders.contentTypeHeader: 'text/html; charset=utf-8',
+      });
+    }
+    if (request.method == 'HEAD') {
+      return Response.ok(null, headers: const {
+        HttpHeaders.contentTypeHeader: 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+    }
+    return Response.ok(
+      patched,
+      headers: const {
+        HttpHeaders.contentTypeHeader: 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    );
+  }
+
+  Future<Response?> _tryServePatchedBootstrap(
+    Request request,
+    File indexFile,
+  ) async {
+    final pathValue = request.url.path;
+    if (pathValue != 'flutter_bootstrap.js') {
+      return null;
+    }
+    if (!request.url.queryParameters.containsKey('no-sw')) {
+      return null;
+    }
+    final bootstrapFile = File(path.join(indexFile.parent.path, pathValue));
+    if (!bootstrapFile.existsSync()) {
+      return null;
+    }
+    if (request.method == 'HEAD') {
+      return Response.ok(null, headers: const {
+        HttpHeaders.contentTypeHeader: 'application/javascript',
+        'Cache-Control': 'no-store',
+      });
+    }
+    final original = await bootstrapFile.readAsString();
+    final patched = _patchBootstrapForRemote(original);
+    return Response.ok(
+      patched,
+      headers: const {
+        HttpHeaders.contentTypeHeader: 'application/javascript',
+        'Cache-Control': 'no-store',
+      },
+    );
+  }
+
+  String _patchIndexForRemote(String original) {
+    const bootstrapTag = '<script src="flutter_bootstrap.js" async></script>';
+    const patchedTag =
+        '<script>'
+        "if ('serviceWorker' in navigator) {"
+        'navigator.serviceWorker.getRegistrations().then((regs) => {'
+        'if (!regs.length) { return; }'
+        'Promise.all(regs.map((reg) => reg.unregister())).then(() => {'
+        "if (!sessionStorage.getItem('nipaplay_sw_cleared')) {"
+        "sessionStorage.setItem('nipaplay_sw_cleared', '1');"
+        'location.reload();'
+        '}'
+        '});'
+        '});'
+        '}'
+        '</script>'
+        '<script src="flutter_bootstrap.js?no-sw=1" async></script>';
+    if (original.contains(patchedTag)) {
+      return original;
+    }
+    if (original.contains(bootstrapTag)) {
+      return original.replaceFirst(bootstrapTag, patchedTag);
+    }
+    return original;
+  }
+
+  String _patchBootstrapForRemote(String original) {
+    final pattern = RegExp(
+      r'_flutter\.loader\.load\(\{\s*serviceWorkerSettings:\s*\{\s*serviceWorkerVersion:\s*"[^"]+"\s*\}\s*\}\);',
+      dotAll: true,
+    );
+    if (!pattern.hasMatch(original)) {
+      return original;
+    }
+    return original.replaceFirst(pattern, '_flutter.loader.load({});');
+  }
+
+  bool _isLikelyAssetRequest(Request request) {
+    final pathValue = request.url.path;
+    if (pathValue.isEmpty) {
+      return false;
+    }
+    final segments = request.url.pathSegments;
+    if (segments.isNotEmpty) {
+      final first = segments.first;
+      if (first == 'assets' || first == 'canvaskit' || first == 'icons') {
+        return true;
+      }
+    }
+    final baseName = path.basename(pathValue);
+    return baseName.contains('.');
+  }
+
+  void _logFallback(Request request, File indexFile) {
+    _logStaticRouting(
+      request,
+      indexFile,
+      prefix: '404回退index.html',
+    );
+  }
+
+  void _logStaticNotFound(Request request, File indexFile) {
+    _logStaticRouting(
+      request,
+      indexFile,
+      prefix: '静态资源404',
+    );
+  }
+
+  void _logStaticRouting(Request request, File indexFile, {required String prefix}) {
+    final pathValue = request.url.path;
+    final accept = request.headers[HttpHeaders.acceptHeader] ?? '';
+    final rootDir = indexFile.parent;
+    final normalizedPath =
+        path.normalize(pathValue.isEmpty ? 'index.html' : pathValue);
+    final resolvedPath = path.join(rootDir.path, normalizedPath);
+    final exists = File(resolvedPath).existsSync();
+    print('[WebServer] $prefix: ${request.requestedUri} '
+        'accept="$accept" resolved="$resolvedPath" exists=$exists');
+  }
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -85,33 +340,43 @@ class WebServerService {
     _port = port ?? _port;
 
     try {
+      final webRoot = _resolveWebUiRoot();
+      if (webRoot != null) {
+        _webUiHandler = createStaticHandler(
+          webRoot.path,
+          defaultDocument: 'index.html',
+          serveFilesOutsidePath: false,
+        );
+        _webUiIndexFile = File(path.join(webRoot.path, 'index.html'));
+      } else {
+        _webUiHandler = null;
+        _webUiIndexFile = null;
+      }
       // 挂载在 '/api'，剥离前缀后保留子路径的前导斜杠 (e.g. /api/info -> /info)
       final apiRouter = Router()..mount('/api', _webApiService.handler);
 
       final Handler rootHandler = (Request request) async {
         final path = request.url.path;
-        print('[WebServer] 收到请求: "$path", handlerPath: "${request.handlerPath}"');
+        //print('[WebServer] 收到请求: "$path", handlerPath: "${request.handlerPath}"');
         
         if (path == 'api' || path.startsWith('api/')) {
-          print('[WebServer] 匹配到API路径，尝试分发...');
+          //print('[WebServer] 匹配到API路径，尝试分发...');
           try {
             final response = await apiRouter.call(request);
-            print('[WebServer] API路由器响应状态码: ${response.statusCode}');
+            //print('[WebServer] API路由器响应状态码: ${response.statusCode}');
             if (response.statusCode == 404) {
-               print('[WebServer] 警告：API路由器返回404。请检查 web_api_service.dart 中的路由定义是否与请求路径匹配。');
+               //print('[WebServer] 警告：API路由器返回404。请检查 web_api_service.dart 中的路由定义是否与请求路径匹配。');
             }
             return response;
           } catch (e) {
-            print('[WebServer] API处理异常: $e');
+            //print('[WebServer] API处理异常: $e');
             return Response.internalServerError(body: 'API Error: $e');
           }
         }
-        print('[WebServer] 未匹配API路径，返回404');
-        return Response(
-          404,
-          body: 'Web UI 已移除，请使用 NipaPlay 客户端连接远程访问 API。',
-          headers: const {'Content-Type': 'text/plain; charset=utf-8'},
-        );
+        if (_shouldInjectApiParam(request)) {
+          return _redirectWithApiParam(request);
+        }
+        return _handleWebUiRequest(request);
       };
 
       final handler = const Pipeline()

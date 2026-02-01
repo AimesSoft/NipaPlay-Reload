@@ -86,15 +86,15 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
       // Web Remote Auto-Discovery
       if (kIsWeb) {
-        final origin = WebRemoteAccessService.resolveBaseUrlFromOrigin();
-        if (origin != null) {
-          final existingIndex = _hosts.indexWhere((h) => h.baseUrl == origin);
+        final candidate = await WebRemoteAccessService.resolveCandidateBaseUrl();
+        if (candidate != null) {
+          final existingIndex = _hosts.indexWhere((h) => h.baseUrl == candidate);
           if (existingIndex == -1) {
-            final id = 'web-origin-${origin.hashCode}';
+            final id = 'web-origin-${candidate.hashCode}';
             final host = SharedRemoteHost(
               id: id,
               displayName: 'NipaPlay Server (Auto)',
-              baseUrl: origin,
+              baseUrl: candidate,
               isOnline: true,
             );
             _hosts.insert(0, host);

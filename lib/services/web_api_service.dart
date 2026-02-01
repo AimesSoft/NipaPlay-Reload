@@ -147,10 +147,10 @@ class WebApiService {
 
   Future<Response> handleImageProxyRequest(Request request) async {
     final urlParam = request.url.queryParameters['url'];
-    debugPrint('[ImageProxy] Request received. Raw param: $urlParam');
+    //debugPrint('[ImageProxy] Request received. Raw param: $urlParam');
 
     if (urlParam == null || urlParam.isEmpty) {
-      debugPrint('[ImageProxy] Error: Missing image URL');
+      //debugPrint('[ImageProxy] Error: Missing image URL');
       return Response.badRequest(body: 'Missing image URL');
     }
 
@@ -158,16 +158,16 @@ class WebApiService {
       String imageUrl;
       try {
         imageUrl = utf8.decode(base64Url.decode(urlParam));
-        debugPrint('[ImageProxy] Decoded URL: $imageUrl');
+        //debugPrint('[ImageProxy] Decoded URL: $imageUrl');
       } catch (e) {
         imageUrl = urlParam;
-        debugPrint('[ImageProxy] Base64 decode failed, using raw: $imageUrl');
+        //debugPrint('[ImageProxy] Base64 decode failed, using raw: $imageUrl');
       }
 
       if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-        debugPrint('[ImageProxy] Fetching network image: $imageUrl');
+        //debugPrint('[ImageProxy] Fetching network image: $imageUrl');
         final response = await http.get(Uri.parse(imageUrl));
-        debugPrint('[ImageProxy] Network fetch status: ${response.statusCode}');
+        //debugPrint('[ImageProxy] Network fetch status: ${response.statusCode}');
         if (response.statusCode == 200) {
           return Response.ok(
             response.bodyBytes,
@@ -180,10 +180,10 @@ class WebApiService {
           return Response(response.statusCode, body: 'Failed to fetch image');
         }
       } else {
-        debugPrint('[ImageProxy] Reading local file: $imageUrl');
+        //debugPrint('[ImageProxy] Reading local file: $imageUrl');
         final file = File(imageUrl);
         final exists = await file.exists();
-        debugPrint('[ImageProxy] File exists: $exists');
+        //debugPrint('[ImageProxy] File exists: $exists');
         
         if (!exists) {
           return Response.notFound('Image file not found');
@@ -197,7 +197,7 @@ class WebApiService {
             !ext.endsWith('.webp') && 
             !ext.endsWith('.gif') && 
             !ext.endsWith('.bmp')) {
-          debugPrint('[ImageProxy] Forbidden extension: $ext');
+          //debugPrint('[ImageProxy] Forbidden extension: $ext');
           return Response.forbidden('Access to non-image files is forbidden');
         }
 
@@ -208,7 +208,7 @@ class WebApiService {
         if (ext.endsWith('.gif')) contentType = 'image/gif';
         if (ext.endsWith('.bmp')) contentType = 'image/bmp';
 
-        debugPrint('[ImageProxy] Serving file with Content-Type: $contentType, Size: ${bytes.length}');
+        //debugPrint('[ImageProxy] Serving file with Content-Type: $contentType, Size: ${bytes.length}');
         return Response.ok(
           bytes,
           headers: {
@@ -219,7 +219,7 @@ class WebApiService {
         );
       }
     } catch (e) {
-      debugPrint('[ImageProxy] Exception: $e');
+      //debugPrint('[ImageProxy] Exception: $e');
       return Response.internalServerError(body: 'Error proxying image: $e');
     }
   }
