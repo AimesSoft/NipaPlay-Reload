@@ -29,6 +29,7 @@ import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
+import 'package:nipaplay/services/web_remote_history_sync_service.dart';
 import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';

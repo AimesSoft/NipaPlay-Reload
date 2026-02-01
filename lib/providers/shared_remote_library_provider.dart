@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -658,6 +659,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         _webdavConnections = [];
         _smbConnections = [];
         _scanStatus = null;
+        if (kIsWeb) {
+          MediaSourceUtils.updateRemoteWebDavConnections(_webdavConnections);
+        }
         _managementErrorMessage = _managementUnsupportedMessage;
         _updateHostStatus(host.id, isOnline: true, lastError: null);
         return;
@@ -720,6 +724,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         }
       }
       _smbConnections = smb;
+      if (kIsWeb) {
+        MediaSourceUtils.updateRemoteWebDavConnections(_webdavConnections);
+      }
 
       await refreshScanStatus(showLoading: false);
       _updateHostStatus(host.id, isOnline: true, lastError: null);
@@ -728,6 +735,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _webdavConnections = [];
       _smbConnections = [];
       _scanStatus = null;
+      if (kIsWeb) {
+        MediaSourceUtils.updateRemoteWebDavConnections(_webdavConnections);
+      }
       _managementErrorMessage = _buildManagementFriendlyError(e, host);
       _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
     } finally {

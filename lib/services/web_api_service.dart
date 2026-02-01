@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'bangumi_service.dart';
@@ -8,11 +9,13 @@ import 'dandanplay_service.dart';
 import 'package:http/http.dart' as http;
 import 'search_service.dart'; // 导入SearchService
 import 'package:flutter/foundation.dart'; // 导入debugPrint
+import 'package:nipaplay/models/watch_history_model.dart';
 import '../providers/service_provider.dart';
 import 'local_media_share_api.dart';
 import 'local_media_management_api.dart';
 import 'web_ui_proxy_api.dart';
 import 'network_media_settings_api.dart';
+import 'package:path/path.dart' as p;
 
 class WebApiService {
   final Router _router = Router();
@@ -63,6 +66,7 @@ class WebApiService {
     _router.get('/media/local/items', handleGetLocalMediaItemsRequest);
         _router.get('/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
         _router.get('/history', handleGetHistoryRequest);
+        _router.post('/history/progress', handleUpdateHistoryProgressRequest);
         _router.mount('/media/local/share/', _localMediaShareApi.router);
     _router.mount('/media/local/manage/', _localMediaManagementApi.router);
     _router.mount('/settings/network/', _networkMediaSettingsApi.router);
@@ -590,6 +594,155 @@ class WebApiService {
       );
     } catch (e) {
       return Response.internalServerError(body: 'Error getting history: $e');
+    }
+  }
+
+  Future<Response> handleUpdateHistoryProgressRequest(Request request) async {
+    Map<String, dynamic> payload = const {};
+    try {
+      final rawBody = await request.readAsString();
+      if (rawBody.trim().isNotEmpty) {
+        payload = json.decode(rawBody) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      return Response.badRequest(body: 'Invalid JSON payload');
+    }
+
+    final rawPath = payload['filePath'] ?? payload['path'];
+    final filePath = rawPath?.toString().trim() ?? '';
+    if (filePath.isEmpty) {
+      return Response.badRequest(body: 'Missing filePath');
+    }
+
+    double? progress;
+    final progressValue = payload['progress'];
+    if (progressValue is num) {
+      progress = progressValue.toDouble();
+    }
+
+    int? positionMs;
+    final positionValue = payload['positionMs'] ?? payload['position'];
+    if (positionValue is num) {
+      positionMs = positionValue.toInt();
+    }
+
+    int? durationMs;
+    final durationValue = payload['durationMs'] ?? payload['duration'];
+    if (durationValue is num) {
+      durationMs = durationValue.toInt();
+    }
+
+    DateTime? clientUpdatedAt;
+    final clientTime = payload['clientUpdatedAt'] ?? payload['clientTime'];
+    if (clientTime is String) {
+      clientUpdatedAt = DateTime.tryParse(clientTime);
+    }
+
+    final animeName = payload['animeName']?.toString();
+    final episodeTitle = payload['episodeTitle']?.toString();
+    final animeId = payload['animeId'] is num
+        ? (payload['animeId'] as num).toInt()
+        : int.tryParse(payload['animeId']?.toString() ?? '');
+    final episodeId = payload['episodeId'] is num
+        ? (payload['episodeId'] as num).toInt()
+        : int.tryParse(payload['episodeId']?.toString() ?? '');
+    final videoHash = payload['videoHash']?.toString();
+
+    try {
+      final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
+      if (!watchHistoryProvider.isLoaded) {
+        await watchHistoryProvider.loadHistory();
+      }
+
+      WatchHistoryItem? existingHistory =
+          await watchHistoryProvider.getHistoryItem(filePath);
+
+      final double sanitizedProgress = progress == null || progress.isNaN
+          ? 0.0
+          : progress.clamp(0.0, 1.0);
+      final int sanitizedPosition = positionMs != null && positionMs > 0
+          ? positionMs
+          : 0;
+      final int? sanitizedDuration =
+          durationMs != null && durationMs > 0 ? durationMs : null;
+      double derivedProgress = sanitizedProgress;
+      if (derivedProgress <= 0 &&
+          sanitizedDuration != null &&
+          sanitizedDuration > 0 &&
+          sanitizedPosition > 0) {
+        derivedProgress =
+            (sanitizedPosition / sanitizedDuration).clamp(0.0, 1.0);
+      }
+
+      WatchHistoryItem updatedHistory;
+      if (existingHistory != null) {
+        final mergedProgress = math.min(
+          1.0,
+          math.max(existingHistory.watchProgress, derivedProgress),
+        );
+        final mergedPosition =
+            math.max(existingHistory.lastPosition, sanitizedPosition);
+        final mergedDuration = sanitizedDuration != null
+            ? math.max(existingHistory.duration, sanitizedDuration)
+            : existingHistory.duration;
+
+        updatedHistory = existingHistory.copyWith(
+          watchProgress: mergedProgress,
+          lastPosition: mergedPosition,
+          duration: mergedDuration,
+          lastWatchTime: clientUpdatedAt ?? DateTime.now(),
+          animeName:
+              (animeName != null && animeName.trim().isNotEmpty)
+                  ? animeName.trim()
+                  : existingHistory.animeName,
+          episodeTitle:
+              (episodeTitle != null && episodeTitle.trim().isNotEmpty)
+                  ? episodeTitle.trim()
+                  : existingHistory.episodeTitle,
+          animeId: animeId ?? existingHistory.animeId,
+          episodeId: episodeId ?? existingHistory.episodeId,
+          videoHash: videoHash ?? existingHistory.videoHash,
+        );
+      } else {
+        final fallbackName = (animeName != null && animeName.trim().isNotEmpty)
+            ? animeName.trim()
+            : p.basenameWithoutExtension(filePath);
+
+        updatedHistory = WatchHistoryItem(
+          filePath: filePath,
+          animeName: fallbackName.isNotEmpty ? fallbackName : '未知动画',
+          episodeTitle:
+              (episodeTitle != null && episodeTitle.trim().isNotEmpty)
+                  ? episodeTitle.trim()
+                  : null,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: derivedProgress,
+          lastPosition: sanitizedPosition,
+          duration: sanitizedDuration ?? 0,
+          lastWatchTime: clientUpdatedAt ?? DateTime.now(),
+          thumbnailPath: null,
+          isFromScan: false,
+          videoHash: videoHash,
+        );
+      }
+
+      await watchHistoryProvider.addOrUpdateHistory(updatedHistory);
+
+      return Response.ok(
+        json.encode({
+          'success': true,
+          'data': {
+            'progress': updatedHistory.watchProgress,
+            'lastPosition': updatedHistory.lastPosition,
+            'duration': updatedHistory.duration,
+            'lastWatchTime': updatedHistory.lastWatchTime.toIso8601String(),
+          },
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Failed to update history: $e');
     }
   }
 

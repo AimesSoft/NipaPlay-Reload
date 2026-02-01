@@ -285,6 +285,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   bool _hasWebDAVLibrary = false;
   bool _hasSMBLibrary = false;
   bool _localConnectionsReady = false;
+  String? _remoteManagementHostId;
 
   // 添加变量追踪“添加媒体服务器”入口的悬停状态
   bool _isAddEntryHovered = false;
@@ -377,6 +378,18 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
       _hasWebDAVLibrary,
       _hasSMBLibrary,
     );
+  }
+
+  void _maybeBootstrapRemoteManagement(SharedRemoteLibraryProvider provider) {
+    if (!kIsWeb) return;
+    final hostId = provider.activeHostId;
+    if (hostId == null || hostId.isEmpty) return;
+    if (_remoteManagementHostId == hostId) return;
+    _remoteManagementHostId = hostId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      provider.refreshManagement();
+    });
   }
 
   bool _hasLibraryItemsForSource(
@@ -747,6 +760,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         DandanplayRemoteProvider, WatchHistoryProvider>(
       builder: (context, jellyfinProvider, embyProvider, sharedProvider,
           dandanProvider, watchHistoryProvider, child) {
+        _maybeBootstrapRemoteManagement(sharedProvider);
         final currentJellyfinConnectionState = jellyfinProvider.isConnected;
         final currentEmbyConnectionState = embyProvider.isConnected;
         final currentSharedState = sharedProvider.hasReachableActiveHost;
