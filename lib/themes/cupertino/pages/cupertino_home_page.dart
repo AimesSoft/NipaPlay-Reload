@@ -70,6 +70,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   double _scrollOffset = 0.0;
   bool _isHistoryAutoMatching = false;
   bool _historyAutoMatchDialogVisible = false;
+  // iOS 版出于审核需要隐藏“今日新番/随机推荐”板块。
+  bool get _allowReviewRestrictedSections => !Platform.isIOS;
 
   List<_CupertinoRecommendedItem> _recommendedItems = [];
 
@@ -158,8 +160,10 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         if (mounted) {
           _loadRecommendedContent();
           _loadLatestContent();
-          _loadTodayAnimes();
-          _loadRandomRecommendations();
+          if (_allowReviewRestrictedSections) {
+            _loadTodayAnimes();
+            _loadRandomRecommendations();
+          }
         }
       });
     }
@@ -972,14 +976,19 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Future<void> _handleRefresh() async {
     final syncService = ServerHistorySyncService.instance;
-    await Future.wait([
+    final tasks = <Future<void>>[
       _loadRecommendedContent(forceRefresh: true),
       _loadLatestContent(),
-      _loadTodayAnimes(forceRefresh: true),
-      _loadRandomRecommendations(forceRefresh: true),
       syncService.syncJellyfinResume(),
       syncService.syncEmbyResume(),
-    ]);
+    ];
+    if (_allowReviewRestrictedSections) {
+      tasks.addAll([
+        _loadTodayAnimes(forceRefresh: true),
+        _loadRandomRecommendations(forceRefresh: true),
+      ]);
+    }
+    await Future.wait(tasks);
   }
 
   @override
@@ -994,11 +1003,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
     // 获取状态栏高度
     final statusBarHeight = MediaQuery.of(context).padding.top;
-    final bool showTodaySection =
-        _isLoadingTodayAnimes || _todayAnimes.isNotEmpty;
+    final bool showTodaySection = _allowReviewRestrictedSections &&
+        (_isLoadingTodayAnimes || _todayAnimes.isNotEmpty);
     final bool showRandomSection =
-        _isLoadingRandomRecommendations || _randomRecommendations.isNotEmpty;
-    final String todayTitle = _buildTodaySectionTitle();
+        _allowReviewRestrictedSections &&
+        (_isLoadingRandomRecommendations || _randomRecommendations.isNotEmpty);
 
     return ColoredBox(
       color: backgroundColor,
@@ -1019,7 +1028,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
               SliverToBoxAdapter(child: _buildSectionTitle('精选推荐')),
               SliverToBoxAdapter(child: _buildHeroSection()),
               if (showTodaySection) ...[
-                SliverToBoxAdapter(child: _buildSectionTitle(todayTitle)),
+                SliverToBoxAdapter(
+                  child: _buildSectionTitle(_buildTodaySectionTitle()),
+                ),
                 SliverToBoxAdapter(child: _buildTodaySection()),
               ],
               if (showRandomSection) ...[
