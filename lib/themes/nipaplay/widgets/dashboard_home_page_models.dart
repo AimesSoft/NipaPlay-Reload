@@ -24,15 +24,17 @@ class RecommendedItem {
 
   // 用于更新图片质量的方法
   RecommendedItem copyWith({
+    String? subtitle,
     String? backgroundImageUrl,
+    String? logoImageUrl,
     bool? isLowRes,
   }) {
     return RecommendedItem(
       id: id,
       title: title,
-      subtitle: subtitle,
+      subtitle: subtitle ?? this.subtitle,
       backgroundImageUrl: backgroundImageUrl ?? this.backgroundImageUrl,
-      logoImageUrl: logoImageUrl,
+      logoImageUrl: logoImageUrl ?? this.logoImageUrl,
       source: source,
       rating: rating,
       isLowRes: isLowRes ?? this.isLowRes,

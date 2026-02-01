@@ -361,6 +361,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             final subtitle = results[2] as String?;
             final backdropUrl = backdropCandidate?.value;
             final logoUrl = logoCandidate?.value;
+            final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+            final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
 
             return RecommendedItem(
               id: item.id,
@@ -369,8 +371,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                   .replaceAll('<br>', ' ')
                   .replaceAll('<br/>', ' ')
                   .replaceAll('<br />', ' ') : '暂无简介信息'),
-              backgroundImageUrl: backdropUrl,
-              logoImageUrl: logoUrl,
+              backgroundImageUrl: normalizedBackdropUrl,
+              logoImageUrl: normalizedLogoUrl,
               source: RecommendedItemSource.jellyfin,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
               isLowRes: _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
@@ -389,6 +391,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             final subtitle = results[2] as String?;
             final backdropUrl = backdropCandidate?.value;
             final logoUrl = logoCandidate?.value;
+            final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+            final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
 
             return RecommendedItem(
               id: item.id,
@@ -397,8 +401,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                   .replaceAll('<br>', ' ')
                   .replaceAll('<br/>', ' ')
                   .replaceAll('<br />', ' ') : '暂无简介信息'),
-              backgroundImageUrl: backdropUrl,
-              logoImageUrl: logoUrl,
+              backgroundImageUrl: normalizedBackdropUrl,
+              logoImageUrl: normalizedLogoUrl,
               source: RecommendedItemSource.emby,
               rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
               isLowRes: _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
@@ -450,6 +454,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                 // 忽略缓存访问错误
               }
             }
+
+            if (cachedImageUrl == null || cachedImageUrl.isEmpty) {
+              cachedImageUrl = item.thumbnailPath;
+            }
+            cachedImageUrl = _normalizeRecommendationImageUrl(cachedImageUrl);
             
             return RecommendedItem(
               id: item.animeId?.toString() ?? item.filePath,
@@ -467,6 +476,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             dandanLookup[dandanLookupKey] = item;
             
             final coverUrl = await _resolveDandanCoverForGroup(item, dandanSource);
+            final normalizedCoverUrl = _normalizeRecommendationImageUrl(coverUrl);
             final subtitle = item.latestEpisode.episodeTitle.isNotEmpty
                 ? item.latestEpisode.episodeTitle
                 : '弹弹play远程媒体';
@@ -474,11 +484,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               id: dandanId,
               title: item.title,
               subtitle: subtitle,
-              backgroundImageUrl: coverUrl,
+              backgroundImageUrl: normalizedCoverUrl,
               logoImageUrl: null,
               source: RecommendedItemSource.dandanplay,
               rating: null,
-              isLowRes: coverUrl != null, // 弹弹play默认封面是低清
+              isLowRes: normalizedCoverUrl != null, // 弹弹play默认封面是低清
             );
           }
         } catch (_) {
@@ -550,6 +560,26 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         _checkPendingRefresh();
       }
     }
+  }
+
+  String? _normalizeRecommendationImageUrl(String? url) {
+    if (url == null) return null;
+    var value = url.trim();
+    if (value.isEmpty) return null;
+    if (value == 'assets/backempty.png' || value == 'assets/backEmpty.png') {
+      return null;
+    }
+    if (value.startsWith('file://')) {
+      value = value.substring('file://'.length);
+    }
+    if (!kIsWeb) return value;
+    if (value.startsWith('data:') || value.startsWith('blob:')) {
+      return value;
+    }
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return WebRemoteAccessService.proxyUrl(value) ?? value;
+    }
+    return WebRemoteAccessService.imageProxyUrl(value) ?? value;
   }
 
   bool _shouldBypassRecommendedCache() {
