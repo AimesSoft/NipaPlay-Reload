@@ -7,6 +7,7 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/utils/storage_service.dart' show StorageService;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class WatchHistoryProvider extends ChangeNotifier {
   List<WatchHistoryItem> _history = [];
@@ -79,6 +80,48 @@ class WatchHistoryProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
+      if (kIsWeb) {
+        // 尝试从远程 API 获取历史记录
+        final remoteHistory = await WebRemoteAccessService.fetchHistory();
+        if (remoteHistory.isNotEmpty) {
+          _history = remoteHistory.map((data) {
+            String? thumbnail = data['thumbnailPath'];
+            // 如果缩略图是本地路径（不含协议头），则转换为远程代理 URL
+            if (thumbnail != null && 
+                thumbnail.isNotEmpty && 
+                !thumbnail.startsWith('http://') && 
+                !thumbnail.startsWith('https://')) {
+              final original = thumbnail;
+              thumbnail = WebRemoteAccessService.imageProxyUrl(thumbnail);
+              debugPrint('[WatchHistory] Converted local thumbnail: $original -> $thumbnail');
+            }
+            
+            return WatchHistoryItem(
+              filePath: data['filePath'],
+              animeName: data['animeName'],
+              episodeTitle: data['episodeTitle'],
+              episodeId: data['episodeId'],
+              animeId: data['animeId'],
+              watchProgress: (data['watchProgress'] as num).toDouble(),
+              lastPosition: (data['lastPosition'] as num).toInt(),
+              duration: (data['duration'] as num).toInt(),
+              lastWatchTime: DateTime.parse(data['lastWatchTime']),
+              thumbnailPath: thumbnail,
+              isFromScan: data['isFromScan'] ?? false,
+              videoHash: data['videoHash'],
+            );
+          }).toList();
+          
+          // 排序
+          _history.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+          
+          _isLoaded = true;
+          _isLoading = false;
+          notifyListeners();
+          return;
+        }
+      }
+
       // 迁移JSON数据到SQLite (如果需要)
       await _database.migrateFromJson();
       
@@ -103,6 +146,9 @@ class WatchHistoryProvider extends ChangeNotifier {
 
   // 验证文件路径并修复iOS路径问题
   Future<List<WatchHistoryItem>> _validateFilePaths(List<WatchHistoryItem> items) async {
+    if (kIsWeb) {
+      return items;
+    }
     List<WatchHistoryItem> validItems = [];
     List<String> invalidPaths = [];
     

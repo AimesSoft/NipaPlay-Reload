@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 /// Bangumi API服务
 ///
@@ -19,16 +20,28 @@ class BangumiApiService {
   static const String _userInfoKey = 'bangumi_user_info';
   static const String _isLoggedInKey = 'bangumi_logged_in';
 
+  static bool _initialized = false;
   static String? _accessToken;
   static bool _isLoggedIn = false;
   static Map<String, dynamic>? _userInfo;
+  
+  /// 登录状态监听器
+  static final ValueNotifier<bool> loginStatusNotifier = ValueNotifier<bool>(false);
+  
+  /// Web端同步定时器
+  static Timer? _syncTimer;
 
   /// 初始化服务，加载保存的Token
   static Future<void> initialize() async {
     try {
+      // 防止重复初始化
+      if (_initialized) {
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
       _accessToken = prefs.getString(_tokenKey);
       _isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
+      loginStatusNotifier.value = _isLoggedIn;
 
       final userInfoStr = prefs.getString(_userInfoKey);
       if (userInfoStr != null) {
@@ -38,6 +51,15 @@ class BangumiApiService {
           debugPrint('[Bangumi API] 解析用户信息失败: $e');
           _userInfo = null;
         }
+      }
+
+      if (kIsWeb) {
+        WebRemoteAccessService.baseUrlNotifier.addListener(_onBaseUrlChanged);
+        await _syncLoginStatusFromServer();
+        _initialized = true;
+        _startSyncTimer();
+        debugPrint('[Bangumi API] 服务初始化完成，登录状态: $_isLoggedIn');
+        return;
       }
 
       if (_accessToken != null && _isLoggedIn) {
@@ -51,9 +73,97 @@ class BangumiApiService {
         }
       }
 
+      _initialized = true;
       debugPrint('[Bangumi API] 服务初始化完成，登录状态: $_isLoggedIn');
     } catch (e) {
       debugPrint('[Bangumi API] 初始化失败: $e');
+    }
+  }
+  
+  /// 监听BaseURL变化
+  static void _onBaseUrlChanged() {
+    debugPrint('[Bangumi API] 检测到BaseURL变化，重新启动同步');
+    // 无论当前定时器状态如何，都重置并立即开始同步
+    _startSyncTimer();
+    _syncLoginStatusFromServer();
+  }
+  
+  /// 启动Web端同步定时器
+  static void _startSyncTimer() {
+    _syncTimer?.cancel(); // 先取消旧的，防止重复
+    debugPrint('[Bangumi API] 启动Web端状态同步定时器');
+    _syncTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _syncLoginStatusFromServer();
+    });
+  }
+
+  static Future<bool> _syncLoginStatusFromServer() async {
+    try {
+      final baseUrl = await WebRemoteAccessService.resolveCandidateBaseUrl();
+      // 减少日志刷屏，仅在非localhost或明确配置时打印详细信息，或者降低频率
+      // debugPrint('[Bangumi API] 同步登录状态，BaseURL: $baseUrl');
+      
+      if (baseUrl == null || baseUrl.isEmpty) {
+        return false;
+      }
+
+      final uri = Uri.parse('$baseUrl/api/bangumi/login_status');
+
+      final response = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 3));
+
+      // debugPrint('[Bangumi API] 响应状态码: ${response.statusCode}');
+      if (response.statusCode == 404) {
+        debugPrint('[Bangumi API] 接口未找到 (404) - $baseUrl。请检查服务端版本或API路径配置。');
+        // 不停止定时器，允许自动恢复
+        return false;
+      }
+      
+      if (response.statusCode != 200) {
+        debugPrint('[Bangumi API] 请求失败 (${response.statusCode})');
+        return false;
+      }
+
+      // debugPrint('[Bangumi API] 响应内容: ${response.body}');
+      final data = json.decode(response.body);
+      final newLoginStatus = data['isLoggedIn'] == true;
+      
+      // 只有状态改变时才更新
+      if (_isLoggedIn != newLoginStatus) {
+        debugPrint('[Bangumi API] Web端登录状态更新: $newLoginStatus');
+        _isLoggedIn = newLoginStatus;
+        loginStatusNotifier.value = _isLoggedIn;
+        
+        final userInfo = data['userInfo'];
+        if (userInfo is Map<String, dynamic>) {
+          _userInfo = Map<String, dynamic>.from(userInfo);
+        } else {
+          _userInfo = null;
+        }
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_isLoggedInKey, _isLoggedIn);
+        if (_userInfo != null) {
+          await prefs.setString(_userInfoKey, json.encode(_userInfo));
+        } else {
+          await prefs.remove(_userInfoKey);
+        }
+      } else if (_isLoggedIn && _userInfo == null) {
+         // 状态是已登录但没有用户信息，尝试补充信息
+         final userInfo = data['userInfo'];
+         if (userInfo is Map<String, dynamic>) {
+           _userInfo = Map<String, dynamic>.from(userInfo);
+           final prefs = await SharedPreferences.getInstance();
+           await prefs.setString(_userInfoKey, json.encode(_userInfo));
+         }
+      }
+
+      return true;
+    } catch (e) {
+      // 这里的错误日志太多会刷屏，可以考虑降低频率或只在调试模式显示
+      // debugPrint('[Bangumi API] 同步Web登录状态失败: $e');
+      return false;
     }
   }
 
@@ -63,7 +173,7 @@ class BangumiApiService {
 
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/v0/me'),
+        WebRemoteAccessService.proxyUri(Uri.parse('$_baseUrl/v0/me')),
         headers: {
           'Authorization': 'Bearer $_accessToken',
           'User-Agent': _userAgent,
@@ -82,13 +192,16 @@ class BangumiApiService {
         debugPrint(
             '[Bangumi API] Token验证成功，用户: ${userData['username'] ?? 'unknown'}');
         return true;
-      } else {
-        debugPrint('[Bangumi API] Token验证失败: ${response.statusCode}');
+      } else if (response.statusCode == 401) {
+        debugPrint('[Bangumi API] Token已失效 (401)，需要重新登录');
         return false;
+      } else {
+        debugPrint('[Bangumi API] Token验证返回非200状态 (${response.statusCode})，暂时保留登录状态');
+        return true;
       }
     } catch (e) {
-      debugPrint('[Bangumi API] Token验证异常: $e');
-      return false;
+      debugPrint('[Bangumi API] Token验证过程中发生网络异常: $e，暂时保留登录状态');
+      return true;
     }
   }
 
@@ -97,7 +210,7 @@ class BangumiApiService {
     try {
       // 验证Token有效性
       final response = await http.get(
-        Uri.parse('$_baseUrl/v0/me'),
+        WebRemoteAccessService.proxyUri(Uri.parse('$_baseUrl/v0/me')),
         headers: {
           'Authorization': 'Bearer $token',
           'User-Agent': _userAgent,
@@ -111,6 +224,7 @@ class BangumiApiService {
         _accessToken = token;
         _userInfo = userData;
         _isLoggedIn = true;
+        loginStatusNotifier.value = true;
 
         // 保存到SharedPreferences
         final prefs = await SharedPreferences.getInstance();
@@ -154,6 +268,7 @@ class BangumiApiService {
       _accessToken = null;
       _userInfo = null;
       _isLoggedIn = false;
+      loginStatusNotifier.value = false;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_tokenKey);
@@ -199,10 +314,11 @@ class BangumiApiService {
     }
 
     try {
-      Uri uri = Uri.parse('$_baseUrl$path');
+      Uri targetUri = Uri.parse('$_baseUrl$path');
       if (queryParams != null && queryParams.isNotEmpty) {
-        uri = uri.replace(queryParameters: queryParams);
+        targetUri = targetUri.replace(queryParameters: queryParams);
       }
+      final uri = WebRemoteAccessService.proxyUri(targetUri);
 
       final headers = {
         'Authorization': 'Bearer $_accessToken',

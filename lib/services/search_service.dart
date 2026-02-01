@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/search_model.dart';
 import './dandanplay_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class SearchService {
   static final SearchService instance = SearchService._();
@@ -21,7 +22,12 @@ class SearchService {
     // Web环境下的实现
     if (kIsWeb) {
       try {
-        final response = await http.get(Uri.parse('/api/search/config'));
+        final apiUri =
+            WebRemoteAccessService.apiUri('/api/search/config');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
+        final response = await http.get(apiUri);
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes));
           return SearchConfig.fromJson(data);
@@ -30,63 +36,63 @@ class SearchService {
               'Failed to load search config from API: ${response.statusCode}');
         }
       } catch (e) {
-        throw Exception('Failed to connect to the search config API: $e');
+        debugPrint('[SearchService] Web API不可用，回退到直连弹弹play: $e');
       }
-    } else {
-      // 检查内存缓存
-      if (_cachedConfig != null &&
-          _configCacheTime != null &&
-          DateTime.now().difference(_configCacheTime!) < _configCacheDuration) {
-        return _cachedConfig!;
-      }
+    }
 
-      // 检查本地缓存
-      final prefs = await SharedPreferences.getInstance();
-      final cachedString = prefs.getString(_configCacheKey);
-      if (cachedString != null) {
-        try {
-          final data = json.decode(cachedString);
-          final timestamp = data['timestamp'] as int;
-          final now = DateTime.now().millisecondsSinceEpoch;
+    // 检查内存缓存
+    if (_cachedConfig != null &&
+        _configCacheTime != null &&
+        DateTime.now().difference(_configCacheTime!) < _configCacheDuration) {
+      return _cachedConfig!;
+    }
 
-          if (now - timestamp <= _configCacheDuration.inMilliseconds) {
-            _cachedConfig = SearchConfig.fromJson(data['config']);
-            _configCacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-            return _cachedConfig!;
-          }
-        } catch (_) {
-        }
-      }
-
-      // 从网络获取
+    // 检查本地缓存
+    final prefs = await SharedPreferences.getInstance();
+    final cachedString = prefs.getString(_configCacheKey);
+    if (cachedString != null) {
       try {
-        final baseUrl = await DandanplayService.getApiBaseUrl();
-        final url = '$baseUrl/api/v2/search/adv/config?source=$source';
-        final response = await _makeAuthenticatedRequest(url);
+        final data = json.decode(cachedString);
+        final timestamp = data['timestamp'] as int;
+        final now = DateTime.now().millisecondsSinceEpoch;
 
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['success'] == true) {
-            _cachedConfig = SearchConfig.fromJson(data);
-            _configCacheTime = DateTime.now();
-
-            // 保存到本地缓存
-            final cacheData = {
-              'timestamp': _configCacheTime!.millisecondsSinceEpoch,
-              'config': data,
-            };
-            await prefs.setString(_configCacheKey, json.encode(cacheData));
-
-            return _cachedConfig!;
-          } else {
-            throw Exception('API返回错误: ${data['errorMessage']}');
-          }
-        } else {
-          throw Exception('HTTP错误: ${response.statusCode}');
+        if (now - timestamp <= _configCacheDuration.inMilliseconds) {
+          _cachedConfig = SearchConfig.fromJson(data['config']);
+          _configCacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+          return _cachedConfig!;
         }
       } catch (_) {
-        rethrow;
       }
+    }
+
+    // 从网络获取
+    try {
+      final baseUrl = await DandanplayService.getApiBaseUrl();
+      final url = '$baseUrl/api/v2/search/adv/config?source=$source';
+      final response = await _makeAuthenticatedRequest(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          _cachedConfig = SearchConfig.fromJson(data);
+          _configCacheTime = DateTime.now();
+
+          // 保存到本地缓存
+          final cacheData = {
+            'timestamp': _configCacheTime!.millisecondsSinceEpoch,
+            'config': data,
+          };
+          await prefs.setString(_configCacheKey, json.encode(cacheData));
+
+          return _cachedConfig!;
+        } else {
+          throw Exception('API返回错误: ${data['errorMessage']}');
+        }
+      } else {
+        throw Exception('HTTP错误: ${response.statusCode}');
+      }
+    } catch (_) {
+      rethrow;
     }
   }
 
@@ -95,8 +101,13 @@ class SearchService {
     // Web环境下的实现
     if (kIsWeb) {
       try {
+        final apiUri =
+            WebRemoteAccessService.apiUri('/api/search/by-tags');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
         final response = await http.post(
-          Uri.parse('/api/search/by-tags'),
+          apiUri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({'tags': tags}),
         );
@@ -108,44 +119,44 @@ class SearchService {
               'Failed to search by tags from API: ${response.statusCode}');
         }
       } catch (e) {
-        throw Exception('Failed to connect to the search by tags API: $e');
+        debugPrint('[SearchService] Web API不可用，回退到直连弹弹play: $e');
       }
-    } else {
-      if (tags.isEmpty) {
-        throw ArgumentError('标签列表不能为空');
+    }
+
+    if (tags.isEmpty) {
+      throw ArgumentError('标签列表不能为空');
+    }
+
+    if (tags.length > 10) {
+      throw ArgumentError('标签数量不能超过10个');
+    }
+
+    for (String tag in tags) {
+      if (tag.length > 50) {
+        throw ArgumentError('单个标签长度不能超过50个字符');
       }
+    }
 
-      if (tags.length > 10) {
-        throw ArgumentError('标签数量不能超过10个');
-      }
+    try {
+      final tagsString = tags.join(',');
+      final baseUrl = await DandanplayService.getApiBaseUrl();
+      final url =
+          '$baseUrl/api/v2/search/tag?tags=${Uri.encodeComponent(tagsString)}';
+      final response = await _makeAuthenticatedRequest(url);
 
-      for (String tag in tags) {
-        if (tag.length > 50) {
-          throw ArgumentError('单个标签长度不能超过50个字符');
-        }
-      }
-
-      try {
-        final tagsString = tags.join(',');
-        final baseUrl = await DandanplayService.getApiBaseUrl();
-        final url =
-            '$baseUrl/api/v2/search/tag?tags=${Uri.encodeComponent(tagsString)}';
-        final response = await _makeAuthenticatedRequest(url);
-
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['success'] == true) {
-            final result = SearchResult.fromTagSearchJson(data);
-            return result;
-          } else {
-            throw Exception('API返回错误: ${data['errorMessage']}');
-          }
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          final result = SearchResult.fromTagSearchJson(data);
+          return result;
         } else {
-          throw Exception('HTTP错误: ${response.statusCode}');
+          throw Exception('API返回错误: ${data['errorMessage']}');
         }
-      } catch (_) {
-        rethrow;
+      } else {
+        throw Exception('HTTP错误: ${response.statusCode}');
       }
+    } catch (_) {
+      rethrow;
     }
   }
 
@@ -174,8 +185,13 @@ class SearchService {
           'maxRate': maxRate,
           'sort': sort,
         };
+        final apiUri =
+            WebRemoteAccessService.apiUri('/api/search/advanced');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
         final response = await http.post(
-          Uri.parse('/api/search/advanced'),
+          apiUri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(body),
         );
@@ -187,60 +203,60 @@ class SearchService {
               'Failed to perform advanced search from API: ${response.statusCode}');
         }
       } catch (e) {
-        throw Exception('Failed to connect to the advanced search API: $e');
+        debugPrint('[SearchService] Web API不可用，回退到直连弹弹play: $e');
       }
-    } else {
-      try {
-        final queryParams = <String, String>{
-          'source': source,
-          'minRate': minRate.toString(),
-          'maxRate': maxRate.toString(),
-          'sort': sort.toString(),
-        };
+    }
 
-        if (keyword != null && keyword.isNotEmpty) {
-          queryParams['keyword'] = keyword;
-        }
+    try {
+      final queryParams = <String, String>{
+        'source': source,
+        'minRate': minRate.toString(),
+        'maxRate': maxRate.toString(),
+        'sort': sort.toString(),
+      };
 
-        if (type != null) {
-          queryParams['type'] = type.toString();
-        }
+      if (keyword != null && keyword.isNotEmpty) {
+        queryParams['keyword'] = keyword;
+      }
 
-        if (tagIds != null && tagIds.isNotEmpty) {
-          queryParams['tags'] = tagIds.join(',');
-        }
+      if (type != null) {
+        queryParams['type'] = type.toString();
+      }
 
-        if (year != null) {
-          queryParams['year'] = year.toString();
-        }
+      if (tagIds != null && tagIds.isNotEmpty) {
+        queryParams['tags'] = tagIds.join(',');
+      }
 
-        if (month != null) {
-          queryParams['month'] = month.toString();
-        }
+      if (year != null) {
+        queryParams['year'] = year.toString();
+      }
 
-        if (restricted != null) {
-          queryParams['restricted'] = restricted.toString();
-        }
+      if (month != null) {
+        queryParams['month'] = month.toString();
+      }
 
-        final baseUrl = await DandanplayService.getApiBaseUrl();
-        final uri = Uri.parse('$baseUrl/api/v2/search/adv')
-            .replace(queryParameters: queryParams);
-        final response = await _makeAuthenticatedRequest(uri.toString());
+      if (restricted != null) {
+        queryParams['restricted'] = restricted.toString();
+      }
 
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['success'] == true) {
-            final result = SearchResult.fromAdvancedSearchJson(data);
-            return result;
-          } else {
-            throw Exception('API返回错误: ${data['errorMessage']}');
-          }
+      final baseUrl = await DandanplayService.getApiBaseUrl();
+      final uri = Uri.parse('$baseUrl/api/v2/search/adv')
+          .replace(queryParameters: queryParams);
+      final response = await _makeAuthenticatedRequest(uri.toString());
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          final result = SearchResult.fromAdvancedSearchJson(data);
+          return result;
         } else {
-          throw Exception('HTTP错误: ${response.statusCode}');
+          throw Exception('API返回错误: ${data['errorMessage']}');
         }
-      } catch (_) {
-        rethrow;
+      } else {
+        throw Exception('HTTP错误: ${response.statusCode}');
       }
+    } catch (_) {
+      rethrow;
     }
   }
 
@@ -277,7 +293,7 @@ class SearchService {
 
       final response = await http
           .get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: headers,
       )
           .timeout(

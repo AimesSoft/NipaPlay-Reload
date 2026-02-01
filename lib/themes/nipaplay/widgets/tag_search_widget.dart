@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +19,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class _TagSearchStyle {
   const _TagSearchStyle({
@@ -450,11 +450,13 @@ class _TagSearchModalState extends State<TagSearchModal> {
     debugPrint('[TagSearchWidget] 文件路径: ${historyItem.filePath}');
 
     // 检查文件是否存在
-    final videoFile = File(historyItem.filePath);
-    if (!videoFile.existsSync()) {
-      debugPrint('[TagSearchWidget] 文件不存在: ${historyItem.filePath}');
-      BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
-      return;
+    if (!kIsWeb) {
+      final videoFile = File(historyItem.filePath);
+      if (!videoFile.existsSync()) {
+        debugPrint('[TagSearchWidget] 文件不存在: ${historyItem.filePath}');
+        BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
+        return;
+      }
     }
 
     bool tabChangeLogicExecuted = false;
@@ -1638,7 +1640,8 @@ class _TagSearchModalState extends State<TagSearchModal> {
         height: 45,
         child: CachedNetworkImageWidget(
           imageUrl: kIsWeb
-              ? '/api/image_proxy?url=${base64Url.encode(utf8.encode(anime.imageUrl!))}'
+              ? (WebRemoteAccessService.imageProxyUrl(anime.imageUrl!) ??
+                  anime.imageUrl!)
               : anime.imageUrl!,
           fit: BoxFit.cover,
           loadMode: CachedImageLoadMode.legacy,

@@ -36,10 +36,12 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     super.initState();
     loadLoginStatus();
     loadBangumiStatus();
+    BangumiApiService.loginStatusNotifier.addListener(_onLoginStatusChanged);
   }
 
   @override
   void dispose() {
+    BangumiApiService.loginStatusNotifier.removeListener(_onLoginStatusChanged);
     usernameController.dispose();
     passwordController.dispose();
     registerUsernameController.dispose();
@@ -48,6 +50,10 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     registerScreenNameController.dispose();
     bangumiTokenController.dispose();
     super.dispose();
+  }
+
+  void _onLoginStatusChanged() {
+    loadBangumiStatus();
   }
 
   /// 加载登录状态

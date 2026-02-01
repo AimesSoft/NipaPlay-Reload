@@ -6,6 +6,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -30,7 +34,11 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   bool _isInitializing = true;
   bool _autoRefreshPaused = false;
   DateTime? _lastRefreshFailureAt;
+  
   List<SharedRemoteScannedFolder> _scannedFolders = [];
+  List<WebDAVConnection> _webdavConnections = [];
+  List<SMBConnection> _smbConnections = [];
+  
   SharedRemoteScanStatus? _scanStatus;
   bool _isManagementLoading = false;
   String? _managementErrorMessage;
@@ -51,7 +59,11 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get hasActiveHost => _activeHostId != null && _hosts.any((h) => h.id == _activeHostId);
   bool get hasReachableActiveHost => activeHost?.isOnline == true;
+  
   List<SharedRemoteScannedFolder> get scannedFolders => List.unmodifiable(_scannedFolders);
+  List<WebDAVConnection> get webdavConnections => List.unmodifiable(_webdavConnections);
+  List<SMBConnection> get smbConnections => List.unmodifiable(_smbConnections);
+  
   SharedRemoteScanStatus? get scanStatus => _scanStatus;
   bool get isManagementLoading => _isManagementLoading;
   String? get managementErrorMessage => _managementErrorMessage;
@@ -70,6 +82,32 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       if (savedActiveHost != null &&
           _hosts.any((element) => element.id == savedActiveHost)) {
         _activeHostId = savedActiveHost;
+      }
+
+      // Web Remote Auto-Discovery
+      if (kIsWeb) {
+        final candidate = await WebRemoteAccessService.resolveCandidateBaseUrl();
+        if (candidate != null) {
+          final existingIndex = _hosts.indexWhere((h) => h.baseUrl == candidate);
+          if (existingIndex == -1) {
+            final id = 'web-origin-${candidate.hashCode}';
+            final host = SharedRemoteHost(
+              id: id,
+              displayName: 'NipaPlay Server (Auto)',
+              baseUrl: candidate,
+              isOnline: true,
+            );
+            _hosts.insert(0, host);
+            if (_activeHostId == null) {
+              _activeHostId = id;
+            }
+          } else {
+            // Ensure it's active if no other host is selected
+            if (_activeHostId == null) {
+              _activeHostId = _hosts[existingIndex].id;
+            }
+          }
+        }
       }
     } catch (e) {
       _errorMessage = '加载远程媒体库配置失败: $e';
@@ -313,7 +351,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     final sanitizedUri = _sanitizeUri(uri);
     final headers = <String, String>{
       'Accept': 'application/json',
-      'User-Agent': 'NipaPlay/1.0',
+      if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
     };
 
     final authHeader = _buildBasicAuthHeader(uri);
@@ -321,7 +359,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       headers['Authorization'] = authHeader;
     }
 
-    final client = IOClient(_createHttpClient(uri));
+    final client = _createClient(uri);
     try {
       return await client
           .get(sanitizedUri, headers: headers)
@@ -341,7 +379,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     final sanitizedUri = _sanitizeUri(uri);
     final headers = <String, String>{
       'Accept': 'application/json',
-      'User-Agent': 'NipaPlay/1.0',
+      if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
       'Content-Type': 'application/json; charset=utf-8',
     };
 
@@ -350,7 +388,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       headers['Authorization'] = authHeader;
     }
 
-    final client = IOClient(_createHttpClient(uri));
+    final client = _createClient(uri);
     try {
       return await client
           .post(
@@ -373,7 +411,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     final sanitizedUri = _sanitizeUri(uri);
     final headers = <String, String>{
       'Accept': 'application/json',
-      'User-Agent': 'NipaPlay/1.0',
+      if (!kIsWeb) 'User-Agent': 'NipaPlay/1.0',
     };
 
     final authHeader = _buildBasicAuthHeader(uri);
@@ -381,7 +419,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       headers['Authorization'] = authHeader;
     }
 
-    final client = IOClient(_createHttpClient(uri));
+    final client = _createClient(uri);
     try {
       return await client
           .delete(sanitizedUri, headers: headers)
@@ -424,6 +462,13 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     password = Uri.decodeComponent(password);
 
     return 'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+  }
+
+  http.Client _createClient(Uri uri) {
+    if (kIsWeb) {
+      return http.Client();
+    }
+    return IOClient(_createHttpClient(uri));
   }
 
   HttpClient _createHttpClient(Uri uri) {
@@ -480,9 +525,19 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     if (host == null) {
       throw Exception('未选择远程媒体库');
     }
-    return Uri.parse(host.baseUrl).resolve(episode.streamPath.startsWith('/')
-        ? episode.streamPath.substring(1)
-        : episode.streamPath);
+    final streamPath = episode.streamPath.trim();
+    if (streamPath.isEmpty) {
+      throw Exception('该剧集缺少可用的播放地址');
+    }
+    final resolved = Uri.parse(host.baseUrl).resolve(
+      streamPath.startsWith('/') ? streamPath.substring(1) : streamPath,
+    );
+    if (kIsWeb &&
+        resolved.isAbsolute &&
+        (resolved.scheme == 'http' || resolved.scheme == 'https')) {
+      return WebRemoteAccessService.proxyUri(resolved);
+    }
+    return resolved;
   }
 
   WatchHistoryItem buildWatchHistoryItem({
@@ -611,7 +666,12 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
       if (response.statusCode == HttpStatus.notFound) {
         _scannedFolders = [];
+        _webdavConnections = [];
+        _smbConnections = [];
         _scanStatus = null;
+        if (kIsWeb) {
+          MediaSourceUtils.updateRemoteWebDavConnections(_webdavConnections);
+        }
         _managementErrorMessage = _managementUnsupportedMessage;
         _updateHostStatus(host.id, isOnline: true, lastError: null);
         return;
@@ -632,6 +692,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
 
       final data = payloadMap['data'];
+      
+      // Parse Folders
       final foldersRaw = data is Map<String, dynamic>
           ? data['folders']
           : payloadMap['folders'];
@@ -649,11 +711,43 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
       _scannedFolders = folders;
 
+      // Parse WebDAV
+      final webdavRaw = data is Map<String, dynamic> ? data['webdav'] : null;
+      final webdav = <WebDAVConnection>[];
+      if (webdavRaw is List) {
+        for (final item in webdavRaw) {
+          if (item is Map<String, dynamic>) {
+            webdav.add(WebDAVConnection.fromJson(item));
+          }
+        }
+      }
+      _webdavConnections = webdav;
+
+      // Parse SMB
+      final smbRaw = data is Map<String, dynamic> ? data['smb'] : null;
+      final smb = <SMBConnection>[];
+      if (smbRaw is List) {
+        for (final item in smbRaw) {
+          if (item is Map<String, dynamic>) {
+            smb.add(SMBConnection.fromJson(item));
+          }
+        }
+      }
+      _smbConnections = smb;
+      if (kIsWeb) {
+        MediaSourceUtils.updateRemoteWebDavConnections(_webdavConnections);
+      }
+
       await refreshScanStatus(showLoading: false);
       _updateHostStatus(host.id, isOnline: true, lastError: null);
     } catch (e) {
       _scannedFolders = [];
+      _webdavConnections = [];
+      _smbConnections = [];
       _scanStatus = null;
+      if (kIsWeb) {
+        MediaSourceUtils.updateRemoteWebDavConnections(_webdavConnections);
+      }
       _managementErrorMessage = _buildManagementFriendlyError(e, host);
       _updateHostStatus(host.id, isOnline: false, lastError: e.toString());
     } finally {
@@ -827,6 +921,467 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
               ? _managementUnsupportedMessage
               : _buildManagementFriendlyError(e, host));
       _managementErrorMessage = friendly;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<List<WebDAVFile>> listRemoteWebDAVDirectory({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('WebDAV 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/list')
+          .replace(queryParameters: {'name': sanitizedName, 'path': path});
+      final response =
+          await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? true;
+      if (!success) {
+        final message = payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final data = payloadMap['data'];
+      final entriesRaw = data is Map<String, dynamic>
+          ? data['entries']
+          : payloadMap['entries'];
+
+      int? parseInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value);
+        return null;
+      }
+
+      DateTime? parseDate(dynamic value) {
+        if (value is String) {
+          return DateTime.tryParse(value);
+        }
+        return null;
+      }
+
+      final entries = <WebDAVFile>[];
+      if (entriesRaw is List) {
+        for (final item in entriesRaw) {
+          final Map<String, dynamic>? map = item is Map<String, dynamic>
+              ? item
+              : (item is Map ? item.cast<String, dynamic>() : null);
+          if (map == null) continue;
+          entries.add(WebDAVFile(
+            name: map['name'] as String? ?? '',
+            path: map['path'] as String? ?? '',
+            isDirectory: map['isDirectory'] == true,
+            size: parseInt(map['size']),
+            lastModified: parseDate(map['lastModified']),
+          ));
+        }
+      }
+
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+
+      return entries;
+    } catch (e) {
+      final existing = _managementErrorMessage;
+      final rawMessage = e.toString();
+      final friendly = existing != null && existing.trim().isNotEmpty
+          ? existing
+          : _buildManagementFriendlyError(e, host);
+      _managementErrorMessage = friendly;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> testWebDAVConnection({
+    String? name,
+    WebDAVConnection? connection,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    if ((name == null || name.trim().isEmpty) && connection == null) {
+      throw Exception('WebDAV 连接参数为空');
+    }
+
+    try {
+      Uri uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/test');
+      http.Response response;
+      if (connection != null) {
+        response = await _sendPostRequest(
+          uri,
+          jsonBody: connection.toJson(),
+          timeout: const Duration(seconds: 15),
+        );
+      } else {
+        uri = uri.replace(queryParameters: {'name': name!.trim()});
+        response = await _sendPostRequest(
+          uri,
+          timeout: const Duration(seconds: 15),
+        );
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      final bool connected = data is Map<String, dynamic>
+          ? data['isConnected'] == true
+          : payloadMap['isConnected'] == true;
+      if (name != null && name.trim().isNotEmpty) {
+        await refreshManagement(userInitiated: true);
+      }
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+      return connected;
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<Map<String, int>> scanRemoteWebDAVFolder({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('WebDAV 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/scan');
+      final response = await _sendPostRequest(
+        uri,
+        jsonBody: {'name': sanitizedName, 'path': path},
+        timeout: const Duration(seconds: 60),
+      );
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      int readInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value) ?? 0;
+        return 0;
+      }
+
+      return {
+        'total': readInt(data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
+        'matched': readInt(data is Map<String, dynamic> ? data['matched'] : payloadMap['matched']),
+        'failed': readInt(data is Map<String, dynamic> ? data['failed'] : payloadMap['failed']),
+      };
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<List<SMBFileEntry>> listRemoteSMBDirectory({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('SMB 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/list')
+          .replace(queryParameters: {'name': sanitizedName, 'path': path});
+      final response =
+          await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final bool success = payloadMap['success'] as bool? ?? true;
+      if (!success) {
+        final message = payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final data = payloadMap['data'];
+      final entriesRaw = data is Map<String, dynamic>
+          ? data['entries']
+          : payloadMap['entries'];
+
+      int? parseInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value);
+        return null;
+      }
+
+      final entries = <SMBFileEntry>[];
+      if (entriesRaw is List) {
+        for (final item in entriesRaw) {
+          final Map<String, dynamic>? map = item is Map<String, dynamic>
+              ? item
+              : (item is Map ? item.cast<String, dynamic>() : null);
+          if (map == null) continue;
+          entries.add(SMBFileEntry(
+            name: map['name'] as String? ?? '',
+            path: map['path'] as String? ?? '',
+            isDirectory: map['isDirectory'] == true,
+            size: parseInt(map['size']),
+            isShare: map['isShare'] == true,
+          ));
+        }
+      }
+
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+
+      return entries;
+    } catch (e) {
+      final existing = _managementErrorMessage;
+      final friendly = existing != null && existing.trim().isNotEmpty
+          ? existing
+          : _buildManagementFriendlyError(e, host);
+      _managementErrorMessage = friendly;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> testSMBConnection(String name) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('SMB 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/test')
+          .replace(queryParameters: {'name': sanitizedName});
+      final response =
+          await _sendPostRequest(uri, timeout: const Duration(seconds: 15));
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      final bool connected = data is Map<String, dynamic>
+          ? data['isConnected'] == true
+          : payloadMap['isConnected'] == true;
+      await refreshManagement(userInitiated: true);
+      if (_managementErrorMessage != null) {
+        _managementErrorMessage = null;
+        notifyListeners();
+      }
+      return connected;
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<Map<String, int>> scanRemoteSMBFolder({
+    required String name,
+    required String path,
+  }) async {
+    final host = activeHost;
+    if (host == null) {
+      throw Exception('未选择远程主机');
+    }
+
+    final sanitizedName = name.trim();
+    if (sanitizedName.isEmpty) {
+      throw Exception('SMB 连接名称为空');
+    }
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb/scan');
+      final response = await _sendPostRequest(
+        uri,
+        jsonBody: {'name': sanitizedName, 'path': path},
+        timeout: const Duration(seconds: 60),
+      );
+
+      if (response.statusCode != HttpStatus.ok) {
+        String? apiMessage;
+        try {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            apiMessage = decoded['message'] as String?;
+          } else if (decoded is Map) {
+            apiMessage = decoded['message']?.toString();
+          }
+        } catch (_) {
+          apiMessage = null;
+        }
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : 'HTTP ${response.statusCode}';
+        _managementErrorMessage = message;
+        notifyListeners();
+        throw Exception(message);
+      }
+
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      final Map<String, dynamic> payloadMap =
+          payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+      final data = payloadMap['data'];
+      int readInt(dynamic value) {
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value) ?? 0;
+        return 0;
+      }
+
+      return {
+        'total': readInt(data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
+        'matched': readInt(data is Map<String, dynamic> ? data['matched'] : payloadMap['matched']),
+        'failed': readInt(data is Map<String, dynamic> ? data['failed'] : payloadMap['failed']),
+      };
+    } catch (e) {
+      _managementErrorMessage = _buildManagementFriendlyError(e, host);
       notifyListeners();
       rethrow;
     }
@@ -1055,6 +1610,112 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _isManagementLoading = false;
       notifyListeners();
       await _persistHosts();
+    }
+  }
+
+  // --- WebDAV Methods ---
+
+  Future<void> addWebDAVConnection(WebDAVConnection connection) async {
+    final host = activeHost;
+    if (host == null) return;
+    
+    _isManagementLoading = true;
+    notifyListeners();
+    
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav');
+      final response = await _sendPostRequest(uri, jsonBody: connection.toJson());
+      
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to add WebDAV');
+      }
+      
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeWebDAVConnection(String name) async {
+    final host = activeHost;
+    if (host == null) return;
+
+    _isManagementLoading = true;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav')
+          .replace(queryParameters: {'name': name});
+      final response = await _sendDeleteRequest(uri);
+
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to remove WebDAV');
+      }
+
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // --- SMB Methods ---
+
+  Future<void> addSMBConnection(SMBConnection connection) async {
+    final host = activeHost;
+    if (host == null) return;
+
+    _isManagementLoading = true;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb');
+      final response = await _sendPostRequest(uri, jsonBody: connection.toJson());
+
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to add SMB');
+      }
+
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeSMBConnection(String name) async {
+    final host = activeHost;
+    if (host == null) return;
+
+    _isManagementLoading = true;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb')
+          .replace(queryParameters: {'name': name});
+      final response = await _sendDeleteRequest(uri);
+
+      if (response.statusCode != 200) {
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        throw Exception(body['message'] ?? 'Failed to remove SMB');
+      }
+
+      await refreshManagement(userInitiated: true);
+    } catch (e) {
+      _managementErrorMessage = e.toString();
+    } finally {
+      _isManagementLoading = false;
+      notifyListeners();
     }
   }
 

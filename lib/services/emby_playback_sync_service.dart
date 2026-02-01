@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/models/media_server_playback.dart';
 import '../models/watch_history_model.dart';
 import 'emby_service.dart';
 
@@ -16,6 +17,8 @@ class EmbyPlaybackSyncService {
   // 当前播放状态
   String? _currentItemId;
   String? _currentPlaySessionId;
+  String? _currentMediaSourceId;
+  String? _currentPlayMethod;
   bool _isPlaying = false;
   
   /// 开始播放时调用，拉取服务器记录并与本地记录做冲突处理
@@ -60,7 +63,8 @@ class EmbyPlaybackSyncService {
   }
   
   /// 开始播放时调用，向服务器报告播放开始
-  Future<void> reportPlaybackStart(String itemId, WatchHistoryItem historyItem) async {
+  Future<void> reportPlaybackStart(String itemId, WatchHistoryItem historyItem,
+      {PlaybackSession? playbackSession}) async {
     try {
       if (!_embyService.isConnected) return;
       
@@ -70,25 +74,36 @@ class EmbyPlaybackSyncService {
       _stopProgressSync();
       _currentItemId = null;
       _currentPlaySessionId = null;
+      _currentMediaSourceId = null;
+      _currentPlayMethod = null;
       _isPlaying = false;
-      
-      final playSessionId = _generatePlaySessionId();
+
+      final resolvedSessionId = playbackSession?.playSessionId?.trim();
+      if (resolvedSessionId == null || resolvedSessionId.isEmpty) {
+        debugPrint('[EmbySync] 无有效PlaySessionId，跳过播放开始上报');
+        return;
+      }
+
       _currentItemId = itemId;
-      _currentPlaySessionId = playSessionId;
+      _currentPlaySessionId = resolvedSessionId;
+      _currentMediaSourceId = playbackSession?.mediaSourceId;
+      _currentPlayMethod =
+          playbackSession?.isTranscoding == true ? 'Transcode' : 'DirectPlay';
       _isPlaying = true;
-      debugPrint('[EmbySync] 新播放会话已初始化: $playSessionId');
+      debugPrint('[EmbySync] 新播放会话已初始化: $resolvedSessionId');
       
       // 构建播放开始信息 - 使用Emby的PlaybackStartInfo格式
+      final resolvedMediaSourceId = _currentMediaSourceId ?? itemId;
       final startInfo = {
         'ItemId': itemId,
         'PositionTicks': (historyItem.lastPosition * 10000).round(), // 转换为ticks
-        'PlaySessionId': playSessionId,
+        'PlaySessionId': resolvedSessionId,
         'CanSeek': true,
         'IsPaused': false,
         'IsMuted': false,
-        'PlayMethod': 'DirectPlay', // 假设直接播放
+        'PlayMethod': _currentPlayMethod ?? 'DirectPlay',
         'VolumeLevel': 100,
-        'MediaSourceId': itemId, // Emby需要MediaSourceId
+        'MediaSourceId': resolvedMediaSourceId,
       };
       
       // 发送播放开始请求 - Emby使用/emby前缀
@@ -112,7 +127,8 @@ class EmbyPlaybackSyncService {
   }
   
   /// 播放结束时调用，向服务器报告播放结束
-  Future<void> reportPlaybackStopped(String itemId, WatchHistoryItem historyItem, {bool isCompleted = false}) async {
+  Future<void> reportPlaybackStopped(String itemId, WatchHistoryItem historyItem,
+      {bool isCompleted = false}) async {
     try {
       if (!_embyService.isConnected) return;
       
@@ -120,14 +136,20 @@ class EmbyPlaybackSyncService {
       
       // 停止定时器
       _stopProgressSync();
+
+      if (_currentPlaySessionId == null || _currentPlaySessionId!.isEmpty) {
+        debugPrint('[EmbySync] 无有效PlaySessionId，跳过播放结束上报');
+        return;
+      }
       
       // 构建播放结束信息 - 使用Emby的PlaybackStopInfo格式
+      final resolvedMediaSourceId = _currentMediaSourceId ?? itemId;
       final stopInfo = {
         'ItemId': itemId,
         'PositionTicks': (historyItem.lastPosition * 10000).round(), // 转换为ticks
         'PlaySessionId': _currentPlaySessionId,
         'Failed': false,
-        'MediaSourceId': itemId, // Emby需要MediaSourceId
+        'MediaSourceId': resolvedMediaSourceId,
       };
       
       // 发送播放结束请求 - Emby使用/emby前缀
@@ -154,6 +176,8 @@ class EmbyPlaybackSyncService {
       // 清理状态
       _currentItemId = null;
       _currentPlaySessionId = null;
+      _currentMediaSourceId = null;
+      _currentPlayMethod = null;
       _isPlaying = false;
       debugPrint('[EmbySync] 播放状态已清理，准备下一集播放');
     }
@@ -264,9 +288,12 @@ class EmbyPlaybackSyncService {
     }
   }
   
-  /// 生成播放会话ID
-  String _generatePlaySessionId() {
-    return 'nipaplay_${DateTime.now().millisecondsSinceEpoch}_${_currentItemId}';
+  void updatePlaybackSession(PlaybackSession session) {
+    _currentItemId = session.itemId;
+    _currentPlaySessionId = session.playSessionId;
+    _currentMediaSourceId = session.mediaSourceId;
+    _currentPlayMethod =
+        session.isTranscoding ? 'Transcode' : 'DirectPlay';
   }
   
   /// 发送认证请求
@@ -302,10 +329,15 @@ class EmbyPlaybackSyncService {
   
   /// 手动同步播放进度（供外部调用）
   Future<void> syncCurrentProgress(int positionMs) async {
-    if (!_isPlaying || _currentItemId == null) return;
+    if (!_isPlaying ||
+        _currentItemId == null ||
+        _currentPlaySessionId == null) {
+      return;
+    }
     
     try {
       // 使用Emby的PlaybackProgressInfo格式
+      final resolvedMediaSourceId = _currentMediaSourceId ?? _currentItemId;
       final progressInfo = {
         'ItemId': _currentItemId,
         'PositionTicks': (positionMs * 10000).round(),
@@ -313,9 +345,9 @@ class EmbyPlaybackSyncService {
         'CanSeek': true,
         'IsPaused': false,
         'IsMuted': false,
-        'PlayMethod': 'DirectPlay',
+        'PlayMethod': _currentPlayMethod ?? 'DirectPlay',
         'VolumeLevel': 100,
-        'MediaSourceId': _currentItemId, // Emby需要MediaSourceId
+        'MediaSourceId': resolvedMediaSourceId,
       };
       
       final response = await _makeAuthenticatedRequest(
@@ -337,10 +369,15 @@ class EmbyPlaybackSyncService {
 
   /// 报告播放暂停状态
   Future<void> reportPlaybackPaused(int positionMs) async {
-    if (!_isPlaying || _currentItemId == null) return;
+    if (!_isPlaying ||
+        _currentItemId == null ||
+        _currentPlaySessionId == null) {
+      return;
+    }
     
     try {
       // 使用Emby的PlaybackProgressInfo格式
+      final resolvedMediaSourceId = _currentMediaSourceId ?? _currentItemId;
       final progressInfo = {
         'ItemId': _currentItemId,
         'PositionTicks': (positionMs * 10000).round(),
@@ -348,9 +385,9 @@ class EmbyPlaybackSyncService {
         'CanSeek': true,
         'IsPaused': true, // 设置为暂停状态
         'IsMuted': false,
-        'PlayMethod': 'DirectPlay',
+        'PlayMethod': _currentPlayMethod ?? 'DirectPlay',
         'VolumeLevel': 100,
-        'MediaSourceId': _currentItemId, // Emby需要MediaSourceId
+        'MediaSourceId': resolvedMediaSourceId,
       };
       
       final response = await _makeAuthenticatedRequest(

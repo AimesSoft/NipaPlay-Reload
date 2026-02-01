@@ -8,6 +8,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -141,7 +142,7 @@ class JellyfinDandanplayMatcher {
 
     try {
       // 获取Jellyfin流媒体URL（仅用于日志）
-      final streamUrl = getPlayUrl(episode);
+      final streamUrl = await getPlayUrl(episode);
       debugPrint(
           '正在为Jellyfin内容创建可播放项: ${episode.seriesName} - ${episode.name}');
       debugPrint('Jellyfin流媒体URL: $streamUrl');
@@ -244,9 +245,12 @@ class JellyfinDandanplayMatcher {
   /// 获取播放URL
   ///
   /// 根据Jellyfin剧集信息获取媒体流URL
-  String getPlayUrl(JellyfinEpisodeInfo episode) {
-    final url = JellyfinService.instance.getStreamUrl(episode.id);
-    debugPrint('Jellyfin流媒体URL: $url');
+  Future<String> getPlayUrl(JellyfinEpisodeInfo episode) async {
+    final url = JellyfinService.instance.getStreamUrlWithOptions(
+      episode.id,
+      forceDirectPlay: true,
+    );
+    debugPrint('Jellyfin直连URL: $url');
     return url;
   }
 
@@ -698,7 +702,9 @@ class JellyfinDandanplayMatcher {
 
       debugPrint('发送匹配请求到弹弹play API');
       final response = await http.post(
-        Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
+        WebRemoteAccessService.proxyUri(
+          Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
+        ),
         headers: headers,
         body: body,
       );
@@ -789,7 +795,7 @@ class JellyfinDandanplayMatcher {
       debugPrint('请求URL: $url');
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,
@@ -888,7 +894,7 @@ class JellyfinDandanplayMatcher {
       debugPrint('请求URL (使用标题搜索剧集): $url');
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,

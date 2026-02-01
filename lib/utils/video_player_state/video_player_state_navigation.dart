@@ -106,17 +106,24 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
               final episodeId =
                   resolvedHistory.filePath.replaceFirst('jellyfin://', '');
-              // 获取实际的HTTP流媒体URL
-              final actualPlayUrl =
-                  JellyfinService.instance.getStreamUrl(episodeId);
-              debugPrint('[上一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
+              final playbackSession =
+                  await JellyfinService.instance.createPlaybackSession(
+                itemId: episodeId,
+                startPositionMs: resolvedHistory.lastPosition > 0
+                    ? resolvedHistory.lastPosition
+                    : null,
+              );
+              debugPrint(
+                  '[上一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
 
-              // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(resolvedHistory.filePath,
-                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(
+                resolvedHistory.filePath,
+                historyItem: resolvedHistory,
+                playbackSession: playbackSession,
+              );
             } catch (e) {
-              debugPrint('[上一话] 获取Jellyfin流媒体URL失败: $e');
-              _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
+              debugPrint('[上一话] 获取Jellyfin播放会话失败: $e');
+              _showEpisodeErrorMessage('上一话', '获取播放会话失败: $e');
               return;
             }
           } else if (resolvedHistory.filePath.startsWith('emby://')) {
@@ -125,17 +132,24 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final embyPath = resolvedHistory.filePath.replaceFirst('emby://', '');
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
-              // 获取实际的HTTP流媒体URL
-              final actualPlayUrl =
-                  await EmbyService.instance.getStreamUrl(episodeId);
-              debugPrint('[上一话] 获取Emby流媒体URL: $actualPlayUrl');
+              final playbackSession =
+                  await EmbyService.instance.createPlaybackSession(
+                itemId: episodeId,
+                startPositionMs: resolvedHistory.lastPosition > 0
+                    ? resolvedHistory.lastPosition
+                    : null,
+              );
+              debugPrint(
+                  '[上一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
 
-              // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(resolvedHistory.filePath,
-                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(
+                resolvedHistory.filePath,
+                historyItem: resolvedHistory,
+                playbackSession: playbackSession,
+              );
             } catch (e) {
-              debugPrint('[上一话] 获取Emby流媒体URL失败: $e');
-              _showEpisodeErrorMessage('上一话', '获取流媒体URL失败: $e');
+              debugPrint('[上一话] 获取Emby播放会话失败: $e');
+              _showEpisodeErrorMessage('上一话', '获取播放会话失败: $e');
               return;
             }
           } else {
@@ -263,17 +277,24 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               // 从jellyfin://协议URL中提取episodeId（简单格式：jellyfin://episodeId）
               final episodeId =
                   resolvedHistory.filePath.replaceFirst('jellyfin://', '');
-              // 获取实际的HTTP流媒体URL
-              final actualPlayUrl =
-                  JellyfinService.instance.getStreamUrl(episodeId);
-              debugPrint('[下一话] 获取Jellyfin流媒体URL: $actualPlayUrl');
+              final playbackSession =
+                  await JellyfinService.instance.createPlaybackSession(
+                itemId: episodeId,
+                startPositionMs: resolvedHistory.lastPosition > 0
+                    ? resolvedHistory.lastPosition
+                    : null,
+              );
+              debugPrint(
+                  '[下一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
 
-              // 使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(resolvedHistory.filePath,
-                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(
+                resolvedHistory.filePath,
+                historyItem: resolvedHistory,
+                playbackSession: playbackSession,
+              );
             } catch (e) {
-              debugPrint('[下一话] 获取Jellyfin流媒体URL失败: $e');
-              _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
+              debugPrint('[下一话] 获取Jellyfin播放会话失败: $e');
+              _showEpisodeErrorMessage('下一话', '获取播放会话失败: $e');
               return;
             }
           } else if (resolvedHistory.filePath.startsWith('emby://')) {
@@ -282,17 +303,24 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final embyPath = resolvedHistory.filePath.replaceFirst('emby://', '');
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
-              // 获取实际的HTTP流媒体URL
-              final actualPlayUrl =
-                  await EmbyService.instance.getStreamUrl(episodeId);
-              debugPrint('[下一话] 获取Emby流媒体URL: $actualPlayUrl');
+              final playbackSession =
+                  await EmbyService.instance.createPlaybackSession(
+                itemId: episodeId,
+                startPositionMs: resolvedHistory.lastPosition > 0
+                    ? resolvedHistory.lastPosition
+                    : null,
+              );
+              debugPrint(
+                  '[下一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
 
-              // 使用Emby协议URL作为标识符，HTTP URL作为实际播放源
-              await initializePlayer(resolvedHistory.filePath,
-                  historyItem: resolvedHistory, actualPlayUrl: actualPlayUrl);
+              await initializePlayer(
+                resolvedHistory.filePath,
+                historyItem: resolvedHistory,
+                playbackSession: playbackSession,
+              );
             } catch (e) {
-              debugPrint('[下一话] 获取Emby流媒体URL失败: $e');
-              _showEpisodeErrorMessage('下一话', '获取流媒体URL失败: $e');
+              debugPrint('[下一话] 获取Emby播放会话失败: $e');
+              _showEpisodeErrorMessage('下一话', '获取播放会话失败: $e');
               return;
             }
           } else {
@@ -339,9 +367,13 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
   Future<String?> _resolveMatchablePath(String filePath) async {
     if (filePath.startsWith('jellyfin://')) {
       final episodeId = filePath.replaceFirst('jellyfin://', '');
-      return JellyfinService.instance.isConnected
-          ? JellyfinService.instance.getStreamUrl(episodeId)
-          : null;
+      if (!JellyfinService.instance.isConnected) {
+        return null;
+      }
+      return JellyfinService.instance.getStreamUrlWithOptions(
+        episodeId,
+        forceDirectPlay: true,
+      );
     }
     if (filePath.startsWith('emby://')) {
       final embyPath = filePath.replaceFirst('emby://', '');
@@ -349,7 +381,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       if (!EmbyService.instance.isConnected) {
         return null;
       }
-      return await EmbyService.instance.getStreamUrl(episodeId);
+      return EmbyService.instance.getStreamUrlWithOptions(
+        episodeId,
+        forceDirectPlay: true,
+      );
     }
     return filePath;
   }

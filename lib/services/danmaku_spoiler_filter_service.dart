@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 enum SpoilerAiApiFormat {
   openai,
@@ -58,7 +59,7 @@ class DanmakuSpoilerFilterService {
 
         final response = await http
             .post(
-              Uri.parse(resolvedApiUrl),
+              WebRemoteAccessService.proxyUri(Uri.parse(resolvedApiUrl)),
               headers: headers,
               body: jsonEncode(payload),
             )
@@ -118,7 +119,7 @@ class DanmakuSpoilerFilterService {
 
         final response = await http
             .post(
-              requestUri,
+              WebRemoteAccessService.proxyUri(requestUri),
               headers: headers,
               body: jsonEncode(payload),
             )

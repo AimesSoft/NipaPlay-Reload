@@ -41,3 +41,5 @@ docs/error.txt
 .vscode/settings.json
 *.xcscheme
 /.tmp_home
+/packages/nipaplay_smb2/android/.cxx
+/packages/nipaplay_smb2/android/.cxx

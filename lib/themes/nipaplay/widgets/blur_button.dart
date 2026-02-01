@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
 
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -150,6 +151,36 @@ class _BlurButtonState extends State<BlurButton> {
         return content;
       }
       return SizedBox(width: widget.width, child: content);
+    }
+
+    if (kIsWeb) {
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        width: widget.width,
+        decoration: BoxDecoration(
+          color: _isHovered
+              ? const Color(0xFF505050)
+              : const Color(0xFF383838),
+          borderRadius: borderRadius,
+          border: Border.all(
+            color: _isHovered
+                ? Colors.white.withOpacity(0.5)
+                : Colors.white.withOpacity(0.2),
+            width: _isHovered ? 1.0 : 0.5,
+          ),
+          boxShadow: _isHovered
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  )
+                ]
+              : [],
+        ),
+        child: content,
+      );
     }
 
     return ClipRRect(

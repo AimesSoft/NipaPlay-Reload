@@ -3,16 +3,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:path_provider/path_provider.dart'
     if (dart.library.html) 'package:nipaplay/utils/mock_path_provider.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'debug_log_service.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/services/emby_transcode_manager.dart';
+import 'package:nipaplay/services/media_server_playback_client.dart';
 import 'media_server_service_base.dart';
 
-class EmbyService extends MediaServerServiceBase {
+class EmbyService extends MediaServerServiceBase
+    implements MediaServerPlaybackClient {
   static final EmbyService instance = EmbyService._internal();
 
   EmbyService._internal();
@@ -46,6 +50,8 @@ class EmbyService extends MediaServerServiceBase {
 
   @override
   String get notConnectedMessage => '未连接到 Emby 服务器';
+
+  bool get isTranscodeEnabled => transcodeEnabledCache;
 
   @override
   String normalizeRequestPath(String path) => _normalizeEmbyPath(path);
@@ -343,7 +349,7 @@ class EmbyService extends MediaServerServiceBase {
 
   @override
   Future<void> loadAvailableLibraries() async {
-    if (kIsWeb || !_isConnected || _userId == null) return;
+    if (!_isConnected || _userId == null) return;
 
     try {
       final response =
@@ -407,7 +413,6 @@ class EmbyService extends MediaServerServiceBase {
     String parentId, {
     int limit = 99999,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _userId == null) {
       return [];
     }
@@ -461,7 +466,6 @@ class EmbyService extends MediaServerServiceBase {
     String? sortBy,
     String? sortOrder,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected) {
       return [];
     }
@@ -514,7 +518,6 @@ class EmbyService extends MediaServerServiceBase {
     String libraryId, {
     int limit = 20,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected) {
       return [];
     }
@@ -565,7 +568,6 @@ class EmbyService extends MediaServerServiceBase {
     String? sortBy,
     String? sortOrder,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
       return [];
     }
@@ -661,7 +663,6 @@ class EmbyService extends MediaServerServiceBase {
 
   // 获取最新电影列表
   Future<List<EmbyMovieInfo>> getLatestMovies({int limit = 99999}) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _selectedLibraryIds.isEmpty || _userId == null) {
       return [];
     }
@@ -702,7 +703,6 @@ class EmbyService extends MediaServerServiceBase {
 
   /// 获取 Resume 列表用于同步播放记录
   Future<List<Map<String, dynamic>>> fetchResumeItems({int limit = 5}) async {
-    if (kIsWeb) return [];
     if (!_isConnected || _userId == null) {
       debugPrint('EmbyService.fetchResumeItems -> skip, connected=$_isConnected userId=$_userId');
       return [];
@@ -1034,9 +1034,257 @@ class EmbyService extends MediaServerServiceBase {
     );
   }
 
+  @override
+  Future<PlaybackSession> createPlaybackSession({
+    required String itemId,
+    JellyfinVideoQuality? quality,
+    int? startPositionMs,
+    int? audioStreamIndex,
+    int? subtitleStreamIndex,
+    bool burnInSubtitle = false,
+    String? playSessionId,
+    String? mediaSourceId,
+  }) async {
+    if (!_isConnected || _accessToken == null || _userId == null) {
+      throw Exception('未连接到Emby服务器');
+    }
+
+    final effectiveQuality = quality ??
+        (transcodeEnabledCache
+            ? defaultQualityCache
+            : JellyfinVideoQuality.original);
+
+    if (!transcodeEnabledCache) {
+      final resolvedPlaySessionId = playSessionId?.isNotEmpty == true
+          ? playSessionId
+          : _generateLocalPlaySessionId(itemId);
+      final resolvedMediaSourceId =
+          (mediaSourceId?.isNotEmpty ?? false) ? mediaSourceId! : itemId;
+      final directUrl = _buildDirectPlayUrl(
+        itemId,
+        mediaSourceId: resolvedMediaSourceId,
+        playSessionId: resolvedPlaySessionId,
+      );
+      return PlaybackSession(
+        itemId: itemId,
+        mediaSourceId: resolvedMediaSourceId,
+        playSessionId: resolvedPlaySessionId,
+        streamUrl: directUrl,
+        isTranscoding: false,
+      );
+    }
+
+    final enableTranscoding = transcodeEnabledCache &&
+      effectiveQuality != JellyfinVideoQuality.original;
+    final maxStreamingBitrate =
+      enableTranscoding ? effectiveQuality.bitrate : null;
+    final resolvedPlaySessionId = playSessionId;
+
+    final deviceProfile = PlaybackDeviceProfileBuilder.build(
+      deviceName: 'NipaPlay',
+      settings: transcodeSettingsCache,
+    );
+
+    final request = <String, dynamic>{
+      'DeviceProfile': deviceProfile.toJson(),
+      'UserId': _userId,
+      'EnableDirectPlay': true,
+      'EnableDirectStream': true,
+      'EnableTranscoding': enableTranscoding,
+    };
+    if (maxStreamingBitrate != null) {
+      request['MaxStreamingBitrate'] = maxStreamingBitrate * 1000;
+    }
+    if (startPositionMs != null && startPositionMs > 0) {
+      request['StartTimeTicks'] = (startPositionMs * 10000).round();
+    }
+    if (audioStreamIndex != null) {
+      request['AudioStreamIndex'] = audioStreamIndex;
+    }
+    if (enableTranscoding) {
+      if (subtitleStreamIndex != null) {
+        request['SubtitleStreamIndex'] = subtitleStreamIndex;
+      }
+      final subtitleMethod = _resolveSubtitleMethod(
+        enableTranscoding: enableTranscoding,
+        subtitleStreamIndex: subtitleStreamIndex,
+        burnInSubtitle: burnInSubtitle,
+      );
+      if (subtitleMethod != null && subtitleMethod.isNotEmpty) {
+        request['SubtitleMethod'] = subtitleMethod;
+      }
+    }
+    if (resolvedPlaySessionId != null && resolvedPlaySessionId.isNotEmpty) {
+      request['PlaySessionId'] = resolvedPlaySessionId;
+    }
+    if (mediaSourceId != null && mediaSourceId.isNotEmpty) {
+      request['MediaSourceId'] = mediaSourceId;
+    }
+
+    final response = await _makeAuthenticatedRequest(
+      '/emby/Items/$itemId/PlaybackInfo?UserId=$_userId',
+      method: 'POST',
+      body: request,
+    );
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return _buildPlaybackSessionFromResponse(
+      itemId: itemId,
+      data: data,
+      preferTranscoding: enableTranscoding,
+      forceDirectPlay: false,
+      forcedPlaySessionId: resolvedPlaySessionId,
+      requestedMediaSourceId: mediaSourceId,
+    );
+  }
+
+  @override
+  Future<PlaybackSession> refreshPlaybackSession(
+    PlaybackSession session, {
+    JellyfinVideoQuality? quality,
+    int? startPositionMs,
+    int? audioStreamIndex,
+    int? subtitleStreamIndex,
+    bool burnInSubtitle = false,
+  }) {
+    return createPlaybackSession(
+      itemId: session.itemId,
+      quality: quality,
+      startPositionMs: startPositionMs,
+      audioStreamIndex: audioStreamIndex,
+      subtitleStreamIndex: subtitleStreamIndex,
+      burnInSubtitle: burnInSubtitle,
+      playSessionId: session.playSessionId,
+      mediaSourceId: session.mediaSourceId,
+    );
+  }
+
+  PlaybackSession _buildPlaybackSessionFromResponse({
+    required String itemId,
+    required Map<String, dynamic> data,
+    required bool preferTranscoding,
+    required bool forceDirectPlay,
+    String? forcedPlaySessionId,
+    String? requestedMediaSourceId,
+  }) {
+    final playSessionId =
+      forcedPlaySessionId ?? data['PlaySessionId']?.toString();
+    final rawSources = data['MediaSources'];
+    final sources = <PlaybackMediaSource>[];
+    if (rawSources is List) {
+      for (final source in rawSources) {
+        if (source is Map) {
+          sources.add(
+            PlaybackMediaSource.fromJson(Map<String, dynamic>.from(source)),
+          );
+        }
+      }
+    }
+
+    PlaybackMediaSource? selected;
+    if (requestedMediaSourceId != null && requestedMediaSourceId.isNotEmpty) {
+      for (final source in sources) {
+        if (source.id == requestedMediaSourceId) {
+          selected = source;
+          break;
+        }
+      }
+    }
+    selected ??= sources.isNotEmpty ? sources.first : null;
+
+    final directStreamUrl = selected?.directStreamUrl;
+    final transcodingUrl = selected?.transcodingUrl;
+
+    bool useTranscoding = false;
+    String? chosenUrl;
+    if (!forceDirectPlay && transcodingUrl != null && transcodingUrl.isNotEmpty) {
+      if (preferTranscoding ||
+          directStreamUrl == null ||
+          directStreamUrl.isEmpty) {
+        useTranscoding = true;
+        chosenUrl = transcodingUrl;
+      }
+    }
+    chosenUrl ??= directStreamUrl;
+
+    final resolvedUrl = (chosenUrl != null && chosenUrl.isNotEmpty)
+        ? _resolvePlaybackUrl(chosenUrl)
+        : _buildDirectPlayUrl(
+            itemId,
+            mediaSourceId: selected?.id,
+            playSessionId: playSessionId,
+          );
+
+    if (chosenUrl == null || chosenUrl.isEmpty) {
+      useTranscoding = false;
+    }
+
+    return PlaybackSession(
+      itemId: itemId,
+      mediaSourceId: selected?.id,
+      playSessionId: playSessionId,
+      streamUrl: resolvedUrl,
+      isTranscoding: useTranscoding,
+      transcodingProtocol: selected?.transcodingSubProtocol,
+      transcodingContainer: selected?.transcodingContainer,
+      mediaSources: sources,
+      selectedSource: selected,
+    );
+  }
+
+  String _generateLocalPlaySessionId(String itemId) {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return 'nipaplay_${timestamp}_$itemId';
+  }
+
+  String _resolvePlaybackUrl(String url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    final normalized = url.startsWith('/') ? url : '/$url';
+    return '$_serverUrl$normalized';
+  }
+
+  String? _resolveSubtitleMethod({
+    required bool enableTranscoding,
+    int? subtitleStreamIndex,
+    bool burnInSubtitle = false,
+  }) {
+    if (!enableTranscoding) {
+      return null;
+    }
+    if (subtitleStreamIndex != null) {
+      return burnInSubtitle ? 'Encode' : 'Embed';
+    }
+
+    if (!transcodeSettingsCache.subtitle.enableTranscoding) {
+      return null;
+    }
+    final delivery = transcodeSettingsCache.subtitle.deliveryMethod;
+    if (delivery == JellyfinSubtitleDeliveryMethod.external ||
+        delivery == JellyfinSubtitleDeliveryMethod.drop) {
+      return null;
+    }
+    return delivery.apiValue;
+  }
+
   /// 构建直连URL（不转码）
-  String _buildDirectPlayUrl(String itemId) {
-    return '$_serverUrl/emby/Videos/$itemId/stream?Static=true&api_key=$_accessToken';
+  String _buildDirectPlayUrl(
+    String itemId, {
+    String? mediaSourceId,
+    String? playSessionId,
+  }) {
+    final params = <String, String>{
+      'Static': 'true',
+      if (mediaSourceId != null && mediaSourceId.isNotEmpty)
+        'MediaSourceId': mediaSourceId,
+      if (playSessionId != null && playSessionId.isNotEmpty)
+        'PlaySessionId': playSessionId,
+      if (_accessToken != null) 'api_key': _accessToken!,
+    };
+    final uri = Uri.parse('$_serverUrl/emby/Videos/$itemId/stream')
+        .replace(queryParameters: params);
+    return uri.toString();
   }
 
   /// 构建转码URL（HLS 使用 master.m3u8，尽量同步生成，必要参数使用约定填充）
@@ -1382,7 +1630,6 @@ class EmbyService extends MediaServerServiceBase {
     int limit = 50,
     String? parentId,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || searchTerm.trim().isEmpty || _userId == null) {
       return [];
     }
@@ -1440,7 +1687,6 @@ class EmbyService extends MediaServerServiceBase {
     String searchTerm, {
     int limit = 50,
   }) async {
-    if (kIsWeb) return [];
     if (!_isConnected || searchTerm.trim().isEmpty || _userId == null) {
       return [];
     }
@@ -1605,7 +1851,8 @@ class EmbyService extends MediaServerServiceBase {
           '$_serverUrl/emby/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
       debugPrint('EmbyService: 下载字幕文件: $subtitleUrl');
       // 下载字幕文件
-      final subtitleResponse = await http.get(Uri.parse(subtitleUrl));
+      final subtitleResponse =
+          await http.get(WebRemoteAccessService.proxyUri(Uri.parse(subtitleUrl)));
       if (subtitleResponse.statusCode == 200) {
         // 保存到临时文件
         final tempDir = await getTemporaryDirectory();

@@ -21,6 +21,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadMergeDanmaku(); // 加载弹幕合并设置
     await _loadDanmakuStacking(); // 加载弹幕堆叠设置
     await _loadTimelineDanmakuEnabled(); // 加载时间轴告知弹幕轨道开关
+    await _loadHardwareDecoderSetting(); // 加载硬件解码开关
 
     // 加载弹幕类型屏蔽设置
     await _loadBlockTopDanmaku();
@@ -377,7 +378,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     }
 
     // 2. iOS平台：尝试修复容器路径查找进度
-    if (Platform.isIOS) {
+    if (!kIsWeb && Platform.isIOS) {
       final fixedPath = await iOSContainerPathFixer.fixContainerPath(path);
       if (fixedPath != null) {
         position = positionMap[fixedPath] ?? 0;

@@ -106,7 +106,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
       
       
       final response = await http.head(
-        Uri.parse(imageApiUrl),
+        WebRemoteAccessService.proxyUri(Uri.parse(imageApiUrl)),
         headers: {
           'User-Agent': 'NipaPlay/1.0',
         },
@@ -171,14 +171,18 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         final subtitle = results[2] as String?;
         final backdropUrl = backdropCandidate?.value;
         final logoUrl = logoCandidate?.value;
+        final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+        final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
         
         // 如果获取到了更好的图片或信息，创建升级版本
-        if (backdropUrl != currentItem.backgroundImageUrl || 
-            logoUrl != currentItem.logoImageUrl ||
+        if (normalizedBackdropUrl != currentItem.backgroundImageUrl || 
+            normalizedLogoUrl != currentItem.logoImageUrl ||
             subtitle != currentItem.subtitle) {
           upgradedItem = currentItem.copyWith(
-            backgroundImageUrl: backdropUrl,
-            isLowRes: backdropUrl == null
+            subtitle: subtitle,
+            backgroundImageUrl: normalizedBackdropUrl,
+            logoImageUrl: normalizedLogoUrl,
+            isLowRes: normalizedBackdropUrl == null
                 ? currentItem.isLowRes
                 : _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
           );
@@ -200,14 +204,18 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         final subtitle = results[2] as String?;
         final backdropUrl = backdropCandidate?.value;
         final logoUrl = logoCandidate?.value;
+        final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+        final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
         
         // 如果获取到了更好的图片或信息，创建升级版本
-        if (backdropUrl != currentItem.backgroundImageUrl || 
-            logoUrl != currentItem.logoImageUrl ||
+        if (normalizedBackdropUrl != currentItem.backgroundImageUrl || 
+            normalizedLogoUrl != currentItem.logoImageUrl ||
             subtitle != currentItem.subtitle) {
           upgradedItem = currentItem.copyWith(
-            backgroundImageUrl: backdropUrl,
-            isLowRes: backdropUrl == null
+            subtitle: subtitle,
+            backgroundImageUrl: normalizedBackdropUrl,
+            logoImageUrl: normalizedLogoUrl,
+            isLowRes: normalizedBackdropUrl == null
                 ? currentItem.isLowRes
                 : _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
           );
@@ -263,11 +271,16 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         }
         
         // 如果获取到了更好的图片或信息，创建升级版本
-        if (highQualityImageUrl != currentItem.backgroundImageUrl ||
+        final normalizedHighQualityUrl =
+            _normalizeRecommendationImageUrl(highQualityImageUrl);
+        if (normalizedHighQualityUrl != currentItem.backgroundImageUrl ||
             detailedSubtitle != currentItem.subtitle) {
           upgradedItem = currentItem.copyWith(
-            backgroundImageUrl: highQualityImageUrl,
-            isLowRes: highQualityImageUrl != null ? !_looksHighQualityUrl(highQualityImageUrl) : currentItem.isLowRes,
+            subtitle: detailedSubtitle,
+            backgroundImageUrl: normalizedHighQualityUrl,
+            isLowRes: normalizedHighQualityUrl != null && highQualityImageUrl != null
+                ? !_looksHighQualityUrl(highQualityImageUrl)
+                : currentItem.isLowRes,
           );
         }
       } else if (candidate is DandanplayRemoteAnimeGroup) {
@@ -296,10 +309,12 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
               }
             }
             
-            if (hqUrl != null && hqUrl != currentItem.backgroundImageUrl) {
+            final normalizedHqUrl = _normalizeRecommendationImageUrl(hqUrl);
+            if (normalizedHqUrl != null &&
+                normalizedHqUrl != currentItem.backgroundImageUrl) {
               upgradedItem = currentItem.copyWith(
-                backgroundImageUrl: hqUrl,
-                isLowRes: !_looksHighQualityUrl(hqUrl),
+                backgroundImageUrl: normalizedHqUrl,
+                isLowRes: hqUrl != null ? !_looksHighQualityUrl(hqUrl) : currentItem.isLowRes,
               );
             }
           } catch (_) {
@@ -456,7 +471,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   // 辅助方法：验证图片URL是否有效（HEAD校验，确保非404并且为图片）
   Future<bool> _validateImageUrl(String url) async {
     try {
-      final response = await http.head(Uri.parse(url)).timeout(
+      final response = await http
+          .head(WebRemoteAccessService.proxyUri(Uri.parse(url)))
+          .timeout(
         const Duration(seconds: 2),
         onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
       );

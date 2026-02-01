@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart';
@@ -101,7 +102,7 @@ class LibraryManagementList<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isPhone) {
+    if (isPhone && !kIsWeb) {
       return ListView.builder(
         controller: scrollController,
         padding: padding,
@@ -175,6 +176,7 @@ class LibraryManagementFolderRow extends StatelessWidget {
     this.textColor,
     this.secondaryTextColor,
     this.locale,
+    this.trailingActions,
   });
 
   final String title;
@@ -187,6 +189,7 @@ class LibraryManagementFolderRow extends StatelessWidget {
   final Color? textColor;
   final Color? secondaryTextColor;
   final Locale? locale;
+  final List<Widget>? trailingActions;
 
   @override
   Widget build(BuildContext context) {
@@ -219,12 +222,18 @@ class LibraryManagementFolderRow extends StatelessWidget {
                   color: Color(0xFFFF2E55),
                 ),
               )
-            : Icon(
-                expanded
-                    ? Ionicons.chevron_down_outline
-                    : Ionicons.chevron_forward,
-                color: resolvedSecondaryTextColor,
-                size: 16,
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (trailingActions != null) ...trailingActions!,
+                  Icon(
+                    expanded
+                        ? Ionicons.chevron_down_outline
+                        : Ionicons.chevron_forward,
+                    color: resolvedSecondaryTextColor,
+                    size: 16,
+                  ),
+                ],
               ),
         onTap: onTap,
       ),

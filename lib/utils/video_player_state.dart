@@ -10,6 +10,7 @@ import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
+import 'package:universal_html/html.dart' as web_html;
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
@@ -28,12 +29,15 @@ import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
+import 'package:nipaplay/services/web_remote_history_sync_service.dart';
 import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记录数据库
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -203,6 +207,13 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
   String? _currentVideoPath;
   String? _currentActualPlayUrl; // 存储实际播放URL，用于判断转码状态
+  PlaybackSession? _currentPlaybackSession;
+  final Map<String, int?> _jellyfinServerSubtitleSelections = {};
+  final Map<String, bool> _jellyfinServerSubtitleBurnInSelections = {};
+  final Map<String, int?> _embyServerSubtitleSelections = {};
+  final Map<String, bool> _embyServerSubtitleBurnInSelections = {};
+  final Map<String, int?> _jellyfinServerAudioSelections = {};
+  final Map<String, int?> _embyServerAudioSelections = {};
   String _danmakuOverlayKey = 'idle'; // 弹幕覆盖层的稳定key
   Timer? _uiUpdateTimer; // UI更新定时器（包含位置保存和数据持久化功能）
   // 观看记录节流：记录上一次更新所处的10秒分桶，避免同一时间窗内重复写DB与通知Provider
@@ -259,6 +270,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
   final String _timelinePreviewEnabledKey = 'timeline_preview_enabled';
+  final String _useHardwareDecoderKey = 'use_hardware_decoder';
+  bool _useHardwareDecoder = true;
 
   WatchHistoryProvider? _resolveWatchHistoryProvider() {
     final context = _context;
@@ -516,6 +529,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 获取菜单栏隐藏状态
   bool get isAppBarHidden => _isAppBarHidden;
+  bool get useHardwareDecoder => _useHardwareDecoder;
 
   // 检查是否为平板设备（使用globals中的判定逻辑）
   bool get isTablet => globals.isTablet;
@@ -650,11 +664,36 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration get videoDuration => _videoDuration;
   String? get currentVideoPath => _currentVideoPath;
   String? get currentActualPlayUrl => _currentActualPlayUrl; // 当前实际播放URL
+  PlaybackSession? get currentPlaybackSession => _currentPlaybackSession;
   String get danmakuOverlayKey => _danmakuOverlayKey; // 弹幕覆盖层的稳定key
   String? get animeTitle => _animeTitle; // 添加动画标题getter
   String? get episodeTitle => _episodeTitle; // 添加集数标题getter
   int? get animeId => _animeId; // 添加动画ID getter
   int? get episodeId => _episodeId; // 添加剧集ID getter
+
+  bool hasJellyfinServerAudioSelection(String itemId) =>
+      _jellyfinServerAudioSelections.containsKey(itemId);
+
+  int? getJellyfinServerAudioSelection(String itemId) =>
+      _jellyfinServerAudioSelections[itemId];
+
+  void setJellyfinServerAudioSelection(String itemId, int? index) {
+    if (_jellyfinServerAudioSelections[itemId] == index) return;
+    _jellyfinServerAudioSelections[itemId] = index;
+    notifyListeners();
+  }
+
+  bool hasEmbyServerAudioSelection(String itemId) =>
+      _embyServerAudioSelections.containsKey(itemId);
+
+  int? getEmbyServerAudioSelection(String itemId) =>
+      _embyServerAudioSelections[itemId];
+
+  void setEmbyServerAudioSelection(String itemId, int? index) {
+    if (_embyServerAudioSelections[itemId] == index) return;
+    _embyServerAudioSelections[itemId] = index;
+    notifyListeners();
+  }
 
   // 获取时间轴告知弹幕轨道状态
   bool get isTimelineDanmakuEnabled => _isTimelineDanmakuEnabled;

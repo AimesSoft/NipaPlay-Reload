@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:intl/intl.dart';
@@ -27,6 +28,7 @@ import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
@@ -39,6 +41,7 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
@@ -264,6 +267,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           return !item.filePath.startsWith('jellyfin://') &&
               !item.filePath.startsWith('emby://') &&
               !MediaSourceUtils.isSmbPath(item.filePath) &&
+              !MediaSourceUtils.isWebDavPath(item.filePath) &&
               !item.isDandanplayRemote;
         }).toList();
 
@@ -466,13 +470,31 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     setState(() => _isLoadingTodayAnimes = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final bool filterAdultContentGlobally =
-          prefs.getBool('global_filter_adult_content') ?? true;
-      final allAnimes = await BangumiService.instance.getCalendar(
-        forceRefresh: forceRefresh,
-        filterAdultContent: filterAdultContentGlobally,
-      );
+      List<BangumiAnime> allAnimes;
+      if (kIsWeb) {
+        final apiUri = WebRemoteAccessService.apiUri('/api/bangumi/calendar');
+        if (apiUri == null) {
+          throw Exception('未配置远程访问地址');
+        }
+        final response = await http.get(apiUri);
+        if (response.statusCode == 200) {
+          final List<dynamic> data =
+              json.decode(utf8.decode(response.bodyBytes));
+          allAnimes = data
+              .map((d) => BangumiAnime.fromJson(d as Map<String, dynamic>))
+              .toList();
+        } else {
+          throw Exception('Failed to load from API: ${response.statusCode}');
+        }
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        final bool filterAdultContentGlobally =
+            prefs.getBool('global_filter_adult_content') ?? true;
+        allAnimes = await BangumiService.instance.getCalendar(
+          forceRefresh: forceRefresh,
+          filterAdultContent: filterAdultContentGlobally,
+        );
+      }
 
       final now = DateTime.now();
       int weekday = now.weekday;
@@ -682,6 +704,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             return !item.filePath.startsWith('jellyfin://') &&
                 !item.filePath.startsWith('emby://') &&
                 !MediaSourceUtils.isSmbPath(item.filePath) &&
+                !MediaSourceUtils.isWebDavPath(item.filePath) &&
                 !item.isDandanplayRemote;
           }).toList();
 
@@ -891,7 +914,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       final uri = Uri.parse(
           'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large');
       final response = await http.head(
-        uri,
+        WebRemoteAccessService.proxyUri(uri),
         headers: const {'User-Agent': 'NipaPlay/1.0'},
       ).timeout(const Duration(seconds: 5));
       if (response.statusCode == 302) {
@@ -2326,6 +2349,19 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Widget _getVideoThumbnail(WatchHistoryItem item) {
     final now = DateTime.now();
+    final thumbnailPath = item.thumbnailPath;
+
+    if (thumbnailPath != null &&
+        (thumbnailPath.startsWith('http://') ||
+            thumbnailPath.startsWith('https://'))) {
+      return CachedNetworkImage(
+        imageUrl: thumbnailPath,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorWidget: (_, __, ___) => _buildDefaultThumbnail(item),
+      );
+    }
 
     // iOS平台特殊处理：检查截图文件的修改时间
     if (Platform.isIOS && item.thumbnailPath != null) {
@@ -2618,7 +2654,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   Future<PlayableItem?> _buildPlayableItem(WatchHistoryItem item) async {
     WatchHistoryItem currentItem = item;
     String filePath = currentItem.filePath;
-    String? actualPlayUrl;
+    PlaybackSession? playbackSession;
     bool fileExists = false;
 
     final bool isNetworkUrl = filePath.startsWith('http');
@@ -2633,7 +2669,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final jellyfinId = filePath.replaceFirst('jellyfin://', '');
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
-            actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            playbackSession = await jellyfinService.createPlaybackSession(
+              itemId: jellyfinId,
+              startPositionMs:
+                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+            );
           } else {
             AdaptiveSnackBar.show(
               context,
@@ -2657,7 +2697,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           final embyId = filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = await embyService.getStreamUrl(embyId);
+            playbackSession = await embyService.createPlaybackSession(
+              itemId: embyId,
+              startPositionMs:
+                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+            );
           } else {
             AdaptiveSnackBar.show(
               context,
@@ -2676,18 +2720,22 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         }
       }
     } else {
-      final file = File(filePath);
-      fileExists = file.existsSync();
+      if (kIsWeb) {
+        fileExists = true;
+      } else {
+        final file = File(filePath);
+        fileExists = file.existsSync();
 
-      if (!fileExists && Platform.isIOS) {
-        final altPath = filePath.startsWith('/private')
-            ? filePath.replaceFirst('/private', '')
-            : '/private$filePath';
-        final altFile = File(altPath);
-        if (altFile.existsSync()) {
-          filePath = altPath;
-          currentItem = currentItem.copyWith(filePath: altPath);
-          fileExists = true;
+        if (!fileExists && Platform.isIOS) {
+          final altPath = filePath.startsWith('/private')
+              ? filePath.replaceFirst('/private', '')
+              : '/private$filePath';
+          final altFile = File(altPath);
+          if (altFile.existsSync()) {
+            filePath = altPath;
+            currentItem = currentItem.copyWith(filePath: altPath);
+            fileExists = true;
+          }
         }
       }
     }
@@ -2702,7 +2750,22 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     }
 
     if (WatchHistoryAutoMatchHelper.shouldAutoMatch(currentItem)) {
-      final matchablePath = actualPlayUrl ?? filePath;
+      String matchablePath = filePath;
+      if (filePath.startsWith('jellyfin://')) {
+        final itemId = filePath.replaceFirst('jellyfin://', '');
+        matchablePath = JellyfinService.instance.getStreamUrlWithOptions(
+          itemId,
+          forceDirectPlay: true,
+        );
+      } else if (filePath.startsWith('emby://')) {
+        final embyPath = filePath.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final itemId = parts.isNotEmpty ? parts.last : embyPath;
+        matchablePath = EmbyService.instance.getStreamUrlWithOptions(
+          itemId,
+          forceDirectPlay: true,
+        );
+      }
       currentItem = await _performHistoryAutoMatch(
         currentItem,
         matchablePath,
@@ -2716,7 +2779,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       animeId: currentItem.animeId,
       episodeId: currentItem.episodeId,
       historyItem: currentItem,
-      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
     );
   }
 

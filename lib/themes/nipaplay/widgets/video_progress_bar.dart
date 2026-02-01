@@ -85,76 +85,149 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
             Positioned(
               left: bubbleX,
               top: bubbleY,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 10 : 0),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 0.5,
-                  ),
-                  boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+              child: kIsWeb
+                  ? Container(
+                      padding: const EdgeInsets.all(8),
+                      width: bubbleWidth,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF222222),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.15),
+                          width: 0.5,
                         ),
-                      ],
-                ),
-                width: bubbleWidth,
-                child: hasPreview
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: _buildPreviewImage(
-                              thumbnailPath!,
-                              previewWidth,
-                              previewHeight,
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(
-                                top: 6, left: 4, right: 4, bottom: 2),
-                            child: Text(
-                              text,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.visible,
-                            ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
                         ],
-                      )
-                    : Center(
-                        child: Text(
-                          text,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                      ),
+                      child: hasPreview
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: _buildPreviewImage(
+                                    thumbnailPath!,
+                                    previewWidth,
+                                    previewHeight,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      top: 6, left: 4, right: 4, bottom: 2),
+                                  child: Text(
+                                    text,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.visible,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Text(
+                                text,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.visible,
+                              ),
+                            ),
+                    )
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(
+                            sigmaX: context
+                                    .watch<AppearanceSettingsProvider>()
+                                    .enableWidgetBlurEffect
+                                ? 10
+                                : 0,
+                            sigmaY: context
+                                    .watch<AppearanceSettingsProvider>()
+                                    .enableWidgetBlurEffect
+                                ? 10
+                                : 0),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.3),
+                              width: 0.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.visible,
+                          width: bubbleWidth,
+                          child: hasPreview
+                              ? Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: _buildPreviewImage(
+                                        thumbnailPath!,
+                                        previewWidth,
+                                        previewHeight,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          top: 6, left: 4, right: 4, bottom: 2),
+                                      child: Text(
+                                        text,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        overflow: TextOverflow.visible,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Center(
+                                  child: Text(
+                                    text,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.visible,
+                                  ),
+                                ),
                         ),
                       ),
-              ),
+                    ),
             ),
-          ),
-        ),
-      ],
+          ],
         ),
       ),
     );

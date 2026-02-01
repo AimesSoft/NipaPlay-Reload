@@ -7,6 +7,7 @@ class SMBConnectionDialog {
   static Future<bool?> show(
     BuildContext context, {
     SMBConnection? editConnection,
+    Future<bool> Function(SMBConnection)? onSave,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor =
@@ -15,15 +16,22 @@ class SMBConnectionDialog {
       context: context,
       title: editConnection == null ? '添加SMB服务器' : '编辑SMB服务器',
       backgroundColor: backgroundColor,
-      contentWidget: _SMBConnectionForm(editConnection: editConnection),
+      contentWidget: _SMBConnectionForm(
+        editConnection: editConnection,
+        onSave: onSave,
+      ),
     );
   }
 }
 
 class _SMBConnectionForm extends StatefulWidget {
   final SMBConnection? editConnection;
+  final Future<bool> Function(SMBConnection)? onSave;
 
-  const _SMBConnectionForm({this.editConnection});
+  const _SMBConnectionForm({
+    this.editConnection,
+    this.onSave,
+  });
 
   @override
   State<_SMBConnectionForm> createState() => _SMBConnectionFormState();
@@ -292,7 +300,9 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
     );
 
     bool success = false;
-    if (widget.editConnection == null) {
+    if (widget.onSave != null) {
+      success = await widget.onSave!(connection);
+    } else if (widget.editConnection == null) {
       success = await SMBService.instance.addConnection(connection);
     } else {
       success = await SMBService.instance.updateConnection(

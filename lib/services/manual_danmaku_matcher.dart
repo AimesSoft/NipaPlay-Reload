@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/manual_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -32,7 +33,7 @@ class ManualDanmakuMatcher {
       final url = '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword)}';
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,
@@ -70,7 +71,7 @@ class ManualDanmakuMatcher {
       final url = '$baseUrl$apiPath';
 
       final response = await http.get(
-        Uri.parse(url),
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
         headers: {
           'Accept': 'application/json',
           'X-AppId': DandanplayService.appId,

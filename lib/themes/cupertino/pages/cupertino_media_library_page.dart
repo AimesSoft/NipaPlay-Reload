@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
 
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
@@ -28,10 +30,12 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/local_media_share_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -118,21 +122,23 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       onRefresh: () => _refreshActiveHost(sharedProvider),
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: _buildSectionTitle('本地媒体库'),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: CupertinoLocalMediaLibraryCard(
-                        onViewLibrary: _showLocalMediaLibraryBottomSheet,
-                        onManageLibrary: _showLibraryManagementBottomSheet,
+                  if (!kIsWeb) ...[
+                    SliverToBoxAdapter(
+                      child: _buildSectionTitle('本地媒体库'),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: CupertinoLocalMediaLibraryCard(
+                          onViewLibrary: _showLocalMediaLibraryBottomSheet,
+                          onManageLibrary: _showLibraryManagementBottomSheet,
+                        ),
                       ),
                     ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 12),
-                  ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 12),
+                    ),
+                  ],
                   ..._buildNetworkMediaSection(
                     context,
                     jellyfinProvider,
@@ -983,7 +989,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       return;
     }
 
-    String? actualPlayUrl;
+    PlaybackSession? playbackSession;
     try {
       if (result.filePath.startsWith('jellyfin://')) {
         final jellyfinId = result.filePath.replaceFirst('jellyfin://', '');
@@ -996,9 +1002,16 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           );
           return;
         }
-        actualPlayUrl = provider.getStreamUrl(jellyfinId);
+        playbackSession =
+            await JellyfinService.instance.createPlaybackSession(
+          itemId: jellyfinId,
+          startPositionMs:
+              result.lastPosition > 0 ? result.lastPosition : null,
+        );
       } else if (result.filePath.startsWith('emby://')) {
-        final embyId = result.filePath.replaceFirst('emby://', '');
+        final embyPath = result.filePath.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final embyId = parts.isNotEmpty ? parts.last : embyPath;
         final provider = context.read<EmbyProvider>();
         if (!provider.isConnected) {
           AdaptiveSnackBar.show(
@@ -1008,7 +1021,11 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           );
           return;
         }
-        actualPlayUrl = await provider.getStreamUrl(embyId);
+        playbackSession = await EmbyService.instance.createPlaybackSession(
+          itemId: embyId,
+          startPositionMs:
+              result.lastPosition > 0 ? result.lastPosition : null,
+        );
       }
     } catch (e) {
       AdaptiveSnackBar.show(
@@ -1026,7 +1043,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       animeId: result.animeId,
       episodeId: result.episodeId,
       historyItem: result,
-      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
     );
 
     await PlaybackService().play(playable);
@@ -1259,6 +1276,28 @@ enum _LibrarySource {
   local,
   webdav,
   smb,
+}
+
+class _RemoteScrapeCandidate {
+  final String filePath;
+  final String fileName;
+
+  const _RemoteScrapeCandidate({
+    required this.filePath,
+    required this.fileName,
+  });
+}
+
+class _RemoteScrapeResult {
+  final int total;
+  final int matched;
+  final int failed;
+
+  const _RemoteScrapeResult({
+    required this.total,
+    required this.matched,
+    required this.failed,
+  });
 }
 
 class CupertinoLocalMediaLibraryCard extends StatefulWidget {
@@ -1941,7 +1980,7 @@ class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
 
     final historyItem = sharedEpisode.historyItem;
     var filePath = historyItem.filePath;
-    String? actualPlayUrl;
+    PlaybackSession? playbackSession;
 
     bool fileExists = false;
 
@@ -1952,41 +1991,56 @@ class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
         if (!jellyfinProvider.isConnected) {
           throw '未连接到 Jellyfin 服务器';
         }
-        actualPlayUrl = jellyfinProvider.getStreamUrl(jellyfinId);
+        playbackSession =
+            await JellyfinService.instance.createPlaybackSession(
+          itemId: jellyfinId,
+          startPositionMs:
+              historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+        );
         fileExists = true;
       } catch (e) {
         throw '获取 Jellyfin 播放地址失败：$e';
       }
     } else if (filePath.startsWith('emby://')) {
-      final embyId = filePath.replaceFirst('emby://', '');
+      final embyPath = filePath.replaceFirst('emby://', '');
+      final parts = embyPath.split('/');
+      final embyId = parts.isNotEmpty ? parts.last : embyPath;
       try {
         final embyProvider = routeContext.read<EmbyProvider>();
         if (!embyProvider.isConnected) {
           throw '未连接到 Emby 服务器';
         }
-        actualPlayUrl = await embyProvider.getStreamUrl(embyId);
+        playbackSession = await EmbyService.instance.createPlaybackSession(
+          itemId: embyId,
+          startPositionMs:
+              historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
+        );
         fileExists = true;
       } catch (e) {
         throw '获取 Emby 播放地址失败：$e';
       }
     } else {
-      final file = File(filePath);
-      fileExists = file.existsSync();
+      if (kIsWeb) {
+        fileExists = true;
+      } else {
+        final file = File(filePath);
+        fileExists = file.existsSync();
 
-      if (!fileExists && Platform.isIOS) {
-        final altPath = filePath.startsWith('/private')
-            ? filePath.replaceFirst('/private', '')
-            : '/private$filePath';
-        final altFile = File(altPath);
-        if (altFile.existsSync()) {
-          filePath = altPath;
-          historyItem.filePath = altPath;
-          fileExists = true;
+        if (!fileExists && Platform.isIOS) {
+          final altPath = filePath.startsWith('/private')
+              ? filePath.replaceFirst('/private', '')
+              : '/private$filePath';
+          final altFile = File(altPath);
+          if (altFile.existsSync()) {
+            filePath = altPath;
+            historyItem.filePath = altPath;
+            fileExists = true;
+          }
         }
-      }
 
-      if (!fileExists) {
-        throw '文件不存在或无法访问：${p.basename(filePath)}';
+        if (!fileExists) {
+          throw '文件不存在或无法访问：${p.basename(filePath)}';
+        }
       }
     }
 
@@ -2001,10 +2055,10 @@ class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
           : summary.displayTitle,
       subtitle: historyItem.episodeTitle ?? episode.title,
       animeId: historyItem.animeId ?? summary.animeId,
+      playbackSession: playbackSession,
       episodeId:
           historyItem.episodeId ?? episode.episodeId ?? episode.shareId.hashCode,
       historyItem: historyItem,
-      actualPlayUrl: actualPlayUrl,
     );
   }
 }
@@ -3162,7 +3216,7 @@ class _CupertinoLibraryManagementSheetState
                       minSize: 30,
                       onPressed: () =>
                           _scanWebDAVFolder(connection, file.path, file.name),
-                      child: const Text('扫描'),
+                      child: const Text('刮削'),
                     ),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
@@ -3371,6 +3425,96 @@ class _CupertinoLibraryManagementSheetState
     }
   }
 
+  int? _parseMatchId(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  Future<_RemoteScrapeResult> _scrapeRemoteFiles({
+    required String sourceLabel,
+    required List<_RemoteScrapeCandidate> candidates,
+  }) async {
+    int matched = 0;
+    int failed = 0;
+
+    for (final candidate in candidates) {
+      try {
+        final videoInfo = await DandanplayService.getVideoInfo(candidate.filePath);
+        final matches = videoInfo['matches'];
+        if (videoInfo['isMatched'] != true ||
+            matches is! List ||
+            matches.isEmpty ||
+            matches.first is! Map) {
+          failed++;
+          continue;
+        }
+
+        final match = Map<String, dynamic>.from(matches.first as Map);
+        final animeId = _parseMatchId(match['animeId']);
+        final episodeId = _parseMatchId(match['episodeId']);
+        if (animeId == null || episodeId == null) {
+          failed++;
+          continue;
+        }
+
+        final existingHistory =
+            await WatchHistoryManager.getHistoryItem(candidate.filePath);
+        final rawAnimeTitle = videoInfo['animeTitle'] ?? match['animeTitle'];
+        final rawEpisodeTitle =
+            videoInfo['episodeTitle'] ?? match['episodeTitle'];
+        final rawHash = videoInfo['fileHash'] ?? videoInfo['hash'];
+        final animeTitle = rawAnimeTitle?.toString();
+        final episodeTitle = rawEpisodeTitle?.toString();
+        final hashString = rawHash?.toString();
+        final durationFromMatch = (videoInfo['duration'] is int)
+            ? videoInfo['duration'] as int
+            : (existingHistory?.duration ?? 0);
+        final preserveProgress = existingHistory != null &&
+            existingHistory.watchProgress > 0.01 &&
+            !existingHistory.isFromScan;
+
+        final historyItem = WatchHistoryItem(
+          filePath: candidate.filePath,
+          animeName: animeTitle?.isNotEmpty == true
+              ? animeTitle!
+              : (existingHistory?.animeName ??
+                  p.basenameWithoutExtension(candidate.fileName)),
+          episodeTitle: episodeTitle?.isNotEmpty == true
+              ? episodeTitle
+              : existingHistory?.episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: preserveProgress
+              ? existingHistory!.watchProgress
+              : (existingHistory?.watchProgress ?? 0.0),
+          lastPosition: preserveProgress
+              ? existingHistory!.lastPosition
+              : (existingHistory?.lastPosition ?? 0),
+          duration: durationFromMatch,
+          lastWatchTime: DateTime.now(),
+          thumbnailPath: existingHistory?.thumbnailPath,
+          isFromScan: !preserveProgress,
+          videoHash: hashString?.isNotEmpty == true
+              ? hashString
+              : existingHistory?.videoHash,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        matched++;
+      } catch (e) {
+        failed++;
+        debugPrint('$sourceLabel 刮削失败: ${candidate.fileName} -> $e');
+      }
+    }
+
+    return _RemoteScrapeResult(
+      total: candidates.length,
+      matched: matched,
+      failed: failed,
+    );
+  }
+
   Future<void> _scanWebDAVFolder(
     WebDAVConnection connection,
     String folderPath,
@@ -3379,8 +3523,8 @@ class _CupertinoLibraryManagementSheetState
     final confirm = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('扫描 WebDAV 文件夹'),
-        content: Text('确定要扫描“$folderName”吗？\n扫描后将把其中的视频文件添加到本地媒体库。'),
+        title: const Text('刮削 WebDAV 文件夹'),
+        content: Text('确定要刮削“$folderName”吗？\n刮削后将把其中的视频文件匹配到 WebDAV 媒体库。'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -3388,7 +3532,7 @@ class _CupertinoLibraryManagementSheetState
           ),
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('扫描'),
+            child: const Text('刮削'),
           ),
         ],
       ),
@@ -3399,32 +3543,36 @@ class _CupertinoLibraryManagementSheetState
     }
 
     try {
-      _showSnack('正在扫描 $folderName…');
+      _showSnack('正在刮削 $folderName…');
       final files = await _getWebDAVVideoFiles(connection, folderPath);
       if (files.isEmpty) {
-        _showSnack('未找到可导入的视频文件');
+        _showSnack('未找到可刮削的视频文件');
         return;
       }
 
-      for (final file in files) {
-        final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
-        final historyItem = WatchHistoryItem(
-          filePath: fileUrl,
-          animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-          episodeTitle: '',
-          duration: 0,
-          lastPosition: 0,
-          watchProgress: 0.0,
-          lastWatchTime: DateTime.now(),
-          isFromScan: true,
-        );
-        await WatchHistoryManager.addOrUpdateHistory(historyItem);
-      }
+      final candidates = files
+          .map((file) => _RemoteScrapeCandidate(
+                filePath:
+                    WebDAVService.instance.getFileUrl(connection, file.path),
+                fileName: file.name,
+              ))
+          .toList();
+      final result = await _scrapeRemoteFiles(
+        sourceLabel: 'WebDAV',
+        candidates: candidates,
+      );
 
+      if (!mounted) return;
       await context.read<WatchHistoryProvider>().refresh();
-      _showSnack('已添加 ${files.length} 个视频文件');
+      if (result.matched == 0) {
+        _showSnack('刮削完成，但未匹配到番剧信息');
+      } else if (result.failed > 0) {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}');
+      } else {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}');
+      }
     } catch (e) {
-      _showSnack('扫描失败：$e');
+      _showSnack('刮削失败：$e');
     }
   }
 
@@ -3877,7 +4025,7 @@ class _CupertinoLibraryManagementSheetState
                       minSize: 30,
                       onPressed: () =>
                           _scanSMBFolder(connection, file.path, file.name),
-                      child: const Text('扫描'),
+                      child: const Text('刮削'),
                     ),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
@@ -4120,8 +4268,8 @@ class _CupertinoLibraryManagementSheetState
     final confirm = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('扫描 SMB 文件夹'),
-        content: Text('确定要扫描“$folderName”吗？\n扫描后将把其中的视频文件添加到本地媒体库。'),
+        title: const Text('刮削 SMB 文件夹'),
+        content: Text('确定要刮削“$folderName”吗？\n刮削后将把其中的视频文件匹配到 SMB 媒体库。'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -4129,7 +4277,7 @@ class _CupertinoLibraryManagementSheetState
           ),
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('扫描'),
+            child: const Text('刮削'),
           ),
         ],
       ),
@@ -4140,32 +4288,36 @@ class _CupertinoLibraryManagementSheetState
     }
 
     try {
-      _showSnack('正在扫描 $folderName…');
+      _showSnack('正在刮削 $folderName…');
       final files = await _getSMBVideoFiles(connection, folderPath);
       if (files.isEmpty) {
-        _showSnack('未找到可导入的视频文件');
+        _showSnack('未找到可刮削的视频文件');
         return;
       }
 
-      for (final file in files) {
-        final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
-        final historyItem = WatchHistoryItem(
-          filePath: fileUrl,
-          animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-          episodeTitle: '',
-          duration: 0,
-          lastPosition: 0,
-          watchProgress: 0.0,
-          lastWatchTime: DateTime.now(),
-          isFromScan: true,
-        );
-        await WatchHistoryManager.addOrUpdateHistory(historyItem);
-      }
+      final candidates = files
+          .map((file) => _RemoteScrapeCandidate(
+                filePath:
+                    SMBProxyService.instance.buildStreamUrl(connection, file.path),
+                fileName: file.name,
+              ))
+          .toList();
+      final result = await _scrapeRemoteFiles(
+        sourceLabel: 'SMB',
+        candidates: candidates,
+      );
 
+      if (!mounted) return;
       await context.read<WatchHistoryProvider>().refresh();
-      _showSnack('已添加 ${files.length} 个视频文件');
+      if (result.matched == 0) {
+        _showSnack('刮削完成，但未匹配到番剧信息');
+      } else if (result.failed > 0) {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}');
+      } else {
+        _showSnack('刮削完成：成功 ${result.matched}/${result.total}');
+      }
     } catch (e) {
-      _showSnack('扫描失败：$e');
+      _showSnack('刮削失败：$e');
     }
   }
 
@@ -5061,6 +5213,14 @@ class _SharedRemoteLibraryManagementContentState
             const SizedBox(height: 16),
             _buildActionButtons(context, provider),
             const SizedBox(height: 16),
+            if (provider.webdavConnections.isNotEmpty) ...[
+              _buildWebDAVSection(context, provider),
+              const SizedBox(height: 16),
+            ],
+            if (provider.smbConnections.isNotEmpty) ...[
+              _buildSMBSection(context, provider),
+              const SizedBox(height: 16),
+            ],
             _buildFolderSection(context, provider),
             const SizedBox(height: 32),
           ];
@@ -5213,6 +5373,18 @@ class _SharedRemoteLibraryManagementContentState
           label: '智能刷新',
           icon: CupertinoIcons.refresh,
           onPressed: busy ? null : () => _handleRescanAll(provider),
+        ),
+        _buildActionButton(
+          context,
+          label: '添加 WebDAV',
+          icon: CupertinoIcons.cloud,
+          onPressed: busy ? null : () => _handleAddWebDAV(provider),
+        ),
+        _buildActionButton(
+          context,
+          label: '添加 SMB',
+          icon: CupertinoIcons.share,
+          onPressed: busy ? null : () => _handleAddSMB(provider),
         ),
         _buildActionButton(
           context,
@@ -5441,6 +5613,293 @@ class _SharedRemoteLibraryManagementContentState
         ),
       ),
     );
+  }
+
+  Widget _buildWebDAVSection(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'WebDAV 连接',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...provider.webdavConnections.map((connection) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.secondarySystemBackground, context),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.cloud,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.activeBlue, context),
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connection.name,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.label, context),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        connection.url,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.secondaryLabel, context),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 32,
+                  onPressed: () => _handleRemoveWebDAV(provider, connection),
+                  child: Icon(
+                    CupertinoIcons.delete,
+                    size: 18,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.systemRed, context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildSMBSection(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'SMB 连接',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...provider.smbConnections.map((connection) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: CupertinoDynamicColor.resolve(
+                  CupertinoColors.secondarySystemBackground, context),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.share,
+                  color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.systemIndigo, context),
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connection.name,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.label, context),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${connection.host}:${connection.port}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.secondaryLabel, context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 32,
+                  onPressed: () => _handleEditSMB(provider, connection),
+                  child: Icon(
+                    CupertinoIcons.pencil,
+                    size: 18,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.label, context),
+                  ),
+                ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 32,
+                  onPressed: () => _handleRemoveSMB(provider, connection),
+                  child: Icon(
+                    CupertinoIcons.delete,
+                    size: 18,
+                    color: CupertinoDynamicColor.resolve(
+                        CupertinoColors.systemRed, context),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Future<void> _handleAddWebDAV(SharedRemoteLibraryProvider provider) async {
+    await WebDAVConnectionDialog.show(
+      context,
+      onSave: (connection) async {
+        await provider.addWebDAVConnection(connection);
+        if (provider.managementErrorMessage != null) {
+          throw provider.managementErrorMessage!;
+        }
+        return true;
+      },
+    );
+  }
+
+  Future<void> _handleRemoveWebDAV(
+    SharedRemoteLibraryProvider provider,
+    WebDAVConnection connection,
+  ) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('删除 WebDAV 连接'),
+        content: Text('确定要删除“${connection.name}”吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await provider.removeWebDAVConnection(connection.name);
+      _checkError(provider, '已删除 WebDAV 连接');
+    }
+  }
+
+  Future<void> _handleAddSMB(SharedRemoteLibraryProvider provider) async {
+    await CupertinoSmbConnectionDialog.show(
+      context,
+      onSave: (connection) async {
+        await provider.addSMBConnection(connection);
+        if (provider.managementErrorMessage != null) {
+          return false;
+        }
+        return true;
+      },
+    );
+  }
+
+  Future<void> _handleEditSMB(
+    SharedRemoteLibraryProvider provider,
+    SMBConnection connection,
+  ) async {
+    await CupertinoSmbConnectionDialog.show(
+      context,
+      editConnection: connection,
+      onSave: (updated) async {
+        await provider.addSMBConnection(updated);
+        if (provider.managementErrorMessage != null) {
+          return false;
+        }
+        return true;
+      },
+    );
+  }
+
+  Future<void> _handleRemoveSMB(
+    SharedRemoteLibraryProvider provider,
+    SMBConnection connection,
+  ) async {
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('删除 SMB 连接'),
+        content: Text('确定要删除“${connection.name}”吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await provider.removeSMBConnection(connection.name);
+      _checkError(provider, '已删除 SMB 连接');
+    }
+  }
+
+  void _checkError(SharedRemoteLibraryProvider provider, String successMessage) {
+    if (!mounted) return;
+    if (provider.managementErrorMessage != null) {
+      AdaptiveSnackBar.show(
+        context,
+        message: provider.managementErrorMessage!,
+        type: AdaptiveSnackBarType.error,
+      );
+    } else {
+      AdaptiveSnackBar.show(
+        context,
+        message: successMessage,
+        type: AdaptiveSnackBarType.success,
+      );
+    }
   }
 
   Future<void> _handleAddFolder(SharedRemoteLibraryProvider provider) async {

@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -19,6 +20,7 @@ import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
@@ -38,6 +40,7 @@ import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -79,16 +82,20 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   WatchHistoryProvider? _watchHistoryProviderRef;
   ScanService? _scanServiceRef;
   VideoPlayerState? _videoPlayerStateRef;
+  DandanplayRemoteProvider? _dandanplayProviderRef;
   // Provider ready 回调引用，便于移除
   VoidCallback? _jellyfinProviderReadyListener;
   VoidCallback? _embyProviderReadyListener;
   // 按服务粒度的监听开关
   bool _jellyfinLiveListening = false;
   bool _embyLiveListening = false;
+  bool _lastDandanConnected = false;
+  int _lastDandanGroupCount = 0;
   // Provider 通知后的轻量防抖（覆盖库选择等状态变化）
   Timer? _jfDebounceTimer;
   Timer? _emDebounceTimer;
   Timer? _watchHistoryDebounceTimer;
+  Timer? _dandanDebounceTimer;
 
   bool _isHistoryAutoMatching = false;
   bool _historyAutoMatchDialogVisible = false;
@@ -340,6 +347,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('DashboardHomePage: 添加VideoPlayerState监听器失败: $e');
     }
+
+    // 监听DandanplayRemoteProvider的状态变化
+    try {
+      _dandanplayProviderRef =
+          Provider.of<DandanplayRemoteProvider>(context, listen: false);
+      _lastDandanConnected = _dandanplayProviderRef!.isConnected;
+      _lastDandanGroupCount = _dandanplayProviderRef!.animeGroups.length;
+      _dandanplayProviderRef!.addListener(_onDandanplayStateChanged);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 添加DandanplayRemoteProvider监听器失败: $e');
+    }
   }
 
   void _activateJellyfinLiveListening() {
@@ -420,7 +438,13 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     // 合并短时间内的重复触发：注意，后端 ready 不参与合并，必须执行；仅合并后续触发
     final now = DateTime.now();
     final bool isBackendReady = reason.contains('后端 ready');
-    if (!isBackendReady && _lastLoadTime != null && now.difference(_lastLoadTime!).inMilliseconds < 500) {
+    final bool isProviderReady = reason.contains('Provider ready');
+    final bool shouldRefreshRecommended = _shouldBypassRecommendedCache();
+    if (!isBackendReady &&
+        !isProviderReady &&
+        !shouldRefreshRecommended &&
+        _lastLoadTime != null &&
+        now.difference(_lastLoadTime!).inMilliseconds < 500) {
       debugPrint('DashboardHomePage: 距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过这次($reason)');
       return;
     }
@@ -571,7 +595,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('DashboardHomePage: Jellyfin连接完成，立即刷新数据');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _loadData();
+            _loadData(forceRefreshRecommended: true);
           }
         });
       }
@@ -583,7 +607,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _jfDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
       debugPrint('DashboardHomePage: Jellyfin provider 状态变化（防抖触发）刷新');
-      _loadData();
+      _loadData(forceRefreshRecommended: true);
     });
   }
   
@@ -630,7 +654,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         debugPrint('DashboardHomePage: Emby连接完成，立即刷新数据');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _loadData();
+            _loadData(forceRefreshRecommended: true);
           }
         });
       }
@@ -642,7 +666,36 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _emDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
       debugPrint('DashboardHomePage: Emby provider 状态变化（防抖触发）刷新');
-      _loadData();
+      _loadData(forceRefreshRecommended: true);
+    });
+  }
+
+  void _onDandanplayStateChanged() {
+    if (!mounted) return;
+    if (_isVideoPlayerActive()) {
+      debugPrint('DashboardHomePage: 播放器活跃中，跳过弹弹play状态变化处理');
+      return;
+    }
+
+    final provider = _dandanplayProviderRef ??
+        Provider.of<DandanplayRemoteProvider>(context, listen: false);
+    final connected = provider.isConnected;
+    final groupCount = provider.animeGroups.length;
+    final hasChanged = connected != _lastDandanConnected ||
+        groupCount != _lastDandanGroupCount;
+    _lastDandanConnected = connected;
+    _lastDandanGroupCount = groupCount;
+    if (!hasChanged) return;
+
+    _dandanDebounceTimer?.cancel();
+    _dandanDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted || _isVideoPlayerActive()) return;
+      if (_isLoadingRecommended) {
+        _pendingRefreshAfterLoad = true;
+        _pendingRefreshReason = '弹弹play状态变化';
+        return;
+      }
+      _loadData(forceRefreshRecommended: true);
     });
   }
   
@@ -709,6 +762,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _autoSwitchTimer?.cancel();
     _playerStateCheckTimer?.cancel();
     _watchHistoryDebounceTimer?.cancel();
+    _dandanDebounceTimer?.cancel();
     _playerStateCheckTimer = null;
     
     // 重置播放器状态缓存，防止内存泄漏
@@ -762,6 +816,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('DashboardHomePage: 移除VideoPlayerState监听器失败: $e');
     }
+
+    try {
+      _dandanplayProviderRef?.removeListener(_onDandanplayStateChanged);
+    } catch (_) {}
     
     // 销毁ScrollController
     try {
@@ -803,7 +861,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
-    final bool isIOS = Platform.isIOS;
+    final bool isIOS = !kIsWeb && Platform.isIOS;
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
 
     return Scaffold(

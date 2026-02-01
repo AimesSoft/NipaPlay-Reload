@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async'; // 添加定时器支持
 
 // 全局气泡管理器 - 确保同一时间只有一个气泡显示
@@ -398,11 +399,20 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   }
 
   Widget _buildBubble(Size size) {
+    final bool isWeb = kIsWeb;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF2B2B2B) : Colors.white;
-    final borderColor = isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08);
+    
+    // Web 端使用深灰色背景 (0xFF222222)，否则保持原有逻辑
+    final backgroundColor = isWeb 
+        ? const Color(0xFF222222) 
+        : (isDark ? const Color(0xFF2B2B2B) : Colors.white);
+        
+    final borderColor = isWeb
+        ? Colors.white.withOpacity(0.15)
+        : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08));
+        
     final textStyle = TextStyle(
-      color: isDark ? Colors.white : Colors.black87,
+      color: (isWeb || isDark) ? Colors.white : Colors.black87,
       fontSize: 14,
       height: 1.4,
       fontWeight: FontWeight.w400,

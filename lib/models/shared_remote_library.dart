@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class SharedRemoteHost {
   SharedRemoteHost({
@@ -91,12 +93,24 @@ class SharedRemoteAnimeSummary {
   final bool hasMissingFiles;
 
   factory SharedRemoteAnimeSummary.fromJson(Map<String, dynamic> json) {
+    String? imageUrl = json['imageUrl'] as String?;
+    
+    if (kIsWeb && 
+        imageUrl != null && 
+        imageUrl.isNotEmpty && 
+        !imageUrl.startsWith('http://') && 
+        !imageUrl.startsWith('https://')) {
+      final original = imageUrl;
+      imageUrl = WebRemoteAccessService.imageProxyUrl(imageUrl);
+      debugPrint('[SharedRemoteLib] Converted local image: $original -> $imageUrl');
+    }
+
     return SharedRemoteAnimeSummary(
       animeId: json['animeId'] as int,
       name: json['name'] as String? ?? '未知番剧',
       nameCn: json['nameCn'] as String?,
       summary: json['summary'] as String?,
-      imageUrl: json['imageUrl'] as String?,
+      imageUrl: imageUrl,
       lastWatchTime: DateTime.tryParse(json['lastWatchTime'] as String? ?? '') ?? DateTime.now(),
       episodeCount: json['episodeCount'] as int? ?? 0,
       hasMissingFiles: json['hasMissingFiles'] as bool? ?? false,
@@ -136,11 +150,17 @@ class SharedRemoteEpisode {
   final String? videoHash;
 
   factory SharedRemoteEpisode.fromJson(Map<String, dynamic> json) {
+    final rawStreamPath = json['streamPath'] as String?;
+    final originalFilePath = json['originalFilePath'] as String?;
+    final resolvedStreamPath = (rawStreamPath ?? '').trim().isNotEmpty
+        ? rawStreamPath!.trim()
+        : (originalFilePath ?? '').trim();
+
     return SharedRemoteEpisode(
-      shareId: json['shareId'] as String,
+      shareId: json['shareId']?.toString() ?? '',
       title: json['title'] as String? ?? '未知剧集',
       fileName: json['fileName'] as String? ?? 'unknown',
-      streamPath: json['streamPath'] as String,
+      streamPath: resolvedStreamPath,
       fileExists: json['fileExists'] as bool? ?? true,
       animeId: json['animeId'] as int?,
       episodeId: json['episodeId'] as int?,

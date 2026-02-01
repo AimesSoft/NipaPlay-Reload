@@ -5,6 +5,7 @@ export './abstract_player.dart' show AbstractPlayer; // Export only AbstractPlay
 export './player_factory.dart' show PlayerKernelType; // Export PlayerKernelType enum
 
 import 'package:flutter/foundation.dart'; // For ValueListenable, used in AbstractPlayer
+import 'package:video_player/video_player.dart';
 import './abstract_player.dart' as core_player; // Alias for the true AbstractPlayer
 import './player_enums.dart' as core_enums; // Alias for our pure enums
 import './player_data_models.dart';
@@ -149,6 +150,15 @@ class Player {
     } else {
       return "未知";
     }
+  }
+
+  VideoPlayerController? get videoPlayerController {
+    try {
+      final dyn = _delegate as dynamic;
+      final ctrl = dyn.controller;
+      if (ctrl is VideoPlayerController) return ctrl;
+    } catch (_) {}
+    return null;
   }
   
   // 添加setPlaybackRate方法实现

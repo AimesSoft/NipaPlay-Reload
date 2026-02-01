@@ -25,6 +25,10 @@ class EmbyEpisodeMappingService {
   /// 初始化数据库
   Future<void> initialize() async {
     if (_database != null) return;
+    if (kIsWeb) {
+      debugPrint('[Emby映射服务] Web 平台跳过数据库初始化');
+      return;
+    }
     
     final mainDb = await WatchHistoryDatabase.instance.database;
     _database = mainDb;
@@ -84,6 +88,7 @@ class EmbyEpisodeMappingService {
     required int dandanplayAnimeId,
     required String dandanplayAnimeTitle,
   }) async {
+    if (kIsWeb) return 0;
     await initialize();
 
     debugPrint('[Emby映射服务] 创建动画映射: $embySeriesName -> $dandanplayAnimeTitle');
@@ -135,6 +140,7 @@ class EmbyEpisodeMappingService {
     required int mappingId,
     bool confirmed = true,
   }) async {
+    if (kIsWeb) return;
     await initialize();
 
     debugPrint('[Emby映射服务] 记录剧集映射: Emby集$embyIndexNumber -> DandanPlay集$dandanplayEpisodeId');
@@ -171,6 +177,7 @@ class EmbyEpisodeMappingService {
     required String embySeriesId,
     String? embySeasonId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     // 生成缓存键
@@ -200,6 +207,7 @@ class EmbyEpisodeMappingService {
 
   /// 获取剧集映射
   Future<Map<String, dynamic>?> getEpisodeMapping(String embyEpisodeId) async {
+    if (kIsWeb) return null;
     await initialize();
 
     final results = await _database!.query(
@@ -215,6 +223,7 @@ class EmbyEpisodeMappingService {
   Future<int?> predictEpisodeMapping({
     required EmbyEpisodeInfo embyEpisode,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     // 如果没有集号信息，无法预测
@@ -309,6 +318,7 @@ class EmbyEpisodeMappingService {
   Future<Map<String, dynamic>?> getNextEpisodeMapping({
     required EmbyEpisodeInfo currentEpisode,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[Emby映射服务] 查找下一集: ${currentEpisode.seriesName} 当前第${currentEpisode.indexNumber}集');
@@ -348,6 +358,7 @@ class EmbyEpisodeMappingService {
   Future<Map<String, dynamic>?> getPreviousEpisodeMapping({
     required EmbyEpisodeInfo currentEpisode,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[Emby映射服务] 查找上一集: ${currentEpisode.seriesName} 当前第${currentEpisode.indexNumber}集');
@@ -386,6 +397,7 @@ class EmbyEpisodeMappingService {
     required int currentAnimeId,
     required int currentEpisodeId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[Emby映射服务] ========== 开始查找下一集映射 ==========');
@@ -510,6 +522,7 @@ class EmbyEpisodeMappingService {
     required int currentAnimeId,
     required int currentEpisodeId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     debugPrint('[Emby映射服务] 查找上一集: animeId=$currentAnimeId, episodeId=$currentEpisodeId');
@@ -617,6 +630,7 @@ class EmbyEpisodeMappingService {
     required String embySeriesId,
     String? embySeasonId,
   }) async {
+    if (kIsWeb) return null;
     await initialize();
 
     // 生成缓存键
@@ -722,6 +736,7 @@ class EmbyEpisodeMappingService {
     required String embySeriesId,
     String? embySeasonId,
   }) async {
+    if (kIsWeb) return [];
     await initialize();
 
     final animeMapping = await getAnimeMapping(
@@ -748,6 +763,7 @@ class EmbyEpisodeMappingService {
     required String embySeriesId,
     String? embySeasonId,
   }) async {
+    if (kIsWeb) return;
     await initialize();
 
     final animeMapping = await getAnimeMapping(
@@ -789,6 +805,7 @@ class EmbyEpisodeMappingService {
 
   /// 获取所有动画映射
   Future<List<Map<String, dynamic>>> getAllAnimeMappings() async {
+    if (kIsWeb) return [];
     await initialize();
 
     return await _database!.query(
@@ -799,6 +816,7 @@ class EmbyEpisodeMappingService {
 
   /// 搜索动画映射
   Future<List<Map<String, dynamic>>> searchAnimeMappings(String keyword) async {
+    if (kIsWeb) return [];
     await initialize();
 
     return await _database!.query(
@@ -811,6 +829,14 @@ class EmbyEpisodeMappingService {
 
   /// 获取映射统计信息
   Future<Map<String, dynamic>> getMappingStatistics() async {
+    if (kIsWeb) {
+      return {
+        'anime_mappings': 0,
+        'episode_mappings': 0,
+        'confirmed_mappings': 0,
+        'predicted_mappings': 0,
+      };
+    }
     await initialize();
 
     final animeCount = Sqflite.firstIntValue(await _database!.rawQuery(
@@ -835,6 +861,7 @@ class EmbyEpisodeMappingService {
 
   /// 清理过期的未确认映射
   Future<void> cleanupUnconfirmedMappings({int daysOld = 7}) async {
+    if (kIsWeb) return;
     await initialize();
 
     final cutoffDate = DateTime.now().subtract(Duration(days: daysOld));
@@ -850,6 +877,13 @@ class EmbyEpisodeMappingService {
 
   /// 导出映射数据
   Future<Map<String, dynamic>> exportMappings() async {
+    if (kIsWeb) {
+      return {
+        'anime_mappings': const [],
+        'episode_mappings': const [],
+        'export_time': DateTime.now().toIso8601String(),
+      };
+    }
     await initialize();
 
     final animeMappings = await getAllAnimeMappings();
@@ -864,6 +898,7 @@ class EmbyEpisodeMappingService {
 
   /// 导入映射数据
   Future<void> importMappings(Map<String, dynamic> data) async {
+    if (kIsWeb) return;
     await initialize();
 
     final animeMappings = data['anime_mappings'] as List<dynamic>;
@@ -898,6 +933,7 @@ class EmbyEpisodeMappingService {
 
   /// 清除所有映射数据
   Future<void> clearAllMappings() async {
+    if (kIsWeb) return;
     await initialize();
 
     debugPrint('[Emby映射服务] 清除所有映射数据');

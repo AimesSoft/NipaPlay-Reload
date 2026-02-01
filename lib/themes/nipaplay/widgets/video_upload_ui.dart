@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'dart:io' as io;
-import 'package:universal_html/html.dart' as web_html;
 import 'package:image_picker/image_picker.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -11,7 +10,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
-import 'package:file_picker/file_picker.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -139,27 +137,27 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         final videoState = context.read<VideoPlayerState>();
         videoState.setPreInitLoadingState('正在准备视频文件...');
 
-        FilePickerResult? result = await FilePicker.platform.pickFiles(
-          type: FileType.video,
-        );
-
-        if (result != null && result.files.single.bytes != null) {
-          final fileBytes = result.files.single.bytes!;
-          final fileName = result.files.single.name;
-
-          final blob = web_html.Blob([fileBytes]);
-          final url = web_html.Url.createObjectUrlFromBlob(blob);
-
-          Future.microtask(() async {
-            await videoState.initializePlayer(
-              fileName, // 使用文件名作为标识
-              actualPlayUrl: url,
-            );
-          });
-        } else {
-          // 用户取消了选择
+        final filePickerService = FilePickerService();
+        final fileName = await filePickerService.pickVideoFile();
+        if (fileName == null) {
           videoState.resetPlayer();
+          return;
         }
+        final url = filePickerService.getWebObjectUrl(fileName);
+        if (url == null || url.isEmpty) {
+          videoState.resetPlayer();
+          if (mounted) {
+            BlurSnackBar.show(context, '无法读取视频文件');
+          }
+          return;
+        }
+
+        Future.microtask(() async {
+          await videoState.initializePlayer(
+            fileName,
+            actualPlayUrl: url,
+          );
+        });
       } else if (globals.isPhone) {
         // 手机端弹窗选择来源
         final source = await BlurDialog.show<String>(

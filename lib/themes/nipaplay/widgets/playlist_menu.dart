@@ -246,9 +246,13 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             throw Exception('无法获取Jellyfin剧集信息');
           }
           
-          // 获取实际的流媒体URL
-          final actualUrl = JellyfinService.instance.getStreamUrl(episodeId);
-          debugPrint('[播放列表] 获取Jellyfin流媒体URL: $actualUrl');
+          // 获取播放会话
+          final playbackSession =
+              await JellyfinService.instance.createPlaybackSession(
+            itemId: episodeId,
+          );
+          debugPrint(
+              '[播放列表] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
           
           // 尝试获取弹幕映射
           int? animeId;
@@ -273,8 +277,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           // 按照剧集导航的方式，使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
           await videoState.initializePlayer(
             filePath, // 使用Jellyfin协议URL作为标识符
-            historyItem: historyItem, 
-            actualPlayUrl: actualUrl // HTTP URL作为实际播放源
+            historyItem: historyItem,
+            playbackSession: playbackSession,
           );
           debugPrint('[播放列表] Jellyfin剧集播放完成');
         } else if (filePath.startsWith('emby://')) {
@@ -288,9 +292,13 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             throw Exception('无法获取Emby剧集信息');
           }
           
-          // 获取实际的流媒体URL
-          final actualUrl = await EmbyService.instance.getStreamUrl(episodeId);
-          debugPrint('[播放列表] 获取Emby流媒体URL: $actualUrl');
+          // 获取播放会话
+          final playbackSession =
+              await EmbyService.instance.createPlaybackSession(
+            itemId: episodeId,
+          );
+          debugPrint(
+              '[播放列表] 获取Emby播放会话: ${playbackSession.streamUrl}');
           
           // 尝试获取弹幕映射
           int? animeId;
@@ -315,8 +323,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           // 按照剧集导航的方式，使用Emby协议URL作为标识符，HTTP URL作为实际播放源
           await videoState.initializePlayer(
             filePath, // 使用Emby协议URL作为标识符
-            historyItem: historyItem, 
-            actualPlayUrl: actualUrl // HTTP URL作为实际播放源
+            historyItem: historyItem,
+            playbackSession: playbackSession,
           );
           debugPrint('[播放列表] Emby剧集播放完成');
         } else {

@@ -286,36 +286,96 @@ class BangumiAnime {
 
   // Used for deserializing from our own toJson format
   factory BangumiAnime.fromJson(Map<String, dynamic> json) {
+    String readString(dynamic value) {
+      if (value == null) return '';
+      if (value is String) return value;
+      return value.toString();
+    }
+
+    int? readInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
     List<EpisodeData>? parsedEpisodeList;
-    if (json['episodeList'] != null && json['episodeList'] is List) {
-      parsedEpisodeList = (json['episodeList'] as List)
-          .map((epJson) => EpisodeData.fromJson(epJson as Map<String, dynamic>))
+    final episodesRaw = json['episodeList'] ?? json['episodes'];
+    if (episodesRaw is List) {
+      parsedEpisodeList = episodesRaw
+          .whereType<Map<String, dynamic>>()
+          .map(EpisodeData.fromJson)
           .toList();
     }
-    
+
+    final idValue = json['id'] ?? json['animeId'];
+    final id = readInt(idValue) ?? 0;
+    final name = readString(json['name']);
+    final fallbackName = readString(json['animeTitle']);
+    final nameCn = readString(json['name_cn']);
+    final nameCnAlt = readString(json['nameCn']);
+    final resolvedName = name.isNotEmpty
+        ? name
+        : (fallbackName.isNotEmpty ? fallbackName : nameCnAlt);
+    final resolvedNameCn =
+        nameCn.isNotEmpty ? nameCn : (nameCnAlt.isNotEmpty ? nameCnAlt : resolvedName);
+    final imageUrlRaw = readString(json['imageUrl']);
+    final imageUrl =
+        imageUrlRaw.isNotEmpty ? imageUrlRaw : 'assets/backempty.png';
+    final airDateRaw = readString(json['air_date']);
+    final airDate =
+        airDateRaw.isNotEmpty ? airDateRaw : readString(json['airDate']);
+    final ratingValue = json['rating'];
+    final rating = ratingValue is num ? ratingValue.toDouble() : double.tryParse(ratingValue?.toString() ?? '');
+    final rawRatingDetails = json['ratingDetails'];
+    final ratingDetails = rawRatingDetails is Map<String, dynamic>
+        ? rawRatingDetails
+        : (rawRatingDetails is Map ? rawRatingDetails.cast<String, dynamic>() : null);
+    final rawTags = json['tags'];
+    final tags = rawTags is List ? rawTags.map((tag) => tag.toString()).toList() : null;
+    final rawMetadata = json['metadata'];
+    final metadata = rawMetadata is List
+        ? rawMetadata.map((item) => item.toString()).toList()
+        : null;
+    final rawTitles = json['titles'];
+    List<Map<String, String>>? titles;
+    if (rawTitles is List) {
+      final parsedTitles = <Map<String, String>>[];
+      for (final entry in rawTitles) {
+        if (entry is Map) {
+          final title = entry['title']?.toString();
+          final language = entry['language']?.toString();
+          if (title != null && language != null) {
+            parsedTitles.add({'title': title, 'language': language});
+          }
+        }
+      }
+      if (parsedTitles.isNotEmpty) {
+        titles = parsedTitles;
+      }
+    }
+
     return BangumiAnime(
-      id: json['id'] as int,
-      name: json['name'] as String,
-      nameCn: json['name_cn'] as String,
-      imageUrl: json['imageUrl'] as String,
-      summary: json['summary'] as String?,
-      airDate: json['air_date'] as String?,
-      airWeekday: json['airDay'] as int?,
-      rating: (json['rating'] as num?)?.toDouble(),
-      ratingDetails: json['ratingDetails'] as Map<String, dynamic>?,
-      tags: (json['tags'] as List<dynamic>?)?.cast<String>(),
-      metadata: (json['metadata'] as List<dynamic>?)?.cast<String>(),
-      isNSFW: json['isNSFW'] as bool?,
-      platform: json['platform'] as String?,
-      totalEpisodes: json['totalEpisodes'] as int?,
-      typeDescription: json['typeDescription'] as String?,
-      bangumiUrl: json['bangumiUrl'] as String?,
+      id: id,
+      name: resolvedName,
+      nameCn: resolvedNameCn,
+      imageUrl: imageUrl,
+      summary: json['summary']?.toString(),
+      airDate: airDate.isNotEmpty ? airDate : null,
+      airWeekday: readInt(json['airDay'] ?? json['airWeekday']),
+      rating: rating,
+      ratingDetails: ratingDetails,
+      tags: tags,
+      metadata: metadata,
+      isNSFW: json['isNSFW'] as bool? ?? json['isRestricted'] as bool?,
+      platform: json['platform']?.toString(),
+      totalEpisodes: readInt(json['totalEpisodes']),
+      typeDescription: json['typeDescription']?.toString(),
+      bangumiUrl: json['bangumiUrl']?.toString(),
       isOnAir: json['isOnAir'] as bool?,
       isFavorited: json['isFavorited'] as bool?,
-      titles: (json['titles'] as List<dynamic>?)
-          ?.map((t) => Map<String, String>.from(t as Map))
-          .toList(),
-      searchKeyword: json['searchKeyword'] as String?,
+      titles: titles,
+      searchKeyword: json['searchKeyword']?.toString(),
       episodeList: parsedEpisodeList,
     );
   }

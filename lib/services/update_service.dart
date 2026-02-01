@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class UpdateService {
   static const String _repoUrl = 'https://api.github.com/repos/MCDFsteve/NipaPlay-Reload/releases/latest';
@@ -17,7 +18,7 @@ class UpdateService {
       // 获取最新版本
       //debugPrint('UpdateService: 正在请求GitHub API...');
       final response = await http.get(
-        Uri.parse(_repoUrl),
+        WebRemoteAccessService.proxyUri(Uri.parse(_repoUrl)),
         headers: {'Accept': 'application/vnd.github.v3+json'},
       ).timeout(const Duration(seconds: 10));
       

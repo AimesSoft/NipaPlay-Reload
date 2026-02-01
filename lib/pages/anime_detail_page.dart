@@ -30,6 +30,7 @@ import 'package:meta/meta.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -190,6 +191,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     // 添加TabController监听
     _tabController!.addListener(_handleTabChange);
+    
+    // 添加Bangumi登录状态监听
+    BangumiApiService.loginStatusNotifier.addListener(_onBangumiLoginStatusChanged);
 
     // 启动时异步清理过期缓存
     _bangumiService.cleanExpiredDetailCache().then((_) {
@@ -254,9 +258,19 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     if (_openPageContext == context) {
       _openPageContext = null;
     }
+    BangumiApiService.loginStatusNotifier.removeListener(_onBangumiLoginStatusChanged);
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
     super.dispose();
+  }
+
+  void _onBangumiLoginStatusChanged() {
+    if (mounted) {
+      if (_detailedAnime != null) {
+        _loadBangumiUserData(_detailedAnime!);
+      }
+      setState(() {});
+    }
   }
 
   // 处理标签切换
@@ -298,8 +312,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       if (kIsWeb) {
         // Web environment: fetch from local API
         try {
-          final response = await http
-              .get(Uri.parse('/api/bangumi/detail/${widget.animeId}'));
+          final apiUri = WebRemoteAccessService.apiUri(
+              '/api/bangumi/detail/${widget.animeId}');
+          if (apiUri == null) {
+            throw Exception('未配置远程访问地址');
+          }
+          final response = await http.get(apiUri);
           if (response.statusCode == 200) {
             final data = json.decode(utf8.decode(response.bodyBytes));
             anime = BangumiAnime.fromJson(data as Map<String, dynamic>);
@@ -907,8 +925,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     // -- 开始修改 --
     String coverImageUrl = sharedSummary?.imageUrl ?? anime.imageUrl;
     if (kIsWeb) {
-      final encodedUrl = base64Url.encode(utf8.encode(coverImageUrl));
-      coverImageUrl = '/api/image_proxy?url=$encodedUrl';
+      coverImageUrl =
+          WebRemoteAccessService.imageProxyUrl(coverImageUrl) ?? coverImageUrl;
     }
     // -- 结束修改 --
 
@@ -1896,8 +1914,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     if (coverImageUrl.isEmpty) return null;
 
     if (kIsWeb) {
-      final encodedUrl = base64Url.encode(utf8.encode(coverImageUrl));
-      coverImageUrl = '/api/image_proxy?url=$encodedUrl';
+      coverImageUrl =
+          WebRemoteAccessService.imageProxyUrl(coverImageUrl) ?? coverImageUrl;
     }
     return coverImageUrl;
   }

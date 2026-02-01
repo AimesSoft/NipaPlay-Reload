@@ -10,6 +10,7 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -260,8 +261,11 @@ class EmbyDandanplayMatcher {
   ///
   /// 根据Emby剧集信息获取媒体流URL
   Future<String> getPlayUrl(EmbyEpisodeInfo episode) async {
-    final url = await EmbyService.instance.getStreamUrl(episode.id);
-    debugPrint('Emby流媒体URL: $url');
+    final url = EmbyService.instance.getStreamUrlWithOptions(
+      episode.id,
+      forceDirectPlay: true,
+    );
+    debugPrint('Emby直连URL: $url');
     return url;
   }
 
@@ -675,7 +679,9 @@ class EmbyDandanplayMatcher {
 
       debugPrint('发送匹配请求到弹弹play API');
       final response = await http.post(
-        Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
+        WebRemoteAccessService.proxyUri(
+          Uri.parse('${await DandanplayService.getApiBaseUrl()}/api/v2/match'),
+        ),
         headers: headers,
         body: body,
       );
@@ -761,7 +767,7 @@ class EmbyDandanplayMatcher {
           '$baseUrl/api/v2/search/anime?keyword=${Uri.encodeComponent(cleanedKeyword)}';
       debugPrint('请求URL: $url');
 
-      final uri = Uri.parse(url);
+      final uri = WebRemoteAccessService.proxyUri(Uri.parse(url));
 
       final headers = {
         'Accept': 'application/json',
@@ -837,7 +843,8 @@ class EmbyDandanplayMatcher {
       final apiPath = '/api/v2/bangumi/$animeId';
 
       final baseUrl = await DandanplayService.getApiBaseUrl();
-      final uri = Uri.parse('$baseUrl$apiPath');
+      final uri =
+          WebRemoteAccessService.proxyUri(Uri.parse('$baseUrl$apiPath'));
 
       final headers = {
         'Accept': 'application/json',

@@ -8,13 +8,53 @@ import 'package:shelf_router/shelf_router.dart';
 
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
+
+class _RemoteScrapeCandidate {
+  final String filePath;
+  final String fileName;
+
+  const _RemoteScrapeCandidate({
+    required this.filePath,
+    required this.fileName,
+  });
+}
+
+class _RemoteScrapeResult {
+  final int total;
+  final int matched;
+  final int failed;
+
+  const _RemoteScrapeResult({
+    required this.total,
+    required this.matched,
+    required this.failed,
+  });
+}
 
 class LocalMediaManagementApi {
   LocalMediaManagementApi() {
     router.get('/folders', _handleListFolders);
     router.post('/folders', _handleAddFolder);
     router.delete('/folders', _handleRemoveFolder);
+
+    // WebDAV Management
+    router.post('/webdav', _handleAddWebDAV);
+    router.delete('/webdav', _handleRemoveWebDAV);
+    router.get('/webdav/list', _handleListWebDAV);
+    router.post('/webdav/test', _handleTestWebDAV);
+    router.post('/webdav/scan', _handleScanWebDAV);
+
+    // SMB Management
+    router.post('/smb', _handleAddSMB);
+    router.delete('/smb', _handleRemoveSMB);
+    router.get('/smb/list', _handleListSMB);
+    router.post('/smb/test', _handleTestSMB);
+    router.post('/smb/scan', _handleScanSMB);
 
     router.get('/browse', _handleBrowse);
     router.get('/stream', _handleStream);
@@ -27,6 +67,9 @@ class LocalMediaManagementApi {
   final Router router = Router();
 
   ScanService get _scanService => ServiceProvider.scanService;
+  WebDAVService get _webdavService => WebDAVService.instance;
+  SMBService get _smbService => SMBService.instance;
+
   static const Set<String> _allowedMediaExtensions = {
     '.mp4',
     '.m4v',
@@ -50,14 +93,478 @@ class LocalMediaManagementApi {
   Future<Response> _handleListFolders(Request request) async {
     try {
       final folders = await _buildFolderPayload(_scanService.scannedFolders);
+      final webdav = _webdavService.connections.map((c) => c.toJson()).toList();
+      final smb = _smbService.connections.map((c) => c.toJson()).toList();
+      
       return _jsonOk({
         'success': true,
-        'data': {'folders': folders},
+        'data': {
+          'folders': folders,
+          'webdav': webdav,
+          'smb': smb,
+        },
       });
     } catch (e) {
-      return _jsonError(HttpStatus.internalServerError, '读取扫描文件夹列表失败: $e');
+      return _jsonError(HttpStatus.internalServerError, '读取库列表失败: $e');
     }
   }
+
+  // --- WebDAV Handlers ---
+
+  Future<Response> _handleAddWebDAV(Request request) async {
+    try {
+      final body = await request.readAsString();
+      final payload = json.decode(body) as Map<String, dynamic>;
+      final connection = WebDAVConnection.fromJson(payload);
+      
+      final success = await _webdavService.addConnection(connection);
+      if (success) {
+        return _jsonOk({'success': true, 'message': 'WebDAV 连接已添加'});
+      } else {
+        return _jsonError(HttpStatus.badRequest, 'WebDAV 连接测试失败');
+      }
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '添加 WebDAV 失败: $e');
+    }
+  }
+
+  Future<Response> _handleRemoveWebDAV(Request request) async {
+    final name = request.url.queryParameters['name'];
+    if (name == null || name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing name');
+    }
+    try {
+      await _webdavService.removeConnection(name);
+      return _jsonOk({'success': true});
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '移除 WebDAV 失败: $e');
+    }
+  }
+
+  Future<Response> _handleListWebDAV(Request request) async {
+    final name = request.url.queryParameters['name']?.trim();
+    final path = request.url.queryParameters['path']?.trim() ?? '/';
+    if (name == null || name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing name');
+    }
+
+    final connection = _webdavService.getConnection(name);
+    if (connection == null) {
+      return _jsonError(HttpStatus.notFound, 'WebDAV connection not found');
+    }
+
+    try {
+      final files = await _webdavService.listDirectory(connection, path);
+      final entries = files
+          .map((file) => {
+                'name': file.name,
+                'path': file.path,
+                'isDirectory': file.isDirectory,
+                'size': file.size,
+                'lastModified': file.lastModified?.toIso8601String(),
+              })
+          .toList();
+      return _jsonOk({
+        'success': true,
+        'data': {
+          'path': path,
+          'entries': entries,
+        },
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '读取WebDAV目录失败: $e');
+    }
+  }
+
+  Future<Response> _handleTestWebDAV(Request request) async {
+    try {
+      final name = request.url.queryParameters['name']?.trim();
+      if (name != null && name.isNotEmpty) {
+        final existing = _webdavService.getConnection(name);
+        if (existing == null) {
+          return _jsonError(HttpStatus.notFound, 'WebDAV connection not found');
+        }
+        await _webdavService.updateConnectionStatus(name);
+        final updated = _webdavService.getConnection(name);
+        return _jsonOk({
+          'success': true,
+          'data': {'isConnected': updated?.isConnected ?? false},
+        });
+      }
+
+      final body = await request.readAsString();
+      if (body.trim().isEmpty) {
+        return _jsonError(HttpStatus.badRequest, 'Missing payload');
+      }
+      final decoded = json.decode(body);
+      final payload = decoded is Map<String, dynamic>
+          ? decoded
+          : (decoded is Map ? decoded.cast<String, dynamic>() : null);
+      if (payload == null) {
+        return _jsonError(HttpStatus.badRequest, 'Invalid JSON payload');
+      }
+
+      final connection = WebDAVConnection.fromJson(payload);
+      final ok = await _webdavService.testConnection(connection);
+      return _jsonOk({
+        'success': true,
+        'data': {'isConnected': ok},
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '测试 WebDAV 失败: $e');
+    }
+  }
+
+  Future<Response> _handleScanWebDAV(Request request) async {
+    Map<String, dynamic> payload = const {};
+    try {
+      final body = await request.readAsString();
+      if (body.isNotEmpty) {
+        payload = json.decode(body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      return _jsonError(HttpStatus.badRequest, 'Invalid JSON payload');
+    }
+
+    final name = (payload['name'] ?? payload['connection'] ?? '').toString().trim();
+    final folderPath =
+        (payload['path'] ?? payload['folderPath'] ?? '/').toString().trim();
+    if (name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing WebDAV connection name');
+    }
+
+    final connection = _webdavService.getConnection(name);
+    if (connection == null) {
+      return _jsonError(HttpStatus.notFound, 'WebDAV connection not found');
+    }
+
+    try {
+      final files = await _collectWebDavVideoFiles(connection, folderPath);
+      if (files.isEmpty) {
+        return _jsonOk({
+          'success': true,
+          'data': {'total': 0, 'matched': 0, 'failed': 0},
+        });
+      }
+
+      final candidates = files
+          .map((file) => _RemoteScrapeCandidate(
+                filePath: _webdavService.getFileUrl(connection, file.path),
+                fileName: file.name,
+              ))
+          .toList();
+      final result = await _scrapeRemoteFiles(
+        sourceLabel: 'WebDAV',
+        candidates: candidates,
+      );
+      await ServiceProvider.watchHistoryProvider.refresh();
+      return _jsonOk({
+        'success': true,
+        'data': {
+          'total': result.total,
+          'matched': result.matched,
+          'failed': result.failed,
+        },
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '刮削WebDAV文件夹失败: $e');
+    }
+  }
+
+  // --- SMB Handlers ---
+
+  Future<Response> _handleAddSMB(Request request) async {
+    try {
+      final body = await request.readAsString();
+      final payload = json.decode(body) as Map<String, dynamic>;
+      final connection = SMBConnection.fromJson(payload);
+      
+      // Check if updating or adding
+      final existing = _smbService.getConnection(connection.name);
+      bool success;
+      if (existing != null) {
+        success = await _smbService.updateConnection(connection.name, connection);
+      } else {
+        success = await _smbService.addConnection(connection);
+      }
+
+      if (success) {
+        return _jsonOk({'success': true, 'message': 'SMB 连接已保存'});
+      } else {
+        return _jsonError(HttpStatus.badRequest, 'SMB 连接测试失败');
+      }
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '保存 SMB 失败: $e');
+    }
+  }
+
+  Future<Response> _handleRemoveSMB(Request request) async {
+    final name = request.url.queryParameters['name'];
+    if (name == null || name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing name');
+    }
+    try {
+      await _smbService.removeConnection(name);
+      return _jsonOk({'success': true});
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '移除 SMB 失败: $e');
+    }
+  }
+
+  Future<Response> _handleListSMB(Request request) async {
+    final name = request.url.queryParameters['name']?.trim();
+    final path = request.url.queryParameters['path']?.trim() ?? '/';
+    if (name == null || name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing name');
+    }
+
+    final connection = _smbService.getConnection(name);
+    if (connection == null) {
+      return _jsonError(HttpStatus.notFound, 'SMB connection not found');
+    }
+
+    try {
+      final files = await _smbService.listDirectory(connection, path);
+      final entries = files
+          .map((file) => {
+                'name': file.name,
+                'path': file.path,
+                'isDirectory': file.isDirectory,
+                'size': file.size,
+                'isShare': file.isShare,
+              })
+          .toList();
+      return _jsonOk({
+        'success': true,
+        'data': {
+          'path': path,
+          'entries': entries,
+        },
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '读取SMB目录失败: $e');
+    }
+  }
+
+  Future<Response> _handleTestSMB(Request request) async {
+    final name = request.url.queryParameters['name']?.trim();
+    if (name == null || name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing name');
+    }
+
+    final connection = _smbService.getConnection(name);
+    if (connection == null) {
+      return _jsonError(HttpStatus.notFound, 'SMB connection not found');
+    }
+
+    try {
+      await _smbService.updateConnectionStatus(name);
+      final updated = _smbService.getConnection(name);
+      return _jsonOk({
+        'success': true,
+        'data': {'isConnected': updated?.isConnected ?? false},
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '测试 SMB 失败: $e');
+    }
+  }
+
+  Future<Response> _handleScanSMB(Request request) async {
+    Map<String, dynamic> payload = const {};
+    try {
+      final body = await request.readAsString();
+      if (body.isNotEmpty) {
+        payload = json.decode(body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      return _jsonError(HttpStatus.badRequest, 'Invalid JSON payload');
+    }
+
+    final name = (payload['name'] ?? payload['connection'] ?? '').toString().trim();
+    final folderPath =
+        (payload['path'] ?? payload['folderPath'] ?? '/').toString().trim();
+    if (name.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, 'Missing SMB connection name');
+    }
+
+    final connection = _smbService.getConnection(name);
+    if (connection == null) {
+      return _jsonError(HttpStatus.notFound, 'SMB connection not found');
+    }
+
+    try {
+      await SMBProxyService.instance.initialize();
+      final files = await _collectSmbVideoFiles(connection, folderPath);
+      if (files.isEmpty) {
+        return _jsonOk({
+          'success': true,
+          'data': {'total': 0, 'matched': 0, 'failed': 0},
+        });
+      }
+
+      final candidates = files
+          .map((file) => _RemoteScrapeCandidate(
+                filePath: SMBProxyService.instance.buildStreamUrl(
+                  connection,
+                  file.path,
+                ),
+                fileName: file.name,
+              ))
+          .toList();
+      final result = await _scrapeRemoteFiles(
+        sourceLabel: 'SMB',
+        candidates: candidates,
+      );
+      await ServiceProvider.watchHistoryProvider.refresh();
+      return _jsonOk({
+        'success': true,
+        'data': {
+          'total': result.total,
+          'matched': result.matched,
+          'failed': result.failed,
+        },
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '刮削SMB文件夹失败: $e');
+    }
+  }
+
+  int? _parseMatchId(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  Future<List<WebDAVFile>> _collectWebDavVideoFiles(
+    WebDAVConnection connection,
+    String folderPath,
+  ) async {
+    final List<WebDAVFile> videoFiles = [];
+    try {
+      final files = await _webdavService.listDirectory(connection, folderPath);
+      for (final file in files) {
+        if (file.isDirectory) {
+          final subFiles =
+              await _collectWebDavVideoFiles(connection, file.path);
+          videoFiles.addAll(subFiles);
+        } else if (_webdavService.isVideoFile(file.name)) {
+          videoFiles.add(file);
+        }
+      }
+    } catch (e) {
+      print('获取WebDAV视频文件失败: $e');
+    }
+    return videoFiles;
+  }
+
+  Future<List<SMBFileEntry>> _collectSmbVideoFiles(
+    SMBConnection connection,
+    String folderPath,
+  ) async {
+    final List<SMBFileEntry> videoFiles = [];
+    try {
+      final files = await _smbService.listDirectory(connection, folderPath);
+      for (final file in files) {
+        if (file.isDirectory) {
+          final nested =
+              await _collectSmbVideoFiles(connection, file.path);
+          videoFiles.addAll(nested);
+        } else if (_smbService.isVideoFile(file.name)) {
+          videoFiles.add(file);
+        }
+      }
+    } catch (e) {
+      print('获取SMB视频文件失败: $e');
+    }
+    return videoFiles;
+  }
+
+  Future<_RemoteScrapeResult> _scrapeRemoteFiles({
+    required String sourceLabel,
+    required List<_RemoteScrapeCandidate> candidates,
+  }) async {
+    int matched = 0;
+    int failed = 0;
+
+    for (final candidate in candidates) {
+      try {
+        final videoInfo = await DandanplayService.getVideoInfo(
+          candidate.filePath,
+        );
+        final matches = videoInfo['matches'];
+        if (videoInfo['isMatched'] != true ||
+            matches is! List ||
+            matches.isEmpty ||
+            matches.first is! Map) {
+          failed++;
+          continue;
+        }
+
+        final match = Map<String, dynamic>.from(matches.first as Map);
+        final animeId = _parseMatchId(match['animeId']);
+        final episodeId = _parseMatchId(match['episodeId']);
+        if (animeId == null || episodeId == null) {
+          failed++;
+          continue;
+        }
+
+        final existingHistory =
+            await WatchHistoryManager.getHistoryItem(candidate.filePath);
+        final rawAnimeTitle = videoInfo['animeTitle'] ?? match['animeTitle'];
+        final rawEpisodeTitle =
+            videoInfo['episodeTitle'] ?? match['episodeTitle'];
+        final rawHash = videoInfo['fileHash'] ?? videoInfo['hash'];
+        final animeTitle = rawAnimeTitle?.toString();
+        final episodeTitle = rawEpisodeTitle?.toString();
+        final hashString = rawHash?.toString();
+        final durationFromMatch = (videoInfo['duration'] is int)
+            ? videoInfo['duration'] as int
+            : (existingHistory?.duration ?? 0);
+        final preserveProgress = existingHistory != null &&
+            existingHistory.watchProgress > 0.01 &&
+            !existingHistory.isFromScan;
+
+        final historyItem = WatchHistoryItem(
+          filePath: candidate.filePath,
+          animeName: animeTitle?.isNotEmpty == true
+              ? animeTitle!
+              : (existingHistory?.animeName ??
+                  p.basenameWithoutExtension(candidate.fileName)),
+          episodeTitle: episodeTitle?.isNotEmpty == true
+              ? episodeTitle
+              : existingHistory?.episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: preserveProgress
+              ? existingHistory!.watchProgress
+              : (existingHistory?.watchProgress ?? 0.0),
+          lastPosition: preserveProgress
+              ? existingHistory!.lastPosition
+              : (existingHistory?.lastPosition ?? 0),
+          duration: durationFromMatch,
+          lastWatchTime: DateTime.now(),
+          thumbnailPath: existingHistory?.thumbnailPath,
+          isFromScan: !preserveProgress,
+          videoHash: hashString?.isNotEmpty == true
+              ? hashString
+              : existingHistory?.videoHash,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        matched++;
+      } catch (e) {
+        failed++;
+        print('$sourceLabel 刮削失败: ${candidate.fileName} -> $e');
+      }
+    }
+
+    return _RemoteScrapeResult(
+      total: candidates.length,
+      matched: matched,
+      failed: failed,
+    );
+  }
+
 
   Future<Response> _handleAddFolder(Request request) async {
     Map<String, dynamic> payload = const {};

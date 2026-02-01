@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -177,6 +178,39 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       fontSize: 12,
       fontWeight: FontWeight.w500,
     );
+
+    if (kIsWeb) {
+      return Container(
+        width: width,
+        height: _getBubbleHeight(),
+        decoration: BoxDecoration(
+          color: const Color(0xFF222222),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.15),
+            width: 0.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: widget.padding),
+            child: Text(
+              widget.text,
+              style: textStyle,
+              maxLines: 1,
+              overflow: TextOverflow.visible,
+            ),
+          ),
+        ),
+      );
+    }
     
     return Container(
       width: width,

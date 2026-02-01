@@ -1,4 +1,5 @@
 import 'watch_history_model.dart';
+import 'media_server_playback.dart';
 
 class PlayableItem {
   final String videoPath;
@@ -8,6 +9,7 @@ class PlayableItem {
   final int? episodeId;
   final WatchHistoryItem? historyItem;
   final String? actualPlayUrl;
+  final PlaybackSession? playbackSession;
 
   PlayableItem({
     required this.videoPath,
@@ -17,5 +19,6 @@ class PlayableItem {
     this.episodeId,
     this.historyItem,
     this.actualPlayUrl,
+    this.playbackSession,
   });
 }

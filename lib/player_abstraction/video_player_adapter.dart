@@ -185,6 +185,8 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   @override
   ValueListenable<int?> get textureId => _textureIdNotifier;
 
+  VideoPlayerController? get controller => _controller;
+
   @override
   String get media => _mediaPath;
 
@@ -530,6 +532,18 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         blackBytes[i] = 255; // Alpha 通道设为完全不透明
       }
       print("[VideoPlayerAdapter] 截图失败，返回黑色帧 ${width}x$height");
+      return PlayerFrame(width: width, height: height, bytes: blackBytes);
+    }
+
+    if (kIsWeb) {
+      if (width <= 0) width = 128;
+      if (height <= 0) height = 72;
+      final int numBytes = width * height * 4; // RGBA
+      final Uint8List blackBytes = Uint8List(numBytes);
+      for (int i = 3; i < numBytes; i += 4) {
+        blackBytes[i] = 255; // Alpha 通道设为完全不透明
+      }
+      print("[VideoPlayerAdapter] Web平台截图不可用，返回黑色帧 ${width}x$height");
       return PlayerFrame(width: width, height: height, bytes: blackBytes);
     }
     

@@ -56,6 +56,7 @@ import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/splash_screen.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/web_remote_access_gate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -95,22 +96,6 @@ void main(List<String> args) async {
     debugPaintBaselinesEnabled = false;
     debugPaintSizeEnabled = false;
   });
-
-  // Web 端不再提供 UI，仅保留客户端连接的远程访问 API。
-  if (kIsWeb) {
-    runApp(const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: Center(
-          child: Text(
-            'Web UI 已移除，请使用客户端连接远程访问服务。',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    ));
-    return;
-  }
 
   String? launchFilePath;
   if (globals.isDesktop && args.isNotEmpty) {
@@ -448,7 +433,10 @@ void main(List<String> args) async {
     // 加载设置
     Future.wait(<Future<dynamic>>[
       SettingsStorage.loadString('themeMode', defaultValue: 'system'),
-      SettingsStorage.loadString('backgroundImageMode'),
+      SettingsStorage.loadString(
+        'backgroundImageMode',
+        defaultValue: kIsWeb ? '关闭' : globals.backgroundImageMode,
+      ),
       SettingsStorage.loadString('customBackgroundPath'),
       SettingsStorage.loadString('anime_detail_display_mode',
           defaultValue: 'simple'),
@@ -603,6 +591,7 @@ void main(List<String> args) async {
 
 // 初始化应用所需的所有目录
 Future<void> _initializeAppDirectories() async {
+  if (kIsWeb) return;
   try {
     // Linux平台先处理数据迁移，然后创建目录
     // 其他平台直接创建目录（getAppStorageDirectory内部会处理Linux迁移）
@@ -806,12 +795,22 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
             environment: environment,
             settings: uiThemeProvider.currentThemeSettings,
             overlayBuilder: overlayBuilder,
-            materialHomeBuilder: () =>
-                MainPage(launchFilePath: widget.launchFilePath),
-            fluentHomeBuilder: () =>
-                MainPage(launchFilePath: widget.launchFilePath),
-            cupertinoHomeBuilder: () =>
-                CupertinoMainPage(launchFilePath: widget.launchFilePath),
+            materialHomeBuilder: () => kIsWeb
+                ? WebRemoteAccessGate(
+                    child: MainPage(launchFilePath: widget.launchFilePath),
+                  )
+                : MainPage(launchFilePath: widget.launchFilePath),
+            fluentHomeBuilder: () => kIsWeb
+                ? WebRemoteAccessGate(
+                    child: MainPage(launchFilePath: widget.launchFilePath),
+                  )
+                : MainPage(launchFilePath: widget.launchFilePath),
+            cupertinoHomeBuilder: () => kIsWeb
+                ? WebRemoteAccessGate(
+                    child:
+                        CupertinoMainPage(launchFilePath: widget.launchFilePath),
+                  )
+                : CupertinoMainPage(launchFilePath: widget.launchFilePath),
           );
 
           return descriptor.buildApp(themeContext);

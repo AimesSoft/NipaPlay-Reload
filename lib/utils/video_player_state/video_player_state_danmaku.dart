@@ -1024,6 +1024,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     try {
       // 使用 Provider 获取播放记录
       WatchHistoryItem? existingHistory;
+      WatchHistoryItem? historyForRemoteSync;
 
       final watchHistoryProvider = _resolveWatchHistoryProvider();
       if (watchHistoryProvider != null) {
@@ -1143,6 +1144,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           await WatchHistoryDatabase.instance
               .insertOrUpdateWatchHistory(updatedHistory);
         }
+        historyForRemoteSync = updatedHistory;
       } else {
         // 如果记录不存在，创建新记录
         final fileName = _currentVideoPath!.split('/').last;
@@ -1192,6 +1194,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           await WatchHistoryDatabase.instance
               .insertOrUpdateWatchHistory(newHistory);
         }
+        historyForRemoteSync = newHistory;
       }
 
       if (isSharedRemoteStream) {
@@ -1207,9 +1210,66 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           debugPrint('共享媒体播放进度同步失败: $e');
         }
       }
+
+      if (historyForRemoteSync != null) {
+        await _syncWebRemoteHistoryIfNeeded(
+          historyForRemoteSync,
+          force: forceRemoteSync,
+        );
+      }
     } catch (e) {
       debugPrint('更新观看记录时出错: $e');
     }
+  }
+
+  Future<void> _syncWebRemoteHistoryIfNeeded(
+    WatchHistoryItem historyItem, {
+    required bool force,
+  }) async {
+    if (!kIsWeb) return;
+
+    final originalPath = _initialHistoryItem?.filePath ?? historyItem.filePath;
+    if (originalPath.isEmpty) return;
+    if (SharedRemoteHistoryHelper.isSharedRemoteStreamPath(originalPath)) {
+      return;
+    }
+    if (originalPath.startsWith('jellyfin://') ||
+        originalPath.startsWith('emby://')) {
+      return;
+    }
+    if (originalPath.startsWith('blob:') || originalPath.startsWith('data:')) {
+      return;
+    }
+
+    final resolvedPath = _resolveRemoteHistoryPath(originalPath);
+    if (resolvedPath == null || resolvedPath.isEmpty) {
+      return;
+    }
+
+    await WebRemoteHistorySyncService.instance.syncProgress(
+      item: historyItem,
+      filePathOverride: resolvedPath,
+      positionMs: _position.inMilliseconds,
+      durationMs: _duration.inMilliseconds,
+      progress: _progress,
+      force: force,
+      clientUpdatedAt: DateTime.now(),
+    );
+  }
+
+  String? _resolveRemoteHistoryPath(String originalPath) {
+    final uri = Uri.tryParse(originalPath);
+    if (uri == null) {
+      return originalPath;
+    }
+    final pathLower = uri.path.toLowerCase();
+    if (pathLower.contains('/api/media/local/manage/stream')) {
+      final pathParam = uri.queryParameters['path'];
+      if (pathParam != null && pathParam.trim().isNotEmpty) {
+        return pathParam.trim();
+      }
+    }
+    return originalPath;
   }
 
   // 添加一条新弹幕到当前列表

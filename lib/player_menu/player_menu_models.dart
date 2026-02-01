@@ -1,5 +1,7 @@
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
 
 /// 播放器菜单中可能出现的功能面板 ID
 enum PlayerMenuPaneId {
@@ -92,4 +94,15 @@ class PlayerMenuContext {
   bool get isServerStreaming =>
       (videoState.currentVideoPath?.startsWith('jellyfin://') ?? false) ||
       (videoState.currentVideoPath?.startsWith('emby://') ?? false);
+
+  bool get isTranscodeEnabledForCurrentSource {
+    final path = videoState.currentVideoPath ?? '';
+    if (path.startsWith('jellyfin://')) {
+      return JellyfinService.instance.isTranscodeEnabled;
+    }
+    if (path.startsWith('emby://')) {
+      return EmbyService.instance.isTranscodeEnabled;
+    }
+    return true;
+  }
 }

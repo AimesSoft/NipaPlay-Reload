@@ -1,15 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'bangumi_service.dart';
+import 'bangumi_api_service.dart';
 import 'dandanplay_service.dart';
 import 'package:http/http.dart' as http;
 import 'search_service.dart'; // 导入SearchService
 import 'package:flutter/foundation.dart'; // 导入debugPrint
+import 'package:nipaplay/models/watch_history_model.dart';
 import '../providers/service_provider.dart';
 import 'local_media_share_api.dart';
 import 'local_media_management_api.dart';
+import 'web_ui_proxy_api.dart';
+import 'network_media_settings_api.dart';
+import 'package:path/path.dart' as p;
 
 class WebApiService {
   final Router _router = Router();
@@ -18,14 +24,25 @@ class WebApiService {
   final LocalMediaShareApi _localMediaShareApi = LocalMediaShareApi();
   final LocalMediaManagementApi _localMediaManagementApi =
       LocalMediaManagementApi();
+  final NetworkMediaSettingsApi _networkMediaSettingsApi =
+      NetworkMediaSettingsApi();
+  final WebUiProxyApi _webUiProxyApi = WebUiProxyApi();
 
   WebApiService() {
     _router.get('/info', handleInfoRequest);
     _router.get('/bangumi/calendar', handleBangumiCalendarRequest);
     _router.get('/bangumi/detail/<id>', handleBangumiDetailRequest);
+    _router.get('/bangumi/login_status', handleBangumiLoginStatusRequest);
     _router.get('/danmaku/video_info', handleVideoInfoRequest);
     _router.get('/danmaku/load', handleDanmakuLoadRequest);
     _router.get('/image_proxy', handleImageProxyRequest);
+    _router.add('GET', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('POST', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('PUT', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('PATCH', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('DELETE', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('HEAD', '/web_proxy', _webUiProxyApi.handle);
+    _router.add('OPTIONS', '/web_proxy', _webUiProxyApi.handleOptions);
 
     // 新增搜索相关的API路由
     _router.get('/search/config', handleSearchConfigRequest);
@@ -47,10 +64,12 @@ class WebApiService {
     // 本地媒体库相关API路由
     _router.get('/media/libraries', handleGetLibrariesRequest);
     _router.get('/media/local/items', handleGetLocalMediaItemsRequest);
-    _router.get(
-        '/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
-    _router.mount('/media/local/share/', _localMediaShareApi.router);
+        _router.get('/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
+        _router.get('/history', handleGetHistoryRequest);
+        _router.post('/history/progress', handleUpdateHistoryProgressRequest);
+        _router.mount('/media/local/share/', _localMediaShareApi.router);
     _router.mount('/media/local/manage/', _localMediaManagementApi.router);
+    _router.mount('/settings/network/', _networkMediaSettingsApi.router);
   }
 
   Handler get handler => _router;
@@ -108,35 +127,99 @@ class WebApiService {
     }
   }
 
+  Future<Response> handleBangumiLoginStatusRequest(Request request) async {
+    try {
+      await BangumiApiService.initialize();
+      final status = {
+        'isLoggedIn': BangumiApiService.isLoggedIn,
+        'userInfo': BangumiApiService.userInfo,
+      };
+      return Response.ok(
+        json.encode(status),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error getting bangumi login status: $e',
+      );
+    }
+  }
+
   Future<Response> handleImageProxyRequest(Request request) async {
     final urlParam = request.url.queryParameters['url'];
+    //debugPrint('[ImageProxy] Request received. Raw param: $urlParam');
+
     if (urlParam == null || urlParam.isEmpty) {
+      //debugPrint('[ImageProxy] Error: Missing image URL');
       return Response.badRequest(body: 'Missing image URL');
     }
 
     try {
       String imageUrl;
-      // URL可能未编码，也可能经过了Base64编码。
-      // 我们先尝试进行Base64解码，如果失败，就认为它是一个普通URL。
       try {
         imageUrl = utf8.decode(base64Url.decode(urlParam));
+        //debugPrint('[ImageProxy] Decoded URL: $imageUrl');
       } catch (e) {
-        // 解码失败（非法的Base64格式），则假定它是一个未经编码的普通URL
         imageUrl = urlParam;
+        //debugPrint('[ImageProxy] Base64 decode failed, using raw: $imageUrl');
       }
 
-      final response = await http.get(Uri.parse(imageUrl));
-      if (response.statusCode == 200) {
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        //debugPrint('[ImageProxy] Fetching network image: $imageUrl');
+        final response = await http.get(Uri.parse(imageUrl));
+        //debugPrint('[ImageProxy] Network fetch status: ${response.statusCode}');
+        if (response.statusCode == 200) {
+          return Response.ok(
+            response.bodyBytes,
+            headers: {
+              'Content-Type': response.headers['content-type'] ?? 'image/jpeg',
+              'Access-Control-Allow-Origin': '*',
+            },
+          );
+        } else {
+          return Response(response.statusCode, body: 'Failed to fetch image');
+        }
+      } else {
+        //debugPrint('[ImageProxy] Reading local file: $imageUrl');
+        final file = File(imageUrl);
+        final exists = await file.exists();
+        //debugPrint('[ImageProxy] File exists: $exists');
+        
+        if (!exists) {
+          return Response.notFound('Image file not found');
+        }
+
+        // 简单的安全检查
+        final ext = imageUrl.toLowerCase();
+        if (!ext.endsWith('.jpg') && 
+            !ext.endsWith('.jpeg') && 
+            !ext.endsWith('.png') && 
+            !ext.endsWith('.webp') && 
+            !ext.endsWith('.gif') && 
+            !ext.endsWith('.bmp')) {
+          //debugPrint('[ImageProxy] Forbidden extension: $ext');
+          return Response.forbidden('Access to non-image files is forbidden');
+        }
+
+        final bytes = await file.readAsBytes();
+        String contentType = 'image/jpeg';
+        if (ext.endsWith('.png')) contentType = 'image/png';
+        if (ext.endsWith('.webp')) contentType = 'image/webp';
+        if (ext.endsWith('.gif')) contentType = 'image/gif';
+        if (ext.endsWith('.bmp')) contentType = 'image/bmp';
+
+        //debugPrint('[ImageProxy] Serving file with Content-Type: $contentType, Size: ${bytes.length}');
         return Response.ok(
-          response.bodyBytes,
+          bytes,
           headers: {
-            'Content-Type': response.headers['content-type'] ?? 'image/jpeg'
+            'Content-Type': contentType,
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=3600',
           },
         );
-      } else {
-        return Response(response.statusCode, body: 'Failed to fetch image');
       }
     } catch (e) {
+      //debugPrint('[ImageProxy] Exception: $e');
       return Response.internalServerError(body: 'Error proxying image: $e');
     }
   }
@@ -483,6 +566,186 @@ class WebApiService {
     }
   }
 
+  Future<Response> handleGetHistoryRequest(Request request) async {
+    try {
+      final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
+      if (!watchHistoryProvider.isLoaded) {
+        await watchHistoryProvider.loadHistory();
+      }
+
+      final history = watchHistoryProvider.history.map((item) => {
+        'filePath': item.filePath,
+        'animeName': item.animeName,
+        'episodeTitle': item.episodeTitle,
+        'episodeId': item.episodeId,
+        'animeId': item.animeId,
+        'watchProgress': item.watchProgress,
+        'lastPosition': item.lastPosition,
+        'duration': item.duration,
+        'lastWatchTime': item.lastWatchTime.toIso8601String(),
+        'thumbnailPath': item.thumbnailPath,
+        'isFromScan': item.isFromScan,
+        'videoHash': item.videoHash,
+      }).toList();
+
+      return Response.ok(
+        json.encode({'success': true, 'data': history}),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Error getting history: $e');
+    }
+  }
+
+  Future<Response> handleUpdateHistoryProgressRequest(Request request) async {
+    Map<String, dynamic> payload = const {};
+    try {
+      final rawBody = await request.readAsString();
+      if (rawBody.trim().isNotEmpty) {
+        payload = json.decode(rawBody) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      return Response.badRequest(body: 'Invalid JSON payload');
+    }
+
+    final rawPath = payload['filePath'] ?? payload['path'];
+    final filePath = rawPath?.toString().trim() ?? '';
+    if (filePath.isEmpty) {
+      return Response.badRequest(body: 'Missing filePath');
+    }
+
+    double? progress;
+    final progressValue = payload['progress'];
+    if (progressValue is num) {
+      progress = progressValue.toDouble();
+    }
+
+    int? positionMs;
+    final positionValue = payload['positionMs'] ?? payload['position'];
+    if (positionValue is num) {
+      positionMs = positionValue.toInt();
+    }
+
+    int? durationMs;
+    final durationValue = payload['durationMs'] ?? payload['duration'];
+    if (durationValue is num) {
+      durationMs = durationValue.toInt();
+    }
+
+    DateTime? clientUpdatedAt;
+    final clientTime = payload['clientUpdatedAt'] ?? payload['clientTime'];
+    if (clientTime is String) {
+      clientUpdatedAt = DateTime.tryParse(clientTime);
+    }
+
+    final animeName = payload['animeName']?.toString();
+    final episodeTitle = payload['episodeTitle']?.toString();
+    final animeId = payload['animeId'] is num
+        ? (payload['animeId'] as num).toInt()
+        : int.tryParse(payload['animeId']?.toString() ?? '');
+    final episodeId = payload['episodeId'] is num
+        ? (payload['episodeId'] as num).toInt()
+        : int.tryParse(payload['episodeId']?.toString() ?? '');
+    final videoHash = payload['videoHash']?.toString();
+
+    try {
+      final watchHistoryProvider = ServiceProvider.watchHistoryProvider;
+      if (!watchHistoryProvider.isLoaded) {
+        await watchHistoryProvider.loadHistory();
+      }
+
+      WatchHistoryItem? existingHistory =
+          await watchHistoryProvider.getHistoryItem(filePath);
+
+      final double sanitizedProgress = progress == null || progress.isNaN
+          ? 0.0
+          : progress.clamp(0.0, 1.0);
+      final int sanitizedPosition = positionMs != null && positionMs > 0
+          ? positionMs
+          : 0;
+      final int? sanitizedDuration =
+          durationMs != null && durationMs > 0 ? durationMs : null;
+      double derivedProgress = sanitizedProgress;
+      if (derivedProgress <= 0 &&
+          sanitizedDuration != null &&
+          sanitizedDuration > 0 &&
+          sanitizedPosition > 0) {
+        derivedProgress =
+            (sanitizedPosition / sanitizedDuration).clamp(0.0, 1.0);
+      }
+
+      WatchHistoryItem updatedHistory;
+      if (existingHistory != null) {
+        final mergedProgress = math.min(
+          1.0,
+          math.max(existingHistory.watchProgress, derivedProgress),
+        );
+        final mergedPosition =
+            math.max(existingHistory.lastPosition, sanitizedPosition);
+        final mergedDuration = sanitizedDuration != null
+            ? math.max(existingHistory.duration, sanitizedDuration)
+            : existingHistory.duration;
+
+        updatedHistory = existingHistory.copyWith(
+          watchProgress: mergedProgress,
+          lastPosition: mergedPosition,
+          duration: mergedDuration,
+          lastWatchTime: clientUpdatedAt ?? DateTime.now(),
+          animeName:
+              (animeName != null && animeName.trim().isNotEmpty)
+                  ? animeName.trim()
+                  : existingHistory.animeName,
+          episodeTitle:
+              (episodeTitle != null && episodeTitle.trim().isNotEmpty)
+                  ? episodeTitle.trim()
+                  : existingHistory.episodeTitle,
+          animeId: animeId ?? existingHistory.animeId,
+          episodeId: episodeId ?? existingHistory.episodeId,
+          videoHash: videoHash ?? existingHistory.videoHash,
+        );
+      } else {
+        final fallbackName = (animeName != null && animeName.trim().isNotEmpty)
+            ? animeName.trim()
+            : p.basenameWithoutExtension(filePath);
+
+        updatedHistory = WatchHistoryItem(
+          filePath: filePath,
+          animeName: fallbackName.isNotEmpty ? fallbackName : '未知动画',
+          episodeTitle:
+              (episodeTitle != null && episodeTitle.trim().isNotEmpty)
+                  ? episodeTitle.trim()
+                  : null,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: derivedProgress,
+          lastPosition: sanitizedPosition,
+          duration: sanitizedDuration ?? 0,
+          lastWatchTime: clientUpdatedAt ?? DateTime.now(),
+          thumbnailPath: null,
+          isFromScan: false,
+          videoHash: videoHash,
+        );
+      }
+
+      await watchHistoryProvider.addOrUpdateHistory(updatedHistory);
+
+      return Response.ok(
+        json.encode({
+          'success': true,
+          'data': {
+            'progress': updatedHistory.watchProgress,
+            'lastPosition': updatedHistory.lastPosition,
+            'duration': updatedHistory.duration,
+            'lastWatchTime': updatedHistory.lastWatchTime.toIso8601String(),
+          },
+        }),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(body: 'Failed to update history: $e');
+    }
+  }
+
   // 本地媒体库相关处理函数
   Future<Response> handleGetLibrariesRequest(Request request) async {
     try {
@@ -493,9 +756,6 @@ class WebApiService {
       if (watchHistoryProvider.isLoaded &&
           watchHistoryProvider.history.isNotEmpty) {
         final localMediaCount = watchHistoryProvider.history
-            .where((item) =>
-                !item.filePath.startsWith('jellyfin://') &&
-                !item.filePath.startsWith('emby://'))
             .map((item) => item.animeId)
             .where((animeId) => animeId != null)
             .toSet()

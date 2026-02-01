@@ -128,6 +128,12 @@ class WatchHistoryManager {
   static Future<void> initialize() async {
     if (_initialized) return;
     if (kIsWeb) {
+      try {
+        _migratedToDatabase = true;
+        await _preloadCacheFromDatabase();
+      } catch (e) {
+        debugPrint('Web初始化观看历史管理器失败: $e');
+      }
       _initialized = true;
       return;
     }
@@ -162,7 +168,6 @@ class WatchHistoryManager {
   
   // 从数据库预加载缓存
   static Future<void> _preloadCacheFromDatabase() async {
-    if (kIsWeb) return;
     try {
       final db = WatchHistoryDatabase.instance;
       final historyItems = await db.getAllWatchHistory();
@@ -415,7 +420,6 @@ class WatchHistoryManager {
 
   // 获取所有历史记录
   static Future<List<WatchHistoryItem>> getAllHistory() async {
-    if (kIsWeb) return [];
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接从数据库获取
@@ -445,7 +449,7 @@ class WatchHistoryManager {
 
   // 在修复历史记录文件后重试获取历史记录
   static Future<List<WatchHistoryItem>> _getHistoryAfterFix() async {
-    if (kIsWeb) return [];
+    if (kIsWeb) return List.from(_cachedItems);
     await _retryLoadCache();
     return List.from(_cachedItems);
   }
@@ -501,7 +505,6 @@ class WatchHistoryManager {
 
   // 添加或更新历史记录
   static Future<void> addOrUpdateHistory(WatchHistoryItem item) async {
-    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -605,7 +608,6 @@ class WatchHistoryManager {
 
   // 获取单个历史记录项
   static Future<WatchHistoryItem?> getHistoryItem(String filePath) async {
-    if (kIsWeb) return null;
     try {
       // 如果已迁移到数据库，则直接使用数据库API
       if (_migratedToDatabase) {
@@ -681,7 +683,6 @@ class WatchHistoryManager {
 
   // 删除历史记录
   static Future<void> removeHistory(String filePath) async {
-    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -725,7 +726,6 @@ class WatchHistoryManager {
 
   // 清空所有历史记录
   static Future<void> clearAllHistory() async {
-    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -756,7 +756,6 @@ class WatchHistoryManager {
 
   // New method to get history item by animeId and episodeId
   static Future<WatchHistoryItem?> getHistoryItemByEpisode(int animeId, int episodeId) async {
-    if (kIsWeb) return null;
     if (!_initialized) {
       await initialize();
     }
@@ -789,7 +788,6 @@ class WatchHistoryManager {
 
   // Get items by file path prefix
   static Future<List<WatchHistoryItem>> getItemsByPathPrefix(String pathPrefix) async {
-    if (kIsWeb) return [];
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则优先使用数据库API
@@ -810,7 +808,6 @@ class WatchHistoryManager {
 
   // Remove items by file path prefix
   static Future<void> removeItemsByPathPrefix(String pathPrefix) async {
-    if (kIsWeb) return;
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则直接使用数据库API
@@ -856,7 +853,6 @@ class WatchHistoryManager {
 
   // Get all items for a specific animeId
   static Future<List<WatchHistoryItem>> getAllItemsForAnime(int animeId) async {
-    if (kIsWeb) return [];
     if (!_initialized) await initialize();
     
     // 如果已迁移到数据库，则优先使用数据库API
@@ -888,7 +884,6 @@ class WatchHistoryManager {
 
   // 根据文件路径获取历史记录项
   static Future<WatchHistoryItem?> getHistoryItemByPath(String filePath) async {
-    if (kIsWeb) return null;
     await initialize();
     
     if (_migratedToDatabase) {
@@ -923,7 +918,6 @@ class WatchHistoryManager {
   
   // 根据动画ID获取该动画的所有剧集历史记录
   static Future<List<WatchHistoryItem>> getHistoryItemsByAnimeId(int animeId) async {
-    if (kIsWeb) return [];
     await initialize();
     
     if (_migratedToDatabase) {
@@ -941,7 +935,6 @@ class WatchHistoryManager {
   
   // 获取指定动画的上一集
   static Future<WatchHistoryItem?> getPreviousEpisode(int animeId, int currentEpisodeId) async {
-    if (kIsWeb) return null;
     await initialize();
     
     if (_migratedToDatabase) {
@@ -965,7 +958,6 @@ class WatchHistoryManager {
   
   // 获取指定动画的下一集
   static Future<WatchHistoryItem?> getNextEpisode(int animeId, int currentEpisodeId) async {
-    if (kIsWeb) return null;
     await initialize();
     
     if (_migratedToDatabase) {

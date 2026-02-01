@@ -30,10 +30,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       // 如果有当前视频路径，尝试重新初始化
       if (_currentVideoPath != null) {
         final path = _currentVideoPath!;
+        final actualUrl = _currentActualPlayUrl;
         _currentVideoPath = null; // 清空路径，避免重复初始化
         _danmakuOverlayKey = 'idle'; // 临时重置弹幕覆盖层key
         await Future.delayed(const Duration(seconds: 1)); // 等待一秒
-        await initializePlayer(path);
+        await initializePlayer(path, actualPlayUrl: actualUrl);
       } else {
         _setStatus(PlayerStatus.idle, message: '请重新选择视频');
       }
@@ -266,6 +267,18 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadHardwareDecoderSetting() async {
+    if (kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    final resolved = prefs.getBool(_useHardwareDecoderKey) ?? true;
+    final bool changed = resolved != _useHardwareDecoder;
+    _useHardwareDecoder = resolved;
+    await applyHardwareDecoderPreference();
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
   // 设置弹幕堆叠
   Future<void> setDanmakuStacking(bool stacking) async {
     if (_danmakuStacking != stacking) {
@@ -293,6 +306,36 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   void updateDecoders(List<String> decoders) {
     _decoderManager.updateDecoders(decoders);
     notifyListeners();
+  }
+
+  Future<void> setHardwareDecoderEnabled(bool enabled) async {
+    if (_useHardwareDecoder == enabled) {
+      return;
+    }
+    _useHardwareDecoder = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useHardwareDecoderKey, enabled);
+    await applyHardwareDecoderPreference();
+    notifyListeners();
+  }
+
+  String _resolveMpvHwdecValue() {
+    if (Platform.isAndroid) {
+      return 'mediacodec-copy';
+    }
+    return 'auto-copy';
+  }
+
+  Future<void> applyHardwareDecoderPreference() async {
+    if (kIsWeb || _isDisposed) return;
+    final kernelName = player.getPlayerKernelName();
+    if (kernelName == 'MDK') {
+      await _decoderManager.applyHardwareDecodingPreference(_useHardwareDecoder);
+    } else if (kernelName == 'Media Kit') {
+      final hwdecValue =
+          _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
+      player.setProperty('hwdec', hwdecValue);
+    }
   }
 
   // 播放速度相关方法
@@ -861,6 +904,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 强制启用硬件解码，代理到解码器管理器
   Future<void> forceEnableHardwareDecoder() async {
     if (_status == PlayerStatus.playing || _status == PlayerStatus.paused) {
+      if (!_useHardwareDecoder) {
+        return;
+      }
       await _decoderManager.forceEnableHardwareDecoder();
       // 稍后检查解码器状态
       await Future.delayed(const Duration(seconds: 1));

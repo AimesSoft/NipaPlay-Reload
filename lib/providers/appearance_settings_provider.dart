@@ -59,6 +59,9 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   }
 
   double _resolveDefaultUiScale() {
+    if (kIsWeb) {
+      return defaultUiScale;
+    }
     return globals.isTablet ? defaultTabletUiScale : defaultUiScale;
   }
 

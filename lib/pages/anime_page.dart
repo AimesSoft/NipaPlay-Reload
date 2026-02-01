@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/loading_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/loading_placeholder.dart';
@@ -37,6 +38,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_view.dart
 import 'package:nipaplay/themes/nipaplay/widgets/dandanplay_remote_library_view.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -118,7 +120,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
     
     bool fileExists = false;
     String filePath = item.filePath;
-    String? actualPlayUrl;
+    PlaybackSession? playbackSession;
 
     if (isNetworkUrl || isJellyfinProtocol || isEmbyProtocol) {
       fileExists = true;
@@ -127,13 +129,16 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           final jellyfinId = item.filePath.replaceFirst('jellyfin://', '');
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
-            actualPlayUrl = jellyfinService.getStreamUrl(jellyfinId);
+            playbackSession = await jellyfinService.createPlaybackSession(
+              itemId: jellyfinId,
+              startPositionMs: item.lastPosition > 0 ? item.lastPosition : null,
+            );
           } else {
             BlurSnackBar.show(context, '未连接到Jellyfin服务器');
             return;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Jellyfin流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Jellyfin播放会话失败: $e');
           return;
         }
       }
@@ -143,32 +148,37 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
           final embyId = item.filePath.replaceFirst('emby://', '');
           final embyService = EmbyService.instance;
           if (embyService.isConnected) {
-            actualPlayUrl = await embyService.getStreamUrl(embyId);
+            playbackSession = await embyService.createPlaybackSession(
+              itemId: embyId,
+              startPositionMs: item.lastPosition > 0 ? item.lastPosition : null,
+            );
           } else {
             BlurSnackBar.show(context, '未连接到Emby服务器');
             return;
           }
         } catch (e) {
-          BlurSnackBar.show(context, '获取Emby流媒体URL失败: $e');
+          BlurSnackBar.show(context, '获取Emby播放会话失败: $e');
           return;
         }
       }
     } else {
-      if (!kIsWeb) {
-      final videoFile = File(item.filePath);
-      fileExists = videoFile.existsSync();
-      if (!fileExists && Platform.isIOS) {
-        String altPath = filePath.startsWith('/private') 
-            ? filePath.replaceFirst('/private', '') 
-            : '/private$filePath';
-        
-        final File altFile = File(altPath);
-        if (altFile.existsSync()) {
-          filePath = altPath;
-          item = item.copyWith(filePath: filePath);
-          fileExists = true;
+      if (kIsWeb) {
+        fileExists = true;
+      } else {
+        final videoFile = File(item.filePath);
+        fileExists = videoFile.existsSync();
+        if (!fileExists && Platform.isIOS) {
+          String altPath = filePath.startsWith('/private') 
+              ? filePath.replaceFirst('/private', '') 
+              : '/private$filePath';
+          
+          final File altFile = File(altPath);
+          if (altFile.existsSync()) {
+            filePath = altPath;
+            item = item.copyWith(filePath: filePath);
+            fileExists = true;
+          }
         }
-      }
       }
     }
     
@@ -184,7 +194,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
       animeId: item.animeId,
       episodeId: item.episodeId,
       historyItem: item,
-      actualPlayUrl: actualPlayUrl,
+      playbackSession: playbackSession,
     );
 
     await PlaybackService().play(playableItem);
@@ -272,18 +282,26 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   bool _isDandanConnected = false;
   bool _hasWebDAVConnections = false;
   bool _hasSMBConnections = false;
+  bool _hasWebDAVLibrary = false;
+  bool _hasSMBLibrary = false;
   bool _localConnectionsReady = false;
+  String? _remoteManagementHostId;
 
   // 添加变量追踪“添加媒体服务器”入口的悬停状态
   bool _isAddEntryHovered = false;
   bool _isRemoteAccessHovered = false;
+
+  bool get _showLocalTabs => !kIsWeb;
+  bool get _showSharedRemoteTabs => _hasSharedRemoteHosts || kIsWeb;
   
   // 动态计算标签页数量
   int get _tabCount {
-    int count = 2; // 基础标签: 本地媒体库, 本地库管理
+    int count = _showLocalTabs ? 2 : 0; // 基础标签: 本地媒体库, 本地库管理
+    if (_hasWebDAVLibrary) count++;
     if (_hasWebDAVConnections) count++;
+    if (_hasSMBLibrary) count++;
     if (_hasSMBConnections) count++;
-    if (_hasSharedRemoteHosts) count += 2; // 共享媒体库, 共享库管理
+    if (_showSharedRemoteTabs) count += 2; // 共享媒体库, 共享库管理
     if (_isDandanConnected) count++;
     if (_isJellyfinConnected) count++;
     if (_isEmbyConnected) count++;
@@ -304,7 +322,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     
     // 监听子标签切换通知
     _setupSubTabListener();
-    _initLocalConnectionStates();
+    if (!kIsWeb) {
+      _initLocalConnectionStates();
+    }
     
     // 立即检查是否有待处理的子标签切换请求
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -338,6 +358,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   }
 
   void _refreshLocalConnectionStates() {
+    if (kIsWeb) {
+      return;
+    }
     final hasWebdav = WebDAVService.instance.connections.isNotEmpty;
     final hasSmb = SMBService.instance.connections.isNotEmpty;
 
@@ -352,7 +375,50 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
       _isDandanConnected,
       hasWebdav,
       hasSmb,
+      _hasWebDAVLibrary,
+      _hasSMBLibrary,
     );
+  }
+
+  void _maybeBootstrapRemoteManagement(SharedRemoteLibraryProvider provider) {
+    if (!kIsWeb) return;
+    final hostId = provider.activeHostId;
+    if (hostId == null || hostId.isEmpty) return;
+    if (_remoteManagementHostId == hostId) return;
+    _remoteManagementHostId = hostId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      provider.refreshManagement();
+    });
+  }
+
+  bool _hasLibraryItemsForSource(
+    WatchHistoryProvider provider,
+    MediaLibrarySourceType sourceType,
+  ) {
+    if (!provider.isLoaded) return false;
+    return provider.history.any((item) {
+      if (item.animeId == null) return false;
+      if (item.filePath.startsWith('jellyfin://') ||
+          item.filePath.startsWith('emby://')) {
+        return false;
+      }
+      if (item.filePath.contains('/api/media/local/share/')) {
+        return false;
+      }
+      if (item.isDandanplayRemote) {
+        return false;
+      }
+      switch (sourceType) {
+        case MediaLibrarySourceType.webdav:
+          return MediaSourceUtils.isWebDavPath(item.filePath);
+        case MediaLibrarySourceType.smb:
+          return MediaSourceUtils.isSmbPath(item.filePath);
+        case MediaLibrarySourceType.local:
+        default:
+          return false;
+      }
+    });
   }
 
   TabChangeNotifier? _tabChangeNotifierRef;
@@ -482,6 +548,27 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   }
 
   Future<void> _showWebDAVConnectionDialog() async {
+    if (kIsWeb) {
+      final provider =
+          Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+      final result = await WebDAVConnectionDialog.show(
+        context,
+        onSave: (connection) async {
+          await provider.addWebDAVConnection(connection);
+          if (provider.managementErrorMessage != null) {
+            throw provider.managementErrorMessage!;
+          }
+          return true;
+        },
+        onTest: (connection) =>
+            provider.testWebDAVConnection(connection: connection),
+      );
+      if (result == true && mounted) {
+        await provider.refreshManagement(userInitiated: true);
+      }
+      return;
+    }
+
     if (!_localConnectionsReady) {
       await _initLocalConnectionStates();
     }
@@ -493,6 +580,22 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   }
 
   Future<void> _showSMBConnectionDialog() async {
+    if (kIsWeb) {
+      final provider =
+          Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+      final result = await SMBConnectionDialog.show(
+        context,
+        onSave: (connection) async {
+          await provider.addSMBConnection(connection);
+          return provider.managementErrorMessage == null;
+        },
+      );
+      if (result == true && mounted) {
+        await provider.refreshManagement(userInitiated: true);
+      }
+      return;
+    }
+
     if (!_localConnectionsReady) {
       await _initLocalConnectionStates();
     }
@@ -653,20 +756,37 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final enableAnimation = appearanceSettings.enablePageAnimation;
     
-    return Consumer4<JellyfinProvider, EmbyProvider, SharedRemoteLibraryProvider,
-        DandanplayRemoteProvider>(
+    return Consumer5<JellyfinProvider, EmbyProvider, SharedRemoteLibraryProvider,
+        DandanplayRemoteProvider, WatchHistoryProvider>(
       builder: (context, jellyfinProvider, embyProvider, sharedProvider,
-          dandanProvider, child) {
+          dandanProvider, watchHistoryProvider, child) {
+        _maybeBootstrapRemoteManagement(sharedProvider);
         final currentJellyfinConnectionState = jellyfinProvider.isConnected;
         final currentEmbyConnectionState = embyProvider.isConnected;
         final currentSharedState = sharedProvider.hasReachableActiveHost;
         final currentDandanState = dandanProvider.isConnected;
-        final currentHasWebdav = _localConnectionsReady
-            ? WebDAVService.instance.connections.isNotEmpty
-            : _hasWebDAVConnections;
-        final currentHasSmb = _localConnectionsReady
-            ? SMBService.instance.connections.isNotEmpty
-            : _hasSMBConnections;
+        final currentHasWebdav = kIsWeb
+            ? sharedProvider.webdavConnections.isNotEmpty
+            : (_localConnectionsReady
+                ? WebDAVService.instance.connections.isNotEmpty
+                : _hasWebDAVConnections);
+        final currentHasSmb = kIsWeb
+            ? sharedProvider.smbConnections.isNotEmpty
+            : (_localConnectionsReady
+                ? SMBService.instance.connections.isNotEmpty
+                : _hasSMBConnections);
+        final currentHasWebdavLibrary = watchHistoryProvider.isLoaded
+            ? _hasLibraryItemsForSource(
+                watchHistoryProvider,
+                MediaLibrarySourceType.webdav,
+              )
+            : _hasWebDAVLibrary;
+        final currentHasSmbLibrary = watchHistoryProvider.isLoaded
+            ? _hasLibraryItemsForSource(
+                watchHistoryProvider,
+                MediaLibrarySourceType.smb,
+              )
+            : _hasSMBLibrary;
         
         // 检查连接状态是否改变
         if (_isJellyfinConnected != currentJellyfinConnectionState || 
@@ -674,7 +794,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             _hasSharedRemoteHosts != currentSharedState ||
             _isDandanConnected != currentDandanState ||
             _hasWebDAVConnections != currentHasWebdav ||
-            _hasSMBConnections != currentHasSmb) {
+            _hasSMBConnections != currentHasSmb ||
+            _hasWebDAVLibrary != currentHasWebdavLibrary ||
+            _hasSMBLibrary != currentHasSmbLibrary) {
           print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState, Dandan: $_isDandanConnected -> $currentDandanState');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -685,28 +807,47 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 currentDandanState,
                 currentHasWebdav,
                 currentHasSmb,
+                currentHasWebdavLibrary,
+                currentHasSmbLibrary,
               );
             }
           });
         }
         
         // 动态生成标签页内容
-        final List<Widget> pageChildren = [
-          RepaintBoundary(
-            child: MediaLibraryPage(
-              key: ValueKey('mediaLibrary_${widget.mediaLibraryVersion}'),
-              onPlayEpisode: widget.onPlayEpisode,
-              onSourcesUpdated: _refreshLocalConnectionStates,
+        final List<Widget> pageChildren = [];
+
+        if (_showLocalTabs) {
+          pageChildren.addAll([
+            RepaintBoundary(
+              child: MediaLibraryPage(
+                key: ValueKey('mediaLibrary_local_${widget.mediaLibraryVersion}'),
+                onPlayEpisode: widget.onPlayEpisode,
+                onSourcesUpdated: _refreshLocalConnectionStates,
+                sourceType: MediaLibrarySourceType.local,
+              ),
             ),
-          ),
-          RepaintBoundary(
-            child: LibraryManagementTab(
-              key: const ValueKey('library_management_local'),
-              onPlayEpisode: widget.onPlayEpisode,
-              section: LibraryManagementSection.local,
+            RepaintBoundary(
+              child: LibraryManagementTab(
+                key: const ValueKey('library_management_local'),
+                onPlayEpisode: widget.onPlayEpisode,
+                section: LibraryManagementSection.local,
+              ),
             ),
-          ),
-        ];
+          ]);
+        }
+
+        if (_hasWebDAVLibrary) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: MediaLibraryPage(
+                key: ValueKey('mediaLibrary_webdav_${widget.mediaLibraryVersion}'),
+                onPlayEpisode: widget.onPlayEpisode,
+                sourceType: MediaLibrarySourceType.webdav,
+              ),
+            ),
+          );
+        }
 
         if (_hasWebDAVConnections) {
           pageChildren.add(
@@ -715,6 +856,18 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 key: const ValueKey('library_management_webdav'),
                 onPlayEpisode: widget.onPlayEpisode,
                 section: LibraryManagementSection.webdav,
+              ),
+            ),
+          );
+        }
+
+        if (_hasSMBLibrary) {
+          pageChildren.add(
+            RepaintBoundary(
+              child: MediaLibraryPage(
+                key: ValueKey('mediaLibrary_smb_${widget.mediaLibraryVersion}'),
+                onPlayEpisode: widget.onPlayEpisode,
+                sourceType: MediaLibrarySourceType.smb,
               ),
             ),
           );
@@ -732,7 +885,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           );
         }
 
-        if (_hasSharedRemoteHosts) {
+        if (_showSharedRemoteTabs) {
           // 共享媒体库
           pageChildren.add(
             RepaintBoundary(
@@ -793,25 +946,41 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         final unselectedLabelColor =
             isDarkMode ? Colors.white60 : Colors.black54;
 
-        final List<Widget> tabs = [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(
-              text: "本地媒体库",
-              fontSize: 18,
-              icon: Icon(Icons.tv_outlined, size: 18),
+        final List<Widget> tabs = [];
+
+        if (_showLocalTabs) {
+          tabs.addAll([
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "本地媒体库",
+                fontSize: 18,
+                icon: Icon(Icons.tv_outlined, size: 18),
+              ),
             ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: HoverZoomTab(
-              text: "本地库管理",
-              fontSize: 18,
-              icon: Icon(Icons.folder_open_outlined,
-                  size: 18),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "本地库管理",
+                fontSize: 18,
+                icon: Icon(Icons.folder_open_outlined, size: 18),
+              ),
             ),
-          ),
-        ];
+          ]);
+        }
+
+        if (_hasWebDAVLibrary) {
+          tabs.add(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "WebDAV媒体库",
+                fontSize: 18,
+                icon: Icon(Icons.cloud_outlined, size: 18),
+              ),
+            ),
+          );
+        }
 
         if (_hasWebDAVConnections) {
           tabs.add(
@@ -821,6 +990,19 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 text: "WebDAV库管理",
                 fontSize: 18,
                 icon: Icon(Icons.cloud_outlined, size: 18),
+              ),
+            ),
+          );
+        }
+
+        if (_hasSMBLibrary) {
+          tabs.add(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4.0),
+              child: HoverZoomTab(
+                text: "SMB媒体库",
+                fontSize: 18,
+                icon: Icon(Icons.lan_outlined, size: 18),
               ),
             ),
           );
@@ -839,7 +1021,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           );
         }
 
-        if (_hasSharedRemoteHosts) {
+        if (_showSharedRemoteTabs) {
           // 共享媒体库
           tabs.add(const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4.0),
@@ -1022,13 +1204,17 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     bool isDandanConnected,
     bool hasWebdavConnections,
     bool hasSmbConnections,
+    bool hasWebdavLibrary,
+    bool hasSmbLibrary,
   ) {
     if (_isJellyfinConnected == isJellyfinConnected &&
         _isEmbyConnected == isEmbyConnected &&
         _hasSharedRemoteHosts == hasSharedHosts &&
         _isDandanConnected == isDandanConnected &&
         _hasWebDAVConnections == hasWebdavConnections &&
-        _hasSMBConnections == hasSmbConnections) {
+        _hasSMBConnections == hasSmbConnections &&
+        _hasWebDAVLibrary == hasWebdavLibrary &&
+        _hasSMBLibrary == hasSmbLibrary) {
       return;
     }
     
@@ -1039,6 +1225,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     _isDandanConnected = isDandanConnected;
     _hasWebDAVConnections = hasWebdavConnections;
     _hasSMBConnections = hasSmbConnections;
+    _hasWebDAVLibrary = hasWebdavLibrary;
+    _hasSMBLibrary = hasSmbLibrary;
     
     // 创建新的TabController
     final newController = TabController(

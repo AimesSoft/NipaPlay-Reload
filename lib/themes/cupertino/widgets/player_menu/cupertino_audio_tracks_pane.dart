@@ -1,6 +1,12 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:provider/provider.dart';
 
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
+import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
+import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
+import 'package:nipaplay/providers/emby_transcode_provider.dart';
+import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -17,11 +23,97 @@ class CupertinoAudioTracksPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final path = videoState.currentVideoPath ?? '';
+    final isJellyfin = path.startsWith('jellyfin://');
+    final isEmby = path.startsWith('emby://');
+    final isServerStream = isJellyfin || isEmby;
+    final useServerTracks = (isJellyfin &&
+            JellyfinService.instance.isTranscodeEnabled) ||
+        (isEmby && EmbyService.instance.isTranscodeEnabled);
+    final serverTracks = useServerTracks
+        ? _getServerAudioTracks(videoState)
+        : <_ServerAudioTrack>[];
     final List<PlayerAudioStreamInfo>? audioTracks =
         videoState.player.mediaInfo.audio;
 
-    if (audioTracks == null || audioTracks.isEmpty) {
+    if ((useServerTracks && serverTracks.isEmpty) &&
+        (audioTracks == null || audioTracks.isEmpty)) {
       return _buildEmptyPlaceholder(context);
+    }
+
+    if (isServerStream && useServerTracks && serverTracks.isNotEmpty) {
+      int? selectedIndex;
+      if (isJellyfin) {
+        final itemId = path.replaceFirst('jellyfin://', '');
+        selectedIndex = videoState.getJellyfinServerAudioSelection(itemId);
+        selectedIndex ??= serverTracks
+            .firstWhere((t) => t.isDefault, orElse: () => serverTracks.first)
+            .index;
+      } else if (isEmby) {
+        final embyPath = path.replaceFirst('emby://', '');
+        final parts = embyPath.split('/');
+        final itemId = parts.isNotEmpty ? parts.last : embyPath;
+        selectedIndex = videoState.getEmbyServerAudioSelection(itemId);
+        selectedIndex ??= serverTracks
+            .firstWhere((t) => t.isDefault, orElse: () => serverTracks.first)
+            .index;
+      }
+      return CupertinoBottomSheetContentLayout(
+        sliversBuilder: (context, topSpacing) => [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(20, topSpacing, 20, 12),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '音频轨道',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .navTitleTextStyle
+                        .copyWith(fontSize: 22),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '选择希望使用的音轨语言或关闭其他音轨',
+                    style: CupertinoTheme.of(context)
+                        .textTheme
+                        .textStyle
+                        .copyWith(
+                          fontSize: 13,
+                          color:
+                              CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 24),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate.fixed([
+                CupertinoListSection.insetGrouped(
+                  header: const Text('可用音轨'),
+                  children: [
+                    for (final track in serverTracks)
+                      _buildServerTrackTile(
+                        context,
+                        track,
+                        selectedIndex == track.index,
+                      ),
+                  ],
+                ),
+              ]),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: CupertinoPaneBackButton(onPressed: onBack),
+          ),
+        ],
+      );
     }
 
     return CupertinoBottomSheetContentLayout(
@@ -60,7 +152,7 @@ class CupertinoAudioTracksPane extends StatelessWidget {
               CupertinoListSection.insetGrouped(
                 header: const Text('可用音轨'),
                 children: [
-                  for (final entry in audioTracks.asMap().entries)
+                  for (final entry in audioTracks!.asMap().entries)
                     _buildTrackTile(context, entry.key, entry.value),
                 ],
               ),
@@ -112,6 +204,108 @@ class CupertinoAudioTracksPane extends StatelessWidget {
         videoState.player.activeAudioTracks = [index];
       },
     );
+  }
+
+  Widget _buildServerTrackTile(
+    BuildContext context,
+    _ServerAudioTrack track,
+    bool isActive,
+  ) {
+    final Color activeColor =
+        CupertinoTheme.of(context).primaryColor.withOpacity(0.9);
+    String title = track.title?.isNotEmpty == true
+        ? track.title!
+        : '轨道 ${track.index + 1}';
+    if (track.codec != null && track.codec!.isNotEmpty) {
+      title = '$title (${track.codec})';
+    }
+    final String language = _resolveLanguage(track.language);
+
+    return CupertinoListTile(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      title: Text(
+        title,
+        style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            ),
+      ),
+      subtitle: Text(
+        '语言：$language',
+        style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+              fontSize: 13,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+      ),
+      trailing: isActive
+          ? Icon(
+              CupertinoIcons.check_mark_circled_solid,
+              color: activeColor,
+            )
+          : null,
+      onTap: () async {
+        if (isActive) return;
+        final path = videoState.currentVideoPath;
+        if (path == null) return;
+        if (path.startsWith('jellyfin://')) {
+          final itemId = path.replaceFirst('jellyfin://', '');
+          final jellyfinProvider =
+              Provider.of<JellyfinTranscodeProvider>(context, listen: false);
+          await jellyfinProvider.initialize();
+          videoState.setJellyfinServerAudioSelection(itemId, track.index);
+          await videoState.reloadCurrentJellyfinStream(
+            quality: jellyfinProvider.currentVideoQuality,
+            serverSubtitleIndex:
+                videoState.getJellyfinServerSubtitleSelection(itemId),
+            burnInSubtitle: videoState.getJellyfinServerSubtitleBurnIn(itemId),
+            audioStreamIndex: track.index,
+          );
+          return;
+        }
+        if (path.startsWith('emby://')) {
+          final embyPath = path.replaceFirst('emby://', '');
+          final parts = embyPath.split('/');
+          final itemId = parts.isNotEmpty ? parts.last : embyPath;
+          final embyProvider =
+              Provider.of<EmbyTranscodeProvider>(context, listen: false);
+          await embyProvider.initialize();
+          videoState.setEmbyServerAudioSelection(itemId, track.index);
+          await videoState.reloadCurrentEmbyStream(
+            quality: embyProvider.currentVideoQuality,
+            serverSubtitleIndex: videoState.getEmbyServerSubtitleSelection(itemId),
+            burnInSubtitle: videoState.getEmbyServerSubtitleBurnIn(itemId),
+            audioStreamIndex: track.index,
+          );
+        }
+      },
+    );
+  }
+
+  List<_ServerAudioTrack> _getServerAudioTracks(VideoPlayerState videoState) {
+    final session = videoState.currentPlaybackSession;
+    final source = session?.selectedSource ??
+        (session?.mediaSources.isNotEmpty == true
+            ? session!.mediaSources.first
+            : null);
+    final streams = source?.mediaStreams ?? const [];
+    final tracks = <_ServerAudioTrack>[];
+    for (final stream in streams) {
+      if (stream['Type']?.toString() != 'Audio') continue;
+      final index = stream['Index'];
+      final parsedIndex = index is int
+          ? index
+          : int.tryParse(index?.toString() ?? '');
+      if (parsedIndex == null) continue;
+      tracks.add(
+        _ServerAudioTrack(
+          index: parsedIndex,
+          title: stream['Title']?.toString(),
+          language: stream['Language']?.toString(),
+          codec: stream['Codec']?.toString(),
+          isDefault: stream['IsDefault'] == true,
+        ),
+      );
+    }
+    return tracks;
   }
 
   Widget _buildEmptyPlaceholder(BuildContext context) {
@@ -216,4 +410,20 @@ class CupertinoAudioTracksPane extends StatelessWidget {
 
     return language;
   }
+}
+
+class _ServerAudioTrack {
+  final int index;
+  final String? title;
+  final String? language;
+  final String? codec;
+  final bool isDefault;
+
+  const _ServerAudioTrack({
+    required this.index,
+    this.title,
+    this.language,
+    this.codec,
+    this.isDefault = false,
+  });
 }

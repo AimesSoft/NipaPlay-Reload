@@ -1,6 +1,48 @@
 part of video_player_state;
 
 extension VideoPlayerStateStreaming on VideoPlayerState {
+  bool hasJellyfinServerSubtitleSelection(String itemId) {
+    return _jellyfinServerSubtitleSelections.containsKey(itemId);
+  }
+
+  int? getJellyfinServerSubtitleSelection(String itemId) {
+    if (!_jellyfinServerSubtitleSelections.containsKey(itemId)) {
+      return null;
+    }
+    return _jellyfinServerSubtitleSelections[itemId];
+  }
+
+  bool getJellyfinServerSubtitleBurnIn(String itemId) {
+    return _jellyfinServerSubtitleBurnInSelections[itemId] ?? false;
+  }
+
+  void setJellyfinServerSubtitleSelection(String itemId, int? subtitleIndex,
+      {bool burnIn = false}) {
+    _jellyfinServerSubtitleSelections[itemId] = subtitleIndex;
+    _jellyfinServerSubtitleBurnInSelections[itemId] = burnIn;
+  }
+
+  bool hasEmbyServerSubtitleSelection(String itemId) {
+    return _embyServerSubtitleSelections.containsKey(itemId);
+  }
+
+  int? getEmbyServerSubtitleSelection(String itemId) {
+    if (!_embyServerSubtitleSelections.containsKey(itemId)) {
+      return null;
+    }
+    return _embyServerSubtitleSelections[itemId];
+  }
+
+  bool getEmbyServerSubtitleBurnIn(String itemId) {
+    return _embyServerSubtitleBurnInSelections[itemId] ?? false;
+  }
+
+  void setEmbyServerSubtitleSelection(String itemId, int? subtitleIndex,
+      {bool burnIn = false}) {
+    _embyServerSubtitleSelections[itemId] = subtitleIndex;
+    _embyServerSubtitleBurnInSelections[itemId] = burnIn;
+  }
+
   // 添加返回按钮处理
   Future<bool> handleBackButton() async {
     if (_isFullscreen) {
@@ -371,6 +413,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
     required JellyfinVideoQuality quality,
     int? serverSubtitleIndex,
     bool burnInSubtitle = false,
+    int? audioStreamIndex,
   }) async {
     try {
       if (_currentVideoPath == null ||
@@ -400,20 +443,26 @@ extension JellyfinQualitySwitch on VideoPlayerState {
         lastWatchTime: DateTime.now(),
       );
 
-      // 计算新的播放 URL（应用清晰度 + 可选服务器字幕/烧录参数）
+      // 计算新的播放会话（应用清晰度 + 可选服务器字幕/烧录参数）
       final itemId = currentPath.replaceFirst('jellyfin://', '');
-      final newUrl = await JellyfinService.instance.buildHlsUrlWithOptions(
-        itemId,
+      final newSession = await JellyfinService.instance.createPlaybackSession(
+        itemId: itemId,
         quality: quality,
+        startPositionMs: currentPosition.inMilliseconds,
+        audioStreamIndex: audioStreamIndex,
         subtitleStreamIndex: serverSubtitleIndex,
-        alwaysBurnInSubtitleWhenTranscoding: burnInSubtitle,
+        burnInSubtitle: burnInSubtitle,
+        playSessionId: _currentPlaybackSession?.playSessionId,
+        mediaSourceId: _currentPlaybackSession?.mediaSourceId,
       );
+      _currentPlaybackSession = newSession;
+      JellyfinPlaybackSyncService().updatePlaybackSession(newSession);
 
       // 重载播放器
       await initializePlayer(
         currentPath,
         historyItem: historyItem,
-        actualPlayUrl: newUrl,
+        playbackSession: newSession,
       );
 
       // 恢复播放状态（等待状态稳定后再操作）
@@ -447,6 +496,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
     required JellyfinVideoQuality quality,
     int? serverSubtitleIndex,
     bool burnInSubtitle = false,
+    int? audioStreamIndex,
   }) async {
     try {
       if (_currentVideoPath == null ||
@@ -474,18 +524,26 @@ extension EmbyQualitySwitch on VideoPlayerState {
         lastWatchTime: DateTime.now(),
       );
 
-      final itemId = currentPath.replaceFirst('emby://', '');
-      final newUrl = await EmbyService.instance.buildHlsUrlWithOptions(
-        itemId,
+      final embyPath = currentPath.replaceFirst('emby://', '');
+      final parts = embyPath.split('/');
+      final itemId = parts.isNotEmpty ? parts.last : embyPath;
+      final newSession = await EmbyService.instance.createPlaybackSession(
+        itemId: itemId,
         quality: quality,
+        startPositionMs: currentPosition.inMilliseconds,
+        audioStreamIndex: audioStreamIndex,
         subtitleStreamIndex: serverSubtitleIndex,
-        alwaysBurnInSubtitleWhenTranscoding: burnInSubtitle,
+        burnInSubtitle: burnInSubtitle,
+        playSessionId: _currentPlaybackSession?.playSessionId,
+        mediaSourceId: _currentPlaybackSession?.mediaSourceId,
       );
+      _currentPlaybackSession = newSession;
+      EmbyPlaybackSyncService().updatePlaybackSession(newSession);
 
       await initializePlayer(
         currentPath,
         historyItem: historyItem,
-        actualPlayUrl: newUrl,
+        playbackSession: newSession,
       );
 
       if (hasVideo) {

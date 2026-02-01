@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import './dandanplay_service.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class BangumiService {
   static final BangumiService instance = BangumiService._();
@@ -173,7 +174,7 @@ class BangumiService {
             appId, timestamp, apiPath, appSecret);
 
         final response = await _client.get(
-          Uri.parse(item.url),
+          WebRemoteAccessService.proxyUri(Uri.parse(item.url)),
           headers: {
             'Accept': 'application/json',
             'User-Agent': 'NipaPlay/1.0',

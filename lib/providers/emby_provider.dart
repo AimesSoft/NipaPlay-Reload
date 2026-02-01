@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class EmbyProvider extends ChangeNotifier {
   final EmbyService _embyService = EmbyService.instance;
@@ -122,7 +124,11 @@ class EmbyProvider extends ChangeNotifier {
     _notifyCoalesced();
     
     try {
-      await _embyService.loadSavedSettings();
+      if (kIsWeb) {
+        await _syncFromRemote();
+      } else {
+        await _embyService.loadSavedSettings();
+      }
       await _loadSortSettings(); // 加载排序设置
       _isInitialized = true;
       
@@ -138,6 +144,28 @@ class EmbyProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       _notifyCoalesced();
+    }
+  }
+
+  Future<void> _syncFromRemote() async {
+    final base = await WebRemoteAccessService.resolveCandidateBaseUrl();
+    if (base == null) return;
+
+    try {
+      final response = await http.get(Uri.parse('$base/api/settings/network/emby'));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        _embyService.serverUrl = data['serverUrl'];
+        _embyService.username = data['username'];
+        _embyService.isConnected = data['isConnected'] ?? false;
+        if (data['selectedLibraryIds'] != null) {
+          _embyService.selectedLibraryIds = List<String>.from(data['selectedLibraryIds']);
+        }
+        // Force notify
+        _onConnectionStateChanged(_embyService.isConnected);
+      }
+    } catch (e) {
+      print('EmbyProvider: Failed to sync from remote: $e');
     }
   }
   
@@ -217,9 +245,32 @@ class EmbyProvider extends ChangeNotifier {
     _notifyCoalesced();
     
     try {
-  final success = await _embyService.connect(serverUrl, username, password, addressName: addressName);
-  // 首次加载由连接状态回调统一触发，避免重复加载
-  return success;
+      bool success;
+      if (kIsWeb) {
+        final base = await WebRemoteAccessService.resolveCandidateBaseUrl();
+        if (base == null) throw Exception('Remote server not found');
+        
+        final response = await http.post(
+          Uri.parse('$base/api/settings/network/emby'),
+          body: json.encode({
+            'serverUrl': serverUrl,
+            'username': username,
+            'password': password,
+          }),
+        );
+        
+        if (response.statusCode == 200) {
+          await _syncFromRemote();
+          success = _embyService.isConnected;
+        } else {
+          throw Exception('Remote connection failed: ${response.body}');
+        }
+      } else {
+        success = await _embyService.connect(serverUrl, username, password, addressName: addressName);
+      }
+      
+      // 首次加载由连接状态回调统一触发，避免重复加载
+      return success;
     } catch (e) {
       _hasError = true;
       _errorMessage = e.toString();
@@ -243,7 +294,18 @@ class EmbyProvider extends ChangeNotifier {
   
   // 更新选中的媒体库
   Future<void> updateSelectedLibraries(List<String> libraryIds) async {
-    await _embyService.updateSelectedLibraries(libraryIds);
+    if (kIsWeb) {
+      final base = await WebRemoteAccessService.resolveCandidateBaseUrl();
+      if (base != null) {
+        await http.post(
+          Uri.parse('$base/api/settings/network/emby'),
+          body: json.encode({'selectedLibraryIds': libraryIds}),
+        );
+        await _syncFromRemote();
+      }
+    } else {
+      await _embyService.updateSelectedLibraries(libraryIds);
+    }
     await loadMediaItems();
     await loadMovieItems();
   }
@@ -403,7 +465,6 @@ class EmbyProvider extends ChangeNotifier {
 
   // 保存排序设置到SharedPreferences
   Future<void> _saveSortSettings() async {
-    if (kIsWeb) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final jsonString = json.encode(_librarySpecificSortSettings);
@@ -416,7 +477,6 @@ class EmbyProvider extends ChangeNotifier {
 
   // 加载排序设置
   Future<void> _loadSortSettings() async {
-    if (kIsWeb) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final sortSettingsJson = prefs.getString('emby_library_sort_settings');

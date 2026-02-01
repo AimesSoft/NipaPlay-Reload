@@ -545,6 +545,53 @@ class _CupertinoPlayerSettingsPageState
           ),
         ],
       ),
+      if (_selectedKernelType == PlayerKernelType.mdk ||
+          _selectedKernelType == PlayerKernelType.mediaKit) ...[
+        const SizedBox(height: 16),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return CupertinoSettingsGroupCard(
+              margin: EdgeInsets.zero,
+              backgroundColor: sectionBackground,
+              addDividers: true,
+              dividerIndent: 16,
+              children: [
+                CupertinoSettingsTile(
+                  leading: Icon(
+                    CupertinoIcons.bolt,
+                    color: resolveSettingsIconColor(context),
+                  ),
+                  title: const Text('硬件解码'),
+                  subtitle: const Text('仅对 MDK / Libmpv 生效'),
+                  trailing: AdaptiveSwitch(
+                    value: videoState.useHardwareDecoder,
+                    onChanged: (value) async {
+                      await videoState.setHardwareDecoderEnabled(value);
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: value ? '已开启硬件解码' : '已关闭硬件解码',
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                  ),
+                  onTap: () async {
+                    final bool newValue = !videoState.useHardwareDecoder;
+                    await videoState.setHardwareDecoderEnabled(newValue);
+                    if (!mounted) return;
+                    AdaptiveSnackBar.show(
+                      context,
+                      message: newValue ? '已开启硬件解码' : '已关闭硬件解码',
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  },
+                  backgroundColor: tileBackground,
+                ),
+              ],
+            );
+          },
+        ),
+      ],
       if (globals.isPhone) ...[
         const SizedBox(height: 16),
         Consumer<VideoPlayerState>(

@@ -245,6 +245,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
 
   // 不暂停视频的截图方法
   Future<String?> _captureVideoFrameWithoutPausing() async {
+    if (kIsWeb) return null;
     if (_currentVideoPath == null || !hasVideo) return null;
 
     try {
@@ -308,6 +309,7 @@ extension VideoPlayerStateCapture on VideoPlayerState {
 
   // 捕获视频帧的方法（会暂停视频，用于手动截图）
   Future<String?> captureVideoFrame() async {
+    if (kIsWeb) return null;
     if (_currentVideoPath == null || !hasVideo) return null;
 
     try {

@@ -132,6 +132,17 @@ class SubtitleParser {
         }
       }
 
+      String? utf8Text;
+      try {
+        utf8Text = utf8.decode(bytes, allowMalformed: false);
+      } catch (_) {}
+      if (utf8Text != null) {
+        final format = _detectFormat(utf8Text, filePath);
+        if (allowUnknownFormat || format != SubtitleFormat.unknown) {
+          return SubtitleDecodeResult(text: utf8Text, encoding: 'utf-8');
+        }
+      }
+
       final detectedEncoding = await _detectEncodingWithUchardet(filePath);
       if (detectedEncoding != null) {
         final detectedResult = await _decodeWithDetectedEncoding(
@@ -160,17 +171,19 @@ class SubtitleParser {
         }
       }
 
-      try {
-        final text = utf8.decode(bytes, allowMalformed: false);
-        considerCandidate(text, 'utf-8');
-      } catch (_) {}
+      if (utf8Text != null) {
+        considerCandidate(utf8Text, 'utf-8');
+      }
 
       final looksBinary = _looksBinary(bytes);
       if (looksBinary && !_looksLikeUtf16(bytes)) {
         return null;
       }
 
-      final encodingCandidates = _buildEncodingCandidates(filePath);
+      final looksUtf16 = _looksLikeUtf16(bytes);
+      final encodingCandidates = _buildEncodingCandidates(filePath)
+        ..removeWhere(
+            (encoding) => _isUtf16Encoding(encoding) && !looksUtf16);
       for (final encoding in encodingCandidates) {
         final decoded = await _decodeWithEncoding(bytes, encoding);
         if (decoded == null) continue;
@@ -178,7 +191,9 @@ class SubtitleParser {
       }
 
       if (Platform.isMacOS || Platform.isLinux) {
-        final iconvCandidates = _buildIconvCandidates(filePath);
+        final iconvCandidates = _buildIconvCandidates(filePath)
+          ..removeWhere((encoding) =>
+              _isUtf16Encoding(encoding) && !looksUtf16);
         for (final encoding in iconvCandidates) {
           final decoded = await _decodeWithIconv(filePath, encoding);
           if (decoded == null) continue;
@@ -865,6 +880,9 @@ class SubtitleParser {
     final normalized =
         _normalizeEncodingName(detectedEncoding) ?? detectedEncoding;
     if (normalized.isEmpty) return null;
+    if (_isUtf16Encoding(normalized) && !_looksLikeUtf16(bytes)) {
+      return null;
+    }
 
     String? decoded;
     final iconvEncoding = _toIconvEncoding(normalized);
@@ -961,6 +979,11 @@ class SubtitleParser {
     final evenRatio = evenCount == 0 ? 0 : evenZeros / evenCount;
     final oddRatio = oddCount == 0 ? 0 : oddZeros / oddCount;
     return evenRatio > 0.6 || oddRatio > 0.6;
+  }
+
+  static bool _isUtf16Encoding(String encoding) {
+    final lower = encoding.toLowerCase();
+    return lower == 'utf-16le' || lower == 'utf-16be';
   }
 
   static bool _looksLikeText(String text) {

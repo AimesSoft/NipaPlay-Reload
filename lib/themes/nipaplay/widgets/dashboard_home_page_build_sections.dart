@@ -815,7 +815,20 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
   Widget _getVideoThumbnail(WatchHistoryItem item) {
     final thumbnailPath = item.thumbnailPath;
-    if (thumbnailPath != null) {
+    if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+      final lowerPath = thumbnailPath.toLowerCase();
+      if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) {
+        return CachedNetworkImage(
+          imageUrl: thumbnailPath,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          errorWidget: (_, __, ___) => _buildDefaultThumbnail(item),
+        );
+      }
+      if (kIsWeb) {
+        return _buildDefaultThumbnail(item);
+      }
       final thumbnailFile = File(thumbnailPath);
       if (thumbnailFile.existsSync()) {
         int modifiedMs = 0;
