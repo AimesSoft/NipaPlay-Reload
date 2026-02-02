@@ -182,13 +182,6 @@ class DesktopExitHandler
 
   Future<DesktopExitDecision?> _showExitDialog(material.BuildContext context) {
     bool remember = false;
-    final textStyle =
-        const material.TextStyle(color: material.Colors.white70);
-    final titleStyle = const material.TextStyle(
-      color: material.Colors.white,
-      fontSize: 16,
-      fontWeight: material.FontWeight.w600,
-    );
 
     return BlurDialog.show<DesktopExitDecision>(
       context: context,
@@ -196,6 +189,16 @@ class DesktopExitHandler
       barrierDismissible: true,
       contentWidget: material.StatefulBuilder(
         builder: (context, setState) {
+          final colorScheme = material.Theme.of(context).colorScheme;
+          final textStyle = material.TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.8),
+          );
+          final titleStyle = material.TextStyle(
+            color: colorScheme.onSurface,
+            fontSize: 16,
+            fontWeight: material.FontWeight.w600,
+          );
+
           return material.Column(
             mainAxisSize: material.MainAxisSize.min,
             children: [
@@ -206,6 +209,7 @@ class DesktopExitHandler
                 children: [
                   material.Checkbox(
                     value: remember,
+                    activeColor: colorScheme.primary,
                     onChanged: (value) => setState(() {
                       remember = value ?? false;
                     }),
@@ -229,42 +233,56 @@ class DesktopExitHandler
         },
       ),
       actions: [
-        HoverScaleTextButton(
-          onPressed: () => material.Navigator.of(context).pop(
-            const DesktopExitDecision(
-              action: DesktopExitAction.cancelAndReturn,
-              remember: false,
-            ),
-          ),
-          child: const material.Text(
-            '取消并返回',
-            style: material.TextStyle(color: material.Colors.white70),
-          ),
+        material.Builder(
+          builder: (context) {
+            final colorScheme = material.Theme.of(context).colorScheme;
+            return HoverScaleTextButton(
+              text: '取消并返回',
+              idleColor: colorScheme.onSurface.withOpacity(0.7),
+              hoverColor: colorScheme.primary,
+              onPressed: () => material.Navigator.of(context).pop(
+                const DesktopExitDecision(
+                  action: DesktopExitAction.cancelAndReturn,
+                  remember: false,
+                ),
+              ),
+            );
+          },
         ),
-        material.OutlinedButton(
-          onPressed: () => material.Navigator.of(context).pop(
-            DesktopExitDecision(
-              action: DesktopExitAction.minimizeToTrayOrTaskbar,
-              remember: remember,
-            ),
-          ),
-          child: material.Text(
-            '最小化到系统托盘',
-            style: const material.TextStyle(color: material.Colors.white),
-          ),
+        material.Builder(
+          builder: (context) {
+            final colorScheme = material.Theme.of(context).colorScheme;
+            return HoverScaleTextButton(
+              text: '最小化到系统托盘',
+              idleColor: colorScheme.onSurface.withOpacity(0.8),
+              hoverColor: colorScheme.primary,
+              onPressed: () => material.Navigator.of(context).pop(
+                DesktopExitDecision(
+                  action: DesktopExitAction.minimizeToTrayOrTaskbar,
+                  remember: remember,
+                ),
+              ),
+            );
+          },
         ),
-        material.ElevatedButton(
-          onPressed: () => material.Navigator.of(context).pop(
-            DesktopExitDecision(
-              action: DesktopExitAction.closePlayer,
-              remember: remember,
-            ),
-          ),
-          style: material.ElevatedButton.styleFrom(
-            backgroundColor: material.Colors.redAccent,
-            foregroundColor: material.Colors.white,
-          ),
-          child: const material.Text('关闭播放器'),
+        material.Builder(
+          builder: (context) {
+            final colorScheme = material.Theme.of(context).colorScheme;
+            return HoverScaleTextButton(
+              text: '关闭播放器',
+              idleColor: colorScheme.onSurface.withOpacity(0.9),
+              hoverColor: colorScheme.primary,
+              textStyle: const material.TextStyle(
+                fontWeight: material.FontWeight.w600,
+              ),
+              onPressed: () => material.Navigator.of(context).pop(
+                DesktopExitDecision(
+                  action: DesktopExitAction.closePlayer,
+                  remember: remember,
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
