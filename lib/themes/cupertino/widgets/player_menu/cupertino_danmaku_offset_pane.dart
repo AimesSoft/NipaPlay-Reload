@@ -1,7 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -45,7 +45,7 @@ class _CupertinoDanmakuOffsetPaneState
     return offset > 0 ? '+${offset}秒' : '${offset}秒';
   }
 
-  void _applyCustomOffset(SettingsProvider provider) {
+  void _applyCustomOffset(VideoPlayerState videoState) {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     final value = double.tryParse(text);
@@ -53,16 +53,16 @@ class _CupertinoDanmakuOffsetPaneState
       BlurSnackBar.show(context, '请输入 -60 到 60 之间的数字');
       return;
     }
-    provider.setDanmakuTimeOffset(value);
+    videoState.setManualDanmakuOffset(value);
     _controller.clear();
     BlurSnackBar.show(context, '已设置弹幕偏移为 ${_formatOffset(value)}');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SettingsProvider>(
-      builder: (context, provider, _) {
-        final currentOffset = provider.danmakuTimeOffset;
+    return Consumer<VideoPlayerState>(
+      builder: (context, videoState, _) {
+        final currentOffset = videoState.manualDanmakuOffset;
         return CupertinoBottomSheetContentLayout(
           sliversBuilder: (context, topSpacing) => [
             SliverPadding(
@@ -129,7 +129,7 @@ class _CupertinoDanmakuOffsetPaneState
                                 ? CupertinoTheme.of(context).primaryColor
                                 : CupertinoColors.systemGrey5,
                             onPressed: () =>
-                                provider.setDanmakuTimeOffset(value),
+                                videoState.setManualDanmakuOffset(value),
                             child: Text(
                               _formatOffset(value),
                               style: TextStyle(
@@ -161,7 +161,7 @@ class _CupertinoDanmakuOffsetPaneState
                               signed: true,
                               decimal: true,
                             ),
-                            onSubmitted: (_) => _applyCustomOffset(provider),
+                            onSubmitted: (_) => _applyCustomOffset(videoState),
                           ),
                           const SizedBox(height: 8),
                           Align(
@@ -169,7 +169,7 @@ class _CupertinoDanmakuOffsetPaneState
                             child: CupertinoButton(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 20, vertical: 6),
-                              onPressed: () => _applyCustomOffset(provider),
+                              onPressed: () => _applyCustomOffset(videoState),
                               child: const Text('应用'),
                             ),
                           ),
@@ -187,7 +187,7 @@ class _CupertinoDanmakuOffsetPaneState
                       onTap: currentOffset == 0
                           ? null
                           : () {
-                              provider.setDanmakuTimeOffset(0);
+                              videoState.setManualDanmakuOffset(0);
                               BlurSnackBar.show(context, '已重置弹幕偏移');
                             },
                     ),

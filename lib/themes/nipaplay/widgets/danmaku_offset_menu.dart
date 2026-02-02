@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'blur_button.dart';
 import 'blur_snackbar.dart';
@@ -65,7 +65,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
       return;
     }
 
-    Provider.of<SettingsProvider>(context, listen: false).setDanmakuTimeOffset(offset);
+    Provider.of<VideoPlayerState>(context, listen: false)
+        .setManualDanmakuOffset(offset);
     FocusScope.of(context).unfocus();
     _customOffsetController.clear();
     setState(() {
@@ -85,8 +86,8 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: () {
-            Provider.of<SettingsProvider>(context, listen: false)
-                .setDanmakuTimeOffset(offset);
+            Provider.of<VideoPlayerState>(context, listen: false)
+                .setManualDanmakuOffset(offset);
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -115,8 +116,8 @@ style: TextStyle(
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SettingsProvider>(
-      builder: (context, settingsProvider, child) {
+    return Consumer<VideoPlayerState>(
+      builder: (context, videoState, child) {
         return BaseSettingsMenu(
           title: '弹幕偏移',
           onClose: widget.onClose,
@@ -154,9 +155,9 @@ style: TextStyle(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            settingsProvider.danmakuTimeOffset > 0
+                            videoState.manualDanmakuOffset > 0
                                 ? Icons.fast_forward
-                                : settingsProvider.danmakuTimeOffset < 0
+                                : videoState.manualDanmakuOffset < 0
                                     ? Icons.fast_rewind
                                     : Icons.sync,
                             color: Colors.white,
@@ -164,7 +165,7 @@ style: TextStyle(
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            _formatOffset(settingsProvider.danmakuTimeOffset),
+                            _formatOffset(videoState.manualDanmakuOffset),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -176,10 +177,10 @@ style: TextStyle(
                     ),
                     const SizedBox(height: 8),
                     SettingsHintText(
-                      settingsProvider.danmakuTimeOffset > 0
-                          ? '弹幕将提前${settingsProvider.danmakuTimeOffset}秒显示'
-                          : settingsProvider.danmakuTimeOffset < 0
-                              ? '弹幕将延后${(-settingsProvider.danmakuTimeOffset)}秒显示'
+                      videoState.manualDanmakuOffset > 0
+                          ? '弹幕将提前${videoState.manualDanmakuOffset}秒显示'
+                          : videoState.manualDanmakuOffset < 0
+                              ? '弹幕将延后${(-videoState.manualDanmakuOffset)}秒显示'
                               : '弹幕按原始时间显示',
                     ),
                   ],
@@ -216,7 +217,7 @@ style: TextStyle(
                       children: _offsetOptions
                           .where((offset) => offset < 0)
                           .map((offset) => _buildOffsetButton(
-                              offset, settingsProvider.danmakuTimeOffset))
+                              offset, videoState.manualDanmakuOffset))
                           .toList(),
                     ),
                     const SizedBox(height: 8),
@@ -231,7 +232,7 @@ style: TextStyle(
                       ),
                     ),
                     const SizedBox(height: 4),
-                    _buildOffsetButton(0, settingsProvider.danmakuTimeOffset),
+                    _buildOffsetButton(0, videoState.manualDanmakuOffset),
                     const SizedBox(height: 8),
                     
                     // 前进选项
@@ -248,7 +249,7 @@ style: TextStyle(
                       children: _offsetOptions
                           .where((offset) => offset > 0)
                           .map((offset) => _buildOffsetButton(
-                              offset, settingsProvider.danmakuTimeOffset))
+                              offset, videoState.manualDanmakuOffset))
                           .toList(),
                     ),
                   ],

@@ -5,12 +5,16 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       {WatchHistoryItem? historyItem,
       String? historyFilePath,
       String? actualPlayUrl,
-      PlaybackSession? playbackSession}) async {
+      PlaybackSession? playbackSession,
+      bool resetManualDanmakuOffset = true}) async {
     // 每次切换新视频时，重置自动连播倒计时状态，防止高强度测试下卡死
     try {
       AutoNextEpisodeService.instance.cancelAutoNext();
     } catch (e) {
       debugPrint('[自动连播] 重置AutoNextEpisodeService状态失败: $e');
+    }
+    if (resetManualDanmakuOffset) {
+      setManualDanmakuOffset(0.0);
     }
     if (_status == PlayerStatus.loading ||
         _status == PlayerStatus.recognizing) {

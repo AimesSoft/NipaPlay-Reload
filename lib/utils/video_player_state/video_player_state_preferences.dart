@@ -34,7 +34,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         _currentVideoPath = null; // 清空路径，避免重复初始化
         _danmakuOverlayKey = 'idle'; // 临时重置弹幕覆盖层key
         await Future.delayed(const Duration(seconds: 1)); // 等待一秒
-        await initializePlayer(path, actualPlayUrl: actualUrl);
+        await initializePlayer(
+          path,
+          actualPlayUrl: actualUrl,
+          resetManualDanmakuOffset: false,
+        );
       } else {
         _setStatus(PlayerStatus.idle, message: '请重新选择视频');
       }

@@ -463,6 +463,7 @@ extension JellyfinQualitySwitch on VideoPlayerState {
         currentPath,
         historyItem: historyItem,
         playbackSession: newSession,
+        resetManualDanmakuOffset: false,
       );
 
       // 恢复播放状态（等待状态稳定后再操作）
@@ -544,6 +545,7 @@ extension EmbyQualitySwitch on VideoPlayerState {
         currentPath,
         historyItem: historyItem,
         playbackSession: newSession,
+        resetManualDanmakuOffset: false,
       );
 
       if (hasVideo) {

@@ -60,8 +60,11 @@ class PlayerKernelManager {
     await videoPlayerState.applyHardwareDecoderPreference();
 
     // 4. 重新初始化播放
-    await videoPlayerState.initializePlayer(currentPath,
-        historyItem: historyItem);
+    await videoPlayerState.initializePlayer(
+      currentPath,
+      historyItem: historyItem,
+      resetManualDanmakuOffset: false,
+    );
 
     // 5. 恢复播放状态
     if (videoPlayerState.hasVideo) {

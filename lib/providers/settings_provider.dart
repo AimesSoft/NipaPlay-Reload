@@ -17,17 +17,12 @@ class SettingsProvider with ChangeNotifier {
   // 哈希匹配失败后自动选择搜索第一个结果（避免弹窗）
   bool _autoMatchDanmakuFirstSearchResultOnHashFail = true; // 默认开启
   
-  // 弹幕时间偏移设置
-  double _danmakuTimeOffset = 0.0; // 默认无偏移，单位为秒
-  static const String _danmakuTimeOffsetKey = 'danmaku_time_offset';
-
   // --- Getters ---
   double get blurPower => _blurPower;
   bool get isBlurEnabled => _blurPower > 0;
   bool get danmakuConvertToSimplified => _danmakuConvertToSimplified;
   bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
       _autoMatchDanmakuFirstSearchResultOnHashFail;
-  double get danmakuTimeOffset => _danmakuTimeOffset;
 
   SettingsProvider() {
     _loadSettings();
@@ -42,8 +37,6 @@ class SettingsProvider with ChangeNotifier {
     _autoMatchDanmakuFirstSearchResultOnHashFail =
         _prefs.getBool(SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail) ??
             true;
-    // Load danmaku time offset setting, defaulting to 0.0 if not set
-    _danmakuTimeOffset = _prefs.getDouble(_danmakuTimeOffsetKey) ?? 0.0;
     notifyListeners();
   }
 
@@ -83,10 +76,4 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sets the danmaku time offset in seconds.
-  Future<void> setDanmakuTimeOffset(double offset) async {
-    _danmakuTimeOffset = offset;
-    await _prefs.setDouble(_danmakuTimeOffsetKey, _danmakuTimeOffset);
-    notifyListeners();
-  }
 }

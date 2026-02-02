@@ -6,7 +6,6 @@ import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:danmaku_canvas/canvas_danmaku_renderer.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuOverlay extends StatefulWidget {
@@ -40,11 +39,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
       // 弹幕不可见时，彻底不构建，避免文本排版消耗
       return const SizedBox.shrink();
     }
-    return Consumer2<VideoPlayerState, SettingsProvider>(
-      builder: (context, videoState, settingsProvider, child) {
+    return Consumer<VideoPlayerState>(
+      builder: (context, videoState, child) {
         final kernelType = DanmakuKernelFactory.getKernelType();
         final combinedTimeOffset =
-            settingsProvider.danmakuTimeOffset + videoState.autoDanmakuOffset;
+            videoState.manualDanmakuOffset + videoState.autoDanmakuOffset;
 
         // 直接从videoState获取已处理好的弹幕列表
         final activeDanmakuList = videoState.danmakuList;
