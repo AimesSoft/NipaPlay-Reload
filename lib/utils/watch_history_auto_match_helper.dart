@@ -8,6 +8,8 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
+import 'package:nipaplay/services/emby_dandanplay_matcher.dart';
 import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 
@@ -39,6 +41,14 @@ class WatchHistoryAutoMatchHelper {
     if (!shouldAutoMatch(item)) {
       return item;
     }
+
+    final serverMatched = await _tryAutoMatchWithServerMatcher(context, item);
+    if (serverMatched != null) {
+      await _persistMatchedHistory(context, serverMatched);
+      onMatched?.call('已为历史记录自动匹配弹幕');
+      return serverMatched;
+    }
+
     if (matchablePath == null || matchablePath.trim().isEmpty) {
       return item;
     }
@@ -105,13 +115,7 @@ class WatchHistoryAutoMatchHelper {
               : item.videoHash,
         );
 
-        await WatchHistoryDatabase.instance
-            .insertOrUpdateWatchHistory(updatedItem);
-        try {
-          context.read<WatchHistoryProvider>().refresh();
-        } catch (_) {
-          // ignore, possibly not in provider scope
-        }
+        await _persistMatchedHistory(context, updatedItem);
 
         await _recordServerMappingsIfNeeded(
           updatedItem,
@@ -128,6 +132,94 @@ class WatchHistoryAutoMatchHelper {
     }
 
     return item;
+  }
+
+  static Future<WatchHistoryItem?> _tryAutoMatchWithServerMatcher(
+    BuildContext context,
+    WatchHistoryItem item,
+  ) async {
+    final filePath = item.filePath;
+    if (filePath.startsWith('jellyfin://')) {
+      final episodeId = _extractServerEpisodeId(filePath, 'jellyfin://');
+      if (episodeId == null) {
+        return null;
+      }
+
+      final jellyfinService = JellyfinService.instance;
+      if (!jellyfinService.isConnected) {
+        debugPrint('[WatchHistoryAutoMatch] Jellyfin未连接，跳过服务端匹配');
+        return null;
+      }
+
+      final episodeInfo = await jellyfinService.getEpisodeDetails(episodeId);
+      if (episodeInfo == null) {
+        return null;
+      }
+
+      final matched = await JellyfinDandanplayMatcher.instance
+          .createPlayableHistoryItem(context, episodeInfo, showMatchDialog: false);
+      return _mergeMatchedHistoryItem(item, matched);
+    }
+
+    if (filePath.startsWith('emby://')) {
+      final episodeId = _extractServerEpisodeId(filePath, 'emby://');
+      if (episodeId == null) {
+        return null;
+      }
+
+      final embyService = EmbyService.instance;
+      if (!embyService.isConnected) {
+        debugPrint('[WatchHistoryAutoMatch] Emby未连接，跳过服务端匹配');
+        return null;
+      }
+
+      final episodeInfo = await embyService.getEpisodeDetails(episodeId);
+      if (episodeInfo == null) {
+        return null;
+      }
+
+      final matched = await EmbyDandanplayMatcher.instance
+          .createPlayableHistoryItem(context, episodeInfo, showMatchDialog: false);
+      return _mergeMatchedHistoryItem(item, matched);
+    }
+
+    return null;
+  }
+
+  static WatchHistoryItem? _mergeMatchedHistoryItem(
+    WatchHistoryItem original,
+    WatchHistoryItem? matched,
+  ) {
+    if (matched == null) {
+      return null;
+    }
+
+    final hasAnimeId = _isValidId(matched.animeId);
+    final hasEpisodeId = _isValidId(matched.episodeId);
+    if (!hasAnimeId || !hasEpisodeId) {
+      return null;
+    }
+
+    final matchedHash = matched.videoHash?.trim();
+    return original.copyWith(
+      animeId: matched.animeId,
+      episodeId: matched.episodeId,
+      animeName: matched.animeName,
+      episodeTitle: matched.episodeTitle,
+      videoHash: matchedHash?.isNotEmpty == true ? matchedHash : original.videoHash,
+    );
+  }
+
+  static Future<void> _persistMatchedHistory(
+    BuildContext context,
+    WatchHistoryItem item,
+  ) async {
+    await WatchHistoryDatabase.instance.insertOrUpdateWatchHistory(item);
+    try {
+      context.read<WatchHistoryProvider>().refresh();
+    } catch (_) {
+      // ignore, possibly not in provider scope
+    }
   }
 
   static Future<void> _recordServerMappingsIfNeeded(

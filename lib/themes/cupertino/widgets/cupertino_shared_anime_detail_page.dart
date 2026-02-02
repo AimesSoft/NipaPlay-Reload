@@ -152,6 +152,7 @@ class _CupertinoSharedAnimeDetailPageState
   String? _vividCoverUrl;
   bool _isLoadingCover = false;
   _CupertinoDetailSubPage _activeSubPage = _CupertinoDetailSubPage.detail;
+  bool _vividCoverSchedulePending = false;
 
   SharedRemoteLibraryProvider? _maybeReadProvider() {
     try {
@@ -895,7 +896,7 @@ class _CupertinoSharedAnimeDetailPageState
 
     final Widget content;
     if (displayMode == AnimeDetailDisplayMode.vivid) {
-      _maybeLoadVividCover();
+      _scheduleLoadVividCover();
       content = _buildVividLayout(context);
     } else {
       content = _buildSimpleLayout(context);
@@ -949,6 +950,16 @@ class _CupertinoSharedAnimeDetailPageState
       return;
     }
     _fetchHighQualityCover();
+  }
+
+  void _scheduleLoadVividCover() {
+    if (_vividCoverSchedulePending) return;
+    _vividCoverSchedulePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _vividCoverSchedulePending = false;
+      if (!mounted) return;
+      _maybeLoadVividCover();
+    });
   }
 
   Future<void> _fetchHighQualityCover() async {

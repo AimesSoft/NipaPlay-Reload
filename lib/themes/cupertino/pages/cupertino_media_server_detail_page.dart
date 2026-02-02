@@ -776,28 +776,6 @@ class _CupertinoMediaServerDetailPageState
 
   @override
   Widget build(BuildContext context) {
-    if (!_isLoading && _error == null && _mediaDetail != null) {
-      return CupertinoSharedAnimeDetailPage(
-        anime: _buildSummary(),
-        hideBackButton: false,
-        showCloseButton: true,
-        customEpisodeLoader: ({bool force = false}) =>
-            _loadSharedEpisodes(force: force),
-        customPlayableBuilder: _buildPlayableItemForEpisode,
-        sourceLabelOverride: widget.serverType == MediaServerType.jellyfin
-            ? 'Jellyfin'
-            : 'Emby',
-        coverImageOverride: _getPosterUrl(),
-        backdropImageOverride: _resolveBackdropUrl(),
-        cast: _buildCastMembers(),
-        seasons: _buildSeasonOptions(),
-        selectedSeasonId: _selectedSeasonId,
-        onSeasonChanged: _handleSeasonChanged,
-        enableBangumiFeatures: false,
-        episodeImageResolver: _resolveEpisodeImage,
-      );
-    }
-
     final title = _mediaDetail?.name ?? '详情';
 
     return AdaptiveScaffold(
