@@ -523,7 +523,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         }
       });
     }
-    
     // 如果播放器重新变为活跃状态，取消待处理的更新
     if (!_wasPlayerActive && isCurrentlyActive) {
       debugPrint('DashboardHomePage: 播放器重新激活，取消待处理的更新检查');
@@ -532,6 +531,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     
     // 更新播放器活跃状态记录
     _wasPlayerActive = isCurrentlyActive;
+  }
+
+  void _onDashboardRefreshPressed() {
+    if (_isLoadingRecommended) {
+      BlurSnackBar.show(context, '正在刷新中');
+      return;
+    }
+    if (_isVideoPlayerActive()) {
+      BlurSnackBar.show(context, '播放器活跃中，稍后再试');
+      return;
+    }
+    _handleManualRefresh();
   }
 
   void _scheduleWatchHistoryRefresh(String reason) {
@@ -866,6 +877,15 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionGlassButton(
+        iconData: Icons.refresh,
+        tooltip: '刷新主页',
+        description: '刷新仪表盘数据',
+        size: 52,
+        iconSize: 22,
+        onPressed: _onDashboardRefreshPressed,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Consumer2<JellyfinProvider, EmbyProvider>(
         builder: (context, jellyfinProvider, embyProvider, child) {
           final configuredSections = _buildConfiguredSections(

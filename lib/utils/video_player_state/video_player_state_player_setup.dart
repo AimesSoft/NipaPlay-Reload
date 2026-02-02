@@ -256,7 +256,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
       // 清除视频资源
       player.state = PlaybackState.stopped;
-      player.setMedia("", MediaType.video); // 使用空字符串和视频类型清除媒体
+      final bool isMediaKitKernel = player.getPlayerKernelName() == 'Media Kit';
+      if (!isMediaKitKernel) {
+        player.setMedia("", MediaType.video); // 使用空字符串和视频类型清除媒体
+      }
 
       // 释放旧纹理
       if (player.textureId.value != null) {
@@ -266,7 +269,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 等待纹理完全释放
       await Future.delayed(const Duration(milliseconds: 500));
       // 重置播放器状态
-      player.media = '';
+      if (!isMediaKitKernel) {
+        player.media = '';
+      }
       await Future.delayed(const Duration(milliseconds: 100));
       _currentVideoPath = null;
       _danmakuOverlayKey = 'idle'; // 临时重置弹幕覆盖层key

@@ -6,6 +6,8 @@ class FloatingActionGlassButton extends StatelessWidget {
   final VoidCallback onPressed;
   final String? tooltip;
   final String? description; // 新增：悬浮气泡描述
+  final double size;
+  final double iconSize;
 
   const FloatingActionGlassButton({
     super.key,
@@ -13,12 +15,14 @@ class FloatingActionGlassButton extends StatelessWidget {
     required this.onPressed,
     this.tooltip,
     this.description, // 新增：悬浮气泡描述
+    this.size = 64,
+    this.iconSize = 28,
   });
 
   @override
   Widget build(BuildContext context) {
     const accentColor = Color(0xFFFF2E55);
-    const double buttonSize = 64;
+    final double buttonSize = size;
     final Widget button = MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
@@ -42,7 +46,7 @@ class FloatingActionGlassButton extends StatelessWidget {
             child: Icon(
               iconData,
               color: Colors.white,
-              size: 28,
+              size: iconSize,
             ),
           ),
         ),

@@ -488,7 +488,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               logoImageUrl: null,
               source: RecommendedItemSource.dandanplay,
               rating: null,
-              isLowRes: normalizedCoverUrl != null, // 弹弹play默认封面是低清
+              isLowRes: coverUrl != null ? !_looksHighQualityUrl(coverUrl) : false,
             );
           }
         } catch (_) {
@@ -539,15 +539,30 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       // 第五步：后台异步升级为高清图片（针对本地和弹弹play远程媒体）
       final upgradeCandidates = <dynamic>[];
       final upgradeBasicItems = <RecommendedItem>[];
+      final upgradeIndices = <int>[];
       for (int i = 0; i < selectedCandidates.length && i < basicItems.length; i++) {
         final cand = selectedCandidates[i];
         if (cand is WatchHistoryItem || cand is DandanplayRemoteAnimeGroup) {
+          // 只对非占位项进行升级，避免索引错位导致更新失败
+          final item = basicItems[i];
+          if (item.source == RecommendedItemSource.placeholder) {
+            continue;
+          }
           upgradeCandidates.add(cand);
-          upgradeBasicItems.add(basicItems[i]);
+          upgradeBasicItems.add(item);
+          upgradeIndices.add(i);
         }
       }
       if (upgradeCandidates.isNotEmpty) {
-        _upgradeToHighQualityImages(upgradeCandidates, upgradeBasicItems);
+        debugPrint(
+          '[DashboardHomePage] 推荐高清升级触发: total=${upgradeCandidates.length}, '
+          'dandan=${upgradeCandidates.whereType<DandanplayRemoteAnimeGroup>().length}, '
+          'local=${upgradeCandidates.whereType<WatchHistoryItem>().length}',
+        );
+        debugPrint('[DashboardHomePage] 升级索引: $upgradeIndices');
+        _upgradeToHighQualityImages(upgradeCandidates, upgradeBasicItems, upgradeIndices);
+      } else {
+        debugPrint('[DashboardHomePage] 推荐高清升级跳过: 无可升级项');
       }
       
     } catch (_) {

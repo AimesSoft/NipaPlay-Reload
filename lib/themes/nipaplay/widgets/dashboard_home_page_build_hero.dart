@@ -153,8 +153,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     width: double.infinity,
                     height: double.infinity,
                     delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                    blurIfLowRes: true,
-                    forceBlur: item.isLowRes,
+                    blurIfLowRes: item.source != RecommendedItemSource.dandanplay,
+                    forceBlur: item.source != RecommendedItemSource.dandanplay ? item.isLowRes : false,
                     lowResBlurSigma: 40,
                     lowResMinScale: 0.8,
                     errorBuilder: (context, error) => Container(
@@ -381,8 +381,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                     width: double.infinity,
                     height: double.infinity,
-                    blurIfLowRes: true,
-                    forceBlur: item.isLowRes,
+                    blurIfLowRes: item.source != RecommendedItemSource.dandanplay,
+                    forceBlur: item.source != RecommendedItemSource.dandanplay ? item.isLowRes : false,
                     lowResBlurSigma: 40,
                     lowResMinScale: 0.8,
                     errorBuilder: (context, error) => Container(
@@ -511,8 +511,12 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
             // 右下角标题（总是显示，不论是否有Logo）
             Positioned(
               right: 8,
-              bottom: 8,
-              left: item.logoImageUrl != null ? 136 : 8, // 如果有Logo就避开它
+              bottom: item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty
+                ? 66
+                  : 8,
+              left: item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty
+                  ? 8
+                  : 8,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

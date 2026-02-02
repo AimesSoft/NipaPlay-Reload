@@ -130,20 +130,24 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   }
 
   // 升级为高清图片（后台异步处理）
-  Future<void> _upgradeToHighQualityImages(List<dynamic> candidates, List<RecommendedItem> currentItems) async {
+  Future<void> _upgradeToHighQualityImages(
+    List<dynamic> candidates,
+    List<RecommendedItem> currentItems,
+    List<int> indices,
+  ) async {
     
-    if (candidates.isEmpty || currentItems.isEmpty) {
+    if (candidates.isEmpty || currentItems.isEmpty || indices.isEmpty) {
       return;
     }
     
     // 为每个候选项目升级图片
     final upgradeFutures = <Future<void>>[];
     
-    for (int i = 0; i < candidates.length && i < currentItems.length; i++) {
+    for (int i = 0; i < candidates.length && i < currentItems.length && i < indices.length; i++) {
       final candidate = candidates[i];
       final currentItem = currentItems[i];
-      
-      upgradeFutures.add(_upgradeItemToHighQuality(candidate, currentItem, i));
+      final targetIndex = indices[i];
+      upgradeFutures.add(_upgradeItemToHighQuality(candidate, currentItem, targetIndex));
     }
     
     // 异步处理所有升级，不阻塞UI
@@ -240,6 +244,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
               highQualityImageUrl = persisted;
             } else {
               // 获取详细信息和高清图片
+              debugPrint('[Bangumi] 拉取详情(本地): animeId=$animeId');
               final bangumiService = BangumiService.instance;
               final animeDetail = await bangumiService.getAnimeDetails(animeId);
               detailedSubtitle = animeDetail.summary?.isNotEmpty == true
@@ -251,7 +256,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
                   : null;
               
               // 获取高清图片
+              debugPrint('[Bangumi] 拉取高清封面(本地): animeId=$animeId');
               highQualityImageUrl = await _getHighQualityImage(animeId, animeDetail);
+              debugPrint('[Bangumi] 高清封面结果(本地): animeId=$animeId url=$highQualityImageUrl');
 
               // 将获取到的高清图持久化，避免后续重复请求
               if (highQualityImageUrl != null && highQualityImageUrl.isNotEmpty) {
@@ -288,17 +295,23 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         if (_isValidAnimeId(candidate.animeId)) {
           final animeId = candidate.animeId!;
           try {
+            debugPrint('[Dandan封面] 尝试升级: animeId=$animeId current=${currentItem.backgroundImageUrl}');
             final prefs = await SharedPreferences.getInstance();
             final persisted = prefs.getString(
                 '${_DashboardHomePageState._localPrefsKeyPrefix}$animeId');
             
             String? hqUrl;
             if (persisted != null && persisted.isNotEmpty && _looksHighQualityUrl(persisted)) {
+              debugPrint('[Dandan封面] 命中持久化高清: animeId=$animeId url=$persisted');
               hqUrl = persisted;
             } else {
+              debugPrint('[Bangumi] 拉取详情(弹弹play): animeId=$animeId');
               final bangumiService = BangumiService.instance;
               final detail = await bangumiService.getAnimeDetails(animeId);
+              debugPrint('[Bangumi] 拉取高清封面(弹弹play): animeId=$animeId');
               hqUrl = await _getHighQualityImage(animeId, detail);
+              debugPrint('[Bangumi] 高清封面结果(弹弹play): animeId=$animeId url=$hqUrl');
+              debugPrint('[Dandan封面] Bangumi高清结果: animeId=$animeId url=$hqUrl');
               
               if (hqUrl != null && hqUrl.isNotEmpty) {
                 try {
@@ -312,10 +325,13 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
             final normalizedHqUrl = _normalizeRecommendationImageUrl(hqUrl);
             if (normalizedHqUrl != null &&
                 normalizedHqUrl != currentItem.backgroundImageUrl) {
+              debugPrint('[Dandan封面] 升级生效: animeId=$animeId url=$normalizedHqUrl');
               upgradedItem = currentItem.copyWith(
                 backgroundImageUrl: normalizedHqUrl,
                 isLowRes: hqUrl != null ? !_looksHighQualityUrl(hqUrl) : currentItem.isLowRes,
               );
+            } else {
+              debugPrint('[Dandan封面] 无需升级: animeId=$animeId');
             }
           } catch (_) {
           }
@@ -341,6 +357,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   // 经验性判断一个图片URL是否"看起来"是高清图
   bool _looksHighQualityUrl(String url) {
     final lower = url.toLowerCase();
+    if (lower.contains('/api/v1/image/')) {
+      return false;
+    }
     if (lower.contains('bgm.tv') || lower.contains('type=large') || lower.contains('original')) {
       return true;
     }
@@ -376,6 +395,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
 
   bool _looksHighQualityCoverUrl(String url) {
     final lower = url.toLowerCase();
+    if (lower.contains('/api/v1/image/')) {
+      return false;
+    }
     if (lower.contains('bgm.tv') || lower.contains('type=large') || lower.contains('original')) {
       return true;
     }
