@@ -12,7 +12,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     try {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getBool(_timelinePreviewEnabledKey);
-      final resolved = stored ?? true;
+      final resolved = stored ?? false;
       if (_timelinePreviewEnabled != resolved) {
         _timelinePreviewEnabled = resolved;
         notifyListeners();
@@ -21,7 +21,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       }
     } catch (e) {
       debugPrint('加载时间轴缩略图开关失败: $e');
-      _timelinePreviewEnabled = true;
+      _timelinePreviewEnabled = false;
     }
   }
 

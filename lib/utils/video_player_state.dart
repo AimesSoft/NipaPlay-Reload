@@ -288,7 +288,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     return null;
   }
-  bool _timelinePreviewEnabled = true; // 默认开启时间轴缩略图
+  bool _timelinePreviewEnabled = false; // 默认关闭时间轴缩略图
   bool _timelinePreviewSupported = false;
   int _timelinePreviewIntervalMs = 15000;
   final Map<int, String> _timelinePreviewCache = {};
