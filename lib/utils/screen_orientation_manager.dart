@@ -58,7 +58,10 @@ class ScreenOrientationManager {
         return;
       } else {
         // 手机设备：切换到横屏
-        await _setLandscapeOnly();
+        // 若已是横屏（例如自动下一集），跳过“先允许竖屏再锁横屏”的过渡，
+        // 避免出现短暂的横/竖来回切换。
+        final bool alreadyLandscape = isLandscape;
+        await _setLandscapeOnly(allowTransientPortrait: !alreadyLandscape);
       }
     } finally {
       _isTransitioning = false;
@@ -110,14 +113,17 @@ class ScreenOrientationManager {
   }
   
   // 设置横屏并锁定
-  Future<void> _setLandscapeOnly() async {
+  // allowTransientPortrait 用于从竖屏过渡到横屏时的短暂放开（某些设备需要）。
+  Future<void> _setLandscapeOnly({bool allowTransientPortrait = true}) async {
     try {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-        DeviceOrientation.portraitUp,
-      ]);
-      await Future.delayed(const Duration(milliseconds: 100));
+      if (allowTransientPortrait) {
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+          DeviceOrientation.portraitUp,
+        ]);
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
