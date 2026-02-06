@@ -93,6 +93,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       _spoilerAiTemperatureDraft = playerState.spoilerAiTemperature;
       _spoilerAiUrlController.text = playerState.spoilerAiApiUrl;
       _spoilerAiModelController.text = playerState.spoilerAiModel;
+      _spoilerAiApiKeyController.text = playerState.spoilerAiApiKey;
       _spoilerAiControllersInitialized = true;
     }
   }
@@ -331,7 +332,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       BlurSnackBar.show(context, '请输入模型名称');
       return;
     }
-    if (!videoState.spoilerAiHasApiKey && apiKeyInput.isEmpty) {
+    if (apiKeyInput.isEmpty) {
       BlurSnackBar.show(context, '请输入 API Key');
       return;
     }
@@ -346,9 +347,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         apiUrl: url,
         model: model,
         temperature: _spoilerAiTemperatureDraft,
-        apiKey: apiKeyInput.isEmpty ? null : apiKeyInput,
+        apiKey: apiKeyInput,
       );
-      _spoilerAiApiKeyController.clear();
+      _spoilerAiApiKeyController.text = apiKeyInput;
       if (!mounted) return;
       BlurSnackBar.show(context, '防剧透 AI 设置已保存');
     } catch (e) {
@@ -986,22 +987,19 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                       ),
                       const SizedBox(height: 12),
                       TextField(
-                        controller: _spoilerAiApiKeyController,
-                        obscureText: true,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        cursorColor: _fluentAccentColor,
-                        decoration: InputDecoration(
-                          labelText: 'API Key',
-                          labelStyle: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                          hintText: videoState.spoilerAiHasApiKey
-                              ? '已保存，留空表示不修改'
-                              : '请输入你的 API Key',
-                          hintStyle: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.38),
-                          ),
+                          controller: _spoilerAiApiKeyController,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          cursorColor: _fluentAccentColor,
+                          decoration: InputDecoration(
+                            labelText: 'API Key',
+                            labelStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                            hintText: '请输入你的 API Key',
+                            hintStyle: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.38),
+                            ),
                           filled: true,
                           fillColor: colorScheme.onSurface.withOpacity(0.1),
                           border: const OutlineInputBorder(
@@ -1015,9 +1013,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                             borderRadius:
                                 BorderRadius.all(Radius.circular(8)),
                           ),
+                          ),
+                          style: TextStyle(color: colorScheme.onSurface),
                         ),
-                        style: TextStyle(color: colorScheme.onSurface),
-                      ),
                       const SizedBox(height: 12),
                       Text(
                         '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',

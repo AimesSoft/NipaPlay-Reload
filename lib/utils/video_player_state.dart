@@ -707,6 +707,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get spoilerAiUseCustomKey => _spoilerAiUseCustomKey;
   SpoilerAiApiFormat get spoilerAiApiFormat => _spoilerAiApiFormat;
   String get spoilerAiApiUrl => _spoilerAiApiUrl;
+  String get spoilerAiApiKey => _spoilerAiApiKey;
   bool get spoilerAiHasApiKey => _spoilerAiApiKey.trim().isNotEmpty;
   bool get spoilerAiConfigReady =>
       _spoilerAiApiUrl.trim().isNotEmpty &&

@@ -68,6 +68,7 @@ class _CupertinoPlayerSettingsPageState
       _spoilerAiTemperatureDraft = videoState.spoilerAiTemperature;
       _spoilerAiUrlController.text = videoState.spoilerAiApiUrl;
       _spoilerAiModelController.text = videoState.spoilerAiModel;
+      _spoilerAiApiKeyController.text = videoState.spoilerAiApiKey;
       _spoilerAiControllersInitialized = true;
     }
 
@@ -212,7 +213,7 @@ class _CupertinoPlayerSettingsPageState
       );
       return;
     }
-    if (!videoState.spoilerAiHasApiKey && apiKeyInput.isEmpty) {
+    if (apiKeyInput.isEmpty) {
       AdaptiveSnackBar.show(
         context,
         message: '请输入 API Key',
@@ -231,9 +232,9 @@ class _CupertinoPlayerSettingsPageState
         apiUrl: url,
         model: model,
         temperature: _spoilerAiTemperatureDraft,
-        apiKey: apiKeyInput.isEmpty ? null : apiKeyInput,
+        apiKey: apiKeyInput,
       );
-      _spoilerAiApiKeyController.clear();
+      _spoilerAiApiKeyController.text = apiKeyInput;
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
@@ -1224,10 +1225,7 @@ class _CupertinoPlayerSettingsPageState
                         const SizedBox(height: 12),
                         CupertinoTextField(
                           controller: _spoilerAiApiKeyController,
-                          placeholder: videoState.spoilerAiHasApiKey
-                              ? '已保存，留空表示不修改'
-                              : '请输入你的 API Key',
-                          obscureText: true,
+                          placeholder: '请输入你的 API Key',
                           autocorrect: false,
                           enableSuggestions: false,
                           padding: const EdgeInsets.symmetric(
