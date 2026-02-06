@@ -74,6 +74,8 @@ class HoverTooltipBubble extends StatefulWidget {
   final bool autoAlign; // 新增：是否自动对齐
   final Duration showDelay;
   final Duration hideDelay;
+  final ValueChanged<bool>? onHoverChanged;
+  final MouseCursor cursor;
 
   const HoverTooltipBubble({
     super.key,
@@ -87,6 +89,8 @@ class HoverTooltipBubble extends StatefulWidget {
     this.autoAlign = true, // 默认启用自动对齐
     this.showDelay = const Duration(milliseconds: 500),
     this.hideDelay = const Duration(milliseconds: 100),
+    this.onHoverChanged,
+    this.cursor = MouseCursor.defer,
   });
 
   @override
@@ -353,6 +357,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
+      cursor: widget.cursor,
       onEnter: (event) {
         _mousePosition = event.position;
         
@@ -362,6 +367,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
         if (mounted) {
           setState(() => _isHovered = true);
         }
+        widget.onHoverChanged?.call(true);
         
         // 使用可管理的定时器
         _showTimer = Timer(widget.showDelay, () {
@@ -382,6 +388,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
         if (mounted) {
           setState(() => _isHovered = false);
         }
+        widget.onHoverChanged?.call(false);
         
         // 使用可管理的定时器
         _hideTimer = Timer(widget.hideDelay, () {

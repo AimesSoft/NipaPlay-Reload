@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
 
-class FloatingActionGlassButton extends StatelessWidget {
+class FloatingActionGlassButton extends StatefulWidget {
   final IconData iconData;
   final VoidCallback onPressed;
   final String? tooltip;
@@ -20,23 +20,50 @@ class FloatingActionGlassButton extends StatelessWidget {
   });
 
   @override
+  State<FloatingActionGlassButton> createState() =>
+      _FloatingActionGlassButtonState();
+}
+
+class _FloatingActionGlassButtonState extends State<FloatingActionGlassButton> {
+  bool _isHovered = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) return;
+    setState(() => _isHovered = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textColor =
+        Theme.of(context).textTheme.bodyMedium?.color ?? colorScheme.onSurface;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     const accentColor = Color(0xFFFF2E55);
-    final double buttonSize = size;
-    final Widget button = MouseRegion(
-      cursor: SystemMouseCursors.click,
+    final Color baseBackground = Color.alphaBlend(
+      colorScheme.onSurface.withOpacity(isDark ? 0.12 : 0.06),
+      colorScheme.surface,
+    );
+    final iconColor = _isHovered ? accentColor : textColor;
+    final double buttonSize = widget.size;
+
+    final Widget button = AnimatedScale(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      scale: _isHovered ? 1.08 : 1.0,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: Container(
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
           width: buttonSize,
           height: buttonSize,
           decoration: BoxDecoration(
-            color: accentColor,
+            color: baseBackground,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
+                color: Colors.black.withOpacity(0.18),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),
@@ -44,9 +71,9 @@ class FloatingActionGlassButton extends StatelessWidget {
           ),
           child: Center(
             child: Icon(
-              iconData,
-              color: Colors.white,
-              size: iconSize,
+              widget.iconData,
+              color: iconColor,
+              size: widget.iconSize,
             ),
           ),
         ),
@@ -54,15 +81,21 @@ class FloatingActionGlassButton extends StatelessWidget {
     );
 
     // 如果有描述信息，则用HoverTooltipBubble包装
-    if (description != null && description!.isNotEmpty) {
+    if (widget.description != null && widget.description!.isNotEmpty) {
       return HoverTooltipBubble(
-        text: description!,
+        text: widget.description!,
         showDelay: const Duration(milliseconds: 500),
         hideDelay: const Duration(milliseconds: 100),
+        cursor: SystemMouseCursors.click,
+        onHoverChanged: _setHovered,
         child: button,
       );
-    } else {
-      return button;
     }
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: button,
+    );
   }
-} 
+}
