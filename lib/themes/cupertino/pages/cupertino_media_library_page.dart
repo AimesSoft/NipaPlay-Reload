@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
@@ -2388,6 +2389,11 @@ class _CupertinoLibraryManagementSheetState
   bool _isLoadingSMB = false;
   bool _smbInitialized = false;
   String? _smbErrorMessage;
+  bool _isRemoteScraping = false;
+  double? _remoteScrapeProgress;
+  String _remoteScrapeMessage = '';
+  int _remoteScrapeLastProcessed = -1;
+  int _remoteScrapeTotal = 0;
 
   @override
   void initState() {
@@ -2444,11 +2450,19 @@ class _CupertinoLibraryManagementSheetState
         } else if (_selectedSource == _LibrarySource.webdav) {
           sections.addAll([
             const SizedBox(height: 16),
+            if (_isRemoteScraping || _remoteScrapeMessage.isNotEmpty)
+              _buildRemoteScrapeStatusCard(context),
+            if (_isRemoteScraping || _remoteScrapeMessage.isNotEmpty)
+              const SizedBox(height: 12),
             _buildWebDAVSection(context),
           ]);
         } else {
           sections.addAll([
             const SizedBox(height: 16),
+            if (_isRemoteScraping || _remoteScrapeMessage.isNotEmpty)
+              _buildRemoteScrapeStatusCard(context),
+            if (_isRemoteScraping || _remoteScrapeMessage.isNotEmpty)
+              const SizedBox(height: 12),
             _buildSMBSection(context),
           ]);
         }
@@ -2540,6 +2554,51 @@ class _CupertinoLibraryManagementSheetState
                 fontSize: 13,
                 height: 1.35,
                 color: secondaryLabelColor,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRemoteScrapeStatusCard(BuildContext context) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final secondaryLabelColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final progressColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _remoteScrapeMessage,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: secondaryLabelColor,
+            ),
+          ),
+          if (_isRemoteScraping) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: _remoteScrapeProgress,
+                backgroundColor: CupertinoColors.systemGrey4,
+                valueColor: AlwaysStoppedAnimation<Color>(progressColor),
               ),
             ),
           ],
@@ -3680,87 +3739,116 @@ class _CupertinoLibraryManagementSheetState
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(16.0 + depth * 14, 10, 12, 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                file.isDirectory
-                    ? CupertinoIcons.folder
-                    : CupertinoIcons.play_arrow_solid,
-                size: 18,
-                color: file.isDirectory
-                    ? CupertinoDynamicColor.resolve(
-                        CupertinoColors.activeBlue,
-                        context,
-                      )
-                    : CupertinoDynamicColor.resolve(
-                        CupertinoColors.systemGrey,
-                        context,
-                      ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.name,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: labelColor,
-                        fontWeight:
-                            file.isDirectory ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
-                    if (!file.isDirectory && file.size != null && file.size! > 0)
+    Widget buildRow({String? subtitleText}) {
+      return Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.0 + depth * 14, 10, 12, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  file.isDirectory
+                      ? CupertinoIcons.folder
+                      : CupertinoIcons.play_arrow_solid,
+                  size: 18,
+                  color: file.isDirectory
+                      ? CupertinoDynamicColor.resolve(
+                          CupertinoColors.activeBlue,
+                          context,
+                        )
+                      : CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemGrey,
+                          context,
+                        ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
-                        style: TextStyle(fontSize: 12, color: subtitleColor),
+                        file.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: labelColor,
+                          fontWeight: file.isDirectory
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
                       ),
-                  ],
+                      if (subtitleText != null)
+                        Text(
+                          subtitleText,
+                          style: TextStyle(fontSize: 12, color: subtitleColor),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      if (!file.isDirectory &&
+                          file.size != null &&
+                          file.size! > 0)
+                        Text(
+                          '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
+                          style: TextStyle(fontSize: 12, color: subtitleColor),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              if (file.isDirectory)
-                Row(
-                  children: [
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 30,
-                      onPressed: () =>
-                          _scanWebDAVFolder(connection, file.path, file.name),
-                      child: const Text('刮削'),
-                    ),
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 30,
-                      onPressed: () => _toggleWebDAVFolder(connection, file.path),
-                      child: Icon(
-                        isExpanded
-                            ? CupertinoIcons.chevron_down
-                            : CupertinoIcons.chevron_right,
-                        size: 16,
-                        color: subtitleColor,
+                if (file.isDirectory)
+                  Row(
+                    children: [
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minSize: 30,
+                        onPressed: () =>
+                            _scanWebDAVFolder(connection, file.path, file.name),
+                        child: const Text('刮削'),
                       ),
-                    ),
-                  ],
-                )
-              else
-                CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minSize: 28,
-                  onPressed: () => _playWebDAVFile(connection, file),
-                  child: const Text('播放'),
-                ),
-            ],
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minSize: 30,
+                        onPressed: () =>
+                            _toggleWebDAVFolder(connection, file.path),
+                        child: Icon(
+                          isExpanded
+                              ? CupertinoIcons.chevron_down
+                              : CupertinoIcons.chevron_right,
+                          size: 16,
+                          color: subtitleColor,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  CupertinoButton(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minSize: 28,
+                    onPressed: () => _playWebDAVFile(connection, file),
+                    child: const Text('播放'),
+                  ),
+              ],
+            ),
           ),
-        ),
-        if (file.isDirectory && isExpanded)
-          _buildWebDAVFileList(connection, file.path, depth: depth + 1),
-      ],
+          if (file.isDirectory && isExpanded)
+            _buildWebDAVFileList(connection, file.path, depth: depth + 1),
+        ],
+      );
+    }
+
+    if (file.isDirectory) {
+      return buildRow();
+    }
+
+    final fileUrl = WebDAVService.instance.getFileUrl(connection, file.path);
+    return FutureBuilder<WatchHistoryItem?>(
+      future: WatchHistoryManager.getHistoryItem(fileUrl),
+      builder: (context, snapshot) {
+        final subtitleText = _buildScanSubtitleText(
+          snapshot.data,
+          p.basenameWithoutExtension(file.name),
+        );
+        return buildRow(subtitleText: subtitleText);
+      },
     );
   }
 
@@ -3941,6 +4029,98 @@ class _CupertinoLibraryManagementSheetState
     }
   }
 
+  void _setRemoteScrapeState({
+    bool? isScraping,
+    String? message,
+    double? progress,
+    bool updateProgress = false,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      if (isScraping != null) {
+        _isRemoteScraping = isScraping;
+      }
+      if (message != null) {
+        _remoteScrapeMessage = message;
+      }
+      if (updateProgress) {
+        _remoteScrapeProgress = progress;
+      }
+    });
+  }
+
+  void _updateRemoteScrapeProgress({
+    required String sourceLabel,
+    required String folderName,
+    required int processed,
+    required int total,
+  }) {
+    if (processed == _remoteScrapeLastProcessed && total == _remoteScrapeTotal) {
+      return;
+    }
+    _remoteScrapeLastProcessed = processed;
+    _remoteScrapeTotal = total;
+    final double progress = total > 0
+        ? (processed / total).clamp(0.0, 1.0).toDouble()
+        : 0.0;
+    _setRemoteScrapeState(
+      message: '$sourceLabel 刮削中：$folderName ($processed/$total)',
+      progress: progress,
+      updateProgress: true,
+    );
+  }
+
+  void _finishRemoteScrape(String message) {
+    _remoteScrapeLastProcessed = -1;
+    _remoteScrapeTotal = 0;
+    _setRemoteScrapeState(
+      isScraping: false,
+      message: message,
+      progress: null,
+      updateProgress: true,
+    );
+  }
+
+  String _buildScrapeSummaryMessage({
+    required int total,
+    required int matched,
+    required int failed,
+  }) {
+    if (total == 0) {
+      return '未找到可刮削的视频文件';
+    }
+    if (matched == 0) {
+      return '刮削完成，但未匹配到番剧信息';
+    }
+    if (failed > 0) {
+      return '刮削完成：成功 $matched/$total，失败 $failed';
+    }
+    return '刮削完成：成功 $matched/$total';
+  }
+
+  String? _buildScanSubtitleText(
+    WatchHistoryItem? historyItem,
+    String baseName,
+  ) {
+    if (historyItem == null) return null;
+
+    final hasScanInfo = historyItem.animeId != null ||
+        historyItem.episodeId != null ||
+        (historyItem.animeName.isNotEmpty && historyItem.animeName != baseName);
+    if (!hasScanInfo) return null;
+
+    final List<String> subtitleParts = [];
+    if (historyItem.animeName.isNotEmpty && historyItem.animeName != baseName) {
+      subtitleParts.add(historyItem.animeName);
+    }
+    if (historyItem.episodeTitle != null &&
+        historyItem.episodeTitle!.isNotEmpty) {
+      subtitleParts.add(historyItem.episodeTitle!);
+    }
+    if (subtitleParts.isEmpty) return null;
+    return subtitleParts.join(' - ');
+  }
+
   int? _parseMatchId(dynamic value) {
     if (value is int) return value;
     if (value is double) return value.toInt();
@@ -3951,9 +4131,12 @@ class _CupertinoLibraryManagementSheetState
   Future<_RemoteScrapeResult> _scrapeRemoteFiles({
     required String sourceLabel,
     required List<_RemoteScrapeCandidate> candidates,
+    void Function(int processed, int total, String currentName)? onProgress,
   }) async {
     int matched = 0;
     int failed = 0;
+    final total = candidates.length;
+    int processed = 0;
 
     for (final candidate in candidates) {
       try {
@@ -4021,6 +4204,9 @@ class _CupertinoLibraryManagementSheetState
       } catch (e) {
         failed++;
         debugPrint('$sourceLabel 刮削失败: ${candidate.fileName} -> $e');
+      } finally {
+        processed++;
+        onProgress?.call(processed, total, candidate.fileName);
       }
     }
 
@@ -4058,10 +4244,29 @@ class _CupertinoLibraryManagementSheetState
       return;
     }
 
+    if (_isRemoteScraping) {
+      _showSnack('已有刮削任务在进行中，请稍后再试。');
+      return;
+    }
+
+    const sourceLabel = 'WebDAV';
+    _setRemoteScrapeState(
+      isScraping: true,
+      message: '正在准备刮削 $folderName...',
+      progress: null,
+      updateProgress: true,
+    );
+
     try {
       _showSnack('正在刮削 $folderName…');
+      _setRemoteScrapeState(
+        message: '正在扫描文件列表: $folderName',
+        progress: null,
+        updateProgress: true,
+      );
       final files = await _getWebDAVVideoFiles(connection, folderPath);
       if (files.isEmpty) {
+        _finishRemoteScrape('未找到可刮削的视频文件');
         _showSnack('未找到可刮削的视频文件');
         return;
       }
@@ -4073,22 +4278,37 @@ class _CupertinoLibraryManagementSheetState
                 fileName: file.name,
               ))
           .toList();
+      _updateRemoteScrapeProgress(
+        sourceLabel: sourceLabel,
+        folderName: folderName,
+        processed: 0,
+        total: candidates.length,
+      );
       final result = await _scrapeRemoteFiles(
-        sourceLabel: 'WebDAV',
+        sourceLabel: sourceLabel,
         candidates: candidates,
+        onProgress: (processed, total, _) {
+          _updateRemoteScrapeProgress(
+            sourceLabel: sourceLabel,
+            folderName: folderName,
+            processed: processed,
+            total: total,
+          );
+        },
       );
 
       if (!mounted) return;
       await context.read<WatchHistoryProvider>().refresh();
-      if (result.matched == 0) {
-        _showSnack('刮削完成，但未匹配到番剧信息');
-      } else if (result.failed > 0) {
-        _showSnack('刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}');
-      } else {
-        _showSnack('刮削完成：成功 ${result.matched}/${result.total}');
-      }
+      final summary = _buildScrapeSummaryMessage(
+        total: result.total,
+        matched: result.matched,
+        failed: result.failed,
+      );
+      _finishRemoteScrape(summary);
+      _showSnack(summary);
     } catch (e) {
-      _showSnack('刮削失败：$e');
+      _finishRemoteScrape('刮削WebDAV文件夹失败: $e');
+      _showSnack('刮削WebDAV文件夹失败: $e');
     }
   }
 
@@ -4489,87 +4709,116 @@ class _CupertinoLibraryManagementSheetState
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
 
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(16.0 + depth * 14, 10, 12, 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                file.isDirectory
-                    ? CupertinoIcons.folder
-                    : CupertinoIcons.play_arrow_solid,
-                size: 18,
-                color: file.isDirectory
-                    ? CupertinoDynamicColor.resolve(
-                        CupertinoColors.activeBlue,
-                        context,
-                      )
-                    : CupertinoDynamicColor.resolve(
-                        CupertinoColors.systemGrey,
-                        context,
-                      ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.name,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: labelColor,
-                        fontWeight:
-                            file.isDirectory ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
-                    if (!file.isDirectory && file.size != null && file.size! > 0)
+    Widget buildRow({String? subtitleText}) {
+      return Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.0 + depth * 14, 10, 12, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  file.isDirectory
+                      ? CupertinoIcons.folder
+                      : CupertinoIcons.play_arrow_solid,
+                  size: 18,
+                  color: file.isDirectory
+                      ? CupertinoDynamicColor.resolve(
+                          CupertinoColors.activeBlue,
+                          context,
+                        )
+                      : CupertinoDynamicColor.resolve(
+                          CupertinoColors.systemGrey,
+                          context,
+                        ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
-                        style: TextStyle(fontSize: 12, color: subtitleColor),
+                        file.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: labelColor,
+                          fontWeight: file.isDirectory
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
                       ),
-                  ],
+                      if (subtitleText != null)
+                        Text(
+                          subtitleText,
+                          style: TextStyle(fontSize: 12, color: subtitleColor),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      if (!file.isDirectory &&
+                          file.size != null &&
+                          file.size! > 0)
+                        Text(
+                          '${(file.size! / 1024 / 1024).toStringAsFixed(1)} MB',
+                          style: TextStyle(fontSize: 12, color: subtitleColor),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              if (file.isDirectory)
-                Row(
-                  children: [
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 30,
-                      onPressed: () =>
-                          _scanSMBFolder(connection, file.path, file.name),
-                      child: const Text('刮削'),
-                    ),
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 30,
-                      onPressed: () => _toggleSMBFolder(connection, file.path),
-                      child: Icon(
-                        isExpanded
-                            ? CupertinoIcons.chevron_down
-                            : CupertinoIcons.chevron_right,
-                        size: 16,
-                        color: subtitleColor,
+                if (file.isDirectory)
+                  Row(
+                    children: [
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minSize: 30,
+                        onPressed: () =>
+                            _scanSMBFolder(connection, file.path, file.name),
+                        child: const Text('刮削'),
                       ),
-                    ),
-                  ],
-                )
-              else
-                CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minSize: 28,
-                  onPressed: () => _playSMBFile(connection, file),
-                  child: const Text('播放'),
-                ),
-            ],
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minSize: 30,
+                        onPressed: () => _toggleSMBFolder(connection, file.path),
+                        child: Icon(
+                          isExpanded
+                              ? CupertinoIcons.chevron_down
+                              : CupertinoIcons.chevron_right,
+                          size: 16,
+                          color: subtitleColor,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  CupertinoButton(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minSize: 28,
+                    onPressed: () => _playSMBFile(connection, file),
+                    child: const Text('播放'),
+                  ),
+              ],
+            ),
           ),
-        ),
-        if (file.isDirectory && isExpanded)
-          _buildSMBFileList(connection, file.path, depth: depth + 1),
-      ],
+          if (file.isDirectory && isExpanded)
+            _buildSMBFileList(connection, file.path, depth: depth + 1),
+        ],
+      );
+    }
+
+    if (file.isDirectory) {
+      return buildRow();
+    }
+
+    final fileUrl =
+        SMBProxyService.instance.buildStreamUrl(connection, file.path);
+    return FutureBuilder<WatchHistoryItem?>(
+      future: WatchHistoryManager.getHistoryItem(fileUrl),
+      builder: (context, snapshot) {
+        final subtitleText = _buildScanSubtitleText(
+          snapshot.data,
+          p.basenameWithoutExtension(file.name),
+        );
+        return buildRow(subtitleText: subtitleText);
+      },
     );
   }
 
@@ -4803,10 +5052,29 @@ class _CupertinoLibraryManagementSheetState
       return;
     }
 
+    if (_isRemoteScraping) {
+      _showSnack('已有刮削任务在进行中，请稍后再试。');
+      return;
+    }
+
+    const sourceLabel = 'SMB';
+    _setRemoteScrapeState(
+      isScraping: true,
+      message: '正在准备刮削 $folderName...',
+      progress: null,
+      updateProgress: true,
+    );
+
     try {
       _showSnack('正在刮削 $folderName…');
+      _setRemoteScrapeState(
+        message: '正在扫描文件列表: $folderName',
+        progress: null,
+        updateProgress: true,
+      );
       final files = await _getSMBVideoFiles(connection, folderPath);
       if (files.isEmpty) {
+        _finishRemoteScrape('未找到可刮削的视频文件');
         _showSnack('未找到可刮削的视频文件');
         return;
       }
@@ -4818,22 +5086,37 @@ class _CupertinoLibraryManagementSheetState
                 fileName: file.name,
               ))
           .toList();
+      _updateRemoteScrapeProgress(
+        sourceLabel: sourceLabel,
+        folderName: folderName,
+        processed: 0,
+        total: candidates.length,
+      );
       final result = await _scrapeRemoteFiles(
-        sourceLabel: 'SMB',
+        sourceLabel: sourceLabel,
         candidates: candidates,
+        onProgress: (processed, total, _) {
+          _updateRemoteScrapeProgress(
+            sourceLabel: sourceLabel,
+            folderName: folderName,
+            processed: processed,
+            total: total,
+          );
+        },
       );
 
       if (!mounted) return;
       await context.read<WatchHistoryProvider>().refresh();
-      if (result.matched == 0) {
-        _showSnack('刮削完成，但未匹配到番剧信息');
-      } else if (result.failed > 0) {
-        _showSnack('刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}');
-      } else {
-        _showSnack('刮削完成：成功 ${result.matched}/${result.total}');
-      }
+      final summary = _buildScrapeSummaryMessage(
+        total: result.total,
+        matched: result.matched,
+        failed: result.failed,
+      );
+      _finishRemoteScrape(summary);
+      _showSnack(summary);
     } catch (e) {
-      _showSnack('刮削失败：$e');
+      _finishRemoteScrape('刮削SMB文件夹失败: $e');
+      _showSnack('刮削SMB文件夹失败: $e');
     }
   }
 

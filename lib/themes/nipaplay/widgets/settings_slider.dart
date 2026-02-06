@@ -45,15 +45,29 @@ class _SettingsSliderState extends State<SettingsSlider> {
       'normal': _fluentAccentColor,
       'default': _fluentAccentColor,
     });
+    final displayText = widget.displayTextBuilder(widget.value);
+    final labelStyle = TextStyle(
+      color: colorScheme.onSurface,
+      fontSize: 14,
+    );
+    final valueStyle = TextStyle(
+      color: colorScheme.onSurface.withOpacity(0.7),
+      fontSize: 13,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.label,
-          style: TextStyle(
-            color: colorScheme.onSurface,
-            fontSize: 14,
+        Text.rich(
+          TextSpan(
+            text: widget.label,
+            style: labelStyle,
+            children: [
+              TextSpan(
+                text: '  $displayText',
+                style: valueStyle,
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -69,7 +83,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
               max: widget.max,
               divisions: divisions,
               onChanged: widget.onChanged,
-              label: widget.displayTextBuilder(widget.value),
+              label: displayText,
             ),
           ),
         ),
