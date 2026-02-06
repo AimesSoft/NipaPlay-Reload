@@ -820,16 +820,6 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }
 
   _SpoilerAiRequestConfig? _resolveSpoilerAiRequestConfig() {
-    if (!_spoilerAiUseCustomKey) {
-      return const _SpoilerAiRequestConfig(
-        apiFormat: SpoilerAiApiFormat.openai,
-        apiUrl: DanmakuSpoilerFilterService.defaultEndpoint,
-        apiKey: '',
-        model: 'gpt-5',
-        temperature: 0.5,
-      );
-    }
-
     final resolvedModel = _spoilerAiModel.trim();
     final resolvedTemperature = _spoilerAiTemperature.clamp(0.0, 2.0).toDouble();
     final apiUrl = _spoilerAiApiUrl.trim();
@@ -858,7 +848,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     buffer.write('|');
     buffer.write(_episodeId?.toString() ?? '');
     buffer.write('|');
-    buffer.write(_spoilerAiUseCustomKey ? 'custom' : 'builtin');
+    buffer.write('custom');
     buffer.write('|');
     buffer.write(requestConfig.apiFormat.name);
     buffer.write('|');

@@ -1021,6 +1021,14 @@ class _CupertinoPlayerSettingsPageState
                     trailing: AdaptiveSwitch(
                       value: videoState.spoilerPreventionEnabled,
                       onChanged: (value) async {
+                        if (value && !videoState.spoilerAiConfigReady) {
+                          AdaptiveSnackBar.show(
+                            context,
+                            message: '请先填写并保存 AI 接口配置',
+                            type: AdaptiveSnackBarType.error,
+                          );
+                          return;
+                        }
                         await videoState.setSpoilerPreventionEnabled(value);
                         if (!mounted) return;
                         AdaptiveSnackBar.show(
@@ -1032,6 +1040,14 @@ class _CupertinoPlayerSettingsPageState
                     ),
                     onTap: () async {
                       final bool newValue = !videoState.spoilerPreventionEnabled;
+                      if (newValue && !videoState.spoilerAiConfigReady) {
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: '请先填写并保存 AI 接口配置',
+                          type: AdaptiveSnackBarType.error,
+                        );
+                        return;
+                      }
                       await videoState.setSpoilerPreventionEnabled(newValue);
                       if (!mounted) return;
                       AdaptiveSnackBar.show(
@@ -1040,51 +1056,6 @@ class _CupertinoPlayerSettingsPageState
                         type: AdaptiveSnackBarType.success,
                       );
                     },
-                    backgroundColor: tileBackground,
-                  );
-                },
-              ),
-              Consumer<VideoPlayerState>(
-                builder: (context, videoState, child) {
-                  final enabled = videoState.spoilerPreventionEnabled;
-                  return CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.lock,
-                      color: resolveSettingsIconColor(context),
-                    ),
-                    title: const Text('使用自定义 AI Key'),
-                    subtitle:
-                        const Text('开启后将使用你填写的 URL/Key（支持 OpenAI 兼容 / Gemini）。'),
-                    trailing: AdaptiveSwitch(
-                      value: videoState.spoilerAiUseCustomKey,
-                      onChanged: enabled
-                          ? (value) async {
-                              await videoState.setSpoilerAiUseCustomKey(value);
-                              if (!mounted) return;
-                              AdaptiveSnackBar.show(
-                                context,
-                                message:
-                                    value ? '已开启自定义 AI Key' : '已关闭自定义 AI Key',
-                                type: AdaptiveSnackBarType.success,
-                              );
-                            }
-                          : null,
-                    ),
-                    onTap: enabled
-                        ? () async {
-                            final bool newValue =
-                                !videoState.spoilerAiUseCustomKey;
-                            await videoState.setSpoilerAiUseCustomKey(newValue);
-                            if (!mounted) return;
-                            AdaptiveSnackBar.show(
-                              context,
-                              message: newValue
-                                  ? '已开启自定义 AI Key'
-                                  : '已关闭自定义 AI Key',
-                              type: AdaptiveSnackBarType.success,
-                            );
-                          }
-                        : null,
                     backgroundColor: tileBackground,
                   );
                 },
@@ -1134,11 +1105,6 @@ class _CupertinoPlayerSettingsPageState
       ),
       Consumer<VideoPlayerState>(
         builder: (context, videoState, child) {
-          if (!videoState.spoilerPreventionEnabled ||
-              !videoState.spoilerAiUseCustomKey) {
-            return const SizedBox.shrink();
-          }
-
           final bool isGemini =
               _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
           final urlHint = isGemini
@@ -1177,6 +1143,14 @@ class _CupertinoPlayerSettingsPageState
                           ],
                         ),
                         const SizedBox(height: 8),
+                        Text(
+                          '开启防剧透前请先填写并保存配置（必须提供接口 URL / Key / 模型）。',
+                          style: textTheme.copyWith(
+                            fontSize: 13,
+                            color: subtitleColor,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
                         Text(
                           isGemini
                               ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'

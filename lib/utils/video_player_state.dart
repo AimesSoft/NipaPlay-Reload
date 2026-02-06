@@ -364,7 +364,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 防剧透 AI 设置
   final String _spoilerAiUseCustomKeyKey = 'spoiler_ai_use_custom_key';
-  bool _spoilerAiUseCustomKey = false;
+  bool _spoilerAiUseCustomKey = true; // 兼容旧设置，固定为自定义接口
   final String _spoilerAiApiFormatKey = 'spoiler_ai_api_format';
   SpoilerAiApiFormat _spoilerAiApiFormat = SpoilerAiApiFormat.openai;
   final String _spoilerAiApiUrlKey = 'spoiler_ai_api_url';
@@ -708,6 +708,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   SpoilerAiApiFormat get spoilerAiApiFormat => _spoilerAiApiFormat;
   String get spoilerAiApiUrl => _spoilerAiApiUrl;
   bool get spoilerAiHasApiKey => _spoilerAiApiKey.trim().isNotEmpty;
+  bool get spoilerAiConfigReady =>
+      _spoilerAiApiUrl.trim().isNotEmpty &&
+      _spoilerAiApiKey.trim().isNotEmpty &&
+      _spoilerAiModel.trim().isNotEmpty;
   String get spoilerAiModel => _spoilerAiModel;
   double get spoilerAiTemperature => _spoilerAiTemperature;
   bool get spoilerAiDebugPrintResponse => _spoilerAiDebugPrintResponse;

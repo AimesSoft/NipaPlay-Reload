@@ -12,7 +12,6 @@ enum SpoilerAiApiFormat {
 class DanmakuSpoilerFilterService {
   DanmakuSpoilerFilterService._();
 
-  static const String defaultEndpoint = 'https://ffmpeg.dfsteve.top/nipaplay.php';
   static const Duration _timeout = Duration(seconds: 60);
 
   static Future<List<String>> detectSpoilerDanmakuTexts({
@@ -32,10 +31,14 @@ class DanmakuSpoilerFilterService {
     if (prompt.trim().isEmpty) return <String>[];
 
     final resolvedTemperature = temperature.clamp(0.0, 2.0).toDouble();
-    final resolvedApiUrl = (apiUrl ?? '').trim().isEmpty
-        ? defaultEndpoint
-        : (apiUrl ?? '').trim();
+    final resolvedApiUrl = (apiUrl ?? '').trim();
+    if (resolvedApiUrl.isEmpty) {
+      throw Exception('AI接口URL为空');
+    }
     final resolvedApiKey = (apiKey ?? '').trim();
+    if (resolvedApiKey.isEmpty) {
+      throw Exception('AI接口Key为空');
+    }
 
     switch (apiFormat) {
       case SpoilerAiApiFormat.openai:

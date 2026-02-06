@@ -285,6 +285,10 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (_spoilerPreventionEnabled == enabled) {
       return;
     }
+    if (enabled && !spoilerAiConfigReady) {
+      debugPrint('[防剧透] 未配置AI接口，无法启用防剧透模式');
+      return;
+    }
     _spoilerPreventionEnabled = enabled;
 
     final prefs = await SharedPreferences.getInstance();
@@ -338,7 +342,13 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
   Future<void> _loadSpoilerAiSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    _spoilerAiUseCustomKey = prefs.getBool(_spoilerAiUseCustomKeyKey) ?? false;
+    final storedUseCustomKey = prefs.getBool(_spoilerAiUseCustomKeyKey);
+    if (storedUseCustomKey != true) {
+      _spoilerAiUseCustomKey = true;
+      await prefs.setBool(_spoilerAiUseCustomKeyKey, true);
+    } else {
+      _spoilerAiUseCustomKey = true;
+    }
     _spoilerAiApiFormat =
         _parseSpoilerAiApiFormat(prefs.getString(_spoilerAiApiFormatKey));
     _spoilerAiApiUrl = prefs.getString(_spoilerAiApiUrlKey) ?? '';
@@ -348,6 +358,10 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _spoilerAiTemperature = temp.clamp(0.0, 2.0).toDouble();
     _spoilerAiDebugPrintResponse =
         prefs.getBool(_spoilerAiDebugPrintResponseKey) ?? false;
+    if (_spoilerPreventionEnabled && !spoilerAiConfigReady) {
+      _spoilerPreventionEnabled = false;
+      await prefs.setBool(_spoilerPreventionEnabledKey, false);
+    }
     notifyListeners();
   }
 
@@ -364,9 +378,9 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     bool shouldRestartAnalysis = false;
     bool changed = false;
 
-    if (useCustomKey != null && _spoilerAiUseCustomKey != useCustomKey) {
-      _spoilerAiUseCustomKey = useCustomKey;
-      await prefs.setBool(_spoilerAiUseCustomKeyKey, useCustomKey);
+    if (useCustomKey != null && _spoilerAiUseCustomKey != true) {
+      _spoilerAiUseCustomKey = true;
+      await prefs.setBool(_spoilerAiUseCustomKeyKey, true);
       changed = true;
       shouldRestartAnalysis = true;
     }
@@ -435,7 +449,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   }
 
   Future<void> setSpoilerAiUseCustomKey(bool enabled) async {
-    await updateSpoilerAiSettings(useCustomKey: enabled);
+    await updateSpoilerAiSettings(useCustomKey: true);
   }
 
   Future<void> setSpoilerAiApiFormat(SpoilerAiApiFormat format) async {

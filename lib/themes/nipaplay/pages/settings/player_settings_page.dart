@@ -814,6 +814,10 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 icon: Ionicons.shield_outline,
                 value: videoState.spoilerPreventionEnabled,
                 onChanged: (bool value) async {
+                  if (value && !videoState.spoilerAiConfigReady) {
+                    BlurSnackBar.show(context, '请先填写并保存 AI 接口配置');
+                    return;
+                  }
                   await videoState.setSpoilerPreventionEnabled(value);
                   if (!context.mounted) return;
                   BlurSnackBar.show(
@@ -824,260 +828,246 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               ),
             ];
 
-            if (videoState.spoilerPreventionEnabled) {
-              widgets.add(
-                Divider(
-                  color: colorScheme.onSurface.withOpacity(0.12),
-                  height: 1,
-                ),
-              );
-              widgets.add(
-                SettingsItem.toggle(
-                  title: "使用自定义 AI Key",
-                  subtitle: "开启后将使用你填写的 URL/Key（支持 OpenAI 兼容 / Gemini）",
-                  icon: Ionicons.key_outline,
-                  value: videoState.spoilerAiUseCustomKey,
-                  onChanged: (bool value) async {
-                    await videoState.setSpoilerAiUseCustomKey(value);
-                    if (!context.mounted) return;
-                    BlurSnackBar.show(
-                      context,
-                      value ? '已开启自定义 AI Key' : '已关闭自定义 AI Key',
-                    );
-                  },
-                ),
-              );
-            }
+            widgets.add(
+              Divider(
+                color: colorScheme.onSurface.withOpacity(0.12),
+                height: 1,
+              ),
+            );
 
-            if (videoState.spoilerPreventionEnabled &&
-                videoState.spoilerAiUseCustomKey) {
-              final bool isGemini =
-                  _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
-              final urlHint = isGemini
-                  ? 'https://generativelanguage.googleapis.com/v1beta/models'
-                  : 'https://api.openai.com/v1/chat/completions';
-              final modelHint =
-                  isGemini ? 'gemini-1.5-flash' : 'gpt-5';
+            final bool isGemini =
+                _spoilerAiApiFormatDraft == SpoilerAiApiFormat.gemini;
+            final urlHint = isGemini
+                ? 'https://generativelanguage.googleapis.com/v1beta/models'
+                : 'https://api.openai.com/v1/chat/completions';
+            final modelHint = isGemini ? 'gemini-1.5-flash' : 'gpt-5';
 
-              widgets.add(
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 12.0,
-                  ),
-                  child: SettingsCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Ionicons.settings_outline,
-                                color: colorScheme.onSurface, size: 18),
-                            const SizedBox(width: 8),
-                            Text(
-                              '防剧透 AI 设置',
-                              style: TextStyle(
-                                color: colorScheme.onSurface,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 12.0,
+                ),
+                child: SettingsCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Ionicons.settings_outline,
+                              color: colorScheme.onSurface, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            '防剧透 AI 设置',
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '开启防剧透前请先填写并保存配置（必须提供接口 URL / Key / 模型）。',
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        isGemini
+                            ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
+                            : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text(
+                            '接口格式',
+                            style: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          BlurDropdown<SpoilerAiApiFormat>(
+                            dropdownKey: _spoilerAiApiFormatDropdownKey,
+                            items: [
+                              DropdownMenuItemData(
+                                title: 'OpenAI 兼容',
+                                value: SpoilerAiApiFormat.openai,
+                                isSelected: _spoilerAiApiFormatDraft ==
+                                    SpoilerAiApiFormat.openai,
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isGemini
-                              ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
-                              : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Text(
-                              '接口格式',
-                              style: TextStyle(
-                                color: colorScheme.onSurface.withOpacity(0.7),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                              DropdownMenuItemData(
+                                title: 'Gemini',
+                                value: SpoilerAiApiFormat.gemini,
+                                isSelected: _spoilerAiApiFormatDraft ==
+                                    SpoilerAiApiFormat.gemini,
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            BlurDropdown<SpoilerAiApiFormat>(
-                              dropdownKey: _spoilerAiApiFormatDropdownKey,
-                              items: [
-                                DropdownMenuItemData(
-                                  title: 'OpenAI 兼容',
-                                  value: SpoilerAiApiFormat.openai,
-                                  isSelected: _spoilerAiApiFormatDraft ==
-                                      SpoilerAiApiFormat.openai,
-                                ),
-                                DropdownMenuItemData(
-                                  title: 'Gemini',
-                                  value: SpoilerAiApiFormat.gemini,
-                                  isSelected: _spoilerAiApiFormatDraft ==
-                                      SpoilerAiApiFormat.gemini,
-                                ),
-                              ],
-                              onItemSelected: (format) {
-                                setState(() {
-                                  _spoilerAiApiFormatDraft = format;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _spoilerAiUrlController,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          cursorColor: _fluentAccentColor,
-                          decoration: InputDecoration(
-                            labelText: '接口 URL',
-                            labelStyle: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                            hintText: urlHint,
-                            hintStyle: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.38),
-                            ),
-                            filled: true,
-                            fillColor: colorScheme.onSurface.withOpacity(0.1),
-                            border: const OutlineInputBorder(
-                              borderSide: BorderSide.none,
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(8)),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderSide: BorderSide(
-                                  color: _fluentAccentColor, width: 2),
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(8)),
-                            ),
-                          ),
-                          style: TextStyle(color: colorScheme.onSurface),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _spoilerAiModelController,
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          cursorColor: _fluentAccentColor,
-                          decoration: InputDecoration(
-                            labelText: '模型',
-                            labelStyle: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                            hintText: modelHint,
-                            hintStyle: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.38),
-                            ),
-                            filled: true,
-                            fillColor: colorScheme.onSurface.withOpacity(0.1),
-                            border: const OutlineInputBorder(
-                              borderSide: BorderSide.none,
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(8)),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderSide: BorderSide(
-                                  color: _fluentAccentColor, width: 2),
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(8)),
-                            ),
-                          ),
-                          style: TextStyle(color: colorScheme.onSurface),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _spoilerAiApiKeyController,
-                          obscureText: true,
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          cursorColor: _fluentAccentColor,
-                          decoration: InputDecoration(
-                            labelText: 'API Key',
-                            labelStyle: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                            hintText: videoState.spoilerAiHasApiKey
-                                ? '已保存，留空表示不修改'
-                                : '请输入你的 API Key',
-                            hintStyle: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.38),
-                            ),
-                            filled: true,
-                            fillColor: colorScheme.onSurface.withOpacity(0.1),
-                            border: const OutlineInputBorder(
-                              borderSide: BorderSide.none,
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(8)),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderSide: BorderSide(
-                                  color: _fluentAccentColor, width: 2),
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(8)),
-                            ),
-                          ),
-                          style: TextStyle(color: colorScheme.onSurface),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                            fontSize: 13,
-                          ),
-                        ),
-                        fluent.FluentTheme(
-                          data: fluent.FluentThemeData(
-                            brightness: Theme.of(context).brightness,
-                            accentColor: fluent.AccentColor.swatch({
-                              'normal': _fluentAccentColor,
-                              'default': _fluentAccentColor,
-                            }),
-                          ),
-                          child: fluent.Slider(
-                            min: 0.0,
-                            max: 2.0,
-                            divisions: 40,
-                            value:
-                                _spoilerAiTemperatureDraft.clamp(0.0, 2.0),
-                            onChanged: (value) {
+                            ],
+                            onItemSelected: (format) {
                               setState(() {
-                                _spoilerAiTemperatureDraft = value;
+                                _spoilerAiApiFormatDraft = format;
                               });
                             },
                           ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: BlurButton(
-                            icon: _isSavingSpoilerAiSettings
-                                ? null
-                                : Ionicons.checkmark_outline,
-                            text: _isSavingSpoilerAiSettings ? '保存中...' : '保存配置',
-                            onTap: _isSavingSpoilerAiSettings
-                                ? () {}
-                                : () => _saveSpoilerAiSettings(videoState),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 10),
-                            fontSize: 13,
-                            iconSize: 16,
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _spoilerAiUrlController,
+                        keyboardType: TextInputType.url,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        cursorColor: _fluentAccentColor,
+                        decoration: InputDecoration(
+                          labelText: '接口 URL',
+                          labelStyle: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          hintText: urlHint,
+                          hintStyle: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.38),
+                          ),
+                          filled: true,
+                          fillColor: colorScheme.onSurface.withOpacity(0.1),
+                          border: const OutlineInputBorder(
+                            borderSide: BorderSide.none,
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(8)),
+                          ),
+                          focusedBorder: const OutlineInputBorder(
+                            borderSide: BorderSide(
+                                color: _fluentAccentColor, width: 2),
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(8)),
                           ),
                         ),
-                      ],
-                    ),
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _spoilerAiModelController,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        cursorColor: _fluentAccentColor,
+                        decoration: InputDecoration(
+                          labelText: '模型',
+                          labelStyle: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          hintText: modelHint,
+                          hintStyle: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.38),
+                          ),
+                          filled: true,
+                          fillColor: colorScheme.onSurface.withOpacity(0.1),
+                          border: const OutlineInputBorder(
+                            borderSide: BorderSide.none,
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(8)),
+                          ),
+                          focusedBorder: const OutlineInputBorder(
+                            borderSide: BorderSide(
+                                color: _fluentAccentColor, width: 2),
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(8)),
+                          ),
+                        ),
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _spoilerAiApiKeyController,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        cursorColor: _fluentAccentColor,
+                        decoration: InputDecoration(
+                          labelText: 'API Key',
+                          labelStyle: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          hintText: videoState.spoilerAiHasApiKey
+                              ? '已保存，留空表示不修改'
+                              : '请输入你的 API Key',
+                          hintStyle: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.38),
+                          ),
+                          filled: true,
+                          fillColor: colorScheme.onSurface.withOpacity(0.1),
+                          border: const OutlineInputBorder(
+                            borderSide: BorderSide.none,
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(8)),
+                          ),
+                          focusedBorder: const OutlineInputBorder(
+                            borderSide: BorderSide(
+                                color: _fluentAccentColor, width: 2),
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(8)),
+                          ),
+                        ),
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.7),
+                          fontSize: 13,
+                        ),
+                      ),
+                      fluent.FluentTheme(
+                        data: fluent.FluentThemeData(
+                          brightness: Theme.of(context).brightness,
+                          accentColor: fluent.AccentColor.swatch({
+                            'normal': _fluentAccentColor,
+                            'default': _fluentAccentColor,
+                          }),
+                        ),
+                        child: fluent.Slider(
+                          min: 0.0,
+                          max: 2.0,
+                          divisions: 40,
+                          value:
+                              _spoilerAiTemperatureDraft.clamp(0.0, 2.0),
+                          onChanged: (value) {
+                            setState(() {
+                              _spoilerAiTemperatureDraft = value;
+                            });
+                          },
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: BlurButton(
+                          icon: _isSavingSpoilerAiSettings
+                              ? null
+                              : Ionicons.checkmark_outline,
+                          text: _isSavingSpoilerAiSettings ? '保存中...' : '保存配置',
+                          onTap: _isSavingSpoilerAiSettings
+                              ? () {}
+                              : () => _saveSpoilerAiSettings(videoState),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          fontSize: 13,
+                          iconSize: 16,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            }
+              ),
+            );
 
             return Column(
               mainAxisSize: MainAxisSize.min,
