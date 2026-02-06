@@ -91,6 +91,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   
   // 存储ScanService引用
   ScanService? _scanService;
+  
+  // WebDAV/SMB 刮削进度状态
+  bool _isRemoteScraping = false;
+  double? _remoteScrapeProgress;
+  String _remoteScrapeMessage = '';
+  int _remoteScrapeLastProcessed = -1;
+  int _remoteScrapeTotal = 0;
 
   // 排序相关状态
   int _sortOption = 0; // 0: 文件名升序, 1: 文件名降序, 2: 修改时间升序, 3: 修改时间降序, 4: 大小升序, 5: 大小降序
@@ -207,6 +214,98 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     } catch (e) {
       debugPrint('初始化SMB服务失败: $e');
     }
+  }
+
+  void _setRemoteScrapeState({
+    bool? isScraping,
+    String? message,
+    double? progress,
+    bool updateProgress = false,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      if (isScraping != null) {
+        _isRemoteScraping = isScraping;
+      }
+      if (message != null) {
+        _remoteScrapeMessage = message;
+      }
+      if (updateProgress) {
+        _remoteScrapeProgress = progress;
+      }
+    });
+  }
+
+  void _updateRemoteScrapeProgress({
+    required String sourceLabel,
+    required String folderName,
+    required int processed,
+    required int total,
+  }) {
+    if (processed == _remoteScrapeLastProcessed && total == _remoteScrapeTotal) {
+      return;
+    }
+    _remoteScrapeLastProcessed = processed;
+    _remoteScrapeTotal = total;
+    final double progress = total > 0
+        ? (processed / total).clamp(0.0, 1.0).toDouble()
+        : 0.0;
+    _setRemoteScrapeState(
+      message: '$sourceLabel 刮削中：$folderName ($processed/$total)',
+      progress: progress,
+      updateProgress: true,
+    );
+  }
+
+  void _finishRemoteScrape(String message) {
+    _remoteScrapeLastProcessed = -1;
+    _remoteScrapeTotal = 0;
+    _setRemoteScrapeState(
+      isScraping: false,
+      message: message,
+      progress: null,
+      updateProgress: true,
+    );
+  }
+
+  String _buildScrapeSummaryMessage({
+    required int total,
+    required int matched,
+    required int failed,
+  }) {
+    if (total == 0) {
+      return '未找到可刮削的视频文件';
+    }
+    if (matched == 0) {
+      return '刮削完成，但未匹配到番剧信息';
+    }
+    if (failed > 0) {
+      return '刮削完成：成功 $matched/$total，失败 $failed';
+    }
+    return '刮削完成：成功 $matched/$total';
+  }
+
+  String? _buildScanSubtitleText(
+    WatchHistoryItem? historyItem,
+    String baseName,
+  ) {
+    if (historyItem == null) return null;
+
+    final hasScanInfo = historyItem.animeId != null ||
+        historyItem.episodeId != null ||
+        (historyItem.animeName.isNotEmpty && historyItem.animeName != baseName);
+    if (!hasScanInfo) return null;
+
+    final List<String> subtitleParts = [];
+    if (historyItem.animeName.isNotEmpty && historyItem.animeName != baseName) {
+      subtitleParts.add(historyItem.animeName);
+    }
+    if (historyItem.episodeTitle != null &&
+        historyItem.episodeTitle!.isNotEmpty) {
+      subtitleParts.add(historyItem.episodeTitle!);
+    }
+    if (subtitleParts.isEmpty) return null;
+    return subtitleParts.join(' - ');
   }
   
   // 显示WebDAV连接对话框
@@ -756,30 +855,10 @@ style: TextStyle(color: Colors.redAccent)),
               final historyItem = snapshot.data;
               final String fileName = p.basename(entity.path);
               
-              // 构建副标题（动画名称和集数）
-              String? subtitleText;
-              // 放宽条件：只要有历史记录且有动画信息就显示
-              if (historyItem != null && 
-                  (historyItem.animeId != null || historyItem.episodeId != null ||
-                   (historyItem.animeName.isNotEmpty && historyItem.animeName != p.basenameWithoutExtension(entity.path)))) {
-                final List<String> subtitleParts = [];
-                
-                // 添加动画名称（如果存在且不是文件名）
-                if (historyItem.animeName.isNotEmpty && 
-                    historyItem.animeName != p.basenameWithoutExtension(entity.path)) {
-                  subtitleParts.add(historyItem.animeName);
-                }
-                
-                // 添加集数标题（如果存在）
-                if (historyItem.episodeTitle != null && 
-                    historyItem.episodeTitle!.isNotEmpty) {
-                  subtitleParts.add(historyItem.episodeTitle!);
-                }
-                
-                if (subtitleParts.isNotEmpty) {
-                  subtitleText = subtitleParts.join(' - ');
-                }
-              }
+              final subtitleText = _buildScanSubtitleText(
+                historyItem,
+                p.basenameWithoutExtension(entity.path),
+              );
               
               return ListTile(
                 dense: true,
@@ -1731,9 +1810,29 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                     ],
                   ),
                 ),
-              ),
+                ),
             ),
         ],
+        if (widget.section != LibraryManagementSection.local)
+          if (_isRemoteScraping || _remoteScrapeMessage.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_remoteScrapeMessage, style: TextStyle(color: scanMessageColor)),
+                  if (_isRemoteScraping)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: LinearProgressIndicator(
+                        value: _remoteScrapeProgress,
+                        backgroundColor: scanProgressBackground,
+                        valueColor: const AlwaysStoppedAnimation<Color>(_accentColor),
+                      ),
+                    ),
+                ],
+              ),
+            ),
         Expanded(
           child: Builder(
             builder: (_) {
@@ -2507,21 +2606,44 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                   ),
             ],
           );
-        } else {
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
-            leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
-            title: Text(
-              file.name,
-              style: TextStyle(color: textColor, fontSize: 13),
-            ),
-            trailing: SearchBarActionButton(
-              icon: Icons.play_circle_outline,
-              tooltip: '播放',
-              onPressed: () => _playWebDAVFile(connection, file),
-            ),
-            onTap: () => _playWebDAVFile(connection, file),
+      } else {
+          final fileUrl =
+              WebDAVService.instance.getFileUrl(connection, file.path);
+          return FutureBuilder<WatchHistoryItem?>(
+            future: WatchHistoryManager.getHistoryItem(fileUrl),
+            builder: (context, snapshot) {
+              final subtitleText = _buildScanSubtitleText(
+                snapshot.data,
+                p.basenameWithoutExtension(file.name),
+              );
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+                leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+                title: Text(
+                  file.name,
+                  style: TextStyle(color: textColor, fontSize: 13),
+                ),
+                subtitle: subtitleText != null
+                    ? Text(
+                        subtitleText,
+                        locale: const Locale("zh-Hans","zh"),
+                        style: TextStyle(
+                          color: secondaryTextColor,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+                trailing: SearchBarActionButton(
+                  icon: Icons.play_circle_outline,
+                  tooltip: '播放',
+                  onPressed: () => _playWebDAVFile(connection, file),
+                ),
+                onTap: () => _playWebDAVFile(connection, file),
+              );
+            },
           );
         }
       }).toList();
@@ -2609,20 +2731,43 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           ],
         );
       } else {
-        return ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
-          leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
-          title: Text(
-            file.name,
-            style: TextStyle(color: textColor, fontSize: 13),
-          ),
-          trailing: SearchBarActionButton(
-            icon: Icons.play_circle_outline,
-            tooltip: '播放',
-            onPressed: () => _playSMBFile(connection, file),
-          ),
-          onTap: () => _playSMBFile(connection, file),
+        final fileUrl =
+            SMBProxyService.instance.buildStreamUrl(connection, file.path);
+        return FutureBuilder<WatchHistoryItem?>(
+          future: WatchHistoryManager.getHistoryItem(fileUrl),
+          builder: (context, snapshot) {
+            final subtitleText = _buildScanSubtitleText(
+              snapshot.data,
+              p.basenameWithoutExtension(file.name),
+            );
+            return ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+              leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+              title: Text(
+                file.name,
+                style: TextStyle(color: textColor, fontSize: 13),
+              ),
+              subtitle: subtitleText != null
+                  ? Text(
+                      subtitleText,
+                      locale: const Locale("zh-Hans","zh"),
+                      style: TextStyle(
+                        color: secondaryTextColor,
+                        fontSize: 12,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
+              trailing: SearchBarActionButton(
+                icon: Icons.play_circle_outline,
+                tooltip: '播放',
+                onPressed: () => _playSMBFile(connection, file),
+              ),
+              onTap: () => _playSMBFile(connection, file),
+            );
+          },
         );
       }
     }).toList();
@@ -2674,9 +2819,12 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   Future<_RemoteScrapeResult> _scrapeRemoteFiles({
     required String sourceLabel,
     required List<_RemoteScrapeCandidate> candidates,
+    void Function(int processed, int total, String currentName)? onProgress,
   }) async {
     int matched = 0;
     int failed = 0;
+    final total = candidates.length;
+    int processed = 0;
 
     for (final candidate in candidates) {
       try {
@@ -2744,6 +2892,9 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       } catch (e) {
         failed++;
         debugPrint('$sourceLabel 刮削失败: ${candidate.fileName} -> $e');
+      } finally {
+        processed++;
+        onProgress?.call(processed, total, candidate.fileName);
       }
     }
 
@@ -2773,6 +2924,17 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     );
     
     if (confirm == true && mounted) {
+      if (_isRemoteScraping) {
+        BlurSnackBar.show(context, '已有刮削任务在进行中，请稍后再试。');
+        return;
+      }
+      const sourceLabel = 'WebDAV';
+      _setRemoteScrapeState(
+        isScraping: true,
+        message: '正在准备刮削 $folderName...',
+        progress: null,
+        updateProgress: true,
+      );
       try {
         if (_isRemoteMode) {
           final provider =
@@ -2780,6 +2942,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           if (mounted) {
             BlurSnackBar.show(context, '正在刮削 $folderName...');
           }
+          _setRemoteScrapeState(
+            message: '正在刮削 $folderName...',
+            progress: null,
+            updateProgress: true,
+          );
           final resultMap = await provider.scanRemoteWebDAVFolder(
             name: connection.name,
             path: folderPath,
@@ -2790,30 +2957,28 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           final total = resultMap['total'] ?? 0;
           final matched = resultMap['matched'] ?? 0;
           final failed = resultMap['failed'] ?? 0;
+          final summary = _buildScrapeSummaryMessage(
+            total: total,
+            matched: matched,
+            failed: failed,
+          );
+          _finishRemoteScrape(summary);
           if (mounted) {
-            if (total == 0) {
-              BlurSnackBar.show(context, '未找到可刮削的视频文件');
-            } else if (matched == 0) {
-              BlurSnackBar.show(context, '刮削完成，但未匹配到番剧信息');
-            } else if (failed > 0) {
-              BlurSnackBar.show(
-                context,
-                '刮削完成：成功 $matched/$total，失败 $failed',
-              );
-            } else {
-              BlurSnackBar.show(
-                context,
-                '刮削完成：成功 $matched/$total',
-              );
-            }
+            BlurSnackBar.show(context, summary);
           }
           return;
         }
 
+        _setRemoteScrapeState(
+          message: '正在扫描文件列表: $folderName',
+          progress: null,
+          updateProgress: true,
+        );
         // 递归获取文件夹中的所有视频文件
         final files = await _getWebDAVVideoFiles(connection, folderPath);
 
         if (files.isEmpty) {
+          _finishRemoteScrape('未找到可刮削的视频文件');
           if (mounted) {
             BlurSnackBar.show(context, '未找到可刮削的视频文件');
           }
@@ -2833,30 +2998,39 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                   fileName: file.name,
                 ))
             .toList();
+        _updateRemoteScrapeProgress(
+          sourceLabel: sourceLabel,
+          folderName: folderName,
+          processed: 0,
+          total: candidates.length,
+        );
         final result = await _scrapeRemoteFiles(
-          sourceLabel: 'WebDAV',
+          sourceLabel: sourceLabel,
           candidates: candidates,
+          onProgress: (processed, total, _) {
+            _updateRemoteScrapeProgress(
+              sourceLabel: sourceLabel,
+              folderName: folderName,
+              processed: processed,
+              total: total,
+            );
+          },
         );
         if (mounted) {
           await context.read<WatchHistoryProvider>().refresh();
         }
 
+        final summary = _buildScrapeSummaryMessage(
+          total: result.total,
+          matched: result.matched,
+          failed: result.failed,
+        );
+        _finishRemoteScrape(summary);
         if (mounted) {
-          if (result.matched == 0) {
-            BlurSnackBar.show(context, '刮削完成，但未匹配到番剧信息');
-          } else if (result.failed > 0) {
-            BlurSnackBar.show(
-              context,
-              '刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}',
-            );
-          } else {
-            BlurSnackBar.show(
-              context,
-              '刮削完成：成功 ${result.matched}/${result.total}',
-            );
-          }
+          BlurSnackBar.show(context, summary);
         }
       } catch (e) {
+        _finishRemoteScrape('刮削WebDAV文件夹失败: $e');
         if (mounted) {
           BlurSnackBar.show(context, '刮削WebDAV文件夹失败: $e');
         }
@@ -2957,6 +3131,17 @@ style: TextStyle(color: Colors.lightBlueAccent)),
     );
 
     if (confirm == true && mounted) {
+      if (_isRemoteScraping) {
+        BlurSnackBar.show(context, '已有刮削任务在进行中，请稍后再试。');
+        return;
+      }
+      const sourceLabel = 'SMB';
+      _setRemoteScrapeState(
+        isScraping: true,
+        message: '正在准备刮削 $folderName...',
+        progress: null,
+        updateProgress: true,
+      );
       try {
         if (_isRemoteMode) {
           final provider =
@@ -2964,6 +3149,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           if (mounted) {
             BlurSnackBar.show(context, '正在刮削 $folderName...');
           }
+          _setRemoteScrapeState(
+            message: '正在刮削 $folderName...',
+            progress: null,
+            updateProgress: true,
+          );
           final resultMap = await provider.scanRemoteSMBFolder(
             name: connection.name,
             path: folderPath,
@@ -2974,28 +3164,26 @@ style: TextStyle(color: Colors.lightBlueAccent)),
           final total = resultMap['total'] ?? 0;
           final matched = resultMap['matched'] ?? 0;
           final failed = resultMap['failed'] ?? 0;
+          final summary = _buildScrapeSummaryMessage(
+            total: total,
+            matched: matched,
+            failed: failed,
+          );
+          _finishRemoteScrape(summary);
           if (mounted) {
-            if (total == 0) {
-              BlurSnackBar.show(context, '未找到可刮削的视频文件');
-            } else if (matched == 0) {
-              BlurSnackBar.show(context, '刮削完成，但未匹配到番剧信息');
-            } else if (failed > 0) {
-              BlurSnackBar.show(
-                context,
-                '刮削完成：成功 $matched/$total，失败 $failed',
-              );
-            } else {
-              BlurSnackBar.show(
-                context,
-                '刮削完成：成功 $matched/$total',
-              );
-            }
+            BlurSnackBar.show(context, summary);
           }
           return;
         }
 
+        _setRemoteScrapeState(
+          message: '正在扫描文件列表: $folderName',
+          progress: null,
+          updateProgress: true,
+        );
         final files = await _getSMBVideoFiles(connection, folderPath);
         if (files.isEmpty) {
+          _finishRemoteScrape('未找到可刮削的视频文件');
           if (mounted) {
             BlurSnackBar.show(context, '未找到可刮削的视频文件');
           }
@@ -3015,30 +3203,39 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                   fileName: file.name,
                 ))
             .toList();
+        _updateRemoteScrapeProgress(
+          sourceLabel: sourceLabel,
+          folderName: folderName,
+          processed: 0,
+          total: candidates.length,
+        );
         final result = await _scrapeRemoteFiles(
-          sourceLabel: 'SMB',
+          sourceLabel: sourceLabel,
           candidates: candidates,
+          onProgress: (processed, total, _) {
+            _updateRemoteScrapeProgress(
+              sourceLabel: sourceLabel,
+              folderName: folderName,
+              processed: processed,
+              total: total,
+            );
+          },
         );
         if (mounted) {
           await context.read<WatchHistoryProvider>().refresh();
         }
 
+        final summary = _buildScrapeSummaryMessage(
+          total: result.total,
+          matched: result.matched,
+          failed: result.failed,
+        );
+        _finishRemoteScrape(summary);
         if (mounted) {
-          if (result.matched == 0) {
-            BlurSnackBar.show(context, '刮削完成，但未匹配到番剧信息');
-          } else if (result.failed > 0) {
-            BlurSnackBar.show(
-              context,
-              '刮削完成：成功 ${result.matched}/${result.total}，失败 ${result.failed}',
-            );
-          } else {
-            BlurSnackBar.show(
-              context,
-              '刮削完成：成功 ${result.matched}/${result.total}',
-            );
-          }
+          BlurSnackBar.show(context, summary);
         }
       } catch (e) {
+        _finishRemoteScrape('刮削SMB文件夹失败: $e');
         if (mounted) {
           BlurSnackBar.show(context, '刮削SMB文件夹失败: $e');
         }

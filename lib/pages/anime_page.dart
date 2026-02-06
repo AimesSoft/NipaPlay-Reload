@@ -1129,27 +1129,30 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
-                          child: TabBar(
-                            controller: _tabController,
-                            isScrollable: true,
-                            tabs: tabs,
-                            labelColor: activeColor,
-                            unselectedLabelColor: unselectedLabelColor,
-                            labelPadding: const EdgeInsets.only(bottom: 12.0),
-                            indicatorPadding: EdgeInsets.zero,
-                            indicator: const _CustomTabIndicator(
-                              indicatorHeight: 3.0,
-                              indicatorColor: activeColor,
-                              radius: 30.0,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 6.0),
+                            child: TabBar(
+                              controller: _tabController,
+                              isScrollable: true,
+                              tabs: tabs,
+                              labelColor: activeColor,
+                              unselectedLabelColor: unselectedLabelColor,
+                              labelPadding: const EdgeInsets.only(bottom: 12.0),
+                              indicatorPadding: EdgeInsets.zero,
+                              indicator: const _CustomTabIndicator(
+                                indicatorHeight: 3.0,
+                                indicatorColor: activeColor,
+                                radius: 30.0,
+                              ),
+                              tabAlignment: TabAlignment.start,
+                              splashFactory: NoSplash.splashFactory,
+                              overlayColor:
+                                  WidgetStateProperty.all(Colors.transparent),
+                              // 移除灰色滑轨
+                              dividerColor: Colors.transparent,
+                              dividerHeight: 3.0,
+                              indicatorSize: TabBarIndicatorSize.label,
                             ),
-                            tabAlignment: TabAlignment.start,
-                            splashFactory: NoSplash.splashFactory,
-                            overlayColor:
-                                WidgetStateProperty.all(Colors.transparent),
-                            // 移除灰色滑轨
-                            dividerColor: Colors.transparent,
-                            dividerHeight: 3.0,
-                            indicatorSize: TabBarIndicatorSize.label,
                           ),
                         ),
                         const SizedBox(width: 8),
