@@ -394,6 +394,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final double _maxDanmakuSpeedMultiplier = 2.0;
   final double _baseDanmakuScrollDurationSeconds = 10.0;
   double _danmakuSpeedMultiplier = 1.0; // 默认标准速度
+  final String _rememberDanmakuOffsetKey = 'remember_danmaku_offset';
+  bool _rememberDanmakuOffset = false; // 是否在切换视频时保留手动弹幕偏移
   double _manualDanmakuOffset = 0.0; // 手动设置的弹幕偏移
   double _autoDanmakuOffset = 0.0; // 弹弹Play自动匹配的时间偏移
 
@@ -652,6 +654,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get danmakuScrollDurationSeconds =>
       _baseDanmakuScrollDurationSeconds / _danmakuSpeedMultiplier;
   bool get danmakuStacking => _danmakuStacking;
+  bool get rememberDanmakuOffset => _rememberDanmakuOffset;
   double get manualDanmakuOffset => _manualDanmakuOffset;
   double get autoDanmakuOffset => _autoDanmakuOffset;
   bool get pauseOnBackground => _pauseOnBackground;

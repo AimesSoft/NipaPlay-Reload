@@ -867,6 +867,27 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadRememberDanmakuOffset() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resolved = prefs.getBool(_rememberDanmakuOffsetKey) ?? false;
+    if (_rememberDanmakuOffset != resolved) {
+      _rememberDanmakuOffset = resolved;
+      notifyListeners();
+    } else {
+      _rememberDanmakuOffset = resolved;
+    }
+  }
+
+  Future<void> setRememberDanmakuOffset(bool remember) async {
+    if (_rememberDanmakuOffset == remember) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_rememberDanmakuOffsetKey, remember);
+    _rememberDanmakuOffset = remember;
+    notifyListeners();
+  }
+
   Future<void> setDanmakuSpeedMultiplier(double multiplier) async {
     final normalized = _normalizeDanmakuSpeed(multiplier);
     if ((_danmakuSpeedMultiplier - normalized).abs() < 0.0001) {

@@ -938,6 +938,43 @@ class _CupertinoPlayerSettingsPageState
             addDividers: true,
             dividerIndent: 16,
             children: [
+              Consumer<VideoPlayerState>(
+                builder: (context, videoState, child) {
+                  return CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.timer,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: const Text('记忆弹幕偏移'),
+                    subtitle:
+                        const Text('切换视频时保留当前手动偏移（自动匹配偏移仍会重置）。'),
+                    trailing: AdaptiveSwitch(
+                      value: videoState.rememberDanmakuOffset,
+                      onChanged: (value) async {
+                        await videoState.setRememberDanmakuOffset(value);
+                        if (!mounted) return;
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: value ? '已开启弹幕偏移记忆' : '已关闭弹幕偏移记忆',
+                          type: AdaptiveSnackBarType.success,
+                        );
+                      },
+                    ),
+                    onTap: () async {
+                      final bool newValue = !videoState.rememberDanmakuOffset;
+                      await videoState.setRememberDanmakuOffset(newValue);
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        context,
+                        message:
+                            newValue ? '已开启弹幕偏移记忆' : '已关闭弹幕偏移记忆',
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                    backgroundColor: tileBackground,
+                  );
+                },
+              ),
               CupertinoSettingsTile(
                 leading: Icon(
                   CupertinoIcons.textformat_abc,

@@ -37,6 +37,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadDanmakuFontSize();
     await _loadDanmakuDisplayArea();
     await _loadDanmakuSpeedMultiplier();
+    await _loadRememberDanmakuOffset();
 
     // 加载播放速度设置
     await _loadPlaybackRate();

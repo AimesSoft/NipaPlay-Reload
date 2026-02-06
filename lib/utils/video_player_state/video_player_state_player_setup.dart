@@ -13,7 +13,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     } catch (e) {
       debugPrint('[自动连播] 重置AutoNextEpisodeService状态失败: $e');
     }
-    if (resetManualDanmakuOffset) {
+    final bool shouldResetManualDanmakuOffset =
+        resetManualDanmakuOffset && !_rememberDanmakuOffset;
+    if (shouldResetManualDanmakuOffset) {
       setManualDanmakuOffset(0.0);
     }
     if (_status == PlayerStatus.loading ||

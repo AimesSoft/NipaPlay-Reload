@@ -763,6 +763,27 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return SettingsItem.toggle(
+              title: "记忆弹幕偏移",
+              subtitle: "切换视频时保留当前手动偏移（自动匹配偏移仍会重置）",
+              icon: Icons.av_timer,
+              value: videoState.rememberDanmakuOffset,
+              onChanged: (bool value) async {
+                await videoState.setRememberDanmakuOffset(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value ? '已开启弹幕偏移记忆' : '已关闭弹幕偏移记忆',
+                );
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
         // 弹幕转换简体中文开关
         Consumer<SettingsProvider>(
           builder: (context, settingsProvider, child) {

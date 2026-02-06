@@ -65,7 +65,11 @@ class SettingsPage extends StatefulWidget {
                   },
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text('设置', style: titleStyle),
+                    child: Text(
+                      '设置',
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: titleStyle,
+                    ),
                   ),
                 );
               },
@@ -158,6 +162,7 @@ class _SettingsPageState extends State<SettingsPage>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Text(title,
+              locale: _titleLocale,
               style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
