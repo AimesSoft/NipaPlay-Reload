@@ -31,8 +31,10 @@ import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/local_media_share_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -2366,6 +2368,10 @@ class _CupertinoLibraryManagementSheetState
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
   _LibrarySource _selectedSource = _LibrarySource.local;
+  static const Set<String> _localVideoExtensions = {'.mp4', '.mkv'};
+  final Map<String, List<FileSystemEntity>> _expandedLocalContents = {};
+  final Set<String> _expandedLocalFolders = {};
+  final Set<String> _loadingLocalFolders = {};
   List<WebDAVConnection> _webdavConnections = [];
   final Map<String, List<WebDAVFile>> _webdavFolderContents = {};
   final Set<String> _expandedWebDAVConnections = {};
@@ -2785,48 +2791,558 @@ class _CupertinoLibraryManagementSheetState
       CupertinoColors.destructiveRed,
       context,
     );
+    final isExpanded = _expandedLocalFolders.contains(folderPath);
+    final isLoading = _loadingLocalFolders.contains(folderPath);
 
-    return CupertinoListTile(
-      title: Text(p.basename(folderPath)),
-      subtitle: Text(
-        folderPath,
-        style: TextStyle(color: subtitleColor, fontSize: 12),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            minimumSize: const Size.square(32),
-            onPressed: scanService.isScanning
-                ? null
-                : () => _handleRescanFolder(scanService, folderPath),
-            child: Icon(
-              CupertinoIcons.refresh_thin,
-              size: 20,
-              color: scanService.isScanning
-                  ? accentColor.withValues(alpha: 0.4)
-                  : accentColor,
+    return Column(
+      children: [
+        CupertinoListTile(
+          title: Text(p.basename(folderPath)),
+          subtitle: Text(
+            folderPath,
+            style: TextStyle(color: subtitleColor, fontSize: 12),
+          ),
+          onTap: () => _toggleLocalFolder(folderPath),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size.square(32),
+                onPressed: scanService.isScanning
+                    ? null
+                    : () => _handleRescanFolder(scanService, folderPath),
+                child: Icon(
+                  CupertinoIcons.refresh_thin,
+                  size: 20,
+                  color: scanService.isScanning
+                      ? accentColor.withValues(alpha: 0.4)
+                      : accentColor,
+                ),
+              ),
+              const SizedBox(width: 4),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size.square(32),
+                onPressed: scanService.isScanning
+                    ? null
+                    : () => _handleRemoveFolder(scanService, folderPath),
+                child: Icon(
+                  CupertinoIcons.delete,
+                  size: 20,
+                  color: scanService.isScanning
+                      ? destructiveColor.withValues(alpha: 0.4)
+                      : destructiveColor,
+                ),
+              ),
+              const SizedBox(width: 4),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size.square(32),
+                onPressed: () => _toggleLocalFolder(folderPath),
+                child: isLoading
+                    ? const CupertinoActivityIndicator(radius: 8)
+                    : Icon(
+                        isExpanded
+                            ? CupertinoIcons.chevron_down
+                            : CupertinoIcons.chevron_right,
+                        size: 18,
+                        color: subtitleColor,
+                      ),
+              ),
+            ],
+          ),
+        ),
+        if (isExpanded)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildLocalFileList(folderPath, depth: 1),
+        ),
+      ],
+    );
+  }
+
+  void _toggleLocalFolder(String folderPath) {
+    if (!mounted || kIsWeb) return;
+    if (_expandedLocalFolders.contains(folderPath)) {
+      setState(() {
+        _expandedLocalFolders.remove(folderPath);
+      });
+      return;
+    }
+    setState(() {
+      _expandedLocalFolders.add(folderPath);
+    });
+    if (_expandedLocalContents.containsKey(folderPath)) {
+      return;
+    }
+    _loadLocalFolderChildren(folderPath);
+  }
+
+  Future<void> _loadLocalFolderChildren(String folderPath) async {
+    if (_loadingLocalFolders.contains(folderPath)) {
+      return;
+    }
+    if (!mounted || kIsWeb) return;
+
+    setState(() {
+      _loadingLocalFolders.add(folderPath);
+    });
+
+    try {
+      final children = await _getDirectoryContents(folderPath);
+      if (!mounted) return;
+      setState(() {
+        _expandedLocalContents[folderPath] = children;
+        _loadingLocalFolders.remove(folderPath);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingLocalFolders.remove(folderPath);
+      });
+      _showSnack('加载文件夹失败：$e');
+    }
+  }
+
+  Future<List<FileSystemEntity>> _getDirectoryContents(String path) async {
+    if (kIsWeb) return [];
+    final List<FileSystemEntity> contents = [];
+    final Directory directory = Directory(path);
+    if (await directory.exists()) {
+      try {
+        await for (final entity
+            in directory.list(recursive: false, followLinks: false)) {
+          if (entity is Directory) {
+            contents.add(entity);
+          } else if (entity is File) {
+            final extension = p.extension(entity.path).toLowerCase();
+            if (_localVideoExtensions.contains(extension)) {
+              contents.add(entity);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('加载文件夹内容失败: $path, 错误: $e');
+      }
+    }
+    _sortLocalContents(contents);
+    return contents;
+  }
+
+  void _sortLocalContents(List<FileSystemEntity> contents) {
+    contents.sort((a, b) {
+      if (a is Directory && b is File) return -1;
+      if (a is File && b is Directory) return 1;
+      return p
+          .basename(a.path)
+          .toLowerCase()
+          .compareTo(p.basename(b.path).toLowerCase());
+    });
+  }
+
+  Widget _buildLocalFileList(String folderPath, {required int depth}) {
+    final contents = _expandedLocalContents[folderPath];
+    final isLoading = _loadingLocalFolders.contains(folderPath);
+    final indentation = 16.0 + depth * 14;
+
+    if (isLoading) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 12, 12, 12),
+        child: const CupertinoActivityIndicator(radius: 10),
+      );
+    }
+
+    if (contents == null) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 12, 12, 12),
+        child: Text(
+          '尚未加载内容',
+          style: TextStyle(
+            fontSize: 12,
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.secondaryLabel,
+              context,
             ),
           ),
-          const SizedBox(width: 4),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            minimumSize: const Size.square(32),
-            onPressed: scanService.isScanning
-                ? null
-                : () => _handleRemoveFolder(scanService, folderPath),
-            child: Icon(
-              CupertinoIcons.delete,
-              size: 20,
-              color: scanService.isScanning
-                  ? destructiveColor.withValues(alpha: 0.4)
-                  : destructiveColor,
+        ),
+      );
+    }
+
+    if (contents.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 12, 12, 12),
+        child: Text(
+          '文件夹为空',
+          style: TextStyle(
+            fontSize: 12,
+            color: CupertinoDynamicColor.resolve(
+              CupertinoColors.secondaryLabel,
+              context,
             ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: contents.map((entity) => _buildLocalNode(entity, depth)).toList(),
+    );
+  }
+
+  Widget _buildLocalNode(FileSystemEntity entity, int depth) {
+    if (entity is Directory) {
+      final dirPath = entity.path;
+      final name = p.basename(dirPath);
+      final isExpanded = _expandedLocalFolders.contains(dirPath);
+      final isLoading = _loadingLocalFolders.contains(dirPath);
+      final labelColor =
+          CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+      final subtitleColor =
+          CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+
+      return Column(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleLocalFolder(dirPath),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16.0 + depth * 14, 8, 12, 8),
+              child: Row(
+                children: [
+                  Icon(
+                    CupertinoIcons.folder,
+                    size: 18,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.activeBlue,
+                      context,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: labelColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (isLoading)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CupertinoActivityIndicator(radius: 8),
+                    )
+                  else
+                    Icon(
+                      isExpanded
+                          ? CupertinoIcons.chevron_down
+                          : CupertinoIcons.chevron_right,
+                      size: 16,
+                      color: subtitleColor,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (isExpanded) _buildLocalFileList(dirPath, depth: depth + 1),
+        ],
+      );
+    }
+
+    if (entity is File) {
+      return _buildLocalFileRow(entity, depth);
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildLocalFileRow(File file, int depth) {
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final accentColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final destructiveColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.destructiveRed, context);
+    final indentation = 16.0 + depth * 14;
+
+    return FutureBuilder<WatchHistoryItem?>(
+      future: WatchHistoryManager.getHistoryItem(file.path),
+      builder: (context, snapshot) {
+        final historyItem = snapshot.data;
+        final fileName = p.basename(file.path);
+        final subtitleText =
+            _buildLocalSubtitle(fileName, historyItem);
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.play_arrow_solid,
+                size: 16,
+                color: subtitleColor,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: labelColor),
+                    ),
+                    if (subtitleText != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleText,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: subtitleColor),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minSize: 28,
+                    onPressed: () => _showManualDanmakuMatchDialog(
+                      file.path,
+                      fileName,
+                      historyItem,
+                    ),
+                    child: Text(
+                      '重刮',
+                      style: TextStyle(fontSize: 12, color: accentColor),
+                    ),
+                  ),
+                  if (historyItem != null &&
+                      (historyItem.animeId != null ||
+                          historyItem.episodeId != null))
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minSize: 28,
+                      onPressed: () => _showRemoveScanResultDialog(
+                        file.path,
+                        fileName,
+                        historyItem,
+                      ),
+                      child: Text(
+                        '取消',
+                        style:
+                            TextStyle(fontSize: 12, color: destructiveColor),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String? _buildLocalSubtitle(
+    String fileName,
+    WatchHistoryItem? historyItem,
+  ) {
+    if (historyItem == null) return null;
+    final baseName = p.basenameWithoutExtension(fileName);
+
+    final hasId = historyItem.animeId != null || historyItem.episodeId != null;
+    final hasCustomName = historyItem.animeName.isNotEmpty &&
+        historyItem.animeName != baseName;
+    final hasEpisodeTitle =
+        historyItem.episodeTitle != null && historyItem.episodeTitle!.isNotEmpty;
+
+    if (!hasId && !hasCustomName && !hasEpisodeTitle) {
+      return null;
+    }
+
+    final parts = <String>[];
+    if (hasCustomName) {
+      parts.add(historyItem.animeName);
+    }
+    if (hasEpisodeTitle) {
+      parts.add(historyItem.episodeTitle!);
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' - ');
+  }
+
+  void _refreshExpandedFolderContents(String folderPath) {
+    final existing = _expandedLocalContents[folderPath];
+    if (existing == null || !mounted) return;
+    setState(() {
+      _expandedLocalContents[folderPath] =
+          List<FileSystemEntity>.from(existing);
+    });
+  }
+
+  Future<void> _showManualDanmakuMatchDialog(
+    String filePath,
+    String fileName,
+    WatchHistoryItem? historyItem,
+  ) async {
+    try {
+      String initialSearchKeyword = fileName;
+      if (historyItem != null && historyItem.animeName.isNotEmpty) {
+        initialSearchKeyword = historyItem.animeName;
+      } else {
+        final keyword = MediaFilenameParser.extractAnimeTitleKeyword(fileName);
+        if (keyword.isNotEmpty) initialSearchKeyword = keyword;
+      }
+
+      final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(
+        context,
+        initialVideoTitle: initialSearchKeyword,
+      );
+
+      if (result != null && mounted) {
+        final episodeId = result['episodeId']?.toString() ?? '';
+        final animeId = result['animeId']?.toString() ?? '';
+        final animeTitle = result['animeTitle']?.toString() ?? '';
+        final episodeTitle = result['episodeTitle']?.toString() ?? '';
+
+        if (episodeId.isNotEmpty && animeId.isNotEmpty) {
+          try {
+            final existingHistory =
+                await WatchHistoryManager.getHistoryItem(filePath);
+
+            final updatedHistory = WatchHistoryItem(
+              filePath: filePath,
+              animeName: animeTitle.isNotEmpty
+                  ? animeTitle
+                  : (existingHistory?.animeName ??
+                      p.basenameWithoutExtension(fileName)),
+              episodeTitle: episodeTitle.isNotEmpty
+                  ? episodeTitle
+                  : existingHistory?.episodeTitle,
+              episodeId: int.tryParse(episodeId),
+              animeId: int.tryParse(animeId),
+              watchProgress: existingHistory?.watchProgress ?? 0.0,
+              lastPosition: existingHistory?.lastPosition ?? 0,
+              duration: existingHistory?.duration ?? 0,
+              lastWatchTime: DateTime.now(),
+              thumbnailPath: existingHistory?.thumbnailPath,
+              isFromScan: existingHistory?.isFromScan ?? false,
+              videoHash: existingHistory?.videoHash,
+            );
+
+            await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+
+            if (mounted) {
+              _showSnack('刮削成功：$animeTitle - $episodeTitle');
+              _refreshExpandedFolderContents(p.dirname(filePath));
+            }
+          } catch (e) {
+            if (mounted) {
+              _showSnack('更新刮削信息失败：$e');
+            }
+          }
+        } else {
+          if (mounted) {
+            _showSnack('刮削结果无效');
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('打开刮削对话框失败：$e');
+      }
+    }
+  }
+
+  Future<void> _showRemoveScanResultDialog(
+    String filePath,
+    String fileName,
+    WatchHistoryItem? historyItem,
+  ) async {
+    if (historyItem == null) return;
+
+    String currentInfo = '';
+    if (historyItem.animeName.isNotEmpty) {
+      currentInfo += '动画：${historyItem.animeName}';
+    }
+    if (historyItem.episodeTitle != null &&
+        historyItem.episodeTitle!.isNotEmpty) {
+      if (currentInfo.isNotEmpty) currentInfo += '\n';
+      currentInfo += '集数：${historyItem.episodeTitle}';
+    }
+    if (historyItem.animeId != null) {
+      if (currentInfo.isNotEmpty) currentInfo += '\n';
+      currentInfo += '动画ID：${historyItem.animeId}';
+    }
+    if (historyItem.episodeId != null) {
+      if (currentInfo.isNotEmpty) currentInfo += '\n';
+      currentInfo += '集数ID：${historyItem.episodeId}';
+    }
+
+    final confirm = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('取消刮削'),
+        content: Text(
+          '确定要取消文件 "$fileName" 的刮削结果吗？\n\n当前刮削信息：\n$currentInfo\n\n取消后将清除动画名称、集数信息和弹幕ID，但保留观看进度。',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确定'),
           ),
         ],
       ),
     );
+
+    if (confirm != true || !mounted) {
+      return;
+    }
+
+    try {
+      final clearedHistory = WatchHistoryItem(
+        filePath: filePath,
+        animeName: p.basenameWithoutExtension(fileName),
+        episodeTitle: null,
+        episodeId: null,
+        animeId: null,
+        watchProgress: historyItem.watchProgress,
+        lastPosition: historyItem.lastPosition,
+        duration: historyItem.duration,
+        lastWatchTime: DateTime.now(),
+        thumbnailPath: historyItem.thumbnailPath,
+        isFromScan: false,
+        videoHash: historyItem.videoHash,
+      );
+
+      await WatchHistoryManager.addOrUpdateHistory(clearedHistory);
+
+      if (mounted) {
+        _showSnack('已取消 "$fileName" 的刮削结果');
+        _refreshExpandedFolderContents(p.dirname(filePath));
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('取消刮削失败：$e');
+      }
+    }
   }
 
   Widget _buildWebDAVSection(BuildContext context) {
