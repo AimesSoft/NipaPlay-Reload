@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
+import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -14,9 +15,59 @@ import './player_data_models.dart';
 /// MediaKit播放器适配器
 class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static bool _disableMpvLogs = false;
+  static int? _cachedMacosMajor;
 
   static void setMpvLogLevelNone() {
     _disableMpvLogs = true;
+  }
+
+  static int? _resolveMacosMajorVersion() {
+    if (_cachedMacosMajor != null) {
+      return _cachedMacosMajor;
+    }
+    if (!Platform.isMacOS) {
+      return null;
+    }
+    final version = Platform.operatingSystemVersion;
+    final versionMatch = RegExp(r'Version\s+(\d+)').firstMatch(version) ??
+        RegExp(r'macOS\s+(\d+)').firstMatch(version);
+    if (versionMatch != null) {
+      _cachedMacosMajor = int.tryParse(versionMatch.group(1)!);
+      return _cachedMacosMajor;
+    }
+    final firstNumber = RegExp(r'(\d+)').firstMatch(version);
+    if (firstNumber == null) {
+      return null;
+    }
+    final major = int.tryParse(firstNumber.group(1)!);
+    if (major == null) {
+      return null;
+    }
+    if (major >= 20 && major <= 30) {
+      // Darwin 20 -> macOS 11, Darwin 23 -> macOS 14
+      _cachedMacosMajor = major - 9;
+      return _cachedMacosMajor;
+    }
+    _cachedMacosMajor = major;
+    return _cachedMacosMajor;
+  }
+
+  static bool _shouldDisableHardwareAcceleration() {
+    if (!Platform.isMacOS) {
+      return false;
+    }
+    final env = Platform.environment['NIPAPLAY_DISABLE_HWACCEL'];
+    if (env != null) {
+      final normalized = env.toLowerCase();
+      if (normalized == '1' || normalized == 'true' || normalized == 'yes') {
+        return true;
+      }
+    }
+    final major = _resolveMacosMajorVersion();
+    if (major != null && major < 14) {
+      return true;
+    }
+    return false;
   }
 
   final Player _player;
@@ -56,9 +107,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   // 添加播放速度状态变量
   double _playbackRate = 1.0;
+  final bool _enableHardwareAcceleration;
 
   MediaKitPlayerAdapter()
-      : _player = Player(
+      : _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
+        _player = Player(
           configuration: PlayerConfiguration(
             libass: true,
             libassAndroidFont: defaultTargetPlatform == TargetPlatform.android
@@ -75,8 +128,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _applyMpvLogLevelOverride();
     _controller = VideoController(
       _player,
-      configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true,
+      configuration: VideoControllerConfiguration(
+        enableHardwareAcceleration: _enableHardwareAcceleration,
       ),
     );
     _initializeHardwareDecoding();
@@ -105,6 +158,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   void _initializeHardwareDecoding() {
     try {
+      if (!_enableHardwareAcceleration) {
+        (_player.platform as dynamic)?.setProperty('hwdec', 'no');
+        debugPrint('MediaKit: macOS < 14 或被禁用，硬件加速已关闭');
+        return;
+      }
       if (defaultTargetPlatform == TargetPlatform.android) {
         (_player.platform as dynamic)?.setProperty('hwdec', 'mediacodec-copy');
       } else {
@@ -1374,10 +1432,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   void setProperty(String name, String value) {
-    _properties[name] = value;
+    var resolvedValue = value;
+    if (!_enableHardwareAcceleration && name == 'hwdec' && value != 'no') {
+      resolvedValue = 'no';
+      debugPrint('MediaKit: 硬件加速已禁用，强制设置 hwdec=no');
+    }
+    _properties[name] = resolvedValue;
     try {
       final dynamic platform = _player.platform;
-      platform?.setProperty?.call(name, value);
+      platform?.setProperty?.call(name, resolvedValue);
     } catch (e) {
       debugPrint('MediaKit: 设置属性$name 失败: $e');
     }

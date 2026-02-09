@@ -3,6 +3,7 @@ import FlutterMacOS
 import UniformTypeIdentifiers
 
 @main
+@objcMembers
 class AppDelegate: FlutterAppDelegate {
   // 直接创建全局引用
   var uploadMenuItem: NSMenuItem?
