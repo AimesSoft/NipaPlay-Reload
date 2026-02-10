@@ -3057,6 +3057,74 @@ class _CupertinoLibraryManagementSheetState
     );
   }
 
+  bool _isBatchMatchVideoFilePath(String filePath) {
+    return _localVideoExtensions.contains(p.extension(filePath).toLowerCase());
+  }
+
+  Widget _buildBatchDanmakuMatchFolderAction(
+    String folderPath,
+    List<FileSystemEntity> folderChildren,
+    double indentation,
+  ) {
+    final candidateFiles = folderChildren
+        .whereType<File>()
+        .map((e) => e.path)
+        .where(_isBatchMatchVideoFilePath)
+        .toList(growable: false);
+
+    if (candidateFiles.length < 2) {
+      return const SizedBox.shrink();
+    }
+
+    final labelColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final subtitleColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final accentColor =
+        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              CupertinoIcons.collections,
+              size: 16,
+              color: accentColor,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '批量匹配弹幕（本文件夹）',
+                    style: TextStyle(fontSize: 13, color: labelColor),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '对齐顺序后批量匹配 ${candidateFiles.length} 个文件',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: subtitleColor),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              '开始',
+              style: TextStyle(fontSize: 12, color: accentColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLocalNode(FileSystemEntity entity, int depth) {
     if (entity is Directory) {
       final dirPath = entity.path;
@@ -3257,6 +3325,85 @@ class _CupertinoLibraryManagementSheetState
       _expandedLocalContents[folderPath] =
           List<FileSystemEntity>.from(existing);
     });
+  }
+
+  Future<void> _showBatchDanmakuMatchDialog(
+    String folderPath,
+    List<String> filePaths,
+  ) async {
+    if (filePaths.isEmpty) {
+      _showSnack('未找到可匹配的视频文件');
+      return;
+    }
+
+    final result = await BatchDanmakuMatchDialog.show(
+      context,
+      filePaths: filePaths,
+      initialSearchKeyword: p.basename(folderPath),
+    );
+
+    if (!mounted || result == null) return;
+
+    final animeId = result['animeId'];
+    final animeTitle = result['animeTitle']?.toString() ?? '';
+    final rawMappings = result['mappings'];
+
+    if (animeId is! int || animeId <= 0 || rawMappings is! List) {
+      _showSnack('批量匹配结果无效');
+      return;
+    }
+
+    final mappings = rawMappings
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
+
+    if (mappings.isEmpty) {
+      _showSnack('没有需要更新的匹配项');
+      return;
+    }
+
+    int successCount = 0;
+    for (final mapping in mappings) {
+      final filePath = mapping['filePath']?.toString() ?? '';
+      final fileName = mapping['fileName']?.toString() ?? p.basename(filePath);
+      final episodeId = mapping['episodeId'];
+      final episodeTitle = mapping['episodeTitle']?.toString() ?? '';
+
+      if (filePath.isEmpty || episodeId is! int || episodeId <= 0) continue;
+
+      try {
+        final existingHistory =
+            await WatchHistoryManager.getHistoryItem(filePath);
+        final updatedHistory = WatchHistoryItem(
+          filePath: filePath,
+          animeName: animeTitle.isNotEmpty
+              ? animeTitle
+              : (existingHistory?.animeName ??
+                  p.basenameWithoutExtension(fileName)),
+          episodeTitle: episodeTitle.isNotEmpty
+              ? episodeTitle
+              : existingHistory?.episodeTitle,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: existingHistory?.watchProgress ?? 0.0,
+          lastPosition: existingHistory?.lastPosition ?? 0,
+          duration: existingHistory?.duration ?? 0,
+          lastWatchTime: DateTime.now(),
+          thumbnailPath: existingHistory?.thumbnailPath,
+          isFromScan: existingHistory?.isFromScan ?? false,
+          videoHash: existingHistory?.videoHash,
+        );
+        await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+        successCount++;
+      } catch (e) {
+        debugPrint('批量更新匹配失败: $filePath -> $episodeId ($e)');
+      }
+    }
+
+    if (!mounted) return;
+    _showSnack('批量匹配完成：成功更新 $successCount/${mappings.length} 个文件');
+    _refreshExpandedFolderContents(folderPath);
   }
 
   Future<void> _showManualDanmakuMatchDialog(

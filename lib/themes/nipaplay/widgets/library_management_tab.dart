@@ -939,17 +939,22 @@ style: TextStyle(color: Colors.redAccent)),
       return const SizedBox.shrink();
     }
 
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color titleColor = isDark ? Colors.white : Colors.black87;
+    final Color subtitleColor = isDark ? Colors.white70 : Colors.black54;
+    final Color iconColor = isDark ? Colors.white70 : Colors.black54;
+
     return ListTile(
-      leading: const Icon(Icons.playlist_add_check, color: Colors.white70),
-      title: const Text(
+      leading: Icon(Icons.playlist_add_check, color: iconColor),
+      title: Text(
         '批量匹配弹幕（本文件夹）',
-        locale: Locale("zh-Hans", "zh"),
-        style: TextStyle(color: Colors.white),
+        locale: const Locale("zh-Hans", "zh"),
+        style: TextStyle(color: titleColor),
       ),
       subtitle: Text(
         '对齐左侧文件顺序与右侧剧集顺序，一键匹配 ${candidateFiles.length} 个文件',
         locale: const Locale("zh-Hans", "zh"),
-        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+        style: TextStyle(color: subtitleColor, fontSize: 12),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1861,13 +1866,10 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       return;
     }
 
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => BatchDanmakuMatchDialog(
-        filePaths: filePaths,
-        initialSearchKeyword: p.basename(folderPath),
-      ),
+    final result = await BatchDanmakuMatchDialog.show(
+      context,
+      filePaths: filePaths,
+      initialSearchKeyword: p.basename(folderPath),
     );
 
     if (!mounted || result == null) return;
