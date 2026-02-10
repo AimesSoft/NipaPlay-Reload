@@ -2241,8 +2241,25 @@ style: TextStyle(color: Colors.lightBlueAccent)),
                 }
               },
               children: _loadingFolders.contains(folderPath)
-                  ? [Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(color: _accentColor)))]
-                  : _buildFileSystemNodes(_expandedFolderContents[folderPath] ?? [], folderPath, 1),
+                  ? [
+                      Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: CircularProgressIndicator(color: _accentColor),
+                        ),
+                      ),
+                    ]
+                  : [
+                      _buildBatchDanmakuMatchFolderAction(
+                        folderPath,
+                        _expandedFolderContents[folderPath] ?? const [],
+                      ),
+                      ..._buildFileSystemNodes(
+                        _expandedFolderContents[folderPath] ?? const [],
+                        folderPath,
+                        1,
+                      ),
+                    ],
             ),
           ),
         );

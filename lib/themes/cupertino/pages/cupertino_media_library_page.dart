@@ -41,6 +41,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
@@ -3045,7 +3046,14 @@ class _CupertinoLibraryManagementSheetState
     }
 
     return Column(
-      children: contents.map((entity) => _buildLocalNode(entity, depth)).toList(),
+      children: [
+        _buildBatchDanmakuMatchFolderAction(
+          folderPath,
+          contents,
+          indentation,
+        ),
+        ...contents.map((entity) => _buildLocalNode(entity, depth)),
+      ],
     );
   }
 
