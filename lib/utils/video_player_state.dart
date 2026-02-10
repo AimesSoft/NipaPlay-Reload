@@ -111,6 +111,7 @@ enum PlayerStatus {
 
 enum PlaybackEndAction {
   autoNext,
+  loop,
   pause,
   exitPlayer,
 }
@@ -122,6 +123,8 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
         return PlaybackEndAction.pause;
       case 'exitPlayer':
         return PlaybackEndAction.exitPlayer;
+      case 'loop':
+        return PlaybackEndAction.loop;
       case 'autoNext':
       default:
         return PlaybackEndAction.autoNext;
@@ -132,6 +135,8 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
     switch (this) {
       case PlaybackEndAction.autoNext:
         return 'autoNext';
+      case PlaybackEndAction.loop:
+        return 'loop';
       case PlaybackEndAction.pause:
         return 'pause';
       case PlaybackEndAction.exitPlayer:
@@ -143,6 +148,8 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
     switch (this) {
       case PlaybackEndAction.autoNext:
         return '自动播放下一话';
+      case PlaybackEndAction.loop:
+        return '循环播放';
       case PlaybackEndAction.pause:
         return '播放完停留在本集';
       case PlaybackEndAction.exitPlayer:
@@ -154,6 +161,8 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
     switch (this) {
       case PlaybackEndAction.autoNext:
         return '播放结束后自动倒计时并播放下一话';
+      case PlaybackEndAction.loop:
+        return '播放结束后从头开始循环播放';
       case PlaybackEndAction.pause:
         return '播放结束后保持在当前页面，不再自动跳转';
       case PlaybackEndAction.exitPlayer:

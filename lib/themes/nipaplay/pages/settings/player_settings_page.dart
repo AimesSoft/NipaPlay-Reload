@@ -586,14 +586,22 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 if (value is! PlaybackEndAction) return;
                 await videoState.setPlaybackEndAction(value);
                 if (!context.mounted) return;
-                BlurSnackBar.show(
-                  context,
-                  value == PlaybackEndAction.autoNext
-                      ? '播放结束后将自动进入下一话'
-                      : value == PlaybackEndAction.pause
-                          ? '播放结束后将停留在当前页面'
-                          : '播放结束后将返回上一页',
-                );
+                String message;
+                switch (value) {
+                  case PlaybackEndAction.autoNext:
+                    message = '播放结束后将自动进入下一话';
+                    break;
+                  case PlaybackEndAction.loop:
+                    message = '播放结束后将从头循环播放';
+                    break;
+                  case PlaybackEndAction.pause:
+                    message = '播放结束后将停留在当前页面';
+                    break;
+                  case PlaybackEndAction.exitPlayer:
+                    message = '播放结束后将返回上一页';
+                    break;
+                }
+                BlurSnackBar.show(context, message);
               },
             );
           },

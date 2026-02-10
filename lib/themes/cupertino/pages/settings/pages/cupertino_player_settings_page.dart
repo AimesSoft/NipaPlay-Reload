@@ -660,11 +660,21 @@ class _CupertinoPlayerSettingsPageState
                     if (action == videoState.playbackEndAction) return;
                     await videoState.setPlaybackEndAction(action);
                     if (!mounted) return;
-                    final message = action == PlaybackEndAction.autoNext
-                        ? '播放结束后将自动进入下一话'
-                        : action == PlaybackEndAction.pause
-                            ? '播放结束后将停留在当前页面'
-                            : '播放结束后将返回上一页';
+                    String message;
+                    switch (action) {
+                      case PlaybackEndAction.autoNext:
+                        message = '播放结束后将自动进入下一话';
+                        break;
+                      case PlaybackEndAction.loop:
+                        message = '播放结束后将从头循环播放';
+                        break;
+                      case PlaybackEndAction.pause:
+                        message = '播放结束后将停留在当前页面';
+                        break;
+                      case PlaybackEndAction.exitPlayer:
+                        message = '播放结束后将返回上一页';
+                        break;
+                    }
                     AdaptiveSnackBar.show(
                       context,
                       message: message,

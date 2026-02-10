@@ -54,6 +54,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
+import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/splash_screen.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/web_remote_access_gate.dart';
@@ -87,6 +88,22 @@ const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 
 final GlobalKey<State<DefaultTabController>> tabControllerKey =
     GlobalKey<State<DefaultTabController>>();
+
+Alignment _resolveStartupWindowAlignment(
+    DesktopStartupWindowPosition position) {
+  switch (position) {
+    case DesktopStartupWindowPosition.topLeft:
+      return Alignment.topLeft;
+    case DesktopStartupWindowPosition.topRight:
+      return Alignment.topRight;
+    case DesktopStartupWindowPosition.center:
+      return Alignment.center;
+    case DesktopStartupWindowPosition.bottomLeft:
+      return Alignment.bottomLeft;
+    case DesktopStartupWindowPosition.bottomRight:
+      return Alignment.bottomRight;
+  }
+}
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -535,6 +552,11 @@ void main(List<String> args) async {
         await windowManager.setIcon('assets/images/logo512.png');
       } catch (e) {
       }
+      final startupState =
+          await DesktopStartupWindowPreferences.loadState();
+      final startupPosition =
+          await DesktopStartupWindowPreferences.loadPosition();
+      final startupSize = await DesktopStartupWindowPreferences.loadSize();
       WindowOptions windowOptions = const WindowOptions(
         skipTaskbar: false,
         titleBarStyle: TitleBarStyle.hidden,
@@ -542,7 +564,13 @@ void main(List<String> args) async {
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.setMinimumSize(const Size(600, 400));
-        await windowManager.maximize();
+        if (startupState == DesktopStartupWindowState.maximized) {
+          await windowManager.maximize();
+        } else {
+          await windowManager.setSize(startupSize);
+          await windowManager
+              .setAlignment(_resolveStartupWindowAlignment(startupPosition));
+        }
         await windowManager.show();
         await windowManager.focus();
       });

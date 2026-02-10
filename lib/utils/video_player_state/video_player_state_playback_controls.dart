@@ -272,6 +272,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
               .startAutoNextEpisode(_context!, _currentVideoPath!);
         }
         break;
+      case PlaybackEndAction.loop:
+        AutoNextEpisodeService.instance.cancelAutoNext();
+        await _restartPlaybackFromBeginning();
+        break;
       case PlaybackEndAction.pause:
         AutoNextEpisodeService.instance.cancelAutoNext();
         break;
@@ -288,6 +292,27 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           });
         }
         break;
+    }
+  }
+
+  Future<void> _restartPlaybackFromBeginning() async {
+    if (!hasVideo) {
+      return;
+    }
+    try {
+      _isSeeking = true;
+      _position = Duration.zero;
+      _progress = 0.0;
+      _playbackTimeMs.value = 0;
+      notifyListeners();
+      player.seek(position: 0);
+      if (_status != PlayerStatus.playing) {
+        play();
+      }
+    } catch (e) {
+      debugPrint('[循环播放] 重新开始失败: ' + e.toString());
+    } finally {
+      _isSeeking = false;
     }
   }
 

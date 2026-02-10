@@ -1,17 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
+import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Define the key for SharedPreferences
 const String defaultPageIndexKey = 'default_page_index';
+
+class _WindowSizePreset {
+  final String id;
+  final String label;
+  final Size size;
+
+  const _WindowSizePreset(this.id, this.label, this.size);
+}
 
 class GeneralPage extends StatefulWidget {
   const GeneralPage({super.key});
@@ -25,6 +38,21 @@ class _GeneralPageState extends State<GeneralPage> {
   final GlobalKey _defaultPageDropdownKey = GlobalKey();
   DesktopExitBehavior _desktopExitBehavior = DesktopExitBehavior.askEveryTime;
   final GlobalKey _desktopExitBehaviorDropdownKey = GlobalKey();
+  DesktopStartupWindowState _startupWindowState =
+      DesktopStartupWindowPreferences.defaultState;
+  DesktopStartupWindowPosition _startupWindowPosition =
+      DesktopStartupWindowPreferences.defaultPosition;
+  Size _startupWindowSize = DesktopStartupWindowPreferences.defaultWindowSize;
+  final GlobalKey _startupWindowStateDropdownKey = GlobalKey();
+  final GlobalKey _startupWindowPositionDropdownKey = GlobalKey();
+  final GlobalKey _startupWindowSizeDropdownKey = GlobalKey();
+
+  static const List<_WindowSizePreset> _windowSizePresets = [
+    _WindowSizePreset('compact', '紧凑 (960 × 600)', Size(960, 600)),
+    _WindowSizePreset('standard', '标准 (1280 × 720)', Size(1280, 720)),
+    _WindowSizePreset('large', '宽屏 (1440 × 900)', Size(1440, 900)),
+    _WindowSizePreset('xlarge', '超大 (1920 × 1080)', Size(1920, 1080)),
+  ];
 
   // 生成默认页面选项
   List<DropdownMenuItemData<int>> _getDefaultPageItems() {
@@ -69,10 +97,17 @@ class _GeneralPageState extends State<GeneralPage> {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     final desktopExitBehavior = await DesktopExitPreferences.load();
+    final startupState = await DesktopStartupWindowPreferences.loadState();
+    final startupPosition =
+        await DesktopStartupWindowPreferences.loadPosition();
+    final startupSize = await DesktopStartupWindowPreferences.loadSize();
     if (mounted) {
       setState(() {
         var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
         _desktopExitBehavior = desktopExitBehavior;
+        _startupWindowState = startupState;
+        _startupWindowPosition = startupPosition;
+        _startupWindowSize = startupSize;
 
         if (storedIndex < 0) {
           storedIndex = 0;
@@ -92,6 +127,248 @@ class _GeneralPageState extends State<GeneralPage> {
 
   Future<void> _saveDesktopExitBehavior(DesktopExitBehavior behavior) async {
     await DesktopExitPreferences.save(behavior);
+  }
+
+  List<DropdownMenuItemData<DesktopStartupWindowState>>
+      _getStartupWindowStateItems() {
+    return [
+      DropdownMenuItemData(
+        title: '窗口化',
+        value: DesktopStartupWindowState.windowed,
+        isSelected: _startupWindowState == DesktopStartupWindowState.windowed,
+      ),
+      DropdownMenuItemData(
+        title: '最大化',
+        value: DesktopStartupWindowState.maximized,
+        isSelected: _startupWindowState == DesktopStartupWindowState.maximized,
+      ),
+    ];
+  }
+
+  List<DropdownMenuItemData<DesktopStartupWindowPosition>>
+      _getStartupWindowPositionItems() {
+    return [
+      DropdownMenuItemData(
+        title: '左上角',
+        value: DesktopStartupWindowPosition.topLeft,
+        isSelected:
+            _startupWindowPosition == DesktopStartupWindowPosition.topLeft,
+      ),
+      DropdownMenuItemData(
+        title: '右上角',
+        value: DesktopStartupWindowPosition.topRight,
+        isSelected:
+            _startupWindowPosition == DesktopStartupWindowPosition.topRight,
+      ),
+      DropdownMenuItemData(
+        title: '居中',
+        value: DesktopStartupWindowPosition.center,
+        isSelected:
+            _startupWindowPosition == DesktopStartupWindowPosition.center,
+      ),
+      DropdownMenuItemData(
+        title: '左下角',
+        value: DesktopStartupWindowPosition.bottomLeft,
+        isSelected:
+            _startupWindowPosition == DesktopStartupWindowPosition.bottomLeft,
+      ),
+      DropdownMenuItemData(
+        title: '右下角',
+        value: DesktopStartupWindowPosition.bottomRight,
+        isSelected:
+            _startupWindowPosition == DesktopStartupWindowPosition.bottomRight,
+      ),
+    ];
+  }
+
+  _WindowSizePreset? _matchWindowSizePreset(Size size) {
+    for (final preset in _windowSizePresets) {
+      if (preset.size.width == size.width &&
+          preset.size.height == size.height) {
+        return preset;
+      }
+    }
+    return null;
+  }
+
+  String _formatWindowSize(Size size) {
+    return size.width.round().toString() +
+        ' × ' +
+        size.height.round().toString();
+  }
+
+  List<DropdownMenuItemData<String>> _getStartupWindowSizeItems() {
+    final matchedPreset = _matchWindowSizePreset(_startupWindowSize);
+    final items = _windowSizePresets
+        .map(
+          (preset) => DropdownMenuItemData(
+            title: preset.label,
+            value: preset.id,
+            isSelected: matchedPreset?.id == preset.id,
+          ),
+        )
+        .toList();
+    final customLabel = matchedPreset == null
+        ? '自定义 (' + _formatWindowSize(_startupWindowSize) + ')'
+        : '自定义';
+    items.add(
+      DropdownMenuItemData(
+        title: customLabel,
+        value: 'custom',
+        isSelected: matchedPreset == null,
+      ),
+    );
+    return items;
+  }
+
+  _WindowSizePreset? _findWindowSizePreset(String id) {
+    for (final preset in _windowSizePresets) {
+      if (preset.id == id) {
+        return preset;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _saveStartupWindowState(
+      DesktopStartupWindowState state) async {
+    await DesktopStartupWindowPreferences.saveState(state);
+  }
+
+  Future<void> _saveStartupWindowPosition(
+      DesktopStartupWindowPosition position) async {
+    await DesktopStartupWindowPreferences.savePosition(position);
+  }
+
+  Future<void> _saveStartupWindowSize(Size size) async {
+    final resolved = DesktopStartupWindowPreferences.sanitizeSize(size);
+    await DesktopStartupWindowPreferences.saveSize(resolved);
+    if (!mounted) return;
+    setState(() {
+      _startupWindowSize = resolved;
+    });
+  }
+
+  Future<void> _resetStartupWindowSize() async {
+    await DesktopStartupWindowPreferences.resetSize();
+    if (!mounted) return;
+    setState(() {
+      _startupWindowSize = DesktopStartupWindowPreferences.defaultWindowSize;
+    });
+    if (!mounted) return;
+    BlurSnackBar.show(context, '已恢复默认窗口尺寸');
+  }
+
+  Future<void> _showCustomWindowSizeDialog() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final widthController = TextEditingController(
+      text: _startupWindowSize.width.round().toString(),
+    );
+    final heightController = TextEditingController(
+      text: _startupWindowSize.height.round().toString(),
+    );
+
+    final Size? result = await BlurDialog.show<Size>(
+      context: context,
+      title: '自定义窗口尺寸',
+      contentWidget: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: widthController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  cursorColor: const Color(0xFFFF2E55),
+                  decoration: InputDecoration(
+                    labelText: '宽度 (px)',
+                    labelStyle:
+                        TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: colorScheme.onSurface),
+                    ),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide:
+                          BorderSide(color: colorScheme.onSurface.withOpacity(0.38)),
+                    ),
+                  ),
+                  style: const TextStyle(color: Color(0xFFFF2E55)),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextField(
+                  controller: heightController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  cursorColor: const Color(0xFFFF2E55),
+                  decoration: InputDecoration(
+                    labelText: '高度 (px)',
+                    labelStyle:
+                        TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: colorScheme.onSurface),
+                    ),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide:
+                          BorderSide(color: colorScheme.onSurface.withOpacity(0.38)),
+                    ),
+                  ),
+                  style: const TextStyle(color: Color(0xFFFF2E55)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '最小尺寸 ' +
+                _formatWindowSize(
+                    DesktopStartupWindowPreferences.minWindowSize),
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.6),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        HoverScaleTextButton(
+          text: '取消',
+          idleColor: colorScheme.onSurface.withOpacity(0.7),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        HoverScaleTextButton(
+          text: '确定',
+          idleColor: colorScheme.onSurface,
+          onPressed: () {
+            final width = int.tryParse(widthController.text);
+            final height = int.tryParse(heightController.text);
+            if (width == null || height == null) {
+              BlurSnackBar.show(context, '请输入有效的宽高数值');
+              return;
+            }
+            if (width < DesktopStartupWindowPreferences.minWindowSize.width ||
+                height < DesktopStartupWindowPreferences.minWindowSize.height) {
+              BlurSnackBar.show(context, '窗口尺寸不能小于最小限制');
+              return;
+            }
+            Navigator.of(context)
+                .pop(Size(width.toDouble(), height.toDouble()));
+          },
+        ),
+      ],
+    );
+
+    widthController.dispose();
+    heightController.dispose();
+
+    if (result != null) {
+      await _saveStartupWindowSize(result);
+      if (!mounted) return;
+      BlurSnackBar.show(context, '已保存启动窗口尺寸');
+    }
   }
 
   Widget _buildHomeSectionSettingsCard(
@@ -236,9 +513,10 @@ class _GeneralPageState extends State<GeneralPage> {
 
         final colorScheme = Theme.of(context).colorScheme;
 
-        return ListView(
-          children: [
-            if (globals.isDesktop)
+        final List<Widget> items = [];
+
+        if (globals.isDesktop) {
+          items.add(
             SettingsItem.dropdown(
               title: "关闭窗口时",
               subtitle: "设置关闭按钮的默认行为，可随时修改“记住我的选择”",
@@ -252,32 +530,124 @@ class _GeneralPageState extends State<GeneralPage> {
               },
               dropdownKey: _desktopExitBehaviorDropdownKey,
             ),
-            if (globals.isDesktop)
+          );
+          items.add(
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          );
+          items.add(
             SettingsItem.dropdown(
-              title: "默认展示页面",
-              subtitle: "选择应用启动后默认显示的页面",
-              icon: Ionicons.home_outline,
-              items: _getDefaultPageItems(),
-              onChanged: (index) {
+              title: "播放器启动时状态",
+              subtitle: "设置启动时窗口状态",
+              icon: Ionicons.expand_outline,
+              items: _getStartupWindowStateItems(),
+              onChanged: (state) {
                 setState(() {
-                  _defaultPageIndex = index;
+                  _startupWindowState = state as DesktopStartupWindowState;
                 });
-                _saveDefaultPagePreference(index);
+                _saveStartupWindowState(state as DesktopStartupWindowState);
+                if (_startupWindowState != DesktopStartupWindowState.windowed) {
+                  BlurSnackBar.show(context, "启动时窗口状态已更新");
+                }
               },
-              dropdownKey: _defaultPageDropdownKey,
+              dropdownKey: _startupWindowStateDropdownKey,
             ),
-            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Consumer<HomeSectionsSettingsProvider>(
-                builder: (context, provider, child) {
-                  return _buildHomeSectionSettingsCard(context, provider);
+          );
+
+          if (_startupWindowState == DesktopStartupWindowState.windowed) {
+            items.add(
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            );
+            items.add(
+              SettingsItem.dropdown(
+                title: "播放器启动时窗口位置",
+                subtitle: "窗口化启动时的位置",
+                icon: Ionicons.move_outline,
+                items: _getStartupWindowPositionItems(),
+                onChanged: (position) {
+                  setState(() {
+                    _startupWindowPosition =
+                        position as DesktopStartupWindowPosition;
+                  });
+                  _saveStartupWindowPosition(
+                      position as DesktopStartupWindowPosition);
+                  BlurSnackBar.show(context, "启动窗口位置已保存");
                 },
+                dropdownKey: _startupWindowPositionDropdownKey,
               ),
-            ),
-          ],
+            );
+            items.add(
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            );
+            items.add(
+              SettingsItem.dropdown(
+                title: "播放器启动时窗口尺寸",
+                subtitle: "支持预设与自定义尺寸",
+                icon: Ionicons.resize_outline,
+                items: _getStartupWindowSizeItems(),
+                onChanged: (value) {
+                  if (value is! String) return;
+                  if (value == 'custom') {
+                    _showCustomWindowSizeDialog();
+                    return;
+                  }
+                  final preset = _findWindowSizePreset(value);
+                  if (preset == null) return;
+                  _saveStartupWindowSize(preset.size).then((_) {
+                    if (!mounted) return;
+                    BlurSnackBar.show(context, "启动窗口尺寸已保存");
+                  });
+                },
+                dropdownKey: _startupWindowSizeDropdownKey,
+              ),
+            );
+            items.add(
+              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            );
+            items.add(
+              SettingsItem.button(
+                title: "恢复默认窗口尺寸",
+                subtitle: "重置为默认的启动窗口大小",
+                icon: Ionicons.refresh_outline,
+                onTap: _resetStartupWindowSize,
+              ),
+            );
+          }
+
+          items.add(
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          );
+        }
+
+        items.add(
+          SettingsItem.dropdown(
+            title: "默认展示页面",
+            subtitle: "选择应用启动后默认显示的页面",
+            icon: Ionicons.home_outline,
+            items: _getDefaultPageItems(),
+            onChanged: (index) {
+              setState(() {
+                _defaultPageIndex = index;
+              });
+              _saveDefaultPagePreference(index);
+            },
+            dropdownKey: _defaultPageDropdownKey,
+          ),
         );
+        items.add(
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        );
+        items.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Consumer<HomeSectionsSettingsProvider>(
+              builder: (context, provider, child) {
+                return _buildHomeSectionSettingsCard(context, provider);
+              },
+            ),
+          ),
+        );
+
+        return ListView(children: items);
       },
     );
   }
