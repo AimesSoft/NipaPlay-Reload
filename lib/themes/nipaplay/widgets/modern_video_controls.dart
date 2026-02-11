@@ -26,6 +26,7 @@ class ModernVideoControls extends StatefulWidget {
 
 class _ModernVideoControlsState extends State<ModernVideoControls> {
   final GlobalKey _settingsButtonKey = GlobalKey();
+  final GlobalKey _progressBarKey = GlobalKey();
   bool _isRewindPressed = false;
   bool _isForwardPressed = false;
   bool _isPlayPressed = false;
@@ -44,6 +45,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   int _tapCount = 0;
   static const _doubleTapTimeout = Duration(milliseconds: 360);
   bool _isProcessingTap = false;
+  bool _ignoreNextTap = false;
   
   // 快捷键提示管理器
   final ShortcutTooltipManager _tooltipManager = ShortcutTooltipManager();
@@ -177,6 +179,12 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
   void _handleTap() {
     if (_isProcessingTap) return;
+    if (_ignoreNextTap || _isDragging) {
+      _ignoreNextTap = false;
+      _tapCount = 0;
+      _doubleTapTimer?.cancel();
+      return;
+    }
 
     _tapCount++;
     if (_tapCount == 1) {
@@ -214,6 +222,15 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     }
   }
 
+  bool _isTapOnProgressBar(Offset globalPosition) {
+    final context = _progressBarKey.currentContext;
+    if (context == null) return false;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox) return false;
+    final rect = renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    return rect.contains(globalPosition);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -227,6 +244,13 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
               child: Container(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    _ignoreNextTap =
+                        _isTapOnProgressBar(details.globalPosition);
+                  },
+                  onTapCancel: () {
+                    _ignoreNextTap = false;
+                  },
                   onTap: _handleTap,
                   child: Stack(
                     clipBehavior: Clip.none,
@@ -251,6 +275,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   VideoProgressBar(
+                                    key: _progressBarKey,
                                     videoState: videoState,
                                     hoverTime: null,
                                     isDragging: _isDragging,
