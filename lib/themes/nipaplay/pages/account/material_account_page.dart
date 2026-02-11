@@ -20,6 +20,10 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     with AccountPageController {
   static const Color _accentColor = Color(0xFFFF2E55);
   static const double _buttonHoverScale = 1.06;
+  static const double _authControlFontSize = 16;
+  static const double _authControlIconSize = 20;
+  static const EdgeInsets _authControlPadding =
+      EdgeInsets.symmetric(horizontal: 18, vertical: 12);
 
   @override
   void showMessage(String message) {
@@ -54,142 +58,13 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     required String actionText,
     required Future<LoginResult> Function(Map<String, String> values) onSubmit,
   }) async {
-    final controllers = <String, TextEditingController>{};
-    final focusNodes = <String, FocusNode>{};
-
-    for (final field in fields) {
-      controllers[field.key] = TextEditingController(text: field.initialValue);
-      focusNodes[field.key] = FocusNode();
-    }
-
-    bool isLoading = false;
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setState) {
-            Future<void> handleSubmit() async {
-              final values = <String, String>{};
-              for (final field in fields) {
-                final value = controllers[field.key]?.text ?? '';
-                if (field.required && value.trim().isEmpty) {
-                  showMessage('请输入${field.label}');
-                  return;
-                }
-                values[field.key] = value.trim();
-              }
-
-              setState(() {
-                isLoading = true;
-              });
-
-              try {
-                final result = await onSubmit(values);
-                if (!mounted) return;
-                setState(() {
-                  isLoading = false;
-                });
-                if (result.success) {
-                  Navigator.of(dialogContext).pop();
-                }
-                if (result.message != null) {
-                  showMessage(result.message!);
-                }
-              } catch (e) {
-                if (!mounted) return;
-                setState(() {
-                  isLoading = false;
-                });
-                showMessage('$actionText失败: $e');
-              }
-            }
-
-            void handleFieldSubmitted(int index) {
-              final isLast = index == fields.length - 1;
-              if (isLast) {
-                if (!isLoading) {
-                  handleSubmit();
-                }
-                return;
-              }
-              final nextField = fields[index + 1];
-              focusNodes[nextField.key]?.requestFocus();
-            }
-
-            return fluent.ContentDialog(
-              title: Text(title),
-              content: SizedBox(
-                width: 360,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (int i = 0; i < fields.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: fluent.InfoLabel(
-                            label: fields[i].label,
-                            child: fields[i].isPassword
-                                ? fluent.PasswordBox(
-                                    controller: controllers[fields[i].key],
-                                    focusNode: focusNodes[fields[i].key],
-                                    placeholder: fields[i].hint,
-                                    autofocus: i == 0,
-                                    onSubmitted: (_) => handleFieldSubmitted(i),
-                                  )
-                                : fluent.TextBox(
-                                    controller: controllers[fields[i].key],
-                                    focusNode: focusNodes[fields[i].key],
-                                    placeholder: fields[i].hint,
-                                    autofocus: i == 0,
-                                    textInputAction:
-                                        i == fields.length - 1
-                                            ? TextInputAction.done
-                                            : TextInputAction.next,
-                                    onSubmitted: (_) => handleFieldSubmitted(i),
-                                  ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                BlurButton(
-                  icon: fluent.FluentIcons.cancel,
-                  text: '取消',
-                  flatStyle: true,
-                  hoverScale: _buttonHoverScale,
-                  onTap: () {
-                    if (isLoading) return;
-                    Navigator.of(dialogContext).pop();
-                  },
-                ),
-                BlurButton(
-                  icon: fluent.FluentIcons.check_mark,
-                  text: isLoading ? '$actionText中...' : actionText,
-                  flatStyle: true,
-                  hoverScale: _buttonHoverScale,
-                  onTap: () {
-                    if (isLoading) return;
-                    handleSubmit();
-                  },
-                ),
-              ],
-            );
-          },
-        );
-      },
+    await BlurLoginDialog.show(
+      context,
+      title: title,
+      fields: fields,
+      loginButtonText: actionText,
+      onLogin: onSubmit,
     );
-
-    for (final controller in controllers.values) {
-      controller.dispose();
-    }
-    for (final focusNode in focusNodes.values) {
-      focusNode.dispose();
-    }
   }
 
   @override
@@ -476,6 +351,33 @@ style: TextStyle(
     );
   }
 
+  Widget _buildAuthControlButton({
+    required String text,
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
+    final isDisabled = onTap == null;
+    return SizedBox(
+      width: double.infinity,
+      child: IgnorePointer(
+        ignoring: isDisabled,
+        child: Opacity(
+          opacity: isDisabled ? 0.6 : 1.0,
+          child: BlurButton(
+            icon: icon,
+            text: text,
+            flatStyle: true,
+            hoverScale: _buttonHoverScale,
+            iconSize: _authControlIconSize,
+            fontSize: _authControlFontSize,
+            padding: _authControlPadding,
+            onTap: onTap ?? () {},
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLoggedOutView() {
     final colorScheme = Theme.of(context).colorScheme;
     final subtitleStyle = TextStyle(
@@ -487,11 +389,9 @@ style: TextStyle(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          BlurButton(
+          _buildAuthControlButton(
             icon: fluent.FluentIcons.signin,
             text: "登录弹弹play账号",
-            flatStyle: true,
-            hoverScale: _buttonHoverScale,
             onTap: showLoginDialog,
           ),
           const SizedBox(height: 6),
@@ -501,11 +401,9 @@ style: TextStyle(
 style: subtitleStyle,
           ),
           const SizedBox(height: 16),
-          BlurButton(
+          _buildAuthControlButton(
             icon: fluent.FluentIcons.add_friend,
             text: "注册弹弹play账号",
-            flatStyle: true,
-            hoverScale: _buttonHoverScale,
             onTap: showRegisterDialog,
           ),
           const SizedBox(height: 6),
@@ -700,11 +598,9 @@ style: subtitleStyle,
           ),
         ),
         const SizedBox(height: 8),
-        BlurButton(
+        _buildAuthControlButton(
           icon: fluent.FluentIcons.link,
           text: '打开访问令牌页面',
-          flatStyle: true,
-          hoverScale: _buttonHoverScale,
           onTap: () async {
             const url = 'https://next.bgm.tv/demo/access-token';
             try {
@@ -739,23 +635,22 @@ style: subtitleStyle,
         const SizedBox(height: 16),
         
         // 令牌输入框
-        fluent.PasswordBox(
-          controller: bangumiTokenController,
-          placeholder: '请输入Bangumi访问令牌',
+        SizedBox(
+          width: double.infinity,
+          child: fluent.PasswordBox(
+            controller: bangumiTokenController,
+            placeholder: '请输入Bangumi访问令牌',
+            style: const TextStyle(fontSize: _authControlFontSize),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
         ),
         const SizedBox(height: 16),
 
         // 保存按钮
-        BlurButton(
+        _buildAuthControlButton(
           icon: fluent.FluentIcons.save,
           text: '保存令牌',
-          expandHorizontally: true,
-          flatStyle: true,
-          hoverScale: _buttonHoverScale,
-          onTap: () {
-            if (isLoading) return;
-            saveBangumiToken();
-          },
+          onTap: isLoading ? null : saveBangumiToken,
         ),
       ],
     );
