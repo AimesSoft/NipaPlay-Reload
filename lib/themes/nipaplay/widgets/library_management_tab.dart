@@ -1163,6 +1163,54 @@ style: TextStyle(color: Color(0xFFFF2E55))),
     );
   }
 
+  void _showFailedScanFilesDialog(ScanService scanService) {
+    if (!mounted) return;
+    final failedFiles = scanService.failedScanFiles;
+    if (failedFiles.isEmpty) {
+      BlurSnackBar.show(context, '暂无失败文件');
+      return;
+    }
+
+    BlurDialog.show(
+      context: context,
+      title: '扫描失败文件（${failedFiles.length}）',
+      contentWidget: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 320, minWidth: 320),
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: failedFiles.length,
+          separatorBuilder: (_, __) => const Divider(height: 16),
+          itemBuilder: (context, index) {
+            final item = failedFiles[index];
+            final displayPath = item.displayPath;
+            final error = item.errorMessage ?? '未知原因';
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  '${index + 1}. $displayPath',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '原因：$error',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        HoverScaleTextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭', locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70)),
+        ),
+      ],
+    );
+  }
+
   // 清除自定义存储路径
   Future<void> _clearCustomStoragePath() async {
     final scanService = Provider.of<ScanService>(context, listen: false);
@@ -1693,6 +1741,22 @@ style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
                         value: scanService!.scanProgress,
                         backgroundColor: scanProgressBackground,
                         valueColor: const AlwaysStoppedAnimation<Color>(_accentColor),
+                      ),
+                    ),
+                  if (!scanService!.isScanning && scanService!.failedScanFiles.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6.0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _showFailedScanFilesDialog(scanService!),
+                          icon: const Icon(Icons.error_outline, size: 16, color: Colors.orangeAccent),
+                          label: Text(
+                            '查看失败文件（${scanService!.failedScanFiles.length}）',
+                            style: const TextStyle(color: Colors.orangeAccent),
+                          ),
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                        ),
                       ),
                     ),
                 ],

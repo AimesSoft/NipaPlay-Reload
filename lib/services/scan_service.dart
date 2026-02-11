@@ -57,6 +57,38 @@ class FolderChangeInfo {
   }
 }
 
+/// 扫描失败文件信息
+class ScanFailedFile {
+  final String folderPath;
+  final String filePath;
+  final String? errorMessage;
+
+  const ScanFailedFile({
+    required this.folderPath,
+    required this.filePath,
+    this.errorMessage,
+  });
+
+  String get folderName => folderPath.isEmpty ? '' : p.basename(folderPath);
+
+  String get relativePath {
+    if (folderPath.isEmpty) return filePath;
+    final relative = p.relative(filePath, from: folderPath);
+    return relative;
+  }
+
+  String get displayPath {
+    if (folderPath.isEmpty) return filePath;
+    final relative = relativePath;
+    if (relative.startsWith('..')) {
+      return filePath;
+    }
+    final name = folderName;
+    if (name.isEmpty) return relative;
+    return p.join(name, relative);
+  }
+}
+
 class _FolderFileDiff {
   final int currentCount;
   final int cachedCount;
@@ -98,6 +130,10 @@ class ScanService with ChangeNotifier {
   // 启动时检测到的变化信息
   final List<FolderChangeInfo> _detectedChanges = [];
   List<FolderChangeInfo> get detectedChanges => List.unmodifiable(_detectedChanges);
+
+  // 最近一次扫描失败的文件列表
+  final List<ScanFailedFile> _failedScanFiles = [];
+  List<ScanFailedFile> get failedScanFiles => List.unmodifiable(_failedScanFiles);
 
   bool _isScanning = false;
   bool get isScanning => _isScanning;
@@ -531,6 +567,31 @@ class ScanService with ChangeNotifier {
     debugPrint("已清理检测到的文件夹变化");
   }
 
+  /// 清理扫描失败文件列表
+  void clearFailedScanFiles({bool notify = true}) {
+    if (_failedScanFiles.isEmpty) return;
+    _failedScanFiles.clear();
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  void _recordFailedScanFiles(
+    String folderPath,
+    List<VideoProcessResult> failedResults,
+  ) {
+    if (failedResults.isEmpty) return;
+    _failedScanFiles.addAll(
+      failedResults.map(
+        (result) => ScanFailedFile(
+          folderPath: folderPath,
+          filePath: result.filePath,
+          errorMessage: result.errorMessage,
+        ),
+      ),
+    );
+  }
+
   void _updateScanState({bool? scanning, double? progress, String? message, bool? completed}) {
     bool changed = false;
     if (scanning != null && _isScanning != scanning) {
@@ -589,6 +650,7 @@ class ScanService with ChangeNotifier {
       return;
     }
 
+    clearFailedScanFiles(notify: false);
     _updateScanState(scanning: true, progress: 0.0, message: "开始智能刷新所有媒体文件夹...");
     
     // 先清理无效的hash缓存
@@ -690,6 +752,10 @@ class ScanService with ChangeNotifier {
     if (!isPartOfBatch && _isScanning) {
       _updateScanMessage("已有扫描任务在进行中，请稍后。");
       return;
+    }
+
+    if (!isPartOfBatch) {
+      clearFailedScanFiles(notify: false);
     }
 
     if (!isPartOfBatch) {
@@ -805,6 +871,7 @@ class ScanService with ChangeNotifier {
     // 第三阶段：处理结果
     final successResults = results.where((r) => r.success).toList();
     final failedResults = results.where((r) => !r.success).toList();
+    _recordFailedScanFiles(directoryPath, failedResults);
     final addedAnimeTitles = successResults
         .where((r) => r.animeTitle != null)
         .map((r) => r.animeTitle!)

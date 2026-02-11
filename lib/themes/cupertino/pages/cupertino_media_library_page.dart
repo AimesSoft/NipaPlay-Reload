@@ -40,6 +40,7 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
@@ -1304,6 +1305,54 @@ class _RemoteScrapeResult {
   });
 }
 
+void _showScanFailedFilesDialog(BuildContext context, ScanService scanService) {
+  final failedFiles = scanService.failedScanFiles;
+  if (failedFiles.isEmpty) return;
+
+  final secondaryLabel = CupertinoDynamicColor.resolve(
+    CupertinoColors.secondaryLabel,
+    context,
+  );
+
+  BlurDialog.show(
+    context: context,
+    title: '扫描失败文件（${failedFiles.length}）',
+    contentWidget: ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 320, minWidth: 260),
+      child: ListView.separated(
+        shrinkWrap: true,
+        itemCount: failedFiles.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final item = failedFiles[index];
+          final displayPath = item.displayPath;
+          final error = item.errorMessage ?? '未知原因';
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${index + 1}. $displayPath',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '原因：$error',
+                style: TextStyle(fontSize: 12, color: secondaryLabel),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+    actions: [
+      CupertinoDialogAction(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('关闭'),
+      ),
+    ],
+  );
+}
+
 class CupertinoLocalMediaLibraryCard extends StatefulWidget {
   const CupertinoLocalMediaLibraryCard({
     super.key,
@@ -1478,6 +1527,39 @@ class _CupertinoLocalMediaLibraryCardState
                     context,
                     scanService.scanMessage,
                     scanService.isScanning,
+                  ),
+                ],
+                if (!scanService.isScanning &&
+                    scanService.failedScanFiles.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minSize: 0,
+                      onPressed: () => _showScanFailedFilesDialog(
+                        context,
+                        scanService,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            CupertinoIcons.exclamationmark_triangle,
+                            size: 16,
+                            color: CupertinoColors.systemOrange,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '查看失败文件（${scanService.failedScanFiles.length}）',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: CupertinoColors.systemOrange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 18),
@@ -2555,6 +2637,39 @@ class _CupertinoLibraryManagementSheetState
                 fontSize: 13,
                 height: 1.35,
                 color: secondaryLabelColor,
+              ),
+            ),
+          ],
+          if (!scanService.isScanning &&
+              scanService.failedScanFiles.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minSize: 0,
+                onPressed: () => _showScanFailedFilesDialog(
+                  context,
+                  scanService,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.exclamationmark_triangle,
+                      size: 16,
+                      color: CupertinoColors.systemOrange,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '查看失败文件（${scanService.failedScanFiles.length}）',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.systemOrange,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
