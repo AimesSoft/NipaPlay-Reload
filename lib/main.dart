@@ -679,12 +679,16 @@ class NipaPlayApp extends StatefulWidget {
   State<NipaPlayApp> createState() => _NipaPlayAppState();
 }
 
-class _NipaPlayAppState extends State<NipaPlayApp> {
+class _NipaPlayAppState extends State<NipaPlayApp>
+    with WidgetsBindingObserver {
   bool _isDragging = false;
+  Brightness _platformBrightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // 启动后设置WatchHistoryProvider监听ScanService
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (globals.isDesktop) {
@@ -717,6 +721,23 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
         debugPrint('_NipaPlayAppState: 设置监听器时出错: $e');
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    final brightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    if (brightness != _platformBrightness) {
+      setState(() {
+        _platformBrightness = brightness;
+      });
+    }
   }
 
   Future<void> _handleSingleInstanceMessage(
@@ -785,19 +806,32 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
       },
       child: Consumer2<ThemeNotifier, UIThemeProvider>(
         builder: (context, themeNotifier, uiThemeProvider, child) {
+          final effectiveBrightness = _resolveEffectiveBrightness(
+            themeNotifier.themeMode,
+            _platformBrightness,
+          );
+          final overlayStyle =
+              _buildMobileSystemUiOverlayStyle(effectiveBrightness);
+          if (overlayStyle != null) {
+            SystemChrome.setSystemUIOverlayStyle(overlayStyle);
+          }
+
           if (!uiThemeProvider.isInitialized) {
-            return MaterialApp(
-              title: 'NipaPlay',
-              debugShowCheckedModeBanner: false,
-              home: const SplashScreen(),
-              builder: (context, appChild) {
-                return Stack(
-                  children: [
-                    appChild ?? const SizedBox.shrink(),
-                    if (_isDragging) const DragDropOverlay(),
-                  ],
-                );
-              },
+            return _wrapWithSystemUiOverlay(
+              MaterialApp(
+                title: 'NipaPlay',
+                debugShowCheckedModeBanner: false,
+                home: const SplashScreen(),
+                builder: (context, appChild) {
+                  return Stack(
+                    children: [
+                      appChild ?? const SizedBox.shrink(),
+                      if (_isDragging) const DragDropOverlay(),
+                    ],
+                  );
+                },
+              ),
+              overlayStyle,
             );
           }
 
@@ -841,7 +875,10 @@ class _NipaPlayAppState extends State<NipaPlayApp> {
                 : CupertinoMainPage(launchFilePath: widget.launchFilePath),
           );
 
-          return descriptor.buildApp(themeContext);
+          return _wrapWithSystemUiOverlay(
+            descriptor.buildApp(themeContext),
+            overlayStyle,
+          );
         },
       ),
     );
@@ -1581,4 +1618,47 @@ void _navigateToPage(BuildContext context, int pageIndex) {
     debugPrint(
         '[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
   }
+}
+
+Brightness _resolveEffectiveBrightness(
+  ThemeMode mode,
+  Brightness platformBrightness,
+) {
+  switch (mode) {
+    case ThemeMode.dark:
+      return Brightness.dark;
+    case ThemeMode.light:
+      return Brightness.light;
+    case ThemeMode.system:
+      return platformBrightness;
+  }
+}
+
+SystemUiOverlayStyle? _buildMobileSystemUiOverlayStyle(
+  Brightness brightness,
+) {
+  if (!(Platform.isIOS || Platform.isAndroid)) {
+    return null;
+  }
+
+  final isDark = brightness == Brightness.dark;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+    // iOS 使用 statusBarBrightness 控制图标颜色，值与期望颜色相反
+    statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+  );
+}
+
+Widget _wrapWithSystemUiOverlay(
+  Widget child,
+  SystemUiOverlayStyle? overlayStyle,
+) {
+  if (overlayStyle == null) {
+    return child;
+  }
+  return AnnotatedRegion<SystemUiOverlayStyle>(
+    value: overlayStyle,
+    child: child,
+  );
 }

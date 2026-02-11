@@ -54,25 +54,31 @@ class LibraryManagementEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final bool isDark = theme.brightness == Brightness.dark;
+    final Color iconColor = onSurface.withOpacity(isDark ? 0.55 : 0.4);
+    final Color titleColor = onSurface.withOpacity(isDark ? 0.75 : 0.7);
+    final Color subtitleColor = onSurface.withOpacity(isDark ? 0.6 : 0.55);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 64, color: Colors.white54),
+            Icon(icon, size: 64, color: iconColor),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
+              style: TextStyle(color: titleColor, fontSize: 16),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 8),
               Text(
                 subtitle!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white60, fontSize: 13),
+                style: TextStyle(color: subtitleColor, fontSize: 13),
               ),
             ],
           ],
