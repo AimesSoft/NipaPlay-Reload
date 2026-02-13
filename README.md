@@ -1,323 +1,193 @@
-<div style="display: flex; align-items: center; justify-content: center;">
-  <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" width="70%" style="margin-right: 20px;">
-  <img src="icons/new-icon-win.png" width="30%">
-</div>
-<img src="assets/images/main_image.png" width="100%">
-
-# NipaPlay-Reload
-
 <div align="center">
+  <div style="display: flex; align-items: center; justify-content: center;">
+    <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" width="100px" style="margin-right: 20px;" alt="Logo">
+    <img src="icons/new-icon-win.png" width="100px" alt="Icon">
+  </div>
+  
+  # NipaPlay-Reload
+
   <img src="https://count.getloli.com/get/@nipaplay?theme=moebooru" alt="访问统计" />
+  
+  <br>
+
+  ![GitHub release](https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=blue)
+  ![GitHub downloads](https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=green)
+  ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
+  ![License](https://img.shields.io/github/license/mcdfsteve/nipaplay-reload?style=flat-square)
+
+  <br>
+
+  <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart" width="80%">
 </div>
-
-![GitHub release](https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=blue) ![GitHub downloads](https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=green) ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square) ![License](https://img.shields.io/github/license/mcdfsteve/nipaplay-reload?style=flat-square)
-
-<div align="center" style="margin: 10px 0;">
-  <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart">
-</div>
-
-### 一个现代化的视频播放器应用。支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统，为用户提供跨平台的统一体验。支持自动匹配网络弹幕。支持观看进度同步bangumi，对动画进行打分和写评论。支持查看新番更新。支持链接emby，jellyfin。支持挂载webdav。支持把你的电脑搭建成本地媒体中心，局域网内其他设备可以快速访问并播放。
-
-## 下载
-
-- **Windows（x86 64）/Linux（amd64 & arm64）/macOS（Intel&Apple Silicon）/Android（arm32&arm64&x86 64）**
-  
-  - [GitHub Releases](https://github.com/mcdfsteve/nipaplay-reload/releases)
-- **iOS (App Store)**
-  
-  - <a href="https://apps.apple.com/cn/app/nipaplay/id6751284970" target="_blank">
-    <img src="others/download.png" width="30%" alt="下载">
-
-</a>
-
-- **macOS (Homebrew)**
-  
-  > 我们推荐 macOS 用户使用 [Homebrew](https://brew.sh/) 进行安装和管理。
-  
-  1. **添加我们的软件源 (Tap):**
-     *(此命令每个用户只需运行一次)*
-     
-     ```bash
-     brew tap Shinokawa/nipaplay-reload
-     ```
-  2. **安装 NipaPlay:**
-     
-     ```bash
-     brew install --cask nipaplay-reload
-     ```
-  3. **更新 NipaPlay:**
-     
-     ```bash
-     brew upgrade nipaplay-reload
-     ```
-- **Arch Linux（x86 64）**
-  
-  - 使用 `aur`助手
-    
-    ```bash
-    paru -S nipaplay-reload-bin
-    ```
-    
-    > 或
-    
-    ```bash
-    yay -S nipaplay-reload-bin
-    ```
-
-- **Gentoo Linux(x86 64)**
-
-  ```bash
-  ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
-  ```
-  
-## 使用文档
-
-**[➡️ 点击这里，查看完整的使用文档](Documentation/index.md)**
-
-在这份文档中，你将了解到：
-
-* 如何在各个平台上安装和配置 NipaPlay
-* 连接 Emby/Jellyfin 媒体服务器的详细步骤
-* 播放器设置优化和故障排查指南
-* 常见问题解答和使用技巧
-
-## 如何贡献
-
-我们非常欢迎来自社区的各种形式的贡献，无论是代码、文档、设计还是软件分发。为了帮助你更轻松地参与进来，我们为您准备了一套详尽的贡献者指南。
-
-**[➡️ 点击这里，查看完整的贡献者指南](CONTRIBUTING_GUIDE/00-Introduction.md)**
-
-在这份指南中，你将了解到：
-
-* 即使不会编程，也能为项目做出贡献的方法。
-* 如何搭建开发环境，并借助 AI 工具编写代码。
-* 如何为应用添加新的播放器或弹幕内核。
-
-## 赞助项目运行
-
-<a href="https://afdian.com/a/irigas" target="_blank">
-<img src="others/爱发电.jpg" width="30%" alt="爱发电">
-
-</a>
-
-<img src="others/赞赏码.jpg" width="30%" alt="赞赏码">
-
-## 应用截图
 
 <div align="center">
-  <p><strong>主界面</strong></p>
-  <img src="others/%E4%B8%BB%E9%A1%B5.png" width="70%" alt="主界面">
-
-<p><strong>视频播放页面</strong></p>
-  <img src="others/%E4%B8%BB%E7%95%8C%E9%9D%A2.png" width="70%" alt="视频播放页面">
-
-<p><strong>番剧详情界面</strong></p>
-  <img src="others/%E6%96%B0%E7%95%AA%E8%AF%A6%E6%83%85%E7%95%8C%E9%9D%A2.png" width="70%" alt="新番剧详情界面">
-
-<p><strong>流媒体详情页面</strong></p>
-  <img src="others/%E6%B5%81%E5%AA%92%E4%BD%93%E8%AF%A6%E6%83%85%E9%A1%B5%E9%9D%A2.png" width="70%" alt="流媒体详情页面">
-
-<p><strong>流媒体媒体库</strong></p>
-  <img src="others/%E6%B5%81%E5%AA%92%E4%BD%93%E5%AA%92%E4%BD%93%E5%BA%93.png" width="70%" alt="流媒体媒体库">
-
-<p><strong>播放界面</strong></p>
-  <img src="others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2.png" width="70%" alt="播放界面">
-
-<p><strong>播放界面UI展示</strong></p>
-  <img src="others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2-UI%E5%B1%95%E7%A4%BA.png" width="70%" alt="播放界面UI展示">
-
-<p><strong>媒体库界面</strong></p>
-  <img src="others/%E5%AA%92%E4%BD%93%E5%BA%93%E7%95%8C%E9%9D%A2.png" width="70%" alt="媒体库界面">
-
-<p><strong>库管理界面</strong></p>
-  <img src="others/%E5%BA%93%E7%AE%A1%E7%90%86%E7%95%8C%E9%9D%A2.png" width="70%" alt="库管理界面">
+  <h3>
+    一个现代化的跨平台视频播放器应用
+  </h3>
+  <p>
+    支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统。
+    <br>
+    打造您的个人媒体中心，享受极致的追番体验。
+  </p>
 </div>
 
-## 已实现功能
+---
 
-- **视频播放**
-  
-  - 支持本地视频文件播放
-  - 支持Emby，Jellyfin视频播放
-  - 支持切换播放器内核
-  - 支持弹幕显示（集成弹弹play）
-    - 滚动弹幕、顶部弹幕、底部弹幕
-    - 弹幕记忆运动轨迹
-    - 时间轴跳转时弹幕位置同步
-    - 弹幕轨道管理系统
-    - 合并弹幕显示
-    - 开关弹幕覆盖
-    - 本地弹幕挂载（json/xml）
-  - 字幕支持
-    - 支持 ASS、SRT 格式字幕
-    - 支持内嵌字幕和外挂字幕
-    - 支持多字幕轨道切换
-    - 支持字幕样式自定义
-    - 支持挂载本地字幕（ass/srt）
-  - 音频支持
-    - 支持多音频轨道切换
-  - 视频信息自动匹配
-  - 播放进度记忆
-  - 倍速功能
-  - 视频截图
-  - Anime4K 超分辨率（实验性）
-  - CRT 显示效果（多档位 GLSL 着色器）
-- **番剧管理**
-  
-  - Bangumi同步观看记录与评分，评论
-  - 新番时间表展示
-  - 按星期分类显示
-  - 番剧详情查看
-  - 图片缓存管理
-  - SMB 媒体库挂载
-  - 历史记录同步
-  - 多设备远程访问
-  - 备份与恢复
-- **设置中心**
-  
-  - 毛玻璃设计风格，提供现代感界面
-  - 适配平板布局和安卓TV
-  - 主题模式切换（亮色/暗色）
-  - 背景图片自定义更换
-  - 快捷键自定义
-  - 多种视频内核和弹幕内核随意切换
-  - 账户设置
-  - 关于页面
+## ✨ 核心亮点
 
-## 开发进度
+NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 
-> 持续开发中，欢迎关注 Releases 获取最新版本
+*   **📺 全平台支持**：无论是在电脑还是手机上，体验始终如一。
+*   **🎯 强大的弹幕系统**：自动匹配网络弹幕，支持弹弹play，让看番不再孤单。
+*   **🎬 媒体库集成**：支持 Emby、Jellyfin、SMB、WebDAV，轻松挂载远程资源。
+*   **📅 番剧管理**：同步 Bangumi 观看进度，查看新番时间表，打分评论一站式搞定。
+*   **🎨 现代 UI**：毛玻璃风格设计，支持自动黑夜模式，美观与易用并重。
 
-## 关于提交issue
+## 🖼️ 应用截图
 
-- 可以在软件的开发者选项-终端输出 里复制或导出软件日志
-- 平板/安卓TV用户也支持，因为可以导出为二维码
+<details>
+<summary><b>点击展开查看更多截图</b></summary>
 
-## 待加入功能
+<div align="center">
+  <table style="border: none;">
+    <tr>
+      <td align="center" style="border: none;">
+        <img src="others/主页.png" width="100%" alt="主界面">
+        <br><b>主界面</b>
+      </td>
+      <td align="center" style="border: none;">
+        <img src="others/播放界面.png" width="100%" alt="播放界面">
+        <br><b>播放界面</b>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="border: none;">
+        <img src="others/新番详情界面.png" width="100%" alt="番剧详情">
+        <br><b>番剧详情界面</b>
+      </td>
+      <td align="center" style="border: none;">
+        <img src="others/流媒体详情页面.png" width="100%" alt="流媒体详情">
+        <br><b>流媒体详情页面</b>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="border: none;">
+        <img src="others/媒体库界面.png" width="100%" alt="媒体库">
+        <br><b>媒体库界面</b>
+      </td>
+      <td align="center" style="border: none;">
+        <img src="others/库管理界面.png" width="100%" alt="库管理">
+        <br><b>库管理界面</b>
+      </td>
+    </tr>
+  </table>
+  <img src="others/播放界面-UI展示.png" width="80%" alt="UI展示">
+  <br><b>播放界面 UI 展示</b>
+</div>
 
-- **功能扩展**
-  - 评论区功能
-  - 云媒体库挂载（FTP）
-  - 视频导出单独片段为gif
-  - 内置下载器并可通过app远程控制
-  - 新番详情页面支持直接跳转网络媒体库
-  - 在线url播放
-  - webview实现弹幕刮削
-  - 补帧功能
-  - hdr和杜比视界支持
-  - 对鸿蒙OS VisionPro AppleTV的移植
+</details>
 
-## 使用的第三方库
+## 📥 下载安装
 
-- **核心功能库**
-  
-  - [fvp](https://pub.dev/packages/fvp) - 高性能视频播放器
-  - [video_player](https://pub.dev/packages/video_player) - Flutter官方视频播放器
-  - [media_kit](https://pub.dev/packages/media_kit) - 跨平台媒体播放框架
-  - [media_kit_video](https://pub.dev/packages/media_kit_video) - media_kit视频组件
-  - [media_kit_libs_video](https://pub.dev/packages/media_kit_libs_video) - media_kit视频库
-  - [http](https://pub.dev/packages/http) - HTTP 请求处理
-  - [crypto](https://pub.dev/packages/crypto) - 加密功能
-  - [canvas_danmaku](https://pub.dev/packages/canvas_danmaku) - Canvas弹幕
-- **UI 相关**
-  
-  - [glassmorphism](https://pub.dev/packages/glassmorphism) - 毛玻璃效果
-  - [hugeicons](https://pub.dev/packages/hugeicons) - 图标库
-  - [kmbal_ionicons](https://pub.dev/packages/kmbal_ionicons) - 图标库
-  - [transparent_image](https://pub.dev/packages/transparent_image) - 透明图片占位符
-- **文件处理**
-  
-  - [file_selector](https://pub.dev/packages/file_selector) - 文件选择器
-  - [path_provider](https://pub.dev/packages/path_provider) - 路径提供
-  - [path](https://pub.dev/packages/path) - 路径处理
-  - [image_picker](https://pub.dev/packages/image_picker) - 图片选择器
-  - [image](https://pub.dev/packages/image) - 图片处理
-- **状态管理**
-  
-  - [provider](https://pub.dev/packages/provider) - 状态管理
-  - [synchronized](https://pub.dev/packages/synchronized) - 同步控制
-- **数据存储**
-  
-  - [shared_preferences](https://pub.dev/packages/shared_preferences) - 本地存储
-  - [sqflite](https://pub.dev/packages/sqflite) - SQLite数据库
-  - [sqflite_common_ffi](https://pub.dev/packages/sqflite_common_ffi) - 桌面平台SQLite支持
-- **网络相关**
-  
-  - [cached_network_image](https://pub.dev/packages/cached_network_image) - 网络图片缓存
-- **系统功能**
-  
-  - [window_manager](https://pub.dev/packages/window_manager) - 窗口管理
-  - [package_info_plus](https://pub.dev/packages/package_info_plus) - 包信息
-  - [url_launcher](https://pub.dev/packages/url_launcher) - URL 启动器
-  - [permission_handler](https://pub.dev/packages/permission_handler) - 权限管理
-  - [wakelock_plus](https://pub.dev/packages/wakelock_plus) - 屏幕常亮
-  - [screen_brightness](https://pub.dev/packages/screen_brightness) - 屏幕亮度控制
-- **工具库**
-  
-  - [intl](https://pub.dev/packages/intl) - 国际化支持
-  - [uuid](https://pub.dev/packages/uuid) - UUID生成器
-- **开发工具**
-  
-  - [flutter_lints](https://pub.dev/packages/flutter_lints) - 代码检查
+支持 **Windows (x64)**、**Linux (amd64/arm64)**、**macOS (Intel/Apple Silicon)**、**Android** 和 **iOS**。
 
-## 技术栈
+### 🚀 快速下载
 
-### 🎯 **核心框架**
+- **GitHub Releases (推荐)**: [下载最新版本](https://github.com/mcdfsteve/nipaplay-reload/releases)
+- **iOS (App Store)**: [点击下载](https://apps.apple.com/cn/app/nipaplay/id6751284970)
 
-- **Flutter** - 跨平台UI框架
-- **Dart** - 编程语言
+### 📦 包管理器安装
 
-### 🎬 **视频播放引擎**
+#### macOS (Homebrew)
+```bash
+brew tap Shinokawa/nipaplay-reload
+brew install --cask nipaplay-reload
+```
 
-- **FVP (Flutter Video Player)** - 基于libmdk的高性能视频播放器
-- **Media Kit** - 跨平台媒体播放框架
-- **Video Player** - Flutter官方视频播放器
-- **libmpv** - 底层媒体播放库
+#### Arch Linux (AUR)
+```bash
+paru -S nipaplay-reload-bin
+# 或
+yay -S nipaplay-reload-bin
+```
 
-### 🗄️ **数据存储**
+#### Gentoo Linux
+```bash
+ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
+```
 
-- **SQLite** - 本地数据库存储
-- **SharedPreferences** - 轻量级键值存储
-- **文件系统** - 本地文件管理
+## 🛠️ 功能列表
 
-### 🌐 **网络与API**
+### 🎥 播放体验
+*   **内核支持**：基于 fvp (libmdk) / media_kit / video_player / libmpv，性能强劲。
+*   **视频支持**：本地播放、Emby/Jellyfin 流媒体、WebDAV 挂载。
+*   **画质增强**：支持 Anime4K 超分（实验性）、CRT 着色器效果。
+*   **音频控制**：多音轨切换、倍速播放。
 
-- **HTTP** - 网络请求处理
-- **弹弹play API** - 弹幕数据源
-- **Bangumi API** - 番剧信息源
-- **Emby/Jellyfin API** - 媒体服务器集成
+### 💬 弹幕与字幕
+*   **弹幕**：滚动/顶底弹幕、轨迹记忆、防遮挡、本地挂载 (xml/json)。
+*   **字幕**：ASS/SRT 格式、多轨切换、样式自定义、本地挂载。
 
-### 🎨 **UI/UX技术**
+### 📒 番剧与同步
+*   **Bangumi**：进度同步、评分、评论。
+*   **新番表**：每日更新提醒，按周分类。
+*   **数据备份**：历史记录同步、多设备远程访问。
 
-- **Material Design** - 设计语言
-- **Glassmorphism** - 毛玻璃视觉效果
-- **Provider** - 状态管理
-- **自适应布局** - 响应式设计
+### ⚙️ 个性化
+*   **主题**：亮色/暗色切换、自定义背景图。
+*   **操作**：自定义快捷键、适配平板/电视布局。
 
-### 🔧 **系统集成**
+## 📖 文档与支持
 
-- **Window Manager** - 桌面窗口管理
-- **Permission Handler** - 权限管理
-- **Wakelock** - 屏幕常亮控制
-- **Screen Brightness** - 亮度控制
+*   **[📚 完整使用文档](Documentation/index.md)**：安装配置、Emby 连接教程、故障排查。
+*   **[🤝 贡献者指南](CONTRIBUTING_GUIDE/00-Introduction.md)**：如何参与开发、添加新功能。
+*   **反馈问题**：请在软件内的“开发者选项”中导出日志，或在 GitHub Issues 中提交。
 
-### 📱 **平台支持**
+## 🏗️ 技术栈
 
-- **Windows** - 桌面应用
-- **macOS** - 桌面应用
-- **Linux** - 桌面应用
-- **Android** - 移动应用
-- **iOS** - 移动应用
+本项目基于 **Flutter** 构建，使用了以下核心技术：
 
-## 关于看板娘
+| 类别 | 技术/库 |
+| :--- | :--- |
+| **核心框架** | Flutter, Dart |
+| **播放引擎** | FVP, Media Kit, libmpv |
+| **UI/UX** | Material Design, Glassmorphism, Hugeicons |
+| **状态管理** | Provider |
+| **数据存储** | SQLite, SharedPreferences |
+| **网络 API** | Dio/Http, Bangumi API, 弹弹play API |
 
-- https://www.pixiv.net/artworks/130349456 （作者MCDFsteve）
+## 📅 开发计划 (Roadmap)
 
-## 鸣谢
+- [ ] 评论区功能完善
+- [ ] 云媒体库挂载 (FTP)
+- [ ] 视频片段导出 (GIF)
+- [ ] 内置下载器及远程控制
+- [ ] 在线 URL 播放优化
+- [ ] Webview 弹幕刮削
+- [ ] 补帧功能 (SVP/Other)
+- [ ] HDR 和杜比视界支持
+- [ ] 鸿蒙 OS / Vision Pro / Apple TV 移植
 
-- EmoSakura
-- Mr.果仁
-- 姬田诗乃
-- 微光
-- 大祥老师
-- 卡拜
+## ❤️ 赞助与鸣谢
+
+如果这个项目对您有帮助，欢迎赞助以支持服务器运行和后续开发！
+
+<div style="display: flex; gap: 20px;">
+  <a href="https://afdian.com/a/irigas" target="_blank">
+    <img src="others/爱发电.jpg" height="150px" alt="爱发电">
+  </a>
+  <img src="others/赞赏码.jpg" height="150px" alt="微信赞赏">
+</div>
+
+### 鸣谢
+感谢以下贡献者和支持者：
+EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜
+
+### 看板娘
+[Pixiv Artwork](https://www.pixiv.net/artworks/130349456) (作者 MCDFsteve)
+
+---
+
+<div align="center">
+  <sub>Made with ❤️ by the NipaPlay Team</sub>
+</div>
