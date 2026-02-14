@@ -353,6 +353,67 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadPrecacheBufferSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValue = prefs.getInt(_precacheBufferSizeMbKey);
+    final resolved = storedValue == null
+        ? PlayerFactory.defaultPrecacheBufferSizeMb
+        : storedValue
+            .clamp(
+              PlayerFactory.minPrecacheBufferSizeMb,
+              PlayerFactory.maxPrecacheBufferSizeMb,
+            )
+            .toInt();
+    _precacheBufferSizeMb = resolved;
+    notifyListeners();
+  }
+
+  Future<void> _loadPrecacheBufferDuration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValue = prefs.getInt(_precacheBufferDurationSecondsKey);
+    final resolved = (storedValue ?? _precacheBufferDurationSeconds)
+        .clamp(1, 120)
+        .toInt();
+    _precacheBufferDurationSeconds = resolved;
+    notifyListeners();
+  }
+
+  Future<void> setPrecacheBufferSizeMb(int value) async {
+    final resolved = value
+        .clamp(
+          PlayerFactory.minPrecacheBufferSizeMb,
+          PlayerFactory.maxPrecacheBufferSizeMb,
+        )
+        .toInt();
+    if (_precacheBufferSizeMb == resolved) {
+      return;
+    }
+    _precacheBufferSizeMb = resolved;
+    await PlayerFactory.savePrecacheBufferSizeMb(resolved);
+    notifyListeners();
+  }
+
+  Future<void> setPrecacheBufferDurationSeconds(int value) async {
+    final resolved = value.clamp(1, 120).toInt();
+    if (_precacheBufferDurationSeconds == resolved) {
+      return;
+    }
+    _precacheBufferDurationSeconds = resolved;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_precacheBufferDurationSecondsKey, resolved);
+    await applyPrecacheBufferSettings();
+    notifyListeners();
+  }
+
+  Future<void> applyPrecacheBufferSettings() async {
+    if (_isDisposed) return;
+    final kernelName = player.getPlayerKernelName();
+    if (kernelName == 'MDK') {
+      final maxMs = _precacheBufferDurationSeconds * 1000;
+      player.setBufferRange(minMs: 1000, maxMs: maxMs, drop: false);
+    }
+  }
+
   // 保存播放速度设置
   Future<void> setPlaybackRate(double rate) async {
     _playbackRate = rate;

@@ -364,6 +364,14 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
             if (progress.isNaN) {
               progress = 0.0;
             }
+            double bufferProgress = widget.videoState.bufferedProgress;
+            if (bufferProgress.isNaN || bufferProgress.isInfinite) {
+              bufferProgress = 0.0;
+            }
+            bufferProgress = bufferProgress.clamp(0.0, 1.0).toDouble();
+            if (bufferProgress < progress) {
+              bufferProgress = progress;
+            }
 
             // 根据设备类型调整尺寸
             final trackHeight = globals.isPhone ? 6.0 : 4.0;
@@ -388,6 +396,24 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(trackHeight / 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // 缓存轨道
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: verticalMargin,
+                        child: FractionallySizedBox(
+                          widthFactor: bufferProgress,
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            height: trackHeight,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius:
+                                  BorderRadius.circular(trackHeight / 2),
                             ),
                           ),
                         ),
@@ -457,6 +483,24 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(trackHeight / 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // 缓存轨道
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: verticalMargin,
+                        child: FractionallySizedBox(
+                          widthFactor: bufferProgress,
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            height: trackHeight,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius:
+                                  BorderRadius.circular(trackHeight / 2),
                             ),
                           ),
                         ),

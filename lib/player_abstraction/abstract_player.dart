@@ -28,6 +28,8 @@ abstract class AbstractPlayer {
   set activeAudioTracks(List<int> value);
 
   int get position; // in milliseconds
+  int get bufferedPosition; // in milliseconds, end of buffered data
+  void setBufferRange({int minMs, int maxMs, bool drop});
 
   bool get supportsExternalSubtitles;
 

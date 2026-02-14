@@ -359,6 +359,33 @@ class MdkPlayerAdapter implements AbstractPlayer {
   int get position => _mdkPlayer.position;
 
   @override
+  int get bufferedPosition {
+    try {
+      final bufferedDuration = _mdkPlayer.buffered();
+      if (bufferedDuration <= 0) {
+        return 0;
+      }
+      final endPosition = _mdkPlayer.position + bufferedDuration;
+      final duration = _mdkPlayer.mediaInfo.duration;
+      if (duration > 0) {
+        return endPosition.clamp(0, duration).toInt();
+      }
+      return endPosition;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  @override
+  void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {
+    try {
+      _mdkPlayer.setBufferRange(min: minMs, max: maxMs, drop: drop);
+    } catch (e) {
+      debugPrint('MDK: 设置缓冲范围失败: $e');
+    }
+  }
+
+  @override
   bool get supportsExternalSubtitles => true;
 
   @override

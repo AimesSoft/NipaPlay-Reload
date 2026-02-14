@@ -211,6 +211,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _progress = 0.0;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  int _bufferedPositionMs = 0;
   String? _error;
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
@@ -278,6 +279,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
   final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
+  final String _precacheBufferSizeMbKey = 'player_precache_buffer_size_mb';
+  int _precacheBufferSizeMb = PlayerFactory.defaultPrecacheBufferSizeMb;
+  final String _precacheBufferDurationSecondsKey =
+      'player_precache_buffer_duration_seconds';
+  int _precacheBufferDurationSeconds = 4;
   final String _timelinePreviewEnabledKey = 'timeline_preview_enabled';
   final String _useHardwareDecoderKey = 'use_hardware_decoder';
   bool _useHardwareDecoder = true;
@@ -634,6 +640,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
+  int get bufferedPosition => _bufferedPositionMs;
+  double get bufferedProgress {
+    final durationMs = _duration.inMilliseconds;
+    if (durationMs <= 0) {
+      return 0.0;
+    }
+    final raw = _bufferedPositionMs / durationMs;
+    if (raw.isNaN || raw.isInfinite) {
+      return _progress.clamp(0.0, 1.0).toDouble();
+    }
+    final clamped = raw.clamp(0.0, 1.0).toDouble();
+    return clamped < _progress ? _progress : clamped;
+  }
   Duration get duration => _duration;
   Duration get position => _position;
   String? get error => _error;
@@ -654,6 +673,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get minimalProgressBarEnabled => _minimalProgressBarEnabled;
   Color get minimalProgressBarColor => Color(_minimalProgressBarColor);
   bool get showDanmakuDensityChart => _showDanmakuDensityChart;
+  int get precacheBufferSizeMb => _precacheBufferSizeMb;
+  int get precacheBufferDurationSeconds => _precacheBufferDurationSeconds;
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;

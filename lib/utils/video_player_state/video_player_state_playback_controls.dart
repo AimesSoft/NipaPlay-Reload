@@ -109,6 +109,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _position = Duration.zero;
       _duration = Duration.zero;
       _progress = 0.0;
+      _bufferedPositionMs = 0;
       _error = null;
       _animeTitle = null; // 清除动画标题
       _episodeTitle = null; // 清除集数标题
@@ -303,6 +304,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _isSeeking = true;
       _position = Duration.zero;
       _progress = 0.0;
+      _bufferedPositionMs = 0;
       _playbackTimeMs.value = 0;
       notifyListeners();
       player.seek(position: 0);
@@ -490,6 +492,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _duration = Duration.zero;
     _position = Duration.zero;
     _progress = 0.0;
+    _bufferedPositionMs = 0;
     _error = null;
     _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
     // Do NOT call WakelockPlus.disable() here directly, _setStatus will handle it
@@ -506,6 +509,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _position = Duration.zero;
     _progress = 0.0;
     _duration = Duration.zero;
+    _bufferedPositionMs = 0;
     _playbackTimeMs.value = 0;
     if (!_isErrorStopping) {
       // <<< MODIFIED HERE

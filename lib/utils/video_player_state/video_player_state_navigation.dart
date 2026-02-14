@@ -543,6 +543,14 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             _position = Duration(milliseconds: playerPosition);
             _duration = Duration(milliseconds: playerDuration);
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            final bufferedMs = player.bufferedPosition;
+            _bufferedPositionMs = bufferedMs <= 0
+                ? 0
+                : (_duration.inMilliseconds > 0
+                    ? bufferedMs
+                        .clamp(0, _duration.inMilliseconds)
+                        .toInt()
+                    : bufferedMs);
             // 高频时间轴：每帧更新弹幕时间
             _playbackTimeMs.value = _position.inMilliseconds.toDouble();
 
@@ -672,6 +680,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             _position = Duration.zero;
             _progress = 0.0;
             _duration = Duration.zero;
+            _bufferedPositionMs = 0;
 
             WidgetsBinding.instance.addPostFrameCallback((_) async {
               // 1. 执行 handleBackButton 逻辑 (处理全屏、截图等)
@@ -692,6 +701,12 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           _playbackTimeMs.value = _position.inMilliseconds.toDouble();
           if (_duration.inMilliseconds > 0) {
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
+            final bufferedMs = player.bufferedPosition;
+            _bufferedPositionMs = bufferedMs <= 0
+                ? 0
+                : bufferedMs
+                    .clamp(0, _duration.inMilliseconds)
+                    .toInt();
             // 暂停下也节流保存位置
             if (_currentVideoPath != null) {
               final int posMs = _position.inMilliseconds;
@@ -709,6 +724,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
             // 暂停状态下，只在位置变化时更新观看记录
             _updateWatchHistory();
+          } else {
+            _bufferedPositionMs = 0;
           }
           if (shouldUiNotify) {
             _lastUiNotifyMs = nowTime;

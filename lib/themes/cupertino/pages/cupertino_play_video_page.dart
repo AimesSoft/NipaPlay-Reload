@@ -1289,6 +1289,12 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     final position = videoState.position;
     final totalMillis = duration.inMilliseconds;
     final isPhone = globals.isPhone;
+    double bufferProgress = videoState.bufferedProgress;
+    if (bufferProgress.isNaN || bufferProgress.isInfinite) {
+      bufferProgress = 0.0;
+    }
+    bufferProgress = bufferProgress.clamp(0.0, 1.0).toDouble();
+    final double bufferTrackHeight = isPhone ? 3.0 : 4.0;
     final smallButtonExtent = isPhone ? 36.0 : 32.0;
     final playButtonExtent = isPhone ? 44.0 : 36.0;
     final smallIconSize = isPhone ? 24.0 : 20.0;
@@ -1318,6 +1324,23 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(bufferTrackHeight / 2),
+                    child: Container(
+                      height: bufferTrackHeight,
+                      color: CupertinoColors.white.withOpacity(0.18),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: bufferProgress,
+                          child: Container(
+                            color: CupertinoColors.white.withOpacity(0.35),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: isPhone ? 6 : 8),
                   AdaptiveSlider(
                     value: totalMillis > 0
                         ? progressValue.clamp(0.0, 1.0)

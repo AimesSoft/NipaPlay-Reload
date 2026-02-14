@@ -45,6 +45,7 @@ class PlayerKernelManager {
       videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
       await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
       await videoPlayerState.applyHardwareDecoderPreference();
+      await videoPlayerState.applyPrecacheBufferSettings();
       debugPrint('[PlayerKernelManager] 已创建新的空播放器实例');
       return;
     }
@@ -58,6 +59,7 @@ class PlayerKernelManager {
     videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
     await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
     await videoPlayerState.applyHardwareDecoderPreference();
+    await videoPlayerState.applyPrecacheBufferSettings();
 
     // 4. 重新初始化播放
     await videoPlayerState.initializePlayer(

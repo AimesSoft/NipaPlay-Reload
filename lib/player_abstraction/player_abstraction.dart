@@ -79,6 +79,9 @@ class Player {
   set activeAudioTracks(List<int> value) => _delegate.activeAudioTracks = value;
 
   int get position => _delegate.position;
+  int get bufferedPosition => _delegate.bufferedPosition;
+  void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) =>
+      _delegate.setBufferRange(minMs: minMs, maxMs: maxMs, drop: drop);
 
   bool get supportsExternalSubtitles => _delegate.supportsExternalSubtitles;
 
