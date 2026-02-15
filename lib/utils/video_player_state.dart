@@ -804,6 +804,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 播放速度相关的getter
   double get playbackRate => _playbackRate;
+  double get effectivePlaybackRate =>
+      _isSpeedBoostActive ? _speedBoostRate : _playbackRate;
   bool get isSpeedBoostActive => _isSpeedBoostActive;
   double get speedBoostRate => _speedBoostRate;
 

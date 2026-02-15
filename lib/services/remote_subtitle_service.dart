@@ -231,7 +231,9 @@ class RemoteSubtitleService {
       String videoUrl) async {
     await WebDAVService.instance.initialize();
 
-    final resolved = WebDAVService.instance.resolveFileUrl(videoUrl);
+    WebDAVResolvedFile? resolved =
+        WebDAVService.instance.resolveFileUrl(videoUrl);
+    resolved ??= _tryResolveWebDavFromUrl(videoUrl);
     if (resolved == null) return const [];
 
     final directory = _posixDirname(resolved.relativePath);
@@ -255,6 +257,87 @@ class RemoteSubtitleService {
 
     candidates.sort((a, b) => a.name.compareTo(b.name));
     return candidates;
+  }
+
+  WebDAVResolvedFile? _tryResolveWebDavFromUrl(String videoUrl) {
+    final uri = Uri.tryParse(videoUrl);
+    if (uri == null) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+
+    final lowerPath = uri.path.toLowerCase();
+    final hasDavHint = uri.userInfo.isNotEmpty ||
+        lowerPath.contains('/webdav') ||
+        lowerPath.contains('/dav');
+    if (!hasDavHint) return null;
+
+    WebDAVConnection? matched;
+    for (final conn in WebDAVService.instance.connections) {
+      final baseUri = Uri.tryParse(conn.url.trim());
+      if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
+        continue;
+      }
+      if (baseUri.scheme != uri.scheme) continue;
+      if (baseUri.host != uri.host) continue;
+      if (_effectivePort(baseUri) != _effectivePort(uri)) continue;
+      matched = conn;
+      break;
+    }
+
+    String username = '';
+    String password = '';
+    if (uri.userInfo.isNotEmpty) {
+      final parts = uri.userInfo.split(':');
+      username = Uri.decodeComponent(parts.first);
+      if (parts.length > 1) {
+        password = Uri.decodeComponent(parts.sublist(1).join(':'));
+      }
+    }
+
+    final rootUrl = uri
+        .replace(userInfo: '', path: '/', query: '', fragment: '')
+        .toString();
+    final connection = matched != null
+        ? matched.copyWith(url: rootUrl)
+        : WebDAVConnection(
+            name: 'auto',
+            url: rootUrl,
+            username: username,
+            password: password,
+            isConnected: true,
+          );
+
+    final relativePath = _normalizeWebDavPath(uri.path, isDirectory: false);
+    return WebDAVResolvedFile(
+      connection: connection,
+      relativePath: relativePath,
+    );
+  }
+
+  String _normalizeWebDavPath(String path, {required bool isDirectory}) {
+    var normalized = path.trim();
+    if (normalized.isEmpty) {
+      normalized = '/';
+    }
+    if (!normalized.startsWith('/')) {
+      normalized = '/$normalized';
+    }
+    normalized = normalized.replaceAll(RegExp(r'/+'), '/');
+    if (normalized.length == 1) {
+      return normalized;
+    }
+    if (isDirectory) {
+      return normalized.endsWith('/') ? normalized : '$normalized/';
+    }
+    return normalized.endsWith('/')
+        ? normalized.substring(0, normalized.length - 1)
+        : normalized;
+  }
+
+  int _effectivePort(Uri uri) {
+    if (uri.hasPort) return uri.port;
+    if (uri.scheme == 'https') return 443;
+    if (uri.scheme == 'http') return 80;
+    return 0;
   }
 
   Future<List<RemoteSubtitleCandidate>> _listSmbCandidates(String videoUrl) async {

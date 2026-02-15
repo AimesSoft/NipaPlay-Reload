@@ -63,7 +63,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
                   isVisible: widget.isVisible,
                   opacity: widget.opacity,
                   status: videoState.status.toString(),
-                  playbackRate: videoState.playbackRate,
+                  playbackRate: videoState.effectivePlaybackRate,
                   displayArea: videoState.danmakuDisplayArea,
                   timeOffset: combinedTimeOffset,
                   scrollDurationSeconds: scrollDuration,
@@ -114,7 +114,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             currentTime: widget.currentPosition / 1000 +
                 combinedTimeOffset,
             isPlaying: widget.isPlaying,
-            playbackRate: videoState.playbackRate,
+            playbackRate: videoState.effectivePlaybackRate,
             scrollDurationSeconds: scrollDuration,
           );
         }
@@ -128,7 +128,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           isVisible: widget.isVisible,
           opacity: widget.opacity,
           status: videoState.status.toString(),
-          playbackRate: videoState.playbackRate,
+          playbackRate: videoState.effectivePlaybackRate,
           displayArea: videoState.danmakuDisplayArea,
           timeOffset: combinedTimeOffset,
           scrollDurationSeconds: scrollDuration,
