@@ -670,8 +670,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   void _applyAnime4KMpvTuning({required bool enable}) {
-    final Map<String, String> options =
-        enable ? _anime4kRecommendedMpvOptions : _anime4kDefaultMpvOptions;
+    final Map<String, String> options = Map<String, String>.from(
+      enable ? _anime4kRecommendedMpvOptions : _anime4kDefaultMpvOptions,
+    );
+    if (!kIsWeb && Platform.isWindows) {
+      options['gpu-api'] = enable ? 'opengl' : 'auto';
+    }
     options.forEach((String key, String value) {
       try {
         player.setProperty(key, value);
@@ -730,6 +734,16 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
       final int targetWidth = (snapshot.srcWidth! * factor).round();
       final int targetHeight = (snapshot.srcHeight! * factor).round();
+
+      if (!kIsWeb && Platform.isWindows) {
+        const int maxDimension = 4096;
+        if (targetWidth > maxDimension || targetHeight > maxDimension) {
+          debugPrint(
+              '[VideoPlayerState] Windows Anime4K 目标尺寸过大，跳过放大以避免黑屏: ${targetWidth}x${targetHeight}');
+          await player.setVideoSurfaceSize();
+          return;
+        }
+      }
 
       if (snapshot.displayWidth == targetWidth &&
           snapshot.displayHeight == targetHeight) {
@@ -998,6 +1012,33 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await Future.delayed(const Duration(seconds: 1));
       await _updateCurrentActiveDecoder();
     }
+  }
+
+  Future<void> _loadScreenshotSaveTarget() async {
+    if (kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getInt(_screenshotSaveTargetKey);
+      _screenshotSaveTarget = ScreenshotSaveTargetDisplay.fromPrefs(stored);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('加载截图默认保存位置失败: $e');
+    }
+  }
+
+  Future<void> setScreenshotSaveTarget(
+    ScreenshotSaveTarget target,
+  ) async {
+    if (kIsWeb) return;
+    if (_screenshotSaveTarget == target) return;
+    _screenshotSaveTarget = target;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_screenshotSaveTargetKey, target.prefsValue);
+    } catch (e) {
+      debugPrint('保存截图默认保存位置失败: $e');
+    }
+    notifyListeners();
   }
 
   Future<Directory> _getDefaultScreenshotSaveDirectory() async {

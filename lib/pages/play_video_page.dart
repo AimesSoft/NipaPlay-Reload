@@ -229,34 +229,45 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
     try {
       if (Platform.isIOS) {
-        final destination = await BlurDialog.show<String>(
-          context: context,
-          title: '保存截图',
-          content: '请选择保存位置',
-          actions: [
-            HoverScaleTextButton(
-              onPressed: () => Navigator.of(context).pop('photos'),
-              child: const Text(
-                '相册',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            HoverScaleTextButton(
-              onPressed: () => Navigator.of(context).pop('file'),
-              child: const Text(
-                '文件',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            HoverScaleTextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text(
-                '取消',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-          ],
-        );
+        String? destination;
+        switch (videoState.screenshotSaveTarget) {
+          case ScreenshotSaveTarget.photos:
+            destination = 'photos';
+            break;
+          case ScreenshotSaveTarget.file:
+            destination = 'file';
+            break;
+          case ScreenshotSaveTarget.ask:
+            destination = await BlurDialog.show<String>(
+              context: context,
+              title: '保存截图',
+              content: '请选择保存位置',
+              actions: [
+                HoverScaleTextButton(
+                  onPressed: () => Navigator.of(context).pop('photos'),
+                  child: const Text(
+                    '相册',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+                HoverScaleTextButton(
+                  onPressed: () => Navigator.of(context).pop('file'),
+                  child: const Text(
+                    '文件',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+                HoverScaleTextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    '取消',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ],
+            );
+            break;
+        }
 
         if (!mounted) return;
         if (destination == null) return;

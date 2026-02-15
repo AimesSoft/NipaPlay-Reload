@@ -226,6 +226,64 @@ class _CupertinoStorageSettingsPageState
                           );
                         },
                       ),
+                      if (defaultTargetPlatform == TargetPlatform.iOS)
+                        Consumer<VideoPlayerState>(
+                          builder: (context, videoState, child) {
+                            return CupertinoSettingsTile(
+                              leading: Icon(
+                                CupertinoIcons.photo_on_rectangle,
+                                color: resolveSettingsIconColor(context),
+                              ),
+                              title: const Text('截图默认保存位置'),
+                              subtitle: Text(videoState.screenshotSaveTarget.label),
+                              showChevron: true,
+                              onTap: () async {
+                                final result =
+                                    await showCupertinoModalPopup<ScreenshotSaveTarget>(
+                                  context: context,
+                                  builder: (ctx) => CupertinoActionSheet(
+                                    title: const Text('截图默认保存位置'),
+                                    message: const Text('选择截图后的默认保存方式'),
+                                    actions: [
+                                      CupertinoActionSheetAction(
+                                        onPressed: () => Navigator.of(ctx)
+                                            .pop(ScreenshotSaveTarget.ask),
+                                        child: Text(
+                                          ScreenshotSaveTarget.ask.label,
+                                        ),
+                                      ),
+                                      CupertinoActionSheetAction(
+                                        onPressed: () => Navigator.of(ctx)
+                                            .pop(ScreenshotSaveTarget.photos),
+                                        child: Text(
+                                          ScreenshotSaveTarget.photos.label,
+                                        ),
+                                      ),
+                                      CupertinoActionSheetAction(
+                                        onPressed: () => Navigator.of(ctx)
+                                            .pop(ScreenshotSaveTarget.file),
+                                        child: Text(
+                                          ScreenshotSaveTarget.file.label,
+                                        ),
+                                      ),
+                                    ],
+                                    cancelButton: CupertinoActionSheetAction(
+                                      isDefaultAction: true,
+                                      onPressed: () => Navigator.of(ctx).pop(),
+                                      child: const Text('取消'),
+                                    ),
+                                  ),
+                                );
+
+                                if (result != null) {
+                                  await videoState.setScreenshotSaveTarget(result);
+                                }
+                              },
+                              backgroundColor:
+                                  resolveSettingsTileBackground(context),
+                            );
+                          },
+                        ),
                       CupertinoSettingsTile(
                         leading: Icon(
                           CupertinoIcons.trash,

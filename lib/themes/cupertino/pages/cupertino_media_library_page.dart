@@ -2777,7 +2777,7 @@ class _CupertinoLibraryManagementSheetState
         ),
         _buildActionButton(
           context,
-          label: '重新加载媒体库',
+          label: '同步本地媒体库',
           icon: CupertinoIcons.arrow_down_doc,
           onPressed: () => _handleReloadHistory(),
         ),
@@ -5640,8 +5640,9 @@ class _CupertinoLibraryManagementSheetState
 
   Future<void> _handleReloadHistory() async {
     final watchHistory = context.read<WatchHistoryProvider>();
+    watchHistory.clearInvalidPathCache();
     await watchHistory.refresh();
-    _showSnack('已请求刷新本地媒体库数据');
+    _showSnack('已同步本地媒体库');
   }
 
   void _showSnack(String message) {

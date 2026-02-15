@@ -185,28 +185,39 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   Future<void> _captureScreenshot(VideoPlayerState videoState) async {
     try {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-        final destination = await showCupertinoModalPopup<String>(
-          context: context,
-          builder: (ctx) => CupertinoActionSheet(
-            title: const Text('保存截图'),
-            message: const Text('请选择保存位置'),
-            actions: [
-              CupertinoActionSheetAction(
-                onPressed: () => Navigator.of(ctx).pop('photos'),
-                child: const Text('相册'),
+        String? destination;
+        switch (videoState.screenshotSaveTarget) {
+          case ScreenshotSaveTarget.photos:
+            destination = 'photos';
+            break;
+          case ScreenshotSaveTarget.file:
+            destination = 'file';
+            break;
+          case ScreenshotSaveTarget.ask:
+            destination = await showCupertinoModalPopup<String>(
+              context: context,
+              builder: (ctx) => CupertinoActionSheet(
+                title: const Text('保存截图'),
+                message: const Text('请选择保存位置'),
+                actions: [
+                  CupertinoActionSheetAction(
+                    onPressed: () => Navigator.of(ctx).pop('photos'),
+                    child: const Text('相册'),
+                  ),
+                  CupertinoActionSheetAction(
+                    onPressed: () => Navigator.of(ctx).pop('file'),
+                    child: const Text('文件'),
+                  ),
+                ],
+                cancelButton: CupertinoActionSheetAction(
+                  isDefaultAction: true,
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('取消'),
+                ),
               ),
-              CupertinoActionSheetAction(
-                onPressed: () => Navigator.of(ctx).pop('file'),
-                child: const Text('文件'),
-              ),
-            ],
-            cancelButton: CupertinoActionSheetAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('取消'),
-            ),
-          ),
-        );
+            );
+            break;
+        }
 
         if (!mounted) return;
         if (destination == null) return;

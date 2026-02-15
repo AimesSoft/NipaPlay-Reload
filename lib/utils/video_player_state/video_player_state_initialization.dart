@@ -60,6 +60,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadAutoNextCountdownSeconds();
     await _loadPauseOnBackgroundSetting();
     await _loadDesktopHoverSettingsMenuEnabled();
+    await _loadScreenshotSaveTarget();
     await _loadScreenshotSaveDirectory();
 
     // 订阅内核切换事件

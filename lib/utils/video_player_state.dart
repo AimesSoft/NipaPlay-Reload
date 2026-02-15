@@ -171,6 +171,35 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
   }
 }
 
+enum ScreenshotSaveTarget {
+  ask,
+  photos,
+  file,
+}
+
+extension ScreenshotSaveTargetDisplay on ScreenshotSaveTarget {
+  static ScreenshotSaveTarget fromPrefs(int? value) {
+    if (value == null) return ScreenshotSaveTarget.ask;
+    if (value < 0 || value >= ScreenshotSaveTarget.values.length) {
+      return ScreenshotSaveTarget.ask;
+    }
+    return ScreenshotSaveTarget.values[value];
+  }
+
+  int get prefsValue => index;
+
+  String get label {
+    switch (this) {
+      case ScreenshotSaveTarget.ask:
+        return '每次询问';
+      case ScreenshotSaveTarget.photos:
+        return '相册';
+      case ScreenshotSaveTarget.file:
+        return '文件';
+    }
+  }
+}
+
 class _VideoDimensionSnapshot {
   final int? srcWidth;
   final int? srcHeight;
@@ -261,7 +290,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _playbackEndActionKey = 'playback_end_action';
   final String _autoNextCountdownSecondsKey = 'auto_next_countdown_seconds';
   final String _screenshotSaveDirectoryKey = 'screenshot_save_directory';
+  final String _screenshotSaveTargetKey = 'screenshot_save_target';
   String? _screenshotSaveDirectory;
+  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.ask;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -666,6 +697,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   PlaybackEndAction get playbackEndAction => _playbackEndAction;
   int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
+  ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;

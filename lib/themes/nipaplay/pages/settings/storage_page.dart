@@ -195,6 +195,46 @@ class _StoragePageState extends State<StoragePage> {
             );
           },
         ),
+        if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.dropdown(
+                title: '截图默认保存位置',
+                subtitle: 'iOS 截图后默认保存到相册或文件',
+                icon: Icons.save_alt,
+                items: [
+                  DropdownMenuItemData(
+                    title: ScreenshotSaveTarget.ask.label,
+                    value: ScreenshotSaveTarget.ask,
+                    isSelected:
+                        videoState.screenshotSaveTarget == ScreenshotSaveTarget.ask,
+                    description: '每次截图时弹出选择框',
+                  ),
+                  DropdownMenuItemData(
+                    title: ScreenshotSaveTarget.photos.label,
+                    value: ScreenshotSaveTarget.photos,
+                    isSelected: videoState.screenshotSaveTarget ==
+                        ScreenshotSaveTarget.photos,
+                    description: '截图后直接保存到相册',
+                  ),
+                  DropdownMenuItemData(
+                    title: ScreenshotSaveTarget.file.label,
+                    value: ScreenshotSaveTarget.file,
+                    isSelected:
+                        videoState.screenshotSaveTarget == ScreenshotSaveTarget.file,
+                    description: '截图后直接保存为文件',
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value is ScreenshotSaveTarget) {
+                    videoState.setScreenshotSaveTarget(value);
+                  }
+                },
+              );
+            },
+          ),
+        ],
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         SettingsItem.button(
           title: '清除图片缓存',
