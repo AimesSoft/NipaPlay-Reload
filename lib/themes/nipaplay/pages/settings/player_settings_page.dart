@@ -661,6 +661,53 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            if (_selectedKernelType == PlayerKernelType.mdk) {
+              const int minSeconds = 1;
+              const int maxSeconds = 120;
+              return SettingsItem.slider(
+                title: '播放预缓存时长',
+                subtitle:
+                    '当前 ${videoState.precacheBufferDurationSeconds} 秒，修改后立即生效',
+                icon: Ionicons.cloud_download_outline,
+                value: videoState.precacheBufferDurationSeconds.toDouble(),
+                min: minSeconds.toDouble(),
+                max: maxSeconds.toDouble(),
+                divisions: maxSeconds - minSeconds,
+                onChanged: (value) {
+                  videoState.setPrecacheBufferDurationSeconds(value.round());
+                },
+                labelFormatter: (value) => '${value.round()} 秒',
+              );
+            }
+            final bool enableSetting =
+                _selectedKernelType == PlayerKernelType.mediaKit;
+            const int stepSize = 4;
+            final int minValue = PlayerFactory.minPrecacheBufferSizeMb;
+            final int maxValue = PlayerFactory.maxPrecacheBufferSizeMb;
+            final int divisions = ((maxValue - minValue) / stepSize).round();
+            return SettingsItem.slider(
+              title: '播放预缓存大小',
+              subtitle: enableSetting
+                  ? '当前 ${videoState.precacheBufferSizeMb} MB，修改后重新打开视频生效'
+                  : '仅 Libmpv 内核生效',
+              icon: Ionicons.cloud_download_outline,
+              enabled: enableSetting,
+              value: videoState.precacheBufferSizeMb.toDouble(),
+              min: minValue.toDouble(),
+              max: maxValue.toDouble(),
+              divisions: divisions,
+              onChanged: (value) {
+                videoState.setPrecacheBufferSizeMb(value.round());
+              },
+              labelFormatter: (value) => '${value.round()} MB',
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
         if (globals.isDesktop) ...[
           Consumer<VideoPlayerState>(
             builder: (context, videoState, child) {

@@ -872,7 +872,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final bool isPhone = MediaQuery.of(context).size.shortestSide < 600;
-    final bool isIOS = !kIsWeb && Platform.isIOS;
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
 
     return Scaffold(
@@ -890,7 +889,6 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         builder: (context, jellyfinProvider, embyProvider, child) {
           final configuredSections = _buildConfiguredSections(
             isPhone: isPhone,
-            isIOS: isIOS,
             sectionsProvider: homeSections,
           );
           return SingleChildScrollView(

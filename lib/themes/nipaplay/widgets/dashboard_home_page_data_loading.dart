@@ -7,7 +7,6 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     bool forceRefreshToday = false,
   }) async {
     final stopwatch = Stopwatch()..start();
-    final bool isIOS = !kIsWeb && Platform.isIOS;
     _lastLoadTime = DateTime.now();
     
     // 检查Widget状态
@@ -45,22 +44,18 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         _loadRecommendedContent(forceRefresh: shouldForceRecommended),
         _loadRecentContent(),
       ];
-      if (!isIOS) {
-        futures.addAll([
-          _loadTodayAnimes(forceRefresh: forceRefreshToday),
-          _loadRandomRecommendations(forceRefresh: forceRefreshRandom),
-        ]);
-      }
+      futures.addAll([
+        _loadTodayAnimes(forceRefresh: forceRefreshToday),
+        _loadRandomRecommendations(forceRefresh: forceRefreshRandom),
+      ]);
       await Future.wait(futures);
     } catch (_) {
       // 如果并行加载失败，尝试串行加载
       try {
         await _loadRecommendedContent(forceRefresh: shouldForceRecommended);
         await _loadRecentContent();
-        if (!isIOS) {
-          await _loadTodayAnimes(forceRefresh: forceRefreshToday);
-          await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
-        }
+        await _loadTodayAnimes(forceRefresh: forceRefreshToday);
+        await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
       } catch (_) {
       }
     }

@@ -2990,17 +2990,22 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   
   // 刮削WebDAV文件夹
   Future<void> _scanWebDAVFolder(WebDAVConnection connection, String folderPath, String folderName) async {
+    final colorScheme = Theme.of(context).colorScheme;
     final confirm = await BlurDialog.show<bool>(
       context: context,
       title: '刮削WebDAV文件夹',
       content: '确定要刮削WebDAV文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 WebDAV 媒体库中。',
       actions: [
         HoverScaleTextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          text: '取消',
+          idleColor: colorScheme.onSurface.withOpacity(0.7),
+          hoverColor: colorScheme.onSurface,
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
-          child: const Text('刮削', style: TextStyle(color: Colors.white)),
+          text: '刮削',
+          idleColor: colorScheme.primary,
+          hoverColor: colorScheme.primary,
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],
@@ -3197,17 +3202,22 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   }
 
   Future<void> _scanSMBFolder(SMBConnection connection, String folderPath, String folderName) async {
+    final colorScheme = Theme.of(context).colorScheme;
     final confirm = await BlurDialog.show<bool>(
       context: context,
       title: '刮削SMB文件夹',
       content: '确定要刮削SMB文件夹 "$folderName" 吗？\n\n这将把该文件夹中的视频文件匹配到 SMB 媒体库中。',
       actions: [
         HoverScaleTextButton(
-          child: const Text('取消', style: TextStyle(color: Colors.white70)),
+          text: '取消',
+          idleColor: colorScheme.onSurface.withOpacity(0.7),
+          hoverColor: colorScheme.onSurface,
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
-          child: const Text('刮削', style: TextStyle(color: Colors.white)),
+          text: '刮削',
+          idleColor: colorScheme.primary,
+          hoverColor: colorScheme.primary,
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],

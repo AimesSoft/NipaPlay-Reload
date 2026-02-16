@@ -47,6 +47,12 @@ class MdkPlayerAdapter implements AbstractPlayer {
   int get position => 0;
 
   @override
+  int get bufferedPosition => 0;
+
+  @override
+  void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {}
+
+  @override
   bool get supportsExternalSubtitles => false;
 
   @override

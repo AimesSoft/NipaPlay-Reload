@@ -21,6 +21,7 @@ import 'package:nipaplay/models/search_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
+import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
@@ -70,8 +71,6 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   double _scrollOffset = 0.0;
   bool _isHistoryAutoMatching = false;
   bool _historyAutoMatchDialogVisible = false;
-  // iOS 版出于审核需要隐藏“今日新番/随机推荐”板块。
-  bool get _allowReviewRestrictedSections => !Platform.isIOS;
 
   List<_CupertinoRecommendedItem> _recommendedItems = [];
 
@@ -157,16 +156,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     if (!_didScheduleInitialLoad) {
       _didScheduleInitialLoad = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _loadRecommendedContent();
-          _loadLatestContent();
-          if (_allowReviewRestrictedSections) {
-            _loadTodayAnimes();
-            _loadRandomRecommendations();
-          }
-        }
-      });
-    }
+      if (mounted) {
+        _loadRecommendedContent();
+        _loadLatestContent();
+        _loadTodayAnimes();
+        _loadRandomRecommendations();
+      }
+    });
+  }
   }
 
   @override
@@ -982,17 +979,16 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       syncService.syncJellyfinResume(),
       syncService.syncEmbyResume(),
     ];
-    if (_allowReviewRestrictedSections) {
-      tasks.addAll([
-        _loadTodayAnimes(forceRefresh: true),
-        _loadRandomRecommendations(forceRefresh: true),
-      ]);
-    }
+    tasks.addAll([
+      _loadTodayAnimes(forceRefresh: true),
+      _loadRandomRecommendations(forceRefresh: true),
+    ]);
     await Future.wait(tasks);
   }
 
   @override
   Widget build(BuildContext context) {
+    final homeSections = context.watch<HomeSectionsSettingsProvider>();
     final backgroundColor = CupertinoDynamicColor.resolve(
       CupertinoColors.systemGroupedBackground,
       context,
@@ -1003,11 +999,20 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
     // 获取状态栏高度
     final statusBarHeight = MediaQuery.of(context).padding.top;
-    final bool showTodaySection = _allowReviewRestrictedSections &&
+    final bool showTodaySection = homeSections.isSectionEnabled(
+          HomeSectionType.todaySeries,
+        ) &&
         (_isLoadingTodayAnimes || _todayAnimes.isNotEmpty);
-    final bool showRandomSection =
-        _allowReviewRestrictedSections &&
+    final bool showRandomSection = homeSections.isSectionEnabled(
+          HomeSectionType.randomRecommendations,
+        ) &&
         (_isLoadingRandomRecommendations || _randomRecommendations.isNotEmpty);
+    final bool showContinueWatching =
+        homeSections.isSectionEnabled(HomeSectionType.continueWatching);
+    final bool showLatestSection = homeSections.isSectionEnabled(
+          HomeSectionType.remoteLibraries,
+        ) ||
+        homeSections.isSectionEnabled(HomeSectionType.localLibrary);
 
     return ColoredBox(
       color: backgroundColor,
@@ -1037,58 +1042,68 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                 SliverToBoxAdapter(child: _buildSectionTitle('随机推荐')),
                 SliverToBoxAdapter(child: _buildRandomRecommendationsSection()),
               ],
-              SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
-              SliverToBoxAdapter(
-                child:
-                    Consumer2<WatchHistoryProvider, AppearanceSettingsProvider>(
-                  builder: (context, historyProvider, appearanceProvider, _) {
-                    final recentItems = _buildRecentItems(
-                        historyProvider.continueWatchingItems);
-                    final style = appearanceProvider.recentWatchingStyle;
+              if (showContinueWatching) ...[
+                SliverToBoxAdapter(child: _buildSectionTitle('最近观看')),
+                SliverToBoxAdapter(
+                  child: Consumer2<WatchHistoryProvider,
+                      AppearanceSettingsProvider>(
+                    builder: (context, historyProvider, appearanceProvider, _) {
+                      final recentItems = _buildRecentItems(
+                          historyProvider.continueWatchingItems);
+                      final style = appearanceProvider.recentWatchingStyle;
 
-                    if (recentItems.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        child: _buildEmptyRecentPlaceholder(),
-                      );
-                    }
+                      if (recentItems.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          child: _buildEmptyRecentPlaceholder(),
+                        );
+                      }
 
-                    if (style == RecentWatchingStyle.detailed) {
-                      return SizedBox(
-                        height: 200,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: recentItems.length,
-                          itemBuilder: (context, index) {
-                            final item = recentItems[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 12),
-                              child: _buildDetailedRecentCard(item),
-                            );
-                          },
-                        ),
-                      );
-                    } else {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        child: Column(
-                          children: recentItems
-                              .map((item) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: _buildRecentCard(item),
-                                  ))
-                              .toList(),
-                        ),
-                      );
-                    }
-                  },
+                      if (style == RecentWatchingStyle.detailed) {
+                        return SizedBox(
+                          height: 200,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            itemCount: recentItems.length,
+                            itemBuilder: (context, index) {
+                              final item = recentItems[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: _buildDetailedRecentCard(item),
+                              );
+                            },
+                          ),
+                        );
+                      } else {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          child: Column(
+                            children: recentItems
+                                .map((item) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: _buildRecentCard(item),
+                                    ))
+                                .toList(),
+                          ),
+                        );
+                      }
+                    },
+                  ),
                 ),
-              ),
+              ],
               // 最近添加部分（无标题，直接显示媒体库内容）
-              SliverToBoxAdapter(child: _buildLatestSection()),
+              if (showLatestSection)
+                SliverToBoxAdapter(
+                  child: _buildLatestSection(
+                    showRemoteLibraries: homeSections
+                        .isSectionEnabled(HomeSectionType.remoteLibraries),
+                    showLocalLibrary: homeSections
+                        .isSectionEnabled(HomeSectionType.localLibrary),
+                  ),
+                ),
               const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
             ],
           ),
@@ -1316,7 +1331,13 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   // 构建最近添加部分（包含Jellyfin/Emby/本地媒体库）
-  Widget _buildLatestSection() {
+  Widget _buildLatestSection({
+    required bool showRemoteLibraries,
+    required bool showLocalLibrary,
+  }) {
+    if (!showRemoteLibraries && !showLocalLibrary) {
+      return const SizedBox.shrink();
+    }
     if (_isLoadingLatest) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 20, vertical: 32),
@@ -1324,10 +1345,12 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
       );
     }
 
-    final hasJellyfin = _recentJellyfinItemsByLibrary.isNotEmpty;
-    final hasEmby = _recentEmbyItemsByLibrary.isNotEmpty;
-    final hasLocal = _recentLocalItems.isNotEmpty;
-    final hasDandan = _recentDandanGroups.isNotEmpty;
+    final hasJellyfin =
+        showRemoteLibraries && _recentJellyfinItemsByLibrary.isNotEmpty;
+    final hasEmby =
+        showRemoteLibraries && _recentEmbyItemsByLibrary.isNotEmpty;
+    final hasLocal = showLocalLibrary && _recentLocalItems.isNotEmpty;
+    final hasDandan = showRemoteLibraries && _recentDandanGroups.isNotEmpty;
 
     if (!hasJellyfin && !hasEmby && !hasLocal && !hasDandan) {
       return Padding(

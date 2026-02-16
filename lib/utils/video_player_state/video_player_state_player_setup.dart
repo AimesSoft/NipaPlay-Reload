@@ -286,6 +286,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       _position = Duration.zero;
       _duration = Duration.zero;
       _progress = 0.0;
+      _bufferedPositionMs = 0;
       _error = null;
       _setStatus(PlayerStatus.idle);
 
@@ -534,6 +535,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       } else {
         _position = Duration.zero;
         _progress = 0.0;
+        _bufferedPositionMs = 0;
         player.seek(position: 0);
       }
 

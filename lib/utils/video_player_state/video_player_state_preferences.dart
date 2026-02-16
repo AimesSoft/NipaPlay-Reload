@@ -353,6 +353,67 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadPrecacheBufferSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValue = prefs.getInt(_precacheBufferSizeMbKey);
+    final resolved = storedValue == null
+        ? PlayerFactory.defaultPrecacheBufferSizeMb
+        : storedValue
+            .clamp(
+              PlayerFactory.minPrecacheBufferSizeMb,
+              PlayerFactory.maxPrecacheBufferSizeMb,
+            )
+            .toInt();
+    _precacheBufferSizeMb = resolved;
+    notifyListeners();
+  }
+
+  Future<void> _loadPrecacheBufferDuration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedValue = prefs.getInt(_precacheBufferDurationSecondsKey);
+    final resolved = (storedValue ?? _precacheBufferDurationSeconds)
+        .clamp(1, 120)
+        .toInt();
+    _precacheBufferDurationSeconds = resolved;
+    notifyListeners();
+  }
+
+  Future<void> setPrecacheBufferSizeMb(int value) async {
+    final resolved = value
+        .clamp(
+          PlayerFactory.minPrecacheBufferSizeMb,
+          PlayerFactory.maxPrecacheBufferSizeMb,
+        )
+        .toInt();
+    if (_precacheBufferSizeMb == resolved) {
+      return;
+    }
+    _precacheBufferSizeMb = resolved;
+    await PlayerFactory.savePrecacheBufferSizeMb(resolved);
+    notifyListeners();
+  }
+
+  Future<void> setPrecacheBufferDurationSeconds(int value) async {
+    final resolved = value.clamp(1, 120).toInt();
+    if (_precacheBufferDurationSeconds == resolved) {
+      return;
+    }
+    _precacheBufferDurationSeconds = resolved;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_precacheBufferDurationSecondsKey, resolved);
+    await applyPrecacheBufferSettings();
+    notifyListeners();
+  }
+
+  Future<void> applyPrecacheBufferSettings() async {
+    if (_isDisposed) return;
+    final kernelName = player.getPlayerKernelName();
+    if (kernelName == 'MDK') {
+      final maxMs = _precacheBufferDurationSeconds * 1000;
+      player.setBufferRange(minMs: 1000, maxMs: maxMs, drop: false);
+    }
+  }
+
   // 保存播放速度设置
   Future<void> setPlaybackRate(double rate) async {
     _playbackRate = rate;
@@ -609,8 +670,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   void _applyAnime4KMpvTuning({required bool enable}) {
-    final Map<String, String> options =
-        enable ? _anime4kRecommendedMpvOptions : _anime4kDefaultMpvOptions;
+    final Map<String, String> options = Map<String, String>.from(
+      enable ? _anime4kRecommendedMpvOptions : _anime4kDefaultMpvOptions,
+    );
+    if (!kIsWeb && Platform.isWindows) {
+      options['gpu-api'] = enable ? 'opengl' : 'auto';
+    }
     options.forEach((String key, String value) {
       try {
         player.setProperty(key, value);
@@ -669,6 +734,16 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
       final int targetWidth = (snapshot.srcWidth! * factor).round();
       final int targetHeight = (snapshot.srcHeight! * factor).round();
+
+      if (!kIsWeb && Platform.isWindows) {
+        const int maxDimension = 4096;
+        if (targetWidth > maxDimension || targetHeight > maxDimension) {
+          debugPrint(
+              '[VideoPlayerState] Windows Anime4K 目标尺寸过大，跳过放大以避免黑屏: ${targetWidth}x${targetHeight}');
+          await player.setVideoSurfaceSize();
+          return;
+        }
+      }
 
       if (snapshot.displayWidth == targetWidth &&
           snapshot.displayHeight == targetHeight) {
@@ -937,6 +1012,33 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await Future.delayed(const Duration(seconds: 1));
       await _updateCurrentActiveDecoder();
     }
+  }
+
+  Future<void> _loadScreenshotSaveTarget() async {
+    if (kIsWeb) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getInt(_screenshotSaveTargetKey);
+      _screenshotSaveTarget = ScreenshotSaveTargetDisplay.fromPrefs(stored);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('加载截图默认保存位置失败: $e');
+    }
+  }
+
+  Future<void> setScreenshotSaveTarget(
+    ScreenshotSaveTarget target,
+  ) async {
+    if (kIsWeb) return;
+    if (_screenshotSaveTarget == target) return;
+    _screenshotSaveTarget = target;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_screenshotSaveTargetKey, target.prefsValue);
+    } catch (e) {
+      debugPrint('保存截图默认保存位置失败: $e');
+    }
+    notifyListeners();
   }
 
   Future<Directory> _getDefaultScreenshotSaveDirectory() async {

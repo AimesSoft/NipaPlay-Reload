@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -64,6 +65,7 @@ class _CupertinoAppearanceSettingsPageState
 
   @override
   Widget build(BuildContext context) {
+    final homeSections = context.watch<HomeSectionsSettingsProvider>();
     final backgroundColor = CupertinoDynamicColor.resolve(
       CupertinoColors.systemGroupedBackground,
       context,
@@ -180,6 +182,49 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '主页板块',
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey,
+                              context,
+                            ),
+                            letterSpacing: 0.2,
+                          ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
+                backgroundColor: sectionBackground,
+                addDividers: true,
+                dividerIndent: 16,
+                children: [
+                  ...HomeSectionType.values.map(
+                    (section) => _buildHomeSectionToggleTile(
+                      section: section,
+                      enabled: homeSections.isSectionEnabled(section),
+                      onChanged: (value) =>
+                          homeSections.setSectionEnabled(section, value),
+                    ),
+                  ),
+                  CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.refresh,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: const Text('恢复默认'),
+                    subtitle: const Text('恢复默认排序与显示状态'),
+                    backgroundColor: resolveSettingsTileBackground(context),
+                    onTap: homeSections.restoreDefaults,
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -252,6 +297,27 @@ class _CupertinoAppearanceSettingsPageState
       backgroundColor: tileColor,
       selected: _recentStyle == style,
       onTap: () => _updateRecentStyle(style),
+    );
+  }
+
+  Widget _buildHomeSectionToggleTile({
+    required HomeSectionType section,
+    required bool enabled,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final tileColor = resolveSettingsTileBackground(context);
+    return CupertinoSettingsTile(
+      leading: Icon(
+        CupertinoIcons.square_grid_2x2,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(section.title),
+      trailing: CupertinoSwitch(
+        value: enabled,
+        onChanged: onChanged,
+      ),
+      backgroundColor: tileColor,
+      onTap: () => onChanged(!enabled),
     );
   }
 }

@@ -16,6 +16,7 @@ import './player_data_models.dart';
 class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
+  static const int _defaultBufferSize = 32 * 1024 * 1024;
 
   static void setMpvLogLevelNone() {
     _disableMpvLogs = true;
@@ -109,7 +110,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   double _playbackRate = 1.0;
   final bool _enableHardwareAcceleration;
 
-  MediaKitPlayerAdapter()
+  MediaKitPlayerAdapter({int? bufferSize})
       : _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
         _player = Player(
           configuration: PlayerConfiguration(
@@ -121,7 +122,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
                 defaultTargetPlatform == TargetPlatform.android
                     ? 'Droid Sans Fallback'
                     : null,
-            bufferSize: 32 * 1024 * 1024,
+            bufferSize: bufferSize ?? _defaultBufferSize,
             logLevel: _disableMpvLogs ? MPVLogLevel.error : MPVLogLevel.debug,
           ),
         ) {
@@ -1159,6 +1160,24 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   int get position => _interpolatedPosition.inMilliseconds;
+
+  @override
+  int get bufferedPosition {
+    final bufferMs = _player.state.buffer.inMilliseconds;
+    if (bufferMs <= 0) {
+      return 0;
+    }
+    final durationMs = _player.state.duration.inMilliseconds;
+    if (durationMs <= 0) {
+      return bufferMs;
+    }
+    return bufferMs.clamp(0, durationMs).toInt();
+  }
+
+  @override
+  void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {
+    // MediaKit 使用 bufferSize（字节）配置，不支持 MDK 的时间缓冲接口。
+  }
 
   @override
   bool get supportsExternalSubtitles => true;

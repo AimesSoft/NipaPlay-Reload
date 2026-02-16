@@ -5,4 +5,5 @@ const List<String> kAcknowledgementNames = [
   '微光',
   '大祥老师',
   '卡拜',
+  'JMT',
 ];

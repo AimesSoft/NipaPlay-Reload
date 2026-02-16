@@ -26,6 +26,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:meta/meta.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
@@ -1797,10 +1798,19 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                     ConnectionState.done &&
                                 historyItem != null &&
                                 historyItem.filePath.isNotEmpty) {
-                              final file = File(historyItem.filePath);
-                              if (await file.exists()) {
+                              final filePath = historyItem.filePath;
+                              final lowerPath = filePath.toLowerCase();
+                              final bool isRemoteSource = historyItem.isDandanplayRemote ||
+                                  lowerPath.startsWith('http://') ||
+                                  lowerPath.startsWith('https://') ||
+                                  lowerPath.startsWith('jellyfin://') ||
+                                  lowerPath.startsWith('emby://') ||
+                                  MediaSourceUtils.isWebDavPath(filePath) ||
+                                  MediaSourceUtils.isSmbPath(filePath);
+
+                              if (isRemoteSource) {
                                 final playableItem = PlayableItem(
-                                  videoPath: historyItem.filePath,
+                                  videoPath: filePath,
                                   title: anime.nameCn,
                                   subtitle: episode.title,
                                   animeId: anime.id,
@@ -1810,8 +1820,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                 await PlaybackService().play(playableItem);
                                 if (mounted) Navigator.pop(context);
                               } else {
-                                BlurSnackBar.show(context,
-                                    '文件已不存在于: ${historyItem.filePath}');
+                                final file = File(filePath);
+                                if (await file.exists()) {
+                                  final playableItem = PlayableItem(
+                                    videoPath: filePath,
+                                    title: anime.nameCn,
+                                    subtitle: episode.title,
+                                    animeId: anime.id,
+                                    episodeId: episode.id,
+                                    historyItem: historyItem,
+                                  );
+                                  await PlaybackService().play(playableItem);
+                                  if (mounted) Navigator.pop(context);
+                                } else {
+                                  BlurSnackBar.show(context,
+                                      '文件已不存在于: ${historyItem.filePath}');
+                                }
                               }
                             } else {
                               BlurSnackBar.show(

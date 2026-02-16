@@ -432,6 +432,18 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
       debugPrint('获取动画详情失败: $animeId - $e');
     }
   }
+
+  Future<void> _syncLocalLibrary() async {
+    if (!mounted || kIsWeb) return;
+    final historyProvider =
+        Provider.of<WatchHistoryProvider>(context, listen: false);
+    historyProvider.clearInvalidPathCache();
+    await historyProvider.refresh();
+    _lastProcessedHistoryHashCode = 0;
+    await _processAndSortHistory(historyProvider.history);
+    if (!mounted) return;
+    BlurSnackBar.show(context, '已同步本地媒体库');
+  }
   
   Future<void> _showJellyfinServerDialog() async {
     await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
@@ -762,6 +774,18 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
             _currentSort = type;
             _applyFilter();
           },
+          trailingActions: widget.sourceType == MediaLibrarySourceType.local
+              ? [
+                  IconButton(
+                    tooltip: '同步本地媒体库',
+                    onPressed: _syncLocalLibrary,
+                    icon: Icon(
+                      Icons.sync,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ]
+              : null,
         ),
         Expanded(
           child: Stack(

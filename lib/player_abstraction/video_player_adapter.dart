@@ -271,6 +271,35 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   @override
+  int get bufferedPosition {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return 0;
+    }
+    final buffered = controller.value.buffered;
+    if (buffered.isEmpty) {
+      return 0;
+    }
+    Duration maxEnd = buffered.first.end;
+    for (final range in buffered) {
+      if (range.end > maxEnd) {
+        maxEnd = range.end;
+      }
+    }
+    final durationMs = controller.value.duration.inMilliseconds;
+    final endMs = maxEnd.inMilliseconds;
+    if (durationMs > 0) {
+      return endMs.clamp(0, durationMs).toInt();
+    }
+    return endMs;
+  }
+
+  @override
+  void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {
+    // video_player 不支持设置缓冲范围。
+  }
+
+  @override
   bool get supportsExternalSubtitles => false; // video_player 不支持外挂字幕
 
   @override

@@ -49,8 +49,8 @@ class _CupertinoDanmakuOffsetPaneState
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     final value = double.tryParse(text);
-    if (value == null || value < -60 || value > 60) {
-      BlurSnackBar.show(context, '请输入 -60 到 60 之间的数字');
+    if (value == null) {
+      BlurSnackBar.show(context, '请输入有效数字');
       return;
     }
     videoState.setManualDanmakuOffset(value);
@@ -156,7 +156,7 @@ class _CupertinoDanmakuOffsetPaneState
                         children: [
                           CupertinoTextField(
                             controller: _controller,
-                            placeholder: '输入 -60 ~ 60 之间的偏移值（秒）',
+                            placeholder: '输入偏移值（秒，可为负）',
                             keyboardType: const TextInputType.numberWithOptions(
                               signed: true,
                               decimal: true,

@@ -81,6 +81,20 @@ class _TooltipBubbleState extends State<TooltipBubble> {
           : position.dy + size.height + widget.verticalOffset;
     }
 
+    final screenSize = MediaQuery.of(context).size;
+    final maxLeft = screenSize.width - bubbleWidth - 10.0;
+    if (maxLeft <= 10.0) {
+      left = 10.0;
+    } else {
+      left = left.clamp(10.0, maxLeft);
+    }
+    final maxTop = screenSize.height - bubbleHeight - 10.0;
+    if (maxTop <= 10.0) {
+      top = 10.0;
+    } else {
+      top = top.clamp(10.0, maxTop);
+    }
+
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         left: left,
@@ -100,6 +114,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       fontSize: 12,
       fontWeight: FontWeight.w500,
     );
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final textPainter = TextPainter(
       text: TextSpan(
         text: widget.text,
@@ -107,6 +122,7 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       ),
       textDirection: TextDirection.ltr,
       maxLines: 1,
+      textScaleFactor: textScaleFactor,
     )..layout(minWidth: 0, maxWidth: double.infinity);
     
     // 增加额外的宽度，确保组合键能够完整显示

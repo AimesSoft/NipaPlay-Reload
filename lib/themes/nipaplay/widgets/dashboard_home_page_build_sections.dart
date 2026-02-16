@@ -61,7 +61,6 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
   List<Widget> _buildConfiguredSections({
     required bool isPhone,
-    required bool isIOS,
     required HomeSectionsSettingsProvider sectionsProvider,
   }) {
     final widgets = <Widget>[];
@@ -86,18 +85,12 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       }
       switch (section) {
         case HomeSectionType.todaySeries:
-          if (isIOS) {
-            continue;
-          }
           if (_todayAnimes.isEmpty && !_isLoadingTodayAnimes) {
             continue;
           }
           addSectionWidgets(section, [_buildTodaySeriesSection()]);
           break;
         case HomeSectionType.randomRecommendations:
-          if (isIOS) {
-            continue;
-          }
           if (_randomRecommendations.isEmpty &&
               !_isLoadingRandomRecommendations) {
             continue;

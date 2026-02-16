@@ -492,6 +492,92 @@ class _CupertinoPlayerSettingsPageState
     return SizedBox(width: double.infinity, child: slider);
   }
 
+  Widget _buildPrecacheBufferSizeSlider(
+    BuildContext context,
+    VideoPlayerState videoState,
+    bool enabled,
+  ) {
+    final double value = videoState.precacheBufferSizeMb.toDouble();
+    final double minValue =
+        PlayerFactory.minPrecacheBufferSizeMb.toDouble();
+    final double maxValue =
+        PlayerFactory.maxPrecacheBufferSizeMb.toDouble();
+    final ValueChanged<double>? onChanged = enabled
+        ? (value) {
+            videoState.setPrecacheBufferSizeMb(value.round());
+          }
+        : null;
+    final Color accentColor = CupertinoTheme.of(context).primaryColor;
+
+    final Widget slider = PlatformInfo.isIOS26OrHigher()
+        ? AdaptiveSlider(
+            value: value,
+            min: minValue,
+            max: maxValue,
+            onChanged: onChanged,
+            activeColor: accentColor,
+          )
+        : fluent.FluentTheme(
+            data: fluent.FluentThemeData(
+              brightness: CupertinoTheme.brightnessOf(context),
+              accentColor: fluent.AccentColor.swatch({
+                'normal': accentColor,
+                'default': accentColor,
+              }),
+            ),
+            child: fluent.Slider(
+              value: value,
+              min: minValue,
+              max: maxValue,
+              onChanged: onChanged,
+            ),
+          );
+
+    return SizedBox(width: double.infinity, child: slider);
+  }
+
+  Widget _buildPrecacheBufferDurationSlider(
+    BuildContext context,
+    VideoPlayerState videoState,
+    bool enabled,
+  ) {
+    final double value = videoState.precacheBufferDurationSeconds.toDouble();
+    const double minValue = 1;
+    const double maxValue = 120;
+    final ValueChanged<double>? onChanged = enabled
+        ? (value) {
+            videoState.setPrecacheBufferDurationSeconds(value.round());
+          }
+        : null;
+    final Color accentColor = CupertinoTheme.of(context).primaryColor;
+
+    final Widget slider = PlatformInfo.isIOS26OrHigher()
+        ? AdaptiveSlider(
+            value: value,
+            min: minValue,
+            max: maxValue,
+            onChanged: onChanged,
+            activeColor: accentColor,
+          )
+        : fluent.FluentTheme(
+            data: fluent.FluentThemeData(
+              brightness: CupertinoTheme.brightnessOf(context),
+              accentColor: fluent.AccentColor.swatch({
+                'normal': accentColor,
+                'default': accentColor,
+              }),
+            ),
+            child: fluent.Slider(
+              value: value,
+              min: minValue,
+              max: maxValue,
+              onChanged: onChanged,
+            ),
+          );
+
+    return SizedBox(width: double.infinity, child: slider);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
@@ -748,6 +834,60 @@ class _CupertinoPlayerSettingsPageState
                   },
                 ),
                 backgroundColor: tileBackground,
+                ),
+              ],
+            );
+        },
+      ),
+      const SizedBox(height: 16),
+      Consumer<VideoPlayerState>(
+        builder: (context, videoState, child) {
+          final bool isMdk = _selectedKernelType == PlayerKernelType.mdk;
+          final bool enableSetting =
+              isMdk || _selectedKernelType == PlayerKernelType.mediaKit;
+          return CupertinoSettingsGroupCard(
+            margin: EdgeInsets.zero,
+            backgroundColor: sectionBackground,
+            addDividers: true,
+            dividerIndent: 16,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  CupertinoSettingsTile(
+                    leading: Icon(
+                      CupertinoIcons.tray_full,
+                      color: resolveSettingsIconColor(context),
+                    ),
+                    title: Text(isMdk ? '播放预缓存时长' : '播放预缓存大小'),
+                    subtitle: Text(
+                      isMdk
+                          ? '当前 ${videoState.precacheBufferDurationSeconds} 秒，修改后立即生效'
+                          : (enableSetting
+                              ? '当前 ${videoState.precacheBufferSizeMb} MB，修改后重新打开视频生效'
+                              : '仅 Libmpv 内核生效'),
+                    ),
+                    backgroundColor: tileBackground,
+                    contentPadding:
+                        const EdgeInsetsDirectional.fromSTEB(20, 12, 16, 8),
+                  ),
+                  Container(
+                    color: tileBackground,
+                    padding:
+                        const EdgeInsetsDirectional.fromSTEB(20, 0, 16, 12),
+                    child: isMdk
+                        ? _buildPrecacheBufferDurationSlider(
+                            context,
+                            videoState,
+                            enableSetting,
+                          )
+                        : _buildPrecacheBufferSizeSlider(
+                            context,
+                            videoState,
+                            enableSetting,
+                          ),
+                  ),
+                ],
               ),
             ],
           );

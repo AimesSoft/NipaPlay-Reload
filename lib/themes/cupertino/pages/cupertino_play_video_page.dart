@@ -185,28 +185,39 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   Future<void> _captureScreenshot(VideoPlayerState videoState) async {
     try {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-        final destination = await showCupertinoModalPopup<String>(
-          context: context,
-          builder: (ctx) => CupertinoActionSheet(
-            title: const Text('保存截图'),
-            message: const Text('请选择保存位置'),
-            actions: [
-              CupertinoActionSheetAction(
-                onPressed: () => Navigator.of(ctx).pop('photos'),
-                child: const Text('相册'),
+        String? destination;
+        switch (videoState.screenshotSaveTarget) {
+          case ScreenshotSaveTarget.photos:
+            destination = 'photos';
+            break;
+          case ScreenshotSaveTarget.file:
+            destination = 'file';
+            break;
+          case ScreenshotSaveTarget.ask:
+            destination = await showCupertinoModalPopup<String>(
+              context: context,
+              builder: (ctx) => CupertinoActionSheet(
+                title: const Text('保存截图'),
+                message: const Text('请选择保存位置'),
+                actions: [
+                  CupertinoActionSheetAction(
+                    onPressed: () => Navigator.of(ctx).pop('photos'),
+                    child: const Text('相册'),
+                  ),
+                  CupertinoActionSheetAction(
+                    onPressed: () => Navigator.of(ctx).pop('file'),
+                    child: const Text('文件'),
+                  ),
+                ],
+                cancelButton: CupertinoActionSheetAction(
+                  isDefaultAction: true,
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('取消'),
+                ),
               ),
-              CupertinoActionSheetAction(
-                onPressed: () => Navigator.of(ctx).pop('file'),
-                child: const Text('文件'),
-              ),
-            ],
-            cancelButton: CupertinoActionSheetAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('取消'),
-            ),
-          ),
-        );
+            );
+            break;
+        }
 
         if (!mounted) return;
         if (destination == null) return;
@@ -1289,6 +1300,12 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     final position = videoState.position;
     final totalMillis = duration.inMilliseconds;
     final isPhone = globals.isPhone;
+    double bufferProgress = videoState.bufferedProgress;
+    if (bufferProgress.isNaN || bufferProgress.isInfinite) {
+      bufferProgress = 0.0;
+    }
+    bufferProgress = bufferProgress.clamp(0.0, 1.0).toDouble();
+    final double bufferTrackHeight = isPhone ? 3.0 : 4.0;
     final smallButtonExtent = isPhone ? 36.0 : 32.0;
     final playButtonExtent = isPhone ? 44.0 : 36.0;
     final smallIconSize = isPhone ? 24.0 : 20.0;
@@ -1318,6 +1335,23 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(bufferTrackHeight / 2),
+                    child: Container(
+                      height: bufferTrackHeight,
+                      color: CupertinoColors.white.withOpacity(0.18),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: bufferProgress,
+                          child: Container(
+                            color: CupertinoColors.white.withOpacity(0.35),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: isPhone ? 6 : 8),
                   AdaptiveSlider(
                     value: totalMillis > 0
                         ? progressValue.clamp(0.0, 1.0)

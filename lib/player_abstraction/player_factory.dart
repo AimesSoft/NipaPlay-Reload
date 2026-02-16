@@ -19,7 +19,12 @@ enum PlayerKernelType {
 
 class PlayerFactory {
   static const String _playerKernelTypeKey = 'player_kernel_type';
+  static const String _precacheBufferSizeKey = 'player_precache_buffer_size_mb';
+  static const int defaultPrecacheBufferSizeMb = 32;
+  static const int minPrecacheBufferSizeMb = 4;
+  static const int maxPrecacheBufferSizeMb = 512;
   static PlayerKernelType? _cachedKernelType;
+  static int _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
   static bool _hasLoadedSettings = false;
 
   // 添加一个StreamController来广播内核切换事件
@@ -30,6 +35,7 @@ class PlayerFactory {
   static Future<void> initialize() async {
     if (kIsWeb) {
       _cachedKernelType = PlayerKernelType.videoPlayer;
+      _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _hasLoadedSettings = true;
       debugPrint('[PlayerFactory] Web平台，强制使用 Video Player 内核');
       return;
@@ -37,6 +43,7 @@ class PlayerFactory {
     try {
       final prefs = await SharedPreferences.getInstance();
       final kernelTypeIndex = prefs.getInt(_playerKernelTypeKey);
+      final bufferSizeMb = prefs.getInt(_precacheBufferSizeKey);
       
       if (kernelTypeIndex != null && kernelTypeIndex < PlayerKernelType.values.length) {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
@@ -44,11 +51,16 @@ class PlayerFactory {
         _cachedKernelType = PlayerKernelType.mdk;
         debugPrint('[PlayerFactory] 无内核设置，使用默认: MDK');
       }
+
+      _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(
+        bufferSizeMb ?? defaultPrecacheBufferSizeMb,
+      );
       
       _hasLoadedSettings = true;
     } catch (e) {
       debugPrint('[PlayerFactory] 初始化读取设置出错: $e');
       _cachedKernelType = PlayerKernelType.mdk;
+      _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _hasLoadedSettings = true;
     }
   }
@@ -58,14 +70,19 @@ class PlayerFactory {
     try {
       // 这里没有真正同步，仅使用默认值，确保后续异步加载会更新缓存值
       _cachedKernelType = PlayerKernelType.mdk;
+      _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _hasLoadedSettings = true;
       
       // 异步加载正确设置并更新缓存
       SharedPreferences.getInstance().then((prefs) {
         final kernelTypeIndex = prefs.getInt(_playerKernelTypeKey);
+        final bufferSizeMb = prefs.getInt(_precacheBufferSizeKey);
         if (kernelTypeIndex != null && kernelTypeIndex < PlayerKernelType.values.length) {
           _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
           debugPrint('[PlayerFactory] 异步更新内核设置: ${_cachedKernelType.toString()}');
+        }
+        if (bufferSizeMb != null) {
+          _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(bufferSizeMb);
         }
       });
       
@@ -73,6 +90,7 @@ class PlayerFactory {
     } catch (e) {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
       _cachedKernelType = PlayerKernelType.mdk;
+      _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
     }
   }
   
@@ -82,6 +100,34 @@ class PlayerFactory {
       _loadSettingsSync();
     }
     return _cachedKernelType ?? PlayerKernelType.mdk;
+  }
+
+  static int _clampPrecacheBufferSizeMb(int value) {
+    return value
+        .clamp(minPrecacheBufferSizeMb, maxPrecacheBufferSizeMb)
+        .toInt();
+  }
+
+  static int getPrecacheBufferSizeMb() {
+    if (!_hasLoadedSettings) {
+      _loadSettingsSync();
+    }
+    return _cachedPrecacheBufferSizeMb;
+  }
+
+  static int getPrecacheBufferSizeBytes() {
+    return getPrecacheBufferSizeMb() * 1024 * 1024;
+  }
+
+  static Future<void> savePrecacheBufferSizeMb(int value) async {
+    final resolved = _clampPrecacheBufferSizeMb(value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_precacheBufferSizeKey, resolved);
+      _cachedPrecacheBufferSizeMb = resolved;
+    } catch (e) {
+      debugPrint('[PlayerFactory] 保存预缓存大小设置出错: $e');
+    }
   }
   
   // 创建播放器实例
@@ -103,14 +149,18 @@ class PlayerFactory {
         debugPrint('[PlayerFactory] 创建 Video Player 播放器');
         return VideoPlayerAdapter();
       case PlayerKernelType.mediaKit:
-        return MediaKitPlayerAdapter();
+        return MediaKitPlayerAdapter(
+          bufferSize: getPrecacheBufferSizeBytes(),
+        );
       // case PlayerKernelType.otherPlayer:
       //   // return OtherPlayerAdapter(ThirdPartyPlayerApi());
       //   throw UnimplementedError('Other player types not yet supported.');
       default:
         // Fallback or throw error
         debugPrint('[PlayerFactory] 未知播放器内核类型，默认使用 MediaKit');
-        return MediaKitPlayerAdapter();
+        return MediaKitPlayerAdapter(
+          bufferSize: getPrecacheBufferSizeBytes(),
+        );
     }
   }
   

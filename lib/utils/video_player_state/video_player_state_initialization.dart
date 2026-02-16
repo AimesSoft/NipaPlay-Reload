@@ -15,6 +15,9 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     _focusNode.requestFocus();
     await _loadLastVideo();
     await _loadMinimalProgressBarSettings(); // 加载最小化进度条设置
+    await _loadPrecacheBufferSize(); // 加载播放预缓存大小
+    await _loadPrecacheBufferDuration(); // 加载播放预缓存时长
+    await applyPrecacheBufferSettings(); // 应用预缓存设置
     await _loadTimelinePreviewSetting(); // 加载时间轴缩略图开关
     await _loadDanmakuOpacity(); // 加载保存的弹幕不透明度
     await _loadDanmakuVisible(); // 加载弹幕可见性
@@ -57,6 +60,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadAutoNextCountdownSeconds();
     await _loadPauseOnBackgroundSetting();
     await _loadDesktopHoverSettingsMenuEnabled();
+    await _loadScreenshotSaveTarget();
     await _loadScreenshotSaveDirectory();
 
     // 订阅内核切换事件

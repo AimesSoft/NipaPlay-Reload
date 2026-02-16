@@ -171,6 +171,35 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
   }
 }
 
+enum ScreenshotSaveTarget {
+  ask,
+  photos,
+  file,
+}
+
+extension ScreenshotSaveTargetDisplay on ScreenshotSaveTarget {
+  static ScreenshotSaveTarget fromPrefs(int? value) {
+    if (value == null) return ScreenshotSaveTarget.ask;
+    if (value < 0 || value >= ScreenshotSaveTarget.values.length) {
+      return ScreenshotSaveTarget.ask;
+    }
+    return ScreenshotSaveTarget.values[value];
+  }
+
+  int get prefsValue => index;
+
+  String get label {
+    switch (this) {
+      case ScreenshotSaveTarget.ask:
+        return '每次询问';
+      case ScreenshotSaveTarget.photos:
+        return '相册';
+      case ScreenshotSaveTarget.file:
+        return '文件';
+    }
+  }
+}
+
 class _VideoDimensionSnapshot {
   final int? srcWidth;
   final int? srcHeight;
@@ -211,6 +240,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _progress = 0.0;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  int _bufferedPositionMs = 0;
   String? _error;
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
@@ -260,7 +290,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _playbackEndActionKey = 'playback_end_action';
   final String _autoNextCountdownSecondsKey = 'auto_next_countdown_seconds';
   final String _screenshotSaveDirectoryKey = 'screenshot_save_directory';
+  final String _screenshotSaveTargetKey = 'screenshot_save_target';
   String? _screenshotSaveDirectory;
+  ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.ask;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -278,6 +310,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _minimalProgressBarColor = 0xFFFF7274; // 默认颜色 #ff7274
   final String _showDanmakuDensityChartKey = 'show_danmaku_density_chart';
   bool _showDanmakuDensityChart = false; // 默认关闭弹幕密度曲线图
+  final String _precacheBufferSizeMbKey = 'player_precache_buffer_size_mb';
+  int _precacheBufferSizeMb = PlayerFactory.defaultPrecacheBufferSizeMb;
+  final String _precacheBufferDurationSecondsKey =
+      'player_precache_buffer_duration_seconds';
+  int _precacheBufferDurationSeconds = 4;
   final String _timelinePreviewEnabledKey = 'timeline_preview_enabled';
   final String _useHardwareDecoderKey = 'use_hardware_decoder';
   bool _useHardwareDecoder = true;
@@ -634,6 +671,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
+  int get bufferedPosition => _bufferedPositionMs;
+  double get bufferedProgress {
+    final durationMs = _duration.inMilliseconds;
+    if (durationMs <= 0) {
+      return 0.0;
+    }
+    final raw = _bufferedPositionMs / durationMs;
+    if (raw.isNaN || raw.isInfinite) {
+      return _progress.clamp(0.0, 1.0).toDouble();
+    }
+    final clamped = raw.clamp(0.0, 1.0).toDouble();
+    return clamped < _progress ? _progress : clamped;
+  }
   Duration get duration => _duration;
   Duration get position => _position;
   String? get error => _error;
@@ -647,6 +697,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   PlaybackEndAction get playbackEndAction => _playbackEndAction;
   int get autoNextCountdownSeconds => _autoNextCountdownSeconds;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
+  ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
@@ -654,6 +705,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get minimalProgressBarEnabled => _minimalProgressBarEnabled;
   Color get minimalProgressBarColor => Color(_minimalProgressBarColor);
   bool get showDanmakuDensityChart => _showDanmakuDensityChart;
+  int get precacheBufferSizeMb => _precacheBufferSizeMb;
+  int get precacheBufferDurationSeconds => _precacheBufferDurationSeconds;
   double get danmakuOpacity => _danmakuOpacity;
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
@@ -783,6 +836,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 播放速度相关的getter
   double get playbackRate => _playbackRate;
+  double get effectivePlaybackRate =>
+      _isSpeedBoostActive ? _speedBoostRate : _playbackRate;
   bool get isSpeedBoostActive => _isSpeedBoostActive;
   double get speedBoostRate => _speedBoostRate;
 

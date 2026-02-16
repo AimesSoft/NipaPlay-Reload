@@ -23,8 +23,6 @@ class DanmakuOffsetMenu extends StatefulWidget {
 class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
   // 预设的偏移选项（秒）
   static const List<double> _offsetOptions = [-10, -5, -2, -1, -0.5, 0, 0.5, 1, 2, 5, 10];
-  static const double _minCustomOffset = -60;
-  static const double _maxCustomOffset = 60;
   final TextEditingController _customOffsetController = TextEditingController();
   String? _customOffsetError;
 
@@ -54,13 +52,6 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
     if (offset == null) {
       setState(() {
         _customOffsetError = '请输入有效的数字';
-      });
-      return;
-    }
-
-    if (offset < _minCustomOffset || offset > _maxCustomOffset) {
-      setState(() {
-        _customOffsetError = '偏移值必须在-60到60秒之间';
       });
       return;
     }
@@ -274,7 +265,7 @@ style: TextStyle(
                     ),
                     const SizedBox(height: 8),
                     const SettingsHintText(
-                      '输入 -60 ~ 60 之间的精确数值，负数表示弹幕提前，正数表示延迟',
+                      '输入任意秒数的精确值，负数表示弹幕提前，正数表示延迟',
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -385,7 +376,7 @@ style: TextStyle(
                       '• 后退(-)：弹幕延后显示，适用于弹幕快于视频的情况',
                     ),
                     SettingsHintText(
-                      '• 也可以输入自定义偏移量，范围为 -60 ~ 60 秒',
+                      '• 也可以输入自定义偏移量（秒）',
                     ),
                   ],
                 ),
