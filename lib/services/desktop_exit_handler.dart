@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -190,6 +191,7 @@ class DesktopExitHandler
       contentWidget: material.StatefulBuilder(
         builder: (context, setState) {
           final colorScheme = material.Theme.of(context).colorScheme;
+          const accentColor = material.Color(0xFFFF2E55);
           final textStyle = material.TextStyle(
             color: colorScheme.onSurface.withOpacity(0.8),
           );
@@ -204,29 +206,35 @@ class DesktopExitHandler
             children: [
               material.Text('确定要退出 NipaPlay 吗？', style: titleStyle),
               const material.SizedBox(height: 12),
-              material.Row(
-                mainAxisSize: material.MainAxisSize.min,
-                children: [
-                  material.Checkbox(
-                    value: remember,
-                    activeColor: colorScheme.primary,
-                    onChanged: (value) => setState(() {
-                      remember = value ?? false;
-                    }),
-                  ),
-                  material.GestureDetector(
-                    onTap: () => setState(() {
-                      remember = !remember;
-                    }),
-                    child: material.Padding(
-                      padding: const material.EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 4,
+              SettingsNoRippleTheme(
+                child: material.Row(
+                  mainAxisSize: material.MainAxisSize.min,
+                  children: [
+                    material.Checkbox(
+                      value: remember,
+                      activeColor: accentColor,
+                      overlayColor: material.WidgetStateProperty.all(
+                        material.Colors.transparent,
                       ),
-                      child: material.Text('记住我的选择', style: textStyle),
+                      splashRadius: 0,
+                      onChanged: (value) => setState(() {
+                        remember = value ?? false;
+                      }),
                     ),
-                  ),
-                ],
+                    material.GestureDetector(
+                      onTap: () => setState(() {
+                        remember = !remember;
+                      }),
+                      child: material.Padding(
+                        padding: const material.EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 4,
+                        ),
+                        child: material.Text('记住我的选择', style: textStyle),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           );
@@ -239,7 +247,7 @@ class DesktopExitHandler
             return HoverScaleTextButton(
               text: '取消并返回',
               idleColor: colorScheme.onSurface.withOpacity(0.7),
-              hoverColor: colorScheme.primary,
+              hoverColor: const material.Color(0xFFFF2E55),
               onPressed: () => material.Navigator.of(context).pop(
                 const DesktopExitDecision(
                   action: DesktopExitAction.cancelAndReturn,
@@ -255,7 +263,7 @@ class DesktopExitHandler
             return HoverScaleTextButton(
               text: '最小化到系统托盘',
               idleColor: colorScheme.onSurface.withOpacity(0.8),
-              hoverColor: colorScheme.primary,
+              hoverColor: const material.Color(0xFFFF2E55),
               onPressed: () => material.Navigator.of(context).pop(
                 DesktopExitDecision(
                   action: DesktopExitAction.minimizeToTrayOrTaskbar,
@@ -271,7 +279,7 @@ class DesktopExitHandler
             return HoverScaleTextButton(
               text: '关闭播放器',
               idleColor: colorScheme.onSurface.withOpacity(0.9),
-              hoverColor: colorScheme.primary,
+              hoverColor: const material.Color(0xFFFF2E55),
               textStyle: const material.TextStyle(
                 fontWeight: material.FontWeight.w600,
               ),
