@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
 
 /// Time-driven danmaku layout engine that keeps positions stable after seeking.
@@ -12,7 +11,7 @@ class NipaPlayNextEngine {
   double _fontSize = 0.0;
   double _displayArea = 1.0;
   double _scrollDurationSeconds = 10.0;
-  double _staticDurationSeconds = 5.0;
+  double _staticDurationSeconds = 10.0;
   bool _allowStacking = false;
   int _sourceListIdentity = 0;
 
@@ -45,16 +44,19 @@ class NipaPlayNextEngine {
 
     final normalizedScrollDuration =
         scrollDurationSeconds > 0 ? scrollDurationSeconds : 10.0;
+    final normalizedStaticDuration = normalizedScrollDuration;
 
     if (_size != size ||
         _fontSize != fontSize ||
         _displayArea != displayArea ||
         _scrollDurationSeconds != normalizedScrollDuration ||
+        _staticDurationSeconds != normalizedStaticDuration ||
         _allowStacking != allowStacking) {
       _size = size;
       _fontSize = fontSize;
       _displayArea = displayArea;
       _scrollDurationSeconds = normalizedScrollDuration;
+      _staticDurationSeconds = normalizedStaticDuration;
       _allowStacking = allowStacking;
       _layoutDirty = true;
     }
@@ -187,15 +189,19 @@ class NipaPlayNextEngine {
       return;
     }
 
-    final baseVerticalSpacing = globals.isPhone ? 10.0 : 20.0;
-    final defaultFontSize = globals.isPhone ? 20.0 : 30.0;
-    final scale = (_fontSize / defaultFontSize).clamp(0.7, 2.5);
-    final verticalSpacing = baseVerticalSpacing * scale;
-    final lineHeight = _fontSize * 1.1;
-    final trackHeight = lineHeight + verticalSpacing;
+    final danmakuHeight = _measureTextHeight(_fontSize);
     final effectiveHeight = max(1.0, _size.height * _displayArea);
 
-    int trackCount = (effectiveHeight / trackHeight).floor();
+    int trackCount;
+    if (_displayArea <= 0 || _displayArea.isNaN || _displayArea.isInfinite) {
+      trackCount = 1;
+    } else {
+      trackCount = (effectiveHeight / danmakuHeight).floor();
+    }
+
+    if (_displayArea == 1.0) {
+      trackCount -= 1;
+    }
     if (trackCount <= 0) trackCount = 1;
 
     DanmakuNextLog.d(
@@ -205,20 +211,17 @@ class NipaPlayNextEngine {
       throttle: Duration.zero,
     );
 
-    final scrollTracks = List<_ScrollTrackState>.generate(
+    final trackYPositions = List<double>.generate(
       trackCount,
-      (_) => _ScrollTrackState.empty(),
-    );
-    final topTrackLastTime = List<double>.filled(
-      trackCount,
-      double.negativeInfinity,
-    );
-    final bottomTrackLastTime = List<double>.filled(
-      trackCount,
-      double.negativeInfinity,
+      (i) => i * danmakuHeight,
     );
 
-    final safeMargin = _size.width * 0.02;
+    final List<List<_NextItem>> scrollTracks =
+        List<List<_NextItem>>.generate(trackCount, (_) => <_NextItem>[]);
+    final List<_NextItem?> topTrackItems =
+        List<_NextItem?>.filled(trackCount, null);
+    final List<_NextItem?> bottomTrackItems =
+        List<_NextItem?>.filled(trackCount, null);
 
     for (final item in _items) {
       final width = _measureTextWidth(item.content.text, _fontSize);
@@ -229,12 +232,12 @@ class NipaPlayNextEngine {
           final speed = (_size.width + width) / _scrollDurationSeconds;
           item.scrollSpeed = speed;
 
-          final selectedTrack = _selectScrollTrack(
+          final selectedTrack = _selectScrollTrackCanvas(
+            item: item,
             time: item.timeSeconds,
-            speed: speed,
+            newWidth: width,
             tracks: scrollTracks,
             trackCount: trackCount,
-            allowStacking: _allowStacking,
           );
 
           if (selectedTrack < 0) {
@@ -243,27 +246,14 @@ class NipaPlayNextEngine {
           }
 
           item.trackIndex = selectedTrack;
-          item.yPosition = selectedTrack * trackHeight +
-              verticalSpacing -
-              _fontSize * 2 / 3;
-
-          final nextAvailable = item.timeSeconds +
-              _scrollDurationSeconds *
-                  ((width + safeMargin) / (_size.width + width));
-
-          scrollTracks[selectedTrack] = _ScrollTrackState(
-            timeSeconds: item.timeSeconds,
-            width: width,
-            speed: speed,
-            nextAvailableTime: nextAvailable,
-          );
+          item.yPosition = trackYPositions[selectedTrack];
+          scrollTracks[selectedTrack].add(item);
           break;
         case DanmakuItemType.top:
-          final selectedTrack = _selectStaticTrack(
+          final selectedTrack = _selectStaticTrackCanvas(
             time: item.timeSeconds,
-            lastTimes: topTrackLastTime,
+            tracks: topTrackItems,
             trackCount: trackCount,
-            allowStacking: _allowStacking,
           );
           if (selectedTrack < 0) {
             item.trackIndex = -1;
@@ -271,17 +261,14 @@ class NipaPlayNextEngine {
           }
 
           item.trackIndex = selectedTrack;
-          topTrackLastTime[selectedTrack] = item.timeSeconds;
-          item.yPosition = selectedTrack * trackHeight +
-              verticalSpacing -
-              _fontSize * 2 / 3;
+          topTrackItems[selectedTrack] = item;
+          item.yPosition = trackYPositions[selectedTrack];
           break;
         case DanmakuItemType.bottom:
-          final selectedTrack = _selectStaticTrack(
+          final selectedTrack = _selectStaticTrackCanvas(
             time: item.timeSeconds,
-            lastTimes: bottomTrackLastTime,
+            tracks: bottomTrackItems,
             trackCount: trackCount,
-            allowStacking: _allowStacking,
           );
           if (selectedTrack < 0) {
             item.trackIndex = -1;
@@ -289,83 +276,93 @@ class NipaPlayNextEngine {
           }
 
           item.trackIndex = selectedTrack;
-          bottomTrackLastTime[selectedTrack] = item.timeSeconds;
-          item.yPosition = _size.height -
-              (selectedTrack + 1) * trackHeight -
-              lineHeight;
+          bottomTrackItems[selectedTrack] = item;
+          item.yPosition = _size.height - trackYPositions[selectedTrack] - danmakuHeight;
           break;
       }
     }
   }
 
-  int _selectScrollTrack({
+  int _selectScrollTrackCanvas({
+    required _NextItem item,
     required double time,
-    required double speed,
-    required List<_ScrollTrackState> tracks,
+    required double newWidth,
+    required List<List<_NextItem>> tracks,
     required int trackCount,
-    required bool allowStacking,
   }) {
-    int? selected;
-    double earliestNextAvailable = double.infinity;
-    int earliestTrack = 0;
-
     for (int i = 0; i < trackCount; i++) {
-      final track = tracks[i];
-      if (track.isEmpty) {
-        selected = i;
-        break;
+      final trackItems = tracks[i];
+      if (trackItems.isNotEmpty) {
+        trackItems.removeWhere(
+          (existing) => time - existing.timeSeconds > _scrollDurationSeconds,
+        );
       }
 
-      if (track.nextAvailableTime <= time) {
-        if (speed <= track.speed) {
-          selected = i;
-          break;
-        }
-
-        final trackLeaveTime = track.timeSeconds +
-            (_size.width + track.width) / track.speed;
-        if (time >= trackLeaveTime) {
-          selected = i;
-          break;
-        }
-      }
-
-      if (track.nextAvailableTime < earliestNextAvailable) {
-        earliestNextAvailable = track.nextAvailableTime;
-        earliestTrack = i;
+      if (_scrollCanAddToTrack(trackItems, newWidth, time)) {
+        return i;
       }
     }
 
-    if (selected != null) return selected;
-    if (!allowStacking) return -1;
-    return earliestTrack;
+    if (item.content.isMe && trackCount > 0) {
+      return 0;
+    }
+
+    if (_allowStacking && trackCount > 0) {
+      return _pickStackedTrack(item, trackCount);
+    }
+
+    return -1;
   }
 
-  int _selectStaticTrack({
-    required double time,
-    required List<double> lastTimes,
-    required int trackCount,
-    required bool allowStacking,
-  }) {
-    int? selected;
-    double earliestTime = double.infinity;
-    int earliestTrack = 0;
-
-    for (int i = 0; i < trackCount; i++) {
-      final lastTime = lastTimes[i];
-      if (time - lastTime >= _staticDurationSeconds) {
-        selected = i;
-        break;
+  bool _scrollCanAddToTrack(
+    List<_NextItem> trackItems,
+    double newWidth,
+    double time,
+  ) {
+    for (final existing in trackItems) {
+      final elapsed = time - existing.timeSeconds;
+      if (elapsed < 0 || elapsed > _scrollDurationSeconds) {
+        continue;
       }
-      if (lastTime < earliestTime) {
-        earliestTime = lastTime;
-        earliestTrack = i;
+      final existingX = _size.width -
+          (elapsed / _scrollDurationSeconds) * (_size.width + existing.width);
+      final existingEnd = existingX + existing.width;
+
+      if (_size.width - existingEnd < 0) {
+        return false;
+      }
+      if (existing.width < newWidth) {
+        final double progress =
+            (_size.width - existingX) / (existing.width + _size.width);
+        if ((1 - progress) > (_size.width / (_size.width + newWidth))) {
+          return false;
+        }
       }
     }
+    return true;
+  }
 
-    if (selected != null) return selected;
-    if (!allowStacking) return -1;
-    return earliestTrack;
+  int _pickStackedTrack(_NextItem item, int trackCount) {
+    final int base = item.content.text.hashCode ^ item.timeSeconds.toInt();
+    final int hash = base & 0x7fffffff;
+    return hash % trackCount;
+  }
+
+  int _selectStaticTrackCanvas({
+    required double time,
+    required List<_NextItem?> tracks,
+    required int trackCount,
+  }) {
+    for (int i = 0; i < trackCount; i++) {
+      final existing = tracks[i];
+      if (existing == null) {
+        return i;
+      }
+      if (time - existing.timeSeconds >= _staticDurationSeconds) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   DanmakuItemType _parseType(dynamic raw) {
@@ -453,6 +450,23 @@ class NipaPlayNextEngine {
     return width;
   }
 
+  double _measureTextHeight(double fontSize) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: '弹幕',
+        locale: const Locale('zh-Hans', 'zh'),
+        style: TextStyle(
+          fontSize: fontSize,
+        ),
+      ),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout(minWidth: 0, maxWidth: double.infinity);
+
+    final height = tp.size.height;
+    return height.isFinite && height > 0 ? height : fontSize;
+  }
+
   int _lowerBound(double value) {
     int lo = 0;
     int hi = _itemTimes.length;
@@ -497,29 +511,4 @@ class _NextItem {
     required this.content,
     required this.type,
   });
-}
-
-class _ScrollTrackState {
-  final double timeSeconds;
-  final double width;
-  final double speed;
-  final double nextAvailableTime;
-
-  const _ScrollTrackState({
-    required this.timeSeconds,
-    required this.width,
-    required this.speed,
-    required this.nextAvailableTime,
-  });
-
-  factory _ScrollTrackState.empty() {
-    return const _ScrollTrackState(
-      timeSeconds: double.negativeInfinity,
-      width: 0.0,
-      speed: 0.0,
-      nextAvailableTime: double.negativeInfinity,
-    );
-  }
-
-  bool get isEmpty => timeSeconds == double.negativeInfinity;
 }
