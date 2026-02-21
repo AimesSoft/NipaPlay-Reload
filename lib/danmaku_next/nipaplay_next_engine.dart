@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
 
 /// Time-driven danmaku layout engine that keeps positions stable after seeking.
 class NipaPlayNextEngine {
@@ -33,6 +34,11 @@ class NipaPlayNextEngine {
     final listIdentity = identityHashCode(danmakuList);
     if (listIdentity != _sourceListIdentity) {
       _sourceListIdentity = listIdentity;
+      DanmakuNextLog.d(
+        'Engine',
+        'configure list changed size=${danmakuList.length}',
+        throttle: Duration.zero,
+      );
       _parseDanmakuList(danmakuList);
       _layoutDirty = true;
     }
@@ -59,7 +65,14 @@ class NipaPlayNextEngine {
   }
 
   List<PositionedDanmakuItem> layout(double currentTimeSeconds) {
-    if (_items.isEmpty || _size.isEmpty) return const [];
+    if (_items.isEmpty || _size.isEmpty) {
+      DanmakuNextLog.d(
+        'Engine',
+        'layout skipped items=${_items.length} size=${_size.width}x${_size.height}',
+        throttle: const Duration(seconds: 2),
+      );
+      return const [];
+    }
 
     final maxDuration = max(_scrollDurationSeconds, _staticDurationSeconds);
     final windowStart = currentTimeSeconds - maxDuration;
@@ -106,6 +119,12 @@ class NipaPlayNextEngine {
       }
     }
 
+    DanmakuNextLog.d(
+      'Engine',
+      'layout time=${currentTimeSeconds.toStringAsFixed(2)} window=[$windowStart..$currentTimeSeconds] '
+      'range=[$left,$right) out=${positioned.length}',
+      throttle: const Duration(seconds: 1),
+    );
     return positioned;
   }
 
@@ -142,12 +161,29 @@ class NipaPlayNextEngine {
     for (final item in _items) {
       _itemTimes.add(item.timeSeconds);
     }
+
+    if (_items.isEmpty) {
+      DanmakuNextLog.d('Engine', 'parse list empty', throttle: Duration.zero);
+    } else {
+      final first = _items.first.timeSeconds;
+      final last = _items.last.timeSeconds;
+      DanmakuNextLog.d(
+        'Engine',
+        'parse list ok count=${_items.length} timeRange=[${first.toStringAsFixed(2)}..${last.toStringAsFixed(2)}]',
+        throttle: Duration.zero,
+      );
+    }
   }
 
   void _rebuildLayout() {
     _layoutDirty = false;
 
     if (_items.isEmpty || _size.isEmpty) {
+      DanmakuNextLog.d(
+        'Engine',
+        'layout rebuild skipped items=${_items.length} size=${_size.width}x${_size.height}',
+        throttle: Duration.zero,
+      );
       return;
     }
 
@@ -161,6 +197,13 @@ class NipaPlayNextEngine {
 
     int trackCount = (effectiveHeight / trackHeight).floor();
     if (trackCount <= 0) trackCount = 1;
+
+    DanmakuNextLog.d(
+      'Engine',
+      'layout rebuild tracks=$trackCount font=${_fontSize.toStringAsFixed(1)} area=${_displayArea.toStringAsFixed(2)} '
+      'scroll=${_scrollDurationSeconds.toStringAsFixed(1)} stacking=$_allowStacking',
+      throttle: Duration.zero,
+    );
 
     final scrollTracks = List<_ScrollTrackState>.generate(
       trackCount,

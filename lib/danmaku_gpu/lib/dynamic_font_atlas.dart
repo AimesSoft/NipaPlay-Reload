@@ -267,8 +267,15 @@ class DynamicFontAtlas {
       // 绘制字符，确保所有字符都基于统一的基线
       textPainter.paint(canvas, Offset(x, actualDrawY));
 
+      final double charWidth = textPainter.width;
+      final double charHeight = textPainter.height;
+      if (!actualDrawY.isFinite || !charWidth.isFinite || !charHeight.isFinite) {
+        debugPrint('DynamicFontAtlas: 跳过无效字符 "$charStr" (NaN/Inf)');
+        continue;
+      }
+
       // 🔥 修复：保存字符的实际绘制区域，确保在行范围内
-      newCharMap[charStr] = Rect.fromLTWH(x, actualDrawY, textPainter.width, textPainter.height);
+      newCharMap[charStr] = Rect.fromLTWH(x, actualDrawY, charWidth, charHeight);
       
       x += textPainter.width;
       if (unifiedRowHeight > maxRowHeight) {
@@ -301,7 +308,7 @@ class DynamicFontAtlas {
   Rect? getCharRect(String char) {
     final rect = characterRectMap[char];
     // 确保返回的矩形是有效的
-    if (rect != null && !rect.isEmpty && rect.isFinite) {
+    if (rect != null && !rect.isEmpty && rect.isFinite && !rect.hasNaN) {
       return rect;
     }
     return null;
