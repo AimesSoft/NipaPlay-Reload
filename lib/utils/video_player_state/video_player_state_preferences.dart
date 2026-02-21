@@ -514,6 +514,34 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadDoubleResolutionPlayback() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resolved = prefs.getBool(_doubleResolutionPlaybackKey) ?? false;
+    if (_doubleResolutionPlaybackEnabled != resolved) {
+      _doubleResolutionPlaybackEnabled = resolved;
+      notifyListeners();
+    } else {
+      _doubleResolutionPlaybackEnabled = resolved;
+    }
+    await applyAnime4KProfileToCurrentPlayer();
+  }
+
+  Future<void> setDoubleResolutionPlaybackEnabled(bool enabled) async {
+    if (_doubleResolutionPlaybackEnabled == enabled) {
+      if (!hasVideo) {
+        await applyAnime4KProfileToCurrentPlayer();
+      }
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_doubleResolutionPlaybackKey, enabled);
+    _doubleResolutionPlaybackEnabled = enabled;
+    if (!hasVideo) {
+      await applyAnime4KProfileToCurrentPlayer();
+    }
+    notifyListeners();
+  }
+
   Future<void> _loadAnime4KProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -536,7 +564,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> setAnime4KProfile(Anime4KProfile profile) async {
     if (_anime4kProfile == profile) {
       // 仍然确保当前播放器应用该配置，便于热切换后快速生效。
-      await applyAnime4KProfileToCurrentPlayer();
+      if (!hasVideo) {
+        await applyAnime4KProfileToCurrentPlayer();
+      }
       return;
     }
 
@@ -548,7 +578,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       debugPrint('[VideoPlayerState] 保存 Anime4K 设置失败: $e');
     }
 
-    await applyAnime4KProfileToCurrentPlayer();
+    if (!hasVideo) {
+      await applyAnime4KProfileToCurrentPlayer();
+    }
     notifyListeners();
   }
 
@@ -597,6 +629,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
     final bool anime4kEnabled = _anime4kProfile != Anime4KProfile.off;
     final bool crtEnabled = _crtProfile != CrtProfile.off;
+    final bool upscaleEnabled =
+        _doubleResolutionPlaybackEnabled || anime4kEnabled;
 
     try {
       final List<String> shaderPaths = <String>[];
@@ -627,7 +661,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         } catch (e) {
           debugPrint('[VideoPlayerState] 清除着色器失败: $e');
         }
-        await _updateAnime4KSurfaceScale(enable: false);
+        await _updateAnime4KSurfaceScale(enable: upscaleEnabled);
         await _logCurrentVideoDimensions(context: 'Shaders off');
         return;
       }
@@ -647,7 +681,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       } catch (e) {
         debugPrint('[VideoPlayerState] 读取 mpv 属性失败: $e');
       }
-      await _updateAnime4KSurfaceScale(enable: anime4kEnabled);
+      await _updateAnime4KSurfaceScale(enable: upscaleEnabled);
       if (anime4kEnabled) {
         await _logCurrentVideoDimensions(
           context: 'Anime4K ${_anime4kProfile.name}',
@@ -702,6 +736,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
   }
 
+  double _resolveVideoSurfaceScaleFactor() {
+    if (_anime4kProfile != Anime4KProfile.off) {
+      return _anime4kScaleFactorForProfile(_anime4kProfile);
+    }
+    return _doubleResolutionPlaybackEnabled ? 2.0 : 1.0;
+  }
+
   Future<void> _updateAnime4KSurfaceScale({
     required bool enable,
     int retry = 0,
@@ -714,7 +755,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         return;
       }
 
-      final double factor = _anime4kScaleFactorForProfile(_anime4kProfile);
+      final double factor = _resolveVideoSurfaceScaleFactor();
       if (factor <= 1.0) {
         await player.setVideoSurfaceSize();
         return;

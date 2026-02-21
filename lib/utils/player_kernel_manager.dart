@@ -187,7 +187,7 @@ class PlayerKernelManager {
 
   /// 获取支持的弹幕内核列表
   static List<String> getSupportedDanmakuKernels() {
-    return ['Canvas 弹幕', 'GPU渲染', 'CPU渲染'];
+    return ['Canvas 弹幕', 'GPU渲染', 'CPU渲染', 'NipaPlay Next'];
   }
 
   /// 获取当前弹幕内核
@@ -209,6 +209,10 @@ class PlayerKernelManager {
         break;
       case 'CPU渲染':
         engine = DanmakuRenderEngine.cpu;
+        break;
+      case 'NipaPlay Next':
+      case 'NipaPlay Next (实验性)':
+        engine = DanmakuRenderEngine.nipaplayNext;
         break;
       case 'Canvas弹幕':
       case 'Canvas 弹幕':

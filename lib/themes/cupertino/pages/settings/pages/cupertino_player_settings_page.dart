@@ -287,6 +287,8 @@ class _CupertinoPlayerSettingsPageState
         return 'GPU 渲染（实验性）：性能更高，但仍在开发中。';
       case DanmakuRenderEngine.canvas:
         return 'Canvas 弹幕（实验性）：高性能，低功耗。';
+      case DanmakuRenderEngine.nipaplayNext:
+        return 'NipaPlay Next（实验性）：时间轴驱动的弹幕逻辑内核。';
     }
   }
 
@@ -350,6 +352,8 @@ class _CupertinoPlayerSettingsPageState
         return 'GPU 渲染 (实验性)';
       case DanmakuRenderEngine.canvas:
         return 'Canvas 弹幕 (实验性)';
+      case DanmakuRenderEngine.nipaplayNext:
+        return 'NipaPlay Next (实验性)';
     }
   }
 
@@ -896,6 +900,77 @@ class _CupertinoPlayerSettingsPageState
       if (_selectedKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
+            final bool supportsUpscale =
+                videoState.isDoubleResolutionSupported;
+            if (!supportsUpscale) {
+              return const SizedBox.shrink();
+            }
+            return Column(
+              children: [
+                const SizedBox(height: 16),
+                CupertinoSettingsGroupCard(
+                  margin: EdgeInsets.zero,
+                  backgroundColor: sectionBackground,
+                  addDividers: true,
+                  dividerIndent: 16,
+                  children: [
+                    CupertinoSettingsTile(
+                      leading: Icon(
+                        CupertinoIcons.textformat_abc,
+                        color: resolveSettingsIconColor(context),
+                      ),
+                      title: const Text('双倍分辨率播放视频'),
+                      subtitle: const Text(
+                        '以 2x 分辨率渲染画面，改善内嵌字幕清晰度（仅 Libmpv，不与 Anime4K 叠加）',
+                      ),
+                      trailing: AdaptiveSwitch(
+                        value: videoState.doubleResolutionPlaybackEnabled,
+                        onChanged: (value) async {
+                          await videoState
+                              .setDoubleResolutionPlaybackEnabled(value);
+                          if (!mounted) return;
+                          final bool deferApply = videoState.hasVideo;
+                          final String message = deferApply
+                              ? '已保存，重新打开视频生效'
+                              : (value
+                                  ? '已开启双倍分辨率播放'
+                                  : '已关闭双倍分辨率播放');
+                          AdaptiveSnackBar.show(
+                            context,
+                            message: message,
+                            type: AdaptiveSnackBarType.success,
+                          );
+                        },
+                      ),
+                      onTap: () async {
+                        final bool newValue =
+                            !videoState.doubleResolutionPlaybackEnabled;
+                        await videoState
+                            .setDoubleResolutionPlaybackEnabled(newValue);
+                        if (!mounted) return;
+                        final bool deferApply = videoState.hasVideo;
+                        final String message = deferApply
+                            ? '已保存，重新打开视频生效'
+                            : (newValue
+                                ? '已开启双倍分辨率播放'
+                                : '已关闭双倍分辨率播放');
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: message,
+                          type: AdaptiveSnackBarType.success,
+                        );
+                      },
+                      backgroundColor: tileBackground,
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      if (_selectedKernelType == PlayerKernelType.mediaKit)
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
             final bool supportsAnime4K = videoState.isAnime4KSupported;
             if (!supportsAnime4K) {
               return const SizedBox.shrink();
@@ -946,10 +1021,13 @@ class _CupertinoPlayerSettingsPageState
                           });
                           videoState.setAnime4KProfile(profile).then((_) {
                             if (!mounted) return;
+                            final bool deferApply = videoState.hasVideo;
                             final option = _getAnime4KProfileTitle(profile);
-                            final message = profile == Anime4KProfile.off
-                                ? '已关闭 Anime4K'
-                                : 'Anime4K 已切换为$option';
+                            final message = deferApply
+                                ? '已保存，重新打开视频生效'
+                                : (profile == Anime4KProfile.off
+                                    ? '已关闭 Anime4K'
+                                    : 'Anime4K 已切换为$option');
                             AdaptiveSnackBar.show(
                               context,
                               message: message,

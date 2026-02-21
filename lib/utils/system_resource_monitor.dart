@@ -313,6 +313,9 @@ class SystemResourceMonitor {
         case DanmakuRenderEngine.canvas:
           _danmakuKernelType = "Canvas";
           break;
+        case DanmakuRenderEngine.nipaplayNext:
+          _danmakuKernelType = "NipaPlay Next";
+          break;
         default:
           _danmakuKernelType = "未知";
       }
