@@ -6,6 +6,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_build_info_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_dependency_versions_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_debug_log_viewer_sheet.dart';
+import 'package:nipaplay/services/file_log_service.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
@@ -104,6 +105,79 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                         backgroundColor: resolveSettingsTileBackground(context),
                         showChevron: true,
                         onTap: () => _openBuildInfo(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  CupertinoSettingsGroupCard(
+                    margin: EdgeInsets.zero,
+                    backgroundColor: resolveSettingsSectionBackground(context),
+                    addDividers: true,
+                    children: [
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.folder,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('日志写入文件'),
+                        subtitle: const Text('每 1 秒写入磁盘，保留最近 5 份日志文件'),
+                        trailing: AdaptiveSwitch(
+                          value: devOptions.enableFileLog,
+                          onChanged: (value) async {
+                            await devOptions.setEnableFileLog(value);
+                            final fileLogService = FileLogService();
+                            if (value) {
+                              await fileLogService.start();
+                            } else {
+                              await fileLogService.stop();
+                            }
+                            if (!context.mounted) return;
+                            AdaptiveSnackBar.show(
+                              context,
+                              message: value ? '已开启日志写入文件' : '已关闭日志写入文件',
+                              type: AdaptiveSnackBarType.success,
+                            );
+                          },
+                        ),
+                        onTap: () async {
+                          final newValue = !devOptions.enableFileLog;
+                          await devOptions.setEnableFileLog(newValue);
+                          final fileLogService = FileLogService();
+                          if (newValue) {
+                            await fileLogService.start();
+                          } else {
+                            await fileLogService.stop();
+                          }
+                          if (!context.mounted) return;
+                          AdaptiveSnackBar.show(
+                            context,
+                            message:
+                                newValue ? '已开启日志写入文件' : '已关闭日志写入文件',
+                            type: AdaptiveSnackBarType.success,
+                          );
+                        },
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.folder_open,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('打开日志路径'),
+                        subtitle: const Text('在文件管理器中打开日志目录'),
+                        backgroundColor: resolveSettingsTileBackground(context),
+                        showChevron: true,
+                        onTap: () async {
+                          final ok = await FileLogService().openLogDirectory();
+                          if (!context.mounted) return;
+                          AdaptiveSnackBar.show(
+                            context,
+                            message: ok ? '已打开日志目录' : '打开日志目录失败',
+                            type: ok
+                                ? AdaptiveSnackBarType.success
+                                : AdaptiveSnackBarType.error,
+                          );
+                        },
                       ),
                     ],
                   ),

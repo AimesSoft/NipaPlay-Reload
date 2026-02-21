@@ -52,6 +52,7 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/file_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
@@ -144,6 +145,8 @@ void main(List<String> args) async {
   // 初始化调试日志服务（在最前面初始化，这样可以收集启动过程的日志）
   final debugLogService = DebugLogService();
   debugLogService.initialize();
+  final fileLogService = FileLogService();
+  await fileLogService.initialize();
 
   if (launchFilePath != null) {
     debugLogService.addLog('应用启动时收到命令行文件路径: $launchFilePath',
@@ -178,6 +181,24 @@ void main(List<String> args) async {
       }
     } catch (e) {
       debugLogService.addError('加载日志收集设置失败: $e', tag: 'LogService');
+    }
+
+    try {
+      final enableFileLog = await SettingsStorage.loadBool(
+        'enable_file_log',
+        defaultValue: true,
+      );
+      if (enableFileLog) {
+        await fileLogService.start();
+        debugLogService.addLog('根据用户设置，日志文件写入已启用',
+            level: 'INFO', tag: 'LogService');
+      } else {
+        await fileLogService.stop();
+        debugLogService.addLog('根据用户设置，日志文件写入已禁用',
+            level: 'INFO', tag: 'LogService');
+      }
+    } catch (e) {
+      debugLogService.addError('加载日志文件设置失败: $e', tag: 'LogService');
     }
   });
 

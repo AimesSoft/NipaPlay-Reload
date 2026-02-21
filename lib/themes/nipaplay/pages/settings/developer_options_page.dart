@@ -5,6 +5,7 @@ import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/dependency_versions_window.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/debug_log_viewer_page.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/file_log_service.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
 import 'package:nipaplay/utils/build_info.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -76,6 +77,45 @@ class DeveloperOptionsPage extends StatelessWidget {
               },
             ),
             
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+            // 日志写入文件开关
+            SettingsItem.toggle(
+              title: '日志写入文件',
+              subtitle: '每 1 秒写入磁盘，保留最近 5 份日志文件',
+              icon: Ionicons.folder_outline,
+              value: devOptions.enableFileLog,
+              onChanged: (bool value) async {
+                await devOptions.setEnableFileLog(value);
+
+                final fileLogService = FileLogService();
+                if (value) {
+                  await fileLogService.start();
+                  BlurSnackBar.show(context, '已开启日志写入文件');
+                } else {
+                  await fileLogService.stop();
+                  BlurSnackBar.show(context, '已关闭日志写入文件');
+                }
+              },
+            ),
+
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+            SettingsItem.button(
+              title: '打开日志路径',
+              subtitle: '在文件管理器中打开日志目录',
+              icon: Ionicons.folder_open_outline,
+              trailingIcon: Ionicons.chevron_forward_outline,
+              onTap: () async {
+                final ok = await FileLogService().openLogDirectory();
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  ok ? '已打开日志目录' : '打开日志目录失败',
+                );
+              },
+            ),
+
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
             Consumer<VideoPlayerState>(

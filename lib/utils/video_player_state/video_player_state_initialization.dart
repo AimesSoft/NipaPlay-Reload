@@ -38,7 +38,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载弹幕字体大小和显示区域
     await _loadDanmakuFontSize();
-    await _loadSubtitleScale();
+    await _loadSubtitleSettings();
     await _loadDanmakuDisplayArea();
     await _loadDanmakuSpeedMultiplier();
     await _loadRememberDanmakuOffset();

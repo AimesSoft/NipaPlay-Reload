@@ -10,6 +10,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   
   // 是否启用终端输出日志收集
   bool _enableDebugLogCollection = true;
+
+  // 是否启用日志写入文件
+  bool _enableFileLog = true;
   
   // 是否显示CanvasDanmaku弹幕内核碰撞箱
   bool _showCanvasDanmakuCollisionBoxes = false;
@@ -31,6 +34,9 @@ class DeveloperOptionsProvider extends ChangeNotifier {
   
   // 获取调试日志收集状态
   bool get enableDebugLogCollection => _enableDebugLogCollection;
+
+  // 获取日志写入文件状态
+  bool get enableFileLog => _enableFileLog;
   
   // 获取CanvasDanmaku弹幕内核碰撞箱显示状态
   bool get showCanvasDanmakuCollisionBoxes => _showCanvasDanmakuCollisionBoxes;
@@ -61,6 +67,11 @@ class DeveloperOptionsProvider extends ChangeNotifier {
     
     _enableDebugLogCollection = await SettingsStorage.loadBool(
       'enable_debug_log_collection',
+      defaultValue: true
+    );
+
+    _enableFileLog = await SettingsStorage.loadBool(
+      'enable_file_log',
       defaultValue: true
     );
     
@@ -111,6 +122,15 @@ class DeveloperOptionsProvider extends ChangeNotifier {
     if (_enableDebugLogCollection != value) {
       _enableDebugLogCollection = value;
       await SettingsStorage.saveBool('enable_debug_log_collection', _enableDebugLogCollection);
+      notifyListeners();
+    }
+  }
+
+  // 设置日志写入文件状态
+  Future<void> setEnableFileLog(bool value) async {
+    if (_enableFileLog != value) {
+      _enableFileLog = value;
+      await SettingsStorage.saveBool('enable_file_log', _enableFileLog);
       notifyListeners();
     }
   }

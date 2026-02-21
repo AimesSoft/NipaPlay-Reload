@@ -18,6 +18,8 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/utils/storage_service.dart';
+import 'package:path/path.dart' as p;
 
 import 'globals.dart' as globals;
 import 'dart:convert';
@@ -44,7 +46,6 @@ import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 
-import 'package:path/path.dart' as p; // Added import for path package
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 // Added for getTemporaryDirectory
@@ -72,7 +73,6 @@ import 'package:nipaplay/themes/cupertino/widgets/player/cupertino_seek_indicato
 import 'decoder_manager.dart'; // 导入解码器管理器
 import 'package:nipaplay/services/episode_navigation_service.dart'; // 导入剧集导航服务
 import 'package:nipaplay/services/auto_next_episode_service.dart';
-import 'storage_service.dart'; // Added import for StorageService
 import 'screen_orientation_manager.dart';
 import 'anime4k_shader_manager.dart';
 import 'crt_shader_manager.dart';
@@ -98,6 +98,12 @@ part 'video_player_state/video_player_state_timeline_preview.dart';
 part 'video_player_state/video_player_state_streaming.dart';
 part 'video_player_state/video_player_state_navigation.dart';
 part 'video_player_state/video_player_state_lifecycle.dart';
+
+enum SubtitleStyleOverrideMode { auto, none, scale, force }
+
+enum SubtitleAlignX { left, center, right }
+
+enum SubtitleAlignY { top, center, bottom }
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -431,8 +437,59 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
+  static const double defaultSubtitleScale = 1.0;
+  static const double defaultSubtitleDelaySeconds = 0.0;
+  static const double defaultSubtitlePosition = 100.0;
+  static const double minSubtitlePosition = 0.0;
+  static const double maxSubtitlePosition = 100.0;
+  static const double defaultSubtitleMarginX = 0.0;
+  static const double defaultSubtitleMarginY = 0.0;
+  static const double defaultSubtitleOpacity = 1.0;
+  static const double defaultSubtitleBorderSize = 3.0;
+  static const double defaultSubtitleShadowOffset = 0.0;
+  static const int defaultSubtitleColorValue = 0xFFFFFFFF;
+  static const int defaultSubtitleBorderColorValue = 0xFF000000;
+  static const int defaultSubtitleShadowColorValue = 0xFF000000;
+  static const SubtitleStyleOverrideMode defaultSubtitleOverrideMode =
+      SubtitleStyleOverrideMode.auto;
+  static const SubtitleAlignX defaultSubtitleAlignX = SubtitleAlignX.center;
+  static const SubtitleAlignY defaultSubtitleAlignY = SubtitleAlignY.bottom;
   final String _subtitleScaleKey = 'subtitle_scale';
-  double _subtitleScale = 1.0; // libass 字幕缩放（1.0为默认）
+  final String _subtitleDelayKey = 'subtitle_delay_seconds';
+  final String _subtitlePositionKey = 'subtitle_position';
+  final String _subtitleAlignXKey = 'subtitle_align_x';
+  final String _subtitleAlignYKey = 'subtitle_align_y';
+  final String _subtitleMarginXKey = 'subtitle_margin_x';
+  final String _subtitleMarginYKey = 'subtitle_margin_y';
+  final String _subtitleOpacityKey = 'subtitle_opacity';
+  final String _subtitleBorderSizeKey = 'subtitle_border_size';
+  final String _subtitleShadowOffsetKey = 'subtitle_shadow_offset';
+  final String _subtitleBoldKey = 'subtitle_bold';
+  final String _subtitleItalicKey = 'subtitle_italic';
+  final String _subtitleColorKey = 'subtitle_color';
+  final String _subtitleBorderColorKey = 'subtitle_border_color';
+  final String _subtitleShadowColorKey = 'subtitle_shadow_color';
+  final String _subtitleFontNameKey = 'subtitle_font_name';
+  final String _subtitleFontDirKey = 'subtitle_font_dir';
+  final String _subtitleOverrideModeKey = 'subtitle_override_mode';
+  double _subtitleScale = defaultSubtitleScale;
+  double _subtitleDelaySeconds = defaultSubtitleDelaySeconds;
+  double _subtitlePosition = defaultSubtitlePosition;
+  SubtitleAlignX _subtitleAlignX = defaultSubtitleAlignX;
+  SubtitleAlignY _subtitleAlignY = defaultSubtitleAlignY;
+  double _subtitleMarginX = defaultSubtitleMarginX;
+  double _subtitleMarginY = defaultSubtitleMarginY;
+  double _subtitleOpacity = defaultSubtitleOpacity;
+  double _subtitleBorderSize = defaultSubtitleBorderSize;
+  double _subtitleShadowOffset = defaultSubtitleShadowOffset;
+  bool _subtitleBold = false;
+  bool _subtitleItalic = false;
+  int _subtitleColorValue = defaultSubtitleColorValue;
+  int _subtitleBorderColorValue = defaultSubtitleBorderColorValue;
+  int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
+  String _subtitleFontName = '';
+  String _subtitleFontDir = '';
+  SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
 
   // 弹幕轨道显示区域设置
   final String _danmakuDisplayAreaKey = 'danmaku_display_area';
@@ -717,6 +774,23 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get mergeDanmaku => _mergeDanmaku;
   double get danmakuFontSize => _danmakuFontSize;
   double get subtitleScale => _subtitleScale;
+  double get subtitleDelaySeconds => _subtitleDelaySeconds;
+  double get subtitlePosition => _subtitlePosition;
+  SubtitleAlignX get subtitleAlignX => _subtitleAlignX;
+  SubtitleAlignY get subtitleAlignY => _subtitleAlignY;
+  double get subtitleMarginX => _subtitleMarginX;
+  double get subtitleMarginY => _subtitleMarginY;
+  double get subtitleOpacity => _subtitleOpacity;
+  double get subtitleBorderSize => _subtitleBorderSize;
+  double get subtitleShadowOffset => _subtitleShadowOffset;
+  bool get subtitleBold => _subtitleBold;
+  bool get subtitleItalic => _subtitleItalic;
+  Color get subtitleColor => Color(_subtitleColorValue);
+  Color get subtitleBorderColor => Color(_subtitleBorderColorValue);
+  Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
+  String get subtitleFontName => _subtitleFontName;
+  String get subtitleFontDir => _subtitleFontDir;
+  SubtitleStyleOverrideMode get subtitleOverrideMode => _subtitleOverrideMode;
   double get danmakuDisplayArea => _danmakuDisplayArea;
   double get danmakuSpeedMultiplier => _danmakuSpeedMultiplier;
   double get danmakuScrollDurationSeconds =>

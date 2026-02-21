@@ -915,12 +915,123 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         .toDouble();
   }
 
-  Future<void> _loadSubtitleScale() async {
+  double _clampSubtitlePosition(double value) {
+    return value
+        .clamp(VideoPlayerState.minSubtitlePosition,
+            VideoPlayerState.maxSubtitlePosition)
+        .toDouble();
+  }
+
+  double _clampSubtitleOpacity(double value) {
+    return value.clamp(0.0, 1.0).toDouble();
+  }
+
+  double _clampSubtitleBorderSize(double value) {
+    return value.clamp(0.0, 10.0).toDouble();
+  }
+
+  double _clampSubtitleShadowOffset(double value) {
+    return value.clamp(0.0, 10.0).toDouble();
+  }
+
+  int _subtitleOpacityToMpv(double value) {
+    return (_clampSubtitleOpacity(value) * 255).round();
+  }
+
+  String _colorToMpvHex(Color color) {
+    final rgb = color.value & 0x00FFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  }
+
+  String _subtitleAlignXToMpv(SubtitleAlignX align) {
+    switch (align) {
+      case SubtitleAlignX.left:
+        return 'left';
+      case SubtitleAlignX.center:
+        return 'center';
+      case SubtitleAlignX.right:
+        return 'right';
+    }
+  }
+
+  String _subtitleAlignYToMpv(SubtitleAlignY align) {
+    switch (align) {
+      case SubtitleAlignY.top:
+        return 'top';
+      case SubtitleAlignY.center:
+        return 'center';
+      case SubtitleAlignY.bottom:
+        return 'bottom';
+    }
+  }
+
+  String _subtitleOverrideModeToMpv(SubtitleStyleOverrideMode mode) {
+    switch (mode) {
+      case SubtitleStyleOverrideMode.none:
+        return 'no';
+      case SubtitleStyleOverrideMode.scale:
+        return 'scale';
+      case SubtitleStyleOverrideMode.force:
+        return 'force';
+      case SubtitleStyleOverrideMode.auto:
+        final bool needsScaleOverride = (_subtitleScale - 1.0).abs() >= 0.001;
+        return needsScaleOverride ? 'scale' : 'no';
+    }
+  }
+
+  Future<void> _loadSubtitleSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _subtitleScale = _clampSubtitleScale(
-      prefs.getDouble(_subtitleScaleKey) ?? 1.0,
+      prefs.getDouble(_subtitleScaleKey) ??
+          VideoPlayerState.defaultSubtitleScale,
     );
-    await applySubtitleScalePreference();
+    _subtitleDelaySeconds = prefs.getDouble(_subtitleDelayKey) ??
+        VideoPlayerState.defaultSubtitleDelaySeconds;
+    _subtitlePosition = _clampSubtitlePosition(
+      prefs.getDouble(_subtitlePositionKey) ??
+          VideoPlayerState.defaultSubtitlePosition,
+    );
+    _subtitleAlignX = SubtitleAlignX.values[
+        (prefs.getInt(_subtitleAlignXKey) ??
+                VideoPlayerState.defaultSubtitleAlignX.index)
+            .clamp(0, SubtitleAlignX.values.length - 1)];
+    _subtitleAlignY = SubtitleAlignY.values[
+        (prefs.getInt(_subtitleAlignYKey) ??
+                VideoPlayerState.defaultSubtitleAlignY.index)
+            .clamp(0, SubtitleAlignY.values.length - 1)];
+    _subtitleMarginX =
+        prefs.getDouble(_subtitleMarginXKey) ??
+            VideoPlayerState.defaultSubtitleMarginX;
+    _subtitleMarginY =
+        prefs.getDouble(_subtitleMarginYKey) ??
+            VideoPlayerState.defaultSubtitleMarginY;
+    _subtitleOpacity = _clampSubtitleOpacity(
+      prefs.getDouble(_subtitleOpacityKey) ??
+          VideoPlayerState.defaultSubtitleOpacity,
+    );
+    _subtitleBorderSize = _clampSubtitleBorderSize(
+      prefs.getDouble(_subtitleBorderSizeKey) ??
+          VideoPlayerState.defaultSubtitleBorderSize,
+    );
+    _subtitleShadowOffset = _clampSubtitleShadowOffset(
+      prefs.getDouble(_subtitleShadowOffsetKey) ??
+          VideoPlayerState.defaultSubtitleShadowOffset,
+    );
+    _subtitleBold = prefs.getBool(_subtitleBoldKey) ?? false;
+    _subtitleItalic = prefs.getBool(_subtitleItalicKey) ?? false;
+    _subtitleColorValue = prefs.getInt(_subtitleColorKey) ??
+        VideoPlayerState.defaultSubtitleColorValue;
+    _subtitleBorderColorValue = prefs.getInt(_subtitleBorderColorKey) ??
+        VideoPlayerState.defaultSubtitleBorderColorValue;
+    _subtitleShadowColorValue = prefs.getInt(_subtitleShadowColorKey) ??
+        VideoPlayerState.defaultSubtitleShadowColorValue;
+    _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
+    _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
+    _subtitleOverrideMode = SubtitleStyleOverrideMode.values[
+        (prefs.getInt(_subtitleOverrideModeKey) ??
+                VideoPlayerState.defaultSubtitleOverrideMode.index)
+            .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
+    await applySubtitleStylePreference();
     notifyListeners();
   }
 
@@ -932,24 +1043,295 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleScale = resolved;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleScaleKey, resolved);
-    await applySubtitleScalePreference();
+    await applySubtitleStylePreference();
     notifyListeners();
   }
 
-  Future<void> applySubtitleScalePreference() async {
+  Future<void> setSubtitleDelaySeconds(double seconds) async {
+    if ((_subtitleDelaySeconds - seconds).abs() < 0.0001) {
+      return;
+    }
+    _subtitleDelaySeconds = seconds;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleDelayKey, seconds);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitlePosition(double position) async {
+    final resolved = _clampSubtitlePosition(position);
+    if ((_subtitlePosition - resolved).abs() < 0.0001) {
+      return;
+    }
+    _subtitlePosition = resolved;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitlePositionKey, resolved);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleAlignX(SubtitleAlignX align) async {
+    if (_subtitleAlignX == align) return;
+    _subtitleAlignX = align;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_subtitleAlignXKey, align.index);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleAlignY(SubtitleAlignY align) async {
+    if (_subtitleAlignY == align) return;
+    _subtitleAlignY = align;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_subtitleAlignYKey, align.index);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleMarginX(double value) async {
+    if ((_subtitleMarginX - value).abs() < 0.0001) return;
+    _subtitleMarginX = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleMarginXKey, value);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleMarginY(double value) async {
+    if ((_subtitleMarginY - value).abs() < 0.0001) return;
+    _subtitleMarginY = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleMarginYKey, value);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleOpacity(double value) async {
+    final resolved = _clampSubtitleOpacity(value);
+    if ((_subtitleOpacity - resolved).abs() < 0.0001) return;
+    _subtitleOpacity = resolved;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleOpacityKey, resolved);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleBorderSize(double value) async {
+    final resolved = _clampSubtitleBorderSize(value);
+    if ((_subtitleBorderSize - resolved).abs() < 0.0001) return;
+    _subtitleBorderSize = resolved;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleBorderSizeKey, resolved);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleShadowOffset(double value) async {
+    final resolved = _clampSubtitleShadowOffset(value);
+    if ((_subtitleShadowOffset - resolved).abs() < 0.0001) return;
+    _subtitleShadowOffset = resolved;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleShadowOffsetKey, resolved);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleBold(bool value) async {
+    if (_subtitleBold == value) return;
+    _subtitleBold = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_subtitleBoldKey, value);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleItalic(bool value) async {
+    if (_subtitleItalic == value) return;
+    _subtitleItalic = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_subtitleItalicKey, value);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleColor(Color color) async {
+    if (_subtitleColorValue == color.value) return;
+    _subtitleColorValue = color.value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_subtitleColorKey, color.value);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleBorderColor(Color color) async {
+    if (_subtitleBorderColorValue == color.value) return;
+    _subtitleBorderColorValue = color.value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_subtitleBorderColorKey, color.value);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleShadowColor(Color color) async {
+    if (_subtitleShadowColorValue == color.value) return;
+    _subtitleShadowColorValue = color.value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_subtitleShadowColorKey, color.value);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleFontName(String name) async {
+    final trimmed = name.trim();
+    if (_subtitleFontName == trimmed) return;
+    _subtitleFontName = trimmed;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_subtitleFontNameKey, trimmed);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleFontDir(String dir) async {
+    if (_subtitleFontDir == dir) return;
+    _subtitleFontDir = dir;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_subtitleFontDirKey, dir);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> importSubtitleFontFile(String sourcePath) async {
+    if (sourcePath.isEmpty) return;
+    try {
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+      await fontsDir.create(recursive: true);
+      final fileName = p.basename(sourcePath);
+      final destPath = p.join(fontsDir.path, fileName);
+      await File(sourcePath).copy(destPath);
+      _subtitleFontDir = fontsDir.path;
+      _subtitleFontName = p.basenameWithoutExtension(destPath);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
+      await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
+      await applySubtitleStylePreference();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 导入字幕字体失败: $e');
+    }
+  }
+
+  Future<void> setSubtitleOverrideMode(
+    SubtitleStyleOverrideMode mode,
+  ) async {
+    if (_subtitleOverrideMode == mode) return;
+    _subtitleOverrideMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_subtitleOverrideModeKey, mode.index);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> resetSubtitleSettings() async {
+    _subtitleScale = VideoPlayerState.defaultSubtitleScale;
+    _subtitleDelaySeconds = VideoPlayerState.defaultSubtitleDelaySeconds;
+    _subtitlePosition = VideoPlayerState.defaultSubtitlePosition;
+    _subtitleAlignX = VideoPlayerState.defaultSubtitleAlignX;
+    _subtitleAlignY = VideoPlayerState.defaultSubtitleAlignY;
+    _subtitleMarginX = VideoPlayerState.defaultSubtitleMarginX;
+    _subtitleMarginY = VideoPlayerState.defaultSubtitleMarginY;
+    _subtitleOpacity = VideoPlayerState.defaultSubtitleOpacity;
+    _subtitleBorderSize = VideoPlayerState.defaultSubtitleBorderSize;
+    _subtitleShadowOffset = VideoPlayerState.defaultSubtitleShadowOffset;
+    _subtitleBold = false;
+    _subtitleItalic = false;
+    _subtitleColorValue = VideoPlayerState.defaultSubtitleColorValue;
+    _subtitleBorderColorValue = VideoPlayerState.defaultSubtitleBorderColorValue;
+    _subtitleShadowColorValue = VideoPlayerState.defaultSubtitleShadowColorValue;
+    _subtitleFontName = '';
+    _subtitleFontDir = '';
+    _subtitleOverrideMode = VideoPlayerState.defaultSubtitleOverrideMode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleScaleKey, _subtitleScale);
+    await prefs.setDouble(_subtitleDelayKey, _subtitleDelaySeconds);
+    await prefs.setDouble(_subtitlePositionKey, _subtitlePosition);
+    await prefs.setInt(_subtitleAlignXKey, _subtitleAlignX.index);
+    await prefs.setInt(_subtitleAlignYKey, _subtitleAlignY.index);
+    await prefs.setDouble(_subtitleMarginXKey, _subtitleMarginX);
+    await prefs.setDouble(_subtitleMarginYKey, _subtitleMarginY);
+    await prefs.setDouble(_subtitleOpacityKey, _subtitleOpacity);
+    await prefs.setDouble(_subtitleBorderSizeKey, _subtitleBorderSize);
+    await prefs.setDouble(_subtitleShadowOffsetKey, _subtitleShadowOffset);
+    await prefs.setBool(_subtitleBoldKey, _subtitleBold);
+    await prefs.setBool(_subtitleItalicKey, _subtitleItalic);
+    await prefs.setInt(_subtitleColorKey, _subtitleColorValue);
+    await prefs.setInt(_subtitleBorderColorKey, _subtitleBorderColorValue);
+    await prefs.setInt(_subtitleShadowColorKey, _subtitleShadowColorValue);
+    await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
+    await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
+    await prefs.setInt(_subtitleOverrideModeKey, _subtitleOverrideMode.index);
+    await applySubtitleStylePreference();
+    notifyListeners();
+  }
+
+  Future<void> applySubtitleStylePreference() async {
     if (kIsWeb || _isDisposed) return;
     try {
       if (player.getPlayerKernelName() != 'Media Kit') {
         return;
       }
       player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
-      final bool needsScaleOverride = (_subtitleScale - 1.0).abs() >= 0.001;
+      player.setProperty('sub-delay', _subtitleDelaySeconds.toStringAsFixed(2));
+      player.setProperty('sub-pos', _subtitlePosition.toStringAsFixed(0));
+      player.setProperty('sub-align-x', _subtitleAlignXToMpv(_subtitleAlignX));
+      player.setProperty('sub-align-y', _subtitleAlignYToMpv(_subtitleAlignY));
+      player.setProperty(
+        'sub-margin-x',
+        _subtitleMarginX.round().toString(),
+      );
+      player.setProperty(
+        'sub-margin-y',
+        _subtitleMarginY.round().toString(),
+      );
+      player.setProperty(
+        'sub-opacity',
+        _subtitleOpacityToMpv(_subtitleOpacity).toString(),
+      );
+      player.setProperty(
+        'sub-border-size',
+        _subtitleBorderSize.toStringAsFixed(1),
+      );
+      player.setProperty(
+        'sub-shadow-offset',
+        _subtitleShadowOffset.toStringAsFixed(1),
+      );
+      player.setProperty('sub-color', _colorToMpvHex(subtitleColor));
+      player.setProperty(
+        'sub-border-color',
+        _colorToMpvHex(subtitleBorderColor),
+      );
+      player.setProperty(
+        'sub-shadow-color',
+        _colorToMpvHex(subtitleShadowColor),
+      );
+      player.setProperty('sub-bold', _subtitleBold ? 'yes' : 'no');
+      player.setProperty('sub-italic', _subtitleItalic ? 'yes' : 'no');
+      if (_subtitleFontDir.isNotEmpty) {
+        player.setProperty('sub-fonts-dir', _subtitleFontDir);
+      } else {
+        player.setProperty('sub-fonts-dir', '');
+      }
+      if (_subtitleFontName.isNotEmpty) {
+        player.setProperty('sub-font', _subtitleFontName);
+      } else {
+        player.setProperty('sub-font', '');
+      }
       player.setProperty(
         'sub-ass-override',
-        needsScaleOverride ? 'scale' : 'no',
+        _subtitleOverrideModeToMpv(_subtitleOverrideMode),
       );
     } catch (e) {
-      debugPrint('[VideoPlayerState] 设置字幕缩放失败: $e');
+      debugPrint('[VideoPlayerState] 设置字幕样式失败: $e');
     }
   }
 
