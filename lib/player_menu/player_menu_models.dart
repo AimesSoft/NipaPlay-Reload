@@ -5,6 +5,7 @@ import 'package:nipaplay/services/emby_service.dart';
 
 /// 播放器菜单中可能出现的功能面板 ID
 enum PlayerMenuPaneId {
+  subtitleSettings,
   subtitleTracks,
   subtitleList,
   audioTracks,
@@ -34,6 +35,7 @@ enum PlayerMenuCategory {
 
 /// UI 图标的抽象标识，由各主题自行映射到具体 Icon
 enum PlayerMenuIconToken {
+  subtitleSettings,
   subtitles,
   subtitleList,
   audioTrack,

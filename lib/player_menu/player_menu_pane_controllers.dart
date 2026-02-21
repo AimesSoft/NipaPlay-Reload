@@ -110,6 +110,23 @@ class SeekStepPaneController extends PlayerMenuPaneController {
   PlayerMenuPaneId get paneId => PlayerMenuPaneId.seekStep;
 }
 
+/// 字幕设置控制器：提供字幕大小设置（Media Kit / libass）
+class SubtitleSettingsPaneController extends PlayerMenuPaneController {
+  SubtitleSettingsPaneController({required super.videoState});
+
+  double get subtitleScale => videoState.subtitleScale;
+
+  Future<void> setSubtitleScale(double scale) =>
+      videoState.setSubtitleScale(scale);
+
+  double get minScale => VideoPlayerState.minSubtitleScale;
+
+  double get maxScale => VideoPlayerState.maxSubtitleScale;
+
+  @override
+  PlayerMenuPaneId get paneId => PlayerMenuPaneId.subtitleSettings;
+}
+
 typedef PlayerMenuPaneControllerBuilder = PlayerMenuPaneController Function(
   VideoPlayerState videoState,
 );
@@ -124,6 +141,8 @@ class PlayerMenuPaneControllerFactory {
         PlaybackRatePaneController(videoState: videoState),
     PlayerMenuPaneId.seekStep: (videoState) =>
         SeekStepPaneController(videoState: videoState),
+    PlayerMenuPaneId.subtitleSettings: (videoState) =>
+        SubtitleSettingsPaneController(videoState: videoState),
   };
 
   static bool supports(PlayerMenuPaneId paneId) => _builders.containsKey(paneId);

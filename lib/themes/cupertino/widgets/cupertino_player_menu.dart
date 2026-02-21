@@ -19,6 +19,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_bac
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_seek_step_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_playlist_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_list_pane.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_settings_pane.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_tracks_pane.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
@@ -115,6 +116,11 @@ class _CupertinoPlayerMenuState extends State<CupertinoPlayerMenu> {
         return CupertinoSubtitleTracksPane(
           videoState: videoState,
           onBack: onBack,
+        );
+      case PlayerMenuPaneId.subtitleSettings:
+        return ChangeNotifierProvider(
+          create: (_) => SubtitleSettingsPaneController(videoState: videoState),
+          child: CupertinoSubtitleSettingsPane(onBack: onBack),
         );
       case PlayerMenuPaneId.subtitleList:
         return CupertinoSubtitleListPane(
@@ -275,6 +281,8 @@ class _CupertinoPlayerMenuHome extends StatelessWidget {
 
   IconData _iconFor(PlayerMenuIconToken token) {
     switch (token) {
+      case PlayerMenuIconToken.subtitleSettings:
+        return CupertinoIcons.textformat;
       case PlayerMenuIconToken.subtitles:
         return CupertinoIcons.captions_bubble;
       case PlayerMenuIconToken.subtitleList:

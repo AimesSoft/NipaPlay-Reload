@@ -908,6 +908,51 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     return _danmakuFontSize;
   }
 
+  double _clampSubtitleScale(double value) {
+    return value
+        .clamp(VideoPlayerState.minSubtitleScale,
+            VideoPlayerState.maxSubtitleScale)
+        .toDouble();
+  }
+
+  Future<void> _loadSubtitleScale() async {
+    final prefs = await SharedPreferences.getInstance();
+    _subtitleScale = _clampSubtitleScale(
+      prefs.getDouble(_subtitleScaleKey) ?? 1.0,
+    );
+    await applySubtitleScalePreference();
+    notifyListeners();
+  }
+
+  Future<void> setSubtitleScale(double scale) async {
+    final resolved = _clampSubtitleScale(scale);
+    if ((_subtitleScale - resolved).abs() < 0.0001) {
+      return;
+    }
+    _subtitleScale = resolved;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_subtitleScaleKey, resolved);
+    await applySubtitleScalePreference();
+    notifyListeners();
+  }
+
+  Future<void> applySubtitleScalePreference() async {
+    if (kIsWeb || _isDisposed) return;
+    try {
+      if (player.getPlayerKernelName() != 'Media Kit') {
+        return;
+      }
+      player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
+      final bool needsScaleOverride = (_subtitleScale - 1.0).abs() >= 0.001;
+      player.setProperty(
+        'sub-ass-override',
+        needsScaleOverride ? 'scale' : 'no',
+      );
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 设置字幕缩放失败: $e');
+    }
+  }
+
   // 加载弹幕轨道显示区域
   Future<void> _loadDanmakuDisplayArea() async {
     final prefs = await SharedPreferences.getInstance();

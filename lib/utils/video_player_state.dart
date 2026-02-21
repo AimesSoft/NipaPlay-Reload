@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:universal_html/html.dart' as web_html;
@@ -428,6 +429,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕字体大小设置
   final String _danmakuFontSizeKey = 'danmaku_font_size';
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
+  static const double minSubtitleScale = 0.5;
+  static const double maxSubtitleScale = 2.5;
+  final String _subtitleScaleKey = 'subtitle_scale';
+  double _subtitleScale = 1.0; // libass 字幕缩放（1.0为默认）
 
   // 弹幕轨道显示区域设置
   final String _danmakuDisplayAreaKey = 'danmaku_display_area';
@@ -711,6 +716,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
   double get danmakuFontSize => _danmakuFontSize;
+  double get subtitleScale => _subtitleScale;
   double get danmakuDisplayArea => _danmakuDisplayArea;
   double get danmakuSpeedMultiplier => _danmakuSpeedMultiplier;
   double get danmakuScrollDurationSeconds =>

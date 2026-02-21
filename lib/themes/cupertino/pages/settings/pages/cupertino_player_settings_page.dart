@@ -1213,6 +1213,43 @@ class _CupertinoPlayerSettingsPageState
               ),
               CupertinoSettingsTile(
                 leading: Icon(
+                  CupertinoIcons.refresh,
+                  color: resolveSettingsIconColor(context),
+                ),
+                title: const Text('播放时自动匹配弹幕'),
+                subtitle: const Text('关闭后播放时不再自动识别并加载弹幕，可在弹幕设置中手动匹配。'),
+                trailing: AdaptiveSwitch(
+                  value: settingsProvider.autoMatchDanmakuOnPlay,
+                  onChanged: (value) {
+                    settingsProvider.setAutoMatchDanmakuOnPlay(value);
+                    if (mounted) {
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: value
+                            ? '已开启播放时自动匹配弹幕'
+                            : '已关闭播放时自动匹配弹幕（可手动匹配）',
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    }
+                  },
+                ),
+                onTap: () {
+                  final bool newValue = !settingsProvider.autoMatchDanmakuOnPlay;
+                  settingsProvider.setAutoMatchDanmakuOnPlay(newValue);
+                  if (mounted) {
+                    AdaptiveSnackBar.show(
+                      context,
+                      message: newValue
+                          ? '已开启播放时自动匹配弹幕'
+                          : '已关闭播放时自动匹配弹幕（可手动匹配）',
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  }
+                },
+                backgroundColor: tileBackground,
+              ),
+              CupertinoSettingsTile(
+                leading: Icon(
                   CupertinoIcons.search,
                   color: resolveSettingsIconColor(context),
                 ),

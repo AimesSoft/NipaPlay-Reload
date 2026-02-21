@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'subtitle_tracks_menu.dart';
+import 'subtitle_settings_menu.dart';
 import 'control_bar_settings_menu.dart';
 import 'danmaku_settings_menu.dart';
 import 'audio_tracks_menu.dart';
@@ -282,6 +283,15 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
   Widget _buildPane(PlayerMenuPaneId paneId) {
     late final Widget child;
     switch (paneId) {
+      case PlayerMenuPaneId.subtitleSettings:
+        child = ChangeNotifierProvider(
+          create: (_) => SubtitleSettingsPaneController(videoState: videoState),
+          child: SubtitleSettingsMenu(
+            onClose: _closeActivePane,
+            onHoverChanged: widget.onHoverChanged,
+          ),
+        );
+        break;
       case PlayerMenuPaneId.subtitleTracks:
         child = SubtitleTracksMenu(
           onClose: _closeActivePane,
@@ -511,6 +521,8 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
 
   IconData _resolveIcon(PlayerMenuIconToken icon) {
     switch (icon) {
+      case PlayerMenuIconToken.subtitleSettings:
+        return Icons.format_size;
       case PlayerMenuIconToken.subtitles:
         return Icons.subtitles;
       case PlayerMenuIconToken.subtitleList:

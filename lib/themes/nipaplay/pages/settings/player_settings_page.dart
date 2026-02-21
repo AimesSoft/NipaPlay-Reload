@@ -1135,6 +1135,30 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         Consumer<SettingsProvider>(
           builder: (context, settingsProvider, child) {
             return SettingsItem.toggle(
+              title: "播放时自动匹配弹幕",
+              subtitle: "关闭后播放时不再自动识别并加载弹幕，可在弹幕设置中手动匹配",
+              icon: Ionicons.sync_outline,
+              value: settingsProvider.autoMatchDanmakuOnPlay,
+              onChanged: (bool value) {
+                settingsProvider.setAutoMatchDanmakuOnPlay(value);
+                if (context.mounted) {
+                  BlurSnackBar.show(
+                    context,
+                    value
+                        ? "已开启播放时自动匹配弹幕"
+                        : "已关闭播放时自动匹配弹幕（可手动匹配）",
+                  );
+                }
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<SettingsProvider>(
+          builder: (context, settingsProvider, child) {
+            return SettingsItem.toggle(
               title: "哈希匹配失败自动匹配弹幕",
               subtitle: "哈希匹配失败时，默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单",
               icon: Ionicons.search_outline,

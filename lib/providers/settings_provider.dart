@@ -16,6 +16,9 @@ class SettingsProvider with ChangeNotifier {
 
   // 哈希匹配失败后自动选择搜索第一个结果（避免弹窗）
   bool _autoMatchDanmakuFirstSearchResultOnHashFail = true; // 默认开启
+
+  // 播放时自动匹配弹幕
+  bool _autoMatchDanmakuOnPlay = true; // 默认开启
   
   // --- Getters ---
   double get blurPower => _blurPower;
@@ -23,6 +26,7 @@ class SettingsProvider with ChangeNotifier {
   bool get danmakuConvertToSimplified => _danmakuConvertToSimplified;
   bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
       _autoMatchDanmakuFirstSearchResultOnHashFail;
+  bool get autoMatchDanmakuOnPlay => _autoMatchDanmakuOnPlay;
 
   SettingsProvider() {
     _loadSettings();
@@ -37,6 +41,8 @@ class SettingsProvider with ChangeNotifier {
     _autoMatchDanmakuFirstSearchResultOnHashFail =
         _prefs.getBool(SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail) ??
             true;
+    _autoMatchDanmakuOnPlay =
+        _prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true;
     notifyListeners();
   }
 
@@ -72,6 +78,15 @@ class SettingsProvider with ChangeNotifier {
     await _prefs.setBool(
       SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail,
       _autoMatchDanmakuFirstSearchResultOnHashFail,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setAutoMatchDanmakuOnPlay(bool enable) async {
+    _autoMatchDanmakuOnPlay = enable;
+    await _prefs.setBool(
+      SettingsKeys.autoMatchDanmakuOnPlay,
+      _autoMatchDanmakuOnPlay,
     );
     notifyListeners();
   }
