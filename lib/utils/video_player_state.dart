@@ -633,6 +633,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late DecoderManager _decoderManager;
 
   bool _hasInitialScreenshot = false; // 添加标记跟踪是否已进行第一次播放截图
+  bool _needsAnime4KSurfaceScaleRefresh = false;
+  int _anime4kSurfaceScaleRequestId = 0;
 
   // 平板设备菜单栏隐藏状态
   bool _isAppBarHidden = false;

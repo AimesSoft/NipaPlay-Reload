@@ -224,6 +224,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         ////debugPrint("Error enabling wakelock: $e");
       }
 
+      if (_needsAnime4KSurfaceScaleRefresh) {
+        _needsAnime4KSurfaceScaleRefresh = false;
+        _scheduleAnime4KSurfaceScaleRefresh();
+      }
+
       // 在播放开始后一小段时间重置最终加载阶段标志
       Future.delayed(const Duration(milliseconds: 200), () {
         _isInFinalLoadingPhase = false;
@@ -493,6 +498,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _position = Duration.zero;
     _progress = 0.0;
     _bufferedPositionMs = 0;
+    _needsAnime4KSurfaceScaleRefresh = false;
+    _anime4kSurfaceScaleRequestId++;
     _error = null;
     _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
     // Do NOT call WakelockPlus.disable() here directly, _setStatus will handle it
@@ -521,6 +528,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
     _currentVideoHash = null;
     _currentThumbnailPath = null;
+    _needsAnime4KSurfaceScaleRefresh = false;
+    _anime4kSurfaceScaleRequestId++;
     _animeTitle = null;
     _episodeTitle = null;
     _episodeId = null; // 清除弹幕ID

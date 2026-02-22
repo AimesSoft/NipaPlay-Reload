@@ -624,6 +624,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (!_supportsAnime4KForCurrentPlayer()) {
       _anime4kShaderPaths = const <String>[];
       _crtShaderPaths = const <String>[];
+      _needsAnime4KSurfaceScaleRefresh = false;
+      _anime4kSurfaceScaleRequestId++;
       return;
     }
 
@@ -631,6 +633,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final bool crtEnabled = _crtProfile != CrtProfile.off;
     final bool upscaleEnabled =
         _doubleResolutionPlaybackEnabled || anime4kEnabled;
+    final bool canAdjustSurface = hasVideo;
 
     try {
       final List<String> shaderPaths = <String>[];
@@ -661,8 +664,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         } catch (e) {
           debugPrint('[VideoPlayerState] 清除着色器失败: $e');
         }
-        await _updateAnime4KSurfaceScale(enable: upscaleEnabled);
-        await _logCurrentVideoDimensions(context: 'Shaders off');
+        if (canAdjustSurface) {
+          await _updateAnime4KSurfaceScale(enable: upscaleEnabled);
+          await _logCurrentVideoDimensions(context: 'Shaders off');
+          _requestAnime4KSurfaceScaleRefreshIfNeeded(upscaleEnabled);
+        } else {
+          _needsAnime4KSurfaceScaleRefresh = upscaleEnabled;
+          _anime4kSurfaceScaleRequestId++;
+        }
         return;
       }
 
@@ -681,11 +690,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       } catch (e) {
         debugPrint('[VideoPlayerState] 读取 mpv 属性失败: $e');
       }
-      await _updateAnime4KSurfaceScale(enable: upscaleEnabled);
-      if (anime4kEnabled) {
-        await _logCurrentVideoDimensions(
-          context: 'Anime4K ${_anime4kProfile.name}',
-        );
+      if (canAdjustSurface) {
+        await _updateAnime4KSurfaceScale(enable: upscaleEnabled);
+        if (anime4kEnabled) {
+          await _logCurrentVideoDimensions(
+            context: 'Anime4K ${_anime4kProfile.name}',
+          );
+        }
+        _requestAnime4KSurfaceScaleRefreshIfNeeded(upscaleEnabled);
+      } else {
+        _needsAnime4KSurfaceScaleRefresh = upscaleEnabled;
+        _anime4kSurfaceScaleRequestId++;
       }
     } catch (e) {
       debugPrint('[VideoPlayerState] 应用着色器失败: $e');
@@ -750,6 +765,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     const int maxRetry = 10;
 
     try {
+      if (!hasVideo) {
+        return;
+      }
       if (!enable) {
         await player.setVideoSurfaceSize();
         return;
@@ -804,6 +822,63 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         debugPrint('[VideoPlayerState] 调整 Anime4K 纹理尺寸失败: $e');
       }
     }
+  }
+
+  void _requestAnime4KSurfaceScaleRefreshIfNeeded(bool upscaleEnabled) {
+    if (!upscaleEnabled || !_supportsAnime4KForCurrentPlayer() || !hasVideo) {
+      _needsAnime4KSurfaceScaleRefresh = false;
+      _anime4kSurfaceScaleRequestId++;
+      return;
+    }
+    if (_status == PlayerStatus.playing) {
+      _needsAnime4KSurfaceScaleRefresh = false;
+      _scheduleAnime4KSurfaceScaleRefresh();
+    } else {
+      _needsAnime4KSurfaceScaleRefresh = true;
+    }
+  }
+
+  void _scheduleAnime4KSurfaceScaleRefresh({
+    int attempt = 0,
+    int? requestId,
+    String? videoPath,
+  }) {
+    if (_isDisposed || !_supportsAnime4KForCurrentPlayer()) {
+      return;
+    }
+
+    final bool upscaleEnabled =
+        _doubleResolutionPlaybackEnabled || _anime4kProfile != Anime4KProfile.off;
+    if (!upscaleEnabled || !hasVideo) {
+      return;
+    }
+
+    final int token = requestId ?? ++_anime4kSurfaceScaleRequestId;
+    final String? targetPath = videoPath ?? _currentVideoPath;
+
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (_isDisposed || token != _anime4kSurfaceScaleRequestId) {
+        return;
+      }
+      if (!hasVideo || _currentVideoPath != targetPath) {
+        return;
+      }
+
+      final bool playbackReady = player.state == PlaybackState.playing ||
+          player.state == PlaybackState.paused;
+      if (!playbackReady) {
+        if (attempt < 6) {
+          _scheduleAnime4KSurfaceScaleRefresh(
+            attempt: attempt + 1,
+            requestId: token,
+            videoPath: targetPath,
+          );
+        }
+        return;
+      }
+
+      unawaited(_updateAnime4KSurfaceScale(enable: upscaleEnabled));
+    });
   }
 
   Future<_VideoDimensionSnapshot> _collectVideoDimensions({
