@@ -169,7 +169,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
       );
     }).toList();
 
-    return _buildDropdownSection(
+    return _buildOptionButtonsSection(
       title: '样式覆盖',
       description: 'ASS 字幕样式覆盖策略',
       items: items,
@@ -247,13 +247,13 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
 
     return Column(
       children: [
-        _buildDropdownSection(
+        _buildOptionButtonsSection(
           title: '水平对齐',
           description: '字幕水平位置',
           items: alignXItems,
           onSelected: videoState.setSubtitleAlignX,
         ),
-        _buildDropdownSection(
+        _buildOptionButtonsSection(
           title: '垂直对齐',
           description: '字幕垂直位置',
           items: alignYItems,
@@ -497,7 +497,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     );
   }
 
-  Widget _buildDropdownSection<T>({
+  Widget _buildOptionButtonsSection<T>({
     required String title,
     required String description,
     required List<DropdownMenuItemData<T>> items,
@@ -517,20 +517,49 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: BlurDropdown<T>(
-                  dropdownKey: GlobalKey(),
-                  items: items,
-                  onItemSelected: onSelected,
-                ),
-              ),
-            ],
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: items
+                .map((item) => _buildOptionButton(item, onSelected))
+                .toList(),
           ),
           const SizedBox(height: 4),
           SettingsHintText(description),
         ],
+      ),
+    );
+  }
+
+  Widget _buildOptionButton<T>(
+    DropdownMenuItemData<T> item,
+    ValueChanged<T> onSelected,
+  ) {
+    final isSelected = item.isSelected;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => onSelected(item.value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(isSelected ? 0.15 : 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.white.withOpacity(isSelected ? 0.5 : 0.2),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            item.title,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
       ),
     );
   }
