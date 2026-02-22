@@ -265,6 +265,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   ),
                 ),
               ],
+              barrierDismissible: !_shouldDisableDialogDismiss(videoState),
             );
             break;
         }
@@ -297,8 +298,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
-  Future<void> _showAirPlayPicker() async {
+  bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
+    if (videoState == null) return false;
+    return globals.isPhone && globals.isTablet && videoState.isAppBarHidden;
+  }
+
+  Future<void> _showAirPlayPicker([VideoPlayerState? videoState]) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+    final disableBackgroundDismiss = _shouldDisableDialogDismiss(videoState);
 
     await BlurDialog.show(
       context: context,
@@ -328,6 +335,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           child: const Text('关闭'),
         ),
       ],
+      barrierDismissible: !disableBackgroundDismiss,
     );
   }
 
@@ -443,7 +451,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           icon: Icons.airplay_rounded,
                           onPressed: () {
                             videoState.resetHideControlsTimer();
-                            _showAirPlayPicker();
+                            _showAirPlayPicker(videoState);
                           },
                         ),
                       if (showScreenshotButton) ...[

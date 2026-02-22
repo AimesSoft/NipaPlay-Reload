@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'hotkey_service.dart';
 
@@ -34,6 +35,7 @@ class DanmakuDialogManager {
     required Function(Map<String, dynamic> danmaku) onDanmakuSent,
     required Function() onDialogClosed,
     required bool wasPlaying,
+    bool disableBackgroundDismiss = false,
   }) async {
     // 如果已经在显示弹幕对话框，则不再显示
     if (_isShowingDialog) {
@@ -56,6 +58,7 @@ class DanmakuDialogManager {
           context: context,
           title: '发送弹幕',
           heightRatio: 0.9,
+          barrierDismissible: !disableBackgroundDismiss,
           child: Builder(
             builder: (sheetContext) {
               final keyboardHeight =
@@ -74,6 +77,14 @@ class DanmakuDialogManager {
           ),
         );
       } else {
+        final List<Widget>? actions = disableBackgroundDismiss
+            ? [
+                HoverScaleTextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('关闭'),
+                ),
+              ]
+            : [];
         await BlurDialog.show(
           context: context,
           title: '发送弹幕',
@@ -82,7 +93,8 @@ class DanmakuDialogManager {
             currentTime: currentTime,
             onDanmakuSent: onDanmakuSent,
           ),
-          actions: [],
+          actions: actions,
+          barrierDismissible: !disableBackgroundDismiss,
         );
       }
       _isShowingDialog = false;

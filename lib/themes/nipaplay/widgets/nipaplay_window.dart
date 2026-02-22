@@ -38,6 +38,34 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   static const double _contentTopPadding = 14;
   static const double _windowControlPadding = 5;
   static const double _windowControlGap = 6;
+  bool _allowBackgroundDismiss = false;
+  Animation<double>? _routeAnimation;
+  void Function(AnimationStatus)? _routeStatusListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _armDismissGuardIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant NipaplayWindowScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.onClose == null && widget.onClose != null) {
+      _armDismissGuardIfNeeded();
+      return;
+    }
+    if (widget.onClose == null && oldWidget.onClose != null) {
+      _detachRouteListener();
+      _allowBackgroundDismiss = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _detachRouteListener();
+    super.dispose();
+  }
 
   bool _useMacStyleCloseButton() {
     if (kIsWeb) {
@@ -47,6 +75,49 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     final isIPad =
         defaultTargetPlatform == TargetPlatform.iOS && globals.isTablet;
     return isMac || isIPad;
+  }
+
+  void _armDismissGuardIfNeeded() {
+    if (widget.onClose == null) {
+      _allowBackgroundDismiss = false;
+      _detachRouteListener();
+      return;
+    }
+    _allowBackgroundDismiss = false;
+    _detachRouteListener();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.onClose == null) return;
+      final animation = ModalRoute.of(context)?.animation;
+      if (animation == null) {
+        _allowBackgroundDismiss = true;
+        return;
+      }
+      if (animation.status == AnimationStatus.completed) {
+        _allowBackgroundDismiss = true;
+        return;
+      }
+      _routeAnimation = animation;
+      _routeStatusListener = (status) {
+        if (status == AnimationStatus.completed) {
+          _allowBackgroundDismiss = true;
+          _detachRouteListener();
+        }
+      };
+      animation.addStatusListener(_routeStatusListener!);
+    });
+  }
+
+  void _handleBackgroundTap() {
+    if (!_allowBackgroundDismiss) return;
+    widget.onClose?.call();
+  }
+
+  void _detachRouteListener() {
+    if (_routeAnimation != null && _routeStatusListener != null) {
+      _routeAnimation!.removeStatusListener(_routeStatusListener!);
+    }
+    _routeAnimation = null;
+    _routeStatusListener = null;
   }
 
   void _applyWindowOffset(Offset delta) {
@@ -134,7 +205,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
         backgroundColor: Colors.transparent,
         body: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: widget.onClose,
+          onTap: widget.onClose == null ? null : _handleBackgroundTap,
           child: Stack(
             children: [
               Center(

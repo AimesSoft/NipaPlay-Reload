@@ -59,6 +59,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   OverlayEntry? _settingsOverlay;
   final GlobalKey _settingsButtonKey = GlobalKey();
 
+  bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
+    if (videoState == null) return false;
+    return globals.isPhone && globals.isTablet && videoState.isAppBarHidden;
+  }
+
   bool get _useNipaplayControls {
     return PlatformInfo.isAndroid || PlatformInfo.isIOS;
   }
@@ -364,6 +369,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       context: context,
       title: '投屏 (AirPlay)',
       heightRatio: 0.5,
+      barrierDismissible: !_shouldDisableDialogDismiss(videoState),
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -639,7 +645,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                               icon: Icons.airplay_rounded,
                               onPressed: () {
                                 videoState.resetHideControlsTimer();
-                                _showAirPlayPickerNipaplay();
+                                _showAirPlayPickerNipaplay(videoState);
                               },
                             ),
                           if (showScreenshotButton) ...[
@@ -938,8 +944,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 '文件',
                 style: TextStyle(color: Colors.white),
               ),
-            ),
-          ],
+              ),
+            ],
+          barrierDismissible: !_shouldDisableDialogDismiss(videoState),
         );
 
         if (!mounted) return;
@@ -966,8 +973,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
   }
 
-  Future<void> _showAirPlayPickerNipaplay() async {
+  Future<void> _showAirPlayPickerNipaplay([VideoPlayerState? videoState]) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+    final disableBackgroundDismiss = _shouldDisableDialogDismiss(videoState);
 
     await BlurDialog.show(
       context: context,
@@ -997,6 +1005,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           child: const Text('关闭'),
         ),
       ],
+      barrierDismissible: !disableBackgroundDismiss,
     );
   }
 
