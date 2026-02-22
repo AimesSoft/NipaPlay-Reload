@@ -718,20 +718,17 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: Transform.translate(
-                  offset: const Offset(0, -90),
-                  child: AnimatedSlide(
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 150),
+                  offset: Offset(showLockButton ? 0 : -0.1, 0),
+                  child: AnimatedOpacity(
+                    opacity: showLockButton ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 150),
-                    offset: Offset(showLockButton ? 0 : -0.1, 0),
-                    child: AnimatedOpacity(
-                      opacity: showLockButton ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: IgnorePointer(
-                        ignoring: !showLockButton,
-                        child: LockControlsButton(
-                          locked: uiLocked,
-                          onPressed: () => _toggleUiLock(videoState),
-                        ),
+                    child: IgnorePointer(
+                      ignoring: !showLockButton,
+                      child: LockControlsButton(
+                        locked: uiLocked,
+                        onPressed: () => _toggleUiLock(videoState),
                       ),
                     ),
                   ),
