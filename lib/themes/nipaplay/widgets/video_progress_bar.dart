@@ -261,7 +261,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
           final thumbSizeHovered = globals.isPhone ? 24.0 : 16.0;
           final currentThumbSize = _isThumbHovered ? thumbSizeHovered : thumbSize;
           final halfThumbSize = currentThumbSize / 2;
-          final verticalMargin = globals.isPhone ? 24.0 : 20.0;
+          final baseVerticalMargin = globals.isPhone ? 24.0 : 20.0;
+          final hitPadding = globals.isPhone ? 12.0 : 8.0;
+          final verticalMargin = baseVerticalMargin + hitPadding;
           final trackHeight = globals.isPhone ? 6.0 : 4.0;
           final thumbRect = Rect.fromLTWH(
             (widget.videoState.progress * width) - halfThumbSize,
@@ -309,6 +311,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         _removeOverlay();
       },
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onHorizontalDragStart: (details) {
           widget.onDraggingStateChange(true);
           _updateProgressFromPosition(details.localPosition);
@@ -375,7 +378,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
 
             // 根据设备类型调整尺寸
             final trackHeight = globals.isPhone ? 6.0 : 4.0;
-            final verticalMargin = globals.isPhone ? 24.0 : 20.0;
+            final baseVerticalMargin = globals.isPhone ? 24.0 : 20.0;
+            final hitPadding = globals.isPhone ? 12.0 : 8.0;
+            final verticalMargin = baseVerticalMargin + hitPadding;
             final thumbSize = globals.isPhone ? 20.0 : 12.0;
             final thumbSizeHovered = globals.isPhone ? 24.0 : 16.0;
             final currentThumbSize = _isThumbHovered || widget.isDragging ? thumbSizeHovered : thumbSize;

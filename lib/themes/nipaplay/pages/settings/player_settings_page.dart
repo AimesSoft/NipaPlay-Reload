@@ -383,6 +383,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         return 'GPU 渲染引擎 (实验性)\n使用自定义着色器和字体图集，性能更高，功耗更低，但目前仍在开发中。';
       case DanmakuRenderEngine.canvas:
         return 'Canvas 弹幕渲染引擎\n来自软件kazumi的开发者\n使用Canvas绘制弹幕，高性能，低功耗，支持大量弹幕同时显示。';
+      case DanmakuRenderEngine.nipaplayNext:
+        return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
     }
   }
 
@@ -531,6 +533,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
               description: _getDanmakuRenderEngineDescription(
                   DanmakuRenderEngine.canvas),
+            ),
+            DropdownMenuItemData(
+              title: "NipaPlay Next",
+              value: DanmakuRenderEngine.nipaplayNext,
+              isSelected:
+                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext,
+              description: _getDanmakuRenderEngineDescription(
+                  DanmakuRenderEngine.nipaplayNext),
             ),
           ],
           onChanged: (engine) {
@@ -732,6 +742,38 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
 
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
+            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+              return const SizedBox.shrink();
+            }
+            final bool supportsUpscale = videoState.isDoubleResolutionSupported;
+            if (!supportsUpscale) {
+              return const SizedBox.shrink();
+            }
+            return SettingsItem.toggle(
+              title: '双倍分辨率播放视频',
+              subtitle: '以 2x 分辨率渲染画面，改善内嵌字幕清晰度（仅 Libmpv，不与 Anime4K 叠加）',
+              icon: Ionicons.resize_outline,
+              value: videoState.doubleResolutionPlaybackEnabled,
+              onChanged: (bool value) async {
+                await videoState.setDoubleResolutionPlaybackEnabled(value);
+                if (!context.mounted) return;
+                final bool deferApply = videoState.hasVideo;
+                final String message = deferApply
+                    ? '已保存，重新打开视频生效'
+                    : (value ? '已开启双倍分辨率播放' : '已关闭双倍分辨率播放');
+                BlurSnackBar.show(
+                  context,
+                  message,
+                );
+              },
+            );
+          },
+        ),
+
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
             final Anime4KProfile currentProfile = videoState.anime4kProfile;
             final bool supportsAnime4K = videoState.isAnime4KSupported;
 
@@ -763,10 +805,13 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 if (value is! Anime4KProfile) return;
                 await videoState.setAnime4KProfile(value);
                 if (!context.mounted) return;
+                final bool deferApply = videoState.hasVideo;
                 final String option = _getAnime4KProfileTitle(value);
-                final String message = value == Anime4KProfile.off
-                    ? '已关闭 Anime4K'
-                    : 'Anime4K 已切换为$option';
+                final String message = deferApply
+                    ? '已保存，重新打开视频生效'
+                    : (value == Anime4KProfile.off
+                        ? '已关闭 Anime4K'
+                        : 'Anime4K 已切换为$option');
                 BlurSnackBar.show(context, message);
               },
             );

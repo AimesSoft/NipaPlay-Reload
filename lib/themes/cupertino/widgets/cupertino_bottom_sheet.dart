@@ -43,6 +43,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     bool showCloseButton = true,
     VoidCallback? onClose,
     bool floatingTitle = false,
+    bool barrierDismissible = true,
   }) async {
     // 隐藏底部导航栏
     final bottomBarProvider = Provider.of<BottomBarProvider>(context, listen: false);
@@ -51,6 +52,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     try {
       final result = await showCupertinoModalPopup<T>(
         context: context,
+        barrierDismissible: barrierDismissible,
         builder: (BuildContext context) => CupertinoBottomSheet(
           title: title,
           heightRatio: heightRatio,

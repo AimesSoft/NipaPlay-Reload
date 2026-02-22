@@ -101,6 +101,7 @@ class BlurSnackBar {
           useGlassBackground ? (isDark ? 0.25 : 0.18) : (isDark ? 0.2 : 0.12),
         );
         final textColor = colorScheme.onSurface.withOpacity(isDark ? 0.92 : 0.88);
+        const actionForeground = Color(0xFFFF2E55);
         final shadowColor = isDark
             ? Colors.black.withOpacity(0.45)
             : Colors.black.withOpacity(0.16);
@@ -143,7 +144,7 @@ class BlurSnackBar {
                     onAction();
                   },
                   style: TextButton.styleFrom(
-                    foregroundColor: colorScheme.primary,
+                    foregroundColor: actionForeground,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 6,

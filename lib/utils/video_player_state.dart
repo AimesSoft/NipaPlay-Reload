@@ -381,6 +381,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     'deband': 'no',
     'scale-antiring': '0.0',
   };
+  final String _doubleResolutionPlaybackKey = 'double_resolution_playback';
+  bool _doubleResolutionPlaybackEnabled = false;
   final String _crtProfileKey = 'crt_profile';
   CrtProfile _crtProfile = CrtProfile.off;
   List<String> _crtShaderPaths = const <String>[];
@@ -631,6 +633,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late DecoderManager _decoderManager;
 
   bool _hasInitialScreenshot = false; // 添加标记跟踪是否已进行第一次播放截图
+  bool _needsAnime4KSurfaceScaleRefresh = false;
+  int _anime4kSurfaceScaleRequestId = 0;
 
   // 平板设备菜单栏隐藏状态
   bool _isAppBarHidden = false;
@@ -803,6 +807,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Anime4KProfile get anime4kProfile => _anime4kProfile;
   bool get isAnime4KEnabled => _anime4kProfile != Anime4KProfile.off;
   bool get isAnime4KSupported => _supportsAnime4KForCurrentPlayer();
+  bool get doubleResolutionPlaybackEnabled => _doubleResolutionPlaybackEnabled;
+  bool get isDoubleResolutionSupported => _supportsAnime4KForCurrentPlayer();
   List<String> get anime4kShaderPaths => List.unmodifiable(_anime4kShaderPaths);
   CrtProfile get crtProfile => _crtProfile;
   bool get isCrtEnabled => _crtProfile != CrtProfile.off;

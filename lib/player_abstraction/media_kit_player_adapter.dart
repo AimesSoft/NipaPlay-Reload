@@ -75,6 +75,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   late final VideoController _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   final GlobalKey _repaintBoundaryKey = GlobalKey();
+  bool _textureIdListenerAttached = false;
 
   String _currentMedia = '';
   PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
@@ -233,19 +234,29 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   void _updateTextureIdFromController() {
     try {
-      _textureIdNotifier.value = _controller.id.value;
-      debugPrint('MediaKit: 成功获取纹理ID从VideoController: ${_controller.id.value}');
-      if (_textureIdNotifier.value == null) {
-        _controller.id.addListener(() {
-          if (_controller.id.value != null &&
-              _textureIdNotifier.value == null) {
-            _textureIdNotifier.value = _controller.id.value;
-            debugPrint('MediaKit: 纹理ID已更新: ${_controller.id.value}');
-          }
-        });
+      final currentId = _controller.id.value;
+      if (_textureIdNotifier.value != currentId) {
+        _textureIdNotifier.value = currentId;
+        debugPrint('MediaKit: 纹理ID已更新: $currentId');
+      } else {
+        debugPrint('MediaKit: 成功获取纹理ID从VideoController: $currentId');
+      }
+
+      if (!_textureIdListenerAttached) {
+        _textureIdListenerAttached = true;
+        _controller.id.addListener(_handleTextureIdChange);
       }
     } catch (e) {
       debugPrint('获取纹理ID失败: $e');
+    }
+  }
+
+  void _handleTextureIdChange() {
+    if (_isDisposed) return;
+    final newId = _controller.id.value;
+    if (newId != null && _textureIdNotifier.value != newId) {
+      _textureIdNotifier.value = newId;
+      debugPrint('MediaKit: 纹理ID已更新: $newId');
     }
   }
 
@@ -1372,6 +1383,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _ticker?.dispose();
     _trackSubscription?.cancel();
     _jellyfinRetryTimer?.cancel();
+    if (_textureIdListenerAttached) {
+      _controller.id.removeListener(_handleTextureIdChange);
+    }
     _player.dispose();
     _textureIdNotifier.dispose();
   }

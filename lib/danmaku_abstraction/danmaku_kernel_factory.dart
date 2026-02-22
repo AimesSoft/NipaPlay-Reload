@@ -11,13 +11,16 @@ enum DanmakuRenderEngine {
 
   /// Canvas 弹幕渲染引擎
   canvas,
+
+  /// NipaPlay Next 弹幕逻辑内核
+  nipaplayNext,
 }
 
 /// 负责读写弹幕渲染引擎设置的工厂类
 class DanmakuKernelFactory {
   static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
-  // Default to Canvas if no user setting exists
-  static DanmakuRenderEngine _cachedEngine = DanmakuRenderEngine.canvas;
+  // Default to NipaPlay Next if no user setting exists
+  static DanmakuRenderEngine _cachedEngine = DanmakuRenderEngine.nipaplayNext;
   static bool _initialized = false;
 
   // 添加StreamController用于广播内核切换事件
@@ -40,10 +43,10 @@ class DanmakuKernelFactory {
       if (engineIndex != null && engineIndex >= 0 && engineIndex < DanmakuRenderEngine.values.length) {
         _cachedEngine = DanmakuRenderEngine.values[engineIndex];
       } else {
-        _cachedEngine = DanmakuRenderEngine.canvas; // 默认使用 Canvas
+        _cachedEngine = DanmakuRenderEngine.nipaplayNext; // 默认使用 NipaPlay Next
       }
     } catch (e) {
-      _cachedEngine = DanmakuRenderEngine.canvas;
+      _cachedEngine = DanmakuRenderEngine.nipaplayNext;
     }
     
     _initialized = true;

@@ -52,6 +52,9 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     // 加载跳过时间设置
     await _loadSkipSeconds();
 
+    // 加载双倍分辨率播放设置
+    await _loadDoubleResolutionPlayback();
+
     // 加载 Anime4K 设置并尝试立即应用
     await _loadAnime4KProfile();
     await _loadCrtProfile();

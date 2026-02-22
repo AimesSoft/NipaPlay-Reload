@@ -265,6 +265,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   ),
                 ),
               ],
+              barrierDismissible: !_shouldDisableDialogDismiss(videoState),
             );
             break;
         }
@@ -297,8 +298,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     }
   }
 
-  Future<void> _showAirPlayPicker() async {
+  bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
+    if (videoState == null) return false;
+    return globals.isPhone && globals.isTablet && videoState.isAppBarHidden;
+  }
+
+  Future<void> _showAirPlayPicker([VideoPlayerState? videoState]) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+    final disableBackgroundDismiss = _shouldDisableDialogDismiss(videoState);
 
     await BlurDialog.show(
       context: context,
@@ -328,6 +335,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           child: const Text('关闭'),
         ),
       ],
+      barrierDismissible: !disableBackgroundDismiss,
     );
   }
 
@@ -443,7 +451,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           icon: Icons.airplay_rounded,
                           onPressed: () {
                             videoState.resetHideControlsTimer();
-                            _showAirPlayPicker();
+                            _showAirPlayPicker(videoState);
                           },
                         ),
                       if (showScreenshotButton) ...[
@@ -508,13 +516,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         if (globals.isPhone)
-          Positioned(
-            left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: Transform.translate(
-                offset: const Offset(0, -90),
+            Positioned(
+              left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+              top: 0,
+              bottom: 0,
+              child: Center(
                 child: AnimatedSlide(
                   duration: const Duration(milliseconds: 150),
                   offset: Offset(showLockButton ? 0 : -0.1, 0),
@@ -532,7 +538,6 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                 ),
               ),
             ),
-          ),
       ],
     );
   }

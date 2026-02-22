@@ -64,7 +64,7 @@ final class AirPlayRoutePickerPlatformView: NSObject, FlutterPlatformView {
   }
 
   private static func colorFromArgb(_ argb: Int) -> UIColor {
-    let value = UInt32(bitPattern: Int32(argb))
+    let value = UInt32(truncatingIfNeeded: argb)
     let a = CGFloat((value >> 24) & 0xFF) / 255.0
     let r = CGFloat((value >> 16) & 0xFF) / 255.0
     let g = CGFloat((value >> 8) & 0xFF) / 255.0
@@ -72,4 +72,3 @@ final class AirPlayRoutePickerPlatformView: NSObject, FlutterPlatformView {
     return UIColor(red: r, green: g, blue: b, alpha: a)
   }
 }
-

@@ -616,6 +616,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 设置状态为准备就绪
       _setStatus(PlayerStatus.ready, message: '准备就绪');
 
+      // 新视频加载后应用超分辨率/CRT 等设置（避免播放中切换导致卡顿）
+      await applyAnime4KProfileToCurrentPlayer();
+
       // 使用屏幕方向管理器设置播放时的屏幕方向
       if (globals.isPhone) {
         debugPrint(

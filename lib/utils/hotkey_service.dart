@@ -16,6 +16,20 @@ class HotkeyService extends ChangeNotifier {
   static const int _debounceTime = 300; // 防抖时间（毫秒）
   static const int _longPressThreshold = 800; // 长按阈值（毫秒）
   
+  bool get _supportsHotkeys {
+    if (kIsWeb) return false;
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.windows:
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+        return true;
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+      case TargetPlatform.fuchsia:
+        return false;
+    }
+  }
+  
   // 单例模式
   factory HotkeyService() {
     return _instance;
@@ -41,7 +55,7 @@ class HotkeyService extends ChangeNotifier {
   Future<void> initialize(BuildContext context) async {
     _context = context;
 
-    if (kIsWeb) {
+    if (!_supportsHotkeys) {
       await loadShortcuts();
       return;
     }
@@ -58,7 +72,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 注册热键
   Future<void> registerHotkeys() async {
-    if (kIsWeb) return;
+    if (!_supportsHotkeys) return;
     // 先清理已注册的热键，再重新注册
     if (_registeredHotkeys.isNotEmpty) {
       //debugPrint('[HotkeyService] 清理现有热键后重新注册');
@@ -69,7 +83,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 注销热键
   Future<void> unregisterHotkeys() async {
-    if (kIsWeb) {
+    if (!_supportsHotkeys) {
       _registeredHotkeys.clear();
       return;
     }
@@ -139,7 +153,7 @@ class HotkeyService extends ChangeNotifier {
   
   // 注册所有热键
   Future<void> registerAllHotkeys() async {
-    if (kIsWeb) return;
+    if (!_supportsHotkeys) return;
     //debugPrint('[HotkeyService] 开始注册所有热键');
     // 先清除所有已注册的热键
     await hotKeyManager.unregisterAll();
@@ -692,7 +706,7 @@ class HotkeyService extends ChangeNotifier {
   @override
   Future<void> dispose() async {
     _longPressTimer?.cancel();
-    if (!kIsWeb) {
+    if (_supportsHotkeys) {
       await hotKeyManager.unregisterAll();
     }
     _registeredHotkeys.clear();

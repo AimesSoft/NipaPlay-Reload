@@ -35,6 +35,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dar
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/floating_action_glass_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/startup_notification_controller.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/watch_history_page.dart';
 import 'package:nipaplay/pages/media_server_detail_page.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
@@ -192,6 +193,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupProviderListeners();
       _startAutoSwitch();
+      StartupNotificationController.schedule(
+        context,
+        isMounted: () => mounted,
+      );
       
       // 🔥 在build完成后安全地加载数据，避免setState during build错误
       if (mounted) {
