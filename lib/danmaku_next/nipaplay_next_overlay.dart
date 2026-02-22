@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
-import 'package:nipaplay/danmaku_gpu/lib/dynamic_font_atlas.dart';
-import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
-import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
+import 'package:nipaplay/danmaku_next/nipaplay_next_canvas_painter.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_engine.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
 
@@ -49,7 +47,6 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
       'init list=${widget.danmakuList.length} font=${widget.fontSize} visible=${widget.isVisible}',
       throttle: Duration.zero,
     );
-    _prebuildAtlas();
   }
 
   @override
@@ -62,7 +59,6 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
         'font size changed ${oldWidget.fontSize} -> ${widget.fontSize}',
         throttle: Duration.zero,
       );
-      _prebuildAtlas();
     }
 
     final listIdentity = identityHashCode(widget.danmakuList);
@@ -73,52 +69,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
         'danmaku list changed size=${widget.danmakuList.length}',
         throttle: Duration.zero,
       );
-      _prebuildAtlas();
     }
-  }
-
-  void _prebuildAtlas() {
-    const int maxPrebuildChars = 320;
-    const int maxPrebuildTexts = 200;
-
-    final Set<String> chars = <String>{};
-    int textCount = 0;
-    for (final danmaku in widget.danmakuList) {
-      final text = danmaku['content']?.toString() ?? '';
-      if (text.isEmpty) continue;
-      textCount++;
-      for (final rune in text.runes) {
-        chars.add(String.fromCharCode(rune));
-        if (chars.length >= maxPrebuildChars) break;
-      }
-      if (chars.length >= maxPrebuildChars || textCount >= maxPrebuildTexts) {
-        break;
-      }
-    }
-
-    if (chars.isEmpty) return;
-
-    final seedText = chars.join();
-    if (seedText.length < chars.length) {
-      DanmakuNextLog.d(
-        'Overlay',
-        'prebuild chars=${chars.length} (deduped)',
-        throttle: Duration.zero,
-      );
-    } else {
-      DanmakuNextLog.d(
-        'Overlay',
-        'prebuild chars=${chars.length}',
-        throttle: Duration.zero,
-      );
-    }
-
-    FontAtlasManager.prebuildFromTexts(
-      fontSize: widget.fontSize,
-      texts: [seedText],
-    ).then((_) {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
@@ -171,21 +122,15 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
           });
         }
 
-        final config = GPUDanmakuConfig(
-          fontSize: widget.fontSize,
-          screenUsageRatio: widget.displayArea,
-          scrollScreensPerSecond: widget.scrollDurationSeconds > 0
-              ? (1.0 / widget.scrollDurationSeconds)
-              : 0.1,
-        );
-
-        return GPUDanmakuOverlay(
-          positionedDanmaku: positioned,
-          isPlaying: true,
-          config: config,
-          isVisible: widget.isVisible,
-          opacity: widget.opacity,
-          currentTime: effectiveTime,
+        return Opacity(
+          opacity: widget.opacity.clamp(0.0, 1.0),
+          child: CustomPaint(
+            painter: NipaPlayNextCanvasPainter(
+              items: positioned,
+              fontSize: widget.fontSize,
+            ),
+            size: size,
+          ),
         );
       },
     );
