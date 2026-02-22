@@ -15,6 +15,10 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
   static const int _cacheLimit = 2000;
   static final Map<_TextCacheKey, TextPainter> _fillCache = {};
   static final Map<_TextCacheKey, TextPainter> _strokeCache = {};
+  static final Paint _selfSendPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5
+    ..color = Colors.white;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -40,6 +44,15 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
 
       final baseOffset = Offset(item.x, item.y);
       strokePainter.paint(canvas, baseOffset);
+      if (content.isMe) {
+        final rect = Rect.fromLTWH(
+          baseOffset.dx - 2,
+          baseOffset.dy - 2,
+          fillPainter.width + 4,
+          fillPainter.height + 4,
+        );
+        canvas.drawRect(rect, _selfSendPaint);
+      }
       fillPainter.paint(canvas, baseOffset);
     }
   }

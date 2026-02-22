@@ -597,9 +597,11 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   );
                 }),
               ),
-              // 弹幕堆叠开关（Canvas模式下隐藏）
+              // 弹幕堆叠开关（Canvas/NipaPlay Next模式下隐藏）
               if (DanmakuKernelFactory.getKernelType() !=
-                  DanmakuRenderEngine.canvas)
+                      DanmakuRenderEngine.canvas &&
+                  DanmakuKernelFactory.getKernelType() !=
+                      DanmakuRenderEngine.nipaplayNext)
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
                   child: Column(

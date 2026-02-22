@@ -14,6 +14,7 @@ class NipaPlayNextOverlay extends StatefulWidget {
   final double timeOffset;
   final double scrollDurationSeconds;
   final bool allowStacking;
+  final bool mergeDanmaku;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
 
   const NipaPlayNextOverlay({
@@ -27,6 +28,7 @@ class NipaPlayNextOverlay extends StatefulWidget {
     required this.timeOffset,
     required this.scrollDurationSeconds,
     required this.allowStacking,
+    required this.mergeDanmaku,
     this.onLayoutCalculated,
   });
 
@@ -102,6 +104,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
           displayArea: widget.displayArea,
           scrollDurationSeconds: widget.scrollDurationSeconds,
           allowStacking: widget.allowStacking,
+          mergeDanmaku: widget.mergeDanmaku,
         );
 
         final effectiveTime = widget.currentTimeSeconds + widget.timeOffset;

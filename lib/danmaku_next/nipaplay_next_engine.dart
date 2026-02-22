@@ -13,10 +13,12 @@ class NipaPlayNextEngine {
   double _scrollDurationSeconds = 10.0;
   double _staticDurationSeconds = 10.0;
   bool _allowStacking = false;
+  bool _mergeDanmaku = false;
   int _sourceListIdentity = 0;
 
   final Map<String, double> _textWidthCache = {};
   static const int _textWidthCacheLimit = 5000;
+  static const double _mergeWindowSeconds = 45.0;
 
   final List<_NextItem> _items = [];
   final List<double> _itemTimes = [];
@@ -29,13 +31,16 @@ class NipaPlayNextEngine {
     required double displayArea,
     required double scrollDurationSeconds,
     required bool allowStacking,
+    required bool mergeDanmaku,
   }) {
     final listIdentity = identityHashCode(danmakuList);
-    if (listIdentity != _sourceListIdentity) {
+    final mergeChanged = mergeDanmaku != _mergeDanmaku;
+    if (listIdentity != _sourceListIdentity || mergeChanged) {
       _sourceListIdentity = listIdentity;
+      _mergeDanmaku = mergeDanmaku;
       DanmakuNextLog.d(
         'Engine',
-        'configure list changed size=${danmakuList.length}',
+        'configure list changed size=${danmakuList.length} merge=$_mergeDanmaku',
         throttle: Duration.zero,
       );
       _parseDanmakuList(danmakuList);
@@ -134,20 +139,30 @@ class NipaPlayNextEngine {
     _items.clear();
     _itemTimes.clear();
 
-    for (final raw in danmakuList) {
-      final time = (raw['time'] as num?)?.toDouble() ?? 0.0;
-      final text = raw['content']?.toString() ?? '';
+    final List<Map<String, dynamic>> sourceList = _mergeDanmaku
+        ? _prepareMergedDanmakuList(danmakuList)
+        : List<Map<String, dynamic>>.from(danmakuList);
+
+    for (final raw in sourceList) {
+      final time = _resolveTime(raw);
+      final text = _resolveContent(raw);
       if (text.isEmpty) continue;
 
       final type = _parseType(raw['type']);
       final color = _parseColor(raw['color']);
       final isMe = raw['isMe'] == true;
+      final isMerged = raw['merged'] == true;
+      final mergeCount = (raw['mergeCount'] as int?) ?? 1;
 
       final content = DanmakuContentItem(
         text,
         type: type,
         color: color,
         isMe: isMe,
+        fontSizeMultiplier: isMerged
+            ? _calcMergedFontSizeMultiplier(mergeCount)
+            : 1.0,
+        countText: isMerged ? 'x$mergeCount' : null,
       );
 
       _items.add(
@@ -189,7 +204,18 @@ class NipaPlayNextEngine {
       return;
     }
 
-    final danmakuHeight = _measureTextHeight(_fontSize);
+    double danmakuHeight = _measureTextHeight(_fontSize);
+    if (_mergeDanmaku && _items.isNotEmpty) {
+      double maxMultiplier = 1.0;
+      for (final item in _items) {
+        if (item.content.fontSizeMultiplier > maxMultiplier) {
+          maxMultiplier = item.content.fontSizeMultiplier;
+        }
+      }
+      if (maxMultiplier > 1.0) {
+        danmakuHeight = _measureTextHeight(_fontSize * maxMultiplier);
+      }
+    }
     final effectiveHeight = max(1.0, _size.height * _displayArea);
 
     int trackCount;
@@ -224,7 +250,10 @@ class NipaPlayNextEngine {
         List<_NextItem?>.filled(trackCount, null);
 
     for (final item in _items) {
-      final width = _measureTextWidth(item.content.text, _fontSize);
+      final width = _measureTextWidth(
+        item.content.text,
+        _fontSize * item.content.fontSizeMultiplier,
+      );
       item.width = width;
 
       switch (item.type) {
@@ -365,6 +394,76 @@ class NipaPlayNextEngine {
     return -1;
   }
 
+  List<Map<String, dynamic>> _prepareMergedDanmakuList(
+      List<Map<String, dynamic>> danmakuList) {
+    if (danmakuList.isEmpty) return const [];
+
+    final List<Map<String, dynamic>> sorted =
+        List<Map<String, dynamic>>.from(danmakuList);
+    sorted.sort((a, b) => _resolveTime(a).compareTo(_resolveTime(b)));
+
+    final Map<String, int> windowContentCount = {};
+    final Map<String, double> firstTime = {};
+    final Map<String, Map<String, dynamic>> processed = {};
+
+    int left = 0;
+    for (int right = 0; right < sorted.length; right++) {
+      final current = sorted[right];
+      final content = _resolveContent(current);
+      if (content.isEmpty) {
+        continue;
+      }
+      final time = _resolveTime(current);
+
+      windowContentCount[content] = (windowContentCount[content] ?? 0) + 1;
+
+      while (left <= right &&
+          time - _resolveTime(sorted[left]) > _mergeWindowSeconds) {
+        final leftContent = _resolveContent(sorted[left]);
+        if (leftContent.isNotEmpty) {
+          windowContentCount[leftContent] =
+              (windowContentCount[leftContent] ?? 1) - 1;
+          if (windowContentCount[leftContent] == 0) {
+            windowContentCount.remove(leftContent);
+          }
+        }
+        left++;
+      }
+
+      final count = windowContentCount[content] ?? 1;
+      final key = '$content-$time';
+
+      if (count > 1) {
+        firstTime[content] ??= time;
+        processed[key] = {
+          ...current,
+          'merged': true,
+          'mergeCount': count,
+          'isFirstInGroup': time == firstTime[content],
+          'groupContent': content,
+        };
+      } else {
+        processed[key] = current;
+      }
+    }
+
+    final List<Map<String, dynamic>> output = [];
+    for (final item in sorted) {
+      final content = _resolveContent(item);
+      if (content.isEmpty) continue;
+      final time = _resolveTime(item);
+      final key = '$content-$time';
+      final processedItem = processed[key] ?? item;
+      if (processedItem['merged'] == true &&
+          processedItem['isFirstInGroup'] == false) {
+        continue;
+      }
+      output.add(processedItem);
+    }
+
+    return output;
+  }
+
   DanmakuItemType _parseType(dynamic raw) {
     if (raw is DanmakuItemType) return raw;
     if (raw is num) {
@@ -423,6 +522,21 @@ class NipaPlayNextEngine {
     }
 
     return Colors.white;
+  }
+
+  double _resolveTime(Map<String, dynamic> raw) {
+    final value = raw['time'] ?? raw['t'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0.0;
+  }
+
+  String _resolveContent(Map<String, dynamic> raw) {
+    return (raw['content'] ?? raw['c'])?.toString() ?? '';
+  }
+
+  double _calcMergedFontSizeMultiplier(int mergeCount) {
+    double multiplier = 1.0 + (mergeCount / 10.0);
+    return multiplier.clamp(1.0, 2.0);
   }
 
   double _measureTextWidth(String text, double fontSize) {

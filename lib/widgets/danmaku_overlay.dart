@@ -130,8 +130,10 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             displayArea: videoState.danmakuDisplayArea,
             timeOffset: combinedTimeOffset,
             scrollDurationSeconds: scrollDuration,
-            allowStacking: videoState.danmakuStacking,
-          );
+            allowStacking: false,
+            mergeDanmaku:
+                widget.isVisible && videoState.mergeDanmaku,
+            );
         }
 
         // Fallback to CPU rendering

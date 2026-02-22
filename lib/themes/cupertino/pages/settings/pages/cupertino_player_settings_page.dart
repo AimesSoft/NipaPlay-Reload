@@ -288,7 +288,7 @@ class _CupertinoPlayerSettingsPageState
       case DanmakuRenderEngine.canvas:
         return 'Canvas 弹幕（实验性）：高性能，低功耗。';
       case DanmakuRenderEngine.nipaplayNext:
-        return 'NipaPlay Next（实验性）：时间轴驱动的弹幕逻辑内核。';
+        return 'NipaPlay Next：CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
     }
   }
 
@@ -353,7 +353,7 @@ class _CupertinoPlayerSettingsPageState
       case DanmakuRenderEngine.canvas:
         return 'Canvas 弹幕 (实验性)';
       case DanmakuRenderEngine.nipaplayNext:
-        return 'NipaPlay Next (实验性)';
+        return 'NipaPlay Next';
     }
   }
 
