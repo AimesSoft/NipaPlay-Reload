@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
@@ -14,6 +15,9 @@ class NipaPlayNextEngine {
   double _staticDurationSeconds = 10.0;
   bool _allowStacking = false;
   bool _mergeDanmaku = false;
+  String? _fontFamily;
+  List<String>? _fontFamilyFallback;
+  Locale? _locale;
   int _sourceListIdentity = 0;
 
   final Map<String, double> _textWidthCache = {};
@@ -32,6 +36,9 @@ class NipaPlayNextEngine {
     required double scrollDurationSeconds,
     required bool allowStacking,
     required bool mergeDanmaku,
+    String? fontFamily,
+    List<String>? fontFamilyFallback,
+    Locale? locale,
   }) {
     final listIdentity = identityHashCode(danmakuList);
     final mergeChanged = mergeDanmaku != _mergeDanmaku;
@@ -63,6 +70,20 @@ class NipaPlayNextEngine {
       _scrollDurationSeconds = normalizedScrollDuration;
       _staticDurationSeconds = normalizedStaticDuration;
       _allowStacking = allowStacking;
+      _layoutDirty = true;
+    }
+
+    final fontFamilyChanged = fontFamily != _fontFamily;
+    final fallbackChanged =
+        !listEquals(fontFamilyFallback, _fontFamilyFallback);
+    final localeChanged = locale != _locale;
+    if (fontFamilyChanged || fallbackChanged || localeChanged) {
+      _fontFamily = fontFamily;
+      _fontFamilyFallback = fontFamilyFallback == null
+          ? null
+          : List<String>.from(fontFamilyFallback);
+      _locale = locale;
+      _textWidthCache.clear();
       _layoutDirty = true;
     }
 
@@ -547,13 +568,15 @@ class NipaPlayNextEngine {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        locale: const Locale('zh-Hans', 'zh'),
         style: TextStyle(
           fontSize: fontSize,
+          fontFamily: _fontFamily,
+          fontFamilyFallback: _fontFamilyFallback,
         ),
       ),
       maxLines: 1,
       textDirection: TextDirection.ltr,
+      locale: _locale,
     )..layout(minWidth: 0, maxWidth: double.infinity);
 
     final width = tp.size.width;
@@ -568,13 +591,15 @@ class NipaPlayNextEngine {
     final tp = TextPainter(
       text: TextSpan(
         text: '弹幕',
-        locale: const Locale('zh-Hans', 'zh'),
         style: TextStyle(
           fontSize: fontSize,
+          fontFamily: _fontFamily,
+          fontFamilyFallback: _fontFamilyFallback,
         ),
       ),
       maxLines: 1,
       textDirection: TextDirection.ltr,
+      locale: _locale,
     )..layout(minWidth: 0, maxWidth: double.infinity);
 
     final height = tp.size.height;
