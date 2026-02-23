@@ -241,14 +241,14 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
 
   TextStyle _pageTextStyle(BuildContext context) {
     final textStyle = DefaultTextStyle.of(context).style;
-    final themeFont = Theme.of(context).fontFamily;
+    final themeFont = _resolveThemeFontFamily(context);
     final fontFamily = textStyle.fontFamily ?? themeFont;
     return TextStyle(fontFamily: fontFamily);
   }
 
   TextStyle _monospaceStyle(BuildContext context, Color color) {
     final textStyle = DefaultTextStyle.of(context).style;
-    final themeFont = Theme.of(context).fontFamily;
+    final themeFont = _resolveThemeFontFamily(context);
     final fallback = <String>[];
     final baseFont = textStyle.fontFamily;
     if (baseFont != null) {
@@ -262,6 +262,13 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       fontFamilyFallback: fallback.isEmpty ? null : fallback,
       color: color,
     );
+  }
+
+  String? _resolveThemeFontFamily(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return textTheme.bodyMedium?.fontFamily ??
+        textTheme.bodyLarge?.fontFamily ??
+        textTheme.bodySmall?.fontFamily;
   }
 
   @override
