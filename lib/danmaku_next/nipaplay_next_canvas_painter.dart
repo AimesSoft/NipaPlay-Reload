@@ -7,10 +7,16 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
   NipaPlayNextCanvasPainter({
     required this.items,
     required this.fontSize,
+    required this.fontFamily,
+    required this.fontFamilyFallback,
+    required this.locale,
   });
 
   final List<PositionedDanmakuItem> items;
   final double fontSize;
+  final String? fontFamily;
+  final List<String>? fontFamilyFallback;
+  final Locale? locale;
 
   static const int _cacheLimit = 2000;
   static final Map<_TextCacheKey, TextPainter> _fillCache = {};
@@ -63,12 +69,16 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     required Color color,
     required bool isStroke,
   }) {
+    final fallbackKey = fontFamilyFallback?.join('\u0000');
     final key = _TextCacheKey(
       text: content.text,
       countText: content.countText,
       fontSize: fontSize,
       color: color.value,
       isStroke: isStroke,
+      fontFamily: fontFamily,
+      fontFamilyFallbackKey: fallbackKey,
+      locale: locale,
     );
 
     final cache = isStroke ? _strokeCache : _fillCache;
@@ -85,6 +95,8 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       fontWeight: FontWeight.normal,
       color: isStroke ? null : color,
       foreground: isStroke ? strokePaint : null,
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
     );
 
     final span = _buildSpan(content, baseStyle, isStroke);
@@ -93,7 +105,7 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       text: span,
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.left,
-      locale: const Locale('zh-Hans', 'zh'),
+      locale: locale,
     )..layout(minWidth: 0, maxWidth: double.infinity);
 
     if (cache.length > _cacheLimit) {
@@ -138,8 +150,22 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant NipaPlayNextCanvasPainter oldDelegate) {
-    return oldDelegate.items != items || oldDelegate.fontSize != fontSize;
+    return oldDelegate.items != items ||
+        oldDelegate.fontSize != fontSize ||
+        oldDelegate.fontFamily != fontFamily ||
+        oldDelegate.locale != locale ||
+        !_listEquals(oldDelegate.fontFamilyFallback, fontFamilyFallback);
   }
+}
+
+bool _listEquals(List<String>? a, List<String>? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return a == b;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 class _TextCacheKey {
@@ -149,6 +175,9 @@ class _TextCacheKey {
     required this.fontSize,
     required this.color,
     required this.isStroke,
+    required this.fontFamily,
+    required this.fontFamilyFallbackKey,
+    required this.locale,
   });
 
   final String text;
@@ -156,6 +185,9 @@ class _TextCacheKey {
   final double fontSize;
   final int color;
   final bool isStroke;
+  final String? fontFamily;
+  final String? fontFamilyFallbackKey;
+  final Locale? locale;
 
   @override
   bool operator ==(Object other) {
@@ -164,10 +196,22 @@ class _TextCacheKey {
         other.countText == countText &&
         other.fontSize == fontSize &&
         other.color == color &&
-        other.isStroke == isStroke;
+        other.isStroke == isStroke &&
+        other.fontFamily == fontFamily &&
+        other.fontFamilyFallbackKey == fontFamilyFallbackKey &&
+        other.locale == locale;
   }
 
   @override
   int get hashCode =>
-      Object.hash(text, countText, fontSize, color, isStroke);
+      Object.hash(
+        text,
+        countText,
+        fontSize,
+        color,
+        isStroke,
+        fontFamily,
+        fontFamilyFallbackKey,
+        locale,
+      );
 }

@@ -4,6 +4,12 @@ import 'package:nipaplay/danmaku_next/nipaplay_next_canvas_painter.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_engine.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
 
+const Locale _danmakuLocale = Locale.fromSubtags(
+  languageCode: 'zh',
+  scriptCode: 'Hans',
+  countryCode: 'CN',
+);
+
 class NipaPlayNextOverlay extends StatefulWidget {
   final List<Map<String, dynamic>> danmakuList;
   final double currentTimeSeconds;
@@ -92,6 +98,11 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final textStyle = DefaultTextStyle.of(context).style;
+        final theme = Theme.of(context);
+        final fontFamily = textStyle.fontFamily ?? theme.fontFamily;
+        final fontFamilyFallback = textStyle.fontFamilyFallback;
+
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) {
           return const SizedBox.expand();
@@ -105,6 +116,9 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
           scrollDurationSeconds: widget.scrollDurationSeconds,
           allowStacking: widget.allowStacking,
           mergeDanmaku: widget.mergeDanmaku,
+          fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
+          locale: _danmakuLocale,
         );
 
         final effectiveTime = widget.currentTimeSeconds + widget.timeOffset;
@@ -131,6 +145,9 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
             painter: NipaPlayNextCanvasPainter(
               items: positioned,
               fontSize: widget.fontSize,
+              fontFamily: fontFamily,
+              fontFamilyFallback: fontFamilyFallback,
+              locale: _danmakuLocale,
             ),
             size: size,
           ),
