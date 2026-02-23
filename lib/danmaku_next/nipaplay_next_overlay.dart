@@ -100,7 +100,9 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
       builder: (context, constraints) {
         final textStyle = DefaultTextStyle.of(context).style;
         final theme = Theme.of(context);
-        final fontFamily = textStyle.fontFamily ?? theme.fontFamily;
+        final themeFontFamily = theme.textTheme.bodyMedium?.fontFamily ??
+            theme.textTheme.bodyLarge?.fontFamily;
+        final fontFamily = textStyle.fontFamily ?? themeFontFamily;
         final fontFamilyFallback = textStyle.fontFamilyFallback;
 
         final size = Size(constraints.maxWidth, constraints.maxHeight);
