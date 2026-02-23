@@ -623,6 +623,18 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 playerPosition == 0 &&
                 playerDuration == 0;
 
+            final bool isStreamingPath =
+                (_currentVideoPath?.startsWith('jellyfin://') ?? false) ||
+                    (_currentVideoPath?.startsWith('emby://') ?? false) ||
+                    (_currentVideoPath?.startsWith('http://') ?? false) ||
+                    (_currentVideoPath?.startsWith('https://') ?? false) ||
+                    (_currentActualPlayUrl?.startsWith('http://') ?? false) ||
+                    (_currentActualPlayUrl?.startsWith('https://') ?? false);
+            final bool isStreamingStartupGrace = isStreamingPath &&
+                _lastPlaybackStartMs > 0 &&
+                (nowTime - _lastPlaybackStartMs) <
+                    _streamingInvalidDataGraceMs;
+
             // 检查是否是Jellyfin流媒体正在初始化
             final bool isJellyfinInitializing = _currentVideoPath != null &&
                 (_currentVideoPath!.contains('jellyfin://') ||
@@ -639,6 +651,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 _currentVideoPath == null && _status == PlayerStatus.idle;
 
             if (isTemporaryInvalid ||
+                isStreamingStartupGrace ||
                 isJellyfinInitializing ||
                 isPlayerResetting ||
                 isInResetProcess ||

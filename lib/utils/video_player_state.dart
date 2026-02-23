@@ -254,6 +254,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _currentVideoPath;
   String? _currentActualPlayUrl; // 存储实际播放URL，用于判断转码状态
   PlaybackSession? _currentPlaybackSession;
+  int _lastPlaybackStartMs = 0; // 播放开始时间（用于流媒体缓冲期容错）
+  static const int _streamingInvalidDataGraceMs = 8000; // 流媒体无效时长容错期
   final Map<String, int?> _jellyfinServerSubtitleSelections = {};
   final Map<String, bool> _jellyfinServerSubtitleBurnInSelections = {};
   final Map<String, int?> _embyServerSubtitleSelections = {};

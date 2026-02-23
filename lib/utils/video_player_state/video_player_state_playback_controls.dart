@@ -401,6 +401,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _ensurePlayerVolumeMatchesPlatformPolicy();
     if (hasVideo &&
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
+      _lastPlaybackStartMs = DateTime.now().millisecondsSinceEpoch;
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
       player.playDirectly().then((_) {
         //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
@@ -468,6 +469,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _currentVideoPath = null;
     _currentActualPlayUrl = null; // 清除实际播放URL
     _currentPlaybackSession = null;
+    _lastPlaybackStartMs = 0;
     _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
     _currentVideoHash = null;
     _currentThumbnailPath = null;
@@ -518,6 +520,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _duration = Duration.zero;
     _bufferedPositionMs = 0;
     _playbackTimeMs.value = 0;
+    _lastPlaybackStartMs = 0;
     if (!_isErrorStopping) {
       // <<< MODIFIED HERE
       _error = null;

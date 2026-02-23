@@ -1057,23 +1057,6 @@ class EmbyService extends MediaServerServiceBase
     final enableTranscoding = transcodeEnabledCache &&
       effectiveQuality != JellyfinVideoQuality.original;
 
-    if (!enableTranscoding) {
-      final resolvedPlaySessionId = playSessionId?.isNotEmpty == true
-          ? playSessionId
-          : _generateLocalPlaySessionId(itemId);
-      final directUrl = _buildDirectPlayUrl(
-        itemId,
-        playSessionId: resolvedPlaySessionId,
-      );
-      return PlaybackSession(
-        itemId: itemId,
-        mediaSourceId: mediaSourceId,
-        playSessionId: resolvedPlaySessionId,
-        streamUrl: directUrl,
-        isTranscoding: false,
-      );
-    }
-
     final maxStreamingBitrate =
       enableTranscoding ? effectiveQuality.bitrate : null;
     final resolvedPlaySessionId = playSessionId;
