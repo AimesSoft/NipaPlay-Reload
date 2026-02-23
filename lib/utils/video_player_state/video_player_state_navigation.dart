@@ -633,7 +633,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             final bool isStreamingStartupGrace = isStreamingPath &&
                 _lastPlaybackStartMs > 0 &&
                 (nowTime - _lastPlaybackStartMs) <
-                    _streamingInvalidDataGraceMs;
+                    VideoPlayerState._streamingInvalidDataGraceMs;
 
             // 检查是否是Jellyfin流媒体正在初始化
             final bool isJellyfinInitializing = _currentVideoPath != null &&
