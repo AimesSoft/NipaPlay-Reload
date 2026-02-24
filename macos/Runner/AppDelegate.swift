@@ -15,7 +15,7 @@ class AppDelegate: FlutterAppDelegate {
   // 连接到xib中定义的导航菜单 - 使用不同名称避免与基类冲突
   @IBOutlet weak var playerMenu: NSMenu!
   
-  override func applicationDidFinishLaunching(_ notification: Notification) {
+  @objc override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
     print("[AppDelegate] 应用启动")
     
@@ -331,24 +331,24 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
   
-  override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+  @objc override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     // 需要支持“关闭窗口后仍驻留菜单栏(托盘)”的行为，因此不能在最后一个窗口关闭时退出进程。
     return false
   }
 
-  override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+  @objc override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
   }
   
   // 处理单个文件拖拽到Dock图标
-  override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+  @objc override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
     print("[AppDelegate] 收到文件拖拽: \(filename)")
     handleOpenFile(filename)
     return true
   }
   
   // 处理多个文件拖拽到Dock图标
-  override func application(_ sender: NSApplication, openFiles filenames: [String]) {
+  @objc override func application(_ sender: NSApplication, openFiles filenames: [String]) {
     print("[AppDelegate] 收到多个文件拖拽: \(filenames)")
     // 处理第一个支持的视频文件
     for filename in filenames {
