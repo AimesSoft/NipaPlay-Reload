@@ -648,26 +648,48 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        if (_selectedKernelType == PlayerKernelType.mdk) ...[
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
-        Consumer<VideoPlayerState>(
-          builder: (context, videoState, child) {
-            return SettingsItem.toggle(
-              title: '时间轴截图预览',
-              subtitle: '进度条悬停时显示缩略图（仅本地/WebDAV/SMB/共享媒体库生效）',
-              icon: Icons.photo_size_select_small_outlined,
-              value: videoState.timelinePreviewEnabled,
-              onChanged: (bool value) async {
-                await videoState.setTimelinePreviewEnabled(value);
-                if (!context.mounted) return;
-                BlurSnackBar.show(
-                  context,
-                  value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
-                );
-              },
-            );
-          },
-        ),
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
+                title: '时间轴截图预览',
+                subtitle: '进度条悬停时显示缩略图（仅本地/WebDAV/SMB/共享媒体库生效）',
+                icon: Icons.photo_size_select_small_outlined,
+                value: videoState.timelinePreviewEnabled,
+                onChanged: (bool value) async {
+                  if (value) {
+                    final bool? confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('开启警告'),
+                        content: const Text('开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('取消'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('确认'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm != true) return;
+                  }
+                  await videoState.setTimelinePreviewEnabled(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                  );
+                },
+              );
+            },
+          ),
+        ],
 
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 

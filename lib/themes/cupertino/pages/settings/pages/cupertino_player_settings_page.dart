@@ -808,41 +808,64 @@ class _CupertinoPlayerSettingsPageState
           );
         },
       ),
-      const SizedBox(height: 16),
-      Consumer<VideoPlayerState>(
-        builder: (context, videoState, child) {
-          return CupertinoSettingsGroupCard(
-            margin: EdgeInsets.zero,
-            backgroundColor: sectionBackground,
-            addDividers: true,
-            dividerIndent: 16,
-            children: [
-              CupertinoSettingsTile(
-                leading: Icon(
-                  CupertinoIcons.photo_on_rectangle,
-                  color: resolveSettingsIconColor(context),
-                ),
-                title: const Text('时间轴截图预览'),
-                subtitle:
-                    const Text('悬停进度条时显示缩略图（本地/WebDAV/SMB/共享媒体库生效）'),
-                trailing: AdaptiveSwitch(
-                  value: videoState.timelinePreviewEnabled,
-                  onChanged: (value) async {
-                    await videoState.setTimelinePreviewEnabled(value);
-                    if (!mounted) return;
-                    AdaptiveSnackBar.show(
-                      context,
-                      message: value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
-                      type: AdaptiveSnackBarType.success,
-                    );
-                  },
-                ),
-                backgroundColor: tileBackground,
+      if (_selectedKernelType == PlayerKernelType.mdk) ...[
+        const SizedBox(height: 16),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            return CupertinoSettingsGroupCard(
+              margin: EdgeInsets.zero,
+              backgroundColor: sectionBackground,
+              addDividers: true,
+              dividerIndent: 16,
+              children: [
+                CupertinoSettingsTile(
+                  leading: Icon(
+                    CupertinoIcons.photo_on_rectangle,
+                    color: resolveSettingsIconColor(context),
+                  ),
+                  title: const Text('时间轴截图预览'),
+                  subtitle:
+                      const Text('悬停进度条时显示缩略图（本地/WebDAV/SMB/共享媒体库生效）'),
+                  trailing: AdaptiveSwitch(
+                    value: videoState.timelinePreviewEnabled,
+                    onChanged: (value) async {
+                      if (value) {
+                        final bool? confirm = await showCupertinoDialog<bool>(
+                          context: context,
+                          builder: (context) => CupertinoAlertDialog(
+                            title: const Text('开启警告'),
+                            content: const Text('开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
+                            actions: [
+                              CupertinoDialogAction(
+                                onPressed: () => Navigator.of(context).pop(false),
+                                child: const Text('取消'),
+                              ),
+                              CupertinoDialogAction(
+                                isDestructiveAction: true,
+                                onPressed: () => Navigator.of(context).pop(true),
+                                child: const Text('确认'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm != true) return;
+                      }
+                      await videoState.setTimelinePreviewEnabled(value);
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                  ),
+                  backgroundColor: tileBackground,
                 ),
               ],
             );
-        },
-      ),
+          },
+        ),
+      ],
       const SizedBox(height: 16),
       Consumer<VideoPlayerState>(
         builder: (context, videoState, child) {
