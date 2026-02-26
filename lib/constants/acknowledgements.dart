@@ -6,4 +6,5 @@ const List<String> kAcknowledgementNames = [
   '大祥老师',
   '卡拜',
   'JMT',
+  '无之将',
 ];

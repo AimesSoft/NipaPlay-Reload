@@ -181,7 +181,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 ### 鸣谢
 感谢以下贡献者和支持者：
-EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT
+EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将
 
 ### 看板娘
 [Pixiv Artwork](https://www.pixiv.net/artworks/130349456) (作者 MCDFsteve)

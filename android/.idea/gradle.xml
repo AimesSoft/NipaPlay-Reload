@@ -24,11 +24,12 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
             <option value="$PROJECT_DIR$/../packages/adaptive_platform_ui/android" />
+            <option value="$PROJECT_DIR$/../packages/media_kit_video/android" />
             <option value="$PROJECT_DIR$/../packages/nipaplay_smb2/android" />
-            <option value="$USER_HOME$/.pub-cache/git/media-kit-0c697093a2f3525a63c4d49508f2421616dea5be/libs/android/media_kit_libs_android_video/android" />
-            <option value="$USER_HOME$/.pub-cache/git/media-kit-0c697093a2f3525a63c4d49508f2421616dea5be/media_kit_video/android" />
+            <option value="$USER_HOME$/.pub-cache/git/media-kit-68ca8e527eb89b7f52baa9c840d51f1d56f4dca3/libs/android/media_kit_libs_android_video/android" />
             <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/charset_converter-2.3.0/android" />
             <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/desktop_drop-0.6.1/android" />
+            <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/dynamic_color-1.8.1/android" />
             <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/file_picker-8.3.2/android" />
             <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/file_selector_android-0.5.1+6/android" />
             <option value="$USER_HOME$/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.22/android" />
