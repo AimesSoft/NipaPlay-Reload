@@ -563,9 +563,14 @@ class SubtitleManager extends ChangeNotifier {
           final candidates = await RemoteSubtitleService.instance
               .listCandidatesForVideo(videoPath);
           if (candidates.isNotEmpty) {
+            final resolvedMatchPath = RemoteSubtitleService.instance
+                .resolveVideoPathForMatching(videoPath);
+            final matchPath = resolvedMatchPath.isNotEmpty
+                ? resolvedMatchPath
+                : videoPath;
             final selected = _pickRemoteSubtitleCandidate(
               candidates,
-              videoPath,
+              matchPath,
             );
             final cachedPath = await RemoteSubtitleService.instance
                 .ensureSubtitleCached(selected);

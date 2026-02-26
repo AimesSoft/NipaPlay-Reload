@@ -100,27 +100,56 @@ class RemoteSubtitleService {
 
   bool isPotentialRemoteVideoPath(String videoPath) {
     if (videoPath.isEmpty) return false;
-    if (MediaSourceUtils.isSmbPath(videoPath)) return true;
-    final uri = Uri.tryParse(videoPath);
+    final resolvedPath = _resolveManagedStreamPath(videoPath);
+    if (resolvedPath.isEmpty) return false;
+    if (MediaSourceUtils.isSmbPath(resolvedPath)) return true;
+    final uri = Uri.tryParse(resolvedPath);
     if (uri == null) return false;
-    return uri.scheme == 'http' || uri.scheme == 'https';
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'smb') return true;
+    if (scheme == 'webdav' ||
+        scheme == 'dav' ||
+        scheme == 'webdavs' ||
+        scheme == 'davs') {
+      return true;
+    }
+    return scheme == 'http' || scheme == 'https';
+  }
+
+  String resolveVideoPathForMatching(String videoPath) {
+    return _resolveManagedStreamPath(videoPath);
   }
 
   Future<List<RemoteSubtitleCandidate>> listCandidatesForVideo(
       String videoPath) async {
     if (kIsWeb || videoPath.isEmpty) return const [];
 
-    if (DandanplayRemoteService.instance.isDandanplayStreamUrl(videoPath)) {
-      return _listDandanplayCandidates(videoPath);
+    final resolvedPath = _resolveManagedStreamPath(videoPath);
+
+    if (DandanplayRemoteService.instance.isDandanplayStreamUrl(resolvedPath)) {
+      return _listDandanplayCandidates(resolvedPath);
     }
 
-    if (MediaSourceUtils.isSmbPath(videoPath)) {
-      return _listSmbCandidates(videoPath);
+    if (MediaSourceUtils.isSmbPath(resolvedPath)) {
+      final uri = Uri.tryParse(resolvedPath);
+      if (uri != null && uri.scheme.toLowerCase() == 'smb') {
+        return _listSmbCandidatesFromUri(uri);
+      }
+      return _listSmbCandidates(resolvedPath);
     }
 
-    final uri = Uri.tryParse(videoPath);
-    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      return _listWebDavCandidates(videoPath);
+    final uri = Uri.tryParse(resolvedPath);
+    if (uri != null) {
+      final scheme = uri.scheme.toLowerCase();
+      if (scheme == 'webdav' ||
+          scheme == 'dav' ||
+          scheme == 'webdavs' ||
+          scheme == 'davs') {
+        return _listWebDavCandidates(_normalizeWebDavUri(uri));
+      }
+      if (scheme == 'http' || scheme == 'https') {
+        return _listWebDavCandidates(resolvedPath);
+      }
     }
 
     return const [];
@@ -259,6 +288,39 @@ class RemoteSubtitleService {
     return candidates;
   }
 
+  Future<List<RemoteSubtitleCandidate>> _listSmbCandidatesFromUri(
+      Uri smbUri) async {
+    await SMBService.instance.initialize();
+
+    final connection = _resolveSmbConnectionFromUri(smbUri);
+    if (connection == null) return const [];
+
+    final smbPath = _normalizeSmbPathFromUri(smbUri);
+    if (smbPath.isEmpty || smbPath == '/') return const [];
+
+    final directory = _posixDirname(smbPath);
+    final entries =
+        await SMBService.instance.listDirectoryAll(connection, directory);
+
+    final candidates = <RemoteSubtitleCandidate>[];
+    for (final entry in entries) {
+      if (entry.isDirectory) continue;
+      final ext = p.extension(entry.name).toLowerCase();
+      if (!_subtitleExtensions.contains(ext)) continue;
+      candidates.add(
+        SmbRemoteSubtitleCandidate(
+          connection: connection,
+          smbPath: entry.path,
+          name: entry.name,
+          extension: ext,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) => a.name.compareTo(b.name));
+    return candidates;
+  }
+
   WebDAVResolvedFile? _tryResolveWebDavFromUrl(String videoUrl) {
     final uri = Uri.tryParse(videoUrl);
     if (uri == null) return null;
@@ -338,6 +400,88 @@ class RemoteSubtitleService {
     if (uri.scheme == 'https') return 443;
     if (uri.scheme == 'http') return 80;
     return 0;
+  }
+
+  String _normalizeWebDavUri(Uri uri) {
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'webdavs' || scheme == 'davs') {
+      return uri.replace(scheme: 'https').toString();
+    }
+    if (scheme == 'webdav' || scheme == 'dav') {
+      final resolvedScheme =
+          uri.hasPort && uri.port == 443 ? 'https' : 'http';
+      return uri.replace(scheme: resolvedScheme).toString();
+    }
+    return uri.toString();
+  }
+
+  String _resolveManagedStreamPath(String videoPath) {
+    final uri = Uri.tryParse(videoPath);
+    if (uri == null) return videoPath;
+    final lowerPath = uri.path.toLowerCase();
+    if (lowerPath.contains('/api/media/local/manage/stream') ||
+        lowerPath.contains('/api/media/local/share/stream')) {
+      final pathParam = uri.queryParameters['path'];
+      if (pathParam != null && pathParam.trim().isNotEmpty) {
+        return pathParam.trim();
+      }
+    }
+    return videoPath;
+  }
+
+  SMBConnection? _resolveSmbConnectionFromUri(Uri smbUri) {
+    final host = smbUri.host.trim();
+    if (host.isEmpty) return null;
+    final port = smbUri.hasPort ? smbUri.port : 445;
+
+    String username = '';
+    String password = '';
+    if (smbUri.userInfo.isNotEmpty) {
+      final parts = smbUri.userInfo.split(':');
+      username = Uri.decodeComponent(parts.first);
+      if (parts.length > 1) {
+        password = Uri.decodeComponent(parts.sublist(1).join(':'));
+      }
+    }
+
+    SMBConnection? matched;
+    for (final conn in SMBService.instance.connections) {
+      if (conn.host.trim().toLowerCase() != host.toLowerCase()) {
+        continue;
+      }
+      if (conn.port != port) continue;
+      if (username.isNotEmpty && conn.username != username) continue;
+      matched = conn;
+      break;
+    }
+
+    if (matched != null) {
+      if (username.isNotEmpty &&
+          (matched.username != username || matched.password != password)) {
+        return matched.copyWith(username: username, password: password);
+      }
+      return matched;
+    }
+
+    final displayHost = port == 445 ? host : '$host:$port';
+    return SMBConnection(
+      name: 'auto@$displayHost',
+      host: host,
+      port: port,
+      username: username,
+      password: password,
+      domain: '',
+      isConnected: true,
+    );
+  }
+
+  String _normalizeSmbPathFromUri(Uri smbUri) {
+    var path = smbUri.path.trim();
+    if (path.isEmpty) return '/';
+    if (!path.startsWith('/')) {
+      path = '/$path';
+    }
+    return path.replaceAll(RegExp(r'/+'), '/');
   }
 
   Future<List<RemoteSubtitleCandidate>> _listSmbCandidates(String videoUrl) async {
