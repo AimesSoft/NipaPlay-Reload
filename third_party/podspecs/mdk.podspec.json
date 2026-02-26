@@ -17,7 +17,8 @@
     "visionos": "1.0"
   },
   "source": {
-    "http": "https://github.com/wang-bin/mdk-sdk/releases/download/v0.33.1/mdk-sdk-apple.tar.xz"
+    "http": "https://github.com/wang-bin/mdk-sdk/releases/download/v0.33.1/mdk-sdk-apple.tar.xz",
+    "sha256": "95863b34ef69abf2a315b5ac7feba6eb39b09e8a6f57c9bf4ef1ac8995d631e8"
   },
   "vendored_frameworks": "mdk-sdk/lib/mdk.xcframework",
   "pod_target_xcconfig": {
@@ -35,4 +36,3 @@
     }
   }
 }
-

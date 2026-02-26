@@ -50,12 +50,10 @@ runs:
         export LC_ALL=zh_CN.UTF-8
         mkdir -p ~/.cocoapods
         echo 'source "https://cdn.cocoapods.org/"' > ~/.cocoapods/config
-        echo "Cleaning existing Pods and cache for a fresh mdk nightly..."
-        rm -rf Pods Podfile.lock
-        pod cache clean fvp || true # Clean fvp pod's cache, which handles mdk
-        pod cache clean --all
-        echo "Running pod install --repo-update (this will run fvp/apple_deps.sh to get mdk nightly)..."
-        pod install --repo-update
+        echo "Cleaning existing Pods (keep Podfile.lock for reproducible builds)..."
+        rm -rf Pods
+        echo "Running pod install --deployment (lockfile enforced)..."
+        pod install --deployment
         cd ..
 
     - name: Setup Code Signing

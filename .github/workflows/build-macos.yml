@@ -72,10 +72,9 @@ jobs:
           apple-id: ${{ secrets.APPLE_ID }}
           apple-app-password: ${{ secrets.APPLE_APP_PASSWORD }}
       
-      - name: Clean CocoaPods cache and lock for mdk
+      - name: Clean CocoaPods Pods (optional)
         run: |
-          pod cache clean mdk
-          find . -name Podfile.lock -delete
+          pod cache clean mdk || true
           rm -rf macos/Pods ios/Pods
       
       - name: Clean flutter pub cache
