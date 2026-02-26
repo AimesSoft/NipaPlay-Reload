@@ -1095,6 +1095,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
   }
 
+  String _defaultSubtitleFontNameForPlatform() {
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      return 'Droid Sans Fallback';
+    }
+    return 'subfont';
+  }
+
   Future<void> _loadSubtitleSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _subtitleScale = _clampSubtitleScale(
@@ -1434,13 +1442,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       player.setProperty('sub-italic', _subtitleItalic ? 'yes' : 'no');
       if (_subtitleFontDir.isNotEmpty) {
         player.setProperty('sub-fonts-dir', _subtitleFontDir);
-      } else {
-        player.setProperty('sub-fonts-dir', '');
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          player.setProperty('sub-file-paths', _subtitleFontDir);
+        }
       }
-      if (_subtitleFontName.isNotEmpty) {
-        player.setProperty('sub-font', _subtitleFontName);
-      } else {
-        player.setProperty('sub-font', '');
+      final resolvedFontName = _subtitleFontName.isNotEmpty
+          ? _subtitleFontName
+          : _defaultSubtitleFontNameForPlatform();
+      if (resolvedFontName.isNotEmpty) {
+        player.setProperty('sub-font', resolvedFontName);
       }
       player.setProperty(
         'sub-ass-override',
