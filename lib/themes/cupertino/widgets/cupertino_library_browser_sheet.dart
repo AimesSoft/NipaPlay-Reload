@@ -20,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum CupertinoLibraryBrowserSource { local, webdav, smb }
 enum CupertinoLibraryBrowserLayout { grid, list }
+enum _BrowserSortOrder { nameAsc, nameDesc }
 
 class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
   const CupertinoLibraryFolderBrowserSheet._({
@@ -94,6 +95,7 @@ class _CupertinoLibraryFolderBrowserSheetState
   List<_BrowserEntry> _entries = [];
   String _searchQuery = '';
   CupertinoLibraryBrowserLayout _layout = CupertinoLibraryBrowserLayout.grid;
+  _BrowserSortOrder _sortOrder = _BrowserSortOrder.nameAsc;
   String? _restoredPath;
   final Map<String, List<_BrowserEntry>> _expandedEntries = {};
   final Set<String> _expandedDirectories = {};
@@ -191,7 +193,9 @@ class _CupertinoLibraryFolderBrowserSheetState
     entries.sort((a, b) {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      final compare =
+          a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return _sortOrder == _BrowserSortOrder.nameAsc ? compare : -compare;
     });
     return entries;
   }
@@ -880,6 +884,24 @@ class _CupertinoLibraryFolderBrowserSheetState
         : CupertinoIcons.square_grid_2x2;
   }
 
+  void _toggleSortOrder() {
+    setState(() {
+      _sortOrder = _sortOrder == _BrowserSortOrder.nameAsc
+          ? _BrowserSortOrder.nameDesc
+          : _BrowserSortOrder.nameAsc;
+      _entries = _sortEntries(List<_BrowserEntry>.from(_entries));
+      _expandedEntries.updateAll((_, value) {
+        return _sortEntries(List<_BrowserEntry>.from(value));
+      });
+    });
+  }
+
+  IconData _sortIcon() {
+    return _sortOrder == _BrowserSortOrder.nameAsc
+        ? CupertinoIcons.arrow_up
+        : CupertinoIcons.arrow_down;
+  }
+
   @override
   Widget build(BuildContext context) {
     final backgroundColor = CupertinoDynamicColor.resolve(
@@ -1143,6 +1165,13 @@ class _CupertinoLibraryFolderBrowserSheetState
                   minSize: 0,
                   onPressed: _toggleLayout,
                   child: Icon(_layoutIcon(), size: 20),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 0,
+                  onPressed: _toggleSortOrder,
+                  child: Icon(_sortIcon(), size: 20),
                 ),
                 const SizedBox(width: 8),
                 CupertinoButton(
