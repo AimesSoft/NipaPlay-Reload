@@ -1027,7 +1027,7 @@ class _CupertinoLibraryFolderBrowserSheetState
                   case _ListItemType.entry:
                     final entry = item.entry!;
                     final historyKey = _historyKeyForEntry(entry);
-                    return _FolderListTile(
+                    final tile = _FolderListTile(
                       entry: entry,
                       depth: item.depth,
                       isExpanded: entry.isDirectory &&
@@ -1044,22 +1044,39 @@ class _CupertinoLibraryFolderBrowserSheetState
                           ? null
                           : () => _showEntryActionSheet(entry),
                     );
+                    return _ListAppear(
+                      key: ValueKey('entry_${entry.path}_${item.depth}'),
+                      animate: item.depth > 0,
+                      child: tile,
+                    );
                   case _ListItemType.loading:
-                    return _FolderListStatusTile(
-                      depth: item.depth,
-                      text: '正在加载...',
-                      showSpinner: true,
+                    return _ListAppear(
+                      key: ValueKey('loading_${item.path}_${item.depth}'),
+                      animate: item.depth > 0,
+                      child: _FolderListStatusTile(
+                        depth: item.depth,
+                        text: '正在加载...',
+                        showSpinner: true,
+                      ),
                     );
                   case _ListItemType.empty:
-                    return _FolderListStatusTile(
-                      depth: item.depth,
-                      text: item.message ?? '空文件夹',
+                    return _ListAppear(
+                      key: ValueKey('empty_${item.path}_${item.depth}'),
+                      animate: item.depth > 0,
+                      child: _FolderListStatusTile(
+                        depth: item.depth,
+                        text: item.message ?? '空文件夹',
+                      ),
                     );
                   case _ListItemType.error:
-                    return _FolderListStatusTile(
-                      depth: item.depth,
-                      text: item.message ?? '读取失败',
-                      isError: true,
+                    return _ListAppear(
+                      key: ValueKey('error_${item.path}_${item.depth}'),
+                      animate: item.depth > 0,
+                      child: _FolderListStatusTile(
+                        depth: item.depth,
+                        text: item.message ?? '读取失败',
+                        isError: true,
+                      ),
                     );
                 }
               },
@@ -1152,12 +1169,34 @@ class _CupertinoLibraryFolderBrowserSheetState
             ),
           ),
           Expanded(
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              layoutBuilder: (currentChild, previousChildren) {
+                return currentChild ?? const SizedBox.shrink();
+              },
+              transitionBuilder: (child, animation) {
+                final position = Tween<Offset>(
+                  begin: const Offset(0, 0.05),
+                  end: Offset.zero,
+                ).chain(CurveTween(curve: Curves.easeOutCubic));
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: animation.drive(position),
+                    child: child,
+                  ),
+                );
+              },
+              child: CustomScrollView(
+                key: ValueKey('${_currentPath}_${_layout.name}'),
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                slivers: slivers,
               ),
-              slivers: slivers,
             ),
           ),
         ],
@@ -1482,6 +1521,34 @@ class _FolderListTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ListAppear extends StatelessWidget {
+  const _ListAppear({
+    super.key,
+    required this.child,
+    required this.animate,
+  });
+
+  final Widget child;
+  final bool animate;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: animate ? 12.0 : 0.0, end: 0.0),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutBack,
+      child: child,
+      builder: (context, value, child) {
+        final opacity = (1 - (value / 12.0)).clamp(0.0, 1.0);
+        return Transform.translate(
+          offset: Offset(0, value),
+          child: Opacity(opacity: opacity, child: child),
+        );
+      },
     );
   }
 }
