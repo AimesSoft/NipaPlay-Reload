@@ -26,7 +26,7 @@ class CupertinoAccountActionButton extends StatelessWidget {
     return AdaptiveButton.child(
       onPressed: isLoading ? null : onPressed,
       style: destructive ? AdaptiveButtonStyle.bordered : AdaptiveButtonStyle.filled,
-      color: destructive ? resolvedColor : null,
+      color: resolvedColor,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,

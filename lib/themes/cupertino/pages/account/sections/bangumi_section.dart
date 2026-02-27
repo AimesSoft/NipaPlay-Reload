@@ -145,7 +145,7 @@ class CupertinoBangumiSection extends StatelessWidget {
                   style: CupertinoTheme.of(context)
                       .textTheme
                       .textStyle
-                      .copyWith(color: CupertinoColors.activeBlue),
+                      .copyWith(color: CupertinoTheme.of(context).primaryColor),
                 ),
               ],
             ),
@@ -191,6 +191,7 @@ class CupertinoBangumiSection extends StatelessWidget {
                 child: AdaptiveButton(
                   onPressed: isLoading ? null : onSaveToken,
                   style: AdaptiveButtonStyle.filled,
+                  color: CupertinoTheme.of(context).primaryColor,
                   label: '保存令牌',
                 ),
               ),
@@ -199,6 +200,7 @@ class CupertinoBangumiSection extends StatelessWidget {
                 child: AdaptiveButton(
                   onPressed: isLoading ? null : onClearToken,
                   style: AdaptiveButtonStyle.bordered,
+                  color: CupertinoTheme.of(context).primaryColor,
                   label: '删除令牌',
                 ),
               ),
@@ -208,14 +210,22 @@ class CupertinoBangumiSection extends StatelessWidget {
           AdaptiveButton.child(
             onPressed: onOpenHelp,
             style: AdaptiveButtonStyle.plain,
+            color: CupertinoTheme.of(context).primaryColor,
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(CupertinoIcons.link, size: 16, color: CupertinoColors.activeBlue),
-                SizedBox(width: 6),
+              children: [
+                Icon(
+                  CupertinoIcons.link,
+                  size: 16,
+                  color: CupertinoTheme.of(context).primaryColor,
+                ),
+                const SizedBox(width: 6),
                 Text(
                   '如何获取 Bangumi 访问令牌',
-                  style: TextStyle(color: CupertinoColors.activeBlue, fontSize: 14),
+                  style: TextStyle(
+                    color: CupertinoTheme.of(context).primaryColor,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
@@ -243,24 +253,28 @@ class CupertinoBangumiSection extends StatelessWidget {
           AdaptiveButton(
             onPressed: isSyncing ? null : onSync,
             style: AdaptiveButtonStyle.filled,
+            color: CupertinoTheme.of(context).primaryColor,
             label: '增量同步',
           ),
           const SizedBox(height: 12),
           AdaptiveButton(
             onPressed: isSyncing ? null : onFullSync,
             style: AdaptiveButtonStyle.tinted,
+            color: CupertinoTheme.of(context).primaryColor,
             label: '全量同步',
           ),
           const SizedBox(height: 12),
           AdaptiveButton(
             onPressed: isSyncing ? null : onTestConnection,
             style: AdaptiveButtonStyle.bordered,
+            color: CupertinoTheme.of(context).primaryColor,
             label: '测试连接',
           ),
           const SizedBox(height: 12),
           AdaptiveButton(
             onPressed: isSyncing ? null : onClearCache,
             style: AdaptiveButtonStyle.gray,
+            color: CupertinoTheme.of(context).primaryColor,
             label: '清除同步缓存',
           ),
         ],

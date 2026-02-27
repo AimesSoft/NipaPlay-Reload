@@ -104,6 +104,7 @@ class _CupertinoAccountCredentialsPageState
               AdaptiveButton.child(
                 onPressed: _isSubmitting ? null : _handleSubmit,
                 style: AdaptiveButtonStyle.filled,
+                color: CupertinoTheme.of(context).primaryColor,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

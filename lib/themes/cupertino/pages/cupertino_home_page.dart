@@ -2075,8 +2075,11 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                         const SizedBox(height: 10),
                         Row(
                           children: [
-                            const Icon(CupertinoIcons.star_fill,
-                                color: Color(0xFFFFD166), size: 16),
+                            Icon(
+                              CupertinoIcons.star_fill,
+                              color: CupertinoTheme.of(context).primaryColor,
+                              size: 16,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               item.rating!.toStringAsFixed(1),
@@ -2103,6 +2106,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
     if (label.isEmpty) {
       return const SizedBox.shrink();
     }
+    final accentColor = CupertinoTheme.of(context).primaryColor;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -2110,14 +2114,14 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
         Icon(
           _sourceIcon(item.source),
           size: 16,
-          color: CupertinoColors.activeBlue,
+          color: accentColor,
         ),
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: CupertinoColors.activeBlue,
+            color: accentColor,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -2158,6 +2162,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   }
 
   Widget _buildPageIndicator(_CupertinoRecommendedItem _) {
+    final accentColor = CupertinoTheme.of(context).primaryColor;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(_recommendedItems.length, (index) {
@@ -2168,9 +2173,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
           width: isActive ? 16 : 6,
           height: 6,
           decoration: BoxDecoration(
-            color: isActive
-                ? CupertinoColors.activeBlue
-                : CupertinoColors.systemGrey3,
+            color: isActive ? accentColor : CupertinoColors.systemGrey3,
             borderRadius: BorderRadius.circular(3),
           ),
         );
@@ -2342,8 +2345,8 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
                       child: LinearProgressIndicator(
                         value: progress,
                         backgroundColor: CupertinoColors.systemGrey4,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          CupertinoColors.activeBlue,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          CupertinoTheme.of(context).primaryColor,
                         ),
                       ),
                     ),
@@ -2909,6 +2912,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
   Widget _buildProgressBar(double progress) {
     final resolvedTrack =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey4, context);
+    final accentColor = CupertinoTheme.of(context).primaryColor;
     return SizedBox(
       height: 6,
       child: Stack(
@@ -2923,7 +2927,7 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
             widthFactor: progress,
             child: Container(
               decoration: BoxDecoration(
-                color: CupertinoColors.activeBlue,
+                color: accentColor,
                 borderRadius: BorderRadius.circular(3),
               ),
             ),

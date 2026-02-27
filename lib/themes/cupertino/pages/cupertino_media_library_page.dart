@@ -462,7 +462,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       CupertinoButton(
                         onPressed: () => _openAddHostDialog(provider),
                         color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.activeBlue, context),
+                            CupertinoTheme.of(context).primaryColor, context),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 10),
                         borderRadius: BorderRadius.circular(14),
@@ -742,7 +742,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }) {
     final bool enabled = onPressed != null;
     final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -1643,7 +1643,7 @@ class _CupertinoLocalMediaLibraryCardState
   Widget _buildImportButton(BuildContext context) {
     final bool enabled = !_isImporting;
     final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final Color textColor = CupertinoColors.white;
 
     final child = Container(
@@ -1804,7 +1804,7 @@ class _CupertinoLocalMediaLibraryCardState
   }) {
     final bool enabled = onPressed != null;
     final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -2689,7 +2689,7 @@ class _CupertinoLibraryManagementSheetState
       context,
     );
     final progressColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2866,8 +2866,7 @@ class _CupertinoLibraryManagementSheetState
     bool primary = false,
   }) {
     final bool enabled = onPressed != null;
-    final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final Color primaryColor = CupertinoTheme.of(context).primaryColor;
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -3015,7 +3014,7 @@ class _CupertinoLibraryManagementSheetState
       context,
     );
     final accentColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.activeBlue,
+      CupertinoTheme.of(context).primaryColor,
       context,
     );
     final destructiveColor = CupertinoDynamicColor.resolve(
@@ -3237,7 +3236,7 @@ class _CupertinoLibraryManagementSheetState
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final accentColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
@@ -3305,7 +3304,7 @@ class _CupertinoLibraryManagementSheetState
                     CupertinoIcons.folder,
                     size: 18,
                     color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.activeBlue,
+                      CupertinoTheme.of(context).primaryColor,
                       context,
                     ),
                   ),
@@ -3358,7 +3357,7 @@ class _CupertinoLibraryManagementSheetState
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final accentColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final destructiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.destructiveRed, context);
     final indentation = 16.0 + depth * 14;
@@ -3842,7 +3841,7 @@ class _CupertinoLibraryManagementSheetState
     final urlColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final statusColor = connection.isConnected
-        ? CupertinoColors.activeGreen
+        ? CupertinoTheme.of(context).primaryColor
         : CupertinoColors.systemRed;
 
     return Container(
@@ -4046,7 +4045,7 @@ class _CupertinoLibraryManagementSheetState
                   size: 18,
                   color: file.isDirectory
                       ? CupertinoDynamicColor.resolve(
-                          CupertinoColors.activeBlue,
+                          CupertinoTheme.of(context).primaryColor,
                           context,
                         )
                       : CupertinoDynamicColor.resolve(
@@ -4797,7 +4796,7 @@ class _CupertinoLibraryManagementSheetState
       context,
     );
     final statusColor = connection.isConnected
-        ? CupertinoColors.activeGreen
+        ? CupertinoTheme.of(context).primaryColor
         : CupertinoColors.systemRed;
 
     return Container(
@@ -5007,7 +5006,7 @@ class _CupertinoLibraryManagementSheetState
                   size: 18,
                   color: file.isDirectory
                       ? CupertinoDynamicColor.resolve(
-                          CupertinoColors.activeBlue,
+                          CupertinoTheme.of(context).primaryColor,
                           context,
                         )
                       : CupertinoDynamicColor.resolve(
@@ -6488,7 +6487,7 @@ class _SharedRemoteLibraryManagementContentState
     bool primary = false,
   }) {
     final color = primary
-        ? CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context)
+        ? CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context)
         : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final textColor = primary ? CupertinoColors.white : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     return CupertinoButton(
@@ -6729,7 +6728,7 @@ class _SharedRemoteLibraryManagementContentState
                 Icon(
                   CupertinoIcons.cloud,
                   color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.activeBlue, context),
+                      CupertinoTheme.of(context).primaryColor, context),
                   size: 24,
                 ),
                 const SizedBox(width: 12),
