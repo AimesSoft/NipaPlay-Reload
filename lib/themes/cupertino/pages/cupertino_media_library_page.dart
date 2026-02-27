@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/foundation.dart';
@@ -55,7 +55,7 @@ import 'package:nipaplay/themes/cupertino/pages/network_media/cupertino_dandanpl
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_smb_connection_dialog.dart';
 
 // ignore_for_file: prefer_const_constructors
@@ -2923,7 +2923,6 @@ class _CupertinoLibraryManagementSheetState
     await CupertinoBottomSheet.show(
       context: context,
       title: '文件浏览',
-      floatingTitle: true,
       child: CupertinoLibraryFolderBrowserSheet.local(
         rootPath: folderPath,
         sourceLabel: displayName,
@@ -2939,7 +2938,6 @@ class _CupertinoLibraryManagementSheetState
     await CupertinoBottomSheet.show(
       context: context,
       title: '文件浏览',
-      floatingTitle: true,
       child: CupertinoLibraryFolderBrowserSheet.webdav(
         connection: connection,
       ),
@@ -2954,7 +2952,6 @@ class _CupertinoLibraryManagementSheetState
     await CupertinoBottomSheet.show(
       context: context,
       title: '文件浏览',
-      floatingTitle: true,
       child: CupertinoLibraryFolderBrowserSheet.smb(
         connection: connection,
       ),
@@ -4204,7 +4201,7 @@ class _CupertinoLibraryManagementSheetState
   Future<void> _showWebDAVConnectionDialog({
     WebDAVConnection? editConnection,
   }) async {
-    final result = await WebDAVConnectionDialog.show(
+    final result = await CupertinoWebDAVConnectionDialog.show(
       context,
       editConnection: editConnection,
     );
@@ -5670,14 +5667,6 @@ class _CupertinoLibraryManagementSheetState
     _showSnack('已同步本地媒体库');
   }
 
-  void _showSnack(String message) {
-    if (!mounted) return;
-    AdaptiveSnackBar.show(
-      context,
-      message: message,
-      type: AdaptiveSnackBarType.info,
-    );
-  }
 }
 
 /// 媒体库内容组件
@@ -6880,7 +6869,7 @@ class _SharedRemoteLibraryManagementContentState
   }
 
   Future<void> _handleAddWebDAV(SharedRemoteLibraryProvider provider) async {
-    await WebDAVConnectionDialog.show(
+    await CupertinoWebDAVConnectionDialog.show(
       context,
       onSave: (connection) async {
         await provider.addWebDAVConnection(connection);

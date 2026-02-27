@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'dart:io' as io;
 import 'package:image_picker/image_picker.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -152,6 +154,16 @@ class _VideoUploadUIState extends State<VideoUploadUI>
           return;
         }
 
+        final playableItem = PlayableItem(
+          videoPath: fileName,
+          actualPlayUrl: url,
+        );
+        if (await ExternalPlayerService.tryHandlePlayback(
+            context, playableItem)) {
+          videoState.resetPlayer();
+          return;
+        }
+
         Future.microtask(() async {
           await videoState.initializePlayer(
             fileName,
@@ -263,6 +275,13 @@ class _VideoUploadUIState extends State<VideoUploadUI>
               if (filePath != null) {
                 // 此处不需要再次设置加载状态，因为已经在选择文件前设置了
 
+                final playableItem = PlayableItem(videoPath: filePath);
+                if (await ExternalPlayerService.tryHandlePlayback(
+                    context, playableItem)) {
+                  videoState.resetPlayer();
+                  return;
+                }
+
                 // 然后在下一帧初始化播放器
                 Future.microtask(() async {
                   if (context.mounted) {
@@ -300,6 +319,13 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         if (filePath != null) {
           // 此处不需要再次设置加载状态，因为已经在选择文件前设置了
 
+          final playableItem = PlayableItem(videoPath: filePath);
+          if (await ExternalPlayerService.tryHandlePlayback(
+              context, playableItem)) {
+            videoState.resetPlayer();
+            return;
+          }
+
           // 然后在下一帧初始化播放器
           Future.microtask(() async {
             await videoState.initializePlayer(filePath);
@@ -331,6 +357,13 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         if (!['mp4', 'mkv'].contains(extension)) {
           BlurSnackBar.show(context, '请选择 MP4 或 MKV 格式的视频文件');
           videoState.resetPlayer(); // 如果选择了不支持的格式，清除加载状态
+          return;
+        }
+
+        final playableItem = PlayableItem(videoPath: picked.path);
+        if (await ExternalPlayerService.tryHandlePlayback(
+            context, playableItem)) {
+          videoState.resetPlayer();
           return;
         }
 

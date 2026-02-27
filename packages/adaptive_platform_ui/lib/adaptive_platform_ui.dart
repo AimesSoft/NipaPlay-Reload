@@ -29,6 +29,7 @@ library;
 
 // Platform utilities
 export 'src/platform/platform_info.dart';
+export 'src/platform/native_overlay.dart';
 
 // Styles
 export 'src/style/sf_symbol.dart';

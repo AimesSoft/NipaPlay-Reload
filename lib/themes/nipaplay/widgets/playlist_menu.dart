@@ -10,7 +10,9 @@ import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/utils/message_helper.dart';
 
 class PlaylistMenu extends StatefulWidget {
@@ -274,6 +276,23 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           // 创建带有弹幕信息的历史项
           final historyItem = await _createJellyfinHistoryItem(episodeInfo, animeId, episodeIdForDanmaku);
           
+          final playableItem = PlayableItem(
+            videoPath: filePath,
+            title: historyItem.animeName,
+            subtitle: historyItem.episodeTitle,
+            animeId: historyItem.animeId,
+            episodeId: historyItem.episodeId,
+            historyItem: historyItem,
+            playbackSession: playbackSession,
+          );
+          if (await ExternalPlayerService.tryHandlePlayback(
+              context, playableItem)) {
+            if (mounted) {
+              widget.onClose();
+            }
+            return;
+          }
+
           // 按照剧集导航的方式，使用Jellyfin协议URL作为标识符，HTTP URL作为实际播放源
           await videoState.initializePlayer(
             filePath, // 使用Jellyfin协议URL作为标识符
@@ -320,6 +339,23 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           // 创建带有弹幕信息的历史项
           final historyItem = await _createEmbyHistoryItem(episodeInfo, animeId, episodeIdForDanmaku);
           
+          final playableItem = PlayableItem(
+            videoPath: filePath,
+            title: historyItem.animeName,
+            subtitle: historyItem.episodeTitle,
+            animeId: historyItem.animeId,
+            episodeId: historyItem.episodeId,
+            historyItem: historyItem,
+            playbackSession: playbackSession,
+          );
+          if (await ExternalPlayerService.tryHandlePlayback(
+              context, playableItem)) {
+            if (mounted) {
+              widget.onClose();
+            }
+            return;
+          }
+
           // 按照剧集导航的方式，使用Emby协议URL作为标识符，HTTP URL作为实际播放源
           await videoState.initializePlayer(
             filePath, // 使用Emby协议URL作为标识符
@@ -334,6 +370,15 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             throw Exception('文件不存在: $filePath');
           }
           
+          final playableItem = PlayableItem(videoPath: filePath);
+          if (await ExternalPlayerService.tryHandlePlayback(
+              context, playableItem)) {
+            if (mounted) {
+              widget.onClose();
+            }
+            return;
+          }
+
           await videoState.initializePlayer(filePath);
           debugPrint('[播放列表] 文件路径播放完成');
         }

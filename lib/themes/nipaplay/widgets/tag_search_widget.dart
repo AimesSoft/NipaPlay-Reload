@@ -5,7 +5,9 @@ import 'package:glassmorphism/glassmorphism.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/models/search_model.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
@@ -431,19 +433,19 @@ class _TagSearchModalState extends State<TagSearchModal> {
       }
       
       // 打开新的番剧详情页面，并处理返回的播放历史记录
-      ThemedAnimeDetail.show(context, animeId).then((historyItem) {
+      ThemedAnimeDetail.show(context, animeId).then((historyItem) async {
         // 检查widget是否仍然挂载，避免在widget销毁后访问context
         if (!mounted) return;
         
         if (historyItem != null) {
-          _handlePlayEpisode(historyItem);
+          await _handlePlayEpisode(historyItem);
         }
       });
     });
   }
 
   // 新增：处理播放剧集的方法，与其他页面保持一致
-  void _handlePlayEpisode(WatchHistoryItem historyItem) {
+  Future<void> _handlePlayEpisode(WatchHistoryItem historyItem) async {
     if (!mounted) return;
 
     debugPrint('[TagSearchWidget] _handlePlayEpisode: 开始处理播放请求');
@@ -457,6 +459,19 @@ class _TagSearchModalState extends State<TagSearchModal> {
         BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
         return;
       }
+    }
+
+    final playableItem = PlayableItem(
+      videoPath: historyItem.filePath,
+      title: historyItem.animeName,
+      subtitle: historyItem.episodeTitle,
+      animeId: historyItem.animeId,
+      episodeId: historyItem.episodeId,
+      historyItem: historyItem,
+    );
+
+    if (await ExternalPlayerService.tryHandlePlayback(context, playableItem)) {
+      return;
     }
 
     bool tabChangeLogicExecuted = false;

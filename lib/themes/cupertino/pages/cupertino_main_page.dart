@@ -1,4 +1,4 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:provider/provider.dart';
 
@@ -67,6 +67,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
 
     return Consumer<BottomBarProvider>(
       builder: (context, bottomBarProvider, _) {
+        final bool showBottomBar = bottomBarProvider.isBottomBarVisible;
         return AdaptiveScaffold(
           minimizeBehavior: TabBarMinimizeBehavior.never,
           enableBlur: true,
@@ -83,60 +84,62 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
               ),
             ),
           ),
-          bottomNavigationBar: AdaptiveBottomNavigationBar(
-            useNativeBottomBar: bottomBarProvider.useNativeBottomBar,
-            selectedItemColor: activeColor,
-            unselectedItemColor: inactiveColor,
-            cupertinoTabBar: CupertinoTabBar(
-              currentIndex: _selectedIndex,
-              onTap: _selectTab,
-              activeColor: activeColor,
-              inactiveColor: inactiveColor,
-              height: tabBarHeight,
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(CupertinoIcons.house),
-                  activeIcon: Icon(CupertinoIcons.house_fill),
-                  label: '主页',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(CupertinoIcons.play_rectangle),
-                  activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
-                  label: '媒体库',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(CupertinoIcons.person_crop_circle),
-                  activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
-                  label: '账户',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(CupertinoIcons.gear_alt),
-                  activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-                  label: '设置',
-                ),
-              ],
-            ),
-            items: const [
-              AdaptiveNavigationDestination(
-                icon: 'house.fill',
-                label: '主页',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'play.rectangle.fill',
-                label: '媒体库',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'person.crop.circle.fill',
-                label: '账户',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'gearshape.fill',
-                label: '设置',
-              ),
-            ],
-            selectedIndex: _selectedIndex,
-            onTap: _selectTab,
-          ),
+          bottomNavigationBar: showBottomBar
+              ? AdaptiveBottomNavigationBar(
+                  useNativeBottomBar: bottomBarProvider.useNativeBottomBar,
+                  selectedItemColor: activeColor,
+                  unselectedItemColor: inactiveColor,
+                  cupertinoTabBar: CupertinoTabBar(
+                    currentIndex: _selectedIndex,
+                    onTap: _selectTab,
+                    activeColor: activeColor,
+                    inactiveColor: inactiveColor,
+                    height: tabBarHeight,
+                    items: const [
+                      BottomNavigationBarItem(
+                        icon: Icon(CupertinoIcons.house),
+                        activeIcon: Icon(CupertinoIcons.house_fill),
+                        label: '主页',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(CupertinoIcons.play_rectangle),
+                        activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
+                        label: '媒体库',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(CupertinoIcons.person_crop_circle),
+                        activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
+                        label: '账户',
+                      ),
+                      BottomNavigationBarItem(
+                        icon: Icon(CupertinoIcons.gear_alt),
+                        activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                        label: '设置',
+                      ),
+                    ],
+                  ),
+                  items: const [
+                    AdaptiveNavigationDestination(
+                      icon: 'house.fill',
+                      label: '主页',
+                    ),
+                    AdaptiveNavigationDestination(
+                      icon: 'play.rectangle.fill',
+                      label: '媒体库',
+                    ),
+                    AdaptiveNavigationDestination(
+                      icon: 'person.crop.circle.fill',
+                      label: '账户',
+                    ),
+                    AdaptiveNavigationDestination(
+                      icon: 'gearshape.fill',
+                      label: '设置',
+                    ),
+                  ],
+                  selectedIndex: _selectedIndex,
+                  onTap: _selectTab,
+                )
+              : null,
         );
       },
     );

@@ -1,4 +1,4 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
@@ -8,6 +8,7 @@ import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:provider/provider.dart';
@@ -240,7 +241,7 @@ class _CupertinoStorageSettingsPageState
                               showChevron: true,
                               onTap: () async {
                                 final result =
-                                    await showCupertinoModalPopup<ScreenshotSaveTarget>(
+                                    await showCupertinoModalPopupWithBottomBar<ScreenshotSaveTarget>(
                                   context: context,
                                   builder: (ctx) => CupertinoActionSheet(
                                     title: const Text('截图默认保存位置'),

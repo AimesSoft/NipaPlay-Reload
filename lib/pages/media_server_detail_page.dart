@@ -3,8 +3,10 @@ import 'package:nipaplay/models/jellyfin_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -22,6 +24,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/providers/settings_provider.dart';
 
 class MediaServerDetailPage extends StatefulWidget {
   final String mediaId;
@@ -1218,6 +1221,70 @@ style: TextStyle(color: secondaryTextColor)));
                     debugPrint('  episodeId: ${historyItem.episodeId}');
                   }
                   
+                  // 创建一个专门用于流媒体播放的历史记录项，使用稳定的jellyfin://或emby://协议
+                  final playableHistoryItem = WatchHistoryItem(
+                    filePath:
+                        historyItem.filePath, // 保持稳定的jellyfin://或emby://协议URL
+                    animeName: historyItem.animeName,
+                    episodeTitle: historyItem.episodeTitle,
+                    episodeId: historyItem.episodeId,
+                    animeId: historyItem.animeId,
+                    watchProgress: historyItem.watchProgress,
+                    lastPosition: historyItem.lastPosition,
+                    duration: historyItem.duration,
+                    lastWatchTime: historyItem.lastWatchTime,
+                    thumbnailPath: historyItem.thumbnailPath,
+                    isFromScan: false,
+                    videoHash: historyItem.videoHash, // 确保包含视频哈希值
+                  );
+
+                  final settingsProvider =
+                      Provider.of<SettingsProvider>(context, listen: false);
+                  if (settingsProvider.useExternalPlayer) {
+                    PlaybackSession? playbackSession;
+                    if (playableHistoryItem.filePath
+                        .startsWith('jellyfin://')) {
+                      final jellyfinId = playableHistoryItem.filePath
+                          .replaceFirst('jellyfin://', '');
+                      playbackSession =
+                          await JellyfinService.instance.createPlaybackSession(
+                        itemId: jellyfinId,
+                        startPositionMs: playableHistoryItem.lastPosition > 0
+                            ? playableHistoryItem.lastPosition
+                            : null,
+                      );
+                    } else if (playableHistoryItem.filePath
+                        .startsWith('emby://')) {
+                      final embyPath = playableHistoryItem.filePath
+                          .replaceFirst('emby://', '');
+                      final parts = embyPath.split('/');
+                      final embyId =
+                          parts.isNotEmpty ? parts.last : embyPath;
+                      playbackSession =
+                          await EmbyService.instance.createPlaybackSession(
+                        itemId: embyId,
+                        startPositionMs: playableHistoryItem.lastPosition > 0
+                            ? playableHistoryItem.lastPosition
+                            : null,
+                      );
+                    }
+
+                    final playableItem = PlayableItem(
+                      videoPath: playableHistoryItem.filePath,
+                      title: playableHistoryItem.animeName,
+                      subtitle: playableHistoryItem.episodeTitle,
+                      animeId: playableHistoryItem.animeId,
+                      episodeId: playableHistoryItem.episodeId,
+                      historyItem: playableHistoryItem,
+                      playbackSession: playbackSession,
+                    );
+                    if (await ExternalPlayerService.tryHandlePlayback(
+                        context, playableItem)) {
+                      Navigator.of(context).pop();
+                      return;
+                    }
+                  }
+                  
                   // 获取必要的服务引用
                   final videoPlayerState =
                       Provider.of<VideoPlayerState>(context, listen: false);
@@ -1248,23 +1315,6 @@ style: TextStyle(color: secondaryTextColor)));
                     BlurSnackBar.show(
                         context, '开始播放: ${historyItem.episodeTitle}');
                   }
-                  
-                  // 创建一个专门用于流媒体播放的历史记录项，使用稳定的jellyfin://或emby://协议
-                  final playableHistoryItem = WatchHistoryItem(
-                    filePath:
-                        historyItem.filePath, // 保持稳定的jellyfin://或emby://协议URL
-                    animeName: historyItem.animeName,
-                    episodeTitle: historyItem.episodeTitle,
-                    episodeId: historyItem.episodeId,
-                    animeId: historyItem.animeId,
-                    watchProgress: historyItem.watchProgress,
-                    lastPosition: historyItem.lastPosition,
-                    duration: historyItem.duration,
-                    lastWatchTime: historyItem.lastWatchTime,
-                    thumbnailPath: historyItem.thumbnailPath,
-                    isFromScan: false,
-                    videoHash: historyItem.videoHash, // 确保包含视频哈希值
-                  );
                   
                   // 4. 异步初始化播放器（页面已切换，用户能看到加载中）
                   debugPrint('开始异步初始化播放器...');

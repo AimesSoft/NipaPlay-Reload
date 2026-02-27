@@ -1,10 +1,11 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 
 class CupertinoNetworkSettingsPage extends StatefulWidget {
   const CupertinoNetworkSettingsPage({super.key});
@@ -135,7 +136,7 @@ class _CupertinoNetworkSettingsPageState
       );
     }
 
-    final selected = await showCupertinoModalPopup<String>(
+    final selected = await showCupertinoModalPopupWithBottomBar<String>(
       context: context,
       builder: (context) {
         return CupertinoActionSheet(
