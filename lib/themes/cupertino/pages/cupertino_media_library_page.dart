@@ -26,6 +26,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_glass_media_server_c
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_shared_anime_detail_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_network_media_management_sheet.dart';
 import 'package:nipaplay/themes/cupertino/pages/network_media/cupertino_network_server_libraries_page.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_library_browser_sheet.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -2902,6 +2903,64 @@ class _CupertinoLibraryManagementSheetState
     );
   }
 
+  void _showSnack(String message) {
+    if (!mounted) return;
+    AdaptiveSnackBar.show(
+      context,
+      message: message,
+      type: AdaptiveSnackBarType.info,
+    );
+  }
+
+  Future<void> _openLocalFolderBrowser(String folderPath) async {
+    if (kIsWeb) {
+      _showSnack('Web 端暂不支持浏览本地文件夹');
+      return;
+    }
+    final displayName = p.basename(folderPath).isEmpty
+        ? '本地'
+        : p.basename(folderPath);
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '文件浏览',
+      floatingTitle: true,
+      child: CupertinoLibraryFolderBrowserSheet.local(
+        rootPath: folderPath,
+        sourceLabel: displayName,
+      ),
+    );
+  }
+
+  Future<void> _openWebDAVBrowser(WebDAVConnection connection) async {
+    if (!connection.isConnected) {
+      _showSnack('请先连接 WebDAV 服务器');
+      return;
+    }
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '文件浏览',
+      floatingTitle: true,
+      child: CupertinoLibraryFolderBrowserSheet.webdav(
+        connection: connection,
+      ),
+    );
+  }
+
+  Future<void> _openSMBBrowser(SMBConnection connection) async {
+    if (!connection.isConnected) {
+      _showSnack('请先连接 SMB 服务器');
+      return;
+    }
+    await CupertinoBottomSheet.show(
+      context: context,
+      title: '文件浏览',
+      floatingTitle: true,
+      child: CupertinoLibraryFolderBrowserSheet.smb(
+        connection: connection,
+      ),
+    );
+  }
+
   Widget _buildFolderSection(BuildContext context, ScanService scanService) {
     final folders = scanService.scannedFolders;
     if (folders.isEmpty) {
@@ -2966,74 +3025,59 @@ class _CupertinoLibraryManagementSheetState
       CupertinoColors.destructiveRed,
       context,
     );
-    final isExpanded = _expandedLocalFolders.contains(folderPath);
-    final isLoading = _loadingLocalFolders.contains(folderPath);
 
-    return Column(
-      children: [
-        CupertinoListTile(
-          title: Text(p.basename(folderPath)),
-          subtitle: Text(
-            folderPath,
-            style: TextStyle(color: subtitleColor, fontSize: 12),
+    return CupertinoListTile(
+      title: Text(p.basename(folderPath)),
+      subtitle: Text(
+        folderPath,
+        style: TextStyle(color: subtitleColor, fontSize: 12),
+      ),
+      onTap: () => _openLocalFolderBrowser(folderPath),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size.square(32),
+            onPressed: scanService.isScanning
+                ? null
+                : () => _handleRescanFolder(scanService, folderPath),
+            child: Icon(
+              CupertinoIcons.refresh_thin,
+              size: 20,
+              color: scanService.isScanning
+                  ? accentColor.withValues(alpha: 0.4)
+                  : accentColor,
+            ),
           ),
-          onTap: () => _toggleLocalFolder(folderPath),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size.square(32),
-                onPressed: scanService.isScanning
-                    ? null
-                    : () => _handleRescanFolder(scanService, folderPath),
-                child: Icon(
-                  CupertinoIcons.refresh_thin,
-                  size: 20,
-                  color: scanService.isScanning
-                      ? accentColor.withValues(alpha: 0.4)
-                      : accentColor,
-                ),
-              ),
-              const SizedBox(width: 4),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size.square(32),
-                onPressed: scanService.isScanning
-                    ? null
-                    : () => _handleRemoveFolder(scanService, folderPath),
-                child: Icon(
-                  CupertinoIcons.delete,
-                  size: 20,
-                  color: scanService.isScanning
-                      ? destructiveColor.withValues(alpha: 0.4)
-                      : destructiveColor,
-                ),
-              ),
-              const SizedBox(width: 4),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size.square(32),
-                onPressed: () => _toggleLocalFolder(folderPath),
-                child: isLoading
-                    ? const CupertinoActivityIndicator(radius: 8)
-                    : Icon(
-                        isExpanded
-                            ? CupertinoIcons.chevron_down
-                            : CupertinoIcons.chevron_right,
-                        size: 18,
-                        color: subtitleColor,
-                      ),
-              ),
-            ],
+          const SizedBox(width: 4),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size.square(32),
+            onPressed: scanService.isScanning
+                ? null
+                : () => _handleRemoveFolder(scanService, folderPath),
+            child: Icon(
+              CupertinoIcons.delete,
+              size: 20,
+              color: scanService.isScanning
+                  ? destructiveColor.withValues(alpha: 0.4)
+                  : destructiveColor,
+            ),
           ),
-        ),
-        if (isExpanded)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _buildLocalFileList(folderPath, depth: 1),
-        ),
-      ],
+          const SizedBox(width: 4),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size.square(32),
+            onPressed: () => _openLocalFolderBrowser(folderPath),
+            child: Icon(
+              CupertinoIcons.folder_open,
+              size: 20,
+              color: subtitleColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3800,13 +3844,9 @@ class _CupertinoLibraryManagementSheetState
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final urlColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    final dividerColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.separator, context);
     final statusColor = connection.isConnected
         ? CupertinoColors.activeGreen
         : CupertinoColors.systemRed;
-    final isExpanded =
-        _expandedWebDAVConnections.contains(connection.name);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -3835,72 +3875,61 @@ class _CupertinoLibraryManagementSheetState
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: connection.isConnected
-                        ? () => _toggleWebDAVConnection(connection)
-                        : null,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          connection.name,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: labelColor,
-                          ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connection.name,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: labelColor,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          connection.url,
-                          style: TextStyle(fontSize: 12, color: urlColor),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        connection.url,
+                        style: TextStyle(fontSize: 12, color: urlColor),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: CupertinoDynamicColor.resolve(
+                                statusColor,
+                                context,
+                              ).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              connection.isConnected ? '已连接' : '未连接',
+                              style: TextStyle(
+                                fontSize: 12,
                                 color: CupertinoDynamicColor.resolve(
                                   statusColor,
                                   context,
-                                ).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                connection.isConnected ? '已连接' : '未连接',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: CupertinoDynamicColor.resolve(
-                                    statusColor,
-                                    context,
-                                  ),
                                 ),
                               ),
                             ),
-                            if (connection.isConnected)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: Icon(
-                                  isExpanded
-                                      ? CupertinoIcons.chevron_down
-                                      : CupertinoIcons.chevron_right,
-                                  size: 14,
-                                  color: urlColor,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    _buildWebDAVIconButton(
+                      icon: CupertinoIcons.folder_open,
+                      onPressed: connection.isConnected
+                          ? () => _openWebDAVBrowser(connection)
+                          : null,
+                    ),
                     _buildWebDAVIconButton(
                       icon: CupertinoIcons.pencil,
                       onPressed: () =>
@@ -3925,16 +3954,12 @@ class _CupertinoLibraryManagementSheetState
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '点击右上角刷新图标测试连接，成功后即可展开并浏览目录。',
+                  '点击右上角刷新图标测试连接，成功后即可浏览目录。',
                   style:
                       TextStyle(fontSize: 12, color: urlColor, height: 1.4),
                 ),
               ),
             ),
-          if (connection.isConnected && isExpanded)
-            Container(height: 1, color: dividerColor),
-          if (connection.isConnected && isExpanded)
-            _buildWebDAVFileList(connection, '/', depth: 0),
         ],
       ),
     );
@@ -4124,13 +4149,22 @@ class _CupertinoLibraryManagementSheetState
 
   CupertinoButton _buildWebDAVIconButton({
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
   }) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
       minSize: 30,
       onPressed: onPressed,
-      child: Icon(icon, size: 18),
+      child: Icon(
+        icon,
+        size: 18,
+        color: onPressed == null
+            ? CupertinoDynamicColor.resolve(
+                CupertinoColors.secondaryLabel,
+                context,
+              )
+            : null,
+      ),
     );
   }
 
@@ -4765,12 +4799,9 @@ class _CupertinoLibraryManagementSheetState
       CupertinoColors.secondaryLabel,
       context,
     );
-    final dividerColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.separator, context);
     final statusColor = connection.isConnected
         ? CupertinoColors.activeGreen
         : CupertinoColors.systemRed;
-    final isExpanded = _expandedSMBConnections.contains(connection.name);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -4796,83 +4827,72 @@ class _CupertinoLibraryManagementSheetState
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: connection.isConnected
-                        ? () => _toggleSMBConnection(connection)
-                        : null,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          connection.name,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: labelColor,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        connection.name,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: labelColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        connection.port != 445
+                            ? '${connection.host}:${connection.port}'
+                            : connection.host,
+                        style: TextStyle(fontSize: 12, color: subtitleColor),
+                      ),
+                      if (connection.username.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            '用户：${connection.username}${connection.domain.isNotEmpty ? ' @${connection.domain}' : ''}',
+                            style:
+                                TextStyle(fontSize: 12, color: subtitleColor),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          connection.port != 445
-                              ? '${connection.host}:${connection.port}'
-                              : connection.host,
-                          style: TextStyle(fontSize: 12, color: subtitleColor),
-                        ),
-                        if (connection.username.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
-                            child: Text(
-                              '用户：${connection.username}${connection.domain.isNotEmpty ? ' @${connection.domain}' : ''}',
-                              style:
-                                  TextStyle(fontSize: 12, color: subtitleColor),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: CupertinoDynamicColor.resolve(
+                                statusColor,
+                                context,
+                              ).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
+                            child: Text(
+                              connection.isConnected ? '已连接' : '未连接',
+                              style: TextStyle(
+                                fontSize: 12,
                                 color: CupertinoDynamicColor.resolve(
                                   statusColor,
                                   context,
-                                ).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                connection.isConnected ? '已连接' : '未连接',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: CupertinoDynamicColor.resolve(
-                                    statusColor,
-                                    context,
-                                  ),
                                 ),
                               ),
                             ),
-                            if (connection.isConnected)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: Icon(
-                                  isExpanded
-                                      ? CupertinoIcons.chevron_down
-                                      : CupertinoIcons.chevron_right,
-                                  size: 14,
-                                  color: subtitleColor,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    _buildSMBIconButton(
+                      icon: CupertinoIcons.folder_open,
+                      onPressed: connection.isConnected
+                          ? () => _openSMBBrowser(connection)
+                          : null,
+                    ),
                     _buildSMBIconButton(
                       icon: CupertinoIcons.pencil,
                       onPressed: () =>
@@ -4897,16 +4917,12 @@ class _CupertinoLibraryManagementSheetState
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '点击右上角刷新图标以连接并加载目录。',
+                  '点击右上角刷新图标以连接并浏览目录。',
                   style:
                       TextStyle(fontSize: 12, color: subtitleColor, height: 1.4),
                 ),
               ),
             ),
-          if (connection.isConnected && isExpanded)
-            Container(height: 1, color: dividerColor),
-          if (connection.isConnected && isExpanded)
-            _buildSMBFileList(connection, '/', depth: 0),
         ],
       ),
     );
@@ -5094,13 +5110,22 @@ class _CupertinoLibraryManagementSheetState
 
   CupertinoButton _buildSMBIconButton({
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
   }) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
       minSize: 30,
       onPressed: onPressed,
-      child: Icon(icon, size: 18),
+      child: Icon(
+        icon,
+        size: 18,
+        color: onPressed == null
+            ? CupertinoDynamicColor.resolve(
+                CupertinoColors.secondaryLabel,
+                context,
+              )
+            : null,
+      ),
     );
   }
 
