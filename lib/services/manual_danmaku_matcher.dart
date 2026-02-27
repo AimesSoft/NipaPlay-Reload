@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_manual_danmaku_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/manual_danmaku_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:provider/provider.dart';
 
 /// 手动弹幕匹配器
@@ -103,6 +106,18 @@ class ManualDanmakuMatcher {
     BuildContext context, {
     String? initialVideoTitle,
   }) async {
+    final uiThemeProvider = Provider.of<UIThemeProvider>(context, listen: false);
+    if (uiThemeProvider.isCupertinoTheme) {
+      return CupertinoBottomSheet.show<Map<String, dynamic>>(
+        context: context,
+        title: '手动匹配弹幕',
+        floatingTitle: true,
+        child: CupertinoManualDanmakuSheet(
+          initialVideoTitle: initialVideoTitle,
+        ),
+      );
+    }
+
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,

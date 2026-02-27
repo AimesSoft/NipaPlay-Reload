@@ -18,6 +18,7 @@ class SettingsMenuScope extends InheritedWidget {
   final double pointerWidth;
   final double pointerHeight;
   final double? height;
+  final Future<void> Function()? requestClose;
 
   const SettingsMenuScope({
     super.key,
@@ -33,6 +34,7 @@ class SettingsMenuScope extends InheritedWidget {
     this.pointerWidth = 16,
     this.pointerHeight = 8,
     this.height,
+    this.requestClose,
   });
 
   static SettingsMenuScope? maybeOf(BuildContext context) {
@@ -51,7 +53,8 @@ class SettingsMenuScope extends InheritedWidget {
         showPointer != oldWidget.showPointer ||
         pointerWidth != oldWidget.pointerWidth ||
         pointerHeight != oldWidget.pointerHeight ||
-        height != oldWidget.height;
+        height != oldWidget.height ||
+        requestClose != oldWidget.requestClose;
   }
 }
 

@@ -13,6 +13,7 @@ import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
@@ -312,6 +313,18 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       onTap: () async {
                         debugPrint('=== 弹幕设置菜单：点击手动匹配弹幕按钮 ===');
                         print('=== 强制输出：手动匹配弹幕按钮被点击！ ===');
+                        final rootContext =
+                            Navigator.of(context, rootNavigator: true).context;
+                        final uiThemeProvider = Provider.of<UIThemeProvider>(
+                          context,
+                          listen: false,
+                        );
+                        if (uiThemeProvider.isCupertinoTheme) {
+                          final menuScope = SettingsMenuScope.maybeOf(context);
+                          if (menuScope?.requestClose != null) {
+                            await menuScope!.requestClose!();
+                          }
+                        }
                         final videoState = widget.videoState;
                         final initialVideoPath = videoState.currentVideoPath;
                         final String? initialSearchKeyword = initialVideoPath == null
@@ -325,7 +338,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                                 : p.basenameWithoutExtension(initialVideoPath);
                         final result = await ManualDanmakuMatcher.instance
                             .showManualMatchDialog(
-                          context,
+                          uiThemeProvider.isCupertinoTheme ? rootContext : context,
                           initialVideoTitle: initialSearchKeyword,
                         );
 

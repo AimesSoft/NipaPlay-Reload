@@ -276,6 +276,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
       anchorRect: resolvedAnchorRect,
       showPointer: resolvedAnchorRect != null,
       height: _menuHeight,
+      requestClose: requestClose,
       child: child,
     );
   }
