@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -15,8 +16,10 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum CupertinoLibraryBrowserSource { local, webdav, smb }
+enum CupertinoLibraryBrowserLayout { grid, list }
 
 class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
   const CupertinoLibraryFolderBrowserSheet._({
@@ -80,6 +83,8 @@ class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
 
 class _CupertinoLibraryFolderBrowserSheetState
     extends State<CupertinoLibraryFolderBrowserSheet> {
+  static const String _lastPathKeyPrefix =
+      'cupertino_library_browser_last_path_';
   final ScrollController _scrollController = ScrollController();
   // Reserved for future: folder counts (disabled for accuracy).
   final List<String> _pathStack = [];
@@ -87,6 +92,13 @@ class _CupertinoLibraryFolderBrowserSheetState
   bool _isLoading = false;
   String? _errorMessage;
   List<_BrowserEntry> _entries = [];
+  String _searchQuery = '';
+  CupertinoLibraryBrowserLayout _layout = CupertinoLibraryBrowserLayout.grid;
+  String? _restoredPath;
+  final Map<String, List<_BrowserEntry>> _expandedEntries = {};
+  final Set<String> _expandedDirectories = {};
+  final Set<String> _loadingDirectories = {};
+  final Map<String, String> _expandedErrors = {};
 
   String get _currentPath => _pathStack.isNotEmpty
       ? _pathStack.last
@@ -98,7 +110,7 @@ class _CupertinoLibraryFolderBrowserSheetState
   void initState() {
     super.initState();
     _pathStack.add(widget.rootPath);
-    _loadDirectory();
+    _restoreLastPathAndLoad();
   }
 
   @override
@@ -113,7 +125,27 @@ class _CupertinoLibraryFolderBrowserSheetState
       _pathStack.removeLast();
       _entries = [];
       _errorMessage = null;
+      _resetExpansionState();
     });
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    _loadDirectory();
+  }
+
+  void _goRoot() {
+    if (_currentPath == widget.rootPath) return;
+    setState(() {
+      _pathStack
+        ..clear()
+        ..add(widget.rootPath);
+      _entries = [];
+      _errorMessage = null;
+      _resetExpansionState();
+    });
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
     _loadDirectory();
   }
 
@@ -121,6 +153,7 @@ class _CupertinoLibraryFolderBrowserSheetState
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _resetExpansionState();
     });
 
     try {
@@ -130,8 +163,22 @@ class _CupertinoLibraryFolderBrowserSheetState
         _entries = entries;
         _isLoading = false;
       });
+      await _saveLastPath(_currentPath);
     } catch (e) {
       if (!mounted) return;
+      if (_restoredPath != null && _currentPath == _restoredPath) {
+        _restoredPath = null;
+        setState(() {
+          _pathStack
+            ..clear()
+            ..add(widget.rootPath);
+          _entries = [];
+          _isLoading = false;
+          _errorMessage = null;
+        });
+        _loadDirectory();
+        return;
+      }
       setState(() {
         _entries = [];
         _isLoading = false;
@@ -221,6 +268,13 @@ class _CupertinoLibraryFolderBrowserSheetState
     }
   }
 
+  void _resetExpansionState() {
+    _expandedDirectories.clear();
+    _expandedEntries.clear();
+    _loadingDirectories.clear();
+    _expandedErrors.clear();
+  }
+
 
   void _openFolder(_BrowserEntry entry) {
     if (!entry.isDirectory) {
@@ -230,8 +284,47 @@ class _CupertinoLibraryFolderBrowserSheetState
       _pathStack.add(entry.path);
       _entries = [];
       _errorMessage = null;
+      _resetExpansionState();
     });
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
     _loadDirectory();
+  }
+
+  Future<void> _toggleDirectoryExpansion(_BrowserEntry entry) async {
+    if (!entry.isDirectory) return;
+    final path = entry.path;
+    if (_expandedDirectories.contains(path)) {
+      setState(() {
+        _expandedDirectories.remove(path);
+      });
+      return;
+    }
+
+    setState(() {
+      _expandedDirectories.add(path);
+      _expandedErrors.remove(path);
+      if (!_expandedEntries.containsKey(path)) {
+        _loadingDirectories.add(path);
+      }
+    });
+
+    if (_expandedEntries.containsKey(path)) return;
+    try {
+      final entries = await _listDirectories(path);
+      if (!mounted) return;
+      setState(() {
+        _expandedEntries[path] = entries;
+        _loadingDirectories.remove(path);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _expandedErrors[path] = e.toString();
+        _loadingDirectories.remove(path);
+      });
+    }
   }
 
   String? _historyKeyForEntry(_BrowserEntry entry) {
@@ -671,6 +764,122 @@ class _CupertinoLibraryFolderBrowserSheetState
     return _currentPath;
   }
 
+  List<_BrowserEntry> _applySearch(List<_BrowserEntry> entries) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return entries;
+    return entries.where((entry) {
+      final name = entry.isDirectory
+          ? entry.name
+          : p.basenameWithoutExtension(entry.name);
+      final candidate = name.isNotEmpty ? name : entry.name;
+      return candidate.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  List<_ListItem> _buildListItems(List<_BrowserEntry> entries, int depth) {
+    final items = <_ListItem>[];
+    for (final entry in entries) {
+      items.add(_ListItem.entry(entry, depth: depth));
+      if (!entry.isDirectory) continue;
+      if (!_expandedDirectories.contains(entry.path)) continue;
+
+      if (_loadingDirectories.contains(entry.path)) {
+        items.add(_ListItem.loading(entry.path, depth: depth + 1));
+        continue;
+      }
+
+      final error = _expandedErrors[entry.path];
+      if (error != null) {
+        items.add(_ListItem.error(entry.path, error, depth: depth + 1));
+        continue;
+      }
+
+      final children = _expandedEntries[entry.path] ?? const <_BrowserEntry>[];
+      final visibleChildren = _applySearch(children);
+      if (visibleChildren.isEmpty) {
+        final message = _searchQuery.trim().isNotEmpty ? '无匹配内容' : '空文件夹';
+        items.add(_ListItem.empty(entry.path, message, depth: depth + 1));
+        continue;
+      }
+      items.addAll(_buildListItems(visibleChildren, depth + 1));
+    }
+    return items;
+  }
+
+  Future<void> _restoreLastPathAndLoad() async {
+    final lastPath = await _loadLastPath();
+    if (lastPath != null && _isValidRestoredPath(lastPath)) {
+      _restoredPath = lastPath;
+      setState(() {
+        _pathStack
+          ..clear()
+          ..add(lastPath);
+      });
+    }
+    _loadDirectory();
+  }
+
+  bool _isValidRestoredPath(String path) {
+    if (path.isEmpty) return false;
+    if (widget.source == CupertinoLibraryBrowserSource.local) {
+      return path == widget.rootPath || path.startsWith(widget.rootPath);
+    }
+    return true;
+  }
+
+  String _storageKey() {
+    String id;
+    switch (widget.source) {
+      case CupertinoLibraryBrowserSource.local:
+        id = widget.rootPath;
+        break;
+      case CupertinoLibraryBrowserSource.webdav:
+        final connection = widget.webdavConnection;
+        id = connection == null
+            ? widget.rootPath
+            : '${connection.url}|${connection.username}';
+        break;
+      case CupertinoLibraryBrowserSource.smb:
+        final connection = widget.smbConnection;
+        id = connection == null
+            ? widget.rootPath
+            : '${connection.host}|${connection.port}|${connection.username}|${connection.domain}';
+        break;
+    }
+    final encoded = base64Url.encode(utf8.encode(id)).replaceAll('=', '');
+    return '$_lastPathKeyPrefix${widget.source.name}_$encoded';
+  }
+
+  Future<void> _saveLastPath(String path) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_storageKey(), path);
+    } catch (_) {}
+  }
+
+  Future<String?> _loadLastPath() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_storageKey());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _toggleLayout() {
+    setState(() {
+      _layout = _layout == CupertinoLibraryBrowserLayout.grid
+          ? CupertinoLibraryBrowserLayout.list
+          : CupertinoLibraryBrowserLayout.grid;
+    });
+  }
+
+  IconData _layoutIcon() {
+    return _layout == CupertinoLibraryBrowserLayout.grid
+        ? CupertinoIcons.list_bullet
+        : CupertinoIcons.square_grid_2x2;
+  }
+
   @override
   Widget build(BuildContext context) {
     final backgroundColor = CupertinoDynamicColor.resolve(
@@ -691,6 +900,7 @@ class _CupertinoLibraryFolderBrowserSheetState
             8;
 
     final slivers = <Widget>[];
+    final visibleEntries = _applySearch(_entries);
 
     if (_isLoading && _entries.isEmpty) {
       slivers.add(
@@ -743,7 +953,8 @@ class _CupertinoLibraryFolderBrowserSheetState
           ),
         ),
       );
-    } else if (_entries.isEmpty) {
+    } else if (visibleEntries.isEmpty) {
+      final bool isSearching = _searchQuery.trim().isNotEmpty;
       slivers.add(
         SliverFillRemaining(
           hasScrollBody: false,
@@ -758,7 +969,7 @@ class _CupertinoLibraryFolderBrowserSheetState
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '当前目录为空',
+                  isSearching ? '未找到匹配内容' : '当前目录为空',
                   style: TextStyle(
                     fontSize: 14,
                     color: secondaryLabelColor,
@@ -769,7 +980,7 @@ class _CupertinoLibraryFolderBrowserSheetState
           ),
         ),
       );
-    } else {
+    } else if (_layout == CupertinoLibraryBrowserLayout.grid) {
       slivers.add(
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -782,7 +993,7 @@ class _CupertinoLibraryFolderBrowserSheetState
               ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
-                final entry = _entries[index];
+                final entry = visibleEntries[index];
                   final historyKey = _historyKeyForEntry(entry);
                   return _FolderGridTile(
                     entry: entry,
@@ -798,9 +1009,63 @@ class _CupertinoLibraryFolderBrowserSheetState
                         : () => _showEntryActionSheet(entry),
                   );
                 },
-                childCount: _entries.length,
+                childCount: visibleEntries.length,
               ),
             ),
+        ),
+      );
+    } else {
+      final listItems = _buildListItems(visibleEntries, 0);
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final item = listItems[index];
+                switch (item.type) {
+                  case _ListItemType.entry:
+                    final entry = item.entry!;
+                    final historyKey = _historyKeyForEntry(entry);
+                    return _FolderListTile(
+                      entry: entry,
+                      depth: item.depth,
+                      isExpanded: entry.isDirectory &&
+                          _expandedDirectories.contains(entry.path),
+                      labelColor: labelColor,
+                      secondaryLabelColor: secondaryLabelColor,
+                      historyFuture: historyKey == null
+                          ? null
+                          : WatchHistoryManager.getHistoryItem(historyKey),
+                      onTap: entry.isDirectory
+                          ? () => _toggleDirectoryExpansion(entry)
+                          : () => _handleEntryTap(entry),
+                      onLongPress: entry.isDirectory
+                          ? null
+                          : () => _showEntryActionSheet(entry),
+                    );
+                  case _ListItemType.loading:
+                    return _FolderListStatusTile(
+                      depth: item.depth,
+                      text: '正在加载...',
+                      showSpinner: true,
+                    );
+                  case _ListItemType.empty:
+                    return _FolderListStatusTile(
+                      depth: item.depth,
+                      text: item.message ?? '空文件夹',
+                    );
+                  case _ListItemType.error:
+                    return _FolderListStatusTile(
+                      depth: item.depth,
+                      text: item.message ?? '读取失败',
+                      isError: true,
+                    );
+                }
+              },
+              childCount: listItems.length,
+            ),
+          ),
         ),
       );
     }
@@ -810,7 +1075,7 @@ class _CupertinoLibraryFolderBrowserSheetState
       child: Column(
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(20, headerTopPadding, 20, 12),
+            padding: EdgeInsets.fromLTRB(20, headerTopPadding, 20, 10),
             child: Row(
               children: [
                 if (_canGoBack)
@@ -852,10 +1117,38 @@ class _CupertinoLibraryFolderBrowserSheetState
                 CupertinoButton(
                   padding: EdgeInsets.zero,
                   minSize: 0,
+                  onPressed: _currentPath == widget.rootPath ? null : _goRoot,
+                  child: const Icon(CupertinoIcons.home, size: 20),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 0,
+                  onPressed: _toggleLayout,
+                  child: Icon(_layoutIcon(), size: 20),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 0,
                   onPressed: _loadDirectory,
                   child: const Icon(CupertinoIcons.refresh_thin, size: 20),
                 ),
               ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: CupertinoSearchTextField(
+              placeholder: '搜索文件/文件夹',
+              onChanged: (value) {
+                if (_searchQuery == value) return;
+                setState(() => _searchQuery = value);
+              },
+              backgroundColor: CupertinoDynamicColor.resolve(
+                CupertinoColors.systemGrey5,
+                context,
+              ),
             ),
           ),
           Expanded(
@@ -883,6 +1176,35 @@ class _BrowserEntry {
   final String name;
   final String path;
   final bool isDirectory;
+}
+
+enum _ListItemType { entry, loading, empty, error }
+
+class _ListItem {
+  _ListItem.entry(_BrowserEntry entry, {required this.depth})
+      : type = _ListItemType.entry,
+        entry = entry,
+        path = entry.path,
+        message = null;
+
+  _ListItem.loading(this.path, {required this.depth})
+      : type = _ListItemType.loading,
+        entry = null,
+        message = null;
+
+  _ListItem.empty(this.path, this.message, {required this.depth})
+      : type = _ListItemType.empty,
+        entry = null;
+
+  _ListItem.error(this.path, this.message, {required this.depth})
+      : type = _ListItemType.error,
+        entry = null;
+
+  final _ListItemType type;
+  final _BrowserEntry? entry;
+  final String path;
+  final int depth;
+  final String? message;
 }
 
 class _FolderGridTile extends StatefulWidget {
@@ -1009,6 +1331,209 @@ class _FolderGridTileState extends State<_FolderGridTile> {
                   },
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderListTile extends StatelessWidget {
+  const _FolderListTile({
+    required this.entry,
+    required this.depth,
+    required this.isExpanded,
+    required this.labelColor,
+    required this.secondaryLabelColor,
+    required this.onTap,
+    required this.historyFuture,
+    required this.onLongPress,
+  });
+
+  final _BrowserEntry entry;
+  final int depth;
+  final bool isExpanded;
+  final Color labelColor;
+  final Color secondaryLabelColor;
+  final VoidCallback onTap;
+  final Future<WatchHistoryItem?>? historyFuture;
+  final VoidCallback? onLongPress;
+
+  String _historyLabel(WatchHistoryItem? item) {
+    if (item == null) {
+      return '未扫描';
+    }
+    if (item.animeId != null || item.episodeId != null) {
+      if (item.animeName.isNotEmpty &&
+          (item.episodeTitle?.isNotEmpty ?? false)) {
+        return '${item.animeName} · ${item.episodeTitle}';
+      }
+      if (item.animeName.isNotEmpty) {
+        return item.animeName;
+      }
+      return '已匹配';
+    }
+    if (item.isFromScan) {
+      return '已扫描';
+    }
+    return '已播放';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final mutedColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondaryLabel,
+      context,
+    );
+    final iconColor = entry.isDirectory
+        ? CupertinoTheme.of(context).primaryColor
+        : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey, context);
+    final nameText = entry.name.isNotEmpty
+        ? (entry.isDirectory
+            ? entry.name
+            : p.basenameWithoutExtension(entry.name))
+        : entry.path;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: GestureDetector(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (depth > 0) SizedBox(width: depth * 12.0),
+              if (entry.isDirectory)
+                Icon(
+                  isExpanded
+                      ? CupertinoIcons.chevron_down
+                      : CupertinoIcons.chevron_right,
+                  size: 16,
+                  color: mutedColor,
+                )
+              else
+                const SizedBox(width: 16),
+              const SizedBox(width: 2),
+              Icon(
+                entry.isDirectory
+                    ? CupertinoIcons.folder_fill
+                    : CupertinoIcons.film,
+                size: entry.isDirectory ? 22 : 20,
+                color: iconColor,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: entry.isDirectory
+                    ? Text(
+                        nameText,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: labelColor,
+                        ),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            nameText,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: labelColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          if (historyFuture != null)
+                            FutureBuilder<WatchHistoryItem?>(
+                              future: historyFuture,
+                              builder: (context, snapshot) {
+                                final label = _historyLabel(snapshot.data);
+                                return Text(
+                                  label,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: secondaryLabelColor,
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderListStatusTile extends StatelessWidget {
+  const _FolderListStatusTile({
+    required this.depth,
+    required this.text,
+    this.isError = false,
+    this.showSpinner = false,
+  });
+
+  final int depth;
+  final String text;
+  final bool isError;
+  final bool showSpinner;
+
+  @override
+  Widget build(BuildContext context) {
+    final cardColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.secondarySystemBackground,
+      context,
+    );
+    final textColor = CupertinoDynamicColor.resolve(
+      isError ? CupertinoColors.systemRed : CupertinoColors.secondaryLabel,
+      context,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            if (depth > 0) SizedBox(width: depth * 12.0),
+            if (showSpinner) ...[
+              const CupertinoActivityIndicator(radius: 7),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: textColor,
+              ),
+            ),
           ],
         ),
       ),
