@@ -950,55 +950,64 @@ class _FolderGridTileState extends State<_FolderGridTile> {
                 color: iconColor,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              widget.entry.name.isNotEmpty
-                  ? (widget.entry.isDirectory
-                      ? widget.entry.name
-                      : p.basenameWithoutExtension(widget.entry.name))
-                  : widget.entry.path,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: widget.labelColor,
-                fontWeight: FontWeight.w600,
+            const SizedBox(height: 4),
+            Flexible(
+              fit: FlexFit.loose,
+              child: Text(
+                widget.entry.name.isNotEmpty
+                    ? (widget.entry.isDirectory
+                        ? widget.entry.name
+                        : p.basenameWithoutExtension(widget.entry.name))
+                    : widget.entry.path,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: widget.labelColor,
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
+                ),
               ),
             ),
             const SizedBox(height: 2),
             if (widget.historyFuture != null)
-              FutureBuilder<WatchHistoryItem?>(
-                future: widget.historyFuture,
-                builder: (context, snapshot) {
-                  final item = snapshot.data;
-                  String label = '';
-                  if (item == null) {
-                    label = '未扫描';
-                  } else if (item.animeId != null || item.episodeId != null) {
-                    if (item.animeName.isNotEmpty &&
-                        (item.episodeTitle?.isNotEmpty ?? false)) {
-                      label = '${item.animeName} · ${item.episodeTitle}';
-                    } else if (item.animeName.isNotEmpty) {
-                      label = item.animeName;
+              Flexible(
+                fit: FlexFit.loose,
+                child: FutureBuilder<WatchHistoryItem?>(
+                  future: widget.historyFuture,
+                  builder: (context, snapshot) {
+                    final item = snapshot.data;
+                    String label = '';
+                    if (item == null) {
+                      label = '未扫描';
+                    } else if (item.animeId != null || item.episodeId != null) {
+                      if (item.animeName.isNotEmpty &&
+                          (item.episodeTitle?.isNotEmpty ?? false)) {
+                        label = '${item.animeName} · ${item.episodeTitle}';
+                      } else if (item.animeName.isNotEmpty) {
+                        label = item.animeName;
+                      } else {
+                        label = '已匹配';
+                      }
+                    } else if (item.isFromScan) {
+                      label = '已扫描';
                     } else {
-                      label = '已匹配';
+                      label = '已播放';
                     }
-                  } else if (item.isFromScan) {
-                    label = '已扫描';
-                  } else {
-                    label = '已播放';
-                  }
-                  return Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: widget.secondaryLabelColor,
-                    ),
-                  );
-                },
+                    return Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: widget.secondaryLabelColor,
+                        height: 1.15,
+                      ),
+                    );
+                  },
+                ),
               ),
           ],
         ),
