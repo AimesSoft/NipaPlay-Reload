@@ -118,4 +118,10 @@ runs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           git config --global core.longpaths true
         fi
+        if [ ! -f "pubspec.lock" ]; then
+          echo "❌ pubspec.lock 不存在，无法使用 --enforce-lockfile。"
+          echo "当前目录: $(pwd)"
+          ls -la
+          exit 1
+        fi
         flutter pub get --enforce-lockfile
