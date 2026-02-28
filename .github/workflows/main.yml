@@ -21,8 +21,9 @@ jobs:
     steps:
       - name: Check commit message for release trigger
         id: check
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
           if [[ "$COMMIT_MSG" =~ ([0-9]{4}\.[0-9]{4}) ]]; then
             echo "✅ Release trigger found in commit message."
             echo "triggered=true" >> $GITHUB_OUTPUT
