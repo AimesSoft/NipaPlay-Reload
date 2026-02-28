@@ -480,6 +480,10 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           ),
 
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
         ],
 
         if (_selectedKernelType == PlayerKernelType.mdk ||

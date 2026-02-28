@@ -13,6 +13,7 @@ import 'package:nipaplay/utils/globals.dart'
     as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
+import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart'; // 导入外部调用设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
@@ -100,6 +101,7 @@ class _SettingsPageState extends State<SettingsPage>
   static const String _entryNetwork = 'network';
   static const String _entryBackupRestore = 'backup_restore';
   static const String _entryPlayer = 'player';
+  static const String _entryExternalPlayer = 'external_player';
   static const String _entryShortcuts = 'shortcuts';
   static const String _entryRemoteMediaLibrary = 'remote_media_library';
   static const String _entryDeveloperOptions = 'developer_options';
@@ -281,6 +283,16 @@ class _SettingsPageState extends State<SettingsPage>
         icon: Ionicons.play_circle_outline,
         pageTitle: "播放器设置",
         page: const PlayerSettingsPage(),
+      ),
+    );
+
+    entries.add(
+      _SettingEntry(
+        id: _entryExternalPlayer,
+        title: "外部调用",
+        icon: Ionicons.open_outline,
+        pageTitle: "外部调用",
+        page: const ExternalPlayerSettingsPage(),
       ),
     );
 
