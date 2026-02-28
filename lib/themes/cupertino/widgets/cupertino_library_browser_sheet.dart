@@ -122,6 +122,7 @@ class _CupertinoLibraryFolderBrowserSheetState
   final Set<String> _expandedDirectories = {};
   final Set<String> _loadingDirectories = {};
   final Map<String, String> _expandedErrors = {};
+  bool _isBatchScanning = false;
 
   String get _currentPath => _pathStack.isNotEmpty
       ? _pathStack.last
@@ -743,8 +744,319 @@ class _CupertinoLibraryFolderBrowserSheetState
     }
   }
 
+  Future<_ScanOutcome> _scanFileEntry(_BrowserEntry entry) async {
+    if (entry.isDirectory) return _ScanOutcome.failed;
+    final targetPath = _videoInfoPathForEntry(entry);
+    if (targetPath == null || targetPath.isEmpty) {
+      return _ScanOutcome.failed;
+    }
+
+    try {
+      final videoInfo = await DandanplayService.getVideoInfo(targetPath)
+          .timeout(const Duration(seconds: 20));
+
+      if (videoInfo['isMatched'] == true &&
+          videoInfo['matches'] != null &&
+          (videoInfo['matches'] as List).isNotEmpty) {
+        final match = videoInfo['matches'][0];
+        final animeId = match['animeId'] as int?;
+        final episodeId = match['episodeId'] as int?;
+        final animeTitle = (match['animeTitle'] as String?)?.isNotEmpty == true
+            ? match['animeTitle'] as String
+            : p.basenameWithoutExtension(entry.name);
+        final episodeTitle = match['episodeTitle'] as String?;
+
+        if (animeId != null && episodeId != null) {
+          final existing = await WatchHistoryManager.getHistoryItem(targetPath);
+          final int durationFromMatch = (videoInfo['duration'] is int)
+              ? videoInfo['duration'] as int
+              : (existing?.duration ?? 0);
+
+          final WatchHistoryItem itemToSave;
+          if (existing != null &&
+              existing.watchProgress > 0.01 &&
+              !existing.isFromScan) {
+            itemToSave = WatchHistoryItem(
+              filePath: existing.filePath,
+              animeName: animeTitle,
+              episodeTitle: episodeTitle,
+              episodeId: episodeId,
+              animeId: animeId,
+              watchProgress: existing.watchProgress,
+              lastPosition: existing.lastPosition,
+              duration: durationFromMatch,
+              lastWatchTime: DateTime.now(),
+              thumbnailPath: existing.thumbnailPath,
+              isFromScan: false,
+            );
+          } else {
+            itemToSave = WatchHistoryItem(
+              filePath: targetPath,
+              animeName: animeTitle,
+              episodeTitle: episodeTitle,
+              episodeId: episodeId,
+              animeId: animeId,
+              watchProgress: existing?.watchProgress ?? 0.0,
+              lastPosition: existing?.lastPosition ?? 0,
+              duration: durationFromMatch,
+              lastWatchTime: DateTime.now(),
+              thumbnailPath: existing?.thumbnailPath,
+              isFromScan: true,
+            );
+          }
+
+          await WatchHistoryManager.addOrUpdateHistory(itemToSave);
+          if (mounted) {
+            setState(() {});
+          }
+          return _ScanOutcome.matched;
+        }
+      }
+      return _ScanOutcome.unmatched;
+    } on TimeoutException {
+      return _ScanOutcome.failed;
+    } catch (_) {
+      return _ScanOutcome.failed;
+    }
+  }
+
+  Future<List<_BrowserEntry>> _collectVideoFiles(String path) async {
+    switch (widget.source) {
+      case CupertinoLibraryBrowserSource.local:
+        return _collectLocalVideoFiles(path);
+      case CupertinoLibraryBrowserSource.webdav:
+        return _collectWebDAVVideoFiles(path);
+      case CupertinoLibraryBrowserSource.smb:
+        return _collectSMBVideoFiles(path);
+      case CupertinoLibraryBrowserSource.sharedRemote:
+        return _collectSharedRemoteVideoFiles(path);
+    }
+  }
+
+  Future<List<_BrowserEntry>> _collectLocalVideoFiles(String path) async {
+    final results = <_BrowserEntry>[];
+    final directory = Directory(path);
+    if (!await directory.exists()) {
+      return results;
+    }
+    await for (final entity
+        in directory.list(recursive: false, followLinks: false)) {
+      if (entity is Directory) {
+        results.addAll(await _collectLocalVideoFiles(entity.path));
+      } else if (entity is File) {
+        final fileName = p.basename(entity.path);
+        if (SMBService.instance.isVideoFile(fileName)) {
+          results.add(
+            _BrowserEntry(
+              name: fileName,
+              path: entity.path,
+              isDirectory: false,
+            ),
+          );
+        }
+      }
+    }
+    return results;
+  }
+
+  Future<List<_BrowserEntry>> _collectWebDAVVideoFiles(String path) async {
+    final connection = widget.webdavConnection;
+    if (connection == null) {
+      throw Exception('WebDAV 连接不可用');
+    }
+    final results = <_BrowserEntry>[];
+    final entries = await WebDAVService.instance.listDirectory(
+      connection,
+      path,
+    );
+    for (final entry in entries) {
+      if (entry.isDirectory) {
+        results.addAll(await _collectWebDAVVideoFiles(entry.path));
+      } else if (WebDAVService.instance.isVideoFile(entry.name)) {
+        results.add(
+          _BrowserEntry(
+            name: entry.name,
+            path: entry.path,
+            isDirectory: false,
+          ),
+        );
+      }
+    }
+    return results;
+  }
+
+  Future<List<_BrowserEntry>> _collectSMBVideoFiles(String path) async {
+    final connection = widget.smbConnection;
+    if (connection == null) {
+      throw Exception('SMB 连接不可用');
+    }
+    final results = <_BrowserEntry>[];
+    final entries = await SMBService.instance.listDirectory(
+      connection,
+      path,
+    );
+    for (final entry in entries) {
+      if (entry.isDirectory) {
+        results.addAll(await _collectSMBVideoFiles(entry.path));
+      } else if (SMBService.instance.isVideoFile(entry.name)) {
+        results.add(
+          _BrowserEntry(
+            name: entry.name,
+            path: entry.path,
+            isDirectory: false,
+          ),
+        );
+      }
+    }
+    return results;
+  }
+
+  Future<List<_BrowserEntry>> _collectSharedRemoteVideoFiles(String path) async {
+    final provider = widget.sharedRemoteProvider;
+    if (provider == null) {
+      throw Exception('共享媒体库不可用');
+    }
+    final results = <_BrowserEntry>[];
+    final entries = await provider.browseRemoteDirectory(path);
+    for (final entry in entries) {
+      if (entry.isDirectory) {
+        results.addAll(await _collectSharedRemoteVideoFiles(entry.path));
+      } else if (SMBService.instance.isVideoFile(entry.name)) {
+        results.add(
+          _BrowserEntry(
+            name: entry.name.isNotEmpty ? entry.name : p.basename(entry.path),
+            path: entry.path,
+            isDirectory: false,
+          ),
+        );
+      }
+    }
+    return results;
+  }
+
+  Future<void> _scanFolder(_BrowserEntry entry) async {
+    if (!entry.isDirectory) return;
+    if (kIsWeb) {
+      _showSnack('Web 端暂不支持扫描');
+      return;
+    }
+    if (_isBatchScanning) {
+      _showSnack('已有扫描任务在进行中，请稍后再试。');
+      return;
+    }
+
+    _isBatchScanning = true;
+    final displayName =
+        entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
+    final bool useNativeOverlay = PlatformInfo.isIOS26OrHigher();
+    NavigatorState? navigator;
+    ValueNotifier<_ScanProgressState>? progressNotifier;
+
+    if (useNativeOverlay) {
+      await AdaptiveNativeOverlay.showScanProgress(
+        title: '正在扫描',
+        message: displayName,
+        progress: 0.05,
+      );
+    } else {
+      navigator = Navigator.of(context, rootNavigator: true);
+      progressNotifier = ValueNotifier<_ScanProgressState>(
+        const _ScanProgressState(progress: 0.05, message: '准备扫描'),
+      );
+      NipaplayWindow.show<void>(
+        context: context,
+        barrierDismissible: false,
+        child: _ScanProgressWindow(
+          fileName: displayName,
+          progressListenable: progressNotifier,
+        ),
+      );
+    }
+
+    void updateProgress(double progress, String message) {
+      if (useNativeOverlay) {
+        AdaptiveNativeOverlay.updateScanProgress(
+          progress: progress,
+          message: message,
+        );
+        return;
+      }
+      progressNotifier?.value = _ScanProgressState(
+        progress: progress.clamp(0.0, 1.0),
+        message: message,
+      );
+    }
+
+    try {
+      updateProgress(0.08, '正在整理文件列表');
+      final files = await _collectVideoFiles(entry.path);
+      if (files.isEmpty) {
+        updateProgress(1.0, '未找到可扫描的视频文件');
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (useNativeOverlay) {
+          await AdaptiveNativeOverlay.showToast(message: '未找到可扫描的视频文件');
+        } else {
+          _showSnack('未找到可扫描的视频文件');
+        }
+        return;
+      }
+
+      int matched = 0;
+      int unmatched = 0;
+      int failed = 0;
+      final total = files.length;
+
+      for (int i = 0; i < total; i++) {
+        final file = files[i];
+        final progress = 0.1 + ((i + 1) / total) * 0.85;
+        updateProgress(
+          progress,
+          '扫描中 ${file.name} (${i + 1}/$total)',
+        );
+        final result = await _scanFileEntry(file);
+        switch (result) {
+          case _ScanOutcome.matched:
+            matched += 1;
+            break;
+          case _ScanOutcome.unmatched:
+            unmatched += 1;
+            break;
+          case _ScanOutcome.failed:
+            failed += 1;
+            break;
+        }
+      }
+
+      updateProgress(1.0, '扫描完成');
+      await Future.delayed(const Duration(milliseconds: 200));
+      final summary = '扫描完成：匹配 $matched，未匹配 $unmatched，失败 $failed';
+      if (useNativeOverlay) {
+        await AdaptiveNativeOverlay.showToast(message: summary);
+      } else {
+        _showSnack(summary);
+      }
+    } catch (e) {
+      updateProgress(1.0, '扫描失败');
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (useNativeOverlay) {
+        await AdaptiveNativeOverlay.showToast(message: '扫描失败：$e');
+      } else {
+        _showSnack('扫描失败：$e');
+      }
+    } finally {
+      if (useNativeOverlay) {
+        await AdaptiveNativeOverlay.dismissScanProgress();
+      } else {
+        if (navigator?.canPop() ?? false) {
+          navigator?.pop();
+        }
+        progressNotifier?.dispose();
+      }
+      _isBatchScanning = false;
+    }
+  }
+
   Future<void> _showEntryActionSheet(_BrowserEntry entry) async {
-    if (entry.isDirectory) return;
     await showCupertinoModalPopupWithBottomBar<void>(
       context: context,
       builder: (context) {
@@ -835,10 +1147,14 @@ class _CupertinoLibraryFolderBrowserSheetState
                           ),
                           Container(height: 0.5, color: separatorColor),
                           buildAction(
-                            title: '扫描',
+                            title: entry.isDirectory ? '扫描文件夹' : '扫描',
                             onPressed: () async {
                               Navigator.of(context).pop();
-                              await _scanEntry(entry);
+                              if (entry.isDirectory) {
+                                await _scanFolder(entry);
+                              } else {
+                                await _scanEntry(entry);
+                              }
                             },
                             isLast: true,
                           ),
@@ -1150,9 +1466,7 @@ class _CupertinoLibraryFolderBrowserSheetState
                         ? null
                         : WatchHistoryManager.getHistoryItem(historyKey),
                     onTap: () => _handleEntryTap(entry),
-                    onLongPress: entry.isDirectory
-                        ? null
-                        : () => _showEntryActionSheet(entry),
+                    onLongPress: () => _showEntryActionSheet(entry),
                   );
                 },
                 childCount: visibleEntries.length,
@@ -1186,9 +1500,7 @@ class _CupertinoLibraryFolderBrowserSheetState
                       onTap: entry.isDirectory
                           ? () => _toggleDirectoryExpansion(entry)
                           : () => _handleEntryTap(entry),
-                      onLongPress: entry.isDirectory
-                          ? null
-                          : () => _showEntryActionSheet(entry),
+                      onLongPress: () => _showEntryActionSheet(entry),
                     );
                     return _ListAppear(
                       key: ValueKey('entry_${entry.path}_${item.depth}'),
@@ -1379,6 +1691,8 @@ class _BrowserEntry {
   final int? episodeId;
   final bool? isFromScan;
 }
+
+enum _ScanOutcome { matched, unmatched, failed }
 
 String _labelForEntry(_BrowserEntry entry, WatchHistoryItem? item) {
   final metaLabel = _entryMetadataLabel(entry);
