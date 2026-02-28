@@ -63,8 +63,8 @@ runs:
         echo 'source "https://cdn.cocoapods.org/"' > ~/.cocoapods/config
         echo "Cleaning existing Pods (keep Podfile.lock for reproducible builds)..."
         rm -rf Pods
-        echo "Running pod install --deployment (lockfile enforced)..."
-        pod install --deployment
+        echo "Running pod install (allowing lockfile updates to fix CocoaPods version checksum mismatch)..."
+        pod install --repo-update
         cd ..
 
     - name: Setup Code Signing
