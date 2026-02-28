@@ -1147,11 +1147,17 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
 
   Future<void> _showRemoteLibraryManagementBottomSheet(
       SharedRemoteLibraryProvider provider) async {
+    final host = provider.activeHost;
+    final label =
+        host?.displayName ?? host?.baseUrl ?? '共享媒体库';
     await CupertinoBottomSheet.show(
       context: context,
       title: '共享库管理',
-      floatingTitle: true,
-      child: _SharedRemoteLibraryManagementContent(provider: provider),
+      child: CupertinoLibraryFolderBrowserSheet.sharedRemote(
+        provider: provider,
+        rootPath: '/',
+        sourceLabel: label,
+      ),
     );
   }
 
@@ -2821,39 +2827,64 @@ class _CupertinoLibraryManagementSheetState
           style: TextStyle(fontSize: 13, color: subtitleColor),
         ),
         const SizedBox(height: 12),
-        CupertinoSlidingSegmentedControl<_LibrarySource>(
-          backgroundColor: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGrey5,
-            context,
-          ),
-          thumbColor: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGrey3,
-            context,
-          ),
-          groupValue: _selectedSource,
-          children: const {
-            _LibrarySource.local: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text('本地媒体'),
+        Builder(builder: (context) {
+          final sources = <_LibrarySource>[
+            _LibrarySource.local,
+            _LibrarySource.webdav,
+            _LibrarySource.smb,
+          ];
+          final labels = <String>['本地媒体', 'WebDAV', 'SMB'];
+          final int selectedIndex = sources.indexOf(_selectedSource);
+          final int safeIndex = selectedIndex < 0 ? 0 : selectedIndex;
+          if (PlatformInfo.isIOS26OrHigher()) {
+            return AdaptiveSegmentedControl(
+              labels: labels,
+              selectedIndex: safeIndex,
+              color: CupertinoTheme.of(context).primaryColor,
+              onValueChanged: (index) {
+                final value = sources[index];
+                if (value == _selectedSource) return;
+                setState(() {
+                  _selectedSource = value;
+                });
+              },
+            );
+          }
+
+          return CupertinoSlidingSegmentedControl<_LibrarySource>(
+            backgroundColor: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey5,
+              context,
             ),
-            _LibrarySource.webdav: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text('WebDAV'),
+            thumbColor: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey3,
+              context,
             ),
-            _LibrarySource.smb: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text('SMB'),
-            ),
-          },
-          onValueChanged: (value) {
-            if (value == null || value == _selectedSource) {
-              return;
-            }
-            setState(() {
-              _selectedSource = value;
-            });
-          },
-        ),
+            groupValue: _selectedSource,
+            children: const {
+              _LibrarySource.local: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text('本地媒体'),
+              ),
+              _LibrarySource.webdav: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text('WebDAV'),
+              ),
+              _LibrarySource.smb: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text('SMB'),
+              ),
+            },
+            onValueChanged: (value) {
+              if (value == null || value == _selectedSource) {
+                return;
+              }
+              setState(() {
+                _selectedSource = value;
+              });
+            },
+          );
+        }),
       ],
     );
   }

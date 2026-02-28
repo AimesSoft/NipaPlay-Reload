@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
@@ -18,7 +19,7 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum CupertinoLibraryBrowserSource { local, webdav, smb }
+enum CupertinoLibraryBrowserSource { local, webdav, smb, sharedRemote }
 enum CupertinoLibraryBrowserLayout { grid, list }
 enum _BrowserSortOrder { nameAsc, nameDesc }
 
@@ -30,6 +31,7 @@ class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
     required this.sourceLabel,
     this.webdavConnection,
     this.smbConnection,
+    this.sharedRemoteProvider,
   });
 
   factory CupertinoLibraryFolderBrowserSheet.local({
@@ -71,11 +73,30 @@ class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
     );
   }
 
+  factory CupertinoLibraryFolderBrowserSheet.sharedRemote({
+    Key? key,
+    required SharedRemoteLibraryProvider provider,
+    String rootPath = '/',
+    String? sourceLabel,
+  }) {
+    final host = provider.activeHost;
+    final label =
+        sourceLabel ?? host?.displayName ?? host?.baseUrl ?? '共享媒体库';
+    return CupertinoLibraryFolderBrowserSheet._(
+      key: key,
+      source: CupertinoLibraryBrowserSource.sharedRemote,
+      rootPath: rootPath,
+      sourceLabel: label,
+      sharedRemoteProvider: provider,
+    );
+  }
+
   final CupertinoLibraryBrowserSource source;
   final String rootPath;
   final String sourceLabel;
   final WebDAVConnection? webdavConnection;
   final SMBConnection? smbConnection;
+  final SharedRemoteLibraryProvider? sharedRemoteProvider;
 
   @override
   State<CupertinoLibraryFolderBrowserSheet> createState() =>
@@ -269,6 +290,47 @@ class _CupertinoLibraryFolderBrowserSheetState
                 ))
             .toList();
         return _sortEntries(result);
+      case CupertinoLibraryBrowserSource.sharedRemote:
+        final provider = widget.sharedRemoteProvider;
+        if (provider == null) {
+          throw Exception('共享媒体库不可用');
+        }
+        if (path == widget.rootPath) {
+          if (provider.scannedFolders.isEmpty) {
+            await provider.refreshManagement(userInitiated: true);
+          }
+          final folders = provider.scannedFolders;
+          if (folders.isEmpty) {
+            final message = provider.managementErrorMessage;
+            if (message != null && message.trim().isNotEmpty) {
+              throw Exception(message);
+            }
+          }
+          final result = folders
+              .map((folder) => _BrowserEntry(
+                    name: folder.name.isNotEmpty
+                        ? folder.name
+                        : p.basename(folder.path),
+                    path: folder.path,
+                    isDirectory: true,
+                  ))
+              .toList();
+          return _sortEntries(result);
+        }
+        final entries = await provider.browseRemoteDirectory(path);
+        final result = entries
+            .map((entry) => _BrowserEntry(
+                  name: entry.name.isNotEmpty ? entry.name : p.basename(entry.path),
+                  path: entry.path,
+                  isDirectory: entry.isDirectory,
+                  animeName: entry.animeName,
+                  episodeTitle: entry.episodeTitle,
+                  animeId: entry.animeId,
+                  episodeId: entry.episodeId,
+                  isFromScan: entry.isFromScan,
+                ))
+            .toList();
+        return _sortEntries(result);
     }
   }
 
@@ -344,6 +406,14 @@ class _CupertinoLibraryFolderBrowserSheetState
         final connection = widget.smbConnection;
         if (connection == null) return null;
         return SMBProxyService.instance.buildStreamUrl(connection, entry.path);
+      case CupertinoLibraryBrowserSource.sharedRemote:
+        final provider = widget.sharedRemoteProvider;
+        if (provider == null) return null;
+        try {
+          return provider.buildRemoteFileStreamUri(entry.path).toString();
+        } catch (_) {
+          return null;
+        }
     }
   }
 
@@ -447,6 +517,51 @@ class _CupertinoLibraryFolderBrowserSheetState
     }
   }
 
+  Future<void> _playSharedRemoteFile(_BrowserEntry entry) async {
+    final provider = widget.sharedRemoteProvider;
+    if (provider == null) {
+      _showSnack('共享媒体库不可用');
+      return;
+    }
+    try {
+      final streamUrl =
+          provider.buildRemoteFileStreamUri(entry.path).toString();
+      final fallbackName =
+          entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
+      final title = p.basenameWithoutExtension(fallbackName);
+      final animeName = (entry.animeName?.trim().isNotEmpty ?? false)
+          ? entry.animeName!.trim()
+          : (title.isNotEmpty ? title : fallbackName);
+      final historyItem = WatchHistoryItem(
+        filePath: streamUrl,
+        animeName: animeName,
+        episodeTitle: entry.episodeTitle?.trim().isNotEmpty == true
+            ? entry.episodeTitle!.trim()
+            : null,
+        animeId: entry.animeId,
+        episodeId: entry.episodeId,
+        watchProgress: 0.0,
+        lastPosition: 0,
+        duration: 0,
+        lastWatchTime: DateTime.now(),
+        isFromScan: entry.isFromScan ?? false,
+      );
+      await WatchHistoryManager.addOrUpdateHistory(historyItem);
+
+      final playable = PlayableItem(
+        videoPath: streamUrl,
+        title: historyItem.animeName,
+        subtitle: historyItem.episodeTitle,
+        animeId: historyItem.animeId,
+        episodeId: historyItem.episodeId,
+        historyItem: historyItem,
+      );
+      await PlaybackService().play(playable);
+    } catch (e) {
+      _showSnack('播放失败：$e');
+    }
+  }
+
   Future<void> _handleEntryTap(_BrowserEntry entry) async {
     if (entry.isDirectory) {
       _openFolder(entry);
@@ -461,6 +576,9 @@ class _CupertinoLibraryFolderBrowserSheetState
         return;
       case CupertinoLibraryBrowserSource.smb:
         await _playSMBFile(entry);
+        return;
+      case CupertinoLibraryBrowserSource.sharedRemote:
+        await _playSharedRemoteFile(entry);
         return;
     }
   }
@@ -848,6 +966,12 @@ class _CupertinoLibraryFolderBrowserSheetState
         id = connection == null
             ? widget.rootPath
             : '${connection.host}|${connection.port}|${connection.username}|${connection.domain}';
+        break;
+      case CupertinoLibraryBrowserSource.sharedRemote:
+        final host = widget.sharedRemoteProvider?.activeHost;
+        id = host == null
+            ? widget.rootPath
+            : '${host.baseUrl}|${host.id}';
         break;
     }
     final encoded = base64Url.encode(utf8.encode(id)).replaceAll('=', '');
@@ -1239,11 +1363,75 @@ class _BrowserEntry {
     required this.name,
     required this.path,
     required this.isDirectory,
+    this.animeName,
+    this.episodeTitle,
+    this.animeId,
+    this.episodeId,
+    this.isFromScan,
   });
 
   final String name;
   final String path;
   final bool isDirectory;
+  final String? animeName;
+  final String? episodeTitle;
+  final int? animeId;
+  final int? episodeId;
+  final bool? isFromScan;
+}
+
+String _labelForEntry(_BrowserEntry entry, WatchHistoryItem? item) {
+  final metaLabel = _entryMetadataLabel(entry);
+  if (item == null) {
+    return metaLabel ?? '未扫描';
+  }
+
+  final hasHistoryIds = item.animeId != null || item.episodeId != null;
+  if (hasHistoryIds || item.isFromScan) {
+    return _historyItemLabel(item);
+  }
+
+  return metaLabel ?? _historyItemLabel(item);
+}
+
+String? _entryMetadataLabel(_BrowserEntry entry) {
+  final animeName = entry.animeName?.trim();
+  final episodeTitle = entry.episodeTitle?.trim();
+  final hasIds = (entry.animeId ?? 0) > 0 || (entry.episodeId ?? 0) > 0;
+
+  if (animeName != null && animeName.isNotEmpty) {
+    if (episodeTitle != null && episodeTitle.isNotEmpty) {
+      return '$animeName · $episodeTitle';
+    }
+    return animeName;
+  }
+  if (episodeTitle != null && episodeTitle.isNotEmpty) {
+    return episodeTitle;
+  }
+  if (hasIds) {
+    return '已匹配';
+  }
+  if (entry.isFromScan == true) {
+    return '已扫描';
+  }
+  return null;
+}
+
+String _historyItemLabel(WatchHistoryItem item) {
+  if (item.animeId != null || item.episodeId != null) {
+    if (item.animeName.isNotEmpty &&
+        (item.episodeTitle?.isNotEmpty ?? false)) {
+      return '${item.animeName} · ${item.episodeTitle}';
+    }
+    if (item.animeName.isNotEmpty) {
+      return item.animeName;
+    }
+    return '已匹配';
+  }
+  if (item.isFromScan) {
+    return '已扫描';
+  }
+  return '已播放';
 }
 
 enum _ListItemType { entry, loading, empty, error }
@@ -1367,24 +1555,8 @@ class _FolderGridTileState extends State<_FolderGridTile> {
                 child: FutureBuilder<WatchHistoryItem?>(
                   future: widget.historyFuture,
                   builder: (context, snapshot) {
-                    final item = snapshot.data;
-                    String label = '';
-                    if (item == null) {
-                      label = '未扫描';
-                    } else if (item.animeId != null || item.episodeId != null) {
-                      if (item.animeName.isNotEmpty &&
-                          (item.episodeTitle?.isNotEmpty ?? false)) {
-                        label = '${item.animeName} · ${item.episodeTitle}';
-                      } else if (item.animeName.isNotEmpty) {
-                        label = item.animeName;
-                      } else {
-                        label = '已匹配';
-                      }
-                    } else if (item.isFromScan) {
-                      label = '已扫描';
-                    } else {
-                      label = '已播放';
-                    }
+                    final label =
+                        _labelForEntry(widget.entry, snapshot.data);
                     return Text(
                       label,
                       maxLines: 2,
@@ -1426,26 +1598,6 @@ class _FolderListTile extends StatelessWidget {
   final VoidCallback onTap;
   final Future<WatchHistoryItem?>? historyFuture;
   final VoidCallback? onLongPress;
-
-  String _historyLabel(WatchHistoryItem? item) {
-    if (item == null) {
-      return '未扫描';
-    }
-    if (item.animeId != null || item.episodeId != null) {
-      if (item.animeName.isNotEmpty &&
-          (item.episodeTitle?.isNotEmpty ?? false)) {
-        return '${item.animeName} · ${item.episodeTitle}';
-      }
-      if (item.animeName.isNotEmpty) {
-        return item.animeName;
-      }
-      return '已匹配';
-    }
-    if (item.isFromScan) {
-      return '已扫描';
-    }
-    return '已播放';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1531,7 +1683,8 @@ class _FolderListTile extends StatelessWidget {
                             FutureBuilder<WatchHistoryItem?>(
                               future: historyFuture,
                               builder: (context, snapshot) {
-                                final label = _historyLabel(snapshot.data);
+                                final label =
+                                    _labelForEntry(entry, snapshot.data);
                                 return Text(
                                   label,
                                   maxLines: 2,
