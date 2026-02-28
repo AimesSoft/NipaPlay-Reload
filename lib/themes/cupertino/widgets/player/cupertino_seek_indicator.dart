@@ -1,4 +1,4 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:nipaplay/themes/cupertino/widgets/cuperinfo_text.dart';
 import 'package:provider/provider.dart';

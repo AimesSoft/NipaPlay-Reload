@@ -1,4 +1,4 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 class CupertinoAccountActionButton extends StatelessWidget {
@@ -26,7 +26,7 @@ class CupertinoAccountActionButton extends StatelessWidget {
     return AdaptiveButton.child(
       onPressed: isLoading ? null : onPressed,
       style: destructive ? AdaptiveButtonStyle.bordered : AdaptiveButtonStyle.filled,
-      color: destructive ? resolvedColor : null,
+      color: resolvedColor,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,

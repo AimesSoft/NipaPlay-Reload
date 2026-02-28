@@ -29,6 +29,7 @@ class FilePickerService {
   static const String _lastVideoDirKey = 'last_video_dir';
   static const String _lastSubtitleDirKey = 'last_subtitle_dir';
   static const String _lastDirKey = 'last_dir';
+  static const String _lastExternalPlayerDirKey = 'last_external_player_dir';
 
   // 内部方法：规范化文件路径（处理iOS的/private前缀）
   String _normalizePath(String path) {
@@ -543,6 +544,70 @@ class FilePickerService {
       return _normalizePath(file.path);
     } catch (e) {
       print('选择字幕文件失败: $e');
+      return null;
+    }
+  }
+
+  // 选择外部播放器可执行文件
+  Future<String?> pickExternalPlayerExecutable(
+      {String? initialDirectory}) async {
+    if (kIsWeb) {
+      return null;
+    }
+    if (!(io.Platform.isWindows ||
+        io.Platform.isMacOS ||
+        io.Platform.isLinux)) {
+      return null;
+    }
+
+    try {
+      initialDirectory ??= await _getLastDirectory(_lastExternalPlayerDirKey);
+
+      if (io.Platform.isMacOS && initialDirectory != null) {
+        final resolvedPath =
+            await SecurityBookmarkService.resolveBookmark(initialDirectory);
+        if (resolvedPath != null) {
+          initialDirectory = resolvedPath;
+        }
+      }
+
+      XTypeGroup? typeGroup;
+      if (io.Platform.isWindows) {
+        typeGroup = XTypeGroup(
+          label: '播放器程序',
+          extensions: const ['exe', 'lnk'],
+        );
+      } else if (io.Platform.isMacOS) {
+        typeGroup = const XTypeGroup(
+          label: '应用程序',
+          extensions: ['app'],
+          uniformTypeIdentifiers: ['com.apple.application-bundle'],
+        );
+      }
+
+      final XFile? file = await openFile(
+        acceptedTypeGroups: typeGroup != null ? [typeGroup] : const [],
+        initialDirectory: initialDirectory,
+        confirmButtonText: '选择播放器',
+      );
+
+      if (file == null) {
+        return null;
+      }
+
+      final filePath = file.path;
+
+      if (io.Platform.isMacOS) {
+        await SecurityBookmarkService.createBookmark(filePath);
+        final parentDir = p.dirname(filePath);
+        await SecurityBookmarkService.createBookmark(parentDir);
+      }
+
+      _saveLastDirectory(filePath, _lastExternalPlayerDirKey, _lastDirKey);
+
+      return _normalizePath(filePath);
+    } catch (e) {
+      print('选择外部播放器失败: $e');
       return null;
     }
   }

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -31,6 +31,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_settings_menu.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:video_player/video_player.dart';
@@ -199,7 +200,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
             destination = 'file';
             break;
           case ScreenshotSaveTarget.ask:
-            destination = await showCupertinoModalPopup<String>(
+            destination = await showCupertinoModalPopupWithBottomBar<String>(
               context: context,
               builder: (ctx) => CupertinoActionSheet(
                 title: const Text('保存截图'),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import '../main.dart'; // 导入 main.dart 以访问 navigatorKey
 import 'package:nipaplay/pages/anime_detail_page.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 
 class PlaybackService {
   static final PlaybackService _instance = PlaybackService._internal();
@@ -22,6 +23,10 @@ class PlaybackService {
     final context = navigatorKey.currentContext; // 直接使用导入的 navigatorKey
     if (context == null) {
       debugPrint("PlaybackService: Navigator context is null, cannot play.");
+      return;
+    }
+
+    if (await ExternalPlayerService.tryHandlePlayback(context, item)) {
       return;
     }
 

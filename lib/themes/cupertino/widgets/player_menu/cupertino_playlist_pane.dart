@@ -4,10 +4,15 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/services/external_player_service.dart';
+import 'package:provider/provider.dart';
 
 class CupertinoPlaylistPane extends StatefulWidget {
   const CupertinoPlaylistPane({
@@ -238,7 +243,39 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
 
   Future<void> _playEpisode(String path) async {
     try {
-      await widget.videoState.initializePlayer(path);
+      PlaybackSession? playbackSession;
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      if (settingsProvider.useExternalPlayer) {
+        if (path.startsWith('jellyfin://')) {
+          final itemId = path.replaceFirst('jellyfin://', '');
+          playbackSession =
+              await JellyfinService.instance.createPlaybackSession(
+            itemId: itemId,
+          );
+        } else if (path.startsWith('emby://')) {
+          final embyPath = path.replaceFirst('emby://', '');
+          final parts = embyPath.split('/');
+          final embyId = parts.isNotEmpty ? parts.last : embyPath;
+          playbackSession = await EmbyService.instance.createPlaybackSession(
+            itemId: embyId,
+          );
+        }
+
+        final playableItem = PlayableItem(
+          videoPath: path,
+          playbackSession: playbackSession,
+        );
+        if (await ExternalPlayerService.tryHandlePlayback(
+            context, playableItem)) {
+          return;
+        }
+      }
+
+      await widget.videoState.initializePlayer(
+        path,
+        playbackSession: playbackSession,
+      );
       BlurSnackBar.show(context, '已切换到新的播放项');
     } catch (e) {
       BlurSnackBar.show(context, '无法播放该条目：$e');

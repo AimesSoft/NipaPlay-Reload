@@ -5,6 +5,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/countdown_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 
 class AutoNextEpisodeService {
   static AutoNextEpisodeService? _instance;
@@ -211,6 +213,35 @@ class AutoNextEpisodeService {
   // 播放下一话
   void _playNextEpisode(BuildContext context, String nextEpisodePath) {
     debugPrint('[AutoNext] _playNextEpisode called, nextEpisodePath=$nextEpisodePath');
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
+    if (settingsProvider.useExternalPlayer) {
+      if (!ExternalPlayerService.isSupportedPlatform) {
+        BlurSnackBar.show(context, '外部播放器仅支持桌面端');
+        _nextEpisodePath = null;
+        return;
+      }
+      final playerPath = settingsProvider.externalPlayerPath.trim();
+      if (playerPath.isEmpty) {
+        BlurSnackBar.show(context, '请先选择外部播放器');
+        _nextEpisodePath = null;
+        return;
+      }
+      ExternalPlayerService.launch(
+        playerPath: playerPath,
+        mediaPath: nextEpisodePath,
+      ).then((launched) {
+        if (context is Element && !context.mounted) {
+          return;
+        }
+        BlurSnackBar.show(
+          context,
+          launched ? '已通过外部播放器打开下一话' : '外部播放器启动失败',
+        );
+      });
+      _nextEpisodePath = null;
+      return;
+    }
     // 优先调用VideoPlayerState的playNextEpisode，兼容Jellyfin/Emby等特殊情况
     try {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);

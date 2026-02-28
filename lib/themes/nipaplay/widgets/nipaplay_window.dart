@@ -18,6 +18,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
     this.topRightAction,
     this.maxWidth = 850,
     this.maxHeightFactor = 0.8,
+    this.showCloseButton = true,
   });
 
   final Widget child;
@@ -28,6 +29,7 @@ class NipaplayWindowScaffold extends StatefulWidget {
   final Widget? topRightAction;
   final double maxWidth;
   final double maxHeightFactor;
+  final bool showCloseButton;
 
   @override
   State<NipaplayWindowScaffold> createState() => _NipaplayWindowScaffoldState();
@@ -193,6 +195,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final bool useMacStyleCloseButton = _useMacStyleCloseButton();
     final Widget? topRightAction = widget.topRightAction;
+    final bool showCloseButton = widget.showCloseButton;
 
     return Theme(
       data: Theme.of(context).copyWith(
@@ -298,13 +301,14 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                       _applyWindowOffset(details.delta),
                                 ),
                               ),
-                              if (useMacStyleCloseButton)
+                              if (showCloseButton && useMacStyleCloseButton)
                                 Positioned(
                                   top: 0,
                                   left: 0,
                                   child: _buildMacCloseButton(context),
                                 )
-                              else if (topRightAction == null)
+                              else if (showCloseButton &&
+                                  topRightAction == null)
                                 Positioned(
                                   top: _windowControlPadding,
                                   right: _windowControlPadding,
@@ -314,18 +318,22 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                 Positioned(
                                   top: _windowControlPadding,
                                   right: _windowControlPadding,
-                                  child: useMacStyleCloseButton
-                                      ? topRightAction!
-                                      : Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            topRightAction!,
-                                            const SizedBox(
-                                              width: _windowControlGap,
-                                            ),
-                                            _buildFluentCloseButton(context),
-                                          ],
-                                        ),
+                                  child: showCloseButton
+                                      ? (useMacStyleCloseButton
+                                          ? topRightAction!
+                                          : Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                topRightAction!,
+                                                const SizedBox(
+                                                  width: _windowControlGap,
+                                                ),
+                                                _buildFluentCloseButton(
+                                                  context,
+                                                ),
+                                              ],
+                                            ))
+                                      : topRightAction!,
                                 ),
                             ],
                           ),

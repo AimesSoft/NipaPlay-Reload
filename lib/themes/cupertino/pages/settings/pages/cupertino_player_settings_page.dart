@@ -1,6 +1,6 @@
 import 'dart:io' if (dart.library.io) 'dart:io';
 
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +17,7 @@ import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -605,6 +606,7 @@ class _CupertinoPlayerSettingsPageState
     final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     final Color tileBackground = resolveSettingsTileBackground(context);
+    final bool externalSupported = globals.isDesktop;
 
     final List<Widget> sections = [
       CupertinoSettingsGroupCard(
@@ -636,6 +638,110 @@ class _CupertinoPlayerSettingsPageState
           ),
         ],
       ),
+      const SizedBox(height: 16),
+      if (externalSupported)
+        CupertinoSettingsGroupCard(
+          margin: EdgeInsets.zero,
+          backgroundColor: sectionBackground,
+          addDividers: true,
+          dividerIndent: 16,
+          children: [
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                Future<void> toggleExternal(bool value) async {
+                  if (!externalSupported) {
+                    return;
+                  }
+                  if (value) {
+                    if (settingsProvider.externalPlayerPath.trim().isEmpty) {
+                      final picked =
+                          await FilePickerService().pickExternalPlayerExecutable();
+                      if (picked == null || picked.trim().isEmpty) {
+                        if (!mounted) return;
+                        AdaptiveSnackBar.show(
+                          context,
+                          message: '已取消选择外部播放器',
+                          type: AdaptiveSnackBarType.info,
+                        );
+                        await settingsProvider.setUseExternalPlayer(false);
+                        return;
+                      }
+                      await settingsProvider.setExternalPlayerPath(picked);
+                    }
+                    await settingsProvider.setUseExternalPlayer(true);
+                    if (!mounted) return;
+                    AdaptiveSnackBar.show(
+                      context,
+                      message: '已启用外部播放器',
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  } else {
+                    await settingsProvider.setUseExternalPlayer(false);
+                    if (!mounted) return;
+                    AdaptiveSnackBar.show(
+                      context,
+                      message: '已关闭外部播放器',
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  }
+                }
+
+                return CupertinoSettingsTile(
+                  leading: Icon(
+                    CupertinoIcons.square_arrow_up,
+                    color: resolveSettingsIconColor(context),
+                  ),
+                  title: const Text('启用外部播放器'),
+                  subtitle: const Text('开启后将使用外部播放器播放视频'),
+                  trailing: AdaptiveSwitch(
+                    value: settingsProvider.useExternalPlayer,
+                    onChanged: toggleExternal,
+                  ),
+                  onTap: () =>
+                      toggleExternal(!settingsProvider.useExternalPlayer),
+                  backgroundColor: tileBackground,
+                );
+              },
+            ),
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                final path = settingsProvider.externalPlayerPath.trim();
+                final subtitle =
+                    path.isEmpty ? '未选择外部播放器' : path;
+                return CupertinoSettingsTile(
+                  leading: Icon(
+                    CupertinoIcons.folder,
+                    color: resolveSettingsIconColor(context),
+                  ),
+                  title: const Text('选择外部播放器'),
+                  subtitle: Text(subtitle),
+                  showChevron: true,
+                  onTap: () async {
+                    final picked = await FilePickerService()
+                        .pickExternalPlayerExecutable();
+                    if (picked == null || picked.trim().isEmpty) {
+                      if (!mounted) return;
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: '已取消选择外部播放器',
+                        type: AdaptiveSnackBarType.info,
+                      );
+                      return;
+                    }
+                    await settingsProvider.setExternalPlayerPath(picked);
+                    if (!mounted) return;
+                    AdaptiveSnackBar.show(
+                      context,
+                      message: '已更新外部播放器',
+                      type: AdaptiveSnackBarType.success,
+                    );
+                  },
+                  backgroundColor: tileBackground,
+                );
+              },
+            ),
+          ],
+        ),
       if (_selectedKernelType == PlayerKernelType.mdk ||
           _selectedKernelType == PlayerKernelType.mediaKit) ...[
         const SizedBox(height: 16),

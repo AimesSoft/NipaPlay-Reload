@@ -6,6 +6,14 @@ import UIKit
 public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
 
     public static func register(with registrar: FlutterPluginRegistrar) {
+        let overlayChannel = FlutterMethodChannel(
+            name: "adaptive_platform_ui/native_overlay",
+            binaryMessenger: registrar.messenger()
+        )
+        overlayChannel.setMethodCallHandler { call, result in
+            NativeOverlayManager.shared.handle(call, result: result)
+        }
+
         // Initialize iOS 26+ Native Tab Bar Manager
         if #available(iOS 26.0, *) {
             iOS26NativeTabBarManager.shared.setup(messenger: registrar.messenger())

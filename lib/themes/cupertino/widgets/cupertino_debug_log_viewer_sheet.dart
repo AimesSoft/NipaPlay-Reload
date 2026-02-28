@@ -1,4 +1,4 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -7,6 +7,7 @@ import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/log_share_service.dart';
 import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 
 class CupertinoDebugLogViewerSheet extends StatefulWidget {
   const CupertinoDebugLogViewerSheet({super.key});
@@ -134,7 +135,7 @@ class _CupertinoDebugLogViewerSheetState
   }
 
   Future<void> _pickLevel() async {
-    final result = await showCupertinoModalPopup<String>(
+    final result = await showCupertinoModalPopupWithBottomBar<String>(
       context: context,
       builder: (context) => CupertinoActionSheet(
         title: const Text('选择日志级别'),
@@ -161,7 +162,7 @@ class _CupertinoDebugLogViewerSheetState
   }
 
   Future<void> _pickTag() async {
-    final result = await showCupertinoModalPopup<String>(
+    final result = await showCupertinoModalPopupWithBottomBar<String>(
       context: context,
       builder: (context) => CupertinoActionSheet(
         title: const Text('选择日志标签'),

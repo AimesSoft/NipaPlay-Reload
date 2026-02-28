@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -23,6 +24,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/external_player_service.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -428,6 +430,24 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       _isLoadingVideoFromDetail = true;
       _loadingMessageForDetail = '正在初始化播放器...';
     });
+
+    final playableItem = PlayableItem(
+      videoPath: historyItem.filePath,
+      title: historyItem.animeName,
+      subtitle: historyItem.episodeTitle,
+      animeId: historyItem.animeId,
+      episodeId: historyItem.episodeId,
+      historyItem: historyItem,
+    );
+
+    if (await ExternalPlayerService.tryHandlePlayback(context, playableItem)) {
+      if (mounted) {
+        setState(() {
+          _isLoadingVideoFromDetail = false;
+        });
+      }
+      return;
+    }
 
     bool tabChangeLogicExecutedInDetail = false;
 

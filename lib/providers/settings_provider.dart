@@ -19,6 +19,10 @@ class SettingsProvider with ChangeNotifier {
 
   // 播放时自动匹配弹幕
   bool _autoMatchDanmakuOnPlay = true; // 默认开启
+
+  // 外部播放器设置
+  bool _useExternalPlayer = false;
+  String _externalPlayerPath = '';
   
   // --- Getters ---
   double get blurPower => _blurPower;
@@ -27,6 +31,8 @@ class SettingsProvider with ChangeNotifier {
   bool get autoMatchDanmakuFirstSearchResultOnHashFail =>
       _autoMatchDanmakuFirstSearchResultOnHashFail;
   bool get autoMatchDanmakuOnPlay => _autoMatchDanmakuOnPlay;
+  bool get useExternalPlayer => _useExternalPlayer;
+  String get externalPlayerPath => _externalPlayerPath;
 
   SettingsProvider() {
     _loadSettings();
@@ -43,6 +49,10 @@ class SettingsProvider with ChangeNotifier {
             true;
     _autoMatchDanmakuOnPlay =
         _prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true;
+    _useExternalPlayer =
+        _prefs.getBool(SettingsKeys.useExternalPlayer) ?? false;
+    _externalPlayerPath =
+        _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
     notifyListeners();
   }
 
@@ -87,6 +97,24 @@ class SettingsProvider with ChangeNotifier {
     await _prefs.setBool(
       SettingsKeys.autoMatchDanmakuOnPlay,
       _autoMatchDanmakuOnPlay,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setUseExternalPlayer(bool enable) async {
+    _useExternalPlayer = enable;
+    await _prefs.setBool(
+      SettingsKeys.useExternalPlayer,
+      _useExternalPlayer,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setExternalPlayerPath(String path) async {
+    _externalPlayerPath = path.trim();
+    await _prefs.setString(
+      SettingsKeys.externalPlayerPath,
+      _externalPlayerPath,
     );
     notifyListeners();
   }

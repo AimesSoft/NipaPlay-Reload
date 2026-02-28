@@ -10,7 +10,7 @@ import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 
 class CupertinoAppearanceSettingsPage extends StatefulWidget {
   const CupertinoAppearanceSettingsPage({super.key});

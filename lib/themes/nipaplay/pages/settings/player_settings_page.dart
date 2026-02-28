@@ -24,6 +24,7 @@ import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -480,10 +481,6 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           ),
 
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
         ],
 
         if (_selectedKernelType == PlayerKernelType.mdk ||

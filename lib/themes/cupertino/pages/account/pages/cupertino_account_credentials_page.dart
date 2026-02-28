@@ -1,4 +1,4 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -104,6 +104,7 @@ class _CupertinoAccountCredentialsPageState
               AdaptiveButton.child(
                 onPressed: _isSubmitting ? null : _handleSubmit,
                 style: AdaptiveButtonStyle.filled,
+                color: CupertinoTheme.of(context).primaryColor,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/foundation.dart';
@@ -55,7 +55,7 @@ import 'package:nipaplay/themes/cupertino/pages/network_media/cupertino_dandanpl
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_smb_connection_dialog.dart';
 
 // ignore_for_file: prefer_const_constructors
@@ -462,7 +462,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       CupertinoButton(
                         onPressed: () => _openAddHostDialog(provider),
                         color: CupertinoDynamicColor.resolve(
-                            CupertinoColors.activeBlue, context),
+                            CupertinoTheme.of(context).primaryColor, context),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 10),
                         borderRadius: BorderRadius.circular(14),
@@ -742,7 +742,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   }) {
     final bool enabled = onPressed != null;
     final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -1147,11 +1147,17 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
 
   Future<void> _showRemoteLibraryManagementBottomSheet(
       SharedRemoteLibraryProvider provider) async {
+    final host = provider.activeHost;
+    final label =
+        host?.displayName ?? host?.baseUrl ?? '共享媒体库';
     await CupertinoBottomSheet.show(
       context: context,
       title: '共享库管理',
-      floatingTitle: true,
-      child: _SharedRemoteLibraryManagementContent(provider: provider),
+      child: CupertinoLibraryFolderBrowserSheet.sharedRemote(
+        provider: provider,
+        rootPath: '/',
+        sourceLabel: label,
+      ),
     );
   }
 
@@ -1643,7 +1649,7 @@ class _CupertinoLocalMediaLibraryCardState
   Widget _buildImportButton(BuildContext context) {
     final bool enabled = !_isImporting;
     final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final Color textColor = CupertinoColors.white;
 
     final child = Container(
@@ -1804,7 +1810,7 @@ class _CupertinoLocalMediaLibraryCardState
   }) {
     final bool enabled = onPressed != null;
     final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -2689,7 +2695,7 @@ class _CupertinoLibraryManagementSheetState
       context,
     );
     final progressColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2821,39 +2827,64 @@ class _CupertinoLibraryManagementSheetState
           style: TextStyle(fontSize: 13, color: subtitleColor),
         ),
         const SizedBox(height: 12),
-        CupertinoSlidingSegmentedControl<_LibrarySource>(
-          backgroundColor: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGrey5,
-            context,
-          ),
-          thumbColor: CupertinoDynamicColor.resolve(
-            CupertinoColors.systemGrey3,
-            context,
-          ),
-          groupValue: _selectedSource,
-          children: const {
-            _LibrarySource.local: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text('本地媒体'),
+        Builder(builder: (context) {
+          final sources = <_LibrarySource>[
+            _LibrarySource.local,
+            _LibrarySource.webdav,
+            _LibrarySource.smb,
+          ];
+          final labels = <String>['本地媒体', 'WebDAV', 'SMB'];
+          final int selectedIndex = sources.indexOf(_selectedSource);
+          final int safeIndex = selectedIndex < 0 ? 0 : selectedIndex;
+          if (PlatformInfo.isIOS26OrHigher()) {
+            return AdaptiveSegmentedControl(
+              labels: labels,
+              selectedIndex: safeIndex,
+              color: CupertinoTheme.of(context).primaryColor,
+              onValueChanged: (index) {
+                final value = sources[index];
+                if (value == _selectedSource) return;
+                setState(() {
+                  _selectedSource = value;
+                });
+              },
+            );
+          }
+
+          return CupertinoSlidingSegmentedControl<_LibrarySource>(
+            backgroundColor: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey5,
+              context,
             ),
-            _LibrarySource.webdav: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text('WebDAV'),
+            thumbColor: CupertinoDynamicColor.resolve(
+              CupertinoColors.systemGrey3,
+              context,
             ),
-            _LibrarySource.smb: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text('SMB'),
-            ),
-          },
-          onValueChanged: (value) {
-            if (value == null || value == _selectedSource) {
-              return;
-            }
-            setState(() {
-              _selectedSource = value;
-            });
-          },
-        ),
+            groupValue: _selectedSource,
+            children: const {
+              _LibrarySource.local: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text('本地媒体'),
+              ),
+              _LibrarySource.webdav: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text('WebDAV'),
+              ),
+              _LibrarySource.smb: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Text('SMB'),
+              ),
+            },
+            onValueChanged: (value) {
+              if (value == null || value == _selectedSource) {
+                return;
+              }
+              setState(() {
+                _selectedSource = value;
+              });
+            },
+          );
+        }),
       ],
     );
   }
@@ -2866,8 +2897,7 @@ class _CupertinoLibraryManagementSheetState
     bool primary = false,
   }) {
     final bool enabled = onPressed != null;
-    final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final Color primaryColor = CupertinoTheme.of(context).primaryColor;
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -2923,7 +2953,6 @@ class _CupertinoLibraryManagementSheetState
     await CupertinoBottomSheet.show(
       context: context,
       title: '文件浏览',
-      floatingTitle: true,
       child: CupertinoLibraryFolderBrowserSheet.local(
         rootPath: folderPath,
         sourceLabel: displayName,
@@ -2939,7 +2968,6 @@ class _CupertinoLibraryManagementSheetState
     await CupertinoBottomSheet.show(
       context: context,
       title: '文件浏览',
-      floatingTitle: true,
       child: CupertinoLibraryFolderBrowserSheet.webdav(
         connection: connection,
       ),
@@ -2954,7 +2982,6 @@ class _CupertinoLibraryManagementSheetState
     await CupertinoBottomSheet.show(
       context: context,
       title: '文件浏览',
-      floatingTitle: true,
       child: CupertinoLibraryFolderBrowserSheet.smb(
         connection: connection,
       ),
@@ -3018,7 +3045,7 @@ class _CupertinoLibraryManagementSheetState
       context,
     );
     final accentColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.activeBlue,
+      CupertinoTheme.of(context).primaryColor,
       context,
     );
     final destructiveColor = CupertinoDynamicColor.resolve(
@@ -3240,7 +3267,7 @@ class _CupertinoLibraryManagementSheetState
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final accentColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
@@ -3308,7 +3335,7 @@ class _CupertinoLibraryManagementSheetState
                     CupertinoIcons.folder,
                     size: 18,
                     color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.activeBlue,
+                      CupertinoTheme.of(context).primaryColor,
                       context,
                     ),
                   ),
@@ -3361,7 +3388,7 @@ class _CupertinoLibraryManagementSheetState
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final accentColor =
-        CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
     final destructiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.destructiveRed, context);
     final indentation = 16.0 + depth * 14;
@@ -3845,7 +3872,7 @@ class _CupertinoLibraryManagementSheetState
     final urlColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
     final statusColor = connection.isConnected
-        ? CupertinoColors.activeGreen
+        ? CupertinoTheme.of(context).primaryColor
         : CupertinoColors.systemRed;
 
     return Container(
@@ -4049,7 +4076,7 @@ class _CupertinoLibraryManagementSheetState
                   size: 18,
                   color: file.isDirectory
                       ? CupertinoDynamicColor.resolve(
-                          CupertinoColors.activeBlue,
+                          CupertinoTheme.of(context).primaryColor,
                           context,
                         )
                       : CupertinoDynamicColor.resolve(
@@ -4204,7 +4231,7 @@ class _CupertinoLibraryManagementSheetState
   Future<void> _showWebDAVConnectionDialog({
     WebDAVConnection? editConnection,
   }) async {
-    final result = await WebDAVConnectionDialog.show(
+    final result = await CupertinoWebDAVConnectionDialog.show(
       context,
       editConnection: editConnection,
     );
@@ -4800,7 +4827,7 @@ class _CupertinoLibraryManagementSheetState
       context,
     );
     final statusColor = connection.isConnected
-        ? CupertinoColors.activeGreen
+        ? CupertinoTheme.of(context).primaryColor
         : CupertinoColors.systemRed;
 
     return Container(
@@ -5010,7 +5037,7 @@ class _CupertinoLibraryManagementSheetState
                   size: 18,
                   color: file.isDirectory
                       ? CupertinoDynamicColor.resolve(
-                          CupertinoColors.activeBlue,
+                          CupertinoTheme.of(context).primaryColor,
                           context,
                         )
                       : CupertinoDynamicColor.resolve(
@@ -5670,14 +5697,6 @@ class _CupertinoLibraryManagementSheetState
     _showSnack('已同步本地媒体库');
   }
 
-  void _showSnack(String message) {
-    if (!mounted) return;
-    AdaptiveSnackBar.show(
-      context,
-      message: message,
-      type: AdaptiveSnackBarType.info,
-    );
-  }
 }
 
 /// 媒体库内容组件
@@ -6499,7 +6518,7 @@ class _SharedRemoteLibraryManagementContentState
     bool primary = false,
   }) {
     final color = primary
-        ? CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context)
+        ? CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context)
         : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final textColor = primary ? CupertinoColors.white : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     return CupertinoButton(
@@ -6740,7 +6759,7 @@ class _SharedRemoteLibraryManagementContentState
                 Icon(
                   CupertinoIcons.cloud,
                   color: CupertinoDynamicColor.resolve(
-                      CupertinoColors.activeBlue, context),
+                      CupertinoTheme.of(context).primaryColor, context),
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -6880,7 +6899,7 @@ class _SharedRemoteLibraryManagementContentState
   }
 
   Future<void> _handleAddWebDAV(SharedRemoteLibraryProvider provider) async {
-    await WebDAVConnectionDialog.show(
+    await CupertinoWebDAVConnectionDialog.show(
       context,
       onSave: (connection) async {
         await provider.addWebDAVConnection(connection);
