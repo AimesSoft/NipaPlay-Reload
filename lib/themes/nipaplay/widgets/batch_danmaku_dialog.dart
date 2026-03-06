@@ -45,7 +45,8 @@ class BatchDanmakuMatchDialog extends StatefulWidget {
   }
 
   @override
-  State<BatchDanmakuMatchDialog> createState() => _BatchDanmakuMatchDialogState();
+  State<BatchDanmakuMatchDialog> createState() =>
+      _BatchDanmakuMatchDialogState();
 }
 
 class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
@@ -71,11 +72,26 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
   @override
   String get hotkeyDisableReason => 'batch_danmaku_dialog';
 
+  /// 从路径或 URL 得到显示名：URL 取 pathSegments 最后一段，本地路径用 basename。
+  static String _displayNameFromPath(String path) {
+    if (path.contains('://')) {
+      final segments = Uri.tryParse(path)?.pathSegments;
+      if (segments != null && segments.isNotEmpty) {
+        return segments.last;
+      }
+      return path;
+    }
+    return p.basename(path);
+  }
+
   @override
   void initState() {
     super.initState();
     _files = widget.filePaths
-        .map((path) => _FileItem(path: path, displayName: p.basename(path)))
+        .map(
+          (path) =>
+              _FileItem(path: path, displayName: _displayNameFromPath(path)),
+        )
         .toList(growable: true);
     if (widget.initialSearchKeyword?.trim().isNotEmpty == true) {
       _searchController.text = widget.initialSearchKeyword!.trim();
@@ -128,10 +144,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
       _isDarkMode ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
 
   TextSelectionThemeData get _selectionTheme => TextSelectionThemeData(
-        cursorColor: _accentColor,
-        selectionColor: _accentColor.withOpacity(0.3),
-        selectionHandleColor: _accentColor,
-      );
+    cursorColor: _accentColor,
+    selectionColor: _accentColor.withOpacity(0.3),
+    selectionHandleColor: _accentColor,
+  );
 
   ButtonStyle _primaryButtonStyle() {
     return ButtonStyle(
@@ -174,8 +190,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
 
     try {
       final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
+          .round();
       const apiPath = '/api/v2/search/anime';
       final baseUrl = await DandanplayService.getApiBaseUrl();
       final url = '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword)}';
@@ -249,8 +265,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
 
     try {
       final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
+          .round();
       final apiPath = '/api/v2/bangumi/$animeId';
       final baseUrl = await DandanplayService.getApiBaseUrl();
       final url = '$baseUrl$apiPath';
@@ -284,7 +300,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
       }
 
       final data = json.decode(response.body);
-      final rawEpisodes = (data is Map<String, dynamic> &&
+      final rawEpisodes =
+          (data is Map<String, dynamic> &&
               data['success'] == true &&
               data['bangumi'] is Map<String, dynamic>)
           ? (data['bangumi'] as Map<String, dynamic>)['episodes']
@@ -372,11 +389,9 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
       });
     }
 
-    Navigator.of(context).pop({
-      'animeId': animeId,
-      'animeTitle': animeTitle,
-      'mappings': mappings,
-    });
+    Navigator.of(
+      context,
+    ).pop({'animeId': animeId, 'animeTitle': animeTitle, 'mappings': mappings});
   }
 
   static int? _tryParsePositiveInt(dynamic value) {
@@ -426,8 +441,9 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     final iconColor = _mutedTextColor;
     final checkboxSide = BorderSide(color: _borderColor, width: 1);
     final backgroundColor = isDragging ? _surfaceColor : _panelAltColor;
-    final borderColor =
-        isDragging ? _accentColor.withOpacity(0.35) : _borderColor;
+    final borderColor = isDragging
+        ? _accentColor.withOpacity(0.35)
+        : _borderColor;
 
     return Container(
       key: ValueKey(item.path),
@@ -501,8 +517,9 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     final iconColor = _mutedTextColor;
     final checkboxSide = BorderSide(color: _borderColor, width: 1);
     final backgroundColor = isDragging ? _surfaceColor : _panelAltColor;
-    final borderColor =
-        isDragging ? _accentColor.withOpacity(0.35) : _borderColor;
+    final borderColor = isDragging
+        ? _accentColor.withOpacity(0.35)
+        : _borderColor;
 
     return Container(
       key: ValueKey(episode.episodeId),
@@ -611,10 +628,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                       const SizedBox(height: 4),
                       Text(
                         'ID: $animeId',
-                        style: TextStyle(
-                          color: _subTextColor,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: _subTextColor, fontSize: 12),
                       ),
                     ],
                   ],
@@ -659,10 +673,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
               const SizedBox(height: 4),
               Text(
                 '对齐本地文件与剧集顺序，一键完成匹配',
-                style: TextStyle(
-                  color: _subTextColor,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: _subTextColor, fontSize: 13),
               ),
             ],
           ),
@@ -682,15 +693,13 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
             decoration: InputDecoration(
               hintText: '搜索番剧（右侧先选番剧再选话数）',
               hintStyle: TextStyle(color: _mutedTextColor),
-              prefixIcon: Icon(
-                Icons.search,
-                color: _mutedTextColor,
-                size: 18,
-              ),
+              prefixIcon: Icon(Icons.search, color: _mutedTextColor, size: 18),
               filled: true,
               fillColor: _panelAltColor,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(color: _borderColor),
@@ -787,10 +796,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         children: [
           Icon(Icons.inbox_outlined, color: _mutedTextColor, size: 32),
           const SizedBox(height: 8),
-          Text(
-            title,
-            style: TextStyle(color: _subTextColor, fontSize: 13),
-          ),
+          Text(title, style: TextStyle(color: _subTextColor, fontSize: 13)),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             Text(
@@ -881,27 +887,26 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                 ? Center(
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(_accentColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
                     ),
                   )
                 : _searchResults.isEmpty
-                    ? _buildEmptyState('暂无搜索结果')
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        primary: false,
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final anime = _searchResults[index];
-                          final showBottomDivider =
-                              index != _searchResults.length - 1;
-                          return _buildSearchResultItem(
-                            anime,
-                            index,
-                            showBottomDivider: showBottomDivider,
-                          );
-                        },
-                      ),
+                ? _buildEmptyState('暂无搜索结果')
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    primary: false,
+                    itemCount: _searchResults.length,
+                    itemBuilder: (context, index) {
+                      final anime = _searchResults[index];
+                      final showBottomDivider =
+                          index != _searchResults.length - 1;
+                      return _buildSearchResultItem(
+                        anime,
+                        index,
+                        showBottomDivider: showBottomDivider,
+                      );
+                    },
+                  ),
           ),
         ),
       ],
@@ -988,10 +993,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           const SizedBox(height: 8),
         ],
         Expanded(
-          child: Container(
-            decoration: _panelDecoration(),
-            child: panelContent,
-          ),
+          child: Container(decoration: _panelDecoration(), child: panelContent),
         ),
         if (mismatch)
           Padding(
@@ -1019,9 +1021,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                   MediaQuery.of(context).size.width,
                 ),
           maxHeightFactor:
-              (globals.isPhone && MediaQuery.of(context).size.shortestSide < 600)
-                  ? 0.9
-                  : 0.85,
+              (globals.isPhone &&
+                  MediaQuery.of(context).size.shortestSide < 600)
+              ? 0.9
+              : 0.85,
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
           child: Padding(
@@ -1074,8 +1077,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                       child: Text(
                         _selectedAnime == null
                             ? (_searchMessage.isNotEmpty
-                                ? _searchMessage
-                                : '先在右侧搜索并选择番剧')
+                                  ? _searchMessage
+                                  : '先在右侧搜索并选择番剧')
                             : '对齐顺序后点击“一键匹配”',
                         style: TextStyle(color: _subTextColor),
                         maxLines: 1,
@@ -1122,9 +1125,4 @@ class _EpisodeItem {
   });
 }
 
-enum _EpisodesMenuAction {
-  changeAnime,
-  selectAll,
-  clearAll,
-  selectFirstN,
-}
+enum _EpisodesMenuAction { changeAnime, selectAll, clearAll, selectFirstN }
