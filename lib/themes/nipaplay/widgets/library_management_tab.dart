@@ -1256,6 +1256,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       BlurSnackBar.show(context, '暂无失败文件');
       return;
     }
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color primaryTextColor = isDark ? Colors.white : Colors.black87;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
 
     BlurDialog.show(
       context: context,
@@ -1275,12 +1278,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               children: [
                 SelectableText(
                   '${index + 1}. $displayPath',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: primaryTextColor, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '原因：$error',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(color: secondaryTextColor, fontSize: 12),
                 ),
               ],
             );
@@ -1290,9 +1293,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭',
-              locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Colors.white70)),
+          child: Text(
+            '关闭',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(color: secondaryTextColor),
+          ),
         ),
       ],
     );
