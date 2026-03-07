@@ -243,6 +243,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _desktopHoverSettingsMenuEnabledKey =
       'desktop_hover_settings_menu_enabled';
   bool _desktopHoverSettingsMenuEnabled = false; // 默认关闭（桌面端）
+  final String _instantHidePlayerUiEnabledKey =
+      'instant_hide_player_ui_enabled';
+  bool _instantHidePlayerUiEnabled = false; // 默认关闭（桌面端）
   bool _isFullscreen = false;
   double _progress = 0.0;
   Duration _duration = Duration.zero;
@@ -737,6 +740,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isDisposed => _isDisposed;
   bool get showRightMenu => _showRightMenu;
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
+  bool get instantHidePlayerUiEnabled => _instantHidePlayerUiEnabled;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
   int get bufferedPosition => _bufferedPositionMs;

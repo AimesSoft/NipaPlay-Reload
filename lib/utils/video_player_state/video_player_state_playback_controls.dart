@@ -640,6 +640,13 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _autoHideTimer?.cancel();
       setShowControls(true);
     } else {
+      if (_instantHidePlayerUiEnabled && !globals.isPhone) {
+        _hideControlsTimer?.cancel();
+        _hideMouseTimer?.cancel();
+        _autoHideTimer?.cancel();
+        setShowControls(false);
+        return;
+      }
       resetHideControlsTimer();
       resetAutoHideTimer();
     }

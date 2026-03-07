@@ -169,6 +169,27 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  Future<void> _loadInstantHidePlayerUiEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resolved = prefs.getBool(_instantHidePlayerUiEnabledKey) ?? false;
+    if (_instantHidePlayerUiEnabled != resolved) {
+      _instantHidePlayerUiEnabled = resolved;
+      notifyListeners();
+    } else {
+      _instantHidePlayerUiEnabled = resolved;
+    }
+  }
+
+  Future<void> setInstantHidePlayerUiEnabled(bool enabled) async {
+    if (_instantHidePlayerUiEnabled == enabled) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_instantHidePlayerUiEnabledKey, enabled);
+    _instantHidePlayerUiEnabled = enabled;
+    notifyListeners();
+  }
+
   // 保存最小化进度条启用状态
   Future<void> setMinimalProgressBarEnabled(bool enabled) async {
     _minimalProgressBarEnabled = enabled;

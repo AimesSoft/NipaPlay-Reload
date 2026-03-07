@@ -11,6 +11,8 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 // import 'package:http/http.dart' as http; // No longer needed for local translation state
 import 'package:nipaplay/services/dandanplay_service.dart'; // 重新添加DandanplayService导入
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart'; // Added for blur snackbar
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:provider/provider.dart'; // 重新添加
 // import 'package:nipaplay/utils/video_player_state.dart'; // Removed from here
 import 'dart:io'; // Added for File operations
@@ -25,6 +27,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:meta/meta.dart';
@@ -32,6 +35,11 @@ import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+
+enum _EpisodeCleanupAction {
+  clearScanResults,
+  deleteWatchHistory,
+}
 
 class AnimeDetailPage extends StatefulWidget {
   final int animeId;
@@ -109,6 +117,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   AppearanceSettingsProvider? _appearanceSettings;
   bool _isEpisodeListReversed = false;
   bool _isSortButtonHovered = false;
+  bool _isCleanupButtonHovered = false;
+  bool _isCleaningEpisodeHistory = false;
   int? _hoveredEpisodeTileId;
   int? _hoveredWatchToggleEpisodeId;
   bool _isBangumiRatingButtonHovered = false;
@@ -1490,6 +1500,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         _isEpisodeListReversed ? episodes.reversed.toList() : episodes;
     final Color sortButtonColor =
         _isSortButtonHovered ? accentColor : secondaryTextColor;
+    final Color cleanupButtonColor = _isCleaningEpisodeHistory
+        ? secondaryTextColor.withOpacity(0.35)
+        : (_isCleanupButtonHovered ? accentColor : secondaryTextColor);
 
     return Column(
       children: [
@@ -1506,6 +1519,58 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
               ),
               const Spacer(),
+              MouseRegion(
+                cursor: _isCleaningEpisodeHistory
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.click,
+                onEnter: _isCleaningEpisodeHistory
+                    ? null
+                    : (_) => setState(() => _isCleanupButtonHovered = true),
+                onExit: _isCleaningEpisodeHistory
+                    ? null
+                    : (_) => setState(() => _isCleanupButtonHovered = false),
+                child: GestureDetector(
+                  onTap: _isCleaningEpisodeHistory
+                      ? null
+                      : () => _showEpisodeListCleanupDialog(anime),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedScale(
+                    scale: _isCleanupButtonHovered ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 180),
+                      style: TextStyle(
+                        color: cleanupButtonColor,
+                        fontSize: 12,
+                      ),
+                      child: IconTheme(
+                        data: IconThemeData(
+                          color: cleanupButtonColor,
+                          size: 16,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Ionicons.trash_outline),
+                              const SizedBox(width: 4),
+                              Text(
+                                _isCleaningEpisodeHistory ? '处理中' : '清理记录',
+                                locale: const Locale('zh-Hans', 'zh'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               MouseRegion(
                 cursor: SystemMouseCursors.click,
                 onEnter: (_) => setState(() => _isSortButtonHovered = true),
@@ -2065,6 +2130,101 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   // 显示模糊Snackbar
   void _showBlurSnackBar(BuildContext context, String message) {
     BlurSnackBar.show(context, message);
+  }
+
+  Future<void> _showEpisodeListCleanupDialog(BangumiAnime anime) async {
+    if (_isCleaningEpisodeHistory) return;
+
+    final displayName = anime.nameCn.isNotEmpty ? anime.nameCn : anime.name;
+    final action = await BlurDialog.show<_EpisodeCleanupAction>(
+      context: context,
+      title: '清理本地记录',
+      content:
+          '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有扫描结果：移除扫描匹配信息，保留观看进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。',
+      actions: [
+        HoverScaleTextButton(
+          child: const Text('清除所有扫描结果', locale: Locale('zh-Hans', 'zh')),
+          onPressed: () {
+            Navigator.of(context).pop(_EpisodeCleanupAction.clearScanResults);
+          },
+        ),
+        HoverScaleTextButton(
+          child: const Text(
+            '批量删除观看记录',
+            locale: Locale('zh-Hans', 'zh'),
+            style: TextStyle(color: Colors.redAccent),
+          ),
+          onPressed: () {
+            Navigator.of(context).pop(_EpisodeCleanupAction.deleteWatchHistory);
+          },
+        ),
+        HoverScaleTextButton(
+          child: const Text(
+            '取消',
+            locale: Locale('zh-Hans', 'zh'),
+            style: TextStyle(color: Colors.white70),
+          ),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+        ),
+      ],
+    );
+
+    if (!mounted || action == null) return;
+
+    setState(() {
+      _isCleaningEpisodeHistory = true;
+      _isCleanupButtonHovered = false;
+    });
+
+    int affectedCount = 0;
+    try {
+      if (action == _EpisodeCleanupAction.clearScanResults) {
+        affectedCount =
+            await WatchHistoryManager.clearScanResultsByAnimeId(anime.id);
+        if (mounted) {
+          _showBlurSnackBar(
+            context,
+            affectedCount > 0
+                ? '已清除 $affectedCount 条扫描结果'
+                : '没有可清除的扫描结果',
+          );
+        }
+      } else {
+        affectedCount =
+            await WatchHistoryManager.removeHistoryByAnimeId(anime.id);
+        if (mounted) {
+          _showBlurSnackBar(
+            context,
+            affectedCount > 0
+                ? '已删除 $affectedCount 条观看记录'
+                : '没有可删除的观看记录',
+          );
+        }
+      }
+
+      _episodeHistoryFutures.clear();
+      await _refreshWatchHistoryProvider();
+    } catch (e) {
+      if (mounted) {
+        _showBlurSnackBar(context, '操作失败: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCleaningEpisodeHistory = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshWatchHistoryProvider() async {
+    try {
+      final provider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
+      await provider.refresh();
+    } catch (_) {}
   }
 
   // 显示评分对话框

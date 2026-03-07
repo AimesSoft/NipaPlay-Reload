@@ -627,6 +627,34 @@ class WatchHistoryDatabase {
     }
   }
   
+  // 根据动画ID删除历史记录
+  Future<int> deleteHistoryByAnimeId(int animeId) async {
+    if (kIsWeb) {
+      await _ensureWebStoreLoaded();
+      final keysToRemove = _webStore.entries
+          .where((entry) => entry.value.animeId == animeId)
+          .map((entry) => entry.key)
+          .toList();
+      for (final key in keysToRemove) {
+        _webStore.remove(key);
+      }
+      _scheduleWebStorePersist();
+      return keysToRemove.length;
+    }
+    final db = await database;
+
+    try {
+      return await db.delete(
+        'watch_history',
+        where: 'anime_id = ?',
+        whereArgs: [animeId],
+      );
+    } catch (e) {
+      debugPrint('删除指定动画观看历史失败: $e');
+      return 0;
+    }
+  }
+  
   // 清空所有历史记录
   Future<void> clearAllHistory() async {
     if (kIsWeb) {

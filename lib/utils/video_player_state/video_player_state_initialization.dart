@@ -64,6 +64,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadAutoNextCountdownSeconds();
     await _loadPauseOnBackgroundSetting();
     await _loadDesktopHoverSettingsMenuEnabled();
+    await _loadInstantHidePlayerUiEnabled();
     await _loadScreenshotSaveTarget();
     await _loadScreenshotSaveDirectory();
 

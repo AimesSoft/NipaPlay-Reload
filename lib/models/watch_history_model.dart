@@ -870,6 +870,79 @@ class WatchHistoryManager {
     
     return _cachedItems.where((item) => item.animeId == animeId).toList();
   }
+
+  // Clear scan results for a specific animeId while preserving watch progress
+  static Future<int> clearScanResultsByAnimeId(int animeId) async {
+    if (!_initialized) await initialize();
+
+    final items = await getAllItemsForAnime(animeId);
+    if (items.isEmpty) return 0;
+
+    int updatedCount = 0;
+    for (final item in items) {
+      if (!item.isFromScan) continue;
+      final fileName = path.basename(item.filePath);
+      final fallbackName =
+          fileName.isNotEmpty ? path.basenameWithoutExtension(fileName) : item.animeName;
+      final clearedHistory = item.copyWith(
+        animeName: fallbackName,
+        episodeTitle: null,
+        episodeId: null,
+        animeId: null,
+        lastWatchTime: DateTime.now(),
+        isFromScan: false,
+      );
+      await addOrUpdateHistory(clearedHistory);
+      updatedCount++;
+    }
+    return updatedCount;
+  }
+
+  // Remove all history items for a specific animeId
+  static Future<int> removeHistoryByAnimeId(int animeId) async {
+    if (!_initialized) await initialize();
+
+    // 如果已迁移到数据库，则直接使用数据库API
+    if (_migratedToDatabase) {
+      try {
+        final db = WatchHistoryDatabase.instance;
+        final count = await db.deleteHistoryByAnimeId(animeId);
+
+        if (count > 0) {
+          _cachedItems.removeWhere((item) => item.animeId == animeId);
+        }
+        return count;
+      } catch (e) {
+        debugPrint('使用数据库删除指定动画观看历史失败: $e');
+        return 0;
+      }
+    }
+
+    if (_isWriting) {
+      await Future.delayed(const Duration(seconds: 1));
+      return removeHistoryByAnimeId(animeId);
+    }
+
+    try {
+      _isWriting = true;
+      final initialCount = _cachedItems.length;
+      _cachedItems.removeWhere((item) => item.animeId == animeId);
+      final removedCount = initialCount - _cachedItems.length;
+
+      if (removedCount > 0) {
+        final jsonList = _cachedItems.map((item) => item.toJson()).toList();
+        final jsonString = json.encode(jsonList);
+
+        final file = io.File(_historyFilePath);
+        await file.writeAsString(jsonString);
+        _lastWriteTime = DateTime.now();
+      }
+
+      return removedCount;
+    } finally {
+      _isWriting = false;
+    }
+  }
   
   // 设置迁移到数据库的标志
   static void setMigratedToDatabase(bool migrated) {

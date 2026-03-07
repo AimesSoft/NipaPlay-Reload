@@ -745,6 +745,25 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           Consumer<VideoPlayerState>(
             builder: (context, videoState, child) {
               return SettingsItem.toggle(
+                title: '立即隐藏播放器UI',
+                subtitle: '鼠标移开后立即隐藏播放控制（桌面端）',
+                icon: Ionicons.eye_off_outline,
+                value: videoState.instantHidePlayerUiEnabled,
+                onChanged: (bool value) async {
+                  await videoState.setInstantHidePlayerUiEnabled(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启立即隐藏播放器UI' : '已关闭立即隐藏播放器UI',
+                  );
+                },
+              );
+            },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              return SettingsItem.toggle(
                 title: '右侧悬浮设置菜单',
                 subtitle: '鼠标移到播放器最右侧显示设置菜单（桌面端）',
                 icon: Ionicons.settings_outline,

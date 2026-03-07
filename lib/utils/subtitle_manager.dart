@@ -338,12 +338,13 @@ class SubtitleManager extends ChangeNotifier {
 
       // 如果字幕文件存在
       if (path.isNotEmpty && File(path).existsSync()) {
-        // 设置外部字幕文件
-        _player.setMedia(path, MediaType.subtitle);
-
-        if (_isMdkKernel()) {
-          // MDK 要求文本字幕为 UTF-8 编码。
-          unawaited(_reloadExternalSubtitleAsUtf8(path, loadToken));
+        final shouldFixEncoding = _shouldFixExternalSubtitleEncoding();
+        if (!shouldFixEncoding) {
+          // 设置外部字幕文件
+          _player.setMedia(path, MediaType.subtitle);
+        } else {
+          // 对 MDK / Media Kit 预处理字幕编码，避免 UTF-16 直接喂给内核导致崩溃
+          unawaited(_loadExternalSubtitleWithEncodingFix(path, loadToken));
         }
 
         // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
@@ -390,15 +391,22 @@ class SubtitleManager extends ChangeNotifier {
   }
 
   bool _isMdkKernel() => _player.getPlayerKernelName() == 'MDK';
+  bool _isMediaKitKernel() => _player.getPlayerKernelName() == 'Media Kit';
+  bool _shouldFixExternalSubtitleEncoding() =>
+      !kIsWeb && (_isMdkKernel() || _isMediaKitKernel());
 
-  Future<void> _reloadExternalSubtitleAsUtf8(
+  Future<void> _loadExternalSubtitleWithEncodingFix(
       String sourcePath, int loadToken) async {
     try {
       if (kIsWeb) return;
-      if (!_isMdkKernel()) return;
 
       final extension = p.extension(sourcePath).toLowerCase();
-      if (extension == '.sup') return;
+      if (extension == '.sup') {
+        if (loadToken != _subtitleLoadToken) return;
+        if (_currentExternalSubtitlePath != sourcePath) return;
+        _player.setMedia(sourcePath, MediaType.subtitle);
+        return;
+      }
 
       final decoded = await SubtitleParser.decodeSubtitleFile(
         sourcePath,
@@ -415,6 +423,10 @@ class SubtitleManager extends ChangeNotifier {
             debugPrint('SubtitleManager: 检测到VobSub，改用IDX加载字幕: $idxPath');
           }
         }
+        // 解码失败，回退直接加载原文件（避免完全无字幕）
+        if (loadToken != _subtitleLoadToken) return;
+        if (_currentExternalSubtitlePath != sourcePath) return;
+        _player.setMedia(sourcePath, MediaType.subtitle);
         return;
       }
 
@@ -424,7 +436,12 @@ class SubtitleManager extends ChangeNotifier {
           SubtitleParser.detectFormat(decoded.text, sourcePath);
       debugPrint(
           'SubtitleManager: 检测到字幕编码: ${decoded.encoding}, 格式: $format, 预览: $preview');
-      if (encoding.startsWith('utf-8')) return;
+      if (encoding.startsWith('utf-8')) {
+        if (loadToken != _subtitleLoadToken) return;
+        if (_currentExternalSubtitlePath != sourcePath) return;
+        _player.setMedia(sourcePath, MediaType.subtitle);
+        return;
+      }
 
       final file = File(sourcePath);
       if (!await file.exists()) return;
@@ -448,7 +465,7 @@ class SubtitleManager extends ChangeNotifier {
       if (_currentExternalSubtitlePath != sourcePath) return;
 
       _player.setMedia(targetPath, MediaType.subtitle);
-      debugPrint('SubtitleManager: 已为MDK转换字幕编码并重新加载: $targetPath');
+      debugPrint('SubtitleManager: 已转换字幕编码并重新加载: $targetPath');
     } catch (e) {
       debugPrint('SubtitleManager: 转换字幕编码失败: $e');
     }

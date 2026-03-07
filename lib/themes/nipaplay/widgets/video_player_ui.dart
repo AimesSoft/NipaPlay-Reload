@@ -51,6 +51,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   Duration get _doubleTapTimeout =>
       globals.isPhone ? _phoneDoubleTapTimeout : _desktopDoubleTapTimeout;
   static const _mouseHideDelay = Duration(seconds: 3);
+  static const _instantMouseHideDelay = Duration(milliseconds: 200);
   bool _isProcessingTap = false;
   bool _isMouseVisible = true;
   bool _isHorizontalDragging = false;
@@ -215,7 +216,12 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   void _resetMouseHideTimer() {
     _mouseMoveTimer?.cancel();
     if (!globals.isPhone) {
-      _mouseMoveTimer = Timer(_mouseHideDelay, () {
+      final videoState = _videoPlayerStateInstance ??
+          Provider.of<VideoPlayerState>(context, listen: false);
+      final hideDelay = videoState.instantHidePlayerUiEnabled
+          ? _instantMouseHideDelay
+          : _mouseHideDelay;
+      _mouseMoveTimer = Timer(hideDelay, () {
         if (mounted && !_isProcessingTap) {
           setState(() {
             _isMouseVisible = false;
@@ -309,7 +315,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     videoState.setShowControls(true);
 
     _mouseMoveTimer?.cancel();
-    _mouseMoveTimer = Timer(_mouseHideDelay, () {
+    final hideDelay = videoState.instantHidePlayerUiEnabled
+        ? _instantMouseHideDelay
+        : _mouseHideDelay;
+    _mouseMoveTimer = Timer(hideDelay, () {
       if (mounted && !_isIndicatorHovered) {
         setState(() {
           _isMouseVisible = false;
@@ -317,6 +326,20 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         videoState.setShowControls(false);
       }
     });
+  }
+
+  void _handleMouseExit(PointerExitEvent event) {
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (!videoState.hasVideo) return;
+    if (!videoState.instantHidePlayerUiEnabled) return;
+
+    _mouseMoveTimer?.cancel();
+    if (_isMouseVisible && mounted) {
+      setState(() {
+        _isMouseVisible = false;
+      });
+    }
+    videoState.setControlsHovered(false);
   }
 
   void _handleHorizontalDragStart(
@@ -607,6 +630,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         if (kIsWeb || (textureId != null && textureId >= 0)) {
           return MouseRegion(
             onHover: _handleMouseMove,
+            onExit: _handleMouseExit,
             cursor: _isMouseVisible
                 ? SystemMouseCursors.basic
                 : SystemMouseCursors.none,

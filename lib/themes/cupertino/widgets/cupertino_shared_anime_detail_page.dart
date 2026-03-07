@@ -7,7 +7,9 @@ import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
@@ -92,6 +94,8 @@ class CupertinoSharedAnimeDetailPage extends StatefulWidget {
 
 enum _CupertinoDetailSubPage { detail, rating, bangumi }
 
+enum _CupertinoEpisodeCleanupAction { clearScanResults, deleteWatchHistory }
+
 class _CupertinoSharedAnimeDetailPageState
     extends State<CupertinoSharedAnimeDetailPage> {
   static const int _infoSegment = 0;
@@ -124,6 +128,7 @@ class _CupertinoSharedAnimeDetailPageState
   List<SharedRemoteEpisode>? _episodes;
   bool _isLoadingEpisodes = false;
   bool _isEpisodeListReversed = false;
+  bool _isCleaningEpisodeHistory = false;
 
   // Bangumi详细信息
   BangumiAnime? _bangumiAnime;
@@ -878,6 +883,106 @@ class _CupertinoSharedAnimeDetailPageState
     }
   }
 
+  Future<void> _showEpisodeListCleanupDialog() async {
+    if (_isCleaningEpisodeHistory) return;
+
+    final displayName =
+        (widget.anime.nameCn?.isNotEmpty == true && widget.anime.nameCn != null)
+            ? widget.anime.nameCn!
+            : widget.anime.name;
+
+    final action =
+        await showCupertinoDialog<_CupertinoEpisodeCleanupAction>(
+      context: context,
+      builder: (dialogContext) {
+        return CupertinoAlertDialog(
+          title: const Text('清理本地记录'),
+          content: Text(
+              '将对《$displayName》的本地记录进行批量处理：\n\n• 清除所有扫描结果：移除扫描匹配信息，保留观看进度。\n• 批量删除观看记录：移除该番剧的所有观看记录（不可恢复）。'),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('清除所有扫描结果'),
+              onPressed: () {
+                Navigator.of(dialogContext)
+                    .pop(_CupertinoEpisodeCleanupAction.clearScanResults);
+              },
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              child: const Text('批量删除观看记录'),
+              onPressed: () {
+                Navigator.of(dialogContext)
+                    .pop(_CupertinoEpisodeCleanupAction.deleteWatchHistory);
+              },
+            ),
+            CupertinoDialogAction(
+              child: const Text('取消'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || action == null) return;
+
+    setState(() {
+      _isCleaningEpisodeHistory = true;
+    });
+
+    int affectedCount = 0;
+    try {
+      if (action == _CupertinoEpisodeCleanupAction.clearScanResults) {
+        affectedCount = await WatchHistoryManager.clearScanResultsByAnimeId(
+          widget.anime.animeId,
+        );
+        if (!mounted) return;
+        _showSnack(
+          affectedCount > 0
+              ? '已清除 $affectedCount 条扫描结果'
+              : '没有可清除的扫描结果',
+          type: affectedCount > 0
+              ? AdaptiveSnackBarType.success
+              : AdaptiveSnackBarType.info,
+        );
+      } else {
+        affectedCount = await WatchHistoryManager.removeHistoryByAnimeId(
+          widget.anime.animeId,
+        );
+        if (!mounted) return;
+        _showSnack(
+          affectedCount > 0
+              ? '已删除 $affectedCount 条观看记录'
+              : '没有可删除的观看记录',
+          type: affectedCount > 0
+              ? AdaptiveSnackBarType.success
+              : AdaptiveSnackBarType.info,
+        );
+      }
+
+      await _refreshWatchHistoryProvider();
+    } catch (e) {
+      if (mounted) {
+        _showSnack('操作失败: ${e.toString()}',
+            type: AdaptiveSnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCleaningEpisodeHistory = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshWatchHistoryProvider() async {
+    try {
+      await context.read<WatchHistoryProvider>().refresh();
+    } catch (_) {}
+  }
+
   void _showSnack(String message,
       {AdaptiveSnackBarType type = AdaptiveSnackBarType.info}) {
     AdaptiveSnackBar.show(
@@ -1557,19 +1662,36 @@ class _CupertinoSharedAnimeDetailPageState
                   ),
                 ],
               ),
-              CupertinoButton(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                minSize: 0,
-                onPressed: () {
-                  setState(() {
-                    _isEpisodeListReversed = !_isEpisodeListReversed;
-                  });
-                },
-                child: Text(
-                  _isEpisodeListReversed ? '倒序' : '正序',
-                  style: const TextStyle(fontSize: 13),
-                ),
+              Row(
+                children: [
+                  CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minSize: 0,
+                    onPressed: _isCleaningEpisodeHistory
+                        ? null
+                        : _showEpisodeListCleanupDialog,
+                    child: Text(
+                      _isCleaningEpisodeHistory ? '处理中' : '清理记录',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minSize: 0,
+                    onPressed: () {
+                      setState(() {
+                        _isEpisodeListReversed = !_isEpisodeListReversed;
+                      });
+                    },
+                    child: Text(
+                      _isEpisodeListReversed ? '倒序' : '正序',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1678,19 +1800,36 @@ class _CupertinoSharedAnimeDetailPageState
                   ),
                 ],
               ),
-              CupertinoButton(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                minSize: 0,
-                onPressed: () {
-                  setState(() {
-                    _isEpisodeListReversed = !_isEpisodeListReversed;
-                  });
-                },
-                child: Text(
-                  _isEpisodeListReversed ? '倒序' : '正序',
-                  style: const TextStyle(fontSize: 13),
-                ),
+              Row(
+                children: [
+                  CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minSize: 0,
+                    onPressed: _isCleaningEpisodeHistory
+                        ? null
+                        : _showEpisodeListCleanupDialog,
+                    child: Text(
+                      _isCleaningEpisodeHistory ? '处理中' : '清理记录',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minSize: 0,
+                    onPressed: () {
+                      setState(() {
+                        _isEpisodeListReversed = !_isEpisodeListReversed;
+                      });
+                    },
+                    child: Text(
+                      _isEpisodeListReversed ? '倒序' : '正序',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
