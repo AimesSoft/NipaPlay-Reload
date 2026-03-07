@@ -442,10 +442,12 @@ class NipaPlayNextEngine {
           time - _resolveTime(sorted[left]) > _mergeWindowSeconds) {
         final leftContent = _resolveContent(sorted[left]);
         if (leftContent.isNotEmpty) {
-          windowContentCount[leftContent] =
-              (windowContentCount[leftContent] ?? 1) - 1;
-          if (windowContentCount[leftContent] == 0) {
+          final nextCount = (windowContentCount[leftContent] ?? 1) - 1;
+          if (nextCount <= 0) {
             windowContentCount.remove(leftContent);
+            firstTime.remove(leftContent);
+          } else {
+            windowContentCount[leftContent] = nextCount;
           }
         }
         left++;
@@ -455,15 +457,28 @@ class NipaPlayNextEngine {
       final key = '$content-$time';
 
       if (count > 1) {
-        firstTime[content] ??= time;
+        final first = firstTime[content] ?? time;
+        firstTime[content] ??= first;
+        final firstKey = '$content-$first';
+        final firstRaw = processed[firstKey] ?? current;
+
+        processed[firstKey] = {
+          ...firstRaw,
+          'merged': true,
+          'mergeCount': count,
+          'isFirstInGroup': true,
+          'groupContent': content,
+        };
+
         processed[key] = {
           ...current,
           'merged': true,
           'mergeCount': count,
-          'isFirstInGroup': time == firstTime[content],
+          'isFirstInGroup': time == first,
           'groupContent': content,
         };
       } else {
+        firstTime[content] = time;
         processed[key] = current;
       }
     }

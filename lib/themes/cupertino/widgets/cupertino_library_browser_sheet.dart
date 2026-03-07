@@ -12,10 +12,12 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -423,6 +425,13 @@ class _CupertinoLibraryFolderBrowserSheetState
     return _historyKeyForEntry(entry);
   }
 
+  bool _isVideoEntry(_BrowserEntry entry) {
+    if (entry.isDirectory) return false;
+    final fileName =
+        entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
+    return SMBService.instance.isVideoFile(fileName);
+  }
+
   void _showSnack(String message) {
     if (!mounted) return;
     AdaptiveSnackBar.show(
@@ -430,6 +439,89 @@ class _CupertinoLibraryFolderBrowserSheetState
       message: message,
       type: AdaptiveSnackBarType.info,
     );
+  }
+
+  Future<void> _showManualDanmakuMatchDialogForEntry(
+    _BrowserEntry entry,
+  ) async {
+    final historyKey = _historyKeyForEntry(entry);
+    if (historyKey == null) {
+      _showSnack('无法获取文件地址');
+      return;
+    }
+
+    final fileName =
+        entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
+
+    try {
+      final existingHistory =
+          await WatchHistoryManager.getHistoryItem(historyKey);
+
+      String initialSearchKeyword = fileName;
+      if (existingHistory != null && existingHistory.animeName.isNotEmpty) {
+        initialSearchKeyword = existingHistory.animeName;
+      } else if (entry.animeName?.trim().isNotEmpty == true) {
+        initialSearchKeyword = entry.animeName!.trim();
+      } else {
+        final keyword =
+            MediaFilenameParser.extractAnimeTitleKeyword(fileName);
+        if (keyword.isNotEmpty) initialSearchKeyword = keyword;
+      }
+
+      final result = await ManualDanmakuMatcher.instance.showManualMatchDialog(
+        context,
+        initialVideoTitle: initialSearchKeyword,
+      );
+
+      if (result == null || !mounted) return;
+
+      final episodeId = result['episodeId']?.toString() ?? '';
+      final animeId = result['animeId']?.toString() ?? '';
+      final animeTitle = result['animeTitle']?.toString() ?? '';
+      final episodeTitle = result['episodeTitle']?.toString() ?? '';
+
+      if (episodeId.isEmpty || animeId.isEmpty) {
+        _showSnack('弹幕匹配结果无效');
+        return;
+      }
+
+      final updatedHistory = WatchHistoryItem(
+        filePath: historyKey,
+        animeName: animeTitle.isNotEmpty
+            ? animeTitle
+            : (existingHistory?.animeName ??
+                entry.animeName ??
+                p.basenameWithoutExtension(fileName)),
+        episodeTitle: episodeTitle.isNotEmpty
+            ? episodeTitle
+            : (existingHistory?.episodeTitle ?? entry.episodeTitle),
+        episodeId: int.tryParse(episodeId),
+        animeId: int.tryParse(animeId),
+        watchProgress: existingHistory?.watchProgress ?? 0.0,
+        lastPosition: existingHistory?.lastPosition ?? 0,
+        duration: existingHistory?.duration ?? 0,
+        lastWatchTime: DateTime.now(),
+        thumbnailPath: existingHistory?.thumbnailPath,
+        isFromScan: existingHistory?.isFromScan ?? entry.isFromScan ?? false,
+        videoHash: existingHistory?.videoHash,
+      );
+
+      await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
+      if (!mounted) return;
+
+      final successTitle =
+          animeTitle.isNotEmpty ? animeTitle : updatedHistory.animeName;
+      if (episodeTitle.isNotEmpty) {
+        _showSnack('弹幕匹配成功：$successTitle - $episodeTitle');
+      } else {
+        _showSnack('弹幕匹配成功：$successTitle');
+      }
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        _showSnack('打开弹幕匹配对话框失败：$e');
+      }
+    }
   }
 
   Future<void> _playLocalFile(_BrowserEntry entry) async {
@@ -1074,6 +1166,7 @@ class _CupertinoLibraryFolderBrowserSheetState
           CupertinoColors.systemRed,
           context,
         );
+        final bool canManualMatch = _isVideoEntry(entry);
 
         Widget buildAction({
           required String title,
@@ -1146,6 +1239,16 @@ class _CupertinoLibraryFolderBrowserSheetState
                             ),
                           ),
                           Container(height: 0.5, color: separatorColor),
+                          if (canManualMatch)
+                            buildAction(
+                              title: '手动选择弹幕',
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                await _showManualDanmakuMatchDialogForEntry(
+                                  entry,
+                                );
+                              },
+                            ),
                           buildAction(
                             title: entry.isDirectory ? '扫描文件夹' : '扫描',
                             onPressed: () async {
