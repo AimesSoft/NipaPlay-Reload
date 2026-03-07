@@ -225,25 +225,14 @@ class NipaPlayNextEngine {
       return;
     }
 
-    double danmakuHeight = _measureTextHeight(_fontSize);
-    if (_mergeDanmaku && _items.isNotEmpty) {
-      double maxMultiplier = 1.0;
-      for (final item in _items) {
-        if (item.content.fontSizeMultiplier > maxMultiplier) {
-          maxMultiplier = item.content.fontSizeMultiplier;
-        }
-      }
-      if (maxMultiplier > 1.0) {
-        danmakuHeight = _measureTextHeight(_fontSize * maxMultiplier);
-      }
-    }
+    final double baseDanmakuHeight = _measureTextHeight(_fontSize);
     final effectiveHeight = max(1.0, _size.height * _displayArea);
 
     int trackCount;
     if (_displayArea <= 0 || _displayArea.isNaN || _displayArea.isInfinite) {
       trackCount = 1;
     } else {
-      trackCount = (effectiveHeight / danmakuHeight).floor();
+      trackCount = (effectiveHeight / baseDanmakuHeight).floor();
     }
 
     if (_displayArea == 1.0) {
@@ -258,17 +247,18 @@ class NipaPlayNextEngine {
       throttle: Duration.zero,
     );
 
-    final trackYPositions = List<double>.generate(
-      trackCount,
-      (i) => i * danmakuHeight,
-    );
-
     final List<List<_NextItem>> scrollTracks =
         List<List<_NextItem>>.generate(trackCount, (_) => <_NextItem>[]);
     final List<_NextItem?> topTrackItems =
         List<_NextItem?>.filled(trackCount, null);
     final List<_NextItem?> bottomTrackItems =
         List<_NextItem?>.filled(trackCount, null);
+    final List<double> scrollTrackHeights =
+        List<double>.filled(trackCount, baseDanmakuHeight);
+    final List<double> topTrackHeights =
+        List<double>.filled(trackCount, baseDanmakuHeight);
+    final List<double> bottomTrackHeights =
+        List<double>.filled(trackCount, baseDanmakuHeight);
 
     for (final item in _items) {
       final width = _measureTextWidth(
@@ -276,6 +266,7 @@ class NipaPlayNextEngine {
         _fontSize * item.content.fontSizeMultiplier,
       );
       item.width = width;
+      final itemHeight = baseDanmakuHeight * item.content.fontSizeMultiplier;
 
       switch (item.type) {
         case DanmakuItemType.scroll:
@@ -296,8 +287,10 @@ class NipaPlayNextEngine {
           }
 
           item.trackIndex = selectedTrack;
-          item.yPosition = trackYPositions[selectedTrack];
           scrollTracks[selectedTrack].add(item);
+          if (itemHeight > scrollTrackHeights[selectedTrack]) {
+            scrollTrackHeights[selectedTrack] = itemHeight;
+          }
           break;
         case DanmakuItemType.top:
           final selectedTrack = _selectStaticTrackCanvas(
@@ -312,7 +305,9 @@ class NipaPlayNextEngine {
 
           item.trackIndex = selectedTrack;
           topTrackItems[selectedTrack] = item;
-          item.yPosition = trackYPositions[selectedTrack];
+          if (itemHeight > topTrackHeights[selectedTrack]) {
+            topTrackHeights[selectedTrack] = itemHeight;
+          }
           break;
         case DanmakuItemType.bottom:
           final selectedTrack = _selectStaticTrackCanvas(
@@ -327,7 +322,46 @@ class NipaPlayNextEngine {
 
           item.trackIndex = selectedTrack;
           bottomTrackItems[selectedTrack] = item;
-          item.yPosition = _size.height - trackYPositions[selectedTrack] - danmakuHeight;
+          if (itemHeight > bottomTrackHeights[selectedTrack]) {
+            bottomTrackHeights[selectedTrack] = itemHeight;
+          }
+          break;
+      }
+    }
+
+    final List<double> scrollTrackOffsets =
+        List<double>.filled(trackCount, 0.0);
+    final List<double> topTrackOffsets =
+        List<double>.filled(trackCount, 0.0);
+    final List<double> bottomTrackOffsets =
+        List<double>.filled(trackCount, 0.0);
+
+    double scrollOffset = 0.0;
+    double topOffset = 0.0;
+    double bottomAccumulated = 0.0;
+    for (int i = 0; i < trackCount; i++) {
+      scrollTrackOffsets[i] = scrollOffset;
+      scrollOffset += scrollTrackHeights[i];
+
+      topTrackOffsets[i] = topOffset;
+      topOffset += topTrackHeights[i];
+
+      bottomAccumulated += bottomTrackHeights[i];
+      bottomTrackOffsets[i] = _size.height - bottomAccumulated;
+    }
+
+    for (final item in _items) {
+      final track = item.trackIndex;
+      if (track < 0 || track >= trackCount) continue;
+      switch (item.type) {
+        case DanmakuItemType.scroll:
+          item.yPosition = scrollTrackOffsets[track];
+          break;
+        case DanmakuItemType.top:
+          item.yPosition = topTrackOffsets[track];
+          break;
+        case DanmakuItemType.bottom:
+          item.yPosition = bottomTrackOffsets[track];
           break;
       }
     }
