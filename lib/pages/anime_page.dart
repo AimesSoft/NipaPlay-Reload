@@ -54,7 +54,8 @@ class AnimePage extends StatefulWidget {
   State<AnimePage> createState() => _AnimePageState();
 }
 
-class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
+class _AnimePageState extends State<AnimePage>
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin<AnimePage> {
   final bool _loadingVideo = false;
   final List<String> _loadingMessages = ['正在初始化播放器...'];
   VideoPlayerState? _videoPlayerState;
@@ -65,6 +66,9 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
   final int _currentTabIndex = 0;
 
   final int _mediaLibraryVersion = 0;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -214,6 +218,7 @@ class _AnimePageState extends State<AnimePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<WatchHistoryProvider>(
       builder: (context, historyProvider, child) {
         return Builder(
