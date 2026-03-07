@@ -904,14 +904,36 @@ class SubtitleParser {
       Uint8List bytes, String encoding,
       {bool stripBom = false}) async {
     try {
-      final data = stripBom ? bytes.sublist(encoding == 'utf-8' ? 3 : 2) : bytes;
-      if (encoding == 'utf-8') {
+      final lower = encoding.toLowerCase();
+      final data =
+          stripBom ? bytes.sublist(lower == 'utf-8' ? 3 : 2) : bytes;
+      if (lower == 'utf-8') {
         return utf8.decode(data, allowMalformed: false);
+      }
+      if (lower == 'utf-16le' || lower == 'utf16le') {
+        return _decodeUtf16(data, littleEndian: true);
+      }
+      if (lower == 'utf-16be' || lower == 'utf16be') {
+        return _decodeUtf16(data, littleEndian: false);
       }
       return await CharsetConverter.decode(encoding, data);
     } catch (_) {
       return null;
     }
+  }
+
+  static String _decodeUtf16(Uint8List bytes, {required bool littleEndian}) {
+    if (bytes.isEmpty) return '';
+    final length = bytes.length - (bytes.length % 2);
+    if (length <= 0) return '';
+
+    final bd = bytes.buffer.asByteData(bytes.offsetInBytes, length);
+    final codeUnits = Uint16List(length ~/ 2);
+    for (int i = 0; i < codeUnits.length; i++) {
+      codeUnits[i] =
+          bd.getUint16(i * 2, littleEndian ? Endian.little : Endian.big);
+    }
+    return String.fromCharCodes(codeUnits);
   }
 
   static Future<String?> _decodeWithIconv(
