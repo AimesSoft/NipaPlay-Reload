@@ -26,6 +26,8 @@ class VideoSettingsMenu extends StatefulWidget {
   final ValueChanged<bool>? onHoverChanged;
   final Rect? anchorRect;
   final GlobalKey? anchorKey;
+  final PlayerMenuPaneId? initialPaneId;
+  final bool hideBackButtonForInitialPane;
 
   const VideoSettingsMenu({
     super.key,
@@ -33,6 +35,8 @@ class VideoSettingsMenu extends StatefulWidget {
     this.onHoverChanged,
     this.anchorRect,
     this.anchorKey,
+    this.initialPaneId,
+    this.hideBackButtonForInitialPane = false,
   });
 
   @override
@@ -65,6 +69,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
     videoState = Provider.of<VideoPlayerState>(context, listen: false);
     _currentKernelType = PlayerFactory.getKernelType();
     videoState.setControlsVisibilityLocked(true);
+    _activePaneId = widget.initialPaneId;
     _anchorRect = widget.anchorRect;
     _anchorRefreshAttempts = 0;
     _menuAnimationController = AnimationController(
@@ -244,8 +249,14 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
     );
   }
 
-  SettingsMenuScope _wrapMenu({required bool showBackItem, required Widget child}) {
-    final bool showHeader = showBackItem;
+  SettingsMenuScope _wrapMenu({
+    required bool showBackItem,
+    required Widget child,
+    bool forceShowHeader = false,
+    bool? useBackButtonOverride,
+  }) {
+    final bool showHeader = showBackItem || forceShowHeader;
+    final bool useBackButton = useBackButtonOverride ?? showBackItem;
     final Rect? resolvedAnchorRect = _resolveAnchorRect();
     if (resolvedAnchorRect == null) {
       if (!_loggedNullAnchor) {
@@ -269,7 +280,7 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
     return SettingsMenuScope(
       width: _menuWidth,
       rightOffset: _menuRightOffset,
-      useBackButton: showBackItem,
+      useBackButton: useBackButton,
       showHeader: showHeader,
       showBackItem: showHeader ? false : showBackItem,
       lockControlsVisible: true,
@@ -281,65 +292,69 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
     );
   }
 
-  Widget _buildPane(PlayerMenuPaneId paneId) {
+  Widget _buildPane(
+    PlayerMenuPaneId paneId, {
+    required VoidCallback onPaneClose,
+    required bool showBackButton,
+  }) {
     late final Widget child;
     switch (paneId) {
       case PlayerMenuPaneId.subtitleSettings:
         child = ChangeNotifierProvider(
           create: (_) => SubtitleSettingsPaneController(videoState: videoState),
           child: SubtitleSettingsMenu(
-            onClose: _closeActivePane,
+            onClose: onPaneClose,
             onHoverChanged: widget.onHoverChanged,
           ),
         );
         break;
       case PlayerMenuPaneId.subtitleTracks:
         child = SubtitleTracksMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.subtitleList:
         child = SubtitleListMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.audioTracks:
         child = AudioTracksMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuSettings:
         child = DanmakuSettingsMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           videoState: videoState,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuTracks:
         child = DanmakuTracksMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuList:
         child = DanmakuListMenu(
           videoState: videoState,
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.danmakuOffset:
         child = DanmakuOffsetMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.controlBarSettings:
         child = ControlBarSettingsMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           videoState: videoState,
           onHoverChanged: widget.onHoverChanged,
         );
@@ -348,26 +363,26 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
         child = ChangeNotifierProvider(
           create: (_) => PlaybackRatePaneController(videoState: videoState),
           child: PlaybackRateMenu(
-            onClose: _closeActivePane,
+            onClose: onPaneClose,
             onHoverChanged: widget.onHoverChanged,
           ),
         );
         break;
       case PlayerMenuPaneId.playlist:
         child = PlaylistMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.jellyfinQuality:
         child = JellyfinQualityMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
       case PlayerMenuPaneId.playbackInfo:
         child = PlaybackInfoMenu(
-          onClose: _closeActivePane,
+          onClose: onPaneClose,
           onHoverChanged: widget.onHoverChanged,
         );
         break;
@@ -375,14 +390,19 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
         child = ChangeNotifierProvider(
           create: (_) => SeekStepPaneController(videoState: videoState),
           child: SeekStepMenu(
-            onClose: _closeActivePane,
+            onClose: onPaneClose,
             onHoverChanged: widget.onHoverChanged,
           ),
         );
         break;
     }
 
-    return _wrapMenu(showBackItem: true, child: child);
+    return _wrapMenu(
+      showBackItem: showBackButton,
+      forceShowHeader: !showBackButton,
+      useBackButtonOverride: showBackButton,
+      child: child,
+    );
   }
 
   @override
@@ -409,7 +429,19 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
             videoState: videoState,
             kernelType: _currentKernelType,
           ),
-        ).build();
+        )
+            .build()
+            .where((item) => item.paneId != PlayerMenuPaneId.playlist)
+            .toList();
+        final bool hideBackForStandaloneInitialPane =
+            widget.hideBackButtonForInitialPane &&
+                widget.initialPaneId != null &&
+                _activePaneId == widget.initialPaneId;
+        final VoidCallback paneCloseCallback = hideBackForStandaloneInitialPane
+            ? () {
+                requestClose();
+              }
+            : _closeActivePane;
         final Widget menuContent = _activePaneId == null
             ? _wrapMenu(
                 showBackItem: false,
@@ -426,7 +458,11 @@ class VideoSettingsMenuState extends State<VideoSettingsMenu>
                   ),
                 ),
               )
-            : _buildPane(_activePaneId!);
+            : _buildPane(
+                _activePaneId!,
+                onPaneClose: paneCloseCallback,
+                showBackButton: !hideBackForStandaloneInitialPane,
+              );
         final Widget animatedMenuContent = FadeTransition(
           opacity: _menuFadeAnimation,
           child: SlideTransition(
