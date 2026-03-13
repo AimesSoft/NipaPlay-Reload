@@ -2987,9 +2987,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       )
                     : null,
                 trailing: SearchBarActionButton(
-                  icon: Icons.play_circle_outline,
-                  tooltip: '播放',
-                  onPressed: () => _playWebDAVFile(connection, file),
+                  icon: Icons.subtitles,
+                  color: iconColor,
+                  tooltip: '手动匹配弹幕',
+                  onPressed: () => _showManualDanmakuMatchDialog(
+                    fileUrl,
+                    file.name,
+                    snapshot.data,
+                  ),
                 ),
                 onTap: () => _playWebDAVFile(connection, file),
               );
