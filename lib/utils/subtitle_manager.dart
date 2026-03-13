@@ -145,7 +145,7 @@ class SubtitleManager extends ChangeNotifier {
 
       // 如果是外部字幕
       if (externalSubtitlePath != null && externalSubtitlePath.isNotEmpty) {
-        final fileName = externalSubtitlePath.split('/').last;
+        final fileName = p.basename(externalSubtitlePath);
         return "正在使用外部字幕文件 - $fileName";
       }
 
@@ -353,7 +353,7 @@ class SubtitleManager extends ChangeNotifier {
         // 更新轨道信息
         updateSubtitleTrackInfo('external_subtitle', {
           'path': path,
-          'title': path.split('/').last,
+          'title': p.basename(path),
           'isActive': true,
           'isManualSet': isManualSetting, // 添加是否手动设置的标记
         });
@@ -562,7 +562,7 @@ class SubtitleManager extends ChangeNotifier {
 
           // 触发自动加载字幕回调
           if (onExternalSubtitleAutoLoaded != null) {
-            final fileName = savedSubtitlePath.split('/').last;
+            final fileName = p.basename(savedSubtitlePath);
             onExternalSubtitleAutoLoaded!(savedSubtitlePath, fileName);
           }
 
@@ -631,7 +631,7 @@ class SubtitleManager extends ChangeNotifier {
 
       // 获取视频文件目录和文件名（不含扩展名）
       final videoDir = videoFile.parent.path;
-      final videoName = videoPath.split('/').last.split('.').first;
+      final videoName = p.basenameWithoutExtension(videoPath);
 
       // 从视频文件名中提取数字（可能的集数）
       final videoNumberMatch = RegExp(r'(\d+)').allMatches(videoName).toList();
@@ -664,7 +664,7 @@ class SubtitleManager extends ChangeNotifier {
 
       // 搜索可能的字幕文件
       for (final ext in subtitleExts) {
-        final potentialPath = '$videoDir/$videoName$ext';
+        final potentialPath = p.join(videoDir, '$videoName$ext');
         debugPrint('SubtitleManager: 尝试检测字幕文件: $potentialPath');
         final subtitleFile = File(potentialPath);
         if (subtitleFile.existsSync()) {
@@ -684,7 +684,7 @@ class SubtitleManager extends ChangeNotifier {
 
           // 触发自动加载字幕回调
           if (onExternalSubtitleAutoLoaded != null) {
-            final fileName = potentialPath.split('/').last;
+            final fileName = p.basename(potentialPath);
             onExternalSubtitleAutoLoaded!(potentialPath, fileName);
           }
 
@@ -721,7 +721,7 @@ class SubtitleManager extends ChangeNotifier {
 
             for (final subtitleFile in subtitleFiles) {
               final subtitleName =
-                  subtitleFile.path.split('/').last.split('.').first;
+                  p.basenameWithoutExtension(subtitleFile.path);
               final subtitleNumberMatch =
                   RegExp(r'(\d+)').allMatches(subtitleName).toList();
               List<String> subtitleNumbers = [];
@@ -828,7 +828,7 @@ class SubtitleManager extends ChangeNotifier {
 
               // 触发自动加载字幕回调
               if (onExternalSubtitleAutoLoaded != null) {
-                final fileName = bestMatchFile.path.split('/').last;
+                final fileName = p.basename(bestMatchFile.path);
                 onExternalSubtitleAutoLoaded!(bestMatchFile.path, fileName);
               }
 
@@ -858,7 +858,7 @@ class SubtitleManager extends ChangeNotifier {
 
             // 触发自动加载字幕回调
             if (onExternalSubtitleAutoLoaded != null) {
-              final fileName = file.path.split('/').last;
+              final fileName = p.basename(file.path);
               onExternalSubtitleAutoLoaded!(file.path, fileName);
             }
 

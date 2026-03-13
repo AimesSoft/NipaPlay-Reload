@@ -11,6 +11,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'bounce_hover_scale.dart';
 import 'video_settings_menu.dart';
 import 'dart:async';
+import 'package:nipaplay/services/desktop_pip_window_service.dart';
 
 class ModernVideoControls extends StatefulWidget {
   final bool showFullscreenButton;
@@ -55,6 +56,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isNextEpisodePressed = false;
   bool _isPreviousEpisodeHovered = false;
   bool _isNextEpisodeHovered = false;
+  bool _isPipPressed = false;
+  bool _isPipHovered = false;
 
 
   String _formatDuration(Duration duration) {
@@ -229,6 +232,15 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
     if (renderObject is! RenderBox) return false;
     final rect = renderObject.localToGlobal(Offset.zero) & renderObject.size;
     return rect.contains(globalPosition);
+  }
+
+  Future<void> _handlePipButtonTap(VideoPlayerState videoState) async {
+    final pipService = DesktopPipWindowService.instance;
+    if (pipService.isCurrentWindowPip) {
+      await pipService.closeCurrentPipWindowAndRestore(videoState);
+      return;
+    }
+    await pipService.openPipWindow(videoState);
   }
 
   @override
@@ -458,6 +470,44 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                       ),
                                       
                                       const SizedBox(width: 12),
+
+                                      if (globals.isDesktop &&
+                                          DesktopPipWindowService
+                                              .isFeatureEnabled)
+                                        _buildControlButton(
+                                          icon: Icon(
+                                            DesktopPipWindowService
+                                                    .instance.isCurrentWindowPip
+                                                ? Icons.picture_in_picture_rounded
+                                                : Icons.picture_in_picture_alt_rounded,
+                                            key: ValueKey<bool>(
+                                              DesktopPipWindowService
+                                                  .instance.isCurrentWindowPip,
+                                            ),
+                                            color: Colors.white,
+                                            size: globals.isPhone ? 36 : 28,
+                                          ),
+                                          onTap: () {
+                                            unawaited(
+                                                _handlePipButtonTap(videoState));
+                                          },
+                                          isPressed: _isPipPressed,
+                                          isHovered: _isPipHovered,
+                                          onHover: (value) =>
+                                              setState(() => _isPipHovered = value),
+                                          onPressed: (value) =>
+                                              setState(() => _isPipPressed = value),
+                                          tooltip: DesktopPipWindowService
+                                                  .instance.isCurrentWindowPip
+                                              ? '关闭小窗并回到主播放'
+                                              : '小窗播放',
+                                          useAnimatedSwitcher: true,
+                                        ),
+
+                                      if (globals.isDesktop &&
+                                          DesktopPipWindowService
+                                              .isFeatureEnabled)
+                                        const SizedBox(width: 12),
                                       
                                       // 设置按钮
                                       Builder(

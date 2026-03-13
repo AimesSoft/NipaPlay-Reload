@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import '../player_abstraction/player_abstraction.dart'; // <-- NEW IMPORT
 import '../player_abstraction/player_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/constants/danmaku_color_presets.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
@@ -346,6 +347,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     return null;
   }
+
   bool _timelinePreviewEnabled = false; // 默认关闭时间轴缩略图
   bool _timelinePreviewSupported = false;
   int _timelinePreviewIntervalMs = 15000;
@@ -366,6 +368,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _mergeDanmaku = false; // 默认不合并弹幕
   final String _danmakuStackingKey = 'danmaku_stacking';
   bool _danmakuStacking = false; // 默认不启用弹幕堆叠
+  final String _danmakuRandomColorEnabledKey = 'danmaku_random_color_enabled';
+  bool _danmakuRandomColorEnabled = false; // 默认关闭随机染色
 
   final String _anime4kProfileKey = 'anime4k_profile';
   Anime4KProfile _anime4kProfile = Anime4KProfile.off;
@@ -756,6 +760,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     final clamped = raw.clamp(0.0, 1.0).toDouble();
     return clamped < _progress ? _progress : clamped;
   }
+
   Duration get duration => _duration;
   Duration get position => _position;
   String? get error => _error;
@@ -806,6 +811,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get danmakuScrollDurationSeconds =>
       _baseDanmakuScrollDurationSeconds / _danmakuSpeedMultiplier;
   bool get danmakuStacking => _danmakuStacking;
+  bool get danmakuRandomColorEnabled => _danmakuRandomColorEnabled;
   bool get rememberDanmakuOffset => _rememberDanmakuOffset;
   double get manualDanmakuOffset => _manualDanmakuOffset;
   double get autoDanmakuOffset => _autoDanmakuOffset;

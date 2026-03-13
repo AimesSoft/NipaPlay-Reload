@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/constants/danmaku_color_presets.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -20,7 +21,8 @@ class SendDanmakuDialogContent extends StatefulWidget {
   });
 
   @override
-  SendDanmakuDialogContentState createState() => SendDanmakuDialogContentState();
+  SendDanmakuDialogContentState createState() =>
+      SendDanmakuDialogContentState();
 }
 
 class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
@@ -33,16 +35,14 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
   bool _isSendButtonHovered = false;
   bool _isSendButtonPressed = false;
 
-  final List<Color> _presetColors = [
-    const Color(0xFFfe0502), const Color(0xFFff7106), const Color(0xFFffaa01), const Color(0xFFffd301),
-    const Color(0xFFffff00), const Color(0xFFa0ee02), const Color(0xFF04cd00), const Color(0xFF019899),
-    const Color(0xFF4266be), const Color(0xFF89d5ff), const Color(0xFFcc0173), const Color(0xFF000000), const Color(0xFF222222),
-    const Color(0xFF9b9b9b), const Color(0xFFffffff),
-  ];
+  final List<Color> _presetColors = DanmakuColorPresets.sendPresetColors;
 
   Color _getStrokeColor(Color textColor) {
     // This logic should match the actual danmaku rendering
-    final luminance = (0.299 * textColor.red + 0.587 * textColor.green + 0.114 * textColor.blue) / 255;
+    final luminance = (0.299 * textColor.red +
+            0.587 * textColor.green +
+            0.114 * textColor.blue) /
+        255;
     return luminance < 0.2 ? Colors.white : Colors.black;
   }
 
@@ -56,7 +56,8 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
   Color _lighten(Color color, [double amount = .3]) {
     assert(amount >= 0 && amount <= 1);
     final hsl = HSLColor.fromColor(color);
-    final hslLight = hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0));
+    final hslLight =
+        hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0));
     return hslLight.toColor();
   }
 
@@ -128,13 +129,13 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
     final mediaQuery = MediaQuery.of(context);
     final shortestSide = mediaQuery.size.shortestSide;
     final bool isRealPhone = globals.isPhone && shortestSide < 600;
-    
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     const inputThemeColor = Color(0xFFff2e55);
 
     final strokeColor = _getStrokeColor(selectedColor);
-    
+
     final previewStyle = TextStyle(
       fontSize: 18,
       color: selectedColor,
@@ -220,7 +221,8 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                       }
                     } else {
                       // For black, we can't darken it, so use a slightly lighter grey to show the border.
-                      if (color == const Color(0xFF000000) || color == const Color(0xFF222222)) {
+                      if (color == const Color(0xFF000000) ||
+                          color == const Color(0xFF222222)) {
                         borderColor = Colors.grey.shade800;
                       } else {
                         borderColor = _darken(color);
@@ -287,45 +289,58 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: theme.dividerColor),
                   ),
-                            child: ToggleButtons(
-                              isSelected: [
-                                danmakuType == 'scroll',
-                                danmakuType == 'top',
-                                danmakuType == 'bottom',
-                              ],
-                              onPressed: (index) {
-                                setState(() {
-                                  if (index == 0) danmakuType = 'scroll';
-                                  if (index == 1) danmakuType = 'top';
-                                  if (index == 2) danmakuType = 'bottom';
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(8),
-                              splashColor: Colors.transparent,
-                              highlightColor: Colors.transparent,
-                              selectedColor: inputThemeColor,
-                              fillColor: Colors.transparent,
-                              color: theme.colorScheme.onSurface,
-                              constraints: const BoxConstraints(minHeight: 32.0, minWidth: 80.0),
-                              children: const [
-                                Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('滚动')),
-                                Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('顶部')),
-                                Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text('底部')),
-                              ],
-                            ),                ),
+                  child: ToggleButtons(
+                    isSelected: [
+                      danmakuType == 'scroll',
+                      danmakuType == 'top',
+                      danmakuType == 'bottom',
+                    ],
+                    onPressed: (index) {
+                      setState(() {
+                        if (index == 0) danmakuType = 'scroll';
+                        if (index == 1) danmakuType = 'top';
+                        if (index == 2) danmakuType = 'bottom';
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    splashColor: Colors.transparent,
+                    highlightColor: Colors.transparent,
+                    selectedColor: inputThemeColor,
+                    fillColor: Colors.transparent,
+                    color: theme.colorScheme.onSurface,
+                    constraints:
+                        const BoxConstraints(minHeight: 32.0, minWidth: 80.0),
+                    children: const [
+                      Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Text('滚动')),
+                      Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Text('顶部')),
+                      Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Text('底部')),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 24),
                 Align(
                   alignment: Alignment.centerRight,
                   child: _isSending
                       ? const CircularProgressIndicator()
                       : MouseRegion(
-                          onEnter: (_) => setState(() => _isSendButtonHovered = true),
-                          onExit: (_) => setState(() => _isSendButtonHovered = false),
+                          onEnter: (_) =>
+                              setState(() => _isSendButtonHovered = true),
+                          onExit: (_) =>
+                              setState(() => _isSendButtonHovered = false),
                           cursor: SystemMouseCursors.click,
                           child: GestureDetector(
-                            onTapDown: (_) => setState(() => _isSendButtonPressed = true),
-                            onTapUp: (_) => setState(() => _isSendButtonPressed = false),
-                            onTapCancel: () => setState(() => _isSendButtonPressed = false),
+                            onTapDown: (_) =>
+                                setState(() => _isSendButtonPressed = true),
+                            onTapUp: (_) =>
+                                setState(() => _isSendButtonPressed = false),
+                            onTapCancel: () =>
+                                setState(() => _isSendButtonPressed = false),
                             onTap: _isSending ? null : _sendDanmaku,
                             child: BounceHoverScale(
                               isHovered: _isSendButtonHovered,
@@ -562,7 +577,8 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
   }
 
   /// 构建输入区域（手机设备左侧）
-  Widget _buildInputSection(ThemeData theme, TextStyle previewStyle, Color inputThemeColor) {
+  Widget _buildInputSection(
+      ThemeData theme, TextStyle previewStyle, Color inputThemeColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -591,11 +607,12 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
             setState(() {});
           },
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // 弹幕模式选择
-        Text('弹幕模式', style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14)),
+        Text('弹幕模式',
+            style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14)),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
@@ -623,9 +640,15 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
             color: theme.colorScheme.onSurface,
             constraints: const BoxConstraints(minHeight: 32.0, minWidth: 60.0),
             children: const [
-              Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text('滚动', style: TextStyle(fontSize: 12))),
-              Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text('顶部', style: TextStyle(fontSize: 12))),
-              Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Text('底部', style: TextStyle(fontSize: 12))),
+              Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Text('滚动', style: TextStyle(fontSize: 12))),
+              Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Text('顶部', style: TextStyle(fontSize: 12))),
+              Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Text('底部', style: TextStyle(fontSize: 12))),
             ],
           ),
         ),
@@ -654,7 +677,8 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
               }
             } else {
               // For black, we can't darken it, so use a slightly lighter grey to show the border.
-              if (color == const Color(0xFF000000) || color == const Color(0xFF222222)) {
+              if (color == const Color(0xFF000000) ||
+                  color == const Color(0xFF222222)) {
                 borderColor = Colors.grey.shade800;
               } else {
                 borderColor = _darken(color);
@@ -681,9 +705,9 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
             );
           }).toList(),
         ),
-        
+
         const Spacer(), // 推送发送按钮到底部
-        
+
         // 底部：发送按钮 - 固定在底部
         Padding(
           padding: const EdgeInsets.only(top: 16.0),

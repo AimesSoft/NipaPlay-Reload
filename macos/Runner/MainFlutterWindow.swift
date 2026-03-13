@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import desktop_multi_window
 
 class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
     static func register(with registrar: FlutterPluginRegistrar) {
@@ -113,6 +114,12 @@ class MainFlutterWindow: NSWindow {
     // 注册自定义安全书签插件
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
     SystemSharePlugin.register(with: flutterViewController.registrar(forPlugin: "SystemSharePlugin"))
+
+    FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
+      RegisterGeneratedPlugins(registry: controller)
+      SecurityBookmarkPlugin.register(with: controller.registrar(forPlugin: "SecurityBookmarkPlugin"))
+      SystemSharePlugin.register(with: controller.registrar(forPlugin: "SystemSharePlugin"))
+    }
 
     super.awakeFromNib()
   }

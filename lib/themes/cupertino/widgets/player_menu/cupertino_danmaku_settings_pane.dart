@@ -78,7 +78,8 @@ class _CupertinoDanmakuSettingsPaneState
     );
     if (result == null) return;
 
-    if (videoState.isDisposed || videoState.currentVideoPath != initialVideoPath) {
+    if (videoState.isDisposed ||
+        videoState.currentVideoPath != initialVideoPath) {
       debugPrint('视频已切换或播放器已销毁，取消加载弹幕');
       return;
     }
@@ -125,8 +126,7 @@ class _CupertinoDanmakuSettingsPaneState
 
     setState(() => _isSavingDanmaku = true);
     try {
-      final extension =
-          format == _DanmakuExportFormat.xml ? 'xml' : 'json';
+      final extension = format == _DanmakuExportFormat.xml ? 'xml' : 'json';
       final fileName =
           _buildDanmakuExportFileName(widget.videoState, extension);
       final savePath = await getSaveLocation(
@@ -165,8 +165,7 @@ class _CupertinoDanmakuSettingsPaneState
     final fallback = videoState.currentVideoPath == null
         ? 'danmaku'
         : p.basenameWithoutExtension(videoState.currentVideoPath!);
-    final baseName =
-        (title == null || title.isEmpty) ? fallback : title;
+    final baseName = (title == null || title.isEmpty) ? fallback : title;
     final timestamp = _formatTimestamp(DateTime.now());
     return '${baseName}_danmaku_$timestamp.$extension';
   }
@@ -198,16 +197,18 @@ class _CupertinoDanmakuSettingsPaneState
               children: [
                 Text(
                   '弹幕设置',
-                  style:
-                      CupertinoTheme.of(context).textTheme.navTitleTextStyle,
+                  style: CupertinoTheme.of(context).textTheme.navTitleTextStyle,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '控制弹幕开关、透明度、字体大小以及屏蔽词',
-                  style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  style: CupertinoTheme.of(context)
+                      .textTheme
+                      .textStyle
+                      .copyWith(
                         fontSize: 13,
-                        color: CupertinoColors.secondaryLabel
-                            .resolveFrom(context),
+                        color:
+                            CupertinoColors.secondaryLabel.resolveFrom(context),
                       ),
                 ),
               ],
@@ -232,6 +233,13 @@ class _CupertinoDanmakuSettingsPaneState
                   subtitle: '在底部进度条显示弹幕密度',
                   value: widget.videoState.showDanmakuDensityChart,
                   onChanged: widget.videoState.setShowDanmakuDensityChart,
+                ),
+                _buildSwitchTile(
+                  context,
+                  title: '随机染色',
+                  subtitle: '忽略原始颜色，按预设彩色随机分配',
+                  value: widget.videoState.danmakuRandomColorEnabled,
+                  onChanged: widget.videoState.setDanmakuRandomColorEnabled,
                 ),
                 CupertinoListTile(
                   title: const Text('手动匹配弹幕'),
@@ -324,8 +332,8 @@ class _CupertinoDanmakuSettingsPaneState
                           _blockWordError!,
                           style: TextStyle(
                             fontSize: 12,
-                            color: CupertinoColors.systemRed
-                                .resolveFrom(context),
+                            color:
+                                CupertinoColors.systemRed.resolveFrom(context),
                           ),
                         ),
                       const SizedBox(height: 12),
@@ -426,8 +434,9 @@ class _CupertinoDanmakuSettingsPaneState
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color:
-                CupertinoColors.systemGrey6.resolveFrom(context).withOpacity(0.8),
+            color: CupertinoColors.systemGrey6
+                .resolveFrom(context)
+                .withOpacity(0.8),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(

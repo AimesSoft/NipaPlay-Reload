@@ -88,6 +88,7 @@ dependencies:
   flutter_svg: ^2.0.14  # 用于显示SVG图标
   flutter_markdown: ^0.7.1
   desktop_drop: ^0.6.1
+  desktop_multi_window: ^0.2.1
   cupertino_icons: ^1.0.8
   charset_converter: ^2.1.1
   system_info2: ^3.0.1

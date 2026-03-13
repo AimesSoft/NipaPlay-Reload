@@ -23,6 +23,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadDanmakuVisible(); // 加载弹幕可见性
     await _loadMergeDanmaku(); // 加载弹幕合并设置
     await _loadDanmakuStacking(); // 加载弹幕堆叠设置
+    await _loadDanmakuRandomColorEnabled(); // 加载弹幕随机染色设置
     await _loadTimelineDanmakuEnabled(); // 加载时间轴告知弹幕轨道开关
     await _loadHardwareDecoderSetting(); // 加载硬件解码开关
 

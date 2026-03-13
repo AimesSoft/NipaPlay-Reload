@@ -42,16 +42,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     }
 
     final targetVideoPath = _currentVideoPath;
-    bool canContinue() =>
-        !_isDisposed && _currentVideoPath == targetVideoPath;
+    bool canContinue() => !_isDisposed && _currentVideoPath == targetVideoPath;
 
     try {
       final dirPath = p.dirname(videoPath);
       final dir = Directory(dirPath);
       if (!await dir.exists()) return;
 
-      final videoBaseName =
-          p.basenameWithoutExtension(videoPath).toLowerCase();
+      final videoBaseName = p.basenameWithoutExtension(videoPath).toLowerCase();
 
       final candidates = <_LocalDanmakuCandidate>[];
       await for (final entity in dir.list(followLinks: false)) {
@@ -269,8 +267,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   Future<void> loadDanmaku(String episodeId, String animeIdStr) async {
     if (_isDisposed) return;
     final targetVideoPath = _currentVideoPath;
-    bool canContinue() =>
-        !_isDisposed && _currentVideoPath == targetVideoPath;
+    bool canContinue() => !_isDisposed && _currentVideoPath == targetVideoPath;
 
     try {
       debugPrint('尝试为episodeId=$episodeId, animeId=$animeIdStr加载弹幕');
@@ -431,8 +428,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       bool setStatusMessage = true}) async {
     if (_isDisposed) return;
     final targetVideoPath = _currentVideoPath;
-    bool canContinue() =>
-        !_isDisposed && _currentVideoPath == targetVideoPath;
+    bool canContinue() => !_isDisposed && _currentVideoPath == targetVideoPath;
 
     try {
       debugPrint('开始从本地JSON加载弹幕...');
@@ -543,8 +539,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     _totalDanmakuCount = mergedList.length;
     _maybeStartSpoilerDanmakuAnalysis(mergedList);
-    final filteredList =
-        mergedList.where((d) => !shouldBlockDanmaku(d)).toList();
+    final filteredList = mergedList
+        .where((d) => !shouldBlockDanmaku(d))
+        .map(_prepareDanmakuForDisplay)
+        .toList();
     _danmakuList = filteredList;
 
     danmakuController?.clearDanmaku();
@@ -639,6 +637,51 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     return content.toString();
   }
 
+  Map<String, dynamic> _prepareDanmakuForDisplay(Map<String, dynamic> item) {
+    if (!_danmakuRandomColorEnabled) {
+      return item;
+    }
+
+    final randomizedColor = _resolveRandomizedDanmakuColor(item);
+    final currentColor = (item['color'] ?? item['r'])?.toString();
+    if (currentColor == randomizedColor) {
+      return item;
+    }
+
+    return <String, dynamic>{
+      ...item,
+      'color': randomizedColor,
+      'r': randomizedColor,
+    };
+  }
+
+  String _resolveRandomizedDanmakuColor(Map<String, dynamic> item) {
+    final palette = DanmakuColorPresets.randomColorfulDanmakuColors;
+    if (palette.isEmpty) {
+      return 'rgb(255,255,255)';
+    }
+
+    final timeValue = _formatDanmakuTime(
+      _resolveDanmakuTimeValue(item['time'] ?? item['t']),
+    );
+    final content = _resolveDanmakuContent(item);
+    final type = (item['type'] ?? item['y'] ?? '').toString();
+    final id = (item['id'] ?? item['cid'] ?? item['p'] ?? '').toString();
+    final signature = '$timeValue|$type|$id|$content';
+    final hash = _stableDanmakuHash(signature);
+    final color = palette[hash % palette.length];
+    return DanmakuColorPresets.toRgbString(color);
+  }
+
+  int _stableDanmakuHash(String input) {
+    var hash = 2166136261;
+    for (final code in input.codeUnits) {
+      hash ^= code;
+      hash = (hash * 16777619) & 0x7fffffff;
+    }
+    return hash & 0x7fffffff;
+  }
+
   int _resolveDanmakuTypeCode(Map<String, dynamic> item) {
     final originalType = item['originalType'];
     if (originalType is num) {
@@ -689,7 +732,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     return text.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
-  void _maybeStartSpoilerDanmakuAnalysis(List<Map<String, dynamic>> mergedList) {
+  void _maybeStartSpoilerDanmakuAnalysis(
+      List<Map<String, dynamic>> mergedList) {
     if (!_spoilerPreventionEnabled) {
       return;
     }
@@ -821,7 +865,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
   _SpoilerAiRequestConfig? _resolveSpoilerAiRequestConfig() {
     final resolvedModel = _spoilerAiModel.trim();
-    final resolvedTemperature = _spoilerAiTemperature.clamp(0.0, 2.0).toDouble();
+    final resolvedTemperature =
+        _spoilerAiTemperature.clamp(0.0, 2.0).toDouble();
     final apiUrl = _spoilerAiApiUrl.trim();
     final apiKey = _spoilerAiApiKey.trim();
     if (apiUrl.isEmpty || apiKey.isEmpty || resolvedModel.isEmpty) {
@@ -897,7 +942,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         }
       }
       _spoilerDanmakuTexts = normalizedSet;
-      debugPrint('[防剧透] AI分析完成，返回=${spoilerTexts.length} 命中=${normalizedSet.length}');
+      debugPrint(
+          '[防剧透] AI分析完成，返回=${spoilerTexts.length} 命中=${normalizedSet.length}');
       if (_spoilerAiDebugPrintResponse && normalizedSet.isNotEmpty) {
         final previewList = normalizedSet.take(200).toList();
         debugPrint(
@@ -921,7 +967,9 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         _isSpoilerDanmakuAnalyzing = false;
       }
 
-      if (isCurrentRun && _spoilerPreventionEnabled && _currentVideoPath == targetVideoPath) {
+      if (isCurrentRun &&
+          _spoilerPreventionEnabled &&
+          _currentVideoPath == targetVideoPath) {
         _updateMergedDanmakuList();
         unawaited(_prebuildGPUDanmakuCharsetIfNeeded());
       }
@@ -1265,7 +1313,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   // 添加一条新弹幕到当前列表
   void addDanmaku(Map<String, dynamic> danmaku) {
     if (danmaku.containsKey('time') && danmaku.containsKey('content')) {
-      _danmakuList.add(danmaku);
+      _danmakuList.add(_prepareDanmakuForDisplay(danmaku));
       // 按时间重新排序
       _danmakuList.sort((a, b) {
         final timeA = (a['time'] as double?) ?? 0.0;

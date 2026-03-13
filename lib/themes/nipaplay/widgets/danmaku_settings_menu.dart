@@ -118,8 +118,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     }
 
     try {
-      final extension =
-          format == _DanmakuExportFormat.xml ? 'xml' : 'json';
+      final extension = format == _DanmakuExportFormat.xml ? 'xml' : 'json';
       final fileName =
           _buildDanmakuExportFileName(widget.videoState, extension);
       final savePath = await getSaveLocation(
@@ -166,8 +165,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     final fallback = videoState.currentVideoPath == null
         ? 'danmaku'
         : p.basenameWithoutExtension(videoState.currentVideoPath!);
-    final baseName =
-        (title == null || title.isEmpty) ? fallback : title;
+    final baseName = (title == null || title.isEmpty) ? fallback : title;
     final timestamp = _formatTimestamp(DateTime.now());
     return '${baseName}_danmaku_$timestamp.$extension';
   }
@@ -301,6 +299,36 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              // 随机染色开关
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          '随机染色',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                        FluentSettingsSwitch(
+                          value: videoState.danmakuRandomColorEnabled,
+                          onChanged: (value) {
+                            videoState.setDanmakuRandomColorEnabled(value);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SettingsHintText(
+                      '开启后忽略弹幕原始颜色，按发送弹幕预设色随机分配',
+                    ),
+                  ],
+                ),
+              ),
               // 手动匹配弹幕
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
@@ -327,7 +355,8 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                         }
                         final videoState = widget.videoState;
                         final initialVideoPath = videoState.currentVideoPath;
-                        final String? initialSearchKeyword = initialVideoPath == null
+                        final String? initialSearchKeyword = initialVideoPath ==
+                                null
                             ? null
                             : (initialVideoPath.startsWith('jellyfin://') ||
                                     initialVideoPath.startsWith('emby://'))
@@ -338,7 +367,9 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                                 : p.basenameWithoutExtension(initialVideoPath);
                         final result = await ManualDanmakuMatcher.instance
                             .showManualMatchDialog(
-                          uiThemeProvider.isCupertinoTheme ? rootContext : context,
+                          uiThemeProvider.isCupertinoTheme
+                              ? rootContext
+                              : context,
                           initialVideoTitle: initialSearchKeyword,
                         );
 
@@ -412,7 +443,8 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                           child: BlurButton(
                             text: '保存为 JSON',
                             icon: Icons.save_alt,
-                            onTap: () => _saveDanmaku(_DanmakuExportFormat.json),
+                            onTap: () =>
+                                _saveDanmaku(_DanmakuExportFormat.json),
                             expandHorizontally: true,
                           ),
                         ),

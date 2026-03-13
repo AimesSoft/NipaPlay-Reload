@@ -91,13 +91,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadAutoNextCountdownSeconds() async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getInt(_autoNextCountdownSecondsKey);
-    final resolved = (storedValue ??
-            AutoNextEpisodeService.defaultCountdownSeconds)
-        .clamp(
-          AutoNextEpisodeService.minCountdownSeconds,
-          AutoNextEpisodeService.maxCountdownSeconds,
-        )
-        .toInt();
+    final resolved =
+        (storedValue ?? AutoNextEpisodeService.defaultCountdownSeconds)
+            .clamp(
+              AutoNextEpisodeService.minCountdownSeconds,
+              AutoNextEpisodeService.maxCountdownSeconds,
+            )
+            .toInt();
     final bool changed = resolved != _autoNextCountdownSeconds;
     _autoNextCountdownSeconds = resolved;
     AutoNextEpisodeService.instance.updateCountdownDuration(resolved);
@@ -147,7 +147,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> _loadDesktopHoverSettingsMenuEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    final resolved = prefs.getBool(_desktopHoverSettingsMenuEnabledKey) ?? false;
+    final resolved =
+        prefs.getBool(_desktopHoverSettingsMenuEnabledKey) ?? false;
     if (_desktopHoverSettingsMenuEnabled != resolved) {
       _desktopHoverSettingsMenuEnabled = resolved;
       notifyListeners();
@@ -284,6 +285,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  // 加载弹幕随机染色设置
+  Future<void> _loadDanmakuRandomColorEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    _danmakuRandomColorEnabled =
+        prefs.getBool(_danmakuRandomColorEnabledKey) ?? false;
+    notifyListeners();
+  }
+
   // 加载时间轴告知弹幕轨道开关
   Future<void> _loadTimelineDanmakuEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -312,6 +321,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await prefs.setBool(_danmakuStackingKey, stacking);
       notifyListeners();
     }
+  }
+
+  // 设置弹幕随机染色
+  Future<void> setDanmakuRandomColorEnabled(bool enabled) async {
+    if (_danmakuRandomColorEnabled == enabled) {
+      return;
+    }
+    _danmakuRandomColorEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_danmakuRandomColorEnabledKey, enabled);
+    _updateMergedDanmakuList();
   }
 
   // 切换弹幕堆叠状态
@@ -355,10 +375,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (kIsWeb || _isDisposed) return;
     final kernelName = player.getPlayerKernelName();
     if (kernelName == 'MDK') {
-      await _decoderManager.applyHardwareDecodingPreference(_useHardwareDecoder);
+      await _decoderManager
+          .applyHardwareDecodingPreference(_useHardwareDecoder);
     } else if (kernelName == 'Media Kit') {
-      final hwdecValue =
-          _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
+      final hwdecValue = _useHardwareDecoder ? _resolveMpvHwdecValue() : 'no';
       player.setProperty('hwdec', hwdecValue);
     }
   }
@@ -392,9 +412,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadPrecacheBufferDuration() async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getInt(_precacheBufferDurationSecondsKey);
-    final resolved = (storedValue ?? _precacheBufferDurationSeconds)
-        .clamp(1, 120)
-        .toInt();
+    final resolved =
+        (storedValue ?? _precacheBufferDurationSeconds).clamp(1, 120).toInt();
     _precacheBufferDurationSeconds = resolved;
     notifyListeners();
   }
@@ -766,7 +785,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final String dispLabel = snapshot.hasDisplay
           ? '${snapshot.displayWidth}x${snapshot.displayHeight}'
           : '未知';
-
     } catch (e) {
       debugPrint('[VideoPlayerState] Anime4K 分辨率日志失败: $e');
     }
@@ -868,8 +886,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
 
-    final bool upscaleEnabled =
-        _doubleResolutionPlaybackEnabled || _anime4kProfile != Anime4KProfile.off;
+    final bool upscaleEnabled = _doubleResolutionPlaybackEnabled ||
+        _anime4kProfile != Anime4KProfile.off;
     if (!upscaleEnabled || !hasVideo) {
       return;
     }
@@ -1136,20 +1154,16 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       prefs.getDouble(_subtitlePositionKey) ??
           VideoPlayerState.defaultSubtitlePosition,
     );
-    _subtitleAlignX = SubtitleAlignX.values[
-        (prefs.getInt(_subtitleAlignXKey) ??
-                VideoPlayerState.defaultSubtitleAlignX.index)
-            .clamp(0, SubtitleAlignX.values.length - 1)];
-    _subtitleAlignY = SubtitleAlignY.values[
-        (prefs.getInt(_subtitleAlignYKey) ??
-                VideoPlayerState.defaultSubtitleAlignY.index)
-            .clamp(0, SubtitleAlignY.values.length - 1)];
-    _subtitleMarginX =
-        prefs.getDouble(_subtitleMarginXKey) ??
-            VideoPlayerState.defaultSubtitleMarginX;
-    _subtitleMarginY =
-        prefs.getDouble(_subtitleMarginYKey) ??
-            VideoPlayerState.defaultSubtitleMarginY;
+    _subtitleAlignX = SubtitleAlignX.values[(prefs.getInt(_subtitleAlignXKey) ??
+            VideoPlayerState.defaultSubtitleAlignX.index)
+        .clamp(0, SubtitleAlignX.values.length - 1)];
+    _subtitleAlignY = SubtitleAlignY.values[(prefs.getInt(_subtitleAlignYKey) ??
+            VideoPlayerState.defaultSubtitleAlignY.index)
+        .clamp(0, SubtitleAlignY.values.length - 1)];
+    _subtitleMarginX = prefs.getDouble(_subtitleMarginXKey) ??
+        VideoPlayerState.defaultSubtitleMarginX;
+    _subtitleMarginY = prefs.getDouble(_subtitleMarginYKey) ??
+        VideoPlayerState.defaultSubtitleMarginY;
     _subtitleOpacity = _clampSubtitleOpacity(
       prefs.getDouble(_subtitleOpacityKey) ??
           VideoPlayerState.defaultSubtitleOpacity,
@@ -1391,8 +1405,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleBold = false;
     _subtitleItalic = false;
     _subtitleColorValue = VideoPlayerState.defaultSubtitleColorValue;
-    _subtitleBorderColorValue = VideoPlayerState.defaultSubtitleBorderColorValue;
-    _subtitleShadowColorValue = VideoPlayerState.defaultSubtitleShadowColorValue;
+    _subtitleBorderColorValue =
+        VideoPlayerState.defaultSubtitleBorderColorValue;
+    _subtitleShadowColorValue =
+        VideoPlayerState.defaultSubtitleShadowColorValue;
     _subtitleFontName = '';
     _subtitleFontDir = '';
     _subtitleOverrideMode = VideoPlayerState.defaultSubtitleOverrideMode;
@@ -1641,8 +1657,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
       String? resolved = saved;
       if (resolved != null && resolved.isNotEmpty && Platform.isMacOS) {
-        resolved = await SecurityBookmarkService.resolveBookmark(resolved) ??
-            resolved;
+        resolved =
+            await SecurityBookmarkService.resolveBookmark(resolved) ?? resolved;
       }
 
       if (resolved == null || resolved.isEmpty) {

@@ -77,6 +77,8 @@ import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
+import 'package:nipaplay/pages/desktop_pip_window_app.dart';
+import 'package:nipaplay/services/desktop_pip_window_service.dart';
 import 'constants/settings_keys.dart';
 import 'player_abstraction/media_kit_player_adapter.dart';
 import 'utils/launch_file_handler.dart';
@@ -114,6 +116,31 @@ void main(List<String> args) async {
     debugPaintBaselinesEnabled = false;
     debugPaintSizeEnabled = false;
   });
+
+  final pipLaunchPayload =
+      DesktopPipWindowService.tryParseLaunchPayload(args);
+  final bool isSubWindowProcess =
+      args.isNotEmpty && args.first == 'multi_window';
+  if (isSubWindowProcess) {
+    if (DesktopPipWindowService.isFeatureEnabled &&
+        pipLaunchPayload != null &&
+        pipLaunchPayload.isPipWindow) {
+      await runDesktopPipWindowApp(pipLaunchPayload);
+      return;
+    }
+    runApp(const SizedBox.shrink());
+    return;
+  }
+
+  if (globals.isDesktop) {
+    DesktopPipWindowService.instance.configureCurrentWindow(
+      windowId: 0,
+      isPipWindow: false,
+    );
+    if (DesktopPipWindowService.isFeatureEnabled) {
+      await DesktopPipWindowService.instance.installMainMethodHandler();
+    }
+  }
 
   String? launchFilePath;
   if (globals.isDesktop && args.isNotEmpty) {
