@@ -66,8 +66,9 @@ class ArrowMenuContainer extends StatelessWidget {
     final borderRadiusValue = BorderRadius.circular(borderRadius);
     final bool isWeb = kIsWeb;
     // Web 使用深灰色纯色背景
-    final Color effectiveBackgroundColor = isWeb ? const Color(0xFF222222) : backgroundColor;
-    
+    final Color effectiveBackgroundColor =
+        isWeb ? const Color(0xFF202020) : backgroundColor;
+
     final backgroundDecoration = BoxDecoration(
       color: effectiveBackgroundColor,
       borderRadius: borderRadiusValue,
@@ -98,7 +99,8 @@ class ArrowMenuContainer extends StatelessWidget {
             ? ClipRRect(
                 borderRadius: borderRadiusValue,
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                  filter:
+                      ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
                   child: DecoratedBox(
                     decoration: backgroundDecoration,
                     child: Padding(
@@ -111,7 +113,8 @@ class ArrowMenuContainer extends StatelessWidget {
             : ClipPath(
                 clipper: ShapeBorderClipper(shape: shape),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+                  filter:
+                      ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
                   child: DecoratedBox(
                     decoration: ShapeDecoration(
                       shape: shape,
@@ -125,8 +128,9 @@ class ArrowMenuContainer extends StatelessWidget {
                   ),
                 ),
               ));
-    final ShapeBorder resolvedBorderShape =
-        useSimpleClip ? RoundedRectangleBorder(borderRadius: borderRadiusValue) : borderShape;
+    final ShapeBorder resolvedBorderShape = useSimpleClip
+        ? RoundedRectangleBorder(borderRadius: borderRadiusValue)
+        : borderShape;
 
     return Stack(
       fit: StackFit.passthrough,
@@ -194,7 +198,8 @@ class ArrowMenuShape extends ShapeBorder {
 
     if (!hasPointer) {
       return Path()
-        ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(clampedRadius)));
+        ..addRRect(
+            RRect.fromRectAndRadius(rect, Radius.circular(clampedRadius)));
     }
 
     final double arrowHalf = pointerWidth / 2;
@@ -216,9 +221,11 @@ class ArrowMenuShape extends ShapeBorder {
       path.lineTo(body.right - clampedRadius, body.top);
       path.arcToPoint(Offset(body.right, body.top + clampedRadius), radius: r);
       path.lineTo(body.right, body.bottom - clampedRadius);
-      path.arcToPoint(Offset(body.right - clampedRadius, body.bottom), radius: r);
+      path.arcToPoint(Offset(body.right - clampedRadius, body.bottom),
+          radius: r);
       path.lineTo(body.left + clampedRadius, body.bottom);
-      path.arcToPoint(Offset(body.left, body.bottom - clampedRadius), radius: r);
+      path.arcToPoint(Offset(body.left, body.bottom - clampedRadius),
+          radius: r);
       path.lineTo(body.left, body.top + clampedRadius);
       path.arcToPoint(Offset(body.left + clampedRadius, body.top), radius: r);
     } else {
@@ -226,12 +233,14 @@ class ArrowMenuShape extends ShapeBorder {
       path.lineTo(body.right - clampedRadius, body.top);
       path.arcToPoint(Offset(body.right, body.top + clampedRadius), radius: r);
       path.lineTo(body.right, body.bottom - clampedRadius);
-      path.arcToPoint(Offset(body.right - clampedRadius, body.bottom), radius: r);
+      path.arcToPoint(Offset(body.right - clampedRadius, body.bottom),
+          radius: r);
       path.lineTo(arrowX + arrowHalf, body.bottom);
       path.lineTo(arrowX, body.bottom + pointerHeight);
       path.lineTo(arrowX - arrowHalf, body.bottom);
       path.lineTo(body.left + clampedRadius, body.bottom);
-      path.arcToPoint(Offset(body.left, body.bottom - clampedRadius), radius: r);
+      path.arcToPoint(Offset(body.left, body.bottom - clampedRadius),
+          radius: r);
       path.lineTo(body.left, body.top + clampedRadius);
       path.arcToPoint(Offset(body.left + clampedRadius, body.top), radius: r);
     }

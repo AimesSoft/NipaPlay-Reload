@@ -91,7 +91,7 @@ class BaseSettingsMenu extends StatelessWidget {
         final baseTheme = Theme.of(context);
         final colorScheme = baseTheme.colorScheme;
         const menuTextColor = Colors.white;
-        final backgroundColor = colorScheme.surface.withOpacity(0.15);
+        final backgroundColor = Colors.black.withValues(alpha: 0.58);
         final borderColor = colorScheme.onSurface.withOpacity(0.2);
         final menuTheme = baseTheme.copyWith(
           colorScheme: colorScheme.copyWith(
@@ -111,14 +111,12 @@ class BaseSettingsMenu extends StatelessWidget {
         final bool showBackItem = scope?.showBackItem ?? false;
         final bool lockControlsVisible = scope?.lockControlsVisible ?? false;
         final Rect? anchorRect = scope?.anchorRect;
-        final bool showPointer =
-            scope?.showPointer ?? (anchorRect != null);
+        final bool showPointer = scope?.showPointer ?? (anchorRect != null);
         final double pointerWidth = scope?.pointerWidth ?? 16;
         final double pointerHeight = scope?.pointerHeight ?? 8;
         final Size screenSize = MediaQuery.of(context).size;
-        final double screenMaxHeight = globals.isPhone
-            ? screenSize.height - 120
-            : screenSize.height - 200;
+        final double screenMaxHeight =
+            globals.isPhone ? screenSize.height - 120 : screenSize.height - 200;
         final double resolvedHeight =
             math.min(scope?.height ?? height, screenMaxHeight);
         const double horizontalMargin = 12;
@@ -136,8 +134,9 @@ class BaseSettingsMenu extends StatelessWidget {
           final spaceAbove = anchorRect.top;
           final spaceBelow = screenSize.height - anchorRect.bottom;
           final showAbove = spaceAbove >= spaceBelow;
-          left = (anchorRect.center.dx - resolvedWidth / 2)
-              .clamp(horizontalMargin, screenSize.width - resolvedWidth - horizontalMargin);
+          left = (anchorRect.center.dx - resolvedWidth / 2).clamp(
+              horizontalMargin,
+              screenSize.width - resolvedWidth - horizontalMargin);
           pointerX = (anchorRect.center.dx - left)
               .clamp(pointerPadding, resolvedWidth - pointerPadding);
           useExternalPointer = showPointer && pointerX != null;
@@ -188,8 +187,9 @@ class BaseSettingsMenu extends StatelessWidget {
                         borderColor: borderColor,
                         blurValue: blurValue,
                         borderRadius: 15,
-                        showPointer:
-                            showPointer && pointerX != null && !useExternalPointer,
+                        showPointer: showPointer &&
+                            pointerX != null &&
+                            !useExternalPointer,
                         pointUp: pointUp,
                         pointerX: pointerX ?? resolvedWidth / 2,
                         pointerWidth: pointerWidth,
