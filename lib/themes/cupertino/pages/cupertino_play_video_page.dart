@@ -234,9 +234,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           AdaptiveSnackBar.show(
             context,
             message: ok ? '截图已保存到相册' : '截图失败',
-            type: ok
-                ? AdaptiveSnackBarType.success
-                : AdaptiveSnackBarType.error,
+            type:
+                ok ? AdaptiveSnackBarType.success : AdaptiveSnackBarType.error,
           );
           return;
         }
@@ -274,7 +273,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
   }
 
-  List<ContextMenuAction> _buildContextMenuActions(VideoPlayerState videoState) {
+  List<ContextMenuAction> _buildContextMenuActions(
+      VideoPlayerState videoState) {
     final actions = <ContextMenuAction>[
       ContextMenuAction(
         icon: Icons.skip_previous_rounded,
@@ -418,8 +418,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
     final textureId = videoState.player.textureId.value;
     final controller = kIsWeb ? videoState.player.videoPlayerController : null;
-    final hasVideo =
-        videoState.hasVideo && (kIsWeb || (textureId != null && textureId >= 0));
+    final hasVideo = videoState.hasVideo &&
+        (kIsWeb || (textureId != null && textureId >= 0));
     final progressValue = _isDragging
         ? (_dragProgress ?? videoState.progress)
         : videoState.progress;
@@ -504,7 +504,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     valueListenable: videoState.playbackTimeMs,
                     builder: (context, posMs, __) {
                       return DanmakuOverlay(
-                        key: ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
+                        key:
+                            ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
                         currentPosition: posMs,
                         videoDuration:
                             videoState.duration.inMilliseconds.toDouble(),
@@ -557,6 +558,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     return DefaultTextStyle.merge(
       style: const TextStyle(decoration: TextDecoration.none),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           Consumer<VideoPlayerState>(
             builder: (context, videoState, _) {
@@ -863,8 +865,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     });
   }
 
-  Future<void> _shareCurrentMediaNipaplay(
-      VideoPlayerState videoState) async {
+  Future<void> _shareCurrentMediaNipaplay(VideoPlayerState videoState) async {
     if (!SystemShareService.isSupported) return;
 
     final currentVideoPath = videoState.currentVideoPath;
@@ -917,8 +918,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
   }
 
-  Future<void> _captureScreenshotNipaplay(
-      VideoPlayerState videoState) async {
+  Future<void> _captureScreenshotNipaplay(VideoPlayerState videoState) async {
     if (kIsWeb) return;
     if (!videoState.hasVideo) return;
 
@@ -942,8 +942,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 '文件',
                 style: TextStyle(color: Colors.white),
               ),
-              ),
-            ],
+            ),
+          ],
           barrierDismissible: !_shouldDisableDialogDismiss(videoState),
         );
 
@@ -971,7 +971,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
   }
 
-  Future<void> _showAirPlayPickerNipaplay([VideoPlayerState? videoState]) async {
+  Future<void> _showAirPlayPickerNipaplay(
+      [VideoPlayerState? videoState]) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
     final disableBackgroundDismiss = _shouldDisableDialogDismiss(videoState);
 
@@ -1360,9 +1361,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   ),
                   SizedBox(height: isPhone ? 6 : 8),
                   AdaptiveSlider(
-                    value: totalMillis > 0
-                        ? progressValue.clamp(0.0, 1.0)
-                        : 0.0,
+                    value:
+                        totalMillis > 0 ? progressValue.clamp(0.0, 1.0) : 0.0,
                     min: 0.0,
                     max: 1.0,
                     activeColor: CupertinoColors.activeBlue,
@@ -1619,8 +1619,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     videoState.setControlsVisibilityLocked(true);
 
     Rect? anchorRect;
-    final RenderBox? renderBox =
-        buttonContext.findRenderObject() as RenderBox?;
+    final RenderBox? renderBox = buttonContext.findRenderObject() as RenderBox?;
     if (renderBox != null && renderBox.hasSize) {
       final position = renderBox.localToGlobal(Offset.zero);
       anchorRect = position & renderBox.size;

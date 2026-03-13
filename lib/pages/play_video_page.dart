@@ -357,8 +357,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   const Positioned.fill(
                     child: VideoPlayerWidget(),
                   ),
-                  if (videoState.hasVideo)
-                    _buildMaterialControls(videoState),
+                  if (videoState.hasVideo) _buildMaterialControls(videoState),
                 ],
               ),
             ),
@@ -372,10 +371,12 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final bool uiLocked = globals.isPhone ? _isUiLocked : false;
     final bool showLockButton = globals.isPhone &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
-    final bool showShareButton = SystemShareService.isSupported && !globals.isDesktop;
+    final bool showShareButton =
+        SystemShareService.isSupported && !globals.isDesktop;
     final bool showScreenshotButton = !kIsWeb && globals.isPhone;
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Consumer<VideoPlayerState>(
           builder: (context, videoState, _) {
@@ -516,28 +517,28 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         if (globals.isPhone)
-            Positioned(
-              left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: AnimatedSlide(
+          Positioned(
+            left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 150),
+                offset: Offset(showLockButton ? 0 : -0.1, 0),
+                child: AnimatedOpacity(
+                  opacity: showLockButton ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 150),
-                  offset: Offset(showLockButton ? 0 : -0.1, 0),
-                  child: AnimatedOpacity(
-                    opacity: showLockButton ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: IgnorePointer(
-                      ignoring: !showLockButton,
-                      child: LockControlsButton(
-                        locked: uiLocked,
-                        onPressed: () => _toggleUiLock(videoState),
-                      ),
+                  child: IgnorePointer(
+                    ignoring: !showLockButton,
+                    child: LockControlsButton(
+                      locked: uiLocked,
+                      onPressed: () => _toggleUiLock(videoState),
                     ),
                   ),
                 ),
               ),
             ),
+          ),
       ],
     );
   }

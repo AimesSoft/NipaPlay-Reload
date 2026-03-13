@@ -45,9 +45,14 @@ class ControlIconShadow extends StatelessWidget {
     required this.child,
     this.shadows = const [
       Shadow(
-        color: Color(0x99000000),
-        blurRadius: 6,
+        color: Color(0xCC000000),
+        blurRadius: 10,
         offset: Offset(0, 2),
+      ),
+      Shadow(
+        color: Color(0x99000000),
+        blurRadius: 18,
+        offset: Offset(0, 4),
       ),
     ],
   });
@@ -70,9 +75,14 @@ class ControlTextShadow extends StatelessWidget {
     required this.child,
     this.shadows = const [
       Shadow(
-        color: Color(0x99000000),
-        blurRadius: 6,
+        color: Color(0xCC000000),
+        blurRadius: 10,
         offset: Offset(0, 2),
+      ),
+      Shadow(
+        color: Color(0x99000000),
+        blurRadius: 18,
+        offset: Offset(0, 4),
       ),
     ],
   });

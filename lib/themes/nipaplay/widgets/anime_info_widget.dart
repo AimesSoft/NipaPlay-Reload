@@ -40,6 +40,8 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
     final episodeTitle = _resolveTitle(widget.videoState.episodeTitle);
     final fileTitle = _resolveFileName(widget.videoState.currentVideoPath);
     final displayTitle = animeTitle ?? fileTitle ?? episodeTitle;
+    final maxInfoWidth = MediaQuery.of(context).size.width * 0.72;
+    const shadowBleedWidth = 64.0;
     if (displayTitle == null) {
       return const SizedBox.shrink();
     }
@@ -52,18 +54,19 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
         offset: Offset(widget.videoState.showControls ? 0 : -0.1, 0),
         child: Container(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.4,
+            maxWidth: maxInfoWidth + shadowBleedWidth,
           ),
-          child: IntrinsicWidth(
-            child: MouseRegion(
-              onEnter: (_) {
-                widget.videoState.setControlsHovered(true);
-              },
-              onExit: (_) {
-                widget.videoState.setControlsHovered(false);
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: MouseRegion(
+            onEnter: (_) {
+              widget.videoState.setControlsHovered(true);
+            },
+            onExit: (_) {
+              widget.videoState.setControlsHovered(false);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxInfoWidth),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.start,
@@ -78,7 +81,8 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                             fontWeight: FontWeight.bold,
                           ),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
                         ),
                       ),
                     ),
@@ -103,7 +107,8 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                               child: Text(
                                 episodeTitle,
                                 maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                                overflow: TextOverflow.fade,
                               ),
                             ),
                           ),
@@ -119,4 +124,4 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
       ),
     );
   }
-} 
+}
