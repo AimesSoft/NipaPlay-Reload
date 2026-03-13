@@ -14,7 +14,7 @@ class _TooltipManager {
   void registerTooltip(_HoverTooltipBubbleState tooltip) {
     if (_isManaging) return;
     _isManaging = true;
-    
+
     try {
       // 如果有旧的气泡，先强制关闭
       if (_currentTooltip != null && _currentTooltip != tooltip) {
@@ -33,7 +33,7 @@ class _TooltipManager {
   void unregisterTooltip(_HoverTooltipBubbleState tooltip) {
     if (_isManaging) return;
     _isManaging = true;
-    
+
     try {
       if (_currentTooltip == tooltip) {
         _currentTooltip = null;
@@ -42,12 +42,12 @@ class _TooltipManager {
       _isManaging = false;
     }
   }
-  
+
   // 强制清理所有气泡（用于紧急情况）
   void forceCleanup() {
     if (_isManaging) return;
     _isManaging = true;
-    
+
     try {
       if (_currentTooltip != null) {
         try {
@@ -107,14 +107,14 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   Size? _bubbleSize;
   double _overlayLeft = 0;
   double _overlayTop = 0;
-  
+
   // 添加定时器管理
   Timer? _showTimer;
   Timer? _hideTimer;
-  
+
   // 添加安全锁，防止并发操作
   bool _isOperating = false;
-  
+
   @override
   void dispose() {
     _manager.unregisterTooltip(this);
@@ -122,7 +122,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
     _forceCleanup(); // 强制清理所有资源
     super.dispose();
   }
-  
+
   @override
   void deactivate() {
     // 当 widget 被移除时，立即清理资源
@@ -145,7 +145,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   void _forceCleanup() {
     if (_isOperating) return; // 防止重复操作
     _isOperating = true;
-    
+
     try {
       _cancelAllTimers();
       _overlayEntry?.remove();
@@ -164,7 +164,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
   void _forceHide() {
     if (_isOperating) return; // 防止重复操作
     _isOperating = true;
-    
+
     try {
       _cancelAllTimers();
       if (mounted) {
@@ -181,13 +181,13 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
 
   void _showOverlay(BuildContext context) {
     if (widget.text.isEmpty || _isOperating || _isOverlayVisible) return;
-    
+
     _isOperating = true;
-    
+
     try {
       // 先注册到管理器（这会自动关闭其他气泡）
       _manager.registerTooltip(this);
-      
+
       // 计算气泡尺寸
       final bubbleSize = _calculateBubbleSize();
       _bubbleSize = bubbleSize;
@@ -200,7 +200,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
 
       _overlayLeft = offset.dx;
       _overlayTop = offset.dy;
-    
+
       _overlayEntry = OverlayEntry(
         builder: (context) => Positioned(
           left: _overlayLeft,
@@ -217,7 +217,6 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
 
       Overlay.of(context).insert(_overlayEntry!);
       _isOverlayVisible = true;
-      
     } catch (e) {
       // 如果显示失败，清理资源
       _overlayEntry?.remove();
@@ -230,9 +229,9 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
 
   void _hideOverlay() {
     if (_isOperating || !_isOverlayVisible) return;
-    
+
     _isOperating = true;
-    
+
     try {
       _cancelAllTimers(); // 确保取消所有定时器
       _manager.unregisterTooltip(this);
@@ -257,9 +256,11 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
 
     if (_mousePosition != null) {
       if (widget.autoAlign) {
-        final rightSpace = screenSize.width - _mousePosition!.dx - widget.horizontalOffset;
+        final rightSpace =
+            screenSize.width - _mousePosition!.dx - widget.horizontalOffset;
         final leftSpace = _mousePosition!.dx - widget.horizontalOffset;
-        final showOnRight = rightSpace >= bubbleSize.width || rightSpace >= leftSpace;
+        final showOnRight =
+            rightSpace >= bubbleSize.width || rightSpace >= leftSpace;
 
         left = showOnRight
             ? _mousePosition!.dx + widget.horizontalOffset
@@ -272,7 +273,8 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
             : _mousePosition!.dy + widget.verticalOffset;
       }
     } else {
-      final RenderBox? renderBox = _childKey.currentContext?.findRenderObject() as RenderBox?;
+      final RenderBox? renderBox =
+          _childKey.currentContext?.findRenderObject() as RenderBox?;
       if (renderBox == null) {
         return null;
       }
@@ -282,7 +284,8 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
 
       if (widget.autoAlign) {
         // 检查右侧是否有足够空间
-        final rightSpace = screenSize.width - (position.dx + size.width + widget.horizontalOffset);
+        final rightSpace = screenSize.width -
+            (position.dx + size.width + widget.horizontalOffset);
         final leftSpace = position.dx - widget.horizontalOffset;
 
         if (rightSpace >= bubbleSize.width) {
@@ -337,7 +340,7 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       height: 1.4,
       fontWeight: FontWeight.w400,
     );
-    
+
     final textPainter = TextPainter(
       text: TextSpan(
         text: widget.text,
@@ -346,11 +349,12 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       textDirection: TextDirection.ltr,
       maxLines: null, // 允许无限行
     )..layout(maxWidth: widget.maxWidth - widget.padding * 2);
-    
+
     // 确保最小尺寸和合理的最大尺寸
-    final width = (textPainter.width + widget.padding * 2).clamp(100.0, widget.maxWidth);
+    final width =
+        (textPainter.width + widget.padding * 2).clamp(100.0, widget.maxWidth);
     final height = (textPainter.height + widget.padding * 2).clamp(40.0, 400.0);
-    
+
     return Size(width, height);
   }
 
@@ -360,15 +364,15 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       cursor: widget.cursor,
       onEnter: (event) {
         _mousePosition = event.position;
-        
+
         // 取消之前的所有定时器
         _cancelAllTimers();
-        
+
         if (mounted) {
           setState(() => _isHovered = true);
         }
         widget.onHoverChanged?.call(true);
-        
+
         // 使用可管理的定时器
         _showTimer = Timer(widget.showDelay, () {
           if (_isHovered && mounted && !_isOverlayVisible) {
@@ -384,12 +388,12 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       onExit: (_) {
         // 取消之前的所有定时器
         _cancelAllTimers();
-        
+
         if (mounted) {
           setState(() => _isHovered = false);
         }
         widget.onHoverChanged?.call(false);
-        
+
         // 使用可管理的定时器
         _hideTimer = Timer(widget.hideDelay, () {
           if (!_isHovered && mounted && _isOverlayVisible) {
@@ -407,25 +411,18 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
 
   Widget _buildBubble(Size size) {
     final bool isWeb = kIsWeb;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // Web 端使用深灰色背景 (0xFF222222)，否则保持原有逻辑
-    final backgroundColor = isWeb 
-        ? const Color(0xFF222222) 
-        : (isDark ? const Color(0xFF2B2B2B) : Colors.white);
-        
-    final borderColor = isWeb
-        ? Colors.white.withOpacity(0.15)
-        : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08));
-        
-    final textStyle = TextStyle(
-      color: (isWeb || isDark) ? Colors.white : Colors.black87,
+    final backgroundColor =
+        isWeb ? const Color(0xFF202020) : Colors.black.withValues(alpha: 0.58);
+    final borderColor = Colors.white.withValues(alpha: 0.2);
+
+    const textStyle = TextStyle(
+      color: Colors.white,
       fontSize: 14,
       height: 1.4,
       fontWeight: FontWeight.w400,
     );
     const bubbleRadius = 8.0;
-    
+
     return Container(
       constraints: BoxConstraints(
         minWidth: 100,
@@ -435,14 +432,6 @@ class _HoverTooltipBubbleState extends State<HoverTooltipBubble> {
       ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(bubbleRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.4 : 0.18),
-            blurRadius: 16,
-            spreadRadius: 1,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(bubbleRadius),

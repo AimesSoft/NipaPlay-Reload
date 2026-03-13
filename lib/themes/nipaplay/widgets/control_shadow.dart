@@ -13,9 +13,14 @@ class ControlShadow extends StatelessWidget {
     this.padding = EdgeInsets.zero,
     this.shadows = const [
       BoxShadow(
-        color: Color(0x66000000),
-        blurRadius: 6,
+        color: Color(0xC0000000),
+        blurRadius: 10,
         offset: Offset(0, 2),
+      ),
+      BoxShadow(
+        color: Color(0x80000000),
+        blurRadius: 18,
+        offset: Offset(0, 6),
       ),
     ],
   });
