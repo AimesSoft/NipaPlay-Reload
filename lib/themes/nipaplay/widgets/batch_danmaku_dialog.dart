@@ -93,6 +93,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
               _FileItem(path: path, displayName: _displayNameFromPath(path)),
         )
         .toList(growable: true);
+    
+    // 默认自动排序文件
+    _sortFilesByEpisodeNumber();
+    
     if (widget.initialSearchKeyword?.trim().isNotEmpty == true) {
       _searchController.text = widget.initialSearchKeyword!.trim();
     }
@@ -354,6 +358,21 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     });
   }
 
+  void _sortFilesByEpisodeNumber() {
+    setState(() {
+      _files.sort((a, b) {
+        // 先按sortKey排序，sortKey为null的排在最后
+        if (a.sortKey != null && b.sortKey != null) {
+          return a.sortKey!.compareTo(b.sortKey!);
+        }
+        if (a.sortKey != null) return -1;
+        if (b.sortKey != null) return 1;
+        // 如果都没有sortKey，按文件名排序
+        return a.displayName.compareTo(b.displayName);
+      });
+    });
+  }
+
   void _toggleSelectAllEpisodes(bool selectAll) {
     if (_episodes.isEmpty) return;
     setState(() {
@@ -480,11 +499,25 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                 side: checkboxSide,
               ),
               Expanded(
-                child: Text(
-                  item.displayName,
-                  style: TextStyle(color: textColor, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.displayName,
+                      style: TextStyle(color: textColor, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (item.episodeNumber != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '剧集: ${item.episodeNumber}',
+                        style: TextStyle(color: _subTextColor, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 6),
@@ -1105,12 +1138,64 @@ class _FileItem {
   final String path;
   final String displayName;
   bool selected;
+  final String? episodeNumber;
+  final int? sortKey;
 
   _FileItem({
     required this.path,
     required this.displayName,
     this.selected = true,
-  });
+  }) : episodeNumber = _extractEpisodeNumber(displayName),
+       sortKey = _generateSortKey(_extractEpisodeNumber(displayName));
+
+  static String? _extractEpisodeNumber(String fileName) {
+    // 匹配常见的剧集格式：[01], 01, E01, EP01, 第01话, 第1话, SP1, OVA, Lite等
+    final patterns = [
+      // 特殊格式：[SP01], SP01, OVA, Lite
+      RegExp(r'\[(SP\d+|OVA|Lite)\]', caseSensitive: false),
+      RegExp(r'[\s_\-\.](SP\d+|OVA|Lite)[\s_\-\.\]]', caseSensitive: false),
+      // 标准数字格式：[01], 01, 1
+      RegExp(r'\[(\d{1,3})\]'),
+      RegExp(r'[\s_\-\.](\d{1,3})[\s_\-\.\]]'),
+      // 带前缀格式：E01, EP01, e01, ep01
+      RegExp(r'[\s_\-\.]([Ee][Pp]?)(\d{1,3})[\s_\-\.\]]'),
+      // 中文格式：第01话, 第1话
+      RegExp(r'第(\d{1,3})话'),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(fileName);
+      if (match != null) {
+        // 对于带前缀的格式，只返回数字部分
+        if (match.groupCount > 1 && match.group(2) != null) {
+          return match.group(2);
+        }
+        return match.group(1);
+      }
+    }
+    return null;
+  }
+
+  static int? _generateSortKey(String? episodeNumber) {
+    if (episodeNumber == null) return null;
+    
+    // 处理特殊剧集号
+    if (episodeNumber.toLowerCase().startsWith('sp')) {
+      final numPart = episodeNumber.substring(2);
+      final num = int.tryParse(numPart) ?? 0;
+      return 1000 + num; // SP剧集排在普通剧集之后
+    }
+    if (episodeNumber.toLowerCase() == 'ova') {
+      return 2000; // OVA排在SP之后
+    }
+    if (episodeNumber.toLowerCase() == 'lite') {
+      return 3000; // Lite排在OVA之后
+    }
+    
+    // 处理普通数字剧集号
+    final num = int.tryParse(episodeNumber);
+    return num;
+  }
 }
 
 class _EpisodeItem {
