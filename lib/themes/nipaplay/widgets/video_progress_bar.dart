@@ -380,8 +380,8 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                 ? thumbSizeHovered
                 : thumbSize;
             final halfThumbSize = currentThumbSize / 2;
-            const trackBaseColor = Color(0xFFB8B8B8);
-            const bufferTrackColor = Color(0xFFD0D0D0);
+            const trackBaseColor = Color.fromARGB(255, 125, 125, 125);
+            const bufferTrackColor = Color.fromARGB(255, 176, 176, 176);
             const playedTrackColor = Color(0xFFFFFFFF);
 
             return widget.isDragging
