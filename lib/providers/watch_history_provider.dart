@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
-import 'package:nipaplay/utils/storage_service.dart' show StorageService;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 
@@ -15,47 +14,49 @@ class WatchHistoryProvider extends ChangeNotifier {
   bool _isLoaded = false;
   final FilePickerService _filePickerService = FilePickerService();
   final WatchHistoryDatabase _database = WatchHistoryDatabase.instance;
-  static const double _completionProgressThreshold = 0.97;
+  static const double _completionProgressThreshold = 0.90;
   static const int _completionTailToleranceMs = 15000;
-  
+
   // 缓存已知无效的文件路径，避免重复检查
   final Set<String> _knownInvalidPaths = {};
-  
+
   // ScanService实例，用于监听扫描完成事件
   ScanService? _scanService;
 
   List<WatchHistoryItem> get history => _history;
-  List<WatchHistoryItem> get continueWatchingItems => _history
-      .where(_shouldDisplayInContinueWatching)
-      .toList(growable: false);
+  List<WatchHistoryItem> get continueWatchingItems {
+    final filtered = _history.where(_shouldDisplayInContinueWatching);
+    return _deduplicateContinueWatching(filtered);
+  }
+
   bool get isLoading => _isLoading;
   bool get isLoaded => _isLoaded;
-  
+
   // 设置ScanService监听器
   void setScanService(ScanService scanService) {
     //debugPrint('WatchHistoryProvider: setScanService 被调用');
-    
+
     // 移除旧的监听器
     if (_scanService != null) {
       //debugPrint('WatchHistoryProvider: 移除旧的ScanService监听器');
       _scanService!.removeListener(_onScanServiceStateChanged);
     }
-    
+
     // 设置新的监听器
     _scanService = scanService;
     _scanService!.addListener(_onScanServiceStateChanged);
     //debugPrint('WatchHistoryProvider: 已添加ScanService监听器');
   }
-  
+
   // 扫描状态变化监听器
   void _onScanServiceStateChanged() {
     if (_scanService == null) return;
-    
+
     //debugPrint('WatchHistoryProvider: ScanService状态变化 - scanJustCompleted: ${_scanService!.scanJustCompleted}');
-    
+
     if (_scanService!.scanJustCompleted) {
       //debugPrint('WatchHistoryProvider: 检测到扫描完成，自动刷新历史记录');
-      
+
       // 延迟刷新，确保扫描结果已保存到数据库
       Future.delayed(const Duration(milliseconds: 100), () {
         refresh();
@@ -64,7 +65,7 @@ class WatchHistoryProvider extends ChangeNotifier {
       });
     }
   }
-  
+
   @override
   void dispose() {
     // 移除监听器
@@ -78,7 +79,7 @@ class WatchHistoryProvider extends ChangeNotifier {
     if (_isLoading) return;
     _isLoading = true;
     notifyListeners();
-    
+
     try {
       if (kIsWeb) {
         // 尝试从远程 API 获取历史记录
@@ -87,15 +88,16 @@ class WatchHistoryProvider extends ChangeNotifier {
           _history = remoteHistory.map((data) {
             String? thumbnail = data['thumbnailPath'];
             // 如果缩略图是本地路径（不含协议头），则转换为远程代理 URL
-            if (thumbnail != null && 
-                thumbnail.isNotEmpty && 
-                !thumbnail.startsWith('http://') && 
+            if (thumbnail != null &&
+                thumbnail.isNotEmpty &&
+                !thumbnail.startsWith('http://') &&
                 !thumbnail.startsWith('https://')) {
               final original = thumbnail;
               thumbnail = WebRemoteAccessService.imageProxyUrl(thumbnail);
-              debugPrint('[WatchHistory] Converted local thumbnail: $original -> $thumbnail');
+              debugPrint(
+                  '[WatchHistory] Converted local thumbnail: $original -> $thumbnail');
             }
-            
+
             return WatchHistoryItem(
               filePath: data['filePath'],
               animeName: data['animeName'],
@@ -111,10 +113,10 @@ class WatchHistoryProvider extends ChangeNotifier {
               videoHash: data['videoHash'],
             );
           }).toList();
-          
+
           // 排序
           _history.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
-          
+
           _isLoaded = true;
           _isLoading = false;
           notifyListeners();
@@ -124,13 +126,13 @@ class WatchHistoryProvider extends ChangeNotifier {
 
       // 迁移JSON数据到SQLite (如果需要)
       await _database.migrateFromJson();
-      
+
       // 调试：打印数据库全部内容
       await _database.debugPrintAllData();
-      
+
       // 从数据库获取历史记录
       final rawHistory = await _database.getAllWatchHistory();
-      
+
       // 过滤掉不存在的文件，并修复iOS路径问题
       _history = await _validateFilePaths(rawHistory);
       _isLoaded = true;
@@ -139,56 +141,61 @@ class WatchHistoryProvider extends ChangeNotifier {
       _history = [];
       _isLoaded = false;
     }
-    
+
     _isLoading = false;
     notifyListeners();
   }
 
   // 验证文件路径并修复iOS路径问题
-  Future<List<WatchHistoryItem>> _validateFilePaths(List<WatchHistoryItem> items) async {
+  Future<List<WatchHistoryItem>> _validateFilePaths(
+      List<WatchHistoryItem> items) async {
     if (kIsWeb) {
       return items;
     }
     List<WatchHistoryItem> validItems = [];
     List<String> invalidPaths = [];
-    
+
     for (var item in items) {
       bool fileExists = false;
       String originalPath = item.filePath;
-      
+
       // 检查是否为已知无效文件路径，如果是则跳过验证
       if (_knownInvalidPaths.contains(originalPath)) {
-        continue;  // 直接跳过已知无效的路径，不输出重复日志
+        continue; // 直接跳过已知无效的路径，不输出重复日志
       }
-      
+
       // 跳过Jellyfin和Emby协议URL的文件存在性验证
-      if (originalPath.startsWith('jellyfin://') || originalPath.startsWith('emby://')) {
+      if (originalPath.startsWith('jellyfin://') ||
+          originalPath.startsWith('emby://')) {
         validItems.add(item);
         continue;
       }
-      
+
       // 跳过HTTP/HTTPS流媒体URL的文件存在性验证
-      if (originalPath.startsWith('http://') || originalPath.startsWith('https://')) {
+      if (originalPath.startsWith('http://') ||
+          originalPath.startsWith('https://')) {
         validItems.add(item);
         continue;
       }
-      
+
       // 1. 使用iOS路径修复工具验证并修复路径
-      final validPath = await iOSContainerPathFixer.validateAndFixFilePath(originalPath);
+      final validPath =
+          await iOSContainerPathFixer.validateAndFixFilePath(originalPath);
       if (validPath != null) {
         fileExists = true;
-        
+
         // 如果路径被修复了，更新记录
         if (validPath != originalPath) {
           // 同时修复缩略图路径
           String? fixedThumbnailPath = item.thumbnailPath;
           if (!kIsWeb && Platform.isIOS && item.thumbnailPath != null) {
-            final fixedThumbnailPathResult = await iOSContainerPathFixer.validateAndFixFilePath(item.thumbnailPath!);
+            final fixedThumbnailPathResult = await iOSContainerPathFixer
+                .validateAndFixFilePath(item.thumbnailPath!);
             if (fixedThumbnailPathResult != null) {
               fixedThumbnailPath = fixedThumbnailPathResult;
             }
           }
-          
+
           final updatedItem = WatchHistoryItem(
             filePath: validPath,
             animeName: item.animeName,
@@ -202,22 +209,23 @@ class WatchHistoryProvider extends ChangeNotifier {
             thumbnailPath: fixedThumbnailPath,
             isFromScan: item.isFromScan,
           );
-          
+
           await _database.insertOrUpdateWatchHistory(updatedItem);
           await _database.deleteHistory(originalPath);
-          
+
           debugPrint('iOS路径修复成功: ${item.animeName}');
           validItems.add(updatedItem);
           continue;
         }
       }
-      
+
       // 2. iOS平台的FilePickerService回退处理
       if (!fileExists && !kIsWeb && Platform.isIOS) {
         fileExists = _filePickerService.checkFileExists(originalPath);
-        
+
         if (!fileExists) {
-          final validPath = await _filePickerService.getValidFilePath(originalPath);
+          final validPath =
+              await _filePickerService.getValidFilePath(originalPath);
           if (validPath != null) {
             item.filePath = validPath;
             final updatedItem = WatchHistoryItem(
@@ -233,14 +241,14 @@ class WatchHistoryProvider extends ChangeNotifier {
               thumbnailPath: item.thumbnailPath,
               isFromScan: item.isFromScan,
             );
-            
+
             await _database.insertOrUpdateWatchHistory(updatedItem);
             await _database.deleteHistory(originalPath);
             fileExists = true;
           }
         }
       }
-      
+
       // 只添加有效的文件
       if (fileExists) {
         validItems.add(item);
@@ -251,12 +259,12 @@ class WatchHistoryProvider extends ChangeNotifier {
         debugPrint('跳过无效文件: ${item.filePath}');
       }
     }
-    
+
     // 从数据库中删除无效的记录
     for (var path in invalidPaths) {
       await _database.deleteHistory(path);
     }
-    
+
     return validItems;
   }
 
@@ -265,18 +273,65 @@ class WatchHistoryProvider extends ChangeNotifier {
     _knownInvalidPaths.clear();
   }
 
+  List<WatchHistoryItem> _deduplicateContinueWatching(
+    Iterable<WatchHistoryItem> items,
+  ) {
+    final Map<String, WatchHistoryItem> latestBySeries = {};
+
+    for (final item in items) {
+      final key = _buildContinueWatchingKey(item);
+      final existing = latestBySeries[key];
+      if (existing == null ||
+          item.lastWatchTime.isAfter(existing.lastWatchTime)) {
+        latestBySeries[key] = item;
+      }
+    }
+
+    final result = latestBySeries.values.toList(growable: false);
+    result.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+    return result;
+  }
+
+  String _buildContinueWatchingKey(WatchHistoryItem item) {
+    final animeId = item.animeId;
+    if (animeId != null && animeId > 0) {
+      return 'anime:$animeId';
+    }
+
+    final normalizedAnimeName = _normalizeContinueWatchingName(item.animeName);
+    if (normalizedAnimeName.isNotEmpty) {
+      return 'name:$normalizedAnimeName';
+    }
+
+    final episodeId = item.episodeId;
+    if (episodeId != null && episodeId > 0) {
+      return 'episode:$episodeId';
+    }
+
+    return 'file:${item.filePath.toLowerCase()}';
+  }
+
+  String _normalizeContinueWatchingName(String name) {
+    final normalized = name.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return '';
+    }
+    return normalized.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
   // 刷新历史记录
   Future<void> refresh() async {
     await loadHistory();
   }
-  
+
   // 添加或更新历史记录
   Future<void> addOrUpdateHistory(WatchHistoryItem item) async {
     // 添加到数据库
     await _database.insertOrUpdateWatchHistory(item);
 
     // 更新内存中的列表
-    final index = _history.indexWhere((element) => element.filePath == item.filePath);
+    final index =
+        _history.indexWhere((element) => element.filePath == item.filePath);
     if (index != -1) {
       _history[index] = item;
     } else {
@@ -288,19 +343,19 @@ class WatchHistoryProvider extends ChangeNotifier {
 
     notifyListeners();
   }
-  
+
   // 根据文件路径获取历史记录
   Future<WatchHistoryItem?> getHistoryItem(String filePath) async {
     return await _database.getHistoryByFilePath(filePath);
   }
-  
+
   // 删除单个历史记录
   Future<void> removeHistory(String filePath) async {
     await _database.deleteHistory(filePath);
     _history.removeWhere((item) => item.filePath == filePath);
     notifyListeners();
   }
-  
+
   // 删除指定前缀的历史记录
   Future<void> removeHistoryByPathPrefix(String pathPrefix) async {
     final count = await _database.deleteHistoryByPathPrefix(pathPrefix);
@@ -309,7 +364,7 @@ class WatchHistoryProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   // 清空所有历史记录
   Future<void> clearAllHistory() async {
     await _database.clearAllHistory();

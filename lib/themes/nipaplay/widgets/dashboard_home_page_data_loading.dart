@@ -8,35 +8,35 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
   }) async {
     final stopwatch = Stopwatch()..start();
     _lastLoadTime = DateTime.now();
-    
+
     // 检查Widget状态
     if (!mounted) {
       return;
     }
-    
+
     // 如果播放器处于活跃状态，跳过数据加载
     if (_isVideoPlayerActive()) {
       return;
     }
-    
+
     // 如果正在加载，先检查是否需要强制重新加载
     if (_isLoadingRecommended) {
       return;
     }
-    
+
     // 🔥 修复仪表盘启动问题：确保WatchHistoryProvider已加载
     try {
-      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      final watchHistoryProvider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
       if (!watchHistoryProvider.isLoaded && !watchHistoryProvider.isLoading) {
         await watchHistoryProvider.loadHistory();
       }
-    } catch (_) {
-    }
-    
-    
+    } catch (_) {}
+
     final shouldForceRecommended = forceRefreshRecommended ||
         _recommendedItems.isEmpty ||
-        _recommendedItems.every((item) => item.source == RecommendedItemSource.placeholder);
+        _recommendedItems
+            .every((item) => item.source == RecommendedItemSource.placeholder);
 
     // 并行加载推荐内容、最近内容、今日新番和随机推荐
     try {
@@ -56,10 +56,9 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         await _loadRecentContent();
         await _loadTodayAnimes(forceRefresh: forceRefreshToday);
         await _loadRandomRecommendations(forceRefresh: forceRefreshRandom);
-      } catch (_) {
-      }
+      } catch (_) {}
     }
-    
+
     stopwatch.stop();
   }
 
@@ -67,14 +66,15 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     if (_isLoadingRecommended) {
       return;
     }
+    unawaited(_refreshContinueWatchingData(
+      '主页手动刷新',
+      syncRemote: true,
+    ));
     unawaited(_loadData(
       forceRefreshRecommended: true,
       forceRefreshRandom: true,
       forceRefreshToday: true,
     ));
-    final syncService = ServerHistorySyncService.instance;
-    unawaited(syncService.syncJellyfinResume());
-    unawaited(syncService.syncEmbyResume());
   }
 
   // 检查并处理待处理的刷新请求
@@ -131,11 +131,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         setState(() {
           final List<BangumiAnime> todayList =
               allAnimes.where((a) => a.airWeekday == weekday).toList();
-          
+
           // 如果今天确实没有（虽然不常见），但在 allAnimes 不为空的情况下，
           // 我们可能不需要清空 _todayAnimes 如果它之前有数据？
           // 但这里是 forceRefresh，所以我们应该信任最新的。
-          
+
           _todayAnimes = todayList;
           _isLoadingTodayAnimes = false;
         });
@@ -149,7 +149,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     if (!mounted) {
       return;
     }
-    
+
     // 检查是否强制刷新或缓存已过期
     final shouldBypassCache = _shouldBypassRecommendedCache();
     if (!forceRefresh &&
@@ -166,12 +166,12 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             Map.from(_DashboardHomePageState._cachedDandanLookup);
         _isLoadingRecommended = false;
       });
-      
+
       // 推荐内容加载完成后启动自动切换
       if (_recommendedItems.length >= 5) {
         _startAutoSwitch();
       }
-      
+
       return;
     }
 
@@ -184,13 +184,15 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       List<dynamic> allCandidates = [];
       DandanplayRemoteProvider? dandanProvider;
       try {
-        dandanProvider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+        dandanProvider =
+            Provider.of<DandanplayRemoteProvider>(context, listen: false);
       } catch (_) {}
       final dandanSource = dandanProvider;
       final Map<String, DandanplayRemoteAnimeGroup> dandanLookup = {};
 
       // 从Jellyfin收集候选项目（按媒体库并行）
-      final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+      final jellyfinProvider =
+          Provider.of<JellyfinProvider>(context, listen: false);
       if (jellyfinProvider.isConnected) {
         final jellyfinService = JellyfinService.instance;
         final jellyfinFutures = <Future<List<JellyfinMediaItem>>>[];
@@ -200,11 +202,10 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               jellyfinService
                   .getRandomMediaItemsByLibrary(library.id, limit: 50)
                   .then((items) {
-                    return items;
-                  })
-                  .catchError((e) {
-                    return <JellyfinMediaItem>[];
-                  }),
+                return items;
+              }).catchError((e) {
+                return <JellyfinMediaItem>[];
+              }),
             );
           }
         }
@@ -227,11 +228,10 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               embyService
                   .getRandomMediaItemsByLibrary(library.id, limit: 50)
                   .then((items) {
-                    return items;
-                  })
-                  .catchError((e) {
-                    return <EmbyMediaItem>[];
-                  }),
+                return items;
+              }).catchError((e) {
+                return <EmbyMediaItem>[];
+              }),
             );
           }
         }
@@ -244,18 +244,20 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       }
 
       // 从本地媒体库收集候选项目
-      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      final watchHistoryProvider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
       if (watchHistoryProvider.isLoaded) {
         try {
           // 过滤掉Jellyfin和Emby的项目，只保留本地文件
-          final localHistory = watchHistoryProvider.history.where((item) => 
-            !item.filePath.startsWith('jellyfin://') &&
-            !item.filePath.startsWith('emby://') &&
-            !MediaSourceUtils.isSmbPath(item.filePath) &&
-            !MediaSourceUtils.isWebDavPath(item.filePath) &&
-            !item.isDandanplayRemote
-          ).toList();
-          
+          final localHistory = watchHistoryProvider.history
+              .where((item) =>
+                  !item.filePath.startsWith('jellyfin://') &&
+                  !item.filePath.startsWith('emby://') &&
+                  !MediaSourceUtils.isSmbPath(item.filePath) &&
+                  !MediaSourceUtils.isWebDavPath(item.filePath) &&
+                  !item.isDandanplayRemote)
+              .toList();
+
           // 按animeId分组，获取每个动画的最新观看记录
           final Map<int, WatchHistoryItem> latestLocalItems = {};
           for (var item in localHistory) {
@@ -265,30 +267,33 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             }
             final id = animeId!;
             if (latestLocalItems.containsKey(id)) {
-              if (item.lastWatchTime.isAfter(latestLocalItems[id]!.lastWatchTime)) {
+              if (item.lastWatchTime
+                  .isAfter(latestLocalItems[id]!.lastWatchTime)) {
                 latestLocalItems[id] = item;
               }
             } else {
               latestLocalItems[id] = item;
             }
           }
-          
+
           // 随机选择一些本地项目 - 直接使用WatchHistoryItem作为候选
           final localItems = latestLocalItems.values.toList();
           localItems.shuffle(math.Random());
-          final selectedLocalItems = localItems.take(math.min(30, localItems.length)).toList();
+          final selectedLocalItems =
+              localItems.take(math.min(30, localItems.length)).toList();
           allCandidates.addAll(selectedLocalItems);
-        } catch (_) {
-        }
+        } catch (_) {}
       }
 
       // 从弹弹play远程媒体库收集候选项目
       if (dandanSource != null &&
           dandanSource.isConnected &&
           dandanSource.animeGroups.isNotEmpty) {
-        final groups = List<DandanplayRemoteAnimeGroup>.from(dandanSource.animeGroups);
+        final groups =
+            List<DandanplayRemoteAnimeGroup>.from(dandanSource.animeGroups);
         groups.shuffle(math.Random());
-        final selectedGroups = groups.take(math.min(30, groups.length)).toList();
+        final selectedGroups =
+            groups.take(math.min(30, groups.length)).toList();
         final dandanAnimeIds = selectedGroups
             .map((group) => group.animeId)
             .whereType<int>()
@@ -347,7 +352,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             // Jellyfin项目 - 首屏即加载 Backdrop/Logo/详情（带验证与回退）
             final jellyfinService = JellyfinService.instance;
             final results = await Future.wait([
-              _tryGetJellyfinImage(jellyfinService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+              _tryGetJellyfinImage(jellyfinService, item.id,
+                  ['Backdrop', 'Primary', 'Art', 'Banner']),
               _tryGetJellyfinImage(jellyfinService, item.id, ['Logo', 'Thumb']),
               _getJellyfinItemSubtitle(jellyfinService, item),
             ]);
@@ -356,28 +362,36 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             final subtitle = results[2] as String?;
             final backdropUrl = backdropCandidate?.value;
             final logoUrl = logoCandidate?.value;
-            final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+            final normalizedBackdropUrl =
+                _normalizeRecommendationImageUrl(backdropUrl);
             final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
 
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview!
-                  .replaceAll('<br>', ' ')
-                  .replaceAll('<br/>', ' ')
-                  .replaceAll('<br />', ' ') : '暂无简介信息'),
+              subtitle: (subtitle?.isNotEmpty == true)
+                  ? subtitle!
+                  : (item.overview?.isNotEmpty == true
+                      ? item.overview!
+                          .replaceAll('<br>', ' ')
+                          .replaceAll('<br/>', ' ')
+                          .replaceAll('<br />', ' ')
+                      : '暂无简介信息'),
               backgroundImageUrl: normalizedBackdropUrl,
               logoImageUrl: normalizedLogoUrl,
               source: RecommendedItemSource.jellyfin,
-              rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
-              isLowRes: _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
+              rating: item.communityRating != null
+                  ? double.tryParse(item.communityRating!)
+                  : null,
+              isLowRes: _shouldBlurLowResCover(
+                  imageType: backdropCandidate?.key, imageUrl: backdropUrl),
             );
-            
           } else if (item is EmbyMediaItem) {
             // Emby项目 - 首屏即加载 Backdrop/Logo/详情（带验证与回退）
             final embyService = EmbyService.instance;
             final results = await Future.wait([
-              _tryGetEmbyImage(embyService, item.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+              _tryGetEmbyImage(embyService, item.id,
+                  ['Backdrop', 'Primary', 'Art', 'Banner']),
               _tryGetEmbyImage(embyService, item.id, ['Logo', 'Thumb']),
               _getEmbyItemSubtitle(embyService, item),
             ]);
@@ -386,33 +400,40 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             final subtitle = results[2] as String?;
             final backdropUrl = backdropCandidate?.value;
             final logoUrl = logoCandidate?.value;
-            final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+            final normalizedBackdropUrl =
+                _normalizeRecommendationImageUrl(backdropUrl);
             final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
 
             return RecommendedItem(
               id: item.id,
               title: item.name,
-              subtitle: (subtitle?.isNotEmpty == true) ? subtitle! : (item.overview?.isNotEmpty == true ? item.overview!
-                  .replaceAll('<br>', ' ')
-                  .replaceAll('<br/>', ' ')
-                  .replaceAll('<br />', ' ') : '暂无简介信息'),
+              subtitle: (subtitle?.isNotEmpty == true)
+                  ? subtitle!
+                  : (item.overview?.isNotEmpty == true
+                      ? item.overview!
+                          .replaceAll('<br>', ' ')
+                          .replaceAll('<br/>', ' ')
+                          .replaceAll('<br />', ' ')
+                      : '暂无简介信息'),
               backgroundImageUrl: normalizedBackdropUrl,
               logoImageUrl: normalizedLogoUrl,
               source: RecommendedItemSource.emby,
-              rating: item.communityRating != null ? double.tryParse(item.communityRating!) : null,
-              isLowRes: _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
+              rating: item.communityRating != null
+                  ? double.tryParse(item.communityRating!)
+                  : null,
+              isLowRes: _shouldBlurLowResCover(
+                  imageType: backdropCandidate?.key, imageUrl: backdropUrl),
             );
-            
           } else if (item is WatchHistoryItem) {
             // 本地媒体库项目 - 先用缓存的封面图片
             String? cachedImageUrl;
             String subtitle = '暂无简介信息';
-            
+
             if (_isValidAnimeId(item.animeId)) {
               final animeId = item.animeId!;
               // 从缓存获取图片URL（来自本地图片缓存）
               cachedImageUrl = _localImageCache[animeId];
-              
+
               // 优先读取持久化的高清图缓存（与媒体库页复用同一Key前缀）
               if (cachedImageUrl == null) {
                 try {
@@ -433,14 +454,16 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                 final String? cachedString = prefs.getString(cacheKey);
                 if (cachedString != null) {
                   final data = json.decode(cachedString);
-                  final animeData = data['animeDetail'] as Map<String, dynamic>?;
+                  final animeData =
+                      data['animeDetail'] as Map<String, dynamic>?;
                   if (animeData != null) {
                     final summary = animeData['summary'] as String?;
                     final imageUrl = animeData['imageUrl'] as String?;
                     if (summary?.isNotEmpty == true) {
                       subtitle = summary!;
                     }
-                    if (cachedImageUrl == null && imageUrl?.isNotEmpty == true) {
+                    if (cachedImageUrl == null &&
+                        imageUrl?.isNotEmpty == true) {
                       cachedImageUrl = imageUrl;
                     }
                   }
@@ -454,10 +477,12 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               cachedImageUrl = item.thumbnailPath;
             }
             cachedImageUrl = _normalizeRecommendationImageUrl(cachedImageUrl);
-            
+
             return RecommendedItem(
               id: item.animeId?.toString() ?? item.filePath,
-              title: item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画'),
+              title: item.animeName.isNotEmpty
+                  ? item.animeName
+                  : (item.episodeTitle ?? '未知动画'),
               subtitle: subtitle,
               backgroundImageUrl: cachedImageUrl,
               logoImageUrl: null,
@@ -469,9 +494,11 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             final dandanId = _buildDandanRecommendedId(item);
             final dandanLookupKey = dandanId;
             dandanLookup[dandanLookupKey] = item;
-            
-            final coverUrl = await _resolveDandanCoverForGroup(item, dandanSource);
-            final normalizedCoverUrl = _normalizeRecommendationImageUrl(coverUrl);
+
+            final coverUrl =
+                await _resolveDandanCoverForGroup(item, dandanSource);
+            final normalizedCoverUrl =
+                _normalizeRecommendationImageUrl(coverUrl);
             final subtitle = item.latestEpisode.episodeTitle.isNotEmpty
                 ? item.latestEpisode.episodeTitle
                 : '弹弹play远程媒体';
@@ -483,7 +510,8 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
               logoImageUrl: null,
               source: RecommendedItemSource.dandanplay,
               rating: null,
-              isLowRes: coverUrl != null ? !_looksHighQualityUrl(coverUrl) : false,
+              isLowRes:
+                  coverUrl != null ? !_looksHighQualityUrl(coverUrl) : false,
             );
           }
         } catch (_) {
@@ -491,10 +519,13 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         }
         return null;
       });
-      
+
       // 等待基础项目构建完成
       final processedItems = await Future.wait(itemFutures);
-      basicItems = processedItems.where((item) => item != null).cast<RecommendedItem>().toList();
+      basicItems = processedItems
+          .where((item) => item != null)
+          .cast<RecommendedItem>()
+          .toList();
 
       // 如果还不够7个，添加占位符
       while (basicItems.length < 7) {
@@ -516,26 +547,28 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           _recommendedDandanLookup = Map.from(dandanLookup);
           _isLoadingRecommended = false;
         });
-        
+
         // 缓存推荐内容和加载时间
         _DashboardHomePageState._cachedRecommendedItems = basicItems;
         _DashboardHomePageState._lastRecommendedLoadTime = DateTime.now();
         _DashboardHomePageState._cachedDandanLookup = Map.from(dandanLookup);
-        
+
         // 推荐内容加载完成后启动自动切换
         if (basicItems.length >= 5) {
           _startAutoSwitch();
         }
-        
+
         // 检查是否有待处理的刷新请求
         _checkPendingRefresh();
       }
-      
+
       // 第五步：后台异步升级为高清图片（针对本地和弹弹play远程媒体）
       final upgradeCandidates = <dynamic>[];
       final upgradeBasicItems = <RecommendedItem>[];
       final upgradeIndices = <int>[];
-      for (int i = 0; i < selectedCandidates.length && i < basicItems.length; i++) {
+      for (int i = 0;
+          i < selectedCandidates.length && i < basicItems.length;
+          i++) {
         final cand = selectedCandidates[i];
         if (cand is WatchHistoryItem || cand is DandanplayRemoteAnimeGroup) {
           // 只对非占位项进行升级，避免索引错位导致更新失败
@@ -555,17 +588,17 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           'local=${upgradeCandidates.whereType<WatchHistoryItem>().length}',
         );
         debugPrint('[DashboardHomePage] 升级索引: $upgradeIndices');
-        _upgradeToHighQualityImages(upgradeCandidates, upgradeBasicItems, upgradeIndices);
+        _upgradeToHighQualityImages(
+            upgradeCandidates, upgradeBasicItems, upgradeIndices);
       } else {
         debugPrint('[DashboardHomePage] 推荐高清升级跳过: 无可升级项');
       }
-      
     } catch (_) {
       if (mounted) {
         setState(() {
           _isLoadingRecommended = false;
         });
-        
+
         // 检查是否有待处理的刷新请求
         _checkPendingRefresh();
       }
@@ -686,11 +719,13 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
     try {
       DandanplayRemoteProvider? dandanProvider;
       try {
-        dandanProvider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+        dandanProvider =
+            Provider.of<DandanplayRemoteProvider>(context, listen: false);
       } catch (_) {}
       if (includeRemote) {
         // 从Jellyfin按媒体库获取最近添加（按库并行）
-        final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+        final jellyfinProvider =
+            Provider.of<JellyfinProvider>(context, listen: false);
         if (jellyfinProvider.isConnected) {
           final jellyfinService = JellyfinService.instance;
           _recentJellyfinItemsByLibrary.clear();
@@ -699,12 +734,12 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             if (jellyfinService.selectedLibraryIds.contains(library.id)) {
               jfFutures.add(() async {
                 try {
-                  final libraryItems = await jellyfinService.getLatestMediaItemsByLibrary(library.id, limit: 25);
+                  final libraryItems = await jellyfinService
+                      .getLatestMediaItemsByLibrary(library.id, limit: 25);
                   if (libraryItems.isNotEmpty) {
                     _recentJellyfinItemsByLibrary[library.name] = libraryItems;
                   }
-                } catch (_) {
-                }
+                } catch (_) {}
               }());
             }
           }
@@ -726,12 +761,12 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
             if (embyService.selectedLibraryIds.contains(library.id)) {
               emFutures.add(() async {
                 try {
-                  final libraryItems = await embyService.getLatestMediaItemsByLibrary(library.id, limit: 25);
+                  final libraryItems = await embyService
+                      .getLatestMediaItemsByLibrary(library.id, limit: 25);
                   if (libraryItems.isNotEmpty) {
                     _recentEmbyItemsByLibrary[library.name] = libraryItems;
                   }
-                } catch (_) {
-                }
+                } catch (_) {}
               }());
             }
           }
@@ -745,17 +780,19 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       }
 
       // 从本地媒体库获取最近添加（优化：不做逐文件stat，按历史记录时间排序，图片懒加载+持久化）
-      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      final watchHistoryProvider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
       if (watchHistoryProvider.isLoaded) {
         try {
           // 过滤掉Jellyfin和Emby的项目，只保留本地文件
-          final localHistory = watchHistoryProvider.history.where((item) => 
-            !item.filePath.startsWith('jellyfin://') &&
-            !item.filePath.startsWith('emby://') &&
-            !MediaSourceUtils.isSmbPath(item.filePath) &&
-            !MediaSourceUtils.isWebDavPath(item.filePath) &&
-            !item.isDandanplayRemote
-          ).toList();
+          final localHistory = watchHistoryProvider.history
+              .where((item) =>
+                  !item.filePath.startsWith('jellyfin://') &&
+                  !item.filePath.startsWith('emby://') &&
+                  !MediaSourceUtils.isSmbPath(item.filePath) &&
+                  !MediaSourceUtils.isWebDavPath(item.filePath) &&
+                  !item.isDandanplayRemote)
+              .toList();
 
           // 按animeId分组，选取"添加时间"代表：
           // 优先使用 isFromScan 为 true 的记录的 lastWatchTime（扫描入库时间），否则用最近一次 lastWatchTime
@@ -784,14 +821,17 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           await _loadPersistedLocalImageUrls(addedTimeMap.keys.toSet());
 
           // 构建 LocalAnimeItem 列表（先用缓存命中图片，未命中先留空，稍后后台补齐）
-          List<LocalAnimeItem> localAnimeItems = representativeItems.entries.map((entry) {
+          List<LocalAnimeItem> localAnimeItems =
+              representativeItems.entries.map((entry) {
             final animeId = entry.key;
             final latestEpisode = entry.value;
             final addedTime = addedTimeMap[animeId]!;
             final cachedImg = _localImageCache[animeId];
             return LocalAnimeItem(
               animeId: animeId,
-              animeName: latestEpisode.animeName.isNotEmpty ? latestEpisode.animeName : '未知动画',
+              animeName: latestEpisode.animeName.isNotEmpty
+                  ? latestEpisode.animeName
+                  : '未知动画',
               imageUrl: cachedImg,
               backdropImageUrl: cachedImg,
               addedTime: addedTime,
@@ -806,8 +846,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           }
 
           _localAnimeItems = localAnimeItems;
-        } catch (_) {
-        }
+        } catch (_) {}
       } else {
         _localAnimeItems = []; // 清空本地项目列表
       }
@@ -820,18 +859,20 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
         List<DandanplayRemoteAnimeGroup> groups =
             List<DandanplayRemoteAnimeGroup>.from(dandanSource.animeGroups);
         groups.sort((a, b) {
-          final aTime = a.latestPlayTime ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final bTime = b.latestPlayTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final aTime =
+              a.latestPlayTime ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bTime =
+              b.latestPlayTime ?? DateTime.fromMillisecondsSinceEpoch(0);
           return bTime.compareTo(aTime);
         });
         if (groups.length > 25) {
           groups = groups.take(25).toList();
         }
         final ids = groups
-          .map((g) => g.animeId)
-          .whereType<int>()
-          .where(_isValidAnimeId)
-          .toSet();
+            .map((g) => g.animeId)
+            .whereType<int>()
+            .where(_isValidAnimeId)
+            .toSet();
         if (ids.isNotEmpty) {
           await _loadPersistedLocalImageUrls(ids);
         }
@@ -864,22 +905,20 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       for (final id in animeIds) {
         if (!_isValidAnimeId(id)) continue;
         if (_localImageCache.containsKey(id)) continue;
-        final url = prefs.getString(
-            '${_DashboardHomePageState._localPrefsKeyPrefix}$id');
+        final url = prefs
+            .getString('${_DashboardHomePageState._localPrefsKeyPrefix}$id');
         if (url != null && url.isNotEmpty) {
           _localImageCache[id] = url;
         }
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   // 后台抓取缺失的番组图片，限流并写入持久化缓存（优化版本）
   Future<void> _fetchLocalAnimeImagesInBackground() async {
     if (_isLoadingLocalImages) return;
     _isLoadingLocalImages = true;
-    
-    
+
     const int maxConcurrent = 3;
     final inflight = <Future<void>>[];
     int processedCount = 0;
@@ -890,7 +929,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       if (!_isValidAnimeId(id)) {
         continue;
       }
-      if (_localImageCache.containsKey(id) && 
+      if (_localImageCache.containsKey(id) &&
           _localImageCache[id]?.isNotEmpty == true) {
         continue; // 已有缓存且不为空，跳过
       }
@@ -900,7 +939,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           // 先尝试从BangumiService缓存获取
           String? imageUrl;
           // String? summary; // 暂时不需要summary变量
-          
+
           // 尝试从SharedPreferences获取已缓存的详情
           try {
             final prefs = await SharedPreferences.getInstance();
@@ -917,17 +956,17 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
           } catch (_) {
             // 忽略缓存读取错误
           }
-          
+
           // 如果缓存中没有，再从网络获取
           if (imageUrl?.isEmpty != false) {
             final detail = await BangumiService.instance.getAnimeDetails(id);
             imageUrl = detail.imageUrl;
             // summary = detail.summary; // 不需要summary
           }
-          
+
           if (imageUrl?.isNotEmpty == true) {
             _localImageCache[id] = imageUrl!;
-            
+
             // 异步保存到持久化缓存
             try {
               final prefs = await SharedPreferences.getInstance();
@@ -935,7 +974,7 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
                   '${_DashboardHomePageState._localPrefsKeyPrefix}$id',
                   imageUrl);
             } catch (_) {}
-            
+
             if (mounted) {
               // 批量更新，减少UI重绘次数
               final idx = _localAnimeItems.indexWhere((e) => e.animeId == id);
@@ -964,10 +1003,10 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       fut.whenComplete(() {
         inflight.remove(fut);
       });
-      
+
       if (inflight.length >= maxConcurrent) {
-        try { 
-          await Future.any(inflight); 
+        try {
+          await Future.any(inflight);
           // 每处理几个项目就更新一次UI，而不是等全部完成
           if (updatedCount > 0 && processedCount % 5 == 0 && mounted) {
             setState(() {});
@@ -976,25 +1015,26 @@ extension DashboardHomePageDataLoading on _DashboardHomePageState {
       }
     }
 
-    try { 
-      await Future.wait(inflight); 
+    try {
+      await Future.wait(inflight);
     } catch (_) {}
-    
+
     // 最终更新UI
     if (mounted && updatedCount > 0) {
       setState(() {});
     }
-    
+
     _isLoadingLocalImages = false;
   }
 
-  Future<void> _fetchDandanGroupImagesInBackground(DandanplayRemoteProvider provider) async {
+  Future<void> _fetchDandanGroupImagesInBackground(
+      DandanplayRemoteProvider provider) async {
     if (_isLoadingDandanImages) return;
     if (_recentDandanplayGroups.isEmpty) return;
 
     final targets = _recentDandanplayGroups
-      .where((group) => _isValidAnimeId(group.animeId))
-      .toList();
+        .where((group) => _isValidAnimeId(group.animeId))
+        .toList();
     if (targets.isEmpty) return;
 
     _isLoadingDandanImages = true;

@@ -106,6 +106,19 @@ enum SubtitleAlignX { left, center, right }
 
 enum SubtitleAlignY { top, center, bottom }
 
+enum DanmakuOutlineStyle {
+  none,
+  stroke,
+  uniform,
+}
+
+enum DanmakuShadowStyle {
+  none,
+  soft,
+  medium,
+  strong,
+}
+
 enum PlayerStatus {
   idle, // 空闲状态
   loading, // 加载中
@@ -446,6 +459,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕字体大小设置
   final String _danmakuFontSizeKey = 'danmaku_font_size';
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
+  final String _danmakuFontFilePathKey = 'danmaku_font_file_path';
+  String _danmakuFontFilePath = '';
+  final String _danmakuFontFamilyKey = 'danmaku_font_family';
+  String _danmakuFontFamily = '';
+  final String _danmakuOutlineStyleKey = 'danmaku_outline_style';
+  DanmakuOutlineStyle _danmakuOutlineStyle = DanmakuOutlineStyle.uniform;
+  final String _danmakuShadowStyleKey = 'danmaku_shadow_style';
+  DanmakuShadowStyle _danmakuShadowStyle = DanmakuShadowStyle.strong;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
   static const double defaultSubtitleScale = 1.0;
@@ -788,6 +809,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get danmakuVisible => _danmakuVisible;
   bool get mergeDanmaku => _mergeDanmaku;
   double get danmakuFontSize => _danmakuFontSize;
+  String get danmakuFontFilePath => _danmakuFontFilePath;
+  String get danmakuFontFamily => _danmakuFontFamily;
+  DanmakuOutlineStyle get danmakuOutlineStyle => _danmakuOutlineStyle;
+  DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
   double get subtitleScale => _subtitleScale;
   double get subtitleDelaySeconds => _subtitleDelaySeconds;
   double get subtitlePosition => _subtitlePosition;

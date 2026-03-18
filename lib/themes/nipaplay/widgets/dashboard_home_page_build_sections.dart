@@ -98,7 +98,8 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
           addSectionWidgets(section, [_buildRandomRecommendationsSection()]);
           break;
         case HomeSectionType.continueWatching:
-          addSectionWidgets(section, [_buildContinueWatching(isPhone: isPhone)]);
+          addSectionWidgets(
+              section, [_buildContinueWatching(isPhone: isPhone)]);
           break;
         case HomeSectionType.remoteLibraries:
           final remoteSections = _buildRemoteLibrarySections(isPhone: isPhone);
@@ -115,7 +116,8 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
                 title: '本地媒体库 - 最近添加',
                 items: _localAnimeItems,
                 scrollController: _getLocalLibraryScrollController(),
-                onItemTap: (item) => _onLocalAnimeItemTap(item as LocalAnimeItem),
+                onItemTap: (item) =>
+                    _onLocalAnimeItemTap(item as LocalAnimeItem),
               ),
             ],
           );
@@ -133,9 +135,12 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
         final actionWidgets = <Widget>[];
         if (!isPhone && validHistory.isNotEmpty) {
-          actionWidgets.add(_buildScrollButtons(_continueWatchingScrollController, 292));
+          actionWidgets
+              .add(_buildScrollButtons(_continueWatchingScrollController, 292));
           actionWidgets.add(const SizedBox(width: 12));
         }
+        actionWidgets.add(_buildContinueWatchingRefreshButton());
+        actionWidgets.add(const SizedBox(width: 8));
         actionWidgets.add(_buildWatchHistoryButton());
 
         return Column(
@@ -207,11 +212,13 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     );
   }
 
-  Widget _buildContinueWatchingCard(WatchHistoryItem item, {bool compact = false}) {
+  Widget _buildContinueWatchingCard(WatchHistoryItem item,
+      {bool compact = false}) {
     return GestureDetector(
       onTap: _isHistoryAutoMatching ? null : () => _onWatchHistoryItemTap(item),
       child: SizedBox(
-        key: ValueKey('continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
+        key: ValueKey(
+            'continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
         width: compact ? 220 : 280, // 手机更窄
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,12 +232,14 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
               clipBehavior: Clip.antiAlias,
               child: _getVideoThumbnail(item),
             ),
-            
+
             const SizedBox(height: 8),
-            
+
             // 媒体名称
             Text(
-              item.animeName.isNotEmpty ? item.animeName : path.basename(item.filePath),
+              item.animeName.isNotEmpty
+                  ? item.animeName
+                  : path.basename(item.filePath),
               style: TextStyle(
                 color: Theme.of(context).brightness == Brightness.dark
                     ? Colors.white
@@ -241,9 +250,9 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
               maxLines: 2, // 增加显示行数
               overflow: TextOverflow.ellipsis,
             ),
-            
+
             const SizedBox(height: 4),
-            
+
             // 进度和集数信息
             Text(
               "${(item.watchProgress * 100).toInt()}%${item.episodeTitle != null ? ' · ${item.episodeTitle}' : ''}",
@@ -277,29 +286,28 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         onClose: () => Navigator.of(context).pop(),
         child: Column(
           children: [
-            Builder(
-              builder: (innerContext) {
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanUpdate: (details) {
-                    NipaplayWindowPositionProvider.of(innerContext)?.onMove(details.delta);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          '观看记录',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+            Builder(builder: (innerContext) {
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (details) {
+                  NipaplayWindowPositionProvider.of(innerContext)
+                      ?.onMove(details.delta);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        '观看记录',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ],
                   ),
-                );
-              }
-            ),
+                ),
+              );
+            }),
             const Expanded(
               child: WatchHistoryPage(),
             ),
@@ -316,6 +324,26 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         onTap: _showWatchHistoryDialog,
         child: const Icon(
           Icons.history_rounded,
+          size: 24,
+        ),
+      ),
+    );
+  }
+
+  void _onContinueWatchingRefreshPressed() {
+    unawaited(_refreshContinueWatchingData(
+      '继续播放手动刷新',
+      syncRemote: true,
+    ));
+  }
+
+  Widget _buildContinueWatchingRefreshButton() {
+    return Tooltip(
+      message: '刷新继续播放',
+      child: _HoverScaleButton(
+        onTap: _onContinueWatchingRefreshPressed,
+        child: const Icon(
+          Icons.refresh_rounded,
           size: 24,
         ),
       ),
@@ -432,7 +460,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
   String? _getWatchProgressForDashboard(dynamic item) {
     int? animeId;
     int? totalEpisodes;
-    
+
     if (item is JellyfinMediaItem) {
       // 对于Jellyfin/Emby，优先使用其自带的UserData信息
       if (item.userData?.played == true) return '已看完';
@@ -455,9 +483,12 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
     if (!_isValidAnimeId(animeId)) return null;
 
-    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
-    final allHistory = watchHistoryProvider.history.where((h) => h.animeId == animeId).toList();
-    
+    final watchHistoryProvider =
+        Provider.of<WatchHistoryProvider>(context, listen: false);
+    final allHistory = watchHistoryProvider.history
+        .where((h) => h.animeId == animeId)
+        .toList();
+
     if (allHistory.isEmpty) return '未观看';
 
     final watchedHistory = allHistory.where(_hasWatchProgress).toList();
@@ -469,7 +500,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         watchedIds.add(h.episodeId!);
       }
     }
-    
+
     int watchedCount = watchedIds.length;
     if (watchedCount == 0) watchedCount = watchedHistory.length;
 
@@ -477,7 +508,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       if (watchedCount >= totalEpisodes) return '已看完';
       return '已看 $watchedCount / $totalEpisodes 集';
     }
-    
+
     return '已看 $watchedCount 集';
   }
 
@@ -496,12 +527,14 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
     double? rating;
     String? summaryStr;
     Future<BangumiAnime>? detailFuture;
-    
+
     if (item is JellyfinMediaItem) {
       name = item.name;
       uniqueId = 'jellyfin_${item.id}';
       sourceLabel = 'Jellyfin';
-      rating = item.communityRating != null ? double.tryParse(item.communityRating!) : null;
+      rating = item.communityRating != null
+          ? double.tryParse(item.communityRating!)
+          : null;
       try {
         imageUrl = JellyfinService.instance.getImageUrl(item.id);
       } catch (e) {
@@ -514,7 +547,9 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       name = item.name;
       uniqueId = 'emby_${item.id}';
       sourceLabel = 'Emby';
-      rating = item.communityRating != null ? double.tryParse(item.communityRating!) : null;
+      rating = item.communityRating != null
+          ? double.tryParse(item.communityRating!)
+          : null;
       try {
         imageUrl = EmbyService.instance.getImageUrl(item.id);
       } catch (e) {
@@ -524,7 +559,9 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         summaryStr = item.overview;
       }
     } else if (item is WatchHistoryItem) {
-      name = item.animeName.isNotEmpty ? item.animeName : (item.episodeTitle ?? '未知动画');
+      name = item.animeName.isNotEmpty
+          ? item.animeName
+          : (item.episodeTitle ?? '未知动画');
       uniqueId = 'history_${item.animeId ?? 0}_${item.filePath.hashCode}';
       imageUrl = item.thumbnailPath ?? '';
       sourceLabel = '本地';
@@ -538,16 +575,17 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       // 优先使用item中的imageUrl，如果为空则尝试从缓存获取
       imageUrl = item.imageUrl ?? '';
       if (imageUrl.isEmpty && _isValidAnimeId(item.animeId)) {
-         imageUrl = _localImageCache[item.animeId] ?? '';
+        imageUrl = _localImageCache[item.animeId] ?? '';
       }
       sourceLabel = '本地';
-      
+
       if (_isValidAnimeId(item.animeId)) {
         detailFuture = BangumiService.instance.getAnimeDetails(item.animeId!);
       }
     } else if (item is DandanplayRemoteAnimeGroup) {
       name = item.title;
-      uniqueId = 'dandan_${item.animeId ?? item.title.hashCode}_${item.episodeCount}';
+      uniqueId =
+          'dandan_${item.animeId ?? item.title.hashCode}_${item.episodeCount}';
       imageUrl = _getDandanGroupImage(item);
       sourceLabel = '弹弹play';
       rating = null;
@@ -601,7 +639,8 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
               asyncSummary = snapshot.data!.summary;
             }
             // 如果从详情中拿到了总集数，更新进度显示
-            if (snapshot.data!.totalEpisodes != null && snapshot.data!.totalEpisodes! > 0) {
+            if (snapshot.data!.totalEpisodes != null &&
+                snapshot.data!.totalEpisodes! > 0) {
               asyncProgress = _getWatchProgressForDashboard(item);
             }
           }
@@ -635,7 +674,8 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
       }
     }
     try {
-      final provider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+      final provider =
+          Provider.of<DandanplayRemoteProvider>(context, listen: false);
       return provider.buildImageUrl(group.primaryHash ?? '') ?? '';
     } catch (_) {
       return '';
@@ -665,8 +705,8 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final persisted = prefs.getString(
-          '${_DashboardHomePageState._localPrefsKeyPrefix}$validId');
+      final persisted = prefs
+          .getString('${_DashboardHomePageState._localPrefsKeyPrefix}$validId');
       if (persisted != null && persisted.isNotEmpty) {
         if (_looksHighQualityUrl(persisted)) {
           _localImageCache[validId] = persisted;
@@ -904,12 +944,14 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
-                errorWidget: (context, url, error) => Container(color: Colors.white10),
+                errorWidget: (context, url, error) =>
+                    Container(color: Colors.white10),
               ),
             ),
             Container(color: Colors.black.withValues(alpha: 0.2)), // 稍微调暗一点
             const Center(
-              child: Icon(Icons.play_circle_outline, color: Colors.white54, size: 32),
+              child: Icon(Icons.play_circle_outline,
+                  color: Colors.white54, size: 32),
             ),
           ],
         );

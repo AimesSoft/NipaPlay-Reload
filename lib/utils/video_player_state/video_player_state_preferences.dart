@@ -1054,6 +1054,218 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
   }
 
+  DanmakuOutlineStyle _resolveDanmakuOutlineStyle(int? index) {
+    const DanmakuOutlineStyle fallback = DanmakuOutlineStyle.uniform;
+    if (index == null ||
+        index < 0 ||
+        index >= DanmakuOutlineStyle.values.length) {
+      return fallback;
+    }
+    return DanmakuOutlineStyle.values[index];
+  }
+
+  DanmakuShadowStyle _resolveDanmakuShadowStyle(int? index) {
+    if (index == null ||
+        index < 0 ||
+        index >= DanmakuShadowStyle.values.length) {
+      return DanmakuShadowStyle.strong;
+    }
+    return DanmakuShadowStyle.values[index];
+  }
+
+  bool _isSupportedDanmakuFontExtension(String path) {
+    final ext = p.extension(path).toLowerCase();
+    return ext == '.ttf' || ext == '.otf' || ext == '.ttc' || ext == '.otc';
+  }
+
+  String _buildDanmakuRuntimeFontFamilyName(
+    String filePath,
+    int length,
+    DateTime modified,
+  ) {
+    final signature = '$filePath|$length|${modified.millisecondsSinceEpoch}';
+    final digest = sha1.convert(utf8.encode(signature)).toString();
+    return 'DanmakuRuntime_${digest.substring(0, 16)}';
+  }
+
+  Future<String?> _loadDanmakuRuntimeFont(String filePath) async {
+    if (kIsWeb) return null;
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        return null;
+      }
+
+      final stat = await file.stat();
+      final family = _buildDanmakuRuntimeFontFamilyName(
+          filePath, stat.size, stat.modified);
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        return null;
+      }
+
+      final loader = FontLoader(family);
+      loader.addFont(Future<ByteData>.value(
+        ByteData.sublistView(Uint8List.fromList(bytes)),
+      ));
+      await loader.load();
+      return family;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 加载弹幕字体失败: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _persistDanmakuFontFile(String sourcePath) async {
+    if (kIsWeb) return null;
+    try {
+      final sourceFile = File(sourcePath);
+      if (!await sourceFile.exists()) return null;
+      final bytes = await sourceFile.readAsBytes();
+      if (bytes.isEmpty) return null;
+
+      final supportDir = await path_provider.getApplicationSupportDirectory();
+      final fontsDir = Directory(p.join(supportDir.path, 'danmaku_fonts'));
+      await fontsDir.create(recursive: true);
+
+      final ext = p.extension(sourcePath).toLowerCase();
+      final baseName = p.basenameWithoutExtension(sourcePath);
+      final hash = sha1.convert(bytes).toString().substring(0, 12);
+      final fileName = '${baseName}_$hash$ext';
+      final destPath = p.join(fontsDir.path, fileName);
+      final destFile = File(destPath);
+      if (!await destFile.exists()) {
+        await destFile.writeAsBytes(bytes, flush: true);
+      }
+      return destPath;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 缓存弹幕字体失败: $e');
+      return null;
+    }
+  }
+
+  Future<void> _loadDanmakuDisplayEffectSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final loadedFontFilePath =
+        (prefs.getString(_danmakuFontFilePathKey) ?? '').trim();
+    var loadedFontFamily =
+        (prefs.getString(_danmakuFontFamilyKey) ?? '').trim();
+    final loadedOutlineStyle =
+        _resolveDanmakuOutlineStyle(prefs.getInt(_danmakuOutlineStyleKey));
+    final loadedShadowStyle =
+        _resolveDanmakuShadowStyle(prefs.getInt(_danmakuShadowStyleKey));
+
+    var effectiveFontPath = loadedFontFilePath;
+    if (effectiveFontPath.isNotEmpty) {
+      if (!_isSupportedDanmakuFontExtension(effectiveFontPath)) {
+        effectiveFontPath = '';
+        loadedFontFamily = '';
+      } else {
+        final runtimeFontFamily =
+            await _loadDanmakuRuntimeFont(effectiveFontPath);
+        if (runtimeFontFamily == null) {
+          effectiveFontPath = '';
+          loadedFontFamily = '';
+        } else {
+          loadedFontFamily = runtimeFontFamily;
+        }
+      }
+    }
+
+    final changed = _danmakuFontFilePath != effectiveFontPath ||
+        _danmakuFontFamily != loadedFontFamily ||
+        _danmakuOutlineStyle != loadedOutlineStyle ||
+        _danmakuShadowStyle != loadedShadowStyle;
+
+    _danmakuFontFilePath = effectiveFontPath;
+    _danmakuFontFamily = loadedFontFamily;
+    _danmakuOutlineStyle = loadedOutlineStyle;
+    _danmakuShadowStyle = loadedShadowStyle;
+
+    if (loadedFontFilePath != effectiveFontPath) {
+      await prefs.setString(_danmakuFontFilePathKey, effectiveFontPath);
+    }
+    if ((prefs.getString(_danmakuFontFamilyKey) ?? '').trim() !=
+        loadedFontFamily) {
+      await prefs.setString(_danmakuFontFamilyKey, loadedFontFamily);
+    }
+
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> setDanmakuFontFamily(String fontFamily) async {
+    final normalized = fontFamily.trim();
+    if (_danmakuFontFamily == normalized && _danmakuFontFilePath.isEmpty) {
+      return;
+    }
+    _danmakuFontFilePath = '';
+    _danmakuFontFamily = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_danmakuFontFilePathKey, '');
+    await prefs.setString(_danmakuFontFamilyKey, normalized);
+    notifyListeners();
+  }
+
+  Future<bool> importDanmakuFontFile(String sourcePath) async {
+    final resolvedPath = sourcePath.trim();
+    if (resolvedPath.isEmpty ||
+        !_isSupportedDanmakuFontExtension(resolvedPath)) {
+      return false;
+    }
+
+    final persistedPath = await _persistDanmakuFontFile(resolvedPath);
+    if (persistedPath == null) {
+      return false;
+    }
+
+    final runtimeFamily = await _loadDanmakuRuntimeFont(persistedPath);
+    if (runtimeFamily == null) {
+      return false;
+    }
+
+    _danmakuFontFilePath = persistedPath;
+    _danmakuFontFamily = runtimeFamily;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_danmakuFontFilePathKey, persistedPath);
+    await prefs.setString(_danmakuFontFamilyKey, runtimeFamily);
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> resetDanmakuFont() async {
+    if (_danmakuFontFilePath.isEmpty && _danmakuFontFamily.isEmpty) {
+      return;
+    }
+    _danmakuFontFilePath = '';
+    _danmakuFontFamily = '';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_danmakuFontFilePathKey, '');
+    await prefs.setString(_danmakuFontFamilyKey, '');
+    notifyListeners();
+  }
+
+  Future<void> setDanmakuOutlineStyle(DanmakuOutlineStyle style) async {
+    if (_danmakuOutlineStyle == style) {
+      return;
+    }
+    _danmakuOutlineStyle = style;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_danmakuOutlineStyleKey, style.index);
+    notifyListeners();
+  }
+
+  Future<void> setDanmakuShadowStyle(DanmakuShadowStyle style) async {
+    if (_danmakuShadowStyle == style) {
+      return;
+    }
+    _danmakuShadowStyle = style;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_danmakuShadowStyleKey, style.index);
+    notifyListeners();
+  }
+
   // 获取实际使用的弹幕字体大小
   double get actualDanmakuFontSize {
     if (_danmakuFontSize <= 0) {

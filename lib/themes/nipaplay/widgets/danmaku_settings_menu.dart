@@ -68,6 +68,62 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     super.dispose();
   }
 
+  Future<void> _pickDanmakuFontFile(VideoPlayerState videoState) async {
+    final selected = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(
+          label: 'Font',
+          extensions: ['ttf', 'otf', 'ttc', 'otc'],
+        ),
+      ],
+    );
+    if (selected == null) return;
+
+    final success = await videoState.importDanmakuFontFile(selected.path);
+    if (!mounted) return;
+    if (success) {
+      BlurSnackBar.show(context, '已应用字体: ${p.basename(selected.path)}');
+    } else {
+      BlurSnackBar.show(context, '字体加载失败，请选择有效的字体文件');
+    }
+  }
+
+  Future<void> _resetDanmakuFont(VideoPlayerState videoState) async {
+    await videoState.resetDanmakuFont();
+    if (!mounted) return;
+    BlurSnackBar.show(context, '已恢复为系统默认字体');
+  }
+
+  String _danmakuFontLabel(VideoPlayerState videoState) {
+    final fontPath = videoState.danmakuFontFilePath.trim();
+    if (fontPath.isEmpty) return '系统默认字体';
+    return p.basename(fontPath);
+  }
+
+  String _outlineStyleLabel(DanmakuOutlineStyle style) {
+    switch (style) {
+      case DanmakuOutlineStyle.none:
+        return '无描边';
+      case DanmakuOutlineStyle.stroke:
+        return '标准描边';
+      case DanmakuOutlineStyle.uniform:
+        return '均匀描边';
+    }
+  }
+
+  String _shadowStyleLabel(DanmakuShadowStyle style) {
+    switch (style) {
+      case DanmakuShadowStyle.none:
+        return '无阴影';
+      case DanmakuShadowStyle.soft:
+        return '柔和阴影';
+      case DanmakuShadowStyle.medium:
+        return '标准阴影';
+      case DanmakuShadowStyle.strong:
+        return '增强阴影';
+    }
+  }
+
   // 添加屏蔽词
   void _addBlockWord() {
     final word = _blockWordController.text.trim();
@@ -502,6 +558,113 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                     const SizedBox(height: 4),
                     const SettingsHintText('调整弹幕文字的大小，轨道间距会自动适配'),
+                  ],
+                ),
+              ),
+              // 弹幕显示效果
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '弹幕显示效果',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '当前字体：${_danmakuFontLabel(videoState)}',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: BlurButton(
+                            text: '选择字体文件',
+                            icon: Icons.folder_open,
+                            onTap: () => _pickDanmakuFontFile(videoState),
+                            expandHorizontally: true,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: BlurButton(
+                            text: '恢复默认',
+                            icon: Icons.restart_alt,
+                            onTap: () => _resetDanmakuFont(videoState),
+                            expandHorizontally: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '描边样式',
+                      style: TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: DanmakuOutlineStyle.values.map((style) {
+                        final selected =
+                            videoState.danmakuOutlineStyle == style;
+                        return BlurButton(
+                          text: _outlineStyleLabel(style),
+                          icon: selected
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          fontSize: 12,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          foregroundColor: selected
+                              ? Colors.white
+                              : Colors.white.withOpacity(0.75),
+                          onTap: () => videoState.setDanmakuOutlineStyle(style),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '阴影样式',
+                      style: TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: DanmakuShadowStyle.values.map((style) {
+                        final selected = videoState.danmakuShadowStyle == style;
+                        return BlurButton(
+                          text: _shadowStyleLabel(style),
+                          icon: selected
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          fontSize: 12,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          foregroundColor: selected
+                              ? Colors.white
+                              : Colors.white.withOpacity(0.75),
+                          onTap: () => videoState.setDanmakuShadowStyle(style),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 4),
+                    const SettingsHintText(
+                      '通过文件选择字体，样式可直接按钮切换。若 Windows 下描边粗细不均，建议选择“均匀描边”。',
+                    ),
                   ],
                 ),
               ),
