@@ -155,6 +155,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   int _bangumiEpisodeStatus = 0;
   bool _isSavingBangumiCollection = false;
 
+  // 上次观看的剧集信息
+  WatchHistoryItem? _lastWatchedEpisode;
+  bool _isLoadingLastWatched = false;
+
   // 新增：评分到评价文本的映射
   static const Map<int, String> _ratingEvaluationMap = {
     1: '不忍直视',
@@ -202,9 +206,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     // 添加TabController监听
     _tabController!.addListener(_handleTabChange);
-    
+
     // 添加Bangumi登录状态监听
-    BangumiApiService.loginStatusNotifier.addListener(_onBangumiLoginStatusChanged);
+    BangumiApiService.loginStatusNotifier
+        .addListener(_onBangumiLoginStatusChanged);
 
     // 启动时异步清理过期缓存
     _bangumiService.cleanExpiredDetailCache().then((_) {
@@ -269,7 +274,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     if (_openPageContext == context) {
       _openPageContext = null;
     }
-    BangumiApiService.loginStatusNotifier.removeListener(_onBangumiLoginStatusChanged);
+    BangumiApiService.loginStatusNotifier
+        .removeListener(_onBangumiLoginStatusChanged);
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
     super.dispose();
@@ -905,8 +911,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       if (i < fullStars) {
         stars.add(const Icon(Ionicons.star, color: bangumiColor, size: 16));
       } else if (i == fullStars && halfStar) {
-        stars.
-            add(const Icon(Ionicons.star_half, color: bangumiColor, size: 16));
+        stars
+            .add(const Icon(Ionicons.star_half, color: bangumiColor, size: 16));
       } else {
         stars.add(Icon(Ionicons.star_outline,
             color: bangumiColor.withOpacity(isDark ? 0.7 : 0.4), size: 16));
@@ -1059,22 +1065,21 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 text: TextSpan(
                     style: valueStyle, // 基础样式
                     children: [
-                      TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
-                      WidgetSpan(
-                          child: _buildRatingStars(bangumiRatingValue.toDouble())),
-                      TextSpan(
-                          text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
-                          locale: const Locale("zh-Hans", "zh"),
-                          style: const TextStyle(
-                              color: Color(0xFFFF2E55),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14)),
-                      TextSpan(
-                          text: bangumiEvaluationText,
-                          locale: const Locale("zh-Hans", "zh"),
-                          style: TextStyle(
-                              color: secondaryTextColor, fontSize: 12))
-                    ])),
+                  TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
+                  WidgetSpan(
+                      child: _buildRatingStars(bangumiRatingValue.toDouble())),
+                  TextSpan(
+                      text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: const TextStyle(
+                          color: Color(0xFFFF2E55),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14)),
+                  TextSpan(
+                      text: bangumiEvaluationText,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(color: secondaryTextColor, fontSize: 12))
+                ])),
             const SizedBox(height: 6),
           ],
 
@@ -1092,8 +1097,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 1.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                              secondaryTextColor),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(secondaryTextColor),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1108,33 +1113,32 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     text: TextSpan(
                       style: valueStyle.copyWith(fontSize: 12),
                       children: [
-                                                TextSpan(
-                                                  text: '我的Bangumi评分: ',
-                                                  style: const TextStyle(
-                                                      color: Color(0xFFFF2E55),
-                                                      fontWeight: FontWeight.bold),
-                                                ),
-                                                if (_bangumiUserRating > 0) ...[
-                                                  TextSpan(
-                                                    text: '$_bangumiUserRating 分',
-                                                    style: const TextStyle(
-                                                      color: Color(0xFFFF2E55),
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 14,
-                                                    ),
-                                                  ),
-                                                  TextSpan(
-                                                    text: _ratingEvaluationMap[_bangumiUserRating] !=
-                                                            null
-                                                        ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
-                                                        : '',
-                                                    style: TextStyle(
-                                                      color: const Color(0xFFFF2E55).withOpacity(0.75),
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ]
-                         else
+                        TextSpan(
+                          text: '我的Bangumi评分: ',
+                          style: const TextStyle(
+                              color: Color(0xFFFF2E55),
+                              fontWeight: FontWeight.bold),
+                        ),
+                        if (_bangumiUserRating > 0) ...[
+                          TextSpan(
+                            text: '$_bangumiUserRating 分',
+                            style: const TextStyle(
+                              color: Color(0xFFFF2E55),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _ratingEvaluationMap[_bangumiUserRating] !=
+                                    null
+                                ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
+                                : '',
+                            style: TextStyle(
+                              color: const Color(0xFFFF2E55).withOpacity(0.75),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ] else
                           TextSpan(
                             text: '未评分',
                             style: TextStyle(color: secondaryTextColor),
@@ -1171,7 +1175,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                               () => _isBangumiRatingButtonHovered = false)
                           : null,
                       child: GestureDetector(
-                        onTap: isBangumiActionEnabled ? _showRatingDialog : null,
+                        onTap:
+                            isBangumiActionEnabled ? _showRatingDialog : null,
                         behavior: HitTestBehavior.opaque,
                         child: AnimatedScale(
                           scale: isBangumiHovered ? 1.1 : 1.0,
@@ -1243,7 +1248,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             ] else if (!_isLoadingBangumiCollection) ...[
               Text(
                 '尚未在Bangumi收藏此番剧',
-                style: valueStyle.copyWith(fontSize: 12, color: secondaryTextColor),
+                style: valueStyle.copyWith(
+                    fontSize: 12, color: secondaryTextColor),
               ),
               const SizedBox(height: 6),
             ],
@@ -1326,73 +1332,73 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                     color: textColor.withOpacity(0.95)))
                           ]));
                     }).toList())),
-            RichText(
-              text: TextSpan(
-                style: valueStyle,
-                children: [
-                  TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
-                  TextSpan(text: (anime.airDate ?? '未知').split('T').first, style: valueStyle),
-                ],
+          RichText(
+            text: TextSpan(
+              style: valueStyle,
+              children: [
+                TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
+                TextSpan(
+                    text: (anime.airDate ?? '未知').split('T').first,
+                    style: valueStyle),
+              ],
+            ),
+          ),
+          if (anime.typeDescription != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: RichText(
+                text: TextSpan(
+                  style: valueStyle,
+                  children: [
+                    TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
+                    TextSpan(text: anime.typeDescription!),
+                  ],
+                ),
               ),
             ),
-            if (anime.typeDescription != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: RichText(
-                  text: TextSpan(
-                    style: valueStyle,
-                    children: [
-                      TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
-                      TextSpan(text: anime.typeDescription!),
-                    ],
-                  ),
+          if (anime.totalEpisodes != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: RichText(
+                text: TextSpan(
+                  style: valueStyle,
+                  children: [
+                    TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
+                    TextSpan(text: '${anime.totalEpisodes}'),
+                  ],
                 ),
               ),
-            if (anime.totalEpisodes != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: RichText(
-                  text: TextSpan(
-                    style: valueStyle,
-                    children: [
-                      TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
-                      TextSpan(text: '${anime.totalEpisodes}'),
-                    ],
-                  ),
+            ),
+          if (anime.isOnAir != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: RichText(
+                text: TextSpan(
+                  style: valueStyle,
+                  children: [
+                    TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
+                    TextSpan(text: anime.isOnAir! ? '正连载' : '已完结'),
+                  ],
                 ),
               ),
-            if (anime.isOnAir != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: RichText(
-                  text: TextSpan(
-                    style: valueStyle,
-                    children: [
-                      TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
-                      TextSpan(text: anime.isOnAir! ? '正连载' : '已完结'),
-                    ],
-                  ),
-                ),
-              ),
+            ),
 
-            if (anime.isNSFW == true)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: RichText(
-                    text: TextSpan(style: valueStyle, children: [
-                  TextSpan(
-                      text: '限制内容: ',
-                      style:
-                          boldWhiteKeyStyle.copyWith(color: Colors.redAccent)),
-                  TextSpan(
-                      text: '是',
-                      style:
-                          TextStyle(color: Colors.redAccent.withOpacity(0.85)))
-                ])),
-              ),
-            ...metadataWidgets,
-            ...titlesWidgets,
-            if (anime.tags != null && anime.tags!.isNotEmpty) ...[
+          if (anime.isNSFW == true)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: RichText(
+                  text: TextSpan(style: valueStyle, children: [
+                TextSpan(
+                    text: '限制内容: ',
+                    style: boldWhiteKeyStyle.copyWith(color: Colors.redAccent)),
+                TextSpan(
+                    text: '是',
+                    style: TextStyle(color: Colors.redAccent.withOpacity(0.85)))
+              ])),
+            ),
+          ...metadataWidgets,
+          ...titlesWidgets,
+          if (anime.tags != null && anime.tags!.isNotEmpty) ...[
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1518,6 +1524,35 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   fontSize: 12,
                 ),
               ),
+              const SizedBox(width: 12),
+              if (_lastWatchedEpisode != null)
+                Builder(builder: (context) {
+                  final episodeId = _lastWatchedEpisode!.episodeId;
+                  if (episodeId != null) {
+                    // 查找对应的剧集
+                    final episode = episodes.firstWhere(
+                      (ep) => ep.id == episodeId,
+                      orElse: () => episodes.first,
+                    );
+                    // 提取标题的第一个词作为剧集标识
+                    final title = episode.title;
+                    final parts = title.split(' ');
+                    if (parts.isNotEmpty) {
+                      final firstPart = parts[0];
+                      return Text(
+                        '上次观看：$firstPart',
+                        locale: const Locale('zh-Hans', 'zh'),
+                        style: TextStyle(
+                          color: secondaryTextColor,
+                          fontSize: 12,
+                        ),
+                      );
+                    }
+                  }
+                  return const SizedBox.shrink();
+                })
+              else
+                const SizedBox.shrink(),
               const Spacer(),
               MouseRegion(
                 cursor: _isCleaningEpisodeHistory
@@ -1634,8 +1669,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 final episode = displayEpisodes[index];
                 final sharedEpisode =
                     hasSharedEpisodes ? _sharedEpisodeMap[episode.id] : null;
-                final sharedPlayable =
-                    sharedEpisode != null ? _sharedPlayableMap[episode.id] : null;
+                final sharedPlayable = sharedEpisode != null
+                    ? _sharedPlayableMap[episode.id]
+                    : null;
                 final bool sharedPlayableAvailable = sharedEpisode != null &&
                     sharedPlayable != null &&
                     sharedEpisode.fileExists;
@@ -1706,8 +1742,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       if (progress > 0.95) {
                         progressTextColor = progressGreen.withOpacity(0.9);
                       } else if (progress > 0.01) {
-                        progressTextColor = progressOrange.withOpacity(
-                            progressFromHistory ? 0.95 : 0.9);
+                        progressTextColor = progressOrange
+                            .withOpacity(progressFromHistory ? 0.95 : 0.9);
                       } else if (progressText == '未播放') {
                         progressTextColor = progressGreen.withOpacity(0.9);
                       } else if (progressText == '共享媒体') {
@@ -1722,8 +1758,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           ? SystemMouseCursors.click
                           : SystemMouseCursors.basic,
                       onEnter: enableEpisodeHover
-                          ? (_) => setState(
-                              () => _hoveredEpisodeTileId = episode.id)
+                          ? (_) =>
+                              setState(() => _hoveredEpisodeTileId = episode.id)
                           : null,
                       onExit: enableEpisodeHover
                           ? (_) {
@@ -1865,13 +1901,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                 historyItem.filePath.isNotEmpty) {
                               final filePath = historyItem.filePath;
                               final lowerPath = filePath.toLowerCase();
-                              final bool isRemoteSource = historyItem.isDandanplayRemote ||
-                                  lowerPath.startsWith('http://') ||
-                                  lowerPath.startsWith('https://') ||
-                                  lowerPath.startsWith('jellyfin://') ||
-                                  lowerPath.startsWith('emby://') ||
-                                  MediaSourceUtils.isWebDavPath(filePath) ||
-                                  MediaSourceUtils.isSmbPath(filePath);
+                              final bool isRemoteSource =
+                                  historyItem.isDandanplayRemote ||
+                                      lowerPath.startsWith('http://') ||
+                                      lowerPath.startsWith('https://') ||
+                                      lowerPath.startsWith('jellyfin://') ||
+                                      lowerPath.startsWith('emby://') ||
+                                      MediaSourceUtils.isWebDavPath(filePath) ||
+                                      MediaSourceUtils.isSmbPath(filePath);
 
                               if (isRemoteSource) {
                                 final playableItem = PlayableItem(
@@ -1903,8 +1940,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                 }
                               }
                             } else {
-                              BlurSnackBar.show(
-                                  context, '媒体库中找不到此剧集的视频文件');
+                              BlurSnackBar.show(context, '媒体库中找不到此剧集的视频文件');
                             }
                           },
                         ),
@@ -1978,6 +2014,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     // 获取是否启用页面切换动画
     final enableAnimation = _appearanceSettings?.enablePageAnimation ?? false;
     final bool isDesktopOrTablet = globals.isDesktopOrTablet;
+
+    // 加载上次观看记录
+    if (_lastWatchedEpisode == null && !_isLoadingLastWatched) {
+      _loadLastWatchedEpisode(widget.animeId);
+    }
 
     return NipaplayAnimeDetailLayout(
       title: displayTitle,
@@ -2186,9 +2227,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         if (mounted) {
           _showBlurSnackBar(
             context,
-            affectedCount > 0
-                ? '已清除 $affectedCount 条扫描结果'
-                : '没有可清除的扫描结果',
+            affectedCount > 0 ? '已清除 $affectedCount 条扫描结果' : '没有可清除的扫描结果',
           );
         }
       } else {
@@ -2197,9 +2236,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         if (mounted) {
           _showBlurSnackBar(
             context,
-            affectedCount > 0
-                ? '已删除 $affectedCount 条观看记录'
-                : '没有可删除的观看记录',
+            affectedCount > 0 ? '已删除 $affectedCount 条观看记录' : '没有可删除的观看记录',
           );
         }
       }
@@ -2225,6 +2262,33 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           Provider.of<WatchHistoryProvider>(context, listen: false);
       await provider.refresh();
     } catch (_) {}
+  }
+
+  // 加载上次观看的剧集
+  Future<void> _loadLastWatchedEpisode(int animeId) async {
+    if (_isLoadingLastWatched) return;
+
+    setState(() {
+      _isLoadingLastWatched = true;
+    });
+
+    try {
+      final historyItems =
+          await WatchHistoryManager.getHistoryItemsByAnimeId(animeId);
+      if (historyItems.isNotEmpty) {
+        // 按最后观看时间排序，取最近的一个
+        historyItems.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+        setState(() {
+          _lastWatchedEpisode = historyItems.first;
+        });
+      }
+    } catch (e) {
+      debugPrint('[番剧详情] 获取上次观看记录失败: $e');
+    } finally {
+      setState(() {
+        _isLoadingLastWatched = false;
+      });
+    }
   }
 
   // 显示评分对话框
@@ -2398,12 +2462,11 @@ class _HoverableTagState extends State<_HoverableTag> {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
-    
+
     final bool enableHover = !globals.isTouch;
     final bool isHovered = enableHover && _isHovered;
-    final Color borderColor = isHovered
-        ? textColor.withOpacity(0.6)
-        : textColor.withOpacity(0.25);
+    final Color borderColor =
+        isHovered ? textColor.withOpacity(0.6) : textColor.withOpacity(0.25);
     final List<Color> backgroundColors = isHovered
         ? [
             textColor.withOpacity(0.22),
@@ -2473,8 +2536,7 @@ class _EpisodeWatchToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color displayColor =
-        isHovered ? const Color(0xFFFF2E55) : idleColor;
+    final Color displayColor = isHovered ? const Color(0xFFFF2E55) : idleColor;
 
     return MouseRegion(
       cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -2560,8 +2622,7 @@ class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
     final Color baseColor =
         widget.isFavorited ? Colors.red : widget.secondaryTextColor;
     final Color iconColor = _isHovered ? baseColor : baseColor;
-    final double scale =
-        _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
 
     return GestureDetector(
       onTap: widget.isToggling ? null : widget.onTap,
