@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
@@ -20,6 +21,22 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   static const String _activeHostIdKey = 'shared_remote_active_host';
   static const String _managementUnsupportedMessage =
       '远程端暂不支持“库管理”共享，请更新对方 NipaPlay。';
+  static const Set<String> _playableRemoteExtensions = {
+    '.mp4',
+    '.m4v',
+    '.mkv',
+    '.mov',
+    '.avi',
+    '.flv',
+    '.ts',
+    '.mpeg',
+    '.mpg',
+    '.webm',
+    '.mp3',
+    '.flac',
+    '.aac',
+    '.wav',
+  };
 
   SharedRemoteLibraryProvider() {
     _loadPersistedHosts();
@@ -1392,8 +1409,30 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     if (host == null) {
       throw Exception('未选择远程主机');
     }
+    if (!isRemoteFilePathPlayable(filePath)) {
+      throw Exception('该文件不是可播放媒体');
+    }
     return Uri.parse('${host.baseUrl}/api/media/local/manage/stream')
         .replace(queryParameters: {'path': filePath});
+  }
+
+  bool isRemoteFilePlayable(SharedRemoteFileEntry entry) {
+    if (entry.isDirectory) {
+      return false;
+    }
+    final candidate = entry.name.trim().isNotEmpty
+        ? entry.name.trim()
+        : entry.path.trim();
+    return isRemoteFilePathPlayable(candidate);
+  }
+
+  bool isRemoteFilePathPlayable(String filePath) {
+    final target = filePath.trim();
+    if (target.isEmpty) {
+      return false;
+    }
+    final extension = p.extension(target).toLowerCase();
+    return _playableRemoteExtensions.contains(extension);
   }
 
   Future<void> addRemoteFolder({

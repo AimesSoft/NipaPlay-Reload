@@ -2956,20 +2956,31 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             ],
           );
         } else {
-          final fileUrl =
-              WebDAVService.instance.getFileUrl(connection, file.path);
+          final canPlay = WebDAVService.instance.isVideoFile(file.name);
+          final fileUrl = canPlay
+              ? WebDAVService.instance.getFileUrl(connection, file.path)
+              : null;
           return FutureBuilder<WatchHistoryItem?>(
-            future: WatchHistoryManager.getHistoryItem(fileUrl),
+            future: fileUrl == null
+                ? Future<WatchHistoryItem?>.value(null)
+                : WatchHistoryManager.getHistoryItem(fileUrl),
             builder: (context, snapshot) {
-              final subtitleText = _buildScanSubtitleText(
-                snapshot.data,
-                p.basenameWithoutExtension(file.name),
-              );
+              final subtitleText = canPlay
+                  ? _buildScanSubtitleText(
+                      snapshot.data,
+                      p.basenameWithoutExtension(file.name),
+                    )
+                  : null;
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
-                leading:
-                    Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+                leading: Icon(
+                  canPlay
+                      ? Icons.videocam_outlined
+                      : Icons.description_outlined,
+                  color: iconColor,
+                  size: 18,
+                ),
                 title: Text(
                   file.name,
                   style: TextStyle(color: textColor, fontSize: 13),
@@ -2986,17 +2997,19 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         overflow: TextOverflow.ellipsis,
                       )
                     : null,
-                trailing: SearchBarActionButton(
-                  icon: Icons.subtitles,
-                  color: iconColor,
-                  tooltip: '手动匹配弹幕',
-                  onPressed: () => _showManualDanmakuMatchDialog(
-                    fileUrl,
-                    file.name,
-                    snapshot.data,
-                  ),
-                ),
-                onTap: () => _playWebDAVFile(connection, file),
+                trailing: canPlay
+                    ? SearchBarActionButton(
+                        icon: Icons.subtitles,
+                        color: iconColor,
+                        tooltip: '手动匹配弹幕',
+                        onPressed: () => _showManualDanmakuMatchDialog(
+                          fileUrl!,
+                          file.name,
+                          snapshot.data,
+                        ),
+                      )
+                    : null,
+                onTap: canPlay ? () => _playWebDAVFile(connection, file) : null,
               );
             },
           );
@@ -3093,20 +3106,29 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           ],
         );
       } else {
-        final fileUrl =
-            SMBProxyService.instance.buildStreamUrl(connection, file.path);
+        final canPlay = SMBService.instance.isVideoFile(file.name);
+        final fileUrl = canPlay
+            ? SMBProxyService.instance.buildStreamUrl(connection, file.path)
+            : null;
         return FutureBuilder<WatchHistoryItem?>(
-          future: WatchHistoryManager.getHistoryItem(fileUrl),
+          future: fileUrl == null
+              ? Future<WatchHistoryItem?>.value(null)
+              : WatchHistoryManager.getHistoryItem(fileUrl),
           builder: (context, snapshot) {
-            final subtitleText = _buildScanSubtitleText(
-              snapshot.data,
-              p.basenameWithoutExtension(file.name),
-            );
+            final subtitleText = canPlay
+                ? _buildScanSubtitleText(
+                    snapshot.data,
+                    p.basenameWithoutExtension(file.name),
+                  )
+                : null;
             return ListTile(
               dense: true,
               contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
-              leading:
-                  Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+              leading: Icon(
+                canPlay ? Icons.videocam_outlined : Icons.description_outlined,
+                color: iconColor,
+                size: 18,
+              ),
               title: Text(
                 file.name,
                 style: TextStyle(color: textColor, fontSize: 13),
@@ -3123,12 +3145,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       overflow: TextOverflow.ellipsis,
                     )
                   : null,
-              trailing: SearchBarActionButton(
-                icon: Icons.play_circle_outline,
-                tooltip: '播放',
-                onPressed: () => _playSMBFile(connection, file),
-              ),
-              onTap: () => _playSMBFile(connection, file),
+              trailing: canPlay
+                  ? SearchBarActionButton(
+                      icon: Icons.play_circle_outline,
+                      tooltip: '播放',
+                      onPressed: () => _playSMBFile(connection, file),
+                    )
+                  : null,
+              onTap: canPlay ? () => _playSMBFile(connection, file) : null,
             );
           },
         );

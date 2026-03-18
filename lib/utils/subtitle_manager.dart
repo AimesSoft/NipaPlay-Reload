@@ -431,8 +431,7 @@ class SubtitleManager extends ChangeNotifier {
 
       final encoding = decoded.encoding.toLowerCase();
       final preview = _extractSubtitlePreview(decoded.text);
-      final format =
-          SubtitleParser.detectFormat(decoded.text, sourcePath);
+      final format = SubtitleParser.detectFormat(decoded.text, sourcePath);
       debugPrint(
           'SubtitleManager: 检测到字幕编码: ${decoded.encoding}, 格式: $format, 预览: $preview');
       if (encoding.startsWith('utf-8')) {
@@ -581,9 +580,8 @@ class SubtitleManager extends ChangeNotifier {
           if (candidates.isNotEmpty) {
             final resolvedMatchPath = RemoteSubtitleService.instance
                 .resolveVideoPathForMatching(videoPath);
-            final matchPath = resolvedMatchPath.isNotEmpty
-                ? resolvedMatchPath
-                : videoPath;
+            final matchPath =
+                resolvedMatchPath.isNotEmpty ? resolvedMatchPath : videoPath;
             final selected = _pickRemoteSubtitleCandidate(
               candidates,
               matchPath,
@@ -614,6 +612,13 @@ class SubtitleManager extends ChangeNotifier {
           }
         } catch (e) {
           debugPrint('SubtitleManager: 远程字幕检测失败: $e');
+        }
+
+        final streamUri = Uri.tryParse(videoPath);
+        final scheme = streamUri?.scheme.toLowerCase();
+        if (scheme == 'http' || scheme == 'https') {
+          debugPrint('SubtitleManager: 远程流字幕检测结束，跳过本地文件系统检测');
+          return;
         }
       }
 
@@ -913,8 +918,7 @@ class SubtitleManager extends ChangeNotifier {
 
     final sorted = List<RemoteSubtitleCandidate>.from(candidates)
       ..sort((a, b) {
-        final scoreCompare =
-            scoreCandidate(b).compareTo(scoreCandidate(a));
+        final scoreCompare = scoreCandidate(b).compareTo(scoreCandidate(a));
         if (scoreCompare != 0) return scoreCompare;
         return a.name.compareTo(b.name);
       });

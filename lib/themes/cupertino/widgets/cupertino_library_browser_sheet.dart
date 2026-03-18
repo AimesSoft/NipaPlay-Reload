@@ -22,7 +22,9 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum CupertinoLibraryBrowserSource { local, webdav, smb, sharedRemote }
+
 enum CupertinoLibraryBrowserLayout { grid, list }
+
 enum _BrowserSortOrder { nameAsc, nameDesc }
 
 class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
@@ -82,8 +84,7 @@ class CupertinoLibraryFolderBrowserSheet extends StatefulWidget {
     String? sourceLabel,
   }) {
     final host = provider.activeHost;
-    final label =
-        sourceLabel ?? host?.displayName ?? host?.baseUrl ?? '共享媒体库';
+    final label = sourceLabel ?? host?.displayName ?? host?.baseUrl ?? '共享媒体库';
     return CupertinoLibraryFolderBrowserSheet._(
       key: key,
       source: CupertinoLibraryBrowserSource.sharedRemote,
@@ -126,9 +127,8 @@ class _CupertinoLibraryFolderBrowserSheetState
   final Map<String, String> _expandedErrors = {};
   bool _isBatchScanning = false;
 
-  String get _currentPath => _pathStack.isNotEmpty
-      ? _pathStack.last
-      : widget.rootPath;
+  String get _currentPath =>
+      _pathStack.isNotEmpty ? _pathStack.last : widget.rootPath;
 
   bool get _canGoBack => _pathStack.length > 1;
 
@@ -217,8 +217,7 @@ class _CupertinoLibraryFolderBrowserSheetState
     entries.sort((a, b) {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
-      final compare =
-          a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      final compare = a.name.toLowerCase().compareTo(b.name.toLowerCase());
       return _sortOrder == _BrowserSortOrder.nameAsc ? compare : -compare;
     });
     return entries;
@@ -323,7 +322,9 @@ class _CupertinoLibraryFolderBrowserSheetState
         final entries = await provider.browseRemoteDirectory(path);
         final result = entries
             .map((entry) => _BrowserEntry(
-                  name: entry.name.isNotEmpty ? entry.name : p.basename(entry.path),
+                  name: entry.name.isNotEmpty
+                      ? entry.name
+                      : p.basename(entry.path),
                   path: entry.path,
                   isDirectory: entry.isDirectory,
                   animeName: entry.animeName,
@@ -343,7 +344,6 @@ class _CupertinoLibraryFolderBrowserSheetState
     _loadingDirectories.clear();
     _expandedErrors.clear();
   }
-
 
   void _openFolder(_BrowserEntry entry) {
     if (!entry.isDirectory) {
@@ -397,7 +397,7 @@ class _CupertinoLibraryFolderBrowserSheetState
   }
 
   String? _historyKeyForEntry(_BrowserEntry entry) {
-    if (entry.isDirectory) return null;
+    if (entry.isDirectory || !_isVideoEntry(entry)) return null;
     switch (widget.source) {
       case CupertinoLibraryBrowserSource.local:
         return entry.path;
@@ -429,7 +429,20 @@ class _CupertinoLibraryFolderBrowserSheetState
     if (entry.isDirectory) return false;
     final fileName =
         entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
-    return SMBService.instance.isVideoFile(fileName);
+    switch (widget.source) {
+      case CupertinoLibraryBrowserSource.local:
+      case CupertinoLibraryBrowserSource.webdav:
+      case CupertinoLibraryBrowserSource.smb:
+        return SMBService.instance.isVideoFile(fileName);
+      case CupertinoLibraryBrowserSource.sharedRemote:
+        final provider = widget.sharedRemoteProvider;
+        if (provider == null) return false;
+        if (entry.path.trim().isNotEmpty &&
+            provider.isRemoteFilePathPlayable(entry.path)) {
+          return true;
+        }
+        return provider.isRemoteFilePathPlayable(fileName);
+    }
   }
 
   void _showSnack(String message) {
@@ -463,8 +476,7 @@ class _CupertinoLibraryFolderBrowserSheetState
       } else if (entry.animeName?.trim().isNotEmpty == true) {
         initialSearchKeyword = entry.animeName!.trim();
       } else {
-        final keyword =
-            MediaFilenameParser.extractAnimeTitleKeyword(fileName);
+        final keyword = MediaFilenameParser.extractAnimeTitleKeyword(fileName);
         if (keyword.isNotEmpty) initialSearchKeyword = keyword;
       }
 
@@ -616,6 +628,10 @@ class _CupertinoLibraryFolderBrowserSheetState
       _showSnack('共享媒体库不可用');
       return;
     }
+    if (!_isVideoEntry(entry)) {
+      _showSnack('该文件不是可播放媒体');
+      return;
+    }
     try {
       final streamUrl =
           provider.buildRemoteFileStreamUri(entry.path).toString();
@@ -660,6 +676,10 @@ class _CupertinoLibraryFolderBrowserSheetState
       _openFolder(entry);
       return;
     }
+    if (!_isVideoEntry(entry)) {
+      _showSnack('该文件不是可播放媒体');
+      return;
+    }
     switch (widget.source) {
       case CupertinoLibraryBrowserSource.local:
         await _playLocalFile(entry);
@@ -678,6 +698,10 @@ class _CupertinoLibraryFolderBrowserSheetState
 
   Future<void> _scanEntry(_BrowserEntry entry) async {
     if (entry.isDirectory) return;
+    if (!_isVideoEntry(entry)) {
+      _showSnack('该文件不是可扫描媒体');
+      return;
+    }
     if (kIsWeb) {
       _showSnack('Web 端暂不支持扫描');
       return;
@@ -1003,7 +1027,8 @@ class _CupertinoLibraryFolderBrowserSheetState
     return results;
   }
 
-  Future<List<_BrowserEntry>> _collectSharedRemoteVideoFiles(String path) async {
+  Future<List<_BrowserEntry>> _collectSharedRemoteVideoFiles(
+      String path) async {
     final provider = widget.sharedRemoteProvider;
     if (provider == null) {
       throw Exception('共享媒体库不可用');
@@ -1013,7 +1038,7 @@ class _CupertinoLibraryFolderBrowserSheetState
     for (final entry in entries) {
       if (entry.isDirectory) {
         results.addAll(await _collectSharedRemoteVideoFiles(entry.path));
-      } else if (SMBService.instance.isVideoFile(entry.name)) {
+      } else if (provider.isRemoteFilePlayable(entry)) {
         results.add(
           _BrowserEntry(
             name: entry.name.isNotEmpty ? entry.name : p.basename(entry.path),
@@ -1167,6 +1192,7 @@ class _CupertinoLibraryFolderBrowserSheetState
           context,
         );
         final bool canManualMatch = _isVideoEntry(entry);
+        final bool canScanEntry = entry.isDirectory || canManualMatch;
 
         Widget buildAction({
           required String title,
@@ -1249,18 +1275,19 @@ class _CupertinoLibraryFolderBrowserSheetState
                                 );
                               },
                             ),
-                          buildAction(
-                            title: entry.isDirectory ? '扫描文件夹' : '扫描',
-                            onPressed: () async {
-                              Navigator.of(context).pop();
-                              if (entry.isDirectory) {
-                                await _scanFolder(entry);
-                              } else {
-                                await _scanEntry(entry);
-                              }
-                            },
-                            isLast: true,
-                          ),
+                          if (canScanEntry)
+                            buildAction(
+                              title: entry.isDirectory ? '扫描文件夹' : '扫描',
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                if (entry.isDirectory) {
+                                  await _scanFolder(entry);
+                                } else {
+                                  await _scanEntry(entry);
+                                }
+                              },
+                              isLast: true,
+                            ),
                         ],
                       ),
                     ),
@@ -1388,9 +1415,7 @@ class _CupertinoLibraryFolderBrowserSheetState
         break;
       case CupertinoLibraryBrowserSource.sharedRemote:
         final host = widget.sharedRemoteProvider?.activeHost;
-        id = host == null
-            ? widget.rootPath
-            : '${host.baseUrl}|${host.id}';
+        id = host == null ? widget.rootPath : '${host.baseUrl}|${host.id}';
         break;
     }
     final encoded = base64Url.encode(utf8.encode(id)).replaceAll('=', '');
@@ -1550,31 +1575,36 @@ class _CupertinoLibraryFolderBrowserSheetState
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 10,
-                childAspectRatio: 0.62,
-              ),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.62,
+            ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final entry = visibleEntries[index];
-                  final historyKey = _historyKeyForEntry(entry);
-                  return _FolderGridTile(
-                    entry: entry,
-                    labelColor: labelColor,
-                    secondaryLabelColor: secondaryLabelColor,
-                    countFuture: null,
-                    historyFuture: historyKey == null
-                        ? null
-                        : WatchHistoryManager.getHistoryItem(historyKey),
-                    onTap: () => _handleEntryTap(entry),
-                    onLongPress: () => _showEntryActionSheet(entry),
-                  );
-                },
-                childCount: visibleEntries.length,
-              ),
+                final historyKey = _historyKeyForEntry(entry);
+                final isPlayableFile =
+                    entry.isDirectory || _isVideoEntry(entry);
+                return _FolderGridTile(
+                  entry: entry,
+                  labelColor: labelColor,
+                  secondaryLabelColor: secondaryLabelColor,
+                  countFuture: null,
+                  historyFuture: historyKey == null
+                      ? null
+                      : WatchHistoryManager.getHistoryItem(historyKey),
+                  isPlayableFile: isPlayableFile,
+                  onTap: entry.isDirectory || isPlayableFile
+                      ? () => _handleEntryTap(entry)
+                      : null,
+                  onLongPress: () => _showEntryActionSheet(entry),
+                );
+              },
+              childCount: visibleEntries.length,
             ),
+          ),
         ),
       );
     } else {
@@ -1590,6 +1620,8 @@ class _CupertinoLibraryFolderBrowserSheetState
                   case _ListItemType.entry:
                     final entry = item.entry!;
                     final historyKey = _historyKeyForEntry(entry);
+                    final isPlayableFile =
+                        entry.isDirectory || _isVideoEntry(entry);
                     final tile = _FolderListTile(
                       entry: entry,
                       depth: item.depth,
@@ -1597,12 +1629,15 @@ class _CupertinoLibraryFolderBrowserSheetState
                           _expandedDirectories.contains(entry.path),
                       labelColor: labelColor,
                       secondaryLabelColor: secondaryLabelColor,
+                      isPlayableFile: isPlayableFile,
                       historyFuture: historyKey == null
                           ? null
                           : WatchHistoryManager.getHistoryItem(historyKey),
                       onTap: entry.isDirectory
                           ? () => _toggleDirectoryExpansion(entry)
-                          : () => _handleEntryTap(entry),
+                          : (isPlayableFile
+                              ? () => _handleEntryTap(entry)
+                              : null),
                       onLongPress: () => _showEntryActionSheet(entry),
                     );
                     return _ListAppear(
@@ -1836,8 +1871,7 @@ String? _entryMetadataLabel(_BrowserEntry entry) {
 
 String _historyItemLabel(WatchHistoryItem item) {
   if (item.animeId != null || item.episodeId != null) {
-    if (item.animeName.isNotEmpty &&
-        (item.episodeTitle?.isNotEmpty ?? false)) {
+    if (item.animeName.isNotEmpty && (item.episodeTitle?.isNotEmpty ?? false)) {
       return '${item.animeName} · ${item.episodeTitle}';
     }
     if (item.animeName.isNotEmpty) {
@@ -1888,6 +1922,7 @@ class _FolderGridTile extends StatefulWidget {
     required this.countFuture,
     required this.onTap,
     required this.historyFuture,
+    required this.isPlayableFile,
     required this.onLongPress,
   });
 
@@ -1895,8 +1930,9 @@ class _FolderGridTile extends StatefulWidget {
   final Color labelColor;
   final Color secondaryLabelColor;
   final Future<int>? countFuture;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Future<WatchHistoryItem?>? historyFuture;
+  final bool isPlayableFile;
   final VoidCallback? onLongPress;
 
   @override
@@ -1912,7 +1948,12 @@ class _FolderGridTileState extends State<_FolderGridTile> {
     );
     final iconColor = widget.entry.isDirectory
         ? CupertinoTheme.of(context).primaryColor
-        : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey, context);
+        : CupertinoDynamicColor.resolve(
+            widget.isPlayableFile
+                ? CupertinoColors.systemGrey
+                : CupertinoColors.tertiaryLabel,
+            context,
+          );
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -1940,7 +1981,9 @@ class _FolderGridTileState extends State<_FolderGridTile> {
               child: Icon(
                 widget.entry.isDirectory
                     ? CupertinoIcons.folder_fill
-                    : CupertinoIcons.film,
+                    : (widget.isPlayableFile
+                        ? CupertinoIcons.film
+                        : CupertinoIcons.doc_text),
                 size: 90,
                 color: iconColor,
               ),
@@ -1972,8 +2015,7 @@ class _FolderGridTileState extends State<_FolderGridTile> {
                 child: FutureBuilder<WatchHistoryItem?>(
                   future: widget.historyFuture,
                   builder: (context, snapshot) {
-                    final label =
-                        _labelForEntry(widget.entry, snapshot.data);
+                    final label = _labelForEntry(widget.entry, snapshot.data);
                     return Text(
                       label,
                       maxLines: 2,
@@ -2002,6 +2044,7 @@ class _FolderListTile extends StatelessWidget {
     required this.isExpanded,
     required this.labelColor,
     required this.secondaryLabelColor,
+    required this.isPlayableFile,
     required this.onTap,
     required this.historyFuture,
     required this.onLongPress,
@@ -2012,7 +2055,8 @@ class _FolderListTile extends StatelessWidget {
   final bool isExpanded;
   final Color labelColor;
   final Color secondaryLabelColor;
-  final VoidCallback onTap;
+  final bool isPlayableFile;
+  final VoidCallback? onTap;
   final Future<WatchHistoryItem?>? historyFuture;
   final VoidCallback? onLongPress;
 
@@ -2028,7 +2072,12 @@ class _FolderListTile extends StatelessWidget {
     );
     final iconColor = entry.isDirectory
         ? CupertinoTheme.of(context).primaryColor
-        : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey, context);
+        : CupertinoDynamicColor.resolve(
+            isPlayableFile
+                ? CupertinoColors.systemGrey
+                : CupertinoColors.tertiaryLabel,
+            context,
+          );
     final nameText = entry.name.isNotEmpty
         ? (entry.isDirectory
             ? entry.name
@@ -2064,7 +2113,9 @@ class _FolderListTile extends StatelessWidget {
               Icon(
                 entry.isDirectory
                     ? CupertinoIcons.folder_fill
-                    : CupertinoIcons.film,
+                    : (isPlayableFile
+                        ? CupertinoIcons.film
+                        : CupertinoIcons.doc_text),
                 size: entry.isDirectory ? 22 : 20,
                 color: iconColor,
               ),
@@ -2248,8 +2299,7 @@ class _ScanProgressWindow extends StatelessWidget {
           child: ValueListenableBuilder<_ScanProgressState>(
             valueListenable: progressListenable,
             builder: (context, value, _) {
-              final double clamped =
-                  value.progress.clamp(0.0, 1.0).toDouble();
+              final double clamped = value.progress.clamp(0.0, 1.0).toDouble();
               final int percent = (clamped * 100).round();
               return Padding(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),

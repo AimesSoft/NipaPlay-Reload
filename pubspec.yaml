@@ -145,6 +145,13 @@ flutter_launcher_icons:
   image_path_ios_dark_transparent:  "icons/new-icon-apple-dark.png"
   remove_alpha_ios: true
 
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name: sqlite3
+      name_windows: winsqlite3
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 # The following section is specific to Flutter packages.
