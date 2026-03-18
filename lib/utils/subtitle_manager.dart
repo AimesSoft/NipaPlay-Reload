@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -329,7 +328,7 @@ class SubtitleManager extends ChangeNotifier {
         // TODO: Call your blur_snackbar here
         // For example: globals.showBlurSnackbar('当前播放器内核不支持加载外部字幕');
         // As a placeholder, I'll just print. Replace with your actual snackbar call.
-        print(
+        debugPrint(
             "USER_INFO: blur_snackbar should be called here: '当前播放器内核不支持加载外部字幕'");
         return;
       }
@@ -903,6 +902,11 @@ class SubtitleManager extends ChangeNotifier {
         if (lowerName.contains(baseName.toLowerCase())) {
           score += 15;
         }
+      }
+
+      if (candidate is SharedRemoteSubtitleCandidate &&
+          candidate.isLikelyMatch) {
+        score += 25;
       }
       return score;
     }

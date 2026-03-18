@@ -13,6 +13,9 @@ class LocalMediaShareApi {
     router.get('/history', _handleWatchHistory);
     router.get('/episodes/<shareId>/stream', _handleEpisodeStream);
     router.add('HEAD', '/episodes/<shareId>/stream', _handleEpisodeStreamHead);
+    router.get('/episodes/<shareId>/subtitles', _handleEpisodeSubtitles);
+    router.get('/episodes/<shareId>/subtitle', _handleEpisodeSubtitleStream);
+    router.add('HEAD', '/episodes/<shareId>/subtitle', _handleEpisodeSubtitleStreamHead);
     router.post('/episodes/<shareId>/progress', _handleUpdateEpisodeProgress);
     router.post('/episodes/<shareId>/thumbnail', _handleUpdateEpisodeThumbnail);
   }
@@ -111,6 +114,71 @@ class LocalMediaShareApi {
       );
     } catch (e) {
       return Response.internalServerError(body: 'Error streaming shared episode: $e');
+    }
+  }
+
+  Future<Response> _handleEpisodeSubtitles(Request request) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    final episode = _service.getEpisodeByShareId(shareId);
+    if (episode == null) {
+      return Response.notFound('Episode not found');
+    }
+
+    try {
+      final items = await _service.listEpisodeSubtitles(episode);
+      return Response.ok(
+        json.encode({'success': true, 'items': items}),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error listing shared episode subtitles: $e',
+      );
+    }
+  }
+
+  Future<Response> _handleEpisodeSubtitleStream(Request request) async {
+    return _handleEpisodeSubtitleStreamInternal(request, headOnly: false);
+  }
+
+  Future<Response> _handleEpisodeSubtitleStreamHead(Request request) async {
+    return _handleEpisodeSubtitleStreamInternal(request, headOnly: true);
+  }
+
+  Future<Response> _handleEpisodeSubtitleStreamInternal(
+    Request request, {
+    required bool headOnly,
+  }) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    final subtitleName = request.url.queryParameters['name']?.trim();
+    if (subtitleName == null || subtitleName.isEmpty) {
+      return Response.badRequest(body: 'Missing subtitle name');
+    }
+
+    final episode = _service.getEpisodeByShareId(shareId);
+    if (episode == null) {
+      return Response.notFound('Episode not found');
+    }
+
+    try {
+      return await _service.buildSubtitleResponse(
+        request,
+        episode,
+        subtitleName: subtitleName,
+        headOnly: headOnly,
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error streaming shared subtitle: $e',
+      );
     }
   }
 
