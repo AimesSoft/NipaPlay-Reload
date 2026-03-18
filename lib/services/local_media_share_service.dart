@@ -104,6 +104,20 @@ class LocalMediaShareService {
   }
 
   static final LocalMediaShareService instance = LocalMediaShareService._internal();
+  static const Set<String> _subtitleExtensions = {
+    '.ass',
+    '.ssa',
+    '.srt',
+    '.sub',
+    '.sup',
+  };
+  static const Map<String, int> _subtitleExtensionPriority = {
+    '.ass': 0,
+    '.ssa': 1,
+    '.srt': 2,
+    '.sub': 3,
+    '.sup': 4,
+  };
 
   final Map<String, SharedEpisodeInfo> _shareEpisodeMap = {};
   final Map<int, SharedAnimeBundle> _animeBundleMap = {};
@@ -412,6 +426,123 @@ class LocalMediaShareService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> listEpisodeSubtitles(
+    SharedEpisodeInfo episode,
+  ) async {
+    final videoPath = episode.historyItem.filePath;
+    if (!_isLocalFilesystemPath(videoPath)) {
+      return const <Map<String, dynamic>>[];
+    }
+
+    final videoFile = File(videoPath);
+    if (!await videoFile.exists()) {
+      return const <Map<String, dynamic>>[];
+    }
+
+    final videoDir = videoFile.parent;
+    if (!await videoDir.exists()) {
+      return const <Map<String, dynamic>>[];
+    }
+
+    final String videoBaseName = p.basenameWithoutExtension(videoPath).toLowerCase();
+    final List<Map<String, dynamic>> items = <Map<String, dynamic>>[];
+
+    await for (final entry in videoDir.list(followLinks: false)) {
+      if (entry is! File) continue;
+
+      final filePath = entry.path;
+      if (p.normalize(filePath) == p.normalize(videoPath)) {
+        continue;
+      }
+
+      final ext = p.extension(filePath).toLowerCase();
+      if (!_subtitleExtensions.contains(ext)) {
+        continue;
+      }
+
+      FileStat stat;
+      try {
+        stat = await entry.stat();
+      } catch (_) {
+        continue;
+      }
+      if (stat.type != FileSystemEntityType.file) {
+        continue;
+      }
+
+      final subtitleBaseName = p.basenameWithoutExtension(filePath).toLowerCase();
+      final bool isLikelyMatch =
+          subtitleBaseName == videoBaseName || subtitleBaseName.contains(videoBaseName);
+
+      items.add({
+        'name': p.basename(filePath),
+        'extension': ext,
+        'size': stat.size,
+        'lastModified': stat.modified.toIso8601String(),
+        'isLikelyMatch': isLikelyMatch,
+      });
+    }
+
+    items.sort((a, b) {
+      final bool aLikely = a['isLikelyMatch'] == true;
+      final bool bLikely = b['isLikelyMatch'] == true;
+      if (aLikely != bLikely) {
+        return bLikely ? 1 : -1;
+      }
+
+      final String aExt = (a['extension'] as String? ?? '').toLowerCase();
+      final String bExt = (b['extension'] as String? ?? '').toLowerCase();
+      final int aExtOrder = _subtitleExtensionPriority[aExt] ?? 999;
+      final int bExtOrder = _subtitleExtensionPriority[bExt] ?? 999;
+      if (aExtOrder != bExtOrder) {
+        return aExtOrder.compareTo(bExtOrder);
+      }
+
+      final String aName = (a['name'] as String? ?? '').toLowerCase();
+      final String bName = (b['name'] as String? ?? '').toLowerCase();
+      return aName.compareTo(bName);
+    });
+
+    return items;
+  }
+
+  Future<Response> buildSubtitleResponse(
+    Request request,
+    SharedEpisodeInfo episode, {
+    required String subtitleName,
+    bool headOnly = false,
+  }) async {
+    final videoPath = episode.historyItem.filePath;
+    if (!_isLocalFilesystemPath(videoPath)) {
+      return Response.notFound('Subtitle not found');
+    }
+
+    final subtitleFile = await _resolveSubtitleFileByName(
+      videoPath: videoPath,
+      subtitleName: subtitleName,
+    );
+    if (subtitleFile == null) {
+      return Response.notFound('Subtitle not found');
+    }
+
+    final totalLength = await subtitleFile.length();
+    final contentType = determineContentType(subtitleFile.path);
+    final contentDisposition =
+        _buildContentDispositionHeader(p.basename(subtitleFile.path));
+    final stream = headOnly ? null : subtitleFile.openRead();
+
+    return Response.ok(
+      stream,
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': '$totalLength',
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'no-cache',
+        'Content-Disposition': contentDisposition,
+      },
+    );
+  }
+
   String _buildContentDispositionHeader(String fileName) {
     String sanitizeAsciiFallback(String value) {
       if (value.isEmpty) return 'file';
@@ -596,5 +727,46 @@ class LocalMediaShareService {
       return 'png';
     }
     return 'png';
+  }
+
+  bool _isLocalFilesystemPath(String path) {
+    final lower = path.toLowerCase();
+    return !lower.startsWith('http://') &&
+        !lower.startsWith('https://') &&
+        !lower.startsWith('jellyfin://') &&
+        !lower.startsWith('emby://');
+  }
+
+  Future<File?> _resolveSubtitleFileByName({
+    required String videoPath,
+    required String subtitleName,
+  }) async {
+    final normalizedName = subtitleName.trim();
+    if (normalizedName.isEmpty) {
+      return null;
+    }
+
+    final sanitizedName = p.basename(normalizedName);
+    if (sanitizedName != normalizedName) {
+      return null;
+    }
+
+    final ext = p.extension(sanitizedName).toLowerCase();
+    if (!_subtitleExtensions.contains(ext)) {
+      return null;
+    }
+
+    final videoFile = File(videoPath);
+    if (!await videoFile.exists()) {
+      return null;
+    }
+
+    final subtitlePath = p.join(videoFile.parent.path, sanitizedName);
+    final subtitleFile = File(subtitlePath);
+    if (!await subtitleFile.exists()) {
+      return null;
+    }
+
+    return subtitleFile;
   }
 }

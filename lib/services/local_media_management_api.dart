@@ -59,6 +59,9 @@ class LocalMediaManagementApi {
     router.get('/browse', _handleBrowse);
     router.get('/stream', _handleStream);
     router.add('HEAD', '/stream', _handleStreamHead);
+    router.get('/subtitles', _handleSubtitles);
+    router.get('/subtitle', _handleSubtitleStream);
+    router.add('HEAD', '/subtitle', _handleSubtitleStreamHead);
 
     router.get('/scan/status', _handleScanStatus);
     router.post('/scan/rescan', _handleRescanAll);
@@ -85,9 +88,20 @@ class LocalMediaManagementApi {
     '.flac',
     '.aac',
     '.wav',
+  };
+  static const Set<String> _subtitleExtensions = {
     '.ass',
     '.ssa',
     '.srt',
+    '.sub',
+    '.sup',
+  };
+  static const Map<String, int> _subtitleExtensionPriority = {
+    '.ass': 0,
+    '.ssa': 1,
+    '.srt': 2,
+    '.sub': 3,
+    '.sup': 4,
   };
 
   Future<Response> _handleListFolders(Request request) async {
@@ -95,7 +109,7 @@ class LocalMediaManagementApi {
       final folders = await _buildFolderPayload(_scanService.scannedFolders);
       final webdav = _webdavService.connections.map((c) => c.toJson()).toList();
       final smb = _smbService.connections.map((c) => c.toJson()).toList();
-      
+
       return _jsonOk({
         'success': true,
         'data': {
@@ -116,7 +130,7 @@ class LocalMediaManagementApi {
       final body = await request.readAsString();
       final payload = json.decode(body) as Map<String, dynamic>;
       final connection = WebDAVConnection.fromJson(payload);
-      
+
       final success = await _webdavService.addConnection(connection);
       if (success) {
         return _jsonOk({'success': true, 'message': 'WebDAV 连接已添加'});
@@ -226,11 +240,13 @@ class LocalMediaManagementApi {
       return _jsonError(HttpStatus.badRequest, 'Invalid JSON payload');
     }
 
-    final name = (payload['name'] ?? payload['connection'] ?? '').toString().trim();
+    final name =
+        (payload['name'] ?? payload['connection'] ?? '').toString().trim();
     final folderPath =
         (payload['path'] ?? payload['folderPath'] ?? '/').toString().trim();
     if (name.isEmpty) {
-      return _jsonError(HttpStatus.badRequest, 'Missing WebDAV connection name');
+      return _jsonError(
+          HttpStatus.badRequest, 'Missing WebDAV connection name');
     }
 
     final connection = _webdavService.getConnection(name);
@@ -278,12 +294,13 @@ class LocalMediaManagementApi {
       final body = await request.readAsString();
       final payload = json.decode(body) as Map<String, dynamic>;
       final connection = SMBConnection.fromJson(payload);
-      
+
       // Check if updating or adding
       final existing = _smbService.getConnection(connection.name);
       bool success;
       if (existing != null) {
-        success = await _smbService.updateConnection(connection.name, connection);
+        success =
+            await _smbService.updateConnection(connection.name, connection);
       } else {
         success = await _smbService.addConnection(connection);
       }
@@ -380,7 +397,8 @@ class LocalMediaManagementApi {
       return _jsonError(HttpStatus.badRequest, 'Invalid JSON payload');
     }
 
-    final name = (payload['name'] ?? payload['connection'] ?? '').toString().trim();
+    final name =
+        (payload['name'] ?? payload['connection'] ?? '').toString().trim();
     final folderPath =
         (payload['path'] ?? payload['folderPath'] ?? '/').toString().trim();
     if (name.isEmpty) {
@@ -467,8 +485,7 @@ class LocalMediaManagementApi {
       final files = await _smbService.listDirectory(connection, folderPath);
       for (final file in files) {
         if (file.isDirectory) {
-          final nested =
-              await _collectSmbVideoFiles(connection, file.path);
+          final nested = await _collectSmbVideoFiles(connection, file.path);
           videoFiles.addAll(nested);
         } else if (_smbService.isVideoFile(file.name)) {
           videoFiles.add(file);
@@ -565,7 +582,6 @@ class LocalMediaManagementApi {
     );
   }
 
-
   Future<Response> _handleAddFolder(Request request) async {
     Map<String, dynamic> payload = const {};
     try {
@@ -661,7 +677,8 @@ class LocalMediaManagementApi {
       }
 
       final entries = <Map<String, dynamic>>[];
-      await for (final entity in directory.list(recursive: false, followLinks: false)) {
+      await for (final entity
+          in directory.list(recursive: false, followLinks: false)) {
         if (entity is Directory) {
           entries.add(await _buildEntryJson(entity, isDirectory: true));
           continue;
@@ -733,7 +750,8 @@ class LocalMediaManagementApi {
 
       final totalLength = await file.length();
       final contentType = _determineContentType(targetPath);
-      final contentDisposition = _buildContentDispositionHeader(p.basename(targetPath));
+      final contentDisposition =
+          _buildContentDispositionHeader(p.basename(targetPath));
       final rangeHeader = request.headers['range'];
 
       if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
@@ -741,8 +759,11 @@ class LocalMediaManagementApi {
         if (match != null) {
           final startStr = match.group(1);
           final endStr = match.group(2);
-          final start = startStr != null && startStr.isNotEmpty ? int.parse(startStr) : 0;
-          final end = endStr != null && endStr.isNotEmpty ? int.parse(endStr) : totalLength - 1;
+          final start =
+              startStr != null && startStr.isNotEmpty ? int.parse(startStr) : 0;
+          final end = endStr != null && endStr.isNotEmpty
+              ? int.parse(endStr)
+              : totalLength - 1;
           if (start >= totalLength) {
             return Response(
               HttpStatus.requestedRangeNotSatisfiable,
@@ -754,7 +775,8 @@ class LocalMediaManagementApi {
           }
           final adjustedEnd = end >= totalLength ? totalLength - 1 : end;
           final chunkSize = adjustedEnd - start + 1;
-          final stream = headOnly ? null : file.openRead(start, adjustedEnd + 1);
+          final stream =
+              headOnly ? null : file.openRead(start, adjustedEnd + 1);
           return Response(
             HttpStatus.partialContent,
             body: stream,
@@ -783,6 +805,157 @@ class LocalMediaManagementApi {
       );
     } catch (e) {
       return Response.internalServerError(body: '文件读取失败: $e');
+    }
+  }
+
+  Future<Response> _handleSubtitles(Request request) async {
+    final rawVideoPath = request.url.queryParameters['path']?.trim();
+    if (rawVideoPath == null || rawVideoPath.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, '缺少 path 参数');
+    }
+
+    final videoPath = p.normalize(rawVideoPath);
+    if (!_isAllowedPath(videoPath)) {
+      return _jsonError(HttpStatus.forbidden, '路径不允许访问');
+    }
+
+    try {
+      final videoFile = await _resolveManagedVideoFile(videoPath);
+      if (videoFile == null) {
+        return _jsonError(HttpStatus.notFound, '视频文件不存在');
+      }
+
+      final videoDir = videoFile.parent;
+      if (!await videoDir.exists()) {
+        return _jsonOk(
+            {'success': true, 'items': const <Map<String, dynamic>>[]});
+      }
+
+      final videoBaseName =
+          p.basenameWithoutExtension(videoFile.path).toLowerCase();
+      final items = <Map<String, dynamic>>[];
+
+      await for (final entry in videoDir.list(followLinks: false)) {
+        if (entry is! File) continue;
+
+        final filePath = entry.path;
+        if (p.normalize(filePath) == p.normalize(videoFile.path)) {
+          continue;
+        }
+
+        final ext = p.extension(filePath).toLowerCase();
+        if (!_subtitleExtensions.contains(ext)) {
+          continue;
+        }
+
+        FileStat stat;
+        try {
+          stat = await entry.stat();
+        } catch (_) {
+          continue;
+        }
+        if (stat.type != FileSystemEntityType.file) {
+          continue;
+        }
+
+        final subtitleBaseName =
+            p.basenameWithoutExtension(filePath).toLowerCase();
+        final isLikelyMatch = subtitleBaseName == videoBaseName ||
+            subtitleBaseName.contains(videoBaseName) ||
+            videoBaseName.contains(subtitleBaseName);
+
+        items.add({
+          'name': p.basename(filePath),
+          'extension': ext,
+          'size': stat.size,
+          'lastModified': stat.modified.toIso8601String(),
+          'isLikelyMatch': isLikelyMatch,
+        });
+      }
+
+      items.sort((a, b) {
+        final bool aLikely = a['isLikelyMatch'] == true;
+        final bool bLikely = b['isLikelyMatch'] == true;
+        if (aLikely != bLikely) {
+          return bLikely ? 1 : -1;
+        }
+
+        final String aExt = (a['extension'] as String? ?? '').toLowerCase();
+        final String bExt = (b['extension'] as String? ?? '').toLowerCase();
+        final int aExtOrder = _subtitleExtensionPriority[aExt] ?? 999;
+        final int bExtOrder = _subtitleExtensionPriority[bExt] ?? 999;
+        if (aExtOrder != bExtOrder) {
+          return aExtOrder.compareTo(bExtOrder);
+        }
+
+        final String aName = (a['name'] as String? ?? '').toLowerCase();
+        final String bName = (b['name'] as String? ?? '').toLowerCase();
+        return aName.compareTo(bName);
+      });
+
+      return _jsonOk({
+        'success': true,
+        'items': items,
+      });
+    } catch (e) {
+      return _jsonError(HttpStatus.internalServerError, '读取字幕列表失败: $e');
+    }
+  }
+
+  Future<Response> _handleSubtitleStream(Request request) async {
+    return _handleSubtitleStreamInternal(request, headOnly: false);
+  }
+
+  Future<Response> _handleSubtitleStreamHead(Request request) async {
+    return _handleSubtitleStreamInternal(request, headOnly: true);
+  }
+
+  Future<Response> _handleSubtitleStreamInternal(
+    Request request, {
+    required bool headOnly,
+  }) async {
+    final rawVideoPath = request.url.queryParameters['path']?.trim();
+    if (rawVideoPath == null || rawVideoPath.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, '缺少 path 参数');
+    }
+
+    final subtitleName = request.url.queryParameters['name']?.trim();
+    if (subtitleName == null || subtitleName.isEmpty) {
+      return _jsonError(HttpStatus.badRequest, '缺少字幕 name 参数');
+    }
+
+    final videoPath = p.normalize(rawVideoPath);
+    if (!_isAllowedPath(videoPath)) {
+      return _jsonError(HttpStatus.forbidden, '路径不允许访问');
+    }
+
+    try {
+      final subtitleFile = await _resolveSubtitleFileByName(
+        videoPath: videoPath,
+        subtitleName: subtitleName,
+      );
+      if (subtitleFile == null) {
+        return Response.notFound('Subtitle not found');
+      }
+
+      final totalLength = await subtitleFile.length();
+      final contentType = _determineContentType(subtitleFile.path);
+      final contentDisposition =
+          _buildContentDispositionHeader(p.basename(subtitleFile.path));
+      final stream = headOnly ? null : subtitleFile.openRead();
+
+      return Response.ok(
+        stream,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': '$totalLength',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-cache',
+          'Content-Disposition': contentDisposition,
+        },
+      );
+    } catch (e) {
+      return Response.internalServerError(body: '字幕读取失败: $e');
     }
   }
 
@@ -962,6 +1135,52 @@ class LocalMediaManagementApi {
     };
   }
 
+  Future<File?> _resolveManagedVideoFile(String targetPath) async {
+    for (final candidate in _pathCandidates(targetPath)) {
+      final file = File(candidate);
+      if (await file.exists()) {
+        return file;
+      }
+    }
+    return null;
+  }
+
+  Future<File?> _resolveSubtitleFileByName({
+    required String videoPath,
+    required String subtitleName,
+  }) async {
+    final normalizedName = subtitleName.trim();
+    if (normalizedName.isEmpty) {
+      return null;
+    }
+
+    final sanitizedName = p.basename(normalizedName);
+    if (sanitizedName != normalizedName) {
+      return null;
+    }
+
+    final ext = p.extension(sanitizedName).toLowerCase();
+    if (!_subtitleExtensions.contains(ext)) {
+      return null;
+    }
+
+    final videoFile = await _resolveManagedVideoFile(videoPath);
+    if (videoFile == null) {
+      return null;
+    }
+
+    final subtitlePath = p.join(videoFile.parent.path, sanitizedName);
+    if (!_isAllowedPath(subtitlePath)) {
+      return null;
+    }
+
+    final subtitleFile = File(subtitlePath);
+    if (!await subtitleFile.exists()) {
+      return null;
+    }
+    return subtitleFile;
+  }
+
   String _determineContentType(String filePath) {
     final ext = p.extension(filePath).toLowerCase();
     switch (ext) {
@@ -1006,7 +1225,8 @@ class LocalMediaManagementApi {
       final buffer = StringBuffer();
       for (final codeUnit in value.codeUnits) {
         final bool isAsciiPrintable = codeUnit >= 0x20 && codeUnit <= 0x7E;
-        final bool isForbidden = codeUnit == 0x22 /* " */ || codeUnit == 0x5C /* \\ */;
+        final bool isForbidden =
+            codeUnit == 0x22 /* " */ || codeUnit == 0x5C /* \\ */;
         buffer.writeCharCode(
           isAsciiPrintable && !isForbidden ? codeUnit : 0x5F /* _ */,
         );

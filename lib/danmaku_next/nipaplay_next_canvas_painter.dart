@@ -1,7 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/video_player_state.dart';
 
 class NipaPlayNextCanvasPainter extends CustomPainter {
   NipaPlayNextCanvasPainter({
@@ -10,6 +12,8 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     required this.fontFamily,
     required this.fontFamilyFallback,
     required this.locale,
+    required this.outlineStyle,
+    required this.shadowStyle,
   });
 
   final List<PositionedDanmakuItem> items;
@@ -17,10 +21,13 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
   final String? fontFamily;
   final List<String>? fontFamilyFallback;
   final Locale? locale;
+  final DanmakuOutlineStyle outlineStyle;
+  final DanmakuShadowStyle shadowStyle;
 
   static const int _cacheLimit = 2000;
   static final Map<_TextCacheKey, TextPainter> _fillCache = {};
   static final Map<_TextCacheKey, TextPainter> _strokeCache = {};
+  static final Map<_TextCacheKey, TextPainter> _shadowCache = {};
   static final Paint _selfSendPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5
@@ -34,22 +41,52 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       final content = item.content;
       final adjustedFontSize = fontSize * content.fontSizeMultiplier;
       final strokeColor = _getStrokeColor(content.color);
+      final shadowConfig = _resolveShadowStyle(adjustedFontSize);
+      final strokeWidth = _resolveStrokeWidth(adjustedFontSize);
+      final uniformOutlineRadius =
+          _resolveUniformOutlineRadius(adjustedFontSize);
 
-      final fillPainter = _getPainter(
+      final fillPainter = _getFillPainter(
         content: content,
         fontSize: adjustedFontSize,
         color: content.color,
-        isStroke: false,
-      );
-      final strokePainter = _getPainter(
-        content: content,
-        fontSize: adjustedFontSize,
-        color: strokeColor,
-        isStroke: true,
       );
 
       final baseOffset = Offset(item.x, item.y);
-      strokePainter.paint(canvas, baseOffset);
+      if (shadowConfig != null) {
+        final shadowPainter = _getShadowPainter(
+          content: content,
+          fontSize: adjustedFontSize,
+          color: Color.fromRGBO(0, 0, 0, shadowConfig.opacity),
+          blurSigma: shadowConfig.blurSigma,
+        );
+        shadowPainter.paint(canvas, baseOffset + shadowConfig.offset);
+      }
+
+      switch (outlineStyle) {
+        case DanmakuOutlineStyle.none:
+          break;
+        case DanmakuOutlineStyle.stroke:
+          final strokePainter = _getStrokePainter(
+            content: content,
+            fontSize: adjustedFontSize,
+            color: strokeColor,
+            strokeWidth: strokeWidth,
+          );
+          strokePainter.paint(canvas, baseOffset);
+          break;
+        case DanmakuOutlineStyle.uniform:
+          final outlinePainter = _getFillPainter(
+            content: content,
+            fontSize: adjustedFontSize,
+            color: strokeColor,
+          );
+          for (final offset in _buildUniformOffsets(uniformOutlineRadius)) {
+            outlinePainter.paint(canvas, baseOffset + offset);
+          }
+          break;
+      }
+
       if (content.isMe) {
         final rect = Rect.fromLTWH(
           baseOffset.dx - 2,
@@ -63,11 +100,55 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     }
   }
 
+  TextPainter _getFillPainter({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required Color color,
+  }) {
+    return _getPainter(
+      content: content,
+      fontSize: fontSize,
+      color: color,
+      variant: _PainterVariant.fill,
+    );
+  }
+
+  TextPainter _getStrokePainter({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required Color color,
+    required double strokeWidth,
+  }) {
+    return _getPainter(
+      content: content,
+      fontSize: fontSize,
+      color: color,
+      variant: _PainterVariant.stroke,
+      effectValue: strokeWidth,
+    );
+  }
+
+  TextPainter _getShadowPainter({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required Color color,
+    required double blurSigma,
+  }) {
+    return _getPainter(
+      content: content,
+      fontSize: fontSize,
+      color: color,
+      variant: _PainterVariant.shadow,
+      effectValue: blurSigma,
+    );
+  }
+
   TextPainter _getPainter({
     required DanmakuContentItem content,
     required double fontSize,
     required Color color,
-    required bool isStroke,
+    required _PainterVariant variant,
+    double effectValue = 0.0,
   }) {
     final fallbackKey = fontFamilyFallback?.join('\u0000');
     final key = _TextCacheKey(
@@ -75,31 +156,50 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       countText: content.countText,
       fontSize: fontSize,
       color: color.value,
-      isStroke: isStroke,
+      variant: variant,
+      effectValue: effectValue,
       fontFamily: fontFamily,
       fontFamilyFallbackKey: fallbackKey,
       locale: locale,
     );
 
-    final cache = isStroke ? _strokeCache : _fillCache;
+    final cache = switch (variant) {
+      _PainterVariant.fill => _fillCache,
+      _PainterVariant.stroke => _strokeCache,
+      _PainterVariant.shadow => _shadowCache,
+    };
     final cached = cache[key];
     if (cached != null) return cached;
 
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = globals.strokeWidth * 2
-      ..color = color;
+    final paint = Paint()
+      ..color = color
+      ..isAntiAlias = true;
+
+    if (variant == _PainterVariant.stroke) {
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = effectValue
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round;
+    } else {
+      paint.style = PaintingStyle.fill;
+      if (variant == _PainterVariant.shadow && effectValue > 0) {
+        paint.maskFilter = MaskFilter.blur(BlurStyle.normal, effectValue);
+      }
+    }
+
+    final bool isFill = variant == _PainterVariant.fill;
 
     final baseStyle = TextStyle(
       fontSize: fontSize,
       fontWeight: FontWeight.normal,
-      color: isStroke ? null : color,
-      foreground: isStroke ? strokePaint : null,
+      color: isFill ? color : null,
+      foreground: isFill ? null : paint,
       fontFamily: fontFamily,
       fontFamilyFallback: fontFamilyFallback,
     );
 
-    final span = _buildSpan(content, baseStyle, isStroke);
+    final span = _buildSpan(content, baseStyle, !isFill);
 
     final painter = TextPainter(
       text: span,
@@ -113,6 +213,55 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     }
     cache[key] = painter;
     return painter;
+  }
+
+  List<Offset> _buildUniformOffsets(double radius) {
+    return <Offset>[
+      Offset(-radius, 0),
+      Offset(radius, 0),
+      Offset(0, -radius),
+      Offset(0, radius),
+      Offset(-radius, -radius),
+      Offset(radius, -radius),
+      Offset(-radius, radius),
+      Offset(radius, radius),
+    ];
+  }
+
+  _ShadowConfig? _resolveShadowStyle(double targetFontSize) {
+    final double unit = _resolveUniformOutlineRadius(targetFontSize);
+    switch (shadowStyle) {
+      case DanmakuShadowStyle.none:
+        return null;
+      case DanmakuShadowStyle.soft:
+        return _ShadowConfig(
+          offset: Offset(unit * 0.8, unit * 0.8),
+          blurSigma: unit * 0.9,
+          opacity: 0.34,
+        );
+      case DanmakuShadowStyle.medium:
+        return _ShadowConfig(
+          offset: Offset(unit, unit),
+          blurSigma: unit * 1.2,
+          opacity: 0.44,
+        );
+      case DanmakuShadowStyle.strong:
+        return _ShadowConfig(
+          offset: Offset(unit * 1.2, unit * 1.2),
+          blurSigma: unit * 1.5,
+          opacity: 0.55,
+        );
+    }
+  }
+
+  double _resolveStrokeWidth(double targetFontSize) {
+    final width = targetFontSize * 0.06;
+    return width.clamp(1.0, 2.6);
+  }
+
+  double _resolveUniformOutlineRadius(double targetFontSize) {
+    final radius = targetFontSize * 0.045;
+    return math.max(0.8, radius.clamp(0.8, 2.0));
   }
 
   TextSpan _buildSpan(
@@ -143,8 +292,10 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
   }
 
   Color _getStrokeColor(Color textColor) {
-    final luminance =
-        (0.299 * textColor.red + 0.587 * textColor.green + 0.114 * textColor.blue) / 255;
+    final luminance = (0.299 * textColor.red +
+            0.587 * textColor.green +
+            0.114 * textColor.blue) /
+        255;
     return luminance < 0.2 ? Colors.white : Colors.black;
   }
 
@@ -153,9 +304,29 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     return oldDelegate.items != items ||
         oldDelegate.fontSize != fontSize ||
         oldDelegate.fontFamily != fontFamily ||
+        oldDelegate.outlineStyle != outlineStyle ||
+        oldDelegate.shadowStyle != shadowStyle ||
         oldDelegate.locale != locale ||
         !_listEquals(oldDelegate.fontFamilyFallback, fontFamilyFallback);
   }
+}
+
+class _ShadowConfig {
+  const _ShadowConfig({
+    required this.offset,
+    required this.blurSigma,
+    required this.opacity,
+  });
+
+  final Offset offset;
+  final double blurSigma;
+  final double opacity;
+}
+
+enum _PainterVariant {
+  fill,
+  stroke,
+  shadow,
 }
 
 bool _listEquals(List<String>? a, List<String>? b) {
@@ -174,7 +345,8 @@ class _TextCacheKey {
     required this.countText,
     required this.fontSize,
     required this.color,
-    required this.isStroke,
+    required this.variant,
+    required this.effectValue,
     required this.fontFamily,
     required this.fontFamilyFallbackKey,
     required this.locale,
@@ -184,7 +356,8 @@ class _TextCacheKey {
   final String? countText;
   final double fontSize;
   final int color;
-  final bool isStroke;
+  final _PainterVariant variant;
+  final double effectValue;
   final String? fontFamily;
   final String? fontFamilyFallbackKey;
   final Locale? locale;
@@ -196,20 +369,21 @@ class _TextCacheKey {
         other.countText == countText &&
         other.fontSize == fontSize &&
         other.color == color &&
-        other.isStroke == isStroke &&
+        other.variant == variant &&
+        other.effectValue == effectValue &&
         other.fontFamily == fontFamily &&
         other.fontFamilyFallbackKey == fontFamilyFallbackKey &&
         other.locale == locale;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(
+  int get hashCode => Object.hash(
         text,
         countText,
         fontSize,
         color,
-        isStroke,
+        variant,
+        effectValue,
         fontFamily,
         fontFamilyFallbackKey,
         locale,

@@ -3,6 +3,7 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_canvas_painter.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_engine.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
 
 const Locale _danmakuLocale = Locale.fromSubtags(
   languageCode: 'zh',
@@ -21,6 +22,9 @@ class NipaPlayNextOverlay extends StatefulWidget {
   final double scrollDurationSeconds;
   final bool allowStacking;
   final bool mergeDanmaku;
+  final String customFontFamily;
+  final DanmakuOutlineStyle outlineStyle;
+  final DanmakuShadowStyle shadowStyle;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
 
   const NipaPlayNextOverlay({
@@ -35,6 +39,9 @@ class NipaPlayNextOverlay extends StatefulWidget {
     required this.scrollDurationSeconds,
     required this.allowStacking,
     required this.mergeDanmaku,
+    required this.customFontFamily,
+    required this.outlineStyle,
+    required this.shadowStyle,
     this.onLayoutCalculated,
   });
 
@@ -102,7 +109,10 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
         final theme = Theme.of(context);
         final themeFontFamily = theme.textTheme.bodyMedium?.fontFamily ??
             theme.textTheme.bodyLarge?.fontFamily;
-        final fontFamily = textStyle.fontFamily ?? themeFontFamily;
+        final customFontFamily = widget.customFontFamily.trim();
+        final fontFamily = customFontFamily.isNotEmpty
+            ? customFontFamily
+            : (textStyle.fontFamily ?? themeFontFamily);
         final fontFamilyFallback = textStyle.fontFamilyFallback;
 
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -129,7 +139,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
         DanmakuNextLog.d(
           'Overlay',
           'build size=${size.width.toStringAsFixed(1)}x${size.height.toStringAsFixed(1)} '
-          'time=${effectiveTime.toStringAsFixed(2)} items=${positioned.length}',
+              'time=${effectiveTime.toStringAsFixed(2)} items=${positioned.length}',
           throttle: const Duration(seconds: 1),
         );
 
@@ -150,6 +160,8 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
               fontFamily: fontFamily,
               fontFamilyFallback: fontFamilyFallback,
               locale: _danmakuLocale,
+              outlineStyle: widget.outlineStyle,
+              shadowStyle: widget.shadowStyle,
             ),
             size: size,
           ),

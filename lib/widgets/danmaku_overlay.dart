@@ -112,8 +112,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             blockScrollDanmaku: videoState.blockScrollDanmaku,
             blockWords: videoState.danmakuBlockWords,
             danmakuList: activeDanmakuList,
-            currentTime: widget.currentPosition / 1000 +
-                combinedTimeOffset,
+            currentTime: widget.currentPosition / 1000 + combinedTimeOffset,
             isPlaying: widget.isPlaying,
             playbackRate: videoState.effectivePlaybackRate,
             scrollDurationSeconds: scrollDuration,
@@ -131,9 +130,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             timeOffset: combinedTimeOffset,
             scrollDurationSeconds: scrollDuration,
             allowStacking: false,
-            mergeDanmaku:
-                widget.isVisible && videoState.mergeDanmaku,
-            );
+            mergeDanmaku: widget.isVisible && videoState.mergeDanmaku,
+            customFontFamily: videoState.danmakuFontFamily,
+            outlineStyle: videoState.danmakuOutlineStyle,
+            shadowStyle: videoState.danmakuShadowStyle,
+          );
         }
 
         // Fallback to CPU rendering

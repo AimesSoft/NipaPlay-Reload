@@ -93,6 +93,33 @@ class DandanplayRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
   String get sourceLabel => '弹弹play 远程媒体库';
 }
 
+class SharedRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
+  final String shareId;
+  final String fileName;
+  final Uri subtitleUri;
+  final String? authorizationHeader;
+  final bool isLikelyMatch;
+
+  @override
+  final String name;
+
+  @override
+  final String extension;
+
+  const SharedRemoteSubtitleCandidate({
+    required this.shareId,
+    required this.fileName,
+    required this.subtitleUri,
+    required this.authorizationHeader,
+    required this.isLikelyMatch,
+    required this.name,
+    required this.extension,
+  });
+
+  @override
+  String get sourceLabel => '共享媒体库';
+}
+
 class RemoteSubtitleService {
   RemoteSubtitleService._();
 
@@ -100,6 +127,8 @@ class RemoteSubtitleService {
 
   bool isPotentialRemoteVideoPath(String videoPath) {
     if (videoPath.isEmpty) return false;
+    if (_parseManagedLibraryStreamUrl(videoPath) != null) return true;
+    if (_parseSharedRemoteStreamUrl(videoPath) != null) return true;
     final resolvedPath = _resolveManagedStreamPath(videoPath);
     if (resolvedPath.isEmpty) return false;
     if (MediaSourceUtils.isSmbPath(resolvedPath)) return true;
@@ -123,6 +152,16 @@ class RemoteSubtitleService {
   Future<List<RemoteSubtitleCandidate>> listCandidatesForVideo(
       String videoPath) async {
     if (kIsWeb || videoPath.isEmpty) return const [];
+
+    final managedStream = _parseManagedLibraryStreamUrl(videoPath);
+    if (managedStream != null) {
+      return _listManagedLibraryCandidates(managedStream);
+    }
+
+    final sharedStream = _parseSharedRemoteStreamUrl(videoPath);
+    if (sharedStream != null) {
+      return _listSharedRemoteCandidates(sharedStream);
+    }
 
     final resolvedPath = _resolveManagedStreamPath(videoPath);
 
@@ -176,6 +215,8 @@ class RemoteSubtitleService {
         'smb:${candidate.connection.name}:${candidate.smbPath}',
       DandanplayRemoteSubtitleCandidate() =>
         'dandanplay:${candidate.entryId}:${candidate.fileName}',
+      SharedRemoteSubtitleCandidate() =>
+        'shared:${candidate.subtitleUri.replace(userInfo: '', fragment: '').toString()}',
     };
 
     final hash = sha1.convert(utf8.encode(cacheKey)).toString();
@@ -222,6 +263,10 @@ class RemoteSubtitleService {
       await _downloadDandanplaySubtitle(candidate, destination);
       return;
     }
+    if (candidate is SharedRemoteSubtitleCandidate) {
+      await _downloadSharedRemoteSubtitle(candidate, destination);
+      return;
+    }
     throw UnsupportedError('不支持的远程字幕来源');
   }
 
@@ -256,6 +301,255 @@ class RemoteSubtitleService {
     return candidates;
   }
 
+  _ManagedLibraryStreamInfo? _parseManagedLibraryStreamUrl(String videoUrl) {
+    final uri = Uri.tryParse(videoUrl);
+    if (uri == null) return null;
+    final lowerPath = uri.path.toLowerCase();
+    if (!lowerPath.contains('/api/media/local/manage/stream')) {
+      return null;
+    }
+    final videoPath = uri.queryParameters['path']?.trim();
+    if (videoPath == null || videoPath.isEmpty) {
+      return null;
+    }
+    return _ManagedLibraryStreamInfo(
+      streamUri: uri,
+      videoPath: videoPath,
+    );
+  }
+
+  _SharedRemoteStreamInfo? _parseSharedRemoteStreamUrl(String videoUrl) {
+    final uri = Uri.tryParse(videoUrl);
+    if (uri == null) return null;
+
+    final match =
+        RegExp(r'^(.*?/api/media/local/share/episodes/([^/]+)/)stream$')
+            .firstMatch(uri.path);
+    if (match == null) return null;
+
+    final pathPrefix = match.group(1);
+    final shareId = match.group(2);
+    if (pathPrefix == null ||
+        pathPrefix.isEmpty ||
+        shareId == null ||
+        shareId.isEmpty) {
+      return null;
+    }
+
+    return _SharedRemoteStreamInfo(
+      streamUri: uri,
+      shareId: shareId,
+      subtitlesPath: '${pathPrefix}subtitles',
+      subtitlePath: '${pathPrefix}subtitle',
+    );
+  }
+
+  Future<List<RemoteSubtitleCandidate>> _listManagedLibraryCandidates(
+    _ManagedLibraryStreamInfo info,
+  ) async {
+    final authHeader = _buildBasicAuthHeader(info.streamUri);
+    final requestUri = info.streamUri.replace(
+      userInfo: '',
+      path: '/api/media/local/manage/subtitles',
+      queryParameters: {'path': info.videoPath},
+      fragment: '',
+    );
+
+    final headers = <String, String>{
+      'accept': 'application/json',
+      'user-agent': 'NipaPlay',
+    };
+    if (authHeader != null) {
+      headers['authorization'] = authHeader;
+    }
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(milliseconds: 10000),
+        receiveTimeout: const Duration(milliseconds: 15000),
+        sendTimeout: const Duration(milliseconds: 10000),
+        followRedirects: true,
+        responseType: ResponseType.plain,
+        headers: headers,
+      ),
+    );
+
+    Response<String> response;
+    try {
+      response = await dio.get<String>(requestUri.toString());
+    } catch (_) {
+      return const [];
+    }
+
+    final status = response.statusCode ?? 0;
+    if (status != 200) {
+      return const [];
+    }
+
+    final body = response.data;
+    if (body == null || body.trim().isEmpty) {
+      return const [];
+    }
+
+    Map<String, dynamic> payload;
+    try {
+      final decoded = json.decode(body);
+      payload = decoded is Map<String, dynamic>
+          ? decoded
+          : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
+    } catch (_) {
+      return const [];
+    }
+    if (payload.isEmpty) {
+      return const [];
+    }
+
+    dynamic rawItems = payload['items'];
+    if (rawItems is! List) {
+      final data = payload['data'];
+      if (data is Map<String, dynamic>) {
+        rawItems = data['items'];
+      } else if (data is Map) {
+        rawItems = data['items'];
+      }
+    }
+    if (rawItems is! List) {
+      return const [];
+    }
+
+    final candidates = <RemoteSubtitleCandidate>[];
+    for (final item in rawItems) {
+      if (item is! Map) continue;
+      final map = item.cast<String, dynamic>();
+      final name = (map['name']?.toString() ?? '').trim();
+      if (name.isEmpty) continue;
+      final ext = p.extension(name).toLowerCase();
+      if (!_subtitleExtensions.contains(ext)) continue;
+
+      final subtitleUri = info.streamUri.replace(
+        path: '/api/media/local/manage/subtitle',
+        queryParameters: {
+          'path': info.videoPath,
+          'name': name,
+        },
+        fragment: '',
+      );
+
+      candidates.add(
+        SharedRemoteSubtitleCandidate(
+          shareId: 'manage',
+          fileName: name,
+          subtitleUri: subtitleUri,
+          authorizationHeader: authHeader,
+          isLikelyMatch: map['isLikelyMatch'] == true,
+          name: name,
+          extension: ext,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) => a.name.compareTo(b.name));
+    return candidates;
+  }
+
+  Future<List<RemoteSubtitleCandidate>> _listSharedRemoteCandidates(
+    _SharedRemoteStreamInfo info,
+  ) async {
+    final authHeader = _buildBasicAuthHeader(info.streamUri);
+    final requestUri = info.streamUri.replace(
+      userInfo: '',
+      path: info.subtitlesPath,
+      query: '',
+      queryParameters: null,
+      fragment: '',
+    );
+
+    final headers = <String, String>{
+      'accept': 'application/json',
+      'user-agent': 'NipaPlay',
+    };
+    if (authHeader != null) {
+      headers['authorization'] = authHeader;
+    }
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(milliseconds: 10000),
+        receiveTimeout: const Duration(milliseconds: 15000),
+        sendTimeout: const Duration(milliseconds: 10000),
+        followRedirects: true,
+        responseType: ResponseType.plain,
+        headers: headers,
+      ),
+    );
+
+    Response<String> response;
+    try {
+      response = await dio.get<String>(requestUri.toString());
+    } catch (_) {
+      return const [];
+    }
+
+    final status = response.statusCode ?? 0;
+    if (status != 200) {
+      return const [];
+    }
+
+    final body = response.data;
+    if (body == null || body.trim().isEmpty) {
+      return const [];
+    }
+
+    Map<String, dynamic> payload;
+    try {
+      final decoded = json.decode(body);
+      payload = decoded is Map<String, dynamic>
+          ? decoded
+          : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
+    } catch (_) {
+      return const [];
+    }
+    if (payload.isEmpty) {
+      return const [];
+    }
+
+    final rawItems = payload['items'];
+    if (rawItems is! List) {
+      return const [];
+    }
+
+    final candidates = <RemoteSubtitleCandidate>[];
+    for (final item in rawItems) {
+      if (item is! Map) continue;
+      final map = item.cast<String, dynamic>();
+      final name = (map['name']?.toString() ?? '').trim();
+      if (name.isEmpty) continue;
+      final ext = p.extension(name).toLowerCase();
+      if (!_subtitleExtensions.contains(ext)) continue;
+
+      final subtitleUri = info.streamUri.replace(
+        path: info.subtitlePath,
+        queryParameters: {'name': name},
+        fragment: '',
+      );
+
+      candidates.add(
+        SharedRemoteSubtitleCandidate(
+          shareId: info.shareId,
+          fileName: name,
+          subtitleUri: subtitleUri,
+          authorizationHeader: authHeader,
+          isLikelyMatch: map['isLikelyMatch'] == true,
+          name: name,
+          extension: ext,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) => a.name.compareTo(b.name));
+    return candidates;
+  }
+
   Future<List<RemoteSubtitleCandidate>> _listWebDavCandidates(
       String videoUrl) async {
     await WebDAVService.instance.initialize();
@@ -266,8 +560,8 @@ class RemoteSubtitleService {
     if (resolved == null) return const [];
 
     final directory = _posixDirname(resolved.relativePath);
-    final entries =
-        await WebDAVService.instance.listDirectoryAll(resolved.connection, directory);
+    final entries = await WebDAVService.instance
+        .listDirectoryAll(resolved.connection, directory);
 
     final candidates = <RemoteSubtitleCandidate>[];
     for (final entry in entries) {
@@ -402,14 +696,28 @@ class RemoteSubtitleService {
     return 0;
   }
 
+  String? _buildBasicAuthHeader(Uri uri) {
+    if (uri.userInfo.isEmpty) {
+      return null;
+    }
+    final parts = uri.userInfo.split(':');
+    final username = Uri.decodeComponent(parts.first);
+    final password =
+        parts.length > 1 ? Uri.decodeComponent(parts.sublist(1).join(':')) : '';
+    if (username.trim().isEmpty && password.trim().isEmpty) {
+      return null;
+    }
+    final credentials = '$username:$password';
+    return 'Basic ${base64Encode(utf8.encode(credentials))}';
+  }
+
   String _normalizeWebDavUri(Uri uri) {
     final scheme = uri.scheme.toLowerCase();
     if (scheme == 'webdavs' || scheme == 'davs') {
       return uri.replace(scheme: 'https').toString();
     }
     if (scheme == 'webdav' || scheme == 'dav') {
-      final resolvedScheme =
-          uri.hasPort && uri.port == 443 ? 'https' : 'http';
+      final resolvedScheme = uri.hasPort && uri.port == 443 ? 'https' : 'http';
       return uri.replace(scheme: resolvedScheme).toString();
     }
     return uri.toString();
@@ -484,7 +792,8 @@ class RemoteSubtitleService {
     return path.replaceAll(RegExp(r'/+'), '/');
   }
 
-  Future<List<RemoteSubtitleCandidate>> _listSmbCandidates(String videoUrl) async {
+  Future<List<RemoteSubtitleCandidate>> _listSmbCandidates(
+      String videoUrl) async {
     final parsed = _parseSmbProxyStreamUrl(videoUrl);
     if (parsed == null) return const [];
 
@@ -493,7 +802,8 @@ class RemoteSubtitleService {
     if (connection == null) return const [];
 
     final directory = _posixDirname(parsed.smbPath);
-    final entries = await SMBService.instance.listDirectoryAll(connection, directory);
+    final entries =
+        await SMBService.instance.listDirectoryAll(connection, directory);
 
     final candidates = <RemoteSubtitleCandidate>[];
     for (final entry in entries) {
@@ -516,8 +826,8 @@ class RemoteSubtitleService {
 
   Future<void> _downloadWebDavSubtitle(
       WebDavRemoteSubtitleCandidate candidate, File destination) async {
-    final rawUrl =
-        WebDAVService.instance.getFileUrl(candidate.connection, candidate.remotePath);
+    final rawUrl = WebDAVService.instance
+        .getFileUrl(candidate.connection, candidate.remotePath);
     final rawUri = Uri.parse(rawUrl);
     final sanitized = rawUri.replace(userInfo: '');
 
@@ -606,12 +916,48 @@ class RemoteSubtitleService {
 
   Future<void> _downloadDandanplaySubtitle(
       DandanplayRemoteSubtitleCandidate candidate, File destination) async {
-    final data = await DandanplayRemoteService.instance.downloadSubtitleFileBytes(
+    final data =
+        await DandanplayRemoteService.instance.downloadSubtitleFileBytes(
       candidate.entryId,
       candidate.fileName,
     );
     if (data.isEmpty) {
       throw Exception('弹弹play 返回空字幕内容');
+    }
+    await destination.writeAsBytes(data, flush: true);
+  }
+
+  Future<void> _downloadSharedRemoteSubtitle(
+      SharedRemoteSubtitleCandidate candidate, File destination) async {
+    final headers = <String, String>{
+      'user-agent': 'NipaPlay',
+      'accept': '*/*',
+    };
+    if (candidate.authorizationHeader != null &&
+        candidate.authorizationHeader!.isNotEmpty) {
+      headers['authorization'] = candidate.authorizationHeader!;
+    }
+
+    final requestUri = candidate.subtitleUri.replace(userInfo: '');
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(milliseconds: 10000),
+        receiveTimeout: const Duration(milliseconds: 45000),
+        sendTimeout: const Duration(milliseconds: 10000),
+        followRedirects: true,
+        responseType: ResponseType.bytes,
+        headers: headers,
+      ),
+    );
+
+    final response = await dio.get<List<int>>(requestUri.toString());
+    final status = response.statusCode ?? 0;
+    if (status != 200 && status != 206) {
+      throw Exception('共享媒体字幕下载失败 (HTTP $status)');
+    }
+    final data = response.data;
+    if (data == null || data.isEmpty) {
+      throw Exception('共享媒体字幕返回空内容');
     }
     await destination.writeAsBytes(data, flush: true);
   }
@@ -642,7 +988,10 @@ class RemoteSubtitleService {
 
     final connName = uri.queryParameters['conn']?.trim();
     final smbPath = uri.queryParameters['path']?.trim();
-    if (connName == null || connName.isEmpty || smbPath == null || smbPath.isEmpty) {
+    if (connName == null ||
+        connName.isEmpty ||
+        smbPath == null ||
+        smbPath.isEmpty) {
       return null;
     }
     return _SmbProxyStreamUrl(connName: connName, smbPath: smbPath);
@@ -656,5 +1005,29 @@ class _SmbProxyStreamUrl {
   const _SmbProxyStreamUrl({
     required this.connName,
     required this.smbPath,
+  });
+}
+
+class _ManagedLibraryStreamInfo {
+  final Uri streamUri;
+  final String videoPath;
+
+  const _ManagedLibraryStreamInfo({
+    required this.streamUri,
+    required this.videoPath,
+  });
+}
+
+class _SharedRemoteStreamInfo {
+  final Uri streamUri;
+  final String shareId;
+  final String subtitlesPath;
+  final String subtitlePath;
+
+  const _SharedRemoteStreamInfo({
+    required this.streamUri,
+    required this.shareId,
+    required this.subtitlesPath,
+    required this.subtitlePath,
   });
 }

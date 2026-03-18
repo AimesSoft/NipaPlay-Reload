@@ -107,8 +107,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       color: backgroundColor,
       child: Stack(
         children: [
-          Consumer4<SharedRemoteLibraryProvider, JellyfinProvider,
-              EmbyProvider, DandanplayRemoteProvider>(
+          Consumer4<SharedRemoteLibraryProvider, JellyfinProvider, EmbyProvider,
+              DandanplayRemoteProvider>(
             builder: (
               context,
               sharedProvider,
@@ -586,7 +586,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       context,
                       label: '库管理',
                       icon: CupertinoIcons.folder,
-                      onPressed: () => _showRemoteLibraryManagementBottomSheet(provider),
+                      onPressed: () =>
+                          _showRemoteLibraryManagementBottomSheet(provider),
                     ),
                     _buildActionButton(
                       context,
@@ -741,8 +742,8 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
     bool primary = false,
   }) {
     final bool enabled = onPressed != null;
-    final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
+    final Color primaryColor = CupertinoDynamicColor.resolve(
+        CupertinoTheme.of(context).primaryColor, context);
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -1008,11 +1009,9 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           );
           return;
         }
-        playbackSession =
-            await JellyfinService.instance.createPlaybackSession(
+        playbackSession = await JellyfinService.instance.createPlaybackSession(
           itemId: jellyfinId,
-          startPositionMs:
-              result.lastPosition > 0 ? result.lastPosition : null,
+          startPositionMs: result.lastPosition > 0 ? result.lastPosition : null,
         );
       } else if (result.filePath.startsWith('emby://')) {
         final embyPath = result.filePath.replaceFirst('emby://', '');
@@ -1029,8 +1028,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
         }
         playbackSession = await EmbyService.instance.createPlaybackSession(
           itemId: embyId,
-          startPositionMs:
-              result.lastPosition > 0 ? result.lastPosition : null,
+          startPositionMs: result.lastPosition > 0 ? result.lastPosition : null,
         );
       }
     } catch (e) {
@@ -1095,9 +1093,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: hasExisting
-            ? '弹弹play 远程服务配置已更新'
-            : '弹弹play 远程服务已连接',
+        message: hasExisting ? '弹弹play 远程服务配置已更新' : '弹弹play 远程服务已连接',
         type: AdaptiveSnackBarType.success,
       );
     } catch (e) {
@@ -1148,8 +1144,7 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
   Future<void> _showRemoteLibraryManagementBottomSheet(
       SharedRemoteLibraryProvider provider) async {
     final host = provider.activeHost;
-    final label =
-        host?.displayName ?? host?.baseUrl ?? '共享媒体库';
+    final label = host?.displayName ?? host?.baseUrl ?? '共享媒体库';
     await CupertinoBottomSheet.show(
       context: context,
       title: '共享库管理',
@@ -1648,8 +1643,8 @@ class _CupertinoLocalMediaLibraryCardState
 
   Widget _buildImportButton(BuildContext context) {
     final bool enabled = !_isImporting;
-    final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
+    final Color primaryColor = CupertinoDynamicColor.resolve(
+        CupertinoTheme.of(context).primaryColor, context);
     final Color textColor = CupertinoColors.white;
 
     final child = Container(
@@ -1809,8 +1804,8 @@ class _CupertinoLocalMediaLibraryCardState
     bool primary = false,
   }) {
     final bool enabled = onPressed != null;
-    final Color primaryColor =
-        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
+    final Color primaryColor = CupertinoDynamicColor.resolve(
+        CupertinoTheme.of(context).primaryColor, context);
     final Color secondaryBackground =
         CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
     final Color textColor = primary
@@ -2084,8 +2079,7 @@ class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
         if (!jellyfinProvider.isConnected) {
           throw '未连接到 Jellyfin 服务器';
         }
-        playbackSession =
-            await JellyfinService.instance.createPlaybackSession(
+        playbackSession = await JellyfinService.instance.createPlaybackSession(
           itemId: jellyfinId,
           startPositionMs:
               historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
@@ -2149,8 +2143,9 @@ class _LocalMediaLibrarySheetState extends State<_LocalMediaLibrarySheet> {
       subtitle: historyItem.episodeTitle ?? episode.title,
       animeId: historyItem.animeId ?? summary.animeId,
       playbackSession: playbackSession,
-      episodeId:
-          historyItem.episodeId ?? episode.episodeId ?? episode.shareId.hashCode,
+      episodeId: historyItem.episodeId ??
+          episode.episodeId ??
+          episode.shareId.hashCode,
       historyItem: historyItem,
     );
   }
@@ -2694,8 +2689,8 @@ class _CupertinoLibraryManagementSheetState
       CupertinoColors.secondaryLabel,
       context,
     );
-    final progressColor =
-        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
+    final progressColor = CupertinoDynamicColor.resolve(
+        CupertinoTheme.of(context).primaryColor, context);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2947,9 +2942,8 @@ class _CupertinoLibraryManagementSheetState
       _showSnack('Web 端暂不支持浏览本地文件夹');
       return;
     }
-    final displayName = p.basename(folderPath).isEmpty
-        ? '本地'
-        : p.basename(folderPath);
+    final displayName =
+        p.basename(folderPath).isEmpty ? '本地' : p.basename(folderPath);
     await CupertinoBottomSheet.show(
       context: context,
       title: '文件浏览',
@@ -3266,8 +3260,8 @@ class _CupertinoLibraryManagementSheetState
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    final accentColor =
-        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
+    final accentColor = CupertinoDynamicColor.resolve(
+        CupertinoTheme.of(context).primaryColor, context);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
@@ -3319,8 +3313,8 @@ class _CupertinoLibraryManagementSheetState
       final isLoading = _loadingLocalFolders.contains(dirPath);
       final labelColor =
           CupertinoDynamicColor.resolve(CupertinoColors.label, context);
-      final subtitleColor =
-          CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+      final subtitleColor = CupertinoDynamicColor.resolve(
+          CupertinoColors.secondaryLabel, context);
 
       return Column(
         children: [
@@ -3387,8 +3381,8 @@ class _CupertinoLibraryManagementSheetState
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final subtitleColor =
         CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
-    final accentColor =
-        CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context);
+    final accentColor = CupertinoDynamicColor.resolve(
+        CupertinoTheme.of(context).primaryColor, context);
     final destructiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.destructiveRed, context);
     final indentation = 16.0 + depth * 14;
@@ -3398,8 +3392,7 @@ class _CupertinoLibraryManagementSheetState
       builder: (context, snapshot) {
         final historyItem = snapshot.data;
         final fileName = p.basename(file.path);
-        final subtitleText =
-            _buildLocalSubtitle(fileName, historyItem);
+        final subtitleText = _buildLocalSubtitle(fileName, historyItem);
 
         return Padding(
           padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
@@ -3463,8 +3456,7 @@ class _CupertinoLibraryManagementSheetState
                       ),
                       child: Text(
                         '取消',
-                        style:
-                            TextStyle(fontSize: 12, color: destructiveColor),
+                        style: TextStyle(fontSize: 12, color: destructiveColor),
                       ),
                     ),
                 ],
@@ -3484,10 +3476,10 @@ class _CupertinoLibraryManagementSheetState
     final baseName = p.basenameWithoutExtension(fileName);
 
     final hasId = historyItem.animeId != null || historyItem.episodeId != null;
-    final hasCustomName = historyItem.animeName.isNotEmpty &&
-        historyItem.animeName != baseName;
-    final hasEpisodeTitle =
-        historyItem.episodeTitle != null && historyItem.episodeTitle!.isNotEmpty;
+    final hasCustomName =
+        historyItem.animeName.isNotEmpty && historyItem.animeName != baseName;
+    final hasEpisodeTitle = historyItem.episodeTitle != null &&
+        historyItem.episodeTitle!.isNotEmpty;
 
     if (!hasId && !hasCustomName && !hasEpisodeTitle) {
       return null;
@@ -3773,8 +3765,8 @@ class _CupertinoLibraryManagementSheetState
     } else {
       children.addAll(
         _webdavConnections
-            .map((connection) =>
-                _buildWebDAVConnectionCard(context, connection))
+            .map(
+                (connection) => _buildWebDAVConnectionCard(context, connection))
             .toList(),
       );
     }
@@ -3881,8 +3873,7 @@ class _CupertinoLibraryManagementSheetState
         color: cardColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color:
-              CupertinoDynamicColor.resolve(statusColor, context).withValues(
+          color: CupertinoDynamicColor.resolve(statusColor, context).withValues(
             alpha: 0.25,
           ),
           width: 1,
@@ -3897,8 +3888,7 @@ class _CupertinoLibraryManagementSheetState
               children: [
                 Icon(
                   CupertinoIcons.cloud,
-                  color:
-                      CupertinoDynamicColor.resolve(statusColor, context),
+                  color: CupertinoDynamicColor.resolve(statusColor, context),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -3959,8 +3949,8 @@ class _CupertinoLibraryManagementSheetState
                     ),
                     _buildWebDAVIconButton(
                       icon: CupertinoIcons.pencil,
-                      onPressed: () =>
-                          _showWebDAVConnectionDialog(editConnection: connection),
+                      onPressed: () => _showWebDAVConnectionDialog(
+                          editConnection: connection),
                     ),
                     _buildWebDAVIconButton(
                       icon: CupertinoIcons.delete,
@@ -3982,8 +3972,7 @@ class _CupertinoLibraryManagementSheetState
                 alignment: Alignment.centerLeft,
                 child: Text(
                   '点击右上角刷新图标测试连接，成功后即可浏览目录。',
-                  style:
-                      TextStyle(fontSize: 12, color: urlColor, height: 1.4),
+                  style: TextStyle(fontSize: 12, color: urlColor, height: 1.4),
                 ),
               ),
             ),
@@ -4056,6 +4045,8 @@ class _CupertinoLibraryManagementSheetState
   ) {
     final key = _webdavKey(connection, file.path);
     final isExpanded = _expandedWebDAVFolders.contains(key);
+    final canPlayFile =
+        !file.isDirectory && WebDAVService.instance.isVideoFile(file.name);
     final labelColor =
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final subtitleColor =
@@ -4072,7 +4063,9 @@ class _CupertinoLibraryManagementSheetState
                 Icon(
                   file.isDirectory
                       ? CupertinoIcons.folder
-                      : CupertinoIcons.play_arrow_solid,
+                      : (canPlayFile
+                          ? CupertinoIcons.play_arrow_solid
+                          : CupertinoIcons.doc_text),
                   size: 18,
                   color: file.isDirectory
                       ? CupertinoDynamicColor.resolve(
@@ -4080,7 +4073,9 @@ class _CupertinoLibraryManagementSheetState
                           context,
                         )
                       : CupertinoDynamicColor.resolve(
-                          CupertinoColors.systemGrey,
+                          canPlayFile
+                              ? CupertinoColors.systemGrey
+                              : CupertinoColors.tertiaryLabel,
                           context,
                         ),
                 ),
@@ -4141,7 +4136,7 @@ class _CupertinoLibraryManagementSheetState
                       ),
                     ],
                   )
-                else
+                else if (canPlayFile)
                   CupertinoButton(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minSize: 28,
@@ -4158,6 +4153,10 @@ class _CupertinoLibraryManagementSheetState
     }
 
     if (file.isDirectory) {
+      return buildRow();
+    }
+
+    if (!canPlayFile) {
       return buildRow();
     }
 
@@ -4343,8 +4342,8 @@ class _CupertinoLibraryManagementSheetState
     });
 
     try {
-      final files =
-          await WebDAVService.instance.listDirectory(connection, normalizedPath);
+      final files = await WebDAVService.instance
+          .listDirectory(connection, normalizedPath);
       if (!mounted) return;
       setState(() {
         _webdavFolderContents[key] = files;
@@ -4386,14 +4385,14 @@ class _CupertinoLibraryManagementSheetState
     required int processed,
     required int total,
   }) {
-    if (processed == _remoteScrapeLastProcessed && total == _remoteScrapeTotal) {
+    if (processed == _remoteScrapeLastProcessed &&
+        total == _remoteScrapeTotal) {
       return;
     }
     _remoteScrapeLastProcessed = processed;
     _remoteScrapeTotal = total;
-    final double progress = total > 0
-        ? (processed / total).clamp(0.0, 1.0).toDouble()
-        : 0.0;
+    final double progress =
+        total > 0 ? (processed / total).clamp(0.0, 1.0).toDouble() : 0.0;
     _setRemoteScrapeState(
       message: '$sourceLabel 刮削中：$folderName ($processed/$total)',
       progress: progress,
@@ -4471,7 +4470,8 @@ class _CupertinoLibraryManagementSheetState
 
     for (final candidate in candidates) {
       try {
-        final videoInfo = await DandanplayService.getVideoInfo(candidate.filePath);
+        final videoInfo =
+            await DandanplayService.getVideoInfo(candidate.filePath);
         final matches = videoInfo['matches'];
         if (videoInfo['isMatched'] != true ||
             matches is! List ||
@@ -4945,8 +4945,8 @@ class _CupertinoLibraryManagementSheetState
                 alignment: Alignment.centerLeft,
                 child: Text(
                   '点击右上角刷新图标以连接并浏览目录。',
-                  style:
-                      TextStyle(fontSize: 12, color: subtitleColor, height: 1.4),
+                  style: TextStyle(
+                      fontSize: 12, color: subtitleColor, height: 1.4),
                 ),
               ),
             ),
@@ -5017,6 +5017,8 @@ class _CupertinoLibraryManagementSheetState
   ) {
     final key = _smbKey(connection, file.path);
     final isExpanded = _expandedSMBFolders.contains(key);
+    final canPlayFile =
+        !file.isDirectory && SMBService.instance.isVideoFile(file.name);
     final labelColor =
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final subtitleColor =
@@ -5033,7 +5035,9 @@ class _CupertinoLibraryManagementSheetState
                 Icon(
                   file.isDirectory
                       ? CupertinoIcons.folder
-                      : CupertinoIcons.play_arrow_solid,
+                      : (canPlayFile
+                          ? CupertinoIcons.play_arrow_solid
+                          : CupertinoIcons.doc_text),
                   size: 18,
                   color: file.isDirectory
                       ? CupertinoDynamicColor.resolve(
@@ -5041,7 +5045,9 @@ class _CupertinoLibraryManagementSheetState
                           context,
                         )
                       : CupertinoDynamicColor.resolve(
-                          CupertinoColors.systemGrey,
+                          canPlayFile
+                              ? CupertinoColors.systemGrey
+                              : CupertinoColors.tertiaryLabel,
                           context,
                         ),
                 ),
@@ -5090,7 +5096,8 @@ class _CupertinoLibraryManagementSheetState
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         minSize: 30,
-                        onPressed: () => _toggleSMBFolder(connection, file.path),
+                        onPressed: () =>
+                            _toggleSMBFolder(connection, file.path),
                         child: Icon(
                           isExpanded
                               ? CupertinoIcons.chevron_down
@@ -5101,7 +5108,7 @@ class _CupertinoLibraryManagementSheetState
                       ),
                     ],
                   )
-                else
+                else if (canPlayFile)
                   CupertinoButton(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minSize: 28,
@@ -5118,6 +5125,10 @@ class _CupertinoLibraryManagementSheetState
     }
 
     if (file.isDirectory) {
+      return buildRow();
+    }
+
+    if (!canPlayFile) {
       return buildRow();
     }
 
@@ -5403,8 +5414,8 @@ class _CupertinoLibraryManagementSheetState
 
       final candidates = files
           .map((file) => _RemoteScrapeCandidate(
-                filePath:
-                    SMBProxyService.instance.buildStreamUrl(connection, file.path),
+                filePath: SMBProxyService.instance
+                    .buildStreamUrl(connection, file.path),
                 fileName: file.name,
               ))
           .toList();
@@ -5471,7 +5482,8 @@ class _CupertinoLibraryManagementSheetState
     SMBFileEntry file,
   ) async {
     try {
-      final fileUrl = SMBProxyService.instance.buildStreamUrl(connection, file.path);
+      final fileUrl =
+          SMBProxyService.instance.buildStreamUrl(connection, file.path);
       final historyItem = WatchHistoryItem(
         filePath: fileUrl,
         animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
@@ -5696,7 +5708,6 @@ class _CupertinoLibraryManagementSheetState
     await watchHistory.refresh();
     _showSnack('已同步本地媒体库');
   }
-
 }
 
 /// 媒体库内容组件
@@ -6008,7 +6019,8 @@ class _SharedRemoteLibraryManagementContentState
   double _scrollOffset = 0.0;
   Timer? _pollTimer;
   bool _pollRequestInFlight = false;
-  final Map<String, List<SharedRemoteFileEntry>> _expandedRemoteDirectories = {};
+  final Map<String, List<SharedRemoteFileEntry>> _expandedRemoteDirectories =
+      {};
   final Set<String> _loadingRemoteDirectories = {};
 
   @override
@@ -6167,7 +6179,8 @@ class _SharedRemoteLibraryManagementContentState
               padding: EdgeInsets.fromLTRB(left, 4, 8, 4),
               child: Row(
                 children: [
-                  Icon(CupertinoIcons.folder, size: 18, color: secondaryLabelColor),
+                  Icon(CupertinoIcons.folder,
+                      size: 18, color: secondaryLabelColor),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -6185,7 +6198,9 @@ class _SharedRemoteLibraryManagementContentState
                     )
                   else
                     Icon(
-                      expanded ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_forward,
+                      expanded
+                          ? CupertinoIcons.chevron_down
+                          : CupertinoIcons.chevron_forward,
                       size: 16,
                       color: secondaryLabelColor,
                     ),
@@ -6195,19 +6210,27 @@ class _SharedRemoteLibraryManagementContentState
           ),
         );
         if (expanded) {
-          widgets.addAll(_buildRemoteDirectoryChildren(context, provider, entryPath, depth + 1));
+          widgets.addAll(_buildRemoteDirectoryChildren(
+              context, provider, entryPath, depth + 1));
         }
         continue;
       }
 
+      final canPlay = provider.isRemoteFilePlayable(entry);
       widgets.add(
         GestureDetector(
-          onTap: () => _playRemoteFile(provider, entry),
+          onTap: canPlay ? () => _playRemoteFile(provider, entry) : null,
           child: Padding(
             padding: EdgeInsets.fromLTRB(left, 4, 8, 4),
             child: Row(
               children: [
-                Icon(CupertinoIcons.play_circle, size: 18, color: secondaryLabelColor),
+                Icon(
+                  canPlay
+                      ? CupertinoIcons.play_circle
+                      : CupertinoIcons.doc_text,
+                  size: 18,
+                  color: secondaryLabelColor,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -6225,7 +6248,8 @@ class _SharedRemoteLibraryManagementContentState
                           _remoteEntrySubtitle(entry)!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: secondaryLabelColor),
+                          style: TextStyle(
+                              fontSize: 12, color: secondaryLabelColor),
                         ),
                       ],
                     ],
@@ -6244,8 +6268,19 @@ class _SharedRemoteLibraryManagementContentState
     SharedRemoteLibraryProvider provider,
     SharedRemoteFileEntry entry,
   ) async {
+    if (!provider.isRemoteFilePlayable(entry)) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '该文件不是可播放媒体',
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
+
     try {
-      final streamUrl = provider.buildRemoteFileStreamUri(entry.path).toString();
+      final streamUrl =
+          provider.buildRemoteFileStreamUri(entry.path).toString();
       final name = entry.name.isNotEmpty ? entry.name : entry.path;
       final title = p.basenameWithoutExtension(name);
 
@@ -6253,7 +6288,9 @@ class _SharedRemoteLibraryManagementContentState
         filePath: streamUrl,
         animeName: (entry.animeName?.trim().isNotEmpty == true)
             ? entry.animeName!.trim()
-            : (title.isNotEmpty ? title : p.basenameWithoutExtension(entry.path)),
+            : (title.isNotEmpty
+                ? title
+                : p.basenameWithoutExtension(entry.path)),
         episodeTitle: entry.episodeTitle?.trim().isNotEmpty == true
             ? entry.episodeTitle!.trim()
             : null,
@@ -6388,7 +6425,9 @@ class _SharedRemoteLibraryManagementContentState
           Row(
             children: [
               Icon(
-                isScanning ? CupertinoIcons.arrow_2_circlepath : CupertinoIcons.folder,
+                isScanning
+                    ? CupertinoIcons.arrow_2_circlepath
+                    : CupertinoIcons.folder,
                 size: 20,
                 color: labelColor,
               ),
@@ -6470,7 +6509,8 @@ class _SharedRemoteLibraryManagementContentState
     BuildContext context,
     SharedRemoteLibraryProvider provider,
   ) {
-    final busy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+    final busy =
+        provider.isManagementLoading || provider.scanStatus?.isScanning == true;
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -6518,9 +6558,12 @@ class _SharedRemoteLibraryManagementContentState
     bool primary = false,
   }) {
     final color = primary
-        ? CupertinoDynamicColor.resolve(CupertinoTheme.of(context).primaryColor, context)
+        ? CupertinoDynamicColor.resolve(
+            CupertinoTheme.of(context).primaryColor, context)
         : CupertinoDynamicColor.resolve(CupertinoColors.systemGrey5, context);
-    final textColor = primary ? CupertinoColors.white : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
+    final textColor = primary
+        ? CupertinoColors.white
+        : CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     return CupertinoButton(
       onPressed: onPressed,
       color: color,
@@ -6580,10 +6623,13 @@ class _SharedRemoteLibraryManagementContentState
         ),
         const SizedBox(height: 12),
         ...folders.map((folder) {
-          final busy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+          final busy = provider.isManagementLoading ||
+              provider.scanStatus?.isScanning == true;
           final statusColor = folder.exists
-              ? CupertinoDynamicColor.resolve(CupertinoColors.systemGreen, context)
-              : CupertinoDynamicColor.resolve(CupertinoColors.systemOrange, context);
+              ? CupertinoDynamicColor.resolve(
+                  CupertinoColors.systemGreen, context)
+              : CupertinoDynamicColor.resolve(
+                  CupertinoColors.systemOrange, context);
           final title = folder.name.isNotEmpty ? folder.name : folder.path;
           final folderPath = folder.path;
           final expanded = _expandedRemoteDirectories.containsKey(folderPath);
@@ -6628,7 +6674,9 @@ class _SharedRemoteLibraryManagementContentState
                             const CupertinoActivityIndicator(radius: 8)
                           else
                             Icon(
-                              expanded ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_forward,
+                              expanded
+                                  ? CupertinoIcons.chevron_down
+                                  : CupertinoIcons.chevron_forward,
                               size: 16,
                               color: secondaryLabelColor,
                             ),
@@ -6650,7 +6698,8 @@ class _SharedRemoteLibraryManagementContentState
                             minSize: 32,
                             onPressed: busy
                                 ? null
-                                : () => _handleRemoveFolder(provider, folderPath),
+                                : () =>
+                                    _handleRemoveFolder(provider, folderPath),
                             child: Icon(
                               CupertinoIcons.delete,
                               size: 18,
@@ -6678,7 +6727,8 @@ class _SharedRemoteLibraryManagementContentState
                 ),
               ),
               if (expanded)
-                ..._buildRemoteDirectoryChildren(context, provider, folderPath, 1),
+                ..._buildRemoteDirectoryChildren(
+                    context, provider, folderPath, 1),
               const SizedBox(height: 12),
             ],
           );
@@ -6741,7 +6791,8 @@ class _SharedRemoteLibraryManagementContentState
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+            color:
+                CupertinoDynamicColor.resolve(CupertinoColors.label, context),
           ),
         ),
         const SizedBox(height: 12),
@@ -6821,7 +6872,8 @@ class _SharedRemoteLibraryManagementContentState
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: CupertinoDynamicColor.resolve(CupertinoColors.label, context),
+            color:
+                CupertinoDynamicColor.resolve(CupertinoColors.label, context),
           ),
         ),
         const SizedBox(height: 12),
@@ -6999,7 +7051,8 @@ class _SharedRemoteLibraryManagementContentState
     }
   }
 
-  void _checkError(SharedRemoteLibraryProvider provider, String successMessage) {
+  void _checkError(
+      SharedRemoteLibraryProvider provider, String successMessage) {
     if (!mounted) return;
     if (provider.managementErrorMessage != null) {
       AdaptiveSnackBar.show(

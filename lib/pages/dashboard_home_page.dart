@@ -100,8 +100,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
 
   bool _isHistoryAutoMatching = false;
   bool _historyAutoMatchDialogVisible = false;
-  
-  
+  bool _isContinueWatchingRefreshInProgress = false;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -109,7 +109,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   List<RecommendedItem> _recommendedItems = [];
   bool _isLoadingRecommended = false;
   bool _isLoadingRecentContent = false;
-  
+
   // 待处理的刷新请求
   bool _pendingRefreshAfterLoad = false;
   String _pendingRefreshReason = '';
@@ -117,7 +117,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 播放器状态追踪，用于检测退出播放器时触发刷新
   bool _wasPlayerActive = false;
   Timer? _playerStateCheckTimer;
-  
+
   // 播放器状态缓存，减少频繁的Provider查询
   bool _cachedPlayerActiveState = false;
   DateTime _lastPlayerStateCheck = DateTime.now();
@@ -132,10 +132,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   Map<String, DandanplayRemoteAnimeGroup> _recommendedDandanLookup = {};
 
   bool _isValidAnimeId(int? value) => value != null && value > 0;
-  
+
   // 本地媒体库数据 - 使用番组信息而不是观看历史
   List<LocalAnimeItem> _localAnimeItems = [];
-  
+
   // 今日新番数据
   List<BangumiAnime> _todayAnimes = [];
   bool _isLoadingTodayAnimes = false;
@@ -157,12 +157,12 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   final ScrollController _continueWatchingScrollController = ScrollController();
   final ScrollController _recentJellyfinScrollController = ScrollController();
   final ScrollController _recentEmbyScrollController = ScrollController();
-  
+
   // 动态媒体库的ScrollController映射
   final Map<String, ScrollController> _jellyfinLibraryScrollControllers = {};
   final Map<String, ScrollController> _embyLibraryScrollControllers = {};
   ScrollController? _localLibraryScrollController;
-  
+
   // 自动切换相关
   Timer? _autoSwitchTimer;
   bool _isAutoSwitching = true;
@@ -188,7 +188,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void initState() {
     super.initState();
     _heroBannerIndexNotifier = ValueNotifier(0);
-    
+
     // 🔥 修复Flutter状态错误：将数据加载移到addPostFrameCallback中
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupProviderListeners();
@@ -197,7 +197,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         context,
         isMounted: () => mounted,
       );
-      
+
       // 🔥 在build完成后安全地加载数据，避免setState during build错误
       if (mounted) {
         _loadData(
@@ -206,13 +206,17 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           forceRefreshToday: true,
         );
       }
-      
+
       // 延迟检查WatchHistoryProvider状态，如果已经加载完成但数据为空则重新加载
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
-          final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
-          if (watchHistoryProvider.isLoaded && _localAnimeItems.isEmpty && _recommendedItems.length <= 7) {
-            debugPrint('DashboardHomePage: 延迟检查发现WatchHistoryProvider已加载但数据为空，重新加载数据');
+          final watchHistoryProvider =
+              Provider.of<WatchHistoryProvider>(context, listen: false);
+          if (watchHistoryProvider.isLoaded &&
+              _localAnimeItems.isEmpty &&
+              _recommendedItems.length <= 7) {
+            debugPrint(
+                'DashboardHomePage: 延迟检查发现WatchHistoryProvider已加载但数据为空，重新加载数据');
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
                 _loadData();
@@ -223,7 +227,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       });
     });
   }
-  
+
   // 获取或创建Jellyfin媒体库的ScrollController
   ScrollController _getJellyfinLibraryScrollController(String libraryName) {
     if (!_jellyfinLibraryScrollControllers.containsKey(libraryName)) {
@@ -231,7 +235,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
     return _jellyfinLibraryScrollControllers[libraryName]!;
   }
-  
+
   // 获取或创建Emby媒体库的ScrollController
   ScrollController _getEmbyLibraryScrollController(String libraryName) {
     if (!_embyLibraryScrollControllers.containsKey(libraryName)) {
@@ -239,7 +243,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
     return _embyLibraryScrollControllers[libraryName]!;
   }
-  
+
   // 获取或创建本地媒体库的ScrollController
   ScrollController _getLocalLibraryScrollController() {
     _localLibraryScrollController ??= ScrollController();
@@ -255,7 +259,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _todayAnimesScrollController ??= ScrollController();
     return _todayAnimesScrollController!;
   }
-  
+
   void _startAutoSwitch() {
     _autoSwitchTimer?.cancel();
     _autoSwitchTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
@@ -272,21 +276,22 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       }
     });
   }
-  
+
   void _stopAutoSwitch() {
     _autoSwitchTimer?.cancel();
     _isAutoSwitching = false;
   }
-  
+
   void _resumeAutoSwitch() {
     _isAutoSwitching = true;
     _startAutoSwitch();
   }
-  
+
   void _setupProviderListeners() {
     // 订阅 Provider 级 ready；ready 之前不监听 Provider 的即时变化
     try {
-      _jellyfinProviderRef = Provider.of<JellyfinProvider>(context, listen: false);
+      _jellyfinProviderRef =
+          Provider.of<JellyfinProvider>(context, listen: false);
       _jellyfinProviderReadyListener = () {
         if (!mounted) return;
         debugPrint('DashboardHomePage: 收到 Jellyfin Provider ready 信号');
@@ -328,27 +333,29 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     } catch (e) {
       debugPrint('DashboardHomePage: 安装 Emby Provider ready 监听失败: $e');
     }
-    
+
     // 监听WatchHistoryProvider的加载状态变化
     try {
-  _watchHistoryProviderRef = Provider.of<WatchHistoryProvider>(context, listen: false);
-  _watchHistoryProviderRef!.addListener(_onWatchHistoryStateChanged);
+      _watchHistoryProviderRef =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
+      _watchHistoryProviderRef!.addListener(_onWatchHistoryStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加WatchHistoryProvider监听器失败: $e');
     }
-    
+
     // 监听ScanService的扫描完成状态变化
     try {
-  _scanServiceRef = Provider.of<ScanService>(context, listen: false);
-  _scanServiceRef!.addListener(_onScanServiceStateChanged);
+      _scanServiceRef = Provider.of<ScanService>(context, listen: false);
+      _scanServiceRef!.addListener(_onScanServiceStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加ScanService监听器失败: $e');
     }
-    
+
     // 监听VideoPlayerState的状态变化，用于检测播放器状态
     try {
-  _videoPlayerStateRef = Provider.of<VideoPlayerState>(context, listen: false);
-  _videoPlayerStateRef!.addListener(_onVideoPlayerStateChanged);
+      _videoPlayerStateRef =
+          Provider.of<VideoPlayerState>(context, listen: false);
+      _videoPlayerStateRef!.addListener(_onVideoPlayerStateChanged);
     } catch (e) {
       debugPrint('DashboardHomePage: 添加VideoPlayerState监听器失败: $e');
     }
@@ -388,6 +395,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _activateJellyfinLiveListening();
       }
     }
+
     checkAndActivate();
   }
 
@@ -423,6 +431,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         _activateEmbyLiveListening();
       }
     }
+
     checkAndActivate();
   }
 
@@ -450,7 +459,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         !shouldRefreshRecommended &&
         _lastLoadTime != null &&
         now.difference(_lastLoadTime!).inMilliseconds < 500) {
-      debugPrint('DashboardHomePage: 距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过这次($reason)');
+      debugPrint(
+          'DashboardHomePage: 距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过这次($reason)');
       return;
     }
     if (_isLoadingRecommended) {
@@ -460,34 +470,35 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     }
     _loadData();
   }
-  
+
   // 检查播放器是否处于活跃状态（播放中、暂停或准备好播放）
   bool _isVideoPlayerActive() {
     try {
       // 使用缓存机制，避免频繁的Provider查询
       final now = DateTime.now();
       const cacheValidDuration = Duration(milliseconds: 100); // 100ms缓存
-      
+
       if (now.difference(_lastPlayerStateCheck) < cacheValidDuration) {
         return _cachedPlayerActiveState;
       }
-      
-      final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
-      final isActive = videoPlayerState.status == PlayerStatus.playing || 
-             videoPlayerState.status == PlayerStatus.paused ||
-             videoPlayerState.hasVideo ||
-             videoPlayerState.currentVideoPath != null;
-      
+
+      final videoPlayerState =
+          Provider.of<VideoPlayerState>(context, listen: false);
+      final status = videoPlayerState.status;
+      final isActive = status != PlayerStatus.idle &&
+          status != PlayerStatus.error &&
+          status != PlayerStatus.disposed;
+
       // 更新缓存
       _cachedPlayerActiveState = isActive;
       _lastPlayerStateCheck = now;
-      
+
       // 只在状态发生变化时打印调试信息，减少日志噪音
       if (isActive != _wasPlayerActive) {
         debugPrint('DashboardHomePage: 播放器活跃状态变化 - $isActive '
-                   '(status: ${videoPlayerState.status}, hasVideo: ${videoPlayerState.hasVideo})');
+            '(status: ${videoPlayerState.status}, hasVideo: ${videoPlayerState.hasVideo})');
       }
-      
+
       return isActive;
     } catch (e) {
       debugPrint('DashboardHomePage: _isVideoPlayerActive() 出错: $e');
@@ -498,31 +509,30 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   // 判断是否应该延迟图片加载（避免与HEAD验证竞争）
   bool _shouldDelayImageLoad() {
     // 检查推荐内容中是否包含本地媒体
-    final hasLocalContent = _recommendedItems.any((item) => 
-      item.source == RecommendedItemSource.local
-    );
-    
+    final hasLocalContent = _recommendedItems
+        .any((item) => item.source == RecommendedItemSource.local);
+
     // 如果有本地媒体，就立即加载以保持最佳性能；没有本地媒体才延迟避免与HEAD验证竞争
     return !hasLocalContent;
   }
 
   void _onVideoPlayerStateChanged() {
     if (!mounted) return;
-    
+
     final isCurrentlyActive = _isVideoPlayerActive();
-    
+
     // 检测播放器从活跃状态变为非活跃状态（退出播放器）
     if (_wasPlayerActive && !isCurrentlyActive) {
       debugPrint('DashboardHomePage: 检测到播放器状态变为非活跃，启动延迟检查');
-      
+
       // 取消之前的检查Timer
       _playerStateCheckTimer?.cancel();
-      
+
       // 延迟检查，避免快速状态切换时的误触发
       _playerStateCheckTimer = Timer(const Duration(milliseconds: 1500), () {
         if (mounted && !_isVideoPlayerActive()) {
           debugPrint('DashboardHomePage: 确认播放器已退出，刷新最近观看');
-          _scheduleWatchHistoryRefresh('播放器退出');
+          unawaited(_refreshContinueWatchingData('播放器退出'));
         } else {
           debugPrint('DashboardHomePage: 播放器状态已恢复活跃，取消更新');
         }
@@ -533,7 +543,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       debugPrint('DashboardHomePage: 播放器重新激活，取消待处理的更新检查');
       _playerStateCheckTimer?.cancel();
     }
-    
+
     // 更新播放器活跃状态记录
     _wasPlayerActive = isCurrentlyActive;
   }
@@ -553,7 +563,8 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   void _scheduleWatchHistoryRefresh(String reason) {
     if (!mounted) return;
     try {
-      final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      final watchHistoryProvider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
       if (!watchHistoryProvider.isLoaded) {
         return;
       }
@@ -567,24 +578,63 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       unawaited(_loadRecentContent(includeRemote: false));
     });
   }
-  
+
+  Future<void> _refreshContinueWatchingData(
+    String reason, {
+    bool syncRemote = false,
+  }) async {
+    if (!mounted || _isContinueWatchingRefreshInProgress) {
+      return;
+    }
+
+    _isContinueWatchingRefreshInProgress = true;
+    try {
+      final watchHistoryProvider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
+
+      if (syncRemote) {
+        final syncService = ServerHistorySyncService.instance;
+        try {
+          await syncService.syncJellyfinResume();
+        } catch (e) {
+          debugPrint('DashboardHomePage: Jellyfin继续播放同步失败($reason): $e');
+        }
+        try {
+          await syncService.syncEmbyResume();
+        } catch (e) {
+          debugPrint('DashboardHomePage: Emby继续播放同步失败($reason): $e');
+        }
+      }
+
+      await watchHistoryProvider.refresh();
+      if (!mounted) return;
+      _scheduleWatchHistoryRefresh(reason);
+    } catch (e) {
+      debugPrint('DashboardHomePage: 刷新继续播放失败($reason): $e');
+    } finally {
+      _isContinueWatchingRefreshInProgress = false;
+    }
+  }
+
   void _onJellyfinStateChanged() {
-  if (!_jellyfinLiveListening) return; // ready 前不处理
+    if (!_jellyfinLiveListening) return; // ready 前不处理
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过Jellyfin状态变化处理');
       return;
     }
-    
+
     // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
     if (_isVideoPlayerActive()) {
       debugPrint('DashboardHomePage: 播放器活跃中，跳过Jellyfin状态变化处理');
       return;
     }
-    
-    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+
+    final jellyfinProvider =
+        Provider.of<JellyfinProvider>(context, listen: false);
     final connected = jellyfinProvider.isConnected;
-    debugPrint('DashboardHomePage: Jellyfin provider 状态变化 - isConnected: $connected, mounted: $mounted');
+    debugPrint(
+        'DashboardHomePage: Jellyfin provider 状态变化 - isConnected: $connected, mounted: $mounted');
 
     // 断开连接时，立即清空“最近添加”并刷新一次UI，避免残留
     if (!connected && mounted) {
@@ -599,8 +649,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     if (connected && mounted) {
       // 合并短时间内的重复触发（避免与刚刚的 ready/首刷重叠）
       final now = DateTime.now();
-      if (_lastLoadTime != null && now.difference(_lastLoadTime!).inMilliseconds < 500) {
-        debugPrint('DashboardHomePage: Jellyfin连接完成，但距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过立即刷新');
+      if (_lastLoadTime != null &&
+          now.difference(_lastLoadTime!).inMilliseconds < 500) {
+        debugPrint(
+            'DashboardHomePage: Jellyfin连接完成，但距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过立即刷新');
         return;
       }
       if (_isLoadingRecommended) {
@@ -618,7 +670,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       return; // 避免与防抖重复触发
     }
 
-  // 统一处理 provider 状态变化（连接/断开/库选择等）：轻量防抖刷新
+    // 统一处理 provider 状态变化（连接/断开/库选择等）：轻量防抖刷新
     _jfDebounceTimer?.cancel();
     _jfDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
@@ -626,24 +678,25 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       _loadData(forceRefreshRecommended: true);
     });
   }
-  
+
   void _onEmbyStateChanged() {
-  if (!_embyLiveListening) return; // ready 前不处理
+    if (!_embyLiveListening) return; // ready 前不处理
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过Emby状态变化处理');
       return;
     }
-    
+
     // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
     if (_isVideoPlayerActive()) {
       debugPrint('DashboardHomePage: 播放器活跃中，跳过Emby状态变化处理');
       return;
     }
-    
+
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
     final connected = embyProvider.isConnected;
-    debugPrint('DashboardHomePage: Emby provider 状态变化 - isConnected: $connected, mounted: $mounted');
+    debugPrint(
+        'DashboardHomePage: Emby provider 状态变化 - isConnected: $connected, mounted: $mounted');
 
     // 断开连接时，立即清空“最近添加”并刷新一次UI，避免残留
     if (!connected && mounted) {
@@ -658,8 +711,10 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     if (connected && mounted) {
       // 合并短时间内的重复触发（避免与刚刚的 ready/首刷重叠）
       final now = DateTime.now();
-      if (_lastLoadTime != null && now.difference(_lastLoadTime!).inMilliseconds < 500) {
-        debugPrint('DashboardHomePage: Emby连接完成，但距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过立即刷新');
+      if (_lastLoadTime != null &&
+          now.difference(_lastLoadTime!).inMilliseconds < 500) {
+        debugPrint(
+            'DashboardHomePage: Emby连接完成，但距上次加载过近(${now.difference(_lastLoadTime!).inMilliseconds}ms)，跳过立即刷新');
         return;
       }
       if (_isLoadingRecommended) {
@@ -677,7 +732,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       return; // 避免与防抖重复触发
     }
 
-  // 统一处理 provider 状态变化（连接/断开/库选择等）：轻量防抖刷新
+    // 统一处理 provider 状态变化（连接/断开/库选择等）：轻量防抖刷新
     _emDebounceTimer?.cancel();
     _emDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted || _isVideoPlayerActive() || _isLoadingRecommended) return;
@@ -714,118 +769,125 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       _loadData(forceRefreshRecommended: true);
     });
   }
-  
+
   void _onWatchHistoryStateChanged() {
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       return;
     }
 
-    final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
-    debugPrint('DashboardHomePage: WatchHistory加载状态变化 - isLoaded: ${watchHistoryProvider.isLoaded}, mounted: $mounted');
-    
+    final watchHistoryProvider =
+        Provider.of<WatchHistoryProvider>(context, listen: false);
+    debugPrint(
+        'DashboardHomePage: WatchHistory加载状态变化 - isLoaded: ${watchHistoryProvider.isLoaded}, mounted: $mounted');
+
     if (watchHistoryProvider.isLoaded && mounted) {
       _scheduleWatchHistoryRefresh('WatchHistory变化');
     }
   }
-  
+
   void _onScanServiceStateChanged() {
     // 检查Widget是否仍然处于活动状态
     if (!mounted) {
       debugPrint('DashboardHomePage: Widget已销毁，跳过ScanService状态变化处理');
       return;
     }
-    
+
     // 如果播放器处于活跃状态（播放或暂停），跳过主页更新
     if (_isVideoPlayerActive()) {
       debugPrint('DashboardHomePage: 播放器活跃中，跳过ScanService状态变化处理');
       return;
     }
-    
+
     final scanService = Provider.of<ScanService>(context, listen: false);
-    debugPrint('DashboardHomePage: ScanService状态变化 - scanJustCompleted: ${scanService.scanJustCompleted}, mounted: $mounted');
-    
+    debugPrint(
+        'DashboardHomePage: ScanService状态变化 - scanJustCompleted: ${scanService.scanJustCompleted}, mounted: $mounted');
+
     if (scanService.scanJustCompleted && mounted) {
       debugPrint('DashboardHomePage: 扫描完成，刷新WatchHistoryProvider和本地媒体库数据');
-      
+
       // 刷新WatchHistoryProvider以获取最新的扫描结果
       try {
-        final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+        final watchHistoryProvider =
+            Provider.of<WatchHistoryProvider>(context, listen: false);
         watchHistoryProvider.refresh();
       } catch (e) {
         debugPrint('DashboardHomePage: 刷新WatchHistoryProvider失败: $e');
       }
-      
+
       // 🔥 修复Flutter状态错误：使用addPostFrameCallback确保不在build期间调用
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _loadData();
         }
       });
-      
+
       // 确认扫描完成事件已处理
       scanService.acknowledgeScanCompleted();
     }
   }
 
-
-
   @override
   void dispose() {
     debugPrint('DashboardHomePage: 开始销毁Widget');
-    
+
     // 清理定时器和ValueNotifier
     _autoSwitchTimer?.cancel();
     _playerStateCheckTimer?.cancel();
     _watchHistoryDebounceTimer?.cancel();
     _dandanDebounceTimer?.cancel();
     _playerStateCheckTimer = null;
-    
+
     // 重置播放器状态缓存，防止内存泄漏
     _cachedPlayerActiveState = false;
     _wasPlayerActive = false;
-    
+
     _heroBannerIndexNotifier.dispose();
-    
+
     // 移除监听器 - 使用初始化时保存的实例引用，避免在dispose中再次查找context
     try {
       _jfDebounceTimer?.cancel();
       _deactivateJellyfinLiveListening();
       if (_jellyfinProviderReadyListener != null) {
-        try { _jellyfinProviderRef?.removeReadyListener(_jellyfinProviderReadyListener!); } catch (_) {}
+        try {
+          _jellyfinProviderRef
+              ?.removeReadyListener(_jellyfinProviderReadyListener!);
+        } catch (_) {}
         _jellyfinProviderReadyListener = null;
       }
       debugPrint('DashboardHomePage: JellyfinProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除JellyfinProvider监听器失败: $e');
     }
-    
+
     try {
       _emDebounceTimer?.cancel();
       _deactivateEmbyLiveListening();
       if (_embyProviderReadyListener != null) {
-        try { _embyProviderRef?.removeReadyListener(_embyProviderReadyListener!); } catch (_) {}
+        try {
+          _embyProviderRef?.removeReadyListener(_embyProviderReadyListener!);
+        } catch (_) {}
         _embyProviderReadyListener = null;
       }
       debugPrint('DashboardHomePage: EmbyProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除EmbyProvider监听器失败: $e');
     }
-    
+
     try {
       _watchHistoryProviderRef?.removeListener(_onWatchHistoryStateChanged);
       debugPrint('DashboardHomePage: WatchHistoryProvider监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除WatchHistoryProvider监听器失败: $e');
     }
-    
+
     try {
       _scanServiceRef?.removeListener(_onScanServiceStateChanged);
       debugPrint('DashboardHomePage: ScanService监听器已移除');
     } catch (e) {
       debugPrint('DashboardHomePage: 移除ScanService监听器失败: $e');
     }
-    
+
     try {
       _videoPlayerStateRef?.removeListener(_onVideoPlayerStateChanged);
       debugPrint('DashboardHomePage: VideoPlayerState监听器已移除');
@@ -836,7 +898,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     try {
       _dandanplayProviderRef?.removeListener(_onDandanplayStateChanged);
     } catch (_) {}
-    
+
     // 销毁ScrollController
     try {
       _heroBannerPageController.dispose();
@@ -844,34 +906,33 @@ class _DashboardHomePageState extends State<DashboardHomePage>
       _continueWatchingScrollController.dispose();
       _recentJellyfinScrollController.dispose();
       _recentEmbyScrollController.dispose();
-      
+
       // 销毁动态创建的ScrollController
       for (final controller in _jellyfinLibraryScrollControllers.values) {
         controller.dispose();
       }
       _jellyfinLibraryScrollControllers.clear();
-      
+
       for (final controller in _embyLibraryScrollControllers.values) {
         controller.dispose();
       }
       _embyLibraryScrollControllers.clear();
-      
+
       _localLibraryScrollController?.dispose();
       _localLibraryScrollController = null;
       _dandanplayScrollController?.dispose();
       _dandanplayScrollController = null;
       _randomRecommendationsScrollController?.dispose();
       _randomRecommendationsScrollController = null;
-      
+
       debugPrint('DashboardHomePage: ScrollController已销毁');
     } catch (e) {
       debugPrint('DashboardHomePage: 销毁ScrollController失败: $e');
     }
-    
+
     debugPrint('DashboardHomePage: Widget销毁完成');
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -902,20 +963,19 @@ class _DashboardHomePageState extends State<DashboardHomePage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                  // 大海报推荐区域
-                  _buildHeroBanner(isPhone: isPhone),
-                  
-                  SizedBox(height: isPhone ? 16 : 32),
-                  ...configuredSections,
+                // 大海报推荐区域
+                _buildHeroBanner(isPhone: isPhone),
 
-                  
-                  // 底部间距
-                  SizedBox(height: isPhone ? 30 : 50),
-                ],
-              ),
-            );
+                SizedBox(height: isPhone ? 16 : 32),
+                ...configuredSections,
+
+                // 底部间距
+                SizedBox(height: isPhone ? 30 : 50),
+              ],
+            ),
+          );
         },
       ),
     );
-}
+  }
 }

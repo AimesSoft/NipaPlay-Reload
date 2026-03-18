@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -329,7 +328,7 @@ class SubtitleManager extends ChangeNotifier {
         // TODO: Call your blur_snackbar here
         // For example: globals.showBlurSnackbar('当前播放器内核不支持加载外部字幕');
         // As a placeholder, I'll just print. Replace with your actual snackbar call.
-        print(
+        debugPrint(
             "USER_INFO: blur_snackbar should be called here: '当前播放器内核不支持加载外部字幕'");
         return;
       }
@@ -432,8 +431,7 @@ class SubtitleManager extends ChangeNotifier {
 
       final encoding = decoded.encoding.toLowerCase();
       final preview = _extractSubtitlePreview(decoded.text);
-      final format =
-          SubtitleParser.detectFormat(decoded.text, sourcePath);
+      final format = SubtitleParser.detectFormat(decoded.text, sourcePath);
       debugPrint(
           'SubtitleManager: 检测到字幕编码: ${decoded.encoding}, 格式: $format, 预览: $preview');
       if (encoding.startsWith('utf-8')) {
@@ -582,9 +580,8 @@ class SubtitleManager extends ChangeNotifier {
           if (candidates.isNotEmpty) {
             final resolvedMatchPath = RemoteSubtitleService.instance
                 .resolveVideoPathForMatching(videoPath);
-            final matchPath = resolvedMatchPath.isNotEmpty
-                ? resolvedMatchPath
-                : videoPath;
+            final matchPath =
+                resolvedMatchPath.isNotEmpty ? resolvedMatchPath : videoPath;
             final selected = _pickRemoteSubtitleCandidate(
               candidates,
               matchPath,
@@ -615,6 +612,13 @@ class SubtitleManager extends ChangeNotifier {
           }
         } catch (e) {
           debugPrint('SubtitleManager: 远程字幕检测失败: $e');
+        }
+
+        final streamUri = Uri.tryParse(videoPath);
+        final scheme = streamUri?.scheme.toLowerCase();
+        if (scheme == 'http' || scheme == 'https') {
+          debugPrint('SubtitleManager: 远程流字幕检测结束，跳过本地文件系统检测');
+          return;
         }
       }
 
@@ -904,13 +908,17 @@ class SubtitleManager extends ChangeNotifier {
           score += 15;
         }
       }
+
+      if (candidate is SharedRemoteSubtitleCandidate &&
+          candidate.isLikelyMatch) {
+        score += 25;
+      }
       return score;
     }
 
     final sorted = List<RemoteSubtitleCandidate>.from(candidates)
       ..sort((a, b) {
-        final scoreCompare =
-            scoreCandidate(b).compareTo(scoreCandidate(a));
+        final scoreCompare = scoreCandidate(b).compareTo(scoreCandidate(a));
         if (scoreCompare != 0) return scoreCompare;
         return a.name.compareTo(b.name);
       });

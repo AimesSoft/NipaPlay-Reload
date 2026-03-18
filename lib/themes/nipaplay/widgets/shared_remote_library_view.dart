@@ -482,13 +482,18 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         continue;
       }
 
+      final canPlay = provider.isRemoteFilePlayable(entry);
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
-            leading: Icon(Icons.videocam_outlined, color: iconColor, size: 18),
+            leading: Icon(
+              canPlay ? Icons.videocam_outlined : Icons.description_outlined,
+              color: iconColor,
+              size: 18,
+            ),
             title: Text(
               entryName,
               locale: const Locale('zh', 'CN'),
@@ -497,7 +502,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: _buildRemoteFileSubtitle(context, entry),
-            onTap: () => _playRemoteFile(provider, entry),
+            onTap: canPlay ? () => _playRemoteFile(provider, entry) : null,
           ),
         ),
       );
@@ -512,6 +517,10 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     final callback = widget.onPlayEpisode;
     if (callback == null) {
       BlurSnackBar.show(context, '当前页面不支持播放');
+      return;
+    }
+    if (!provider.isRemoteFilePlayable(entry)) {
+      BlurSnackBar.show(context, '该文件不是可播放媒体');
       return;
     }
 
