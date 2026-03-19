@@ -93,7 +93,8 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     });
 
     // 清除外部字幕信息的激活状态
-    if (player.activeSubtitleTracks.contains(trackIndex) &&
+    if (_subtitleManager.currentExternalSubtitlePath == null &&
+        player.activeSubtitleTracks.contains(trackIndex) &&
         _subtitleManager.subtitleTrackInfo.containsKey('external_subtitle')) {
       _subtitleManager
           .updateSubtitleTrackInfo('external_subtitle', {'isActive': false});
@@ -119,13 +120,14 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     }
 
     // 在更新完成后检查当前激活的字幕轨道并确保相应的信息被更新
-    if (player.activeSubtitleTracks.isNotEmpty) {
+    if (player.activeSubtitleTracks.isNotEmpty &&
+        _subtitleManager.currentExternalSubtitlePath == null) {
       final activeIndex = player.activeSubtitleTracks.first;
-      if (activeIndex > 0 && activeIndex <= player.mediaInfo.subtitle!.length) {
+      if (activeIndex >= 0 && activeIndex < player.mediaInfo.subtitle!.length) {
         // 激活的是内嵌字幕轨道
         _subtitleManager.updateSubtitleTrackInfo('embedded_subtitle', {
-          'index': activeIndex - 1, // MDK 字幕轨道从 1 开始，而我们的索引从 0 开始
-          'title': player.mediaInfo.subtitle![activeIndex - 1].toString(),
+          'index': activeIndex,
+          'title': player.mediaInfo.subtitle![activeIndex].toString(),
           'isActive': true,
         });
 
@@ -147,11 +149,13 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     _subtitleManager.setExternalSubtitle(path,
         isManualSetting: isManualSetting);
+    notifyListeners();
   }
 
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
+    notifyListeners();
   }
 
   // 桥接方法：预加载字幕文件
@@ -167,6 +171,16 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 桥接方法：获取当前显示的字幕文本
   String getCurrentSubtitleText() {
     return _subtitleManager.getCurrentSubtitleText();
+  }
+
+  // 桥接方法：判断当前外挂字幕是否使用应用内叠层渲染
+  bool shouldRenderCurrentExternalSubtitleInApp() {
+    return _subtitleManager.shouldRenderCurrentExternalSubtitleInApp();
+  }
+
+  // 桥接方法：获取指定时间点的外挂字幕文本
+  String getCurrentExternalSubtitleTextAt(int positionMs) {
+    return _subtitleManager.getCurrentExternalSubtitleTextAt(positionMs);
   }
 
   // 桥接方法：当字幕轨道改变时调用

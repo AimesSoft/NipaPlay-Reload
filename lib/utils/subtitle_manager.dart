@@ -9,6 +9,7 @@ import 'subtitle_parser.dart';
 import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
+import 'package:nipaplay/utils/subtitle_file_utils.dart';
 
 /// 字幕管理器类，负责处理与字幕相关的所有功能
 class SubtitleManager extends ChangeNotifier {
@@ -88,16 +89,20 @@ class SubtitleManager extends ChangeNotifier {
 
   // 保存视频与字幕路径的映射
   Future<void> saveVideoSubtitleMapping(
-      String videoPath, String subtitlePath) async {
+    String videoPath,
+    String subtitlePath,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
-      final Map<String, dynamic> mappingMap =
-          Map<String, dynamic>.from(json.decode(mappingJson));
+      final Map<String, dynamic> mappingMap = Map<String, dynamic>.from(
+        json.decode(mappingJson),
+      );
       mappingMap[videoPath] = subtitlePath;
       await prefs.setString(_videoSubtitleMapKey, json.encode(mappingMap));
       debugPrint(
-          'SubtitleManager: 保存视频字幕映射 - 视频: $videoPath, 字幕: $subtitlePath');
+        'SubtitleManager: 保存视频字幕映射 - 视频: $videoPath, 字幕: $subtitlePath',
+      );
     } catch (e) {
       debugPrint('SubtitleManager: 保存视频字幕映射失败: $e');
     }
@@ -108,11 +113,13 @@ class SubtitleManager extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final mappingJson = prefs.getString(_videoSubtitleMapKey) ?? '{}';
-      final Map<String, dynamic> mappingMap =
-          Map<String, dynamic>.from(json.decode(mappingJson));
+      final Map<String, dynamic> mappingMap = Map<String, dynamic>.from(
+        json.decode(mappingJson),
+      );
       final subtitlePath = mappingMap[videoPath] as String?;
       debugPrint(
-          'SubtitleManager: 获取视频对应的字幕路径 - 视频: $videoPath, 字幕: $subtitlePath');
+        'SubtitleManager: 获取视频对应的字幕路径 - 视频: $videoPath, 字幕: $subtitlePath',
+      );
 
       // 检查字幕文件是否仍然存在
       if (subtitlePath != null && subtitlePath.isNotEmpty) {
@@ -138,9 +145,11 @@ class SubtitleManager extends ChangeNotifier {
 
       // 输出详细调试信息
       debugPrint(
-          'SubtitleManager: getCurrentSubtitleText - 外部字幕路径: $externalSubtitlePath');
+        'SubtitleManager: getCurrentSubtitleText - 外部字幕路径: $externalSubtitlePath',
+      );
       debugPrint(
-          'SubtitleManager: getCurrentSubtitleText - 激活轨道: ${_player.activeSubtitleTracks}');
+        'SubtitleManager: getCurrentSubtitleText - 激活轨道: ${_player.activeSubtitleTracks}',
+      );
 
       // 如果是外部字幕
       if (externalSubtitlePath != null && externalSubtitlePath.isNotEmpty) {
@@ -179,9 +188,11 @@ class SubtitleManager extends ChangeNotifier {
             extension == '.srt' ||
             extension == '.ssa' ||
             extension == '.sub') {
-          // 解析字幕文件
-          final entries = await SubtitleParser.parseAssFile(path);
-          _subtitleCache[path] = entries;
+          final result = await SubtitleParser.parseSubtitleFile(
+            path,
+            allowUnknownFormat: true,
+          );
+          _subtitleCache[path] = result.entries;
           notifyListeners();
         } else if (extension == '.sup') {
           debugPrint('SubtitleManager: 检测到sup字幕，跳过文本解析');
@@ -322,6 +333,8 @@ class SubtitleManager extends ChangeNotifier {
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     try {
       final loadToken = ++_subtitleLoadToken;
+      final previousSubtitleTrackSignatures =
+          _isMdkKernel() ? _snapshotCurrentSubtitleTrackSignatures() : null;
       // NEW: Check if player supports external subtitles
       if (!_player.supportsExternalSubtitles && path.isNotEmpty) {
         debugPrint('SubtitleManager: 当前播放器内核不支持加载外部字幕');
@@ -329,7 +342,8 @@ class SubtitleManager extends ChangeNotifier {
         // For example: globals.showBlurSnackbar('当前播放器内核不支持加载外部字幕');
         // As a placeholder, I'll just print. Replace with your actual snackbar call.
         debugPrint(
-            "USER_INFO: blur_snackbar should be called here: '当前播放器内核不支持加载外部字幕'");
+          "USER_INFO: blur_snackbar should be called here: '当前播放器内核不支持加载外部字幕'",
+        );
         return;
       }
 
@@ -337,13 +351,26 @@ class SubtitleManager extends ChangeNotifier {
 
       // 如果字幕文件存在
       if (path.isNotEmpty && File(path).existsSync()) {
+        final shouldRenderInApp = _shouldRenderExternalSubtitleInApp(path);
         final shouldFixEncoding = _shouldFixExternalSubtitleEncoding();
-        if (!shouldFixEncoding) {
+        if (shouldRenderInApp) {
+          _activateAppRenderedExternalSubtitle(path);
+        } else if (!shouldFixEncoding) {
           // 设置外部字幕文件
-          _player.setMedia(path, MediaType.subtitle);
+          _loadExternalSubtitleIntoPlayer(
+            path,
+            loadToken,
+            previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
+          );
         } else {
           // 对 MDK / Media Kit 预处理字幕编码，避免 UTF-16 直接喂给内核导致崩溃
-          unawaited(_loadExternalSubtitleWithEncodingFix(path, loadToken));
+          unawaited(
+            _loadExternalSubtitleWithEncodingFix(
+              path,
+              loadToken,
+              previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
+            ),
+          );
         }
 
         // 更新内部路径，如果是手动设置的，特别标记以避免被内嵌字幕覆盖
@@ -366,11 +393,13 @@ class SubtitleManager extends ChangeNotifier {
         }
 
         if (_currentVideoPath != null && _currentVideoPath!.isNotEmpty) {
-          unawaited(_persistExternalSubtitleSelection(
-            videoPath: _currentVideoPath!,
-            subtitlePath: path,
-            isActive: true,
-          ));
+          unawaited(
+            _persistExternalSubtitleSelection(
+              videoPath: _currentVideoPath!,
+              subtitlePath: path,
+              isActive: true,
+            ),
+          );
         }
 
         debugPrint('SubtitleManager: 外部字幕设置成功');
@@ -393,9 +422,227 @@ class SubtitleManager extends ChangeNotifier {
   bool _isMediaKitKernel() => _player.getPlayerKernelName() == 'Media Kit';
   bool _shouldFixExternalSubtitleEncoding() =>
       !kIsWeb && (_isMdkKernel() || _isMediaKitKernel());
+  bool _shouldRenderExternalSubtitleInApp(String path) {
+    if (kIsWeb || !_isMdkKernel() || !Platform.isWindows) {
+      return false;
+    }
+
+    final extension = p.extension(path).toLowerCase();
+    return extension == '.ass' || extension == '.ssa' || extension == '.srt';
+  }
+
+  void _activateAppRenderedExternalSubtitle(String path) {
+    try {
+      _player.setMedia("", MediaType.subtitle);
+    } catch (e) {
+      debugPrint('SubtitleManager: 清理播放器外挂字幕失败: $e');
+    }
+
+    try {
+      _player.activeSubtitleTracks = [];
+    } catch (e) {
+      debugPrint('SubtitleManager: 清理播放器字幕轨失败: $e');
+    }
+
+    unawaited(preloadSubtitleFile(path));
+    debugPrint('SubtitleManager: 使用应用内叠层渲染外挂字幕: $path');
+  }
+
+  bool shouldRenderCurrentExternalSubtitleInApp() {
+    final path = getActiveExternalSubtitlePath();
+    if (path == null || path.isEmpty) {
+      return false;
+    }
+
+    return _shouldRenderExternalSubtitleInApp(path);
+  }
+
+  String getCurrentExternalSubtitleTextAt(int positionMs) {
+    final path = getActiveExternalSubtitlePath();
+    if (path == null ||
+        path.isEmpty ||
+        !_shouldRenderExternalSubtitleInApp(path)) {
+      return '';
+    }
+
+    final cachedEntries = _subtitleCache[path];
+    if (cachedEntries == null || cachedEntries.isEmpty) {
+      unawaited(preloadSubtitleFile(path));
+      return '';
+    }
+
+    final activeContents = <String>[];
+    for (final entry in cachedEntries) {
+      if (entry is! SubtitleEntry) {
+        continue;
+      }
+      if (positionMs < entry.startTimeMs || positionMs > entry.endTimeMs) {
+        continue;
+      }
+
+      final content = entry.content.trim();
+      if (content.isEmpty || activeContents.contains(content)) {
+        continue;
+      }
+      activeContents.add(content);
+    }
+
+    final text = activeContents.join('\n');
+    return text;
+  }
+
+  List<String> _snapshotCurrentSubtitleTrackSignatures() {
+    final tracks = _player.mediaInfo.subtitle;
+    if (tracks == null || tracks.isEmpty) {
+      return const [];
+    }
+
+    return tracks.map(_buildSubtitleTrackSignature).toList();
+  }
+
+  String _buildSubtitleTrackSignature(PlayerSubtitleStreamInfo track) {
+    final raw = track.rawRepresentation.trim();
+    if (raw.isNotEmpty) {
+      return raw;
+    }
+
+    final title = track.title?.trim() ?? '';
+    final language = track.language?.trim() ?? '';
+    return '$title|$language';
+  }
+
+  void _loadExternalSubtitleIntoPlayer(
+    String path,
+    int loadToken, {
+    List<String>? previousSubtitleTrackSignatures,
+  }) {
+    if (_isMdkKernel()) {
+      try {
+        _player.setProperty('subtitle', '1');
+        _player.activeSubtitleTracks = [];
+      } catch (e) {
+        debugPrint('SubtitleManager: MDK 清理旧字幕轨失败: $e');
+      }
+    }
+
+    _player.setMedia(path, MediaType.subtitle);
+
+    if (_isMdkKernel()) {
+      unawaited(
+        _ensureMdkExternalSubtitleVisible(
+          subtitlePath: path,
+          loadToken: loadToken,
+        ),
+      );
+      unawaited(
+        _activateMdkExternalSubtitleTrack(
+          subtitlePath: path,
+          loadToken: loadToken,
+          previousSubtitleTrackSignatures:
+              previousSubtitleTrackSignatures ?? const [],
+        ),
+      );
+    }
+  }
+
+  Future<void> _ensureMdkExternalSubtitleVisible({
+    required String subtitlePath,
+    required int loadToken,
+  }) async {
+    if (!_isMdkKernel()) return;
+
+    for (var attempt = 0; attempt < 6; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 80));
+
+      if (loadToken != _subtitleLoadToken) return;
+      if (_currentExternalSubtitlePath != subtitlePath) return;
+
+      try {
+        _player.setProperty('subtitle', '1');
+        _player.activeSubtitleTracks = [0];
+        debugPrint(
+          'SubtitleManager: MDK 已请求显示外挂字幕，attempt=$attempt active=${_player.activeSubtitleTracks}',
+        );
+      } catch (e) {
+        debugPrint('SubtitleManager: MDK 请求显示外挂字幕失败: $e');
+      }
+    }
+  }
+
+  Future<void> _activateMdkExternalSubtitleTrack({
+    required String subtitlePath,
+    required int loadToken,
+    required List<String> previousSubtitleTrackSignatures,
+  }) async {
+    if (!_isMdkKernel()) return;
+
+    final subtitleName = p.basenameWithoutExtension(subtitlePath).toLowerCase();
+    final previousTrackSet = previousSubtitleTrackSignatures.toSet();
+
+    for (var attempt = 0; attempt < 10; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 80));
+
+      if (loadToken != _subtitleLoadToken) return;
+      if (_currentExternalSubtitlePath != subtitlePath) return;
+
+      final currentTracks = _player.mediaInfo.subtitle;
+      if (currentTracks == null || currentTracks.isEmpty) {
+        continue;
+      }
+
+      int? targetIndex;
+      for (var i = 0; i < currentTracks.length; i++) {
+        final signature = _buildSubtitleTrackSignature(currentTracks[i]);
+        if (!previousTrackSet.contains(signature)) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex == null) {
+        final matchedIndex = currentTracks.indexWhere((track) {
+          final title = track.title?.toLowerCase() ?? '';
+          final raw = track.rawRepresentation.toLowerCase();
+          return title.contains(subtitleName) || raw.contains(subtitleName);
+        });
+        if (matchedIndex >= 0) {
+          targetIndex = matchedIndex;
+        }
+      }
+
+      if (targetIndex == null &&
+          currentTracks.length > previousSubtitleTrackSignatures.length) {
+        targetIndex = currentTracks.length - 1;
+      }
+
+      if (targetIndex == null && currentTracks.length == 1) {
+        targetIndex = 0;
+      }
+
+      if (targetIndex == null) {
+        continue;
+      }
+
+      try {
+        _player.setProperty('subtitle', '1');
+        _player.activeSubtitleTracks = [targetIndex];
+        debugPrint(
+          'SubtitleManager: MDK 外部字幕轨已激活，索引: $targetIndex, 字幕: $subtitlePath',
+        );
+        return;
+      } catch (e) {
+        debugPrint('SubtitleManager: MDK 激活外部字幕轨失败: $e');
+      }
+    }
+
+    debugPrint('SubtitleManager: MDK 外部字幕轨激活超时: $subtitlePath');
+  }
 
   Future<void> _loadExternalSubtitleWithEncodingFix(
-      String sourcePath, int loadToken) async {
+    String sourcePath,
+    int loadToken, {
+    List<String>? previousSubtitleTrackSignatures,
+  }) async {
     try {
       if (kIsWeb) return;
 
@@ -403,7 +650,11 @@ class SubtitleManager extends ChangeNotifier {
       if (extension == '.sup') {
         if (loadToken != _subtitleLoadToken) return;
         if (_currentExternalSubtitlePath != sourcePath) return;
-        _player.setMedia(sourcePath, MediaType.subtitle);
+        _loadExternalSubtitleIntoPlayer(
+          sourcePath,
+          loadToken,
+          previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
+        );
         return;
       }
 
@@ -418,14 +669,22 @@ class SubtitleManager extends ChangeNotifier {
           if (await idxFile.exists()) {
             if (loadToken != _subtitleLoadToken) return;
             if (_currentExternalSubtitlePath != sourcePath) return;
-            _player.setMedia(idxPath, MediaType.subtitle);
+            _loadExternalSubtitleIntoPlayer(
+              idxPath,
+              loadToken,
+              previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
+            );
             debugPrint('SubtitleManager: 检测到VobSub，改用IDX加载字幕: $idxPath');
           }
         }
         // 解码失败，回退直接加载原文件（避免完全无字幕）
         if (loadToken != _subtitleLoadToken) return;
         if (_currentExternalSubtitlePath != sourcePath) return;
-        _player.setMedia(sourcePath, MediaType.subtitle);
+        _loadExternalSubtitleIntoPlayer(
+          sourcePath,
+          loadToken,
+          previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
+        );
         return;
       }
 
@@ -433,11 +692,16 @@ class SubtitleManager extends ChangeNotifier {
       final preview = _extractSubtitlePreview(decoded.text);
       final format = SubtitleParser.detectFormat(decoded.text, sourcePath);
       debugPrint(
-          'SubtitleManager: 检测到字幕编码: ${decoded.encoding}, 格式: $format, 预览: $preview');
+        'SubtitleManager: 检测到字幕编码: ${decoded.encoding}, 格式: $format, 预览: $preview',
+      );
       if (encoding.startsWith('utf-8')) {
         if (loadToken != _subtitleLoadToken) return;
         if (_currentExternalSubtitlePath != sourcePath) return;
-        _player.setMedia(sourcePath, MediaType.subtitle);
+        _loadExternalSubtitleIntoPlayer(
+          sourcePath,
+          loadToken,
+          previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
+        );
         return;
       }
 
@@ -462,7 +726,11 @@ class SubtitleManager extends ChangeNotifier {
       if (loadToken != _subtitleLoadToken) return;
       if (_currentExternalSubtitlePath != sourcePath) return;
 
-      _player.setMedia(targetPath, MediaType.subtitle);
+      _loadExternalSubtitleIntoPlayer(
+        targetPath,
+        loadToken,
+        previousSubtitleTrackSignatures: previousSubtitleTrackSignatures,
+      );
       debugPrint('SubtitleManager: 已转换字幕编码并重新加载: $targetPath');
     } catch (e) {
       debugPrint('SubtitleManager: 转换字幕编码失败: $e');
@@ -479,7 +747,9 @@ class SubtitleManager extends ChangeNotifier {
   }
 
   String _resolveSubtitleExtension(
-      SubtitleFormat format, String originalExtension) {
+    SubtitleFormat format,
+    String originalExtension,
+  ) {
     if (format == SubtitleFormat.ass) return '.ass';
     if (format == SubtitleFormat.srt) return '.srt';
     if (format == SubtitleFormat.subViewer) return '.sub';
@@ -530,6 +800,51 @@ class SubtitleManager extends ChangeNotifier {
     setExternalSubtitle(path, isManualSetting: true);
   }
 
+  File? _pickBestLocalSubtitleFile({
+    required List<File> subtitleFiles,
+    required String videoName,
+    required List<String> videoNumbers,
+    String? episodeNumber,
+  }) {
+    if (subtitleFiles.isEmpty) {
+      return null;
+    }
+
+    final scoredCandidates = subtitleFiles.map((file) {
+      final subtitleName = p.basenameWithoutExtension(file.path);
+      final extension = p.extension(file.path).toLowerCase();
+      final score = computeLocalSubtitleMatchScore(
+        videoName: videoName,
+        subtitleName: subtitleName,
+        extension: extension,
+        videoNumbers: videoNumbers,
+        episodeNumber: episodeNumber,
+      );
+      return (file: file, score: score);
+    }).toList()
+      ..sort((a, b) {
+        final scoreCompare = b.score.compareTo(a.score);
+        if (scoreCompare != 0) {
+          return scoreCompare;
+        }
+        return a.file.path.compareTo(b.file.path);
+      });
+
+    for (final candidate in scoredCandidates) {
+      debugPrint(
+        'SubtitleManager: 本地字幕候选 ${candidate.file.path} 得分: ${candidate.score}',
+      );
+    }
+
+    final bestCandidate = scoredCandidates.first;
+    if (bestCandidate.score >= 100 ||
+        (subtitleFiles.length == 1 && bestCandidate.score >= 0)) {
+      return bestCandidate.file;
+    }
+
+    return null;
+  }
+
   // 自动检测并加载同名字幕文件
   Future<void> autoDetectAndLoadSubtitle(String videoPath) async {
     if (kIsWeb) {
@@ -572,8 +887,9 @@ class SubtitleManager extends ChangeNotifier {
 
       // 远程媒体库字幕（含弹弹play远程流）
       if (!kIsWeb &&
-          RemoteSubtitleService.instance
-              .isPotentialRemoteVideoPath(videoPath)) {
+          RemoteSubtitleService.instance.isPotentialRemoteVideoPath(
+            videoPath,
+          )) {
         try {
           final candidates = await RemoteSubtitleService.instance
               .listCandidatesForVideo(videoPath);
@@ -649,22 +965,12 @@ class SubtitleManager extends ChangeNotifier {
       // 提取最可能是集数的数字
       String? episodeNumber;
       if (videoNumbers.isNotEmpty) {
-        // 尝试找到两位数的数字作为集数
-        for (final num in videoNumbers) {
-          if (num.length == 2 && int.parse(num) > 0) {
-            episodeNumber = num;
-            break;
-          }
-        }
-
-        // 如果没找到两位数，使用最后一个数字
-        episodeNumber ??= videoNumbers.last;
-
+        episodeNumber = pickLikelyEpisodeNumber(videoNumbers);
         debugPrint('SubtitleManager: 提取的可能集数: $episodeNumber');
       }
 
       // 常见字幕文件扩展名按优先级排序
-      final subtitleExts = ['.ass', '.srt', '.ssa', '.sub', '.sup'];
+      final subtitleExts = subtitleExtensionMatchScore.keys.toList();
 
       // 搜索可能的字幕文件
       for (final ext in subtitleExts) {
@@ -718,156 +1024,38 @@ class SubtitleManager extends ChangeNotifier {
             return;
           }
 
-          // 如果视频文件名中有数字（可能的集数），尝试基于数字匹配
-          if (videoNumbers.isNotEmpty) {
-            // 评分系统：根据字幕文件名中包含的视频文件名中的数字数量，给每个字幕文件打分
-            Map<File, int> fileScores = {};
+          final bestMatchFile = _pickBestLocalSubtitleFile(
+            subtitleFiles: subtitleFiles,
+            videoName: videoName,
+            videoNumbers: videoNumbers,
+            episodeNumber: episodeNumber,
+          );
 
-            for (final subtitleFile in subtitleFiles) {
-              final subtitleName =
-                  p.basenameWithoutExtension(subtitleFile.path);
-              final subtitleNumberMatch =
-                  RegExp(r'(\d+)').allMatches(subtitleName).toList();
-              List<String> subtitleNumbers = [];
-
-              if (subtitleNumberMatch.isNotEmpty) {
-                subtitleNumbers = subtitleNumberMatch
-                    .map((match) => match.group(0)!)
-                    .toList();
-                debugPrint(
-                    'SubtitleManager: 字幕文件 ${subtitleFile.path} 中的数字: $subtitleNumbers');
-
-                // 提取可能的字幕集数
-                String? subtitleEpisode;
-                for (final num in subtitleNumbers) {
-                  if (num.length == 2 && int.parse(num) > 0) {
-                    subtitleEpisode = num;
-                    break;
-                  }
-                }
-
-                // 如果没找到两位数，使用最后一个数字
-                if (subtitleEpisode == null && subtitleNumbers.isNotEmpty) {
-                  subtitleEpisode = subtitleNumbers.last;
-                }
-
-                debugPrint('SubtitleManager: 字幕可能集数: $subtitleEpisode');
-
-                // 计算匹配分数
-                int score = 0;
-
-                // 如果能提取出视频和字幕的集数，精确匹配集数
-                if (episodeNumber != null && subtitleEpisode != null) {
-                  // 完全匹配集数 - 最高优先级
-                  if (episodeNumber == subtitleEpisode) {
-                    score += 10; // 给予极高的分数
-                    debugPrint(
-                        'SubtitleManager: 集数完全匹配! 视频: $episodeNumber, 字幕: $subtitleEpisode');
-                  } else {
-                    // 检查部分匹配 (例如"01"和"1"，"02"和"2")
-                    final vidEpNum = int.tryParse(episodeNumber) ?? -1;
-                    final subEpNum = int.tryParse(subtitleEpisode) ?? -1;
-
-                    if (vidEpNum == subEpNum && vidEpNum > 0) {
-                      score += 8; // 数值匹配但格式不同
-                      debugPrint(
-                          'SubtitleManager: 集数数值匹配! 视频: $episodeNumber, 字幕: $subtitleEpisode');
-                    } else {
-                      // 不匹配 - 给予负分以防止误匹配
-                      score -= 5;
-                      debugPrint(
-                          'SubtitleManager: 集数不匹配! 视频: $episodeNumber, 字幕: $subtitleEpisode');
-                    }
-                  }
-                } else {
-                  // 退回到原来的匹配逻辑
-                  for (final videoNum in videoNumbers) {
-                    if (subtitleNumbers.contains(videoNum)) {
-                      score++;
-                    }
-                  }
-                }
-
-                // 如果最后一个数字相同（可能是集数），增加权重
-                if (videoNumbers.isNotEmpty &&
-                    subtitleNumbers.isNotEmpty &&
-                    videoNumbers.last == subtitleNumbers.last) {
-                  score += 3;
-                }
-
-                fileScores[subtitleFile] = score;
-              } else {
-                // 没有数字的字幕文件得分为0
-                fileScores[subtitleFile] = 0;
-              }
-            }
-
-            // 按匹配分数排序字幕文件
-            subtitleFiles.sort(
-                (a, b) => (fileScores[b] ?? 0).compareTo(fileScores[a] ?? 0));
-
-            // 获取最高分
-            final highestScore = subtitleFiles.isNotEmpty
-                ? (fileScores[subtitleFiles.first] ?? 0)
-                : 0;
-            debugPrint('SubtitleManager: 最高匹配分数: $highestScore');
-
-            // 只有得分大于0且不是负分的字幕文件才会被使用
-            if (subtitleFiles.isNotEmpty && highestScore > 0) {
-              final bestMatchFile = subtitleFiles.first;
-              debugPrint(
-                  'SubtitleManager: 找到最佳匹配的字幕文件: ${bestMatchFile.path} (分数: $highestScore)');
-
-              // 等待一段时间确保播放器准备好
-              await Future.delayed(const Duration(milliseconds: 500));
-
-              // 设置外部字幕（不标记为手动设置，因为是自动检测的）
-              setExternalSubtitle(bestMatchFile.path, isManualSetting: false);
-
-              // 保存这个自动找到的字幕路径，下次可以直接使用
-              saveVideoSubtitleMapping(videoPath, bestMatchFile.path);
-
-              // 设置完成后强制刷新状态
-              await Future.delayed(const Duration(milliseconds: 300));
-
-              // 触发自动加载字幕回调
-              if (onExternalSubtitleAutoLoaded != null) {
-                final fileName = p.basename(bestMatchFile.path);
-                onExternalSubtitleAutoLoaded!(bestMatchFile.path, fileName);
-              }
-
-              return;
-            } else {
-              debugPrint('SubtitleManager: 没有找到高质量匹配的字幕文件，最高分: $highestScore');
-            }
-          }
-
-          // 如果没有找到基于数字匹配的，或者视频文件名中没有数字，退回到原来的逻辑：选择第一个字幕文件
-          if (subtitleFiles.isNotEmpty) {
-            final file = subtitleFiles.first;
-            debugPrint(
-                'SubtitleManager: 没有找到基于数字匹配的字幕，使用第一个可用字幕: ${file.path}');
+          if (bestMatchFile != null) {
+            debugPrint('SubtitleManager: 找到最佳匹配的字幕文件: ${bestMatchFile.path}');
 
             // 等待一段时间确保播放器准备好
             await Future.delayed(const Duration(milliseconds: 500));
 
             // 设置外部字幕（不标记为手动设置，因为是自动检测的）
-            setExternalSubtitle(file.path, isManualSetting: false);
+            setExternalSubtitle(bestMatchFile.path, isManualSetting: false);
 
             // 保存这个自动找到的字幕路径，下次可以直接使用
-            saveVideoSubtitleMapping(videoPath, file.path);
+            saveVideoSubtitleMapping(videoPath, bestMatchFile.path);
 
             // 设置完成后强制刷新状态
             await Future.delayed(const Duration(milliseconds: 300));
 
             // 触发自动加载字幕回调
             if (onExternalSubtitleAutoLoaded != null) {
-              final fileName = p.basename(file.path);
-              onExternalSubtitleAutoLoaded!(file.path, fileName);
+              final fileName = p.basename(bestMatchFile.path);
+              onExternalSubtitleAutoLoaded!(bestMatchFile.path, fileName);
             }
 
             return;
           }
+
+          debugPrint('SubtitleManager: 没有找到足够可靠的本地字幕匹配结果');
         } catch (e) {
           debugPrint('SubtitleManager: 目录搜索错误: $e');
         }
@@ -929,7 +1117,8 @@ class SubtitleManager extends ChangeNotifier {
   // 获取语言名称
   String getLanguageName(String language) {
     debugPrint(
-        'SubtitleManager: getLanguageName - Called with input: "$language"');
+      'SubtitleManager: getLanguageName - Called with input: "$language"',
+    );
     // 语言代码映射
     final Map<String, String> languageCodes = {
       'chi': '中文',
@@ -963,7 +1152,8 @@ class SubtitleManager extends ChangeNotifier {
     final mappedLanguage = languageCodes[language.toLowerCase()];
     if (mappedLanguage != null) {
       debugPrint(
-          'SubtitleManager: getLanguageName - Matched languageCodes for "$language": $mappedLanguage');
+        'SubtitleManager: getLanguageName - Matched languageCodes for "$language": $mappedLanguage',
+      );
       return mappedLanguage;
     }
 
@@ -972,12 +1162,14 @@ class SubtitleManager extends ChangeNotifier {
       final pattern = RegExp(entry.key, caseSensitive: false);
       if (pattern.hasMatch(language.toLowerCase())) {
         debugPrint(
-            'SubtitleManager: getLanguageName - Matched languagePatterns for "$language" (pattern: "${entry.key}"): ${entry.value}');
+          'SubtitleManager: getLanguageName - Matched languagePatterns for "$language" (pattern: "${entry.key}"): ${entry.value}',
+        );
         return entry.value;
       }
     }
     debugPrint(
-        'SubtitleManager: getLanguageName - No match for "$language", returning original.');
+      'SubtitleManager: getLanguageName - No match for "$language", returning original.',
+    );
     return language;
   }
 
@@ -990,31 +1182,39 @@ class SubtitleManager extends ChangeNotifier {
 
     final playerSubInfo = _player.mediaInfo.subtitle![trackIndex];
     debugPrint(
-        'SubtitleManager: updateEmbeddedSubtitleTrack - Called for trackIndex: $trackIndex');
+      'SubtitleManager: updateEmbeddedSubtitleTrack - Called for trackIndex: $trackIndex',
+    );
     debugPrint(
-        '  - playerSubInfo.title (from Adapter): "${playerSubInfo.title}"');
+      '  - playerSubInfo.title (from Adapter): "${playerSubInfo.title}"',
+    );
     debugPrint(
-        '  - playerSubInfo.language (from Adapter): "${playerSubInfo.language}"');
+      '  - playerSubInfo.language (from Adapter): "${playerSubInfo.language}"',
+    );
     debugPrint(
-        '  - playerSubInfo.metadata (from Adapter): ${playerSubInfo.metadata}');
+      '  - playerSubInfo.metadata (from Adapter): ${playerSubInfo.metadata}',
+    );
 
     String originalTitleFromAdapter = playerSubInfo.title ?? '';
     String originalLanguageCodeFromAdapter = playerSubInfo.language ?? '';
     debugPrint(
-        '  - Initial originalTitleFromAdapter: "$originalTitleFromAdapter"');
+      '  - Initial originalTitleFromAdapter: "$originalTitleFromAdapter"',
+    );
     debugPrint(
-        '  - Initial originalLanguageCodeFromAdapter: "$originalLanguageCodeFromAdapter"');
+      '  - Initial originalLanguageCodeFromAdapter: "$originalLanguageCodeFromAdapter"',
+    );
 
     String displayTitle = originalTitleFromAdapter;
     String determinedLanguage = "未知";
     debugPrint(
-        '  - Initial displayTitle: "$displayTitle", determinedLanguage: "$determinedLanguage"');
+      '  - Initial displayTitle: "$displayTitle", determinedLanguage: "$determinedLanguage"',
+    );
 
     // 1. Try to determine language using the language code from adapter first
     if (originalLanguageCodeFromAdapter.isNotEmpty) {
       determinedLanguage = getLanguageName(originalLanguageCodeFromAdapter);
       debugPrint(
-          '  - After step 1 (from lang code): determinedLanguage: "$determinedLanguage"');
+        '  - After step 1 (from lang code): determinedLanguage: "$determinedLanguage"',
+      );
     }
 
     // 2. If language code didn't yield a good name (or was empty), try with the title from adapter
@@ -1022,7 +1222,8 @@ class SubtitleManager extends ChangeNotifier {
         determinedLanguage == originalLanguageCodeFromAdapter) {
       String langFromTitle = getLanguageName(originalTitleFromAdapter);
       debugPrint(
-          '  - Step 2 (from title "$originalTitleFromAdapter"): langFromTitle: "$langFromTitle"');
+        '  - Step 2 (from title "$originalTitleFromAdapter"): langFromTitle: "$langFromTitle"',
+      );
       if (langFromTitle != originalTitleFromAdapter) {
         determinedLanguage = langFromTitle;
       }
@@ -1058,7 +1259,8 @@ class SubtitleManager extends ChangeNotifier {
       if (determinedLanguage == "未知") determinedLanguage = displayTitle;
     }
     debugPrint(
-        '  - After step 3 (display title construction): displayTitle: "$displayTitle", determinedLanguage: "$determinedLanguage"');
+      '  - After step 3 (display title construction): displayTitle: "$displayTitle", determinedLanguage: "$determinedLanguage"',
+    );
 
     // Ensure determinedLanguage itself is a "final" friendly name
     String finalDeterminedLanguage = getLanguageName(determinedLanguage);
@@ -1066,7 +1268,8 @@ class SubtitleManager extends ChangeNotifier {
       determinedLanguage = finalDeterminedLanguage;
     }
     debugPrint(
-        '  - After final determinedLanguage refinement: determinedLanguage: "$determinedLanguage"');
+      '  - After final determinedLanguage refinement: determinedLanguage: "$determinedLanguage"',
+    );
 
     // If displayTitle is generic but determinedLanguage is more specific, use determinedLanguage for displayTitle
     if ((displayTitle == "未知" ||
@@ -1091,10 +1294,12 @@ class SubtitleManager extends ChangeNotifier {
       determinedLanguage = "未知";
     }
     debugPrint(
-        '  - After displayTitle/determinedLanguage final fallbacks: displayTitle: "$displayTitle", determinedLanguage: "$determinedLanguage"');
+      '  - After displayTitle/determinedLanguage final fallbacks: displayTitle: "$displayTitle", determinedLanguage: "$determinedLanguage"',
+    );
 
     debugPrint(
-        'SubtitleManager: updateEmbeddedSubtitleTrack - FINAL values before updateSubtitleTrackInfo for trackIndex $trackIndex:');
+      'SubtitleManager: updateEmbeddedSubtitleTrack - FINAL values before updateSubtitleTrackInfo for trackIndex $trackIndex:',
+    );
     debugPrint('  - FINAL title for UI: "$displayTitle"');
     debugPrint('  - FINAL language for UI: "$determinedLanguage"');
 
@@ -1106,11 +1311,12 @@ class SubtitleManager extends ChangeNotifier {
       'original_media_kit_title':
           playerSubInfo.metadata['title'] ?? originalTitleFromAdapter,
       'original_media_kit_lang_code':
-          playerSubInfo.metadata['language'] ?? originalLanguageCodeFromAdapter
+          playerSubInfo.metadata['language'] ?? originalLanguageCodeFromAdapter,
     });
 
     // 清除外部字幕信息的激活状态
-    if (_player.activeSubtitleTracks.contains(trackIndex) &&
+    if (_currentExternalSubtitlePath == null &&
+        _player.activeSubtitleTracks.contains(trackIndex) &&
         _subtitleTrackInfo.containsKey('external_subtitle')) {
       updateSubtitleTrackInfo('external_subtitle', {'isActive': false});
     }
@@ -1135,14 +1341,15 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     // 在更新完成后检查当前激活的字幕轨道并确保相应的信息被更新
-    if (_player.activeSubtitleTracks.isNotEmpty) {
+    if (_player.activeSubtitleTracks.isNotEmpty &&
+        _currentExternalSubtitlePath == null) {
       final activeIndex = _player.activeSubtitleTracks.first;
-      if (activeIndex > 0 &&
-          activeIndex <= _player.mediaInfo.subtitle!.length) {
+      if (activeIndex >= 0 &&
+          activeIndex < _player.mediaInfo.subtitle!.length) {
         // 激活的是内嵌字幕轨道
         updateSubtitleTrackInfo('embedded_subtitle', {
-          'index': activeIndex - 1, // MDK 字幕轨道从 1 开始，而我们的索引从 0 开始
-          'title': _player.mediaInfo.subtitle![activeIndex - 1].toString(),
+          'index': activeIndex,
+          'title': _player.mediaInfo.subtitle![activeIndex].toString(),
           'isActive': true,
         });
 
