@@ -34,6 +34,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_settings_menu.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
+import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:video_player/video_player.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
@@ -513,6 +514,20 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                         fontSize: videoState.actualDanmakuFontSize,
                         isVisible: videoState.danmakuVisible,
                         opacity: videoState.mappedDanmakuOpacity,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            if (videoState.hasVideo)
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: true,
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: videoState.playbackTimeMs,
+                    builder: (context, posMs, __) {
+                      return ExternalSubtitleOverlay(
+                        currentPositionMs: posMs,
                       );
                     },
                   ),

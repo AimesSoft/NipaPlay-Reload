@@ -8,6 +8,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
+import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:provider/provider.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
@@ -425,7 +426,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     ];
     final subject = titleParts.isEmpty ? null : titleParts.join(' · ');
 
-    if ((filePath == null || filePath.isEmpty) && (url == null || url.isEmpty)) {
+    if ((filePath == null || filePath.isEmpty) &&
+        (url == null || url.isEmpty)) {
       if (!mounted) return;
       BlurSnackBar.show(context, '没有可分享的内容');
       return;
@@ -506,7 +508,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     }
   }
 
-  List<ContextMenuAction> _buildContextMenuActions(VideoPlayerState videoState) {
+  List<ContextMenuAction> _buildContextMenuActions(
+      VideoPlayerState videoState) {
     final actions = <ContextMenuAction>[
       ContextMenuAction(
         icon: Icons.skip_previous_rounded,
@@ -678,121 +681,22 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                              Positioned.fill(
-                                child: RepaintBoundary(
-                                  child: ColoredBox(
-                                    color: Colors.black,
-                                    child: Center(
-                                      child: AspectRatio(
-                                        aspectRatio: videoState.aspectRatio,
-                                        child: _buildVideoSurface(
-                                          videoState,
-                                          textureId,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              if (videoState.hasVideo &&
-                                  videoState.danmakuVisible)
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    ignoring: true,
-                                    child: Consumer<VideoPlayerState>(
-                                      builder: (context, videoState, _) {
-                                        // 使用高频时间轴驱动弹幕帧率
-                                        return ValueListenableBuilder<double>(
-                                          valueListenable:
-                                              videoState.playbackTimeMs,
-                                          builder: (context, posMs, __) {
-                                            return DanmakuOverlay(
-                                              key: ValueKey(
-                                                  'danmaku_${videoState.danmakuOverlayKey}'),
-                                              currentPosition: posMs,
-                                              videoDuration: videoState
-                                                  .videoDuration.inMilliseconds
-                                                  .toDouble(),
-                                              isPlaying: videoState.status ==
-                                                  PlayerStatus.playing,
-                                              fontSize: getFontSize(videoState),
-                                              isVisible:
-                                                  videoState.danmakuVisible,
-                                              opacity: videoState
-                                                  .mappedDanmakuOpacity,
-                                            );
-                                          },
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ),
-
-                              if (videoState.status ==
-                                      PlayerStatus.recognizing ||
-                                  videoState.status == PlayerStatus.loading)
-                                Positioned.fill(
-                                  child: LoadingOverlay(
-                                    messages: videoState.statusMessages,
-                                    backgroundOpacity: 0.5,
-                                    highPriorityAnimation:
-                                        !videoState.isInFinalLoadingPhase,
-                                    animeTitle: videoState.animeTitle,
-                                    episodeTitle: videoState.episodeTitle,
-                                    fileName:
-                                        videoState.currentVideoPath?.split('/').last,
-                                    coverImageUrl: _currentAnimeCoverUrl,
-                                  ),
-                                ),
-
-                              if (videoState.hasVideo)
-                                VerticalIndicator(videoState: videoState),
-
-                              if (videoState.hasVideo)
-                                const Positioned.fill(
-                                  child: SpeedBoostIndicator(),
-                                ),
-
-                              if (globals.isPhone && videoState.hasVideo)
-                                const BrightnessGestureArea(),
-
-                              if (globals.isPhone && videoState.hasVideo)
-                                const VolumeGestureArea(),
-
-                              // 底部1像素白色进度条
-                              const MinimalProgressBar(),
-
-                              // 弹幕密度曲线
-                              const DanmakuDensityBar(),
-                              ],
-                            ),
-                          )
-                        : Focus(
-                            focusNode: _focusNode,
-                            autofocus: true,
-                            canRequestFocus: true,
-                            child: RepaintBoundary(
-                              key: videoState.screenshotBoundaryKey,
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
                                 Positioned.fill(
                                   child: RepaintBoundary(
                                     child: ColoredBox(
                                       color: Colors.black,
-                                    child: Center(
-                                      child: AspectRatio(
-                                        aspectRatio: videoState.aspectRatio,
-                                        child: _buildVideoSurface(
-                                          videoState,
-                                          textureId,
+                                      child: Center(
+                                        child: AspectRatio(
+                                          aspectRatio: videoState.aspectRatio,
+                                          child: _buildVideoSurface(
+                                            videoState,
+                                            textureId,
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
 
                                 if (videoState.hasVideo &&
                                     videoState.danmakuVisible)
@@ -830,6 +734,23 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     ),
                                   ),
 
+                                if (videoState.hasVideo)
+                                  Positioned.fill(
+                                    child: Consumer<VideoPlayerState>(
+                                      builder: (context, videoState, _) {
+                                        return ValueListenableBuilder<double>(
+                                          valueListenable:
+                                              videoState.playbackTimeMs,
+                                          builder: (context, posMs, __) {
+                                            return ExternalSubtitleOverlay(
+                                              currentPositionMs: posMs,
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+
                                 if (videoState.status ==
                                         PlayerStatus.recognizing ||
                                     videoState.status == PlayerStatus.loading)
@@ -837,12 +758,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     child: LoadingOverlay(
                                       messages: videoState.statusMessages,
                                       backgroundOpacity: 0.5,
-                                      highPriorityAnimation: !videoState
-                                          .isInFinalLoadingPhase,
+                                      highPriorityAnimation:
+                                          !videoState.isInFinalLoadingPhase,
                                       animeTitle: videoState.animeTitle,
                                       episodeTitle: videoState.episodeTitle,
-                                      fileName:
-                                          videoState.currentVideoPath?.split('/').last,
+                                      fileName: videoState.currentVideoPath
+                                          ?.split('/')
+                                          .last,
                                       coverImageUrl: _currentAnimeCoverUrl,
                                     ),
                                   ),
@@ -855,15 +777,137 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     child: SpeedBoostIndicator(),
                                   ),
 
-                                // 右边缘悬浮菜单（仅桌面版）
-                                if (videoState.desktopHoverSettingsMenuEnabled)
-                                  const RightEdgeHoverMenu(),
+                                if (globals.isPhone && videoState.hasVideo)
+                                  const BrightnessGestureArea(),
+
+                                if (globals.isPhone && videoState.hasVideo)
+                                  const VolumeGestureArea(),
 
                                 // 底部1像素白色进度条
                                 const MinimalProgressBar(),
 
                                 // 弹幕密度曲线
                                 const DanmakuDensityBar(),
+                              ],
+                            ),
+                          )
+                        : Focus(
+                            focusNode: _focusNode,
+                            autofocus: true,
+                            canRequestFocus: true,
+                            child: RepaintBoundary(
+                              key: videoState.screenshotBoundaryKey,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Positioned.fill(
+                                    child: RepaintBoundary(
+                                      child: ColoredBox(
+                                        color: Colors.black,
+                                        child: Center(
+                                          child: AspectRatio(
+                                            aspectRatio: videoState.aspectRatio,
+                                            child: _buildVideoSurface(
+                                              videoState,
+                                              textureId,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (videoState.hasVideo &&
+                                      videoState.danmakuVisible)
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        ignoring: true,
+                                        child: Consumer<VideoPlayerState>(
+                                          builder: (context, videoState, _) {
+                                            // 使用高频时间轴驱动弹幕帧率
+                                            return ValueListenableBuilder<
+                                                double>(
+                                              valueListenable:
+                                                  videoState.playbackTimeMs,
+                                              builder: (context, posMs, __) {
+                                                return DanmakuOverlay(
+                                                  key: ValueKey(
+                                                      'danmaku_${videoState.danmakuOverlayKey}'),
+                                                  currentPosition: posMs,
+                                                  videoDuration: videoState
+                                                      .videoDuration
+                                                      .inMilliseconds
+                                                      .toDouble(),
+                                                  isPlaying:
+                                                      videoState.status ==
+                                                          PlayerStatus.playing,
+                                                  fontSize:
+                                                      getFontSize(videoState),
+                                                  isVisible:
+                                                      videoState.danmakuVisible,
+                                                  opacity: videoState
+                                                      .mappedDanmakuOpacity,
+                                                );
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+
+                                  if (videoState.hasVideo)
+                                    Positioned.fill(
+                                      child: Consumer<VideoPlayerState>(
+                                        builder: (context, videoState, _) {
+                                          return ValueListenableBuilder<double>(
+                                            valueListenable:
+                                                videoState.playbackTimeMs,
+                                            builder: (context, posMs, __) {
+                                              return ExternalSubtitleOverlay(
+                                                currentPositionMs: posMs,
+                                              );
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+
+                                  if (videoState.status ==
+                                          PlayerStatus.recognizing ||
+                                      videoState.status == PlayerStatus.loading)
+                                    Positioned.fill(
+                                      child: LoadingOverlay(
+                                        messages: videoState.statusMessages,
+                                        backgroundOpacity: 0.5,
+                                        highPriorityAnimation:
+                                            !videoState.isInFinalLoadingPhase,
+                                        animeTitle: videoState.animeTitle,
+                                        episodeTitle: videoState.episodeTitle,
+                                        fileName: videoState.currentVideoPath
+                                            ?.split('/')
+                                            .last,
+                                        coverImageUrl: _currentAnimeCoverUrl,
+                                      ),
+                                    ),
+
+                                  if (videoState.hasVideo)
+                                    VerticalIndicator(videoState: videoState),
+
+                                  if (videoState.hasVideo)
+                                    const Positioned.fill(
+                                      child: SpeedBoostIndicator(),
+                                    ),
+
+                                  // 右边缘悬浮菜单（仅桌面版）
+                                  if (videoState
+                                      .desktopHoverSettingsMenuEnabled)
+                                    const RightEdgeHoverMenu(),
+
+                                  // 底部1像素白色进度条
+                                  const MinimalProgressBar(),
+
+                                  // 弹幕密度曲线
+                                  const DanmakuDensityBar(),
                                 ],
                               ),
                             ),
