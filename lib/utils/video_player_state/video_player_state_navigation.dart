@@ -113,8 +113,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     ? resolvedHistory.lastPosition
                     : null,
               );
-              debugPrint(
-                  '[上一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
+              debugPrint('[上一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
 
               await initializePlayer(
                 resolvedHistory.filePath,
@@ -129,7 +128,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           } else if (resolvedHistory.filePath.startsWith('emby://')) {
             try {
               // 从emby://协议URL中提取episodeId（只取最后一部分）
-              final embyPath = resolvedHistory.filePath.replaceFirst('emby://', '');
+              final embyPath =
+                  resolvedHistory.filePath.replaceFirst('emby://', '');
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               final playbackSession =
@@ -139,8 +139,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     ? resolvedHistory.lastPosition
                     : null,
               );
-              debugPrint(
-                  '[上一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
+              debugPrint('[上一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
 
               await initializePlayer(
                 resolvedHistory.filePath,
@@ -284,8 +283,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     ? resolvedHistory.lastPosition
                     : null,
               );
-              debugPrint(
-                  '[下一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
+              debugPrint('[下一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
 
               await initializePlayer(
                 resolvedHistory.filePath,
@@ -300,7 +298,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           } else if (resolvedHistory.filePath.startsWith('emby://')) {
             try {
               // 从emby://协议URL中提取episodeId（只取最后一部分）
-              final embyPath = resolvedHistory.filePath.replaceFirst('emby://', '');
+              final embyPath =
+                  resolvedHistory.filePath.replaceFirst('emby://', '');
               final pathParts = embyPath.split('/');
               final episodeId = pathParts.last; // 只使用最后一部分作为episodeId
               final playbackSession =
@@ -310,8 +309,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     ? resolvedHistory.lastPosition
                     : null,
               );
-              debugPrint(
-                  '[下一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
+              debugPrint('[下一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
 
               await initializePlayer(
                 resolvedHistory.filePath,
@@ -541,15 +539,20 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           if (playerPosition >= 0 && playerDuration > 0) {
             // 更新UI显示
             _position = Duration(milliseconds: playerPosition);
+            final previousDurationMs = _duration.inMilliseconds;
+            final previousSubtitleDelay = subtitleDelaySeconds;
             _duration = Duration(milliseconds: playerDuration);
+            if (previousDurationMs != playerDuration &&
+                (previousSubtitleDelay - subtitleDelaySeconds).abs() >=
+                    0.0001) {
+              unawaited(applySubtitleStylePreference());
+            }
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
             final bufferedMs = player.bufferedPosition;
             _bufferedPositionMs = bufferedMs <= 0
                 ? 0
                 : (_duration.inMilliseconds > 0
-                    ? bufferedMs
-                        .clamp(0, _duration.inMilliseconds)
-                        .toInt()
+                    ? bufferedMs.clamp(0, _duration.inMilliseconds).toInt()
                     : bufferedMs);
             // 高频时间轴：每帧更新弹幕时间
             _playbackTimeMs.value = _position.inMilliseconds.toDouble();
@@ -717,9 +720,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             final bufferedMs = player.bufferedPosition;
             _bufferedPositionMs = bufferedMs <= 0
                 ? 0
-                : bufferedMs
-                    .clamp(0, _duration.inMilliseconds)
-                    .toInt();
+                : bufferedMs.clamp(0, _duration.inMilliseconds).toInt();
             // 暂停下也节流保存位置
             if (_currentVideoPath != null) {
               final int posMs = _position.inMilliseconds;
