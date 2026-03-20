@@ -8,4 +8,5 @@ const List<String> kAcknowledgementNames = [
   'JMT',
   '无之将',
   '博易伯伯',
+  '千葉あおい',
 ];
