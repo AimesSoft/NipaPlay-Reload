@@ -160,8 +160,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
               ],
             );
           } else {
-            print(
-                "[VideoPlayerUI] onSeriousPlaybackErrorAndShouldPop: Not mounted or _videoPlayerStateInstance is null.");
+            debugPrint(
+              '[VideoPlayerUI] onSeriousPlaybackErrorAndShouldPop: '
+              'Not mounted or _videoPlayerStateInstance is null.',
+            );
           }
         };
 
@@ -196,7 +198,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         }
       } catch (e) {
         // 捕获并记录任何异常
-        print('VideoPlayerUI初始化出错: $e');
+        debugPrint('VideoPlayerUI初始化出错: $e');
       }
     });
   }

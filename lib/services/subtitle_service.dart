@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/subtitle_parser.dart';
+import 'package:nipaplay/utils/subtitle_file_utils.dart';
+import 'package:nipaplay/utils/subtitle_language_utils.dart';
 
 class SubtitleService {
   static final SubtitleService _instance = SubtitleService._internal();
@@ -141,10 +143,9 @@ class SubtitleService {
       final fileName = p.basename(filePath);
 
       // 检查文件格式
-      final validExtensions = ['.srt', '.ass', '.ssa', '.sub', '.sup'];
       final extension = p.extension(filePath).toLowerCase();
 
-      if (!validExtensions.contains(extension)) {
+      if (!supportedSubtitleExtensions.contains(extension)) {
         throw UnsupportedError('不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 文件');
       }
 
@@ -250,8 +251,7 @@ class SubtitleService {
       final videoDir = videoFile.parent.path;
       final videoName = p.basenameWithoutExtension(videoPath);
 
-      // 常见字幕文件扩展名
-      const subtitleExts = ['.srt', '.ass', '.ssa', '.sub', '.sup'];
+      final subtitleExts = subtitleExtensionMatchScore.keys;
 
       // 尝试查找同名字幕文件
       for (final ext in subtitleExts) {
@@ -288,45 +288,7 @@ class SubtitleService {
 
   /// 获取语言友好名称
   String getLanguageName(String language) {
-    final Map<String, String> languageCodes = {
-      'chi': '中文',
-      'eng': '英文',
-      'jpn': '日语',
-      'kor': '韩语',
-      'fra': '法语',
-      'deu': '德语',
-      'spa': '西班牙语',
-      'ita': '意大利语',
-      'rus': '俄语',
-    };
-
-    final Map<String, String> languagePatterns = {
-      r'chi|chs|zh|中文|简体|繁体|chi.*?simplified|chinese': '中文',
-      r'eng|en|英文|english': '英文',
-      r'jpn|ja|日文|japanese': '日语',
-      r'kor|ko|韩文|korean': '韩语',
-      r'fra|fr|法文|french': '法语',
-      r'ger|de|德文|german': '德语',
-      r'spa|es|西班牙文|spanish': '西班牙语',
-      r'ita|it|意大利文|italian': '意大利语',
-      r'rus|ru|俄文|russian': '俄语',
-    };
-
-    // 首先检查语言代码映射
-    final mappedLanguage = languageCodes[language.toLowerCase()];
-    if (mappedLanguage != null) {
-      return mappedLanguage;
-    }
-
-    // 然后检查语言标识符
-    for (final entry in languagePatterns.entries) {
-      final pattern = RegExp(entry.key, caseSensitive: false);
-      if (pattern.hasMatch(language.toLowerCase())) {
-        return entry.value;
-      }
-    }
-
-    return language;
+    return getSubtitleLanguageName(language);
   }
 
   /// 清除指定视频的字幕缓存

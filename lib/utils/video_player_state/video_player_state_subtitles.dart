@@ -1,51 +1,6 @@
 part of video_player_state;
 
 extension VideoPlayerStateSubtitles on VideoPlayerState {
-  // 获取字幕轨道的语言名称
-  String _getLanguageName(String language) {
-    // 语言代码映射
-    final Map<String, String> languageCodes = {
-      'chi': '中文',
-      'eng': '英文',
-      'jpn': '日语',
-      'kor': '韩语',
-      'fra': '法语',
-      'deu': '德语',
-      'spa': '西班牙语',
-      'ita': '意大利语',
-      'rus': '俄语',
-    };
-
-    // 常见的语言标识符
-    final Map<String, String> languagePatterns = {
-      r'chi|chs|zh|中文|简体|繁体|chi.*?simplified|chinese': '中文',
-      r'eng|en|英文|english': '英文',
-      r'jpn|ja|日文|japanese': '日语',
-      r'kor|ko|韩文|korean': '韩语',
-      r'fra|fr|法文|french': '法语',
-      r'ger|de|德文|german': '德语',
-      r'spa|es|西班牙文|spanish': '西班牙语',
-      r'ita|it|意大利文|italian': '意大利语',
-      r'rus|ru|俄文|russian': '俄语',
-    };
-
-    // 首先检查语言代码映射
-    final mappedLanguage = languageCodes[language.toLowerCase()];
-    if (mappedLanguage != null) {
-      return mappedLanguage;
-    }
-
-    // 然后检查语言标识符
-    for (final entry in languagePatterns.entries) {
-      final pattern = RegExp(entry.key, caseSensitive: false);
-      if (pattern.hasMatch(language.toLowerCase())) {
-        return entry.value;
-      }
-    }
-
-    return language;
-  }
-
   // 更新指定的字幕轨道信息
   void _updateSubtitleTracksInfo(int trackIndex) {
     if (player.mediaInfo.subtitle == null ||
@@ -79,7 +34,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
         if (languageMatch != null) {
           language = languageMatch.group(1)?.trim() ?? language;
           // 获取映射后的语言名称
-          language = _getLanguageName(language);
+          language = getSubtitleLanguageName(language);
         }
       }
     }

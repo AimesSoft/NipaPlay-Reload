@@ -10,6 +10,30 @@ const Map<String, int> subtitleExtensionMatchScore = <String, int>{
   '.sup': 20,
 };
 
+const Set<String> supportedSubtitleExtensions = <String>{
+  '.ass',
+  '.ssa',
+  '.srt',
+  '.sub',
+  '.sup',
+};
+
+const int minReliableLocalSubtitleMatchScore = 100;
+
+const int _exactNameMatchBonus = 500;
+const int _prefixNameMatchBonus = 320;
+const int _normalizedExactMatchBonus = 280;
+const int _normalizedPrefixMatchBonus = 220;
+const int _normalizedContainsMatchBonus = 180;
+const int _normalizedContainedByMatchBonus = 80;
+const int _tokenOverlapWeight = 25;
+const int _allVideoTokensMatchedBonus = 120;
+const int _zeroTokenOverlapPenalty = 80;
+const int _episodeExactMatchBonus = 220;
+const int _episodeNumericEqualBonus = 190;
+const int _episodeMismatchPenalty = 120;
+const int _fallbackNumberMatchBonus = 15;
+
 const Set<String> _subtitleNoiseTokens = <String>{
   'ass',
   'srt',
@@ -132,39 +156,39 @@ int computeLocalSubtitleMatchScore({
   var score = subtitleExtensionMatchScore[extension.toLowerCase()] ?? 0;
 
   if (lowerSubtitle == lowerVideo) {
-    score += 500;
+    score += _exactNameMatchBonus;
   }
 
   if (lowerSubtitle.startsWith('$lowerVideo.') ||
       lowerSubtitle.startsWith('$lowerVideo ') ||
       lowerSubtitle.startsWith('$lowerVideo[') ||
       lowerSubtitle.startsWith('$lowerVideo(')) {
-    score += 320;
+    score += _prefixNameMatchBonus;
   }
 
   if (normalizedVideo.isNotEmpty && normalizedSubtitle == normalizedVideo) {
-    score += 280;
+    score += _normalizedExactMatchBonus;
   } else if (normalizedVideo.isNotEmpty &&
       normalizedSubtitle.startsWith('$normalizedVideo ')) {
-    score += 220;
+    score += _normalizedPrefixMatchBonus;
   } else if (normalizedVideo.isNotEmpty &&
       normalizedSubtitle.contains(normalizedVideo)) {
-    score += 180;
+    score += _normalizedContainsMatchBonus;
   } else if (normalizedSubtitle.isNotEmpty &&
       normalizedVideo.contains(normalizedSubtitle)) {
-    score += 80;
+    score += _normalizedContainedByMatchBonus;
   }
 
   final videoTokens = extractSubtitleMatchTokens(videoName);
   final subtitleTokens = extractSubtitleMatchTokens(subtitleName);
   final overlapCount = videoTokens.intersection(subtitleTokens).length;
 
-  score += overlapCount * 25;
+  score += overlapCount * _tokenOverlapWeight;
 
   if (videoTokens.isNotEmpty && overlapCount == videoTokens.length) {
-    score += 120;
+    score += _allVideoTokensMatchedBonus;
   } else if (videoTokens.length >= 2 && overlapCount == 0) {
-    score -= 80;
+    score -= _zeroTokenOverlapPenalty;
   }
 
   final subtitleNumbers = RegExp(
@@ -174,7 +198,7 @@ int computeLocalSubtitleMatchScore({
 
   if (episodeNumber != null && subtitleEpisode != null) {
     if (episodeNumber == subtitleEpisode) {
-      score += 220;
+      score += _episodeExactMatchBonus;
     } else {
       final videoEpisodeInt = int.tryParse(episodeNumber);
       final subtitleEpisodeInt = int.tryParse(subtitleEpisode);
@@ -182,15 +206,15 @@ int computeLocalSubtitleMatchScore({
           subtitleEpisodeInt != null &&
           videoEpisodeInt > 0 &&
           videoEpisodeInt == subtitleEpisodeInt) {
-        score += 190;
+        score += _episodeNumericEqualBonus;
       } else {
-        score -= 120;
+        score -= _episodeMismatchPenalty;
       }
     }
   } else if (videoNumbers.isNotEmpty && subtitleNumbers.isNotEmpty) {
     for (final videoNumber in videoNumbers.take(3)) {
       if (subtitleNumbers.contains(videoNumber)) {
-        score += 15;
+        score += _fallbackNumberMatchBonus;
       }
     }
   }

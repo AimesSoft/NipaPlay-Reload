@@ -415,8 +415,8 @@ class _CupertinoSubtitleTracksPaneState
                 _externalSubtitles.any((s) => s['isActive'] == true);
             final bool isActive = !hasExternal &&
                 widget.videoState.player.activeSubtitleTracks.contains(index);
-            final String language =
-                _languageName(track.language ?? track.toString());
+            final String language = _subtitleService
+                .getLanguageName(track.language ?? track.toString());
             final String title = track.title?.trim().isNotEmpty == true
                 ? track.title!
                 : '轨道 ${index + 1}';
@@ -498,19 +498,5 @@ class _CupertinoSubtitleTracksPaneState
         ];
       },
     );
-  }
-
-  String _languageName(String input) {
-    final String value = input.toLowerCase();
-    if (value.contains('chi') || value.contains('zh')) return '中文';
-    if (value.contains('eng') || value.contains('en')) return '英文';
-    if (value.contains('jpn') || value.contains('ja')) return '日语';
-    if (value.contains('kor') || value.contains('ko')) return '韩语';
-    if (value.contains('fra') || value.contains('fr')) return '法语';
-    if (value.contains('deu') || value.contains('de')) return '德语';
-    if (value.contains('spa') || value.contains('es')) return '西班牙语';
-    if (value.contains('ita') || value.contains('it')) return '意大利语';
-    if (value.contains('rus') || value.contains('ru')) return '俄语';
-    return input;
   }
 }

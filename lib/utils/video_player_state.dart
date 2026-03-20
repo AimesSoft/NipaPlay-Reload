@@ -65,6 +65,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/seek_indicator.dart'; // Added 
 import 'package:volume_controller/volume_controller.dart';
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
+import 'subtitle_language_utils.dart';
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';

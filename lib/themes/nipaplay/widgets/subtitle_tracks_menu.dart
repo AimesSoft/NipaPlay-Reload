@@ -13,6 +13,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'blur_button.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
+import 'package:nipaplay/utils/subtitle_file_utils.dart';
+import 'package:nipaplay/utils/subtitle_language_utils.dart';
 import 'package:flutter/foundation.dart';
 
 class SubtitleTracksMenu extends StatefulWidget {
@@ -163,11 +165,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       final fileName = p.basename(filePath);
 
       // 检查是否是有效的字幕文件
-      if (!filePath.toLowerCase().endsWith('.srt') &&
-          !filePath.toLowerCase().endsWith('.ass') &&
-          !filePath.toLowerCase().endsWith('.ssa') &&
-          !filePath.toLowerCase().endsWith('.sub') &&
-          !filePath.toLowerCase().endsWith('.sup')) {
+      final extension = p.extension(filePath).toLowerCase();
+      if (!supportedSubtitleExtensions.contains(extension)) {
         if (context.mounted) {
           BlurSnackBar.show(
               context, '不支持的字幕格式，请选择 .srt, .ass, .ssa, .sub 或 .sup 文件');
@@ -442,51 +441,6 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
       debugPrint(
           '_SubtitleTracksMenu: Error switching to embedded subtitle: $e');
     }
-  }
-
-  // 获取字幕轨道的语言名称
-  String _getLanguageName(String language) {
-    // 语言代码映射
-    final Map<String, String> languageCodes = {
-      'chi': '中文',
-      'eng': '英文',
-      'jpn': '日语',
-      'kor': '韩语',
-      'fra': '法语',
-      'deu': '德语',
-      'spa': '西班牙语',
-      'ita': '意大利语',
-      'rus': '俄语',
-    };
-
-    // 常见的语言标识符
-    final Map<String, String> languagePatterns = {
-      r'chi|chs|zh|中文|简体|繁体|chi.*?simplified|chinese': '中文',
-      r'eng|en|英文|english': '英文',
-      r'jpn|ja|日文|japanese': '日语',
-      r'kor|ko|韩文|korean': '韩语',
-      r'fra|fr|法文|french': '法语',
-      r'ger|de|德文|german': '德语',
-      r'spa|es|西班牙文|spanish': '西班牙语',
-      r'ita|it|意大利文|italian': '意大利语',
-      r'rus|ru|俄文|russian': '俄语',
-    };
-
-    // 首先检查语言代码映射
-    final mappedLanguage = languageCodes[language.toLowerCase()];
-    if (mappedLanguage != null) {
-      return mappedLanguage;
-    }
-
-    // 然后检查语言标识符
-    for (final entry in languagePatterns.entries) {
-      final pattern = RegExp(entry.key, caseSensitive: false);
-      if (pattern.hasMatch(language.toLowerCase())) {
-        return entry.value;
-      }
-    }
-
-    return language;
   }
 
   // 删除外部字幕
@@ -796,7 +750,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     .map((entry) {
                   final index = entry
                       .key; // This is the original index from player.mediaInfo.subtitle
-                  // final track = entry.value; // This is PlayerSubtitleStreamInfo, we don't need to parse it here.
+                  final track = entry.value;
 
                   // Determine if this track is active.
                   // Active state is based on player's active tracks and no external subtitle being active.
@@ -812,8 +766,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                   final Map<String, dynamic>? trackDataFromManager =
                       subtitleManager.subtitleTrackInfo[managerTrackKey];
 
-                  String title = '轨道 ${index + 1}'; // Fallback title
-                  String language = '未知'; // Fallback language
+                  String title = track.title?.trim().isNotEmpty == true
+                      ? track.title!.trim()
+                      : '轨道 ${index + 1}';
+                  String language = getSubtitleLanguageName(
+                    track.language ?? title,
+                  );
 
                   if (trackDataFromManager != null) {
                     title = trackDataFromManager['title'] as String? ?? title;

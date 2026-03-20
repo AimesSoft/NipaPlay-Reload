@@ -10,9 +10,23 @@ import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
+import 'package:nipaplay/utils/subtitle_language_utils.dart';
 
 /// 字幕管理器类，负责处理与字幕相关的所有功能
 class SubtitleManager extends ChangeNotifier {
+  static const Duration _mdkSubtitleRetryInterval = Duration(
+    milliseconds: 80,
+  );
+  static const int _mdkVisibilityRetryAttempts = 6;
+  static const int _mdkTrackActivationRetryAttempts = 10;
+  static const Duration _autoLoadPlayerReadyDelay = Duration(
+    milliseconds: 500,
+  );
+  static const Duration _autoLoadStateSettleDelay = Duration(
+    milliseconds: 300,
+  );
+  static const int _subtitlePreviewMaxChars = 80;
+
   Player _player;
   String? _currentVideoPath;
   String? _currentExternalSubtitlePath;
@@ -25,6 +39,7 @@ class SubtitleManager extends ChangeNotifier {
 
   // 外部字幕自动加载回调
   Function(String path, String fileName)? onExternalSubtitleAutoLoaded;
+  void Function(String message)? onUserNotification;
 
   // 构造函数
   SubtitleManager({required Player player}) : _player = player;
@@ -338,12 +353,7 @@ class SubtitleManager extends ChangeNotifier {
       // NEW: Check if player supports external subtitles
       if (!_player.supportsExternalSubtitles && path.isNotEmpty) {
         debugPrint('SubtitleManager: 当前播放器内核不支持加载外部字幕');
-        // TODO: Call your blur_snackbar here
-        // For example: globals.showBlurSnackbar('当前播放器内核不支持加载外部字幕');
-        // As a placeholder, I'll just print. Replace with your actual snackbar call.
-        debugPrint(
-          "USER_INFO: blur_snackbar should be called here: '当前播放器内核不支持加载外部字幕'",
-        );
+        onUserNotification?.call('当前播放器内核不支持加载外部字幕');
         return;
       }
 
@@ -551,8 +561,8 @@ class SubtitleManager extends ChangeNotifier {
   }) async {
     if (!_isMdkKernel()) return;
 
-    for (var attempt = 0; attempt < 6; attempt++) {
-      await Future.delayed(const Duration(milliseconds: 80));
+    for (var attempt = 0; attempt < _mdkVisibilityRetryAttempts; attempt++) {
+      await Future.delayed(_mdkSubtitleRetryInterval);
 
       if (loadToken != _subtitleLoadToken) return;
       if (_currentExternalSubtitlePath != subtitlePath) return;
@@ -579,8 +589,10 @@ class SubtitleManager extends ChangeNotifier {
     final subtitleName = p.basenameWithoutExtension(subtitlePath).toLowerCase();
     final previousTrackSet = previousSubtitleTrackSignatures.toSet();
 
-    for (var attempt = 0; attempt < 10; attempt++) {
-      await Future.delayed(const Duration(milliseconds: 80));
+    for (var attempt = 0;
+        attempt < _mdkTrackActivationRetryAttempts;
+        attempt++) {
+      await Future.delayed(_mdkSubtitleRetryInterval);
 
       if (loadToken != _subtitleLoadToken) return;
       if (_currentExternalSubtitlePath != subtitlePath) return;
@@ -790,8 +802,8 @@ class SubtitleManager extends ChangeNotifier {
 
   String _trimPreview(String text) {
     final cleaned = text.replaceAll('\n', ' ').trim();
-    if (cleaned.length <= 80) return cleaned;
-    return '${cleaned.substring(0, 80)}...';
+    if (cleaned.length <= _subtitlePreviewMaxChars) return cleaned;
+    return '${cleaned.substring(0, _subtitlePreviewMaxChars)}...';
   }
 
   // 强制设置外部字幕（手动操作）
@@ -837,7 +849,7 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     final bestCandidate = scoredCandidates.first;
-    if (bestCandidate.score >= 100 ||
+    if (bestCandidate.score >= minReliableLocalSubtitleMatchScore ||
         (subtitleFiles.length == 1 && bestCandidate.score >= 0)) {
       return bestCandidate.file;
     }
@@ -865,13 +877,13 @@ class SubtitleManager extends ChangeNotifier {
           debugPrint('SubtitleManager: 加载上次使用的外部字幕: $savedSubtitlePath');
 
           // 等待一段时间确保播放器准备好
-          await Future.delayed(const Duration(milliseconds: 500));
+          await Future.delayed(_autoLoadPlayerReadyDelay);
 
           // 设置外部字幕（标记为手动设置，因为这是用户曾经手动选择过的）
           setExternalSubtitle(savedSubtitlePath, isManualSetting: true);
 
           // 设置完成后强制刷新状态
-          await Future.delayed(const Duration(milliseconds: 300));
+          await Future.delayed(_autoLoadStateSettleDelay);
 
           // 触发自动加载字幕回调
           if (onExternalSubtitleAutoLoaded != null) {
@@ -906,7 +918,7 @@ class SubtitleManager extends ChangeNotifier {
                 .ensureSubtitleCached(selected);
 
             // 等待一段时间确保播放器准备好
-            await Future.delayed(const Duration(milliseconds: 500));
+            await Future.delayed(_autoLoadPlayerReadyDelay);
 
             // 设置外部字幕（不标记为手动设置，因为是自动检测的）
             setExternalSubtitle(cachedPath, isManualSetting: false);
@@ -915,7 +927,7 @@ class SubtitleManager extends ChangeNotifier {
             saveVideoSubtitleMapping(videoPath, cachedPath);
 
             // 设置完成后强制刷新状态
-            await Future.delayed(const Duration(milliseconds: 300));
+            await Future.delayed(_autoLoadStateSettleDelay);
 
             // 触发自动加载字幕回调
             if (onExternalSubtitleAutoLoaded != null) {
@@ -981,7 +993,7 @@ class SubtitleManager extends ChangeNotifier {
           debugPrint('SubtitleManager: 找到匹配的字幕文件: $potentialPath');
 
           // 等待一段时间确保播放器准备好
-          await Future.delayed(const Duration(milliseconds: 500));
+          await Future.delayed(_autoLoadPlayerReadyDelay);
 
           // 设置外部字幕（不标记为手动设置，因为是自动检测的）
           setExternalSubtitle(potentialPath, isManualSetting: false);
@@ -990,7 +1002,7 @@ class SubtitleManager extends ChangeNotifier {
           saveVideoSubtitleMapping(videoPath, potentialPath);
 
           // 设置完成后强制刷新状态
-          await Future.delayed(const Duration(milliseconds: 300));
+          await Future.delayed(_autoLoadStateSettleDelay);
 
           // 触发自动加载字幕回调
           if (onExternalSubtitleAutoLoaded != null) {
@@ -1035,7 +1047,7 @@ class SubtitleManager extends ChangeNotifier {
             debugPrint('SubtitleManager: 找到最佳匹配的字幕文件: ${bestMatchFile.path}');
 
             // 等待一段时间确保播放器准备好
-            await Future.delayed(const Duration(milliseconds: 500));
+            await Future.delayed(_autoLoadPlayerReadyDelay);
 
             // 设置外部字幕（不标记为手动设置，因为是自动检测的）
             setExternalSubtitle(bestMatchFile.path, isManualSetting: false);
@@ -1044,7 +1056,7 @@ class SubtitleManager extends ChangeNotifier {
             saveVideoSubtitleMapping(videoPath, bestMatchFile.path);
 
             // 设置完成后强制刷新状态
-            await Future.delayed(const Duration(milliseconds: 300));
+            await Future.delayed(_autoLoadStateSettleDelay);
 
             // 触发自动加载字幕回调
             if (onExternalSubtitleAutoLoaded != null) {
@@ -1116,61 +1128,9 @@ class SubtitleManager extends ChangeNotifier {
 
   // 获取语言名称
   String getLanguageName(String language) {
-    debugPrint(
-      'SubtitleManager: getLanguageName - Called with input: "$language"',
-    );
-    // 语言代码映射
-    final Map<String, String> languageCodes = {
-      'chi': '中文',
-      'eng': '英文',
-      'jpn': '日语',
-      'kor': '韩语',
-      'fra': '法语',
-      'deu': '德语',
-      'spa': '西班牙语',
-      'ita': '意大利语',
-      'rus': '俄语',
-    };
-
-    // 常见的语言标识符
-    final Map<String, String> languagePatterns = {
-      r'simplified|简体|chs|imp|zh-hans|zh-cn|zh-sg|sc$|scjp': '简体中文',
-      r'traditional|繁体|cht|rad|zh-hant|zh-tw|zh-hk|tc$|tcjp': '繁体中文',
-      r'chi|zho|chinese|中文': '中文', // General Chinese as a fallback
-      r'eng|en|英文|english': '英文',
-      r'jpn|ja|日文|japanese': '日语',
-      r'kor|ko|韩文|korean': '韩语',
-      r'fra|fr|法文|french': '法语',
-      r'ger|de|德文|german': '德语',
-      r'spa|es|西班牙文|spanish': '西班牙语',
-      r'ita|it|意大利文|italian': '意大利语',
-      r'rus|ru|俄文|russian': '俄语',
-      r'ind|in|印尼文|indonesian': '印尼语',
-    };
-
-    // 首先检查语言代码映射
-    final mappedLanguage = languageCodes[language.toLowerCase()];
-    if (mappedLanguage != null) {
-      debugPrint(
-        'SubtitleManager: getLanguageName - Matched languageCodes for "$language": $mappedLanguage',
-      );
-      return mappedLanguage;
-    }
-
-    // 然后检查语言标识符
-    for (final entry in languagePatterns.entries) {
-      final pattern = RegExp(entry.key, caseSensitive: false);
-      if (pattern.hasMatch(language.toLowerCase())) {
-        debugPrint(
-          'SubtitleManager: getLanguageName - Matched languagePatterns for "$language" (pattern: "${entry.key}"): ${entry.value}',
-        );
-        return entry.value;
-      }
-    }
-    debugPrint(
-      'SubtitleManager: getLanguageName - No match for "$language", returning original.',
-    );
-    return language;
+    final mapped = getSubtitleLanguageName(language);
+    debugPrint('SubtitleManager: getLanguageName "$language" -> "$mapped"');
+    return mapped;
   }
 
   // 更新指定的字幕轨道信息
