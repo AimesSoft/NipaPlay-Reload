@@ -21,6 +21,7 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
   bool _showDandanplayPage = true;
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
+  bool _isRefreshingDandanBangumiStatus = false;
 
   @override
   void initState() {
@@ -128,7 +129,8 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
       obscureText: true,
     );
 
-    debugPrint('[登录弹窗] 密码输入结果: ${passwordResult != null ? "***已输入***" : "null"}');
+    debugPrint(
+        '[登录弹窗] 密码输入结果: ${passwordResult != null ? "***已输入***" : "null"}');
 
     if (passwordResult == null || passwordResult.isEmpty) {
       debugPrint('[登录弹窗] 密码为空或用户取消，终止登录流程');
@@ -137,7 +139,8 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
 
     passwordController.text = passwordResult;
     debugPrint('[登录弹窗] 已保存密码，开始调用登录方法');
-    debugPrint('[登录弹窗] 用户名: ${usernameController.text}, 密码长度: ${passwordController.text.length}');
+    debugPrint(
+        '[登录弹窗] 用户名: ${usernameController.text}, 密码长度: ${passwordController.text.length}');
 
     try {
       await performLogin();
@@ -271,6 +274,66 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
     await _openExternalUrl(url);
   }
 
+  Future<void> _startDandanBangumiAuthorize() async {
+    final result = await requestBangumiOauthByDandanplay();
+    if (!mounted) return;
+
+    if (result['success'] != true) {
+      showMessage(result['message']?.toString() ?? '获取授权链接失败');
+      return;
+    }
+
+    final url = result['url']?.toString();
+    if (url == null || url.isEmpty) {
+      showMessage('授权链接为空');
+      return;
+    }
+    await _openExternalUrl(url);
+    if (!mounted) return;
+    showMessage('已在浏览器打开授权页，完成后点击“我已完成授权，刷新状态”。');
+    _tryAutoRefreshDandanBangumiStatus();
+  }
+
+  Future<bool> _refreshDandanBangumiStatusAfterAuth() async {
+    if (_isRefreshingDandanBangumiStatus) return false;
+    if (mounted) {
+      setState(() {
+        _isRefreshingDandanBangumiStatus = true;
+      });
+    }
+
+    final result = await refreshDandanBangumiLinkStatus();
+    if (!mounted) return false;
+    setState(() {
+      _isRefreshingDandanBangumiStatus = false;
+    });
+
+    if (result['success'] != true) {
+      showMessage(result['message']?.toString() ?? '刷新绑定状态失败');
+      return false;
+    }
+
+    if (dandanLinkedBangumiInfo != null) {
+      showMessage('Bangumi账号绑定已更新。');
+      return true;
+    }
+    showMessage('暂未检测到绑定状态，请稍后再试。');
+    return false;
+  }
+
+  Future<void> _tryAutoRefreshDandanBangumiStatus() async {
+    for (var i = 0; i < 4; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      final result = await refreshDandanBangumiLinkStatus();
+      if (!mounted) return;
+      if (result['success'] == true && dandanLinkedBangumiInfo != null) {
+        showMessage('Bangumi账号绑定已更新。');
+        return;
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final backgroundColor = CupertinoDynamicColor.resolve(
@@ -363,8 +426,7 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
   }
 
   Widget _buildSegmentedControl(BuildContext context) {
-    final Color textColor =
-        CupertinoDynamicColor.resolve(
+    final Color textColor = CupertinoDynamicColor.resolve(
       const CupertinoDynamicColor.withBrightness(
         color: CupertinoColors.black,
         darkColor: CupertinoColors.white,
@@ -428,11 +490,20 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
       key: const ValueKey('bangumi'),
       isAuthorized: isBangumiLoggedIn,
       userInfo: bangumiUserInfo,
+      isDandanplayLoggedIn: isLoggedIn,
+      dandanLinkedBangumiInfo: dandanLinkedBangumiInfo,
+      dandanLinkedBangumiExpireTime: dandanLinkedBangumiExpireTime,
+      isRequestingDandanBangumiAuth: isRequestingDandanBangumiAuth,
+      isRefreshingDandanBangumiStatus: _isRefreshingDandanBangumiStatus,
       isLoading: isLoading,
       isSyncing: isBangumiSyncing,
       syncStatus: bangumiSyncStatus,
       lastSyncTime: lastBangumiSyncTime,
       tokenController: bangumiTokenController,
+      onRequestDandanBangumiAuth: _startDandanBangumiAuthorize,
+      onRefreshDandanBangumiStatus: () {
+        _refreshDandanBangumiStatusAfterAuth();
+      },
       onSaveToken: saveBangumiToken,
       onClearToken: clearBangumiToken,
       onSync: () => performBangumiSync(forceFullSync: false),

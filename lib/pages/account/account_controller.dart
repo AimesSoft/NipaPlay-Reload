@@ -17,19 +17,23 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   final registerScreenNameController = TextEditingController();
   // Bangumi相关控制器
   final bangumiTokenController = TextEditingController();
-  
+
   // 状态变量
   bool isLoggedIn = false;
   String username = '';
   bool isLoading = false;
   String? avatarUrl;
-  
+
   // Bangumi相关状态
   bool isBangumiLoggedIn = false;
   Map<String, dynamic>? bangumiUserInfo;
   bool isBangumiSyncing = false;
   String bangumiSyncStatus = '';
   DateTime? lastBangumiSyncTime;
+  Map<String, dynamic>? dandanLinkedBangumiInfo;
+  DateTime? dandanLinkedBangumiExpireTime;
+  bool isRequestingDandanBangumiAuth = false;
+  Future<Map<String, dynamic>>? _dandanBangumiRefreshInFlight;
 
   @override
   void initState() {
@@ -63,8 +67,14 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
         isLoggedIn = DandanplayService.isLoggedIn;
         username = DandanplayService.userName ?? '';
         updateAvatarUrl();
+        _syncDandanLinkedBangumiState();
       });
     }
+  }
+
+  void _syncDandanLinkedBangumiState() {
+    dandanLinkedBangumiInfo = DandanplayService.linkedBangumiAccount;
+    dandanLinkedBangumiExpireTime = DandanplayService.linkedBangumiExpireTime;
   }
 
   /// 更新头像URL
@@ -84,13 +94,15 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     final logService = DebugLogService();
 
     debugPrint('[账号控制器-DEBUG] DebugLogService 实例创建完成');
-    logService.addLog('[账号控制器] 开始登录流程', level: 'INFO', tag: 'AccountController');
+    logService.addLog('[账号控制器] 开始登录流程',
+        level: 'INFO', tag: 'AccountController');
 
     debugPrint('[账号控制器-DEBUG] 检查登录信息是否完整');
     debugPrint('[账号控制器-DEBUG] 用户名: ${usernameController.text.trim()}');
     debugPrint('[账号控制器-DEBUG] 密码长度: ${passwordController.text.trim().length}');
 
-    if (usernameController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
+    if (usernameController.text.trim().isEmpty ||
+        passwordController.text.trim().isEmpty) {
       debugPrint('[账号控制器-DEBUG] 登录信息不完整');
       logService.addWarning('[账号控制器] 登录信息不完整', tag: 'AccountController');
       showMessage('请输入用户名和密码');
@@ -98,7 +110,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     }
 
     debugPrint('[账号控制器-DEBUG] 登录信息验证通过');
-    logService.addLog('[账号控制器] 登录信息验证通过，开始登录', level: 'INFO', tag: 'AccountController');
+    logService.addLog('[账号控制器] 登录信息验证通过，开始登录',
+        level: 'INFO', tag: 'AccountController');
 
     if (mounted) {
       setState(() {
@@ -108,7 +121,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
 
     try {
       debugPrint('[账号控制器-DEBUG] 准备调用 DandanplayService.login');
-      logService.addLog('[账号控制器] 调用登录服务', level: 'INFO', tag: 'AccountController');
+      logService.addLog('[账号控制器] 调用登录服务',
+          level: 'INFO', tag: 'AccountController');
 
       final result = await DandanplayService.login(
         usernameController.text.trim(),
@@ -116,11 +130,13 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
       );
 
       debugPrint('[账号控制器-DEBUG] DandanplayService.login 返回结果: $result');
-      logService.addLog('[账号控制器] 登录服务返回结果: ${result.toString()}', level: 'INFO', tag: 'AccountController');
+      logService.addLog('[账号控制器] 登录服务返回结果: ${result.toString()}',
+          level: 'INFO', tag: 'AccountController');
 
       if (result['success'] == true) {
         debugPrint('[账号控制器-DEBUG] 登录成功，重新加载登录状态');
-        logService.addLog('[账号控制器] 登录成功，重新加载登录状态', level: 'INFO', tag: 'AccountController');
+        logService.addLog('[账号控制器] 登录成功，重新加载登录状态',
+            level: 'INFO', tag: 'AccountController');
         await loadLoginStatus();
         usernameController.clear();
         passwordController.clear();
@@ -129,7 +145,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
         }
       } else {
         debugPrint('[账号控制器-DEBUG] 登录失败: ${result['message']}');
-        logService.addError('[账号控制器] 登录失败: ${result['message']}', tag: 'AccountController');
+        logService.addError('[账号控制器] 登录失败: ${result['message']}',
+            tag: 'AccountController');
         if (mounted) {
           showMessage(result['message'] ?? '登录失败');
         }
@@ -138,7 +155,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
       debugPrint('[账号控制器-DEBUG] 登录时发生异常: $e');
       debugPrint('[账号控制器-DEBUG] 异常堆栈: $stackTrace');
       logService.addError('[账号控制器] 登录时发生异常: $e', tag: 'AccountController');
-      logService.addError('[账号控制器] 异常堆栈: $stackTrace', tag: 'AccountController');
+      logService.addError('[账号控制器] 异常堆栈: $stackTrace',
+          tag: 'AccountController');
       if (mounted) {
         showMessage('登录失败: $e');
       }
@@ -157,9 +175,10 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   /// 执行注册
   Future<void> performRegister() async {
     final logService = DebugLogService();
-    
-    logService.addLog('[账号控制器] 开始注册流程', level: 'INFO', tag: 'AccountController');
-    
+
+    logService.addLog('[账号控制器] 开始注册流程',
+        level: 'INFO', tag: 'AccountController');
+
     if (registerUsernameController.text.trim().isEmpty ||
         registerPasswordController.text.trim().isEmpty ||
         registerEmailController.text.trim().isEmpty ||
@@ -169,7 +188,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
       return;
     }
 
-    logService.addLog('[账号控制器] 注册信息验证通过，开始注册', level: 'INFO', tag: 'AccountController');
+    logService.addLog('[账号控制器] 注册信息验证通过，开始注册',
+        level: 'INFO', tag: 'AccountController');
 
     if (mounted) {
       setState(() {
@@ -178,8 +198,9 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     }
 
     try {
-      logService.addLog('[账号控制器] 调用注册服务', level: 'INFO', tag: 'AccountController');
-      
+      logService.addLog('[账号控制器] 调用注册服务',
+          level: 'INFO', tag: 'AccountController');
+
       final result = await DandanplayService.register(
         username: registerUsernameController.text.trim(),
         password: registerPasswordController.text.trim(),
@@ -187,10 +208,12 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
         screenName: registerScreenNameController.text.trim(),
       );
 
-      logService.addLog('[账号控制器] 注册服务返回结果: ${result.toString()}', level: 'INFO', tag: 'AccountController');
+      logService.addLog('[账号控制器] 注册服务返回结果: ${result.toString()}',
+          level: 'INFO', tag: 'AccountController');
 
       if (result['success'] == true) {
-        logService.addLog('[账号控制器] 注册成功，重新加载登录状态', level: 'INFO', tag: 'AccountController');
+        logService.addLog('[账号控制器] 注册成功，重新加载登录状态',
+            level: 'INFO', tag: 'AccountController');
         await loadLoginStatus();
         // 清空注册表单
         registerUsernameController.clear();
@@ -201,7 +224,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
           showMessage(result['message'] ?? '注册成功');
         }
       } else {
-        logService.addError('[账号控制器] 注册失败: ${result['message']}', tag: 'AccountController');
+        logService.addError('[账号控制器] 注册失败: ${result['message']}',
+            tag: 'AccountController');
         if (mounted) {
           showMessage(result['message'] ?? '注册失败');
         }
@@ -210,7 +234,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
       }
     } catch (e, stackTrace) {
       logService.addError('[账号控制器] 注册时发生异常: $e', tag: 'AccountController');
-      logService.addError('[账号控制器] 异常堆栈: $stackTrace', tag: 'AccountController');
+      logService.addError('[账号控制器] 异常堆栈: $stackTrace',
+          tag: 'AccountController');
       if (mounted) {
         showMessage('注册失败: $e');
       }
@@ -233,6 +258,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
         isLoggedIn = false;
         username = '';
         avatarUrl = null;
+        dandanLinkedBangumiInfo = null;
+        dandanLinkedBangumiExpireTime = null;
       });
       showMessage('已退出登录');
     }
@@ -246,7 +273,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
       });
 
       // 获取注销页面URL
-      final deleteAccountUrl = await DandanplayService.startDeleteAccountProcess();
+      final deleteAccountUrl =
+          await DandanplayService.startDeleteAccountProcess();
 
       if (mounted) {
         setState(() {
@@ -277,6 +305,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
           isLoggedIn = false;
           username = '';
           avatarUrl = null;
+          dandanLinkedBangumiInfo = null;
+          dandanLinkedBangumiExpireTime = null;
         });
         showMessage('账号注销完成');
       }
@@ -302,14 +332,14 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   /// 加载Bangumi登录状态
   Future<void> loadBangumiStatus() async {
     await BangumiApiService.initialize();
-    
+
     final stats = await BangumiSyncService.getSyncStatistics();
-    
+
     if (mounted) {
       setState(() {
         isBangumiLoggedIn = BangumiApiService.isLoggedIn;
         bangumiUserInfo = BangumiApiService.userInfo;
-        
+
         if (stats['success']) {
           final lastSyncTimeStr = stats['lastSyncTime'] as String?;
           if (lastSyncTimeStr != null) {
@@ -327,13 +357,14 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   /// 保存Bangumi访问令牌
   Future<void> saveBangumiToken() async {
     final logService = DebugLogService();
-    
+
     if (bangumiTokenController.text.trim().isEmpty) {
       showMessage('请输入访问令牌');
       return;
     }
 
-    logService.addLog('[账号控制器] 保存Bangumi访问令牌', level: 'INFO', tag: 'BangumiSync');
+    logService.addLog('[账号控制器] 保存Bangumi访问令牌',
+        level: 'INFO', tag: 'BangumiSync');
 
     if (mounted) {
       setState(() {
@@ -342,9 +373,11 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     }
 
     try {
-      final result = await BangumiApiService.saveAccessToken(bangumiTokenController.text.trim());
+      final result = await BangumiApiService.saveAccessToken(
+          bangumiTokenController.text.trim());
 
-      logService.addLog('[账号控制器] Bangumi令牌保存结果: ${result.toString()}', level: 'INFO', tag: 'BangumiSync');
+      logService.addLog('[账号控制器] Bangumi令牌保存结果: ${result.toString()}',
+          level: 'INFO', tag: 'BangumiSync');
 
       if (result['success']) {
         await loadBangumiStatus();
@@ -375,8 +408,9 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   /// 清除Bangumi访问令牌
   Future<void> clearBangumiToken() async {
     final logService = DebugLogService();
-    
-    logService.addLog('[账号控制器] 清除Bangumi访问令牌', level: 'INFO', tag: 'BangumiSync');
+
+    logService.addLog('[账号控制器] 清除Bangumi访问令牌',
+        level: 'INFO', tag: 'BangumiSync');
 
     try {
       final result = await BangumiApiService.clearAccessToken();
@@ -402,13 +436,14 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   /// 执行Bangumi同步
   Future<void> performBangumiSync({bool forceFullSync = false}) async {
     final logService = DebugLogService();
-    
+
     if (!isBangumiLoggedIn) {
       showMessage('请先设置Bangumi访问令牌');
       return;
     }
 
-    logService.addLog('[账号控制器] 开始Bangumi同步，全量同步: $forceFullSync', level: 'INFO', tag: 'BangumiSync');
+    logService.addLog('[账号控制器] 开始Bangumi同步，全量同步: $forceFullSync',
+        level: 'INFO', tag: 'BangumiSync');
 
     if (mounted) {
       setState(() {
@@ -436,7 +471,8 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
         },
       );
 
-      logService.addLog('[账号控制器] Bangumi同步结果: ${result.toString()}', level: 'INFO', tag: 'BangumiSync');
+      logService.addLog('[账号控制器] Bangumi同步结果: ${result.toString()}',
+          level: 'INFO', tag: 'BangumiSync');
 
       if (result['success']) {
         await loadBangumiStatus();
@@ -500,7 +536,7 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
   Future<void> clearBangumiSyncCache() async {
     try {
       final result = await BangumiSyncService.clearSyncCache();
-      
+
       if (result['success']) {
         await loadBangumiStatus();
         showMessage(result['message'] ?? '缓存已清除');
@@ -510,5 +546,94 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     } catch (e) {
       showMessage('清除缓存失败: $e');
     }
+  }
+
+  Future<Map<String, dynamic>> requestBangumiOauthByDandanplay({
+    String? redirectUrl,
+  }) async {
+    if (!isLoggedIn) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+
+    if (mounted) {
+      setState(() {
+        isRequestingDandanBangumiAuth = true;
+      });
+    }
+
+    try {
+      final result = await DandanplayService.getBangumiOAuthLoginUrl(
+        redirectUrl: redirectUrl,
+      );
+      _syncDandanLinkedBangumiState();
+      return result;
+    } catch (e) {
+      return {'success': false, 'message': '获取Bangumi授权链接失败: $e'};
+    } finally {
+      if (mounted) {
+        setState(() {
+          isRequestingDandanBangumiAuth = false;
+        });
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> refreshDandanBangumiLinkStatus() async {
+    if (!isLoggedIn) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+    if (_dandanBangumiRefreshInFlight != null) {
+      debugPrint('[账号控制器][Bangumi绑定刷新] 检测到正在刷新，复用进行中的请求');
+      return _dandanBangumiRefreshInFlight!;
+    }
+
+    final task = _refreshDandanBangumiLinkStatusInternal();
+    _dandanBangumiRefreshInFlight = task;
+    try {
+      return await task;
+    } finally {
+      _dandanBangumiRefreshInFlight = null;
+    }
+  }
+
+  Future<Map<String, dynamic>> _refreshDandanBangumiLinkStatusInternal() async {
+    Future<Map<String, dynamic>> refreshOnce() async {
+      debugPrint(
+          '[账号控制器][Bangumi绑定刷新] 调用 DandanplayService.refreshLinkedBangumiStatus');
+      final result = await DandanplayService.refreshLinkedBangumiStatus();
+      if (mounted) {
+        setState(() {
+          _syncDandanLinkedBangumiState();
+        });
+      }
+      debugPrint(
+        '[账号控制器][Bangumi绑定刷新] 返回: success=${result['success']} '
+        'statusCode=${result['statusCode'] ?? '-'} '
+        'requestMethod=${result['requestMethod'] ?? '-'} allow=${result['allow'] ?? '-'} '
+        'requestUri=${result['requestUri'] ?? '-'} message=${result['message'] ?? '-'} '
+        'linked=${dandanLinkedBangumiInfo != null}',
+      );
+      return result;
+    }
+
+    debugPrint('[账号控制器][Bangumi绑定刷新] 第1次刷新开始');
+    var result = await refreshOnce();
+    if (result['success'] == true && dandanLinkedBangumiInfo != null) {
+      debugPrint('[账号控制器][Bangumi绑定刷新] 第1次刷新成功并检测到绑定信息');
+      return result;
+    }
+
+    debugPrint('[账号控制器][Bangumi绑定刷新] 第1次未拿到绑定信息，等待800ms后重试');
+    await Future.delayed(const Duration(milliseconds: 800));
+    debugPrint('[账号控制器][Bangumi绑定刷新] 第2次刷新开始');
+    result = await refreshOnce();
+    if (result['success'] != true) {
+      debugPrint(
+        '[账号控制器][Bangumi绑定刷新] 第2次失败: statusCode=${result['statusCode'] ?? '-'} '
+        'requestMethod=${result['requestMethod'] ?? '-'} '
+        'allow=${result['allow'] ?? '-'} message=${result['message'] ?? '-'}',
+      );
+    }
+    return result;
   }
 }

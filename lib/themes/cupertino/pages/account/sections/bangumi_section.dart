@@ -5,11 +5,18 @@ import 'package:intl/intl.dart';
 class CupertinoBangumiSection extends StatelessWidget {
   final bool isAuthorized;
   final Map<String, dynamic>? userInfo;
+  final bool isDandanplayLoggedIn;
+  final Map<String, dynamic>? dandanLinkedBangumiInfo;
+  final DateTime? dandanLinkedBangumiExpireTime;
+  final bool isRequestingDandanBangumiAuth;
+  final bool isRefreshingDandanBangumiStatus;
   final bool isLoading;
   final bool isSyncing;
   final String syncStatus;
   final DateTime? lastSyncTime;
   final TextEditingController tokenController;
+  final VoidCallback onRequestDandanBangumiAuth;
+  final VoidCallback onRefreshDandanBangumiStatus;
   final VoidCallback onSaveToken;
   final VoidCallback onClearToken;
   final VoidCallback onSync;
@@ -22,11 +29,18 @@ class CupertinoBangumiSection extends StatelessWidget {
     super.key,
     required this.isAuthorized,
     required this.userInfo,
+    required this.isDandanplayLoggedIn,
+    required this.dandanLinkedBangumiInfo,
+    required this.dandanLinkedBangumiExpireTime,
+    required this.isRequestingDandanBangumiAuth,
+    required this.isRefreshingDandanBangumiStatus,
     required this.isLoading,
     required this.isSyncing,
     required this.syncStatus,
     required this.lastSyncTime,
     required this.tokenController,
+    required this.onRequestDandanBangumiAuth,
+    required this.onRefreshDandanBangumiStatus,
     required this.onSaveToken,
     required this.onClearToken,
     required this.onSync,
@@ -43,6 +57,8 @@ class CupertinoBangumiSection extends StatelessWidget {
       children: [
         _buildStatusCard(context),
         const SizedBox(height: 16),
+        _buildDandanLinkedCard(context),
+        const SizedBox(height: 16),
         _buildTokenCard(context),
         const SizedBox(height: 16),
         _buildActionsCard(context),
@@ -50,11 +66,112 @@ class CupertinoBangumiSection extends StatelessWidget {
     );
   }
 
+  Widget _buildDandanLinkedCard(BuildContext context) {
+    final linked = dandanLinkedBangumiInfo;
+    final expiresAt = dandanLinkedBangumiExpireTime;
+    final isExpired = expiresAt != null && expiresAt.isBefore(DateTime.now());
+    final displayRaw = linked?['display']?.toString();
+    final displayName = (displayRaw != null && displayRaw.trim().isNotEmpty)
+        ? displayRaw.trim()
+        : linked?['userName']?.toString();
+    final userId = linked?['userId']?.toString();
+
+    String statusText;
+    if (!isDandanplayLoggedIn) {
+      statusText = '请先登录弹弹play账号后再绑定。';
+    } else if (linked == null) {
+      statusText = '当前未绑定 Bangumi 账号。';
+    } else {
+      final label = (displayName == null || displayName.isEmpty)
+          ? 'Bangumi用户'
+          : displayName;
+      statusText = userId == null || userId.isEmpty
+          ? '已绑定：$label'
+          : '已绑定：$label（ID: $userId）';
+    }
+
+    return _buildRoundedCard(
+      context,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '弹弹play内置 Bangumi 绑定（仅同步进度）',
+            style: CupertinoTheme.of(context)
+                .textTheme
+                .textStyle
+                .copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            statusText,
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  color: isExpired
+                      ? CupertinoColors.systemOrange
+                      : CupertinoColors.systemGrey,
+                ),
+          ),
+          if (expiresAt != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              '授权过期时间：${_formatTime(expiresAt)}',
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 13,
+                    color: isExpired
+                        ? CupertinoColors.systemOrange
+                        : CupertinoColors.systemGrey,
+                  ),
+            ),
+          ],
+          if (isExpired) ...[
+            const SizedBox(height: 6),
+            Text(
+              '授权已过期或续期失败，请重新授权。',
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 13,
+                    color: CupertinoColors.systemOrange,
+                  ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          AdaptiveButton(
+            onPressed: (!isDandanplayLoggedIn || isRequestingDandanBangumiAuth)
+                ? null
+                : onRequestDandanBangumiAuth,
+            style: AdaptiveButtonStyle.filled,
+            color: CupertinoTheme.of(context).primaryColor,
+            label: isRequestingDandanBangumiAuth
+                ? '获取授权链接中...'
+                : (linked == null ? '绑定 Bangumi 账号' : '重新授权 Bangumi 账号'),
+          ),
+          const SizedBox(height: 10),
+          AdaptiveButton(
+            onPressed:
+                (!isDandanplayLoggedIn || isRefreshingDandanBangumiStatus)
+                    ? null
+                    : onRefreshDandanBangumiStatus,
+            style: AdaptiveButtonStyle.bordered,
+            color: CupertinoTheme.of(context).primaryColor,
+            label: isRefreshingDandanBangumiStatus ? '刷新中...' : '我已完成授权，刷新状态',
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '此方式不支持评论，仅用于弹弹服务器自动同步观看历史。',
+            style: CupertinoTheme.of(context)
+                .textTheme
+                .textStyle
+                .copyWith(fontSize: 13, color: CupertinoColors.systemGrey),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusCard(BuildContext context) {
     final String title = isAuthorized ? '已连接 Bangumi' : '尚未连接 Bangumi';
-    final Color iconColor = isAuthorized
-        ? CupertinoColors.activeGreen
-        : CupertinoColors.systemGrey;
+    final Color iconColor =
+        isAuthorized ? CupertinoColors.activeGreen : CupertinoColors.systemGrey;
     final Color textColor = CupertinoDynamicColor.resolve(
       isAuthorized ? CupertinoColors.activeGreen : CupertinoColors.systemGrey,
       context,
