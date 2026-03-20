@@ -653,7 +653,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                           _contextMenuController.showActionsMenu(
                             context: context,
                             globalPosition: details.globalPosition,
-                            style: ContextMenuStyles.glass(context),
+                            style: ContextMenuStyles.playerOverlay(context),
                             actions: _buildContextMenuActions(videoState),
                           );
                         }
