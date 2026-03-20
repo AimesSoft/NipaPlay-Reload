@@ -6,6 +6,8 @@ class CupertinoPlayerSlider extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.onChangeStart,
+    this.onChangeEnd,
     this.min = 0.0,
     this.max = 1.0,
     this.divisions,
@@ -16,6 +18,8 @@ class CupertinoPlayerSlider extends StatelessWidget {
   final double min;
   final double max;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeStart;
+  final ValueChanged<double>? onChangeEnd;
   final int? divisions;
   final Color? activeColor;
 
@@ -35,6 +39,8 @@ class CupertinoPlayerSlider extends StatelessWidget {
             max: max,
             divisions: divisions,
             activeColor: activeColor ?? CupertinoTheme.of(context).primaryColor,
+            onChangeStart: onChangeStart,
+            onChangeEnd: onChangeEnd,
             onChanged: onChanged,
           ),
         );

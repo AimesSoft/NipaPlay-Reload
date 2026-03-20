@@ -1,11 +1,13 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'base_settings_menu.dart';
 import 'blur_button.dart';
+import 'blur_snackbar.dart';
 import 'blur_dropdown.dart';
 import 'fluent_settings_switch.dart';
 import 'settings_hint_text.dart';
@@ -26,21 +28,29 @@ class SubtitleSettingsMenu extends StatefulWidget {
 }
 
 class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
+  final TextEditingController _subtitleDelayController =
+      TextEditingController();
   final TextEditingController _fontNameController = TextEditingController();
   final TextEditingController _textColorController = TextEditingController();
   final TextEditingController _borderColorController = TextEditingController();
   final TextEditingController _shadowColorController = TextEditingController();
+  final FocusNode _subtitleDelayFocus = FocusNode();
   final FocusNode _fontNameFocus = FocusNode();
   final FocusNode _textColorFocus = FocusNode();
   final FocusNode _borderColorFocus = FocusNode();
   final FocusNode _shadowColorFocus = FocusNode();
+  String? _subtitleDelayError;
+  bool _subtitleDelayDirty = false;
+  double? _subtitleDelayPreviewValue;
 
   @override
   void dispose() {
+    _subtitleDelayController.dispose();
     _fontNameController.dispose();
     _textColorController.dispose();
     _borderColorController.dispose();
     _shadowColorController.dispose();
+    _subtitleDelayFocus.dispose();
     _fontNameFocus.dispose();
     _textColorFocus.dispose();
     _borderColorFocus.dispose();
@@ -85,11 +95,136 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     await videoState.importSubtitleFontFile(file.path);
   }
 
+  double _currentSubtitleDelayDisplayValue(VideoPlayerState videoState) {
+    return _subtitleDelayPreviewValue ?? videoState.subtitleDelaySeconds;
+  }
+
+  void _syncSubtitleDelayController(VideoPlayerState videoState) {
+    if (_subtitleDelayFocus.hasFocus || _subtitleDelayDirty) return;
+    final value =
+        _formatDelayInput(_currentSubtitleDelayDisplayValue(videoState));
+    if (_subtitleDelayController.text != value) {
+      _subtitleDelayController.text = value;
+    }
+  }
+
+  String _trimTrailingZeros(String value) {
+    if (!value.contains('.')) return value;
+    return value
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  String _formatDelayInput(double value) {
+    if (value.abs() < 0.0001) return '0';
+    return _trimTrailingZeros(value.toStringAsFixed(3));
+  }
+
+  String _formatDelayDisplay(double value) {
+    final prefix = value > 0 ? '+' : '';
+    return '$prefix${value.toStringAsFixed(1)}s';
+  }
+
+  String _normalizeNumberInput(String value) {
+    return value
+        .trim()
+        .replaceAll('，', '.')
+        .replaceAll(',', '.')
+        .replaceAll('＋', '+')
+        .replaceAll('－', '-');
+  }
+
+  String _buildSubtitleDelayLimitHint(VideoPlayerState videoState) {
+    final limit = _formatDelayInput(videoState.subtitleDelayCustomLimitSeconds);
+    if (videoState.hasSubtitleDelayDurationLimit) {
+      return '手动输入范围：-$limit ~ +$limit 秒（按当前视频时长限制）';
+    }
+    return '手动输入范围：-$limit ~ +$limit 秒（当前时长未就绪时先按默认范围处理）';
+  }
+
+  Future<void> _applyCustomSubtitleDelay(VideoPlayerState videoState) async {
+    final input = _normalizeNumberInput(_subtitleDelayController.text);
+    if (input.isEmpty) {
+      setState(() {
+        _subtitleDelayError = '请输入字幕延迟秒数';
+      });
+      return;
+    }
+
+    final value = double.tryParse(input);
+    if (value == null) {
+      setState(() {
+        _subtitleDelayError = '请输入有效的数字';
+      });
+      return;
+    }
+
+    final limit = videoState.subtitleDelayCustomLimitSeconds;
+    if (value.abs() - limit > 0.0001) {
+      final limitText = _formatDelayInput(limit);
+      setState(() {
+        _subtitleDelayError = '当前视频仅支持 -$limitText ~ +$limitText 秒';
+      });
+      return;
+    }
+
+    await videoState.setSubtitleDelaySeconds(value);
+    if (!mounted) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _subtitleDelayError = null;
+      _subtitleDelayDirty = false;
+      _subtitleDelayPreviewValue = null;
+    });
+    BlurSnackBar.show(context, '已设置字幕延迟为 ${_formatDelayDisplay(value)}');
+  }
+
+  void _handleSubtitleDelayInputChanged(String _) {
+    if (_subtitleDelayDirty && _subtitleDelayError == null) return;
+    setState(() {
+      _subtitleDelayDirty = true;
+      _subtitleDelayError = null;
+      _subtitleDelayPreviewValue = null;
+    });
+  }
+
+  void _handleSubtitleDelaySliderStart(
+    VideoPlayerState videoState,
+    double _,
+  ) {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _subtitleDelayDirty = false;
+      _subtitleDelayError = null;
+      _subtitleDelayPreviewValue = videoState.subtitleDelaySeconds;
+    });
+  }
+
+  void _handleSubtitleDelaySliderChanged(double value) {
+    setState(() {
+      _subtitleDelayPreviewValue = value;
+    });
+  }
+
+  Future<void> _handleSubtitleDelaySliderEnd(
+    VideoPlayerState videoState,
+    double value,
+  ) async {
+    await videoState.setSubtitleDelaySeconds(value);
+    if (!mounted) return;
+    setState(() {
+      _subtitleDelayDirty = false;
+      _subtitleDelayError = null;
+      _subtitleDelayPreviewValue = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SubtitleSettingsPaneController>(
       builder: (context, controller, child) {
         final videoState = controller.videoState;
+        _syncSubtitleDelayController(videoState);
         _syncController(
           controller: _fontNameController,
           focus: _fontNameFocus,
@@ -145,8 +280,8 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   }
 
   Widget _buildOverrideModeSection(VideoPlayerState videoState) {
-    final items =
-        SubtitleStyleOverrideMode.values.map<DropdownMenuItemData<SubtitleStyleOverrideMode>>((mode) {
+    final items = SubtitleStyleOverrideMode.values
+        .map<DropdownMenuItemData<SubtitleStyleOverrideMode>>((mode) {
       final String label;
       switch (mode) {
         case SubtitleStyleOverrideMode.auto:
@@ -191,16 +326,97 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   }
 
   Widget _buildDelaySection(VideoPlayerState videoState) {
-    return _buildSliderSection(
-      label: '字幕延迟',
-      value: videoState.subtitleDelaySeconds,
-      min: -5.0,
-      max: 5.0,
-      step: 0.1,
-      displayTextBuilder: (v) =>
-          '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}s',
-      onChanged: videoState.setSubtitleDelaySeconds,
-      hint: '正值延后，负值提前',
+    final displayValue = _currentSubtitleDelayDisplayValue(videoState);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SettingsSlider(
+            value: displayValue,
+            onChangeStart: (value) =>
+                _handleSubtitleDelaySliderStart(videoState, value),
+            onChanged: _handleSubtitleDelaySliderChanged,
+            onChangeEnd: (value) =>
+                _handleSubtitleDelaySliderEnd(videoState, value),
+            label: '字幕延迟',
+            displayTextBuilder: _formatDelayDisplay,
+            min: videoState.subtitleDelaySliderMinSeconds,
+            max: videoState.subtitleDelaySliderMaxSeconds,
+            step: VideoPlayerState.subtitleDelayStep,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '手动输入秒数',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _subtitleDelayController,
+                  focusNode: _subtitleDelayFocus,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    signed: true,
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'[0-9+\-.,，＋－]'),
+                    ),
+                  ],
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: '例如 -12.5 或 8',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.08),
+                    suffixText: '秒',
+                    suffixStyle: const TextStyle(color: Colors.white70),
+                    errorText: _subtitleDelayError,
+                    enabledBorder: OutlineInputBorder(
+                      borderSide:
+                          BorderSide(color: Colors.white.withOpacity(0.2)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide:
+                          BorderSide(color: Colors.white.withOpacity(0.6)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Colors.redAccent),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Colors.redAccent),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onSubmitted: (_) => _applyCustomSubtitleDelay(videoState),
+                  onChanged: _handleSubtitleDelayInputChanged,
+                ),
+              ),
+              const SizedBox(width: 12),
+              BlurButton(
+                text: '应用',
+                icon: Icons.check,
+                onTap: () => _applyCustomSubtitleDelay(videoState),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const SettingsHintText('滑块用于快速微调，正值延后，负值提前'),
+          SettingsHintText(_buildSubtitleDelayLimitHint(videoState)),
+        ],
+      ),
     );
   }
 
@@ -218,8 +434,8 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   }
 
   Widget _buildAlignSection(VideoPlayerState videoState) {
-    final alignXItems =
-        SubtitleAlignX.values.map<DropdownMenuItemData<SubtitleAlignX>>((align) {
+    final alignXItems = SubtitleAlignX.values
+        .map<DropdownMenuItemData<SubtitleAlignX>>((align) {
       final label = switch (align) {
         SubtitleAlignX.left => '左对齐',
         SubtitleAlignX.center => '居中',
@@ -231,8 +447,8 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
         isSelected: videoState.subtitleAlignX == align,
       );
     }).toList();
-    final alignYItems =
-        SubtitleAlignY.values.map<DropdownMenuItemData<SubtitleAlignY>>((align) {
+    final alignYItems = SubtitleAlignY.values
+        .map<DropdownMenuItemData<SubtitleAlignY>>((align) {
       final label = switch (align) {
         SubtitleAlignY.top => '顶部',
         SubtitleAlignY.center => '垂直居中',

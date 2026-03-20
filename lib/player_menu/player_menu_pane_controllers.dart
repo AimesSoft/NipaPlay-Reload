@@ -52,6 +52,10 @@ class PlaybackRatePaneController extends PlayerMenuPaneController {
 
   double get currentRate => videoState.playbackRate;
 
+  double get minCustomRate => VideoPlayerState.minPlaybackRate;
+
+  double get maxCustomRate => VideoPlayerState.maxPlaybackRate;
+
   bool get isSpeedBoostActive => videoState.isSpeedBoostActive;
 
   Future<void> setPlaybackRate(double rate) => videoState.setPlaybackRate(rate);
@@ -135,8 +139,8 @@ typedef PlayerMenuPaneControllerBuilder = PlayerMenuPaneController Function(
 class PlayerMenuPaneControllerFactory {
   PlayerMenuPaneControllerFactory._();
 
-  static final Map<PlayerMenuPaneId, PlayerMenuPaneControllerBuilder> _builders =
-      {
+  static final Map<PlayerMenuPaneId, PlayerMenuPaneControllerBuilder>
+      _builders = {
     PlayerMenuPaneId.playbackRate: (videoState) =>
         PlaybackRatePaneController(videoState: videoState),
     PlayerMenuPaneId.seekStep: (videoState) =>
@@ -145,7 +149,8 @@ class PlayerMenuPaneControllerFactory {
         SubtitleSettingsPaneController(videoState: videoState),
   };
 
-  static bool supports(PlayerMenuPaneId paneId) => _builders.containsKey(paneId);
+  static bool supports(PlayerMenuPaneId paneId) =>
+      _builders.containsKey(paneId);
 
   static PlayerMenuPaneController? tryCreate(
     PlayerMenuPaneId paneId,

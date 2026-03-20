@@ -388,7 +388,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 加载播放速度设置
   Future<void> _loadPlaybackRate() async {
     final prefs = await SharedPreferences.getInstance();
-    _playbackRate = prefs.getDouble(_playbackRateKey) ?? 1.0; // 默认1倍速
+    _playbackRate = (prefs.getDouble(_playbackRateKey) ?? 1.0).clamp(
+      VideoPlayerState.minPlaybackRate,
+      VideoPlayerState.maxPlaybackRate,
+    ); // 默认1倍速
     _speedBoostRate = prefs.getDouble(_speedBoostRateKey) ?? 2.0; // 默认2倍速
     _normalPlaybackRate = 1.0; // 始终重置为1.0
     notifyListeners();
@@ -456,14 +459,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   // 保存播放速度设置
   Future<void> setPlaybackRate(double rate) async {
-    _playbackRate = rate;
+    final resolved = rate.clamp(
+      VideoPlayerState.minPlaybackRate,
+      VideoPlayerState.maxPlaybackRate,
+    );
+    if ((_playbackRate - resolved).abs() < 0.0001) {
+      return;
+    }
+    _playbackRate = resolved;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_playbackRateKey, rate);
+    await prefs.setDouble(_playbackRateKey, resolved);
 
     // 立即应用新的播放速度
     if (hasVideo) {
-      player.setPlaybackRate(rate);
-      debugPrint('设置播放速度: ${rate}x');
+      player.setPlaybackRate(resolved);
+      debugPrint('设置播放速度: ${resolved}x');
     }
     notifyListeners();
   }
@@ -1654,7 +1664,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         return;
       }
       player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
-      player.setProperty('sub-delay', _subtitleDelaySeconds.toStringAsFixed(2));
+      player.setProperty('sub-delay', subtitleDelaySeconds.toStringAsFixed(2));
       player.setProperty('sub-pos', _subtitlePosition.toStringAsFixed(0));
       player.setProperty('sub-align-x', _subtitleAlignXToMpv(_subtitleAlignX));
       player.setProperty('sub-align-y', _subtitleAlignYToMpv(_subtitleAlignY));

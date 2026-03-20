@@ -66,8 +66,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       notifyListeners();
     } else if (isEmbyStream) {
       final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
-      debugPrint(
-          '检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl');
+      debugPrint('检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl');
       _statusMessages.add('正在准备Emby流媒体播放...');
       notifyListeners();
     }
@@ -220,8 +219,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         );
       } catch (e) {
         // 如果网络请求失败，使用专门的错误处理逻辑
-        await _handleStreamUrlLoadingError(
-            resolvedActualPlayUrl,
+        await _handleStreamUrlLoadingError(resolvedActualPlayUrl,
             e is Exception ? e : Exception(e.toString()));
         return; // 避免继续处理
       }
@@ -507,7 +505,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 异步计算视频哈希值，不阻塞主要初始化流程
       _precomputeVideoHash(videoPath);
 
+      final previousSubtitleDelay = subtitleDelaySeconds;
       _duration = Duration(milliseconds: player.mediaInfo.duration);
+      if ((previousSubtitleDelay - subtitleDelaySeconds).abs() >= 0.0001) {
+        unawaited(applySubtitleStylePreference());
+      }
       unawaited(_setupTimelinePreviewForVideo(videoPath));
 
       // 对于Jellyfin流媒体，先进行同步，再获取播放位置
@@ -713,8 +715,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             errorText.contains('MEDIA_ERR_SRC_NOT_SUPPORTED') ||
             errorText.contains('Format error');
         if (isUnsupportedFormat) {
-          const message =
-              '浏览器不支持该视频格式/编码，请转换为 H.264/AAC 的 MP4 或更换支持的浏览器';
+          const message = '浏览器不支持该视频格式/编码，请转换为 H.264/AAC 的 MP4 或更换支持的浏览器';
           _error = message;
           _setStatus(PlayerStatus.error, message: message);
           return;

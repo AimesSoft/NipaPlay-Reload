@@ -6,6 +6,8 @@ const Color _fluentAccentColor = Color(0xFFFF2E55);
 class SettingsSlider extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeStart;
+  final ValueChanged<double>? onChangeEnd;
   final String label;
   final String Function(double value) displayTextBuilder;
   final double min;
@@ -16,6 +18,8 @@ class SettingsSlider extends StatefulWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.onChangeStart,
+    this.onChangeEnd,
     required this.label,
     required this.displayTextBuilder,
     this.min = 0.0,
@@ -82,6 +86,8 @@ class _SettingsSliderState extends State<SettingsSlider> {
               min: widget.min,
               max: widget.max,
               divisions: divisions,
+              onChangeStart: widget.onChangeStart,
+              onChangeEnd: widget.onChangeEnd,
               onChanged: widget.onChanged,
               label: displayText,
             ),
