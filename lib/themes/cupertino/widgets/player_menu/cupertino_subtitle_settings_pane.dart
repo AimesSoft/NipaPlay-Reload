@@ -143,6 +143,10 @@ class _CupertinoSubtitleSettingsPaneState
       BlurSnackBar.show(context, '请输入有效数字');
       return;
     }
+    if (!value.isFinite) {
+      BlurSnackBar.show(context, '请输入有限数字');
+      return;
+    }
 
     final limit = videoState.subtitleDelayCustomLimitSeconds;
     if (value.abs() - limit > 0.0001) {

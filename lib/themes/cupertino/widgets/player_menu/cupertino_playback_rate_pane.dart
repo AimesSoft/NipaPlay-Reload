@@ -68,6 +68,10 @@ class _CupertinoPlaybackRatePaneState extends State<CupertinoPlaybackRatePane> {
       BlurSnackBar.show(context, '请输入有效数字');
       return;
     }
+    if (!value.isFinite) {
+      BlurSnackBar.show(context, '请输入有限数字');
+      return;
+    }
 
     if (value < controller.minCustomRate || value > controller.maxCustomRate) {
       BlurSnackBar.show(
