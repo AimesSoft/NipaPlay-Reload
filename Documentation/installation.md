@@ -4,7 +4,7 @@
 
 ## Windows
 
-- 前往 [GitHub Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载安装包（或压缩包）；执行安装或解压后运行。
+- 前往 [GitHub Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载安装包（或压缩包）；执行安装或解压后运行。
 - 首次启动被 Defender 拦截时，点击"更多信息→仍要运行"。
 
 ## macOS
@@ -12,12 +12,12 @@
 - 推荐 Homebrew：
   
   ```bash
-  brew tap Shinokawa/nipaplay-reload
+  brew tap AimesSoft/nipaplay-reload
   brew install --cask nipaplay-reload
   ```
   
   安装完成后，查看 [更新与发布通道](release-channels.md) 了解如何使用 Homebrew 轻松更新 NipaPlay（无需再次处理系统安全提示）。
-- 或从 [Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载 dmg，将应用拖至"应用程序"。
+- 或从 [Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载 dmg，将应用拖至"应用程序"。
 
 ## Linux
 
@@ -34,11 +34,11 @@
   ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
   ```
   
-- 其他发行版：从 [Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载对应构建包并按常规方式安装/运行。
+- 其他发行版：从 [Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载对应构建包并按常规方式安装/运行。
 
 ## Android
 
-- 从 [Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载匹配架构的 APK（常见 arm64），启用"未知来源"后安装。
+- 从 [Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载匹配架构的 APK（常见 arm64），启用"未知来源"后安装。
 
 ## iOS
 
@@ -73,7 +73,7 @@ iOS 用户可以选择以下几种安装方式：
    - iOS 设备和数据线
 2. **获取源码**：
    
-   - 从 [Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载源码包
+   - 从 [Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载源码包
 3. **配置和构建**：
    
    - 解压源码并用 Xcode 打开 `ios/Runner.xcworkspace`
@@ -87,7 +87,7 @@ iOS 用户可以选择以下几种安装方式：
 **使用爱思助手**：
 
 1. 在电脑上下载并安装 [爱思助手](https://www.i4.cn/)
-2. 从 [Release 页面](https://github.com/Shinokawa/NipaPlay-Reload/releases) 下载 `.ipa` 文件
+2. 从 [Release 页面](https://github.com/AimesSoft/NipaPlay-Reload/releases) 下载 `.ipa` 文件
 3. 连接 iOS 设备到电脑
 4. 打开爱思助手「工具箱」→ 选择「IPA签名」→ 导入IPA文件
 5. 点击「使用Apple ID签名」→ 登录Apple ID → 勾选设备标识
@@ -107,4 +107,3 @@ iOS 用户可以选择以下几种安装方式：
 ---
 
 **⬅️ 上一篇: [快速开始](quick-start.md)** | **➡️ 下一篇: [安装后设置](post-install.md)**
-

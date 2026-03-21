@@ -10,14 +10,14 @@
   
   <br>
 
-  ![GitHub release](https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=blue)
-  ![GitHub downloads](https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=green)
+  ![GitHub release](https://img.shields.io/github/v/release/AimesSoft/NipaPlay-Reload?style=flat-square&color=blue)
+  ![GitHub downloads](https://img.shields.io/github/downloads/AimesSoft/NipaPlay-Reload/total?style=flat-square&color=green)
   ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
-  ![License](https://img.shields.io/github/license/mcdfsteve/nipaplay-reload?style=flat-square)
+  ![License](https://img.shields.io/github/license/AimesSoft/NipaPlay-Reload?style=flat-square)
 
   <br>
 
-  <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart" width="80%">
+  <img src="https://api.star-history.com/svg?repos=AimesSoft/NipaPlay-Reload&type=Date&theme=moebooru" alt="Star History Chart" width="80%">
 </div>
 
 <div align="center">
@@ -93,14 +93,14 @@ NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 
 ### 快速下载
 
-- **GitHub Releases (推荐)**: [下载最新版本](https://github.com/mcdfsteve/nipaplay-reload/releases)
+- **GitHub Releases (推荐)**: [下载最新版本](https://github.com/AimesSoft/NipaPlay-Reload/releases)
 - **iOS (App Store)**: [点击下载](https://apps.apple.com/cn/app/nipaplay/id6751284970)
 
 ### 包管理器安装
 
 #### macOS (Homebrew)
 ```bash
-brew tap Shinokawa/nipaplay-reload
+brew tap AimesSoft/nipaplay-reload
 brew install --cask nipaplay-reload
 ```
 

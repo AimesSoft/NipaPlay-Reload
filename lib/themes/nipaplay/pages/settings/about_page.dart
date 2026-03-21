@@ -509,7 +509,7 @@ class _AboutPageState extends State<AboutPage> {
               const SizedBox(height: 16),
               GestureDetector(
                 onTap: () => _launchURL(
-                    'https://www.github.com/MCDFsteve/NipaPlay-Reload'),
+                    'https://www.github.com/AimesSoft/NipaPlay-Reload'),
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: Row(
@@ -519,7 +519,7 @@ class _AboutPageState extends State<AboutPage> {
                           color: colorScheme.onSurface.withOpacity(0.8), size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        'MCDFsteve/NipaPlay-Reload',
+                        'AimesSoft/NipaPlay-Reload',
                         locale: Locale("zh-Hans", "zh"),
                         style: TextStyle(
                           color: Colors.cyanAccent[100],

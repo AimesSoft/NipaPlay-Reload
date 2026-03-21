@@ -194,7 +194,7 @@ Section "NipaPlay 主程序" SecMain
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "Publisher" "MCDFSteve"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "DisplayIcon" "$INSTDIR\NipaPlay.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "URLInfoAbout" "https://github.com/MCDFsteve/NipaPlay-Reload"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NipaPlay" "URLInfoAbout" "https://github.com/AimesSoft/NipaPlay-Reload"
   
 SectionEnd
 

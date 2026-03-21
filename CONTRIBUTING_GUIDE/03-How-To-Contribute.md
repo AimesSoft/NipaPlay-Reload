@@ -21,7 +21,7 @@
 
 标准开源协作流程建议先 Fork 官方仓库到你的 GitHub 账号，然后克隆你的 Fork 到本地，并把官方仓库设置为 `upstream`：
 
-1. 在 GitHub 上打开官方仓库：[MCDFsteve/NipaPlay-Reload](https://github.com/MCDFsteve/NipaPlay-Reload)
+1. 在 GitHub 上打开官方仓库：[AimesSoft/NipaPlay-Reload](https://github.com/AimesSoft/NipaPlay-Reload)
 2. 点击右上角的 Fork，将其 Fork 到你的账号下。
 3. 克隆你的 Fork 到本地，并进入项目目录：
 
@@ -33,7 +33,7 @@
 4. 添加官方仓库为上游（upstream）：
 
     ```bash
-    git remote add upstream https://github.com/MCDFsteve/NipaPlay-Reload.git
+    git remote add upstream https://github.com/AimesSoft/NipaPlay-Reload.git
     git remote -v  # 可选：检查 remotes，通常 origin 指向你的 Fork，upstream 指向官方仓库
     ```
 
@@ -159,7 +159,7 @@ git push origin feat/add-contributor-name-to-about-page
 1. 打开你在 GitHub 上的 Fork 仓库页面 (`https://github.com/[你的用户名]/NipaPlay-Reload`)。
 2. GitHub 会自动检测到你刚刚推送了一个新分支，并显示一个黄色的提示条，上面有一个 "Compare & pull request" 按钮。点击它。
 3. 在 PR 页面确认合并目标：
-    * base repository：`MCDFsteve/NipaPlay-Reload`，base：`main`
+    * base repository：`AimesSoft/NipaPlay-Reload`，base：`main`
     * head repository：`[你的用户名]/NipaPlay-Reload`，compare：你刚推送的分支，例如 `add-my-name-to-about-page`
 4. 你会进入一个新的页面。请在这里填写 PR 的标题和描述。
     * **标题**: 通常使用你的 commit 信息即可，例如 "feat: Add contributor name to about page"。

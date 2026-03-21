@@ -182,7 +182,7 @@ class AppDelegate: FlutterAppDelegate {
   
   // 打开 GitHub 页面
   @objc func openGitHub(_ sender: Any?) {
-    if let url = URL(string: "https://github.com/MCDFsteve/NipaPlay-Reload") {
+    if let url = URL(string: "https://github.com/AimesSoft/NipaPlay-Reload") {
       NSWorkspace.shared.open(url)
     }
   }
@@ -243,7 +243,7 @@ class AppDelegate: FlutterAppDelegate {
       MP4, MKV, AVI, MOV, WebM, WMV, M4V, 3GP, FLV, TS, M2TS
       
       更多信息请访问项目主页：
-      https://github.com/MCDFsteve/NipaPlay-Reload
+      https://github.com/AimesSoft/NipaPlay-Reload
       https://nipaplay.aimes-soft.com/
       """
       alert.alertStyle = .informational

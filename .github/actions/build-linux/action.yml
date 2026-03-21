@@ -529,7 +529,7 @@ runs:
         echo '2. 如果没有，运行 `./install-deps.sh` 或手动安装上述依赖' >> "${README_PATH}"
         echo '' >> "${README_PATH}"
         echo '如果遇到其他问题，请访问：' >> "${README_PATH}"
-        echo 'https://github.com/MCDFsteve/NipaPlay-Reload/issues' >> "${README_PATH}"
+        echo 'https://github.com/AimesSoft/NipaPlay-Reload/issues' >> "${README_PATH}"
         
         # Create the tarball
         echo "Creating tarball..."

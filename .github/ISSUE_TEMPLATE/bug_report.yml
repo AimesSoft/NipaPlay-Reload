@@ -1,0 +1,151 @@
+name: Bug 报告
+description: 提交一个可复现的问题，帮助我们更快定位和修复。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的反馈。
+
+        提交前建议先看一下：
+        - [故障排查文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/main/Documentation/troubleshooting.md)
+        - [完整使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/main/Documentation/index.md)
+
+        如果你能附上日志、截图或录屏，通常会大幅提升排查效率。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      description: 帮我们先排除掉常见情况。
+      options:
+        - label: 我已经搜索过现有 Issues，确认这不是重复问题
+          required: true
+        - label: 我已经阅读过故障排查文档，并尝试过其中适用的方案
+          required: true
+        - label: 如果条件允许，我已经在较新版本上再次确认过这个问题
+          required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      description: 问题出现在哪个平台？
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Android
+        - iOS
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: os_version
+    attributes:
+      label: 系统版本
+      description: 尽量写具体一点，方便排查兼容性问题。
+      placeholder: 例如 Windows 11 24H2 / macOS 15.4 / Android 15
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: NipaPlay 版本
+      placeholder: 例如 1.9.18
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_source
+    attributes:
+      label: 安装来源
+      options:
+        - GitHub Releases
+        - App Store
+        - Homebrew
+        - AUR
+        - Gentoo
+        - 自行编译
+        - 其他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 相关功能模块
+      description: 选择最接近的模块即可。
+      options:
+        - 播放
+        - 弹幕 / 字幕
+        - 媒体库
+        - Emby
+        - Jellyfin
+        - WebDAV
+        - SMB
+        - Bangumi
+        - 界面 / 设置
+        - 安装 / 启动
+        - 其他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: player_kernel
+    attributes:
+      label: 播放内核（如适用）
+      options:
+        - FVP (libmdk)
+        - Media Kit
+        - Libmpv
+        - Video Player
+        - 不适用 / 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 简要说明实际发生了什么问题。
+      placeholder: 例如播放某些 H.265 视频时，进入全屏后 3 秒左右黑屏并崩溃。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce_steps
+    attributes:
+      label: 复现步骤
+      description: 请尽量写成稳定可重复的步骤。
+      placeholder: |
+        1. 打开应用
+        2. 进入 ...
+        3. 播放 ...
+        4. 出现 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: 预期行为
+      placeholder: 例如应该正常播放，不应黑屏或闪退。
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志、报错或截图
+      description: |
+        建议附上日志。可以在“设置 -> 开发者选项 -> 终端输出”中复制或导出日志。
+        如果有截图、录屏、示例文件或报错堆栈，也可以一起贴在这里。
+      render: shell
+
+  - type: textarea
+    id: extra_context
+    attributes:
+      label: 补充信息
+      description: 例如媒体来源、视频编码格式、服务器类型、是否必现等。
+      placeholder: 例如 Jellyfin 10.x、HEVC 10bit、仅在开启硬解时出现。
