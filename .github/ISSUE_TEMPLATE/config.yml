@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使用文档与故障排查
+    url: https://github.com/AimesSoft/NipaPlay-Reload/blob/main/Documentation/index.md
+    about: 先查看安装、设置和故障排查文档，很多常见问题可以直接解决。
+  - name: 贡献者指南
+    url: https://github.com/AimesSoft/NipaPlay-Reload/blob/main/CONTRIBUTING_GUIDE/00-Introduction.md
+    about: 想提交代码、文档或其他贡献时，可以先阅读协作流程和开发说明。

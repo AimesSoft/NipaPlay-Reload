@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class UpdateService {
-  static const String _repoUrl = 'https://api.github.com/repos/MCDFsteve/NipaPlay-Reload/releases/latest';
+  static const String _repoUrl = 'https://api.github.com/repos/AimesSoft/NipaPlay-Reload/releases/latest';
   
   static Future<UpdateInfo> checkForUpdates() async {
     try {

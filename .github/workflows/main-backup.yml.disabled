@@ -844,7 +844,7 @@ jobs:
           echo '2. 如果没有，运行 `./install-deps.sh` 或手动安装上述依赖' >> "${README_PATH}"
           echo '' >> "${README_PATH}"
           echo '如果遇到其他问题，请访问：' >> "${README_PATH}"
-          echo 'https://github.com/MCDFsteve/NipaPlay-Reload/issues' >> "${README_PATH}"
+          echo 'https://github.com/AimesSoft/NipaPlay-Reload/issues' >> "${README_PATH}"
           
           # Create the tarball
           echo "Creating tarball..."
@@ -1074,7 +1074,7 @@ jobs:
       - name: Checkout Homebrew Tap repository
         uses: actions/checkout@v4
         with:
-          repository: Shinokawa/homebrew-nipaplay-reload
+          repository: AimesSoft/homebrew-nipaplay-reload
           path: homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
@@ -1086,7 +1086,7 @@ jobs:
         id: shasum
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
-          DMG_URL="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v${VERSION}/NipaPlay_${VERSION}_macOS_Universal.dmg"
+          DMG_URL="https://github.com/AimesSoft/NipaPlay-Reload/releases/download/v${VERSION}/NipaPlay_${VERSION}_macOS_Universal.dmg"
           
           echo "Downloading DMG from ${DMG_URL}..."
           curl -sL -o NipaPlay.dmg "${DMG_URL}"

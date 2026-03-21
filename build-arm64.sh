@@ -25,7 +25,7 @@ Essential: no
 Installed-Size: 34648
 Maintainer: madoka773 <valigarmanda55@gmail.com>
 Description: A cross platform danmaku video player.
-Homepage: https://github.com/MCDFsteve/NipaPlay-Reload
+Homepage: https://github.com/AimesSoft/NipaPlay-Reload
 Depends: ffmpeg, libass9
 EOF
 

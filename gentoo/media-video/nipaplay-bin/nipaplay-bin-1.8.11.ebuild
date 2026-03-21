@@ -2,10 +2,10 @@ EAPI=8
 inherit desktop xdg unpacker
 DESCRIPTION="NipaPlay-Reload 是一个现代化的跨平台本地视频播放器，支持 Windows、macOS、Linux、Android 和 iOS。集成了弹幕显示、多格式字幕支持、多音频轨道切换，新番查看等功能，支持挂载Emby/Jellyfin媒体库。采用 Flutter 开发，提供统一的用户体验。"
 
-HOMEPAGE="https://github.com/MCDFsteve/NipaPlay-Reload
+HOMEPAGE="https://github.com/AimesSoft/NipaPlay-Reload
 	https://nipaplay.aimes-soft.com/"
 MYPN="nipaplay"
-SRC_URI="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v${PV}/NipaPlay-${PV}-Linux-amd64.deb -> ${MYPN}.deb"
+SRC_URI="https://github.com/AimesSoft/NipaPlay-Reload/releases/download/v${PV}/NipaPlay-${PV}-Linux-amd64.deb -> ${MYPN}.deb"
 LICENSE="MIT"
 KEYWORDS="~amd64"
 SLOT="0"

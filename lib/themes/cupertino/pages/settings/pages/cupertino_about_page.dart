@@ -577,8 +577,8 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     final entries = [
       (
         icon: Ionicons.logo_github,
-        label: 'MCDFsteve/NipaPlay-Reload',
-        url: 'https://www.github.com/MCDFsteve/NipaPlay-Reload',
+        label: 'AimesSoft/NipaPlay-Reload',
+        url: 'https://www.github.com/AimesSoft/NipaPlay-Reload',
       ),
       (
         icon: Ionicons.chatbubbles_outline,

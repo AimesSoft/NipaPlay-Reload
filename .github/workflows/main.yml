@@ -200,7 +200,7 @@ jobs:
       - name: Checkout Homebrew Tap repository
         uses: actions/checkout@v4
         with:
-          repository: Shinokawa/homebrew-nipaplay-reload
+          repository: AimesSoft/homebrew-nipaplay-reload
           path: homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
@@ -212,7 +212,7 @@ jobs:
         id: shasum
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
-          DMG_URL="https://github.com/MCDFsteve/NipaPlay-Reload/releases/download/v${VERSION}/NipaPlay_${VERSION}_macOS_Universal.dmg"
+          DMG_URL="https://github.com/AimesSoft/NipaPlay-Reload/releases/download/v${VERSION}/NipaPlay_${VERSION}_macOS_Universal.dmg"
           
           echo "Downloading DMG from ${DMG_URL}..."
           curl -sL -o NipaPlay.dmg "${DMG_URL}"
