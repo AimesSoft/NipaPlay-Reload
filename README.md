@@ -3,22 +3,21 @@
     <img src="https://github.com/user-attachments/assets/5366a99f-8906-4198-b2cf-2553252c0fb4" width="100px" style="margin-right: 20px;" alt="Logo">
     <img src="icons/new-icon-win.png" width="100px" alt="Icon">
   </div>
-  
-  # NipaPlay-Reload
 
-  <img src="https://count.getloli.com/get/@nipaplay?theme=moebooru" alt="访问统计" />
-  
-  <br>
+# NipaPlay-Reload
 
-  ![GitHub release](https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=blue)
-  ![GitHub downloads](https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=green)
-  [![Verified by Nucleus](https://verify.altermenta.com/check/835533f466a714f9/badge.svg)](https://verify.altermenta.com/check/835533f466a714f9)
-  ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
-  ![License](https://img.shields.io/github/license/mcdfsteve/nipaplay-reload?style=flat-square)
+<img src="https://count.getloli.com/get/@nipaplay?theme=moebooru" alt="访问统计" />
 
-  <br>
+<br>
 
-  <img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart" width="80%">
+![GitHub release](https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=blue)
+![GitHub downloads](https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=green)
+![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
+![License](https://img.shields.io/github/license/mcdfsteve/nipaplay-reload?style=flat-square)
+
+<br>
+
+<img src="https://api.star-history.com/svg?repos=mcdfsteve/nipaplay-reload&type=Date&theme=moebooru" alt="Star History Chart" width="80%">
 </div>
 
 <div align="center">
@@ -38,11 +37,11 @@
 
 NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 
-*   **全平台支持**：无论是在电脑还是手机上，体验始终如一。
-*   **强大的弹幕系统**：自动匹配网络弹幕，支持弹弹play，让看番不再孤单。
-*   **媒体库集成**：支持 Emby、Jellyfin、SMB、WebDAV，轻松挂载远程资源。
-*   **番剧管理**：同步 Bangumi 观看进度，查看新番时间表，打分评论一站式搞定。
-*   **现代 UI**：毛玻璃风格设计，支持自动黑夜模式，美观与易用并重。
+* **全平台支持**：无论是在电脑还是手机上，体验始终如一。
+* **强大的弹幕系统**：自动匹配网络弹幕，支持弹弹play，让看番不再孤单。
+* **媒体库集成**：支持 Emby、Jellyfin、SMB、WebDAV，轻松挂载远程资源。
+* **番剧管理**：同步 Bangumi 观看进度，查看新番时间表，打分评论一站式搞定。
+* **现代 UI**：毛玻璃风格设计，支持自动黑夜模式，美观与易用并重。
 
 ## 应用截图
 
@@ -100,12 +99,14 @@ NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 ### 包管理器安装
 
 #### macOS (Homebrew)
+
 ```bash
 brew tap Shinokawa/nipaplay-reload
 brew install --cask nipaplay-reload
 ```
 
 #### Arch Linux (AUR)
+
 ```bash
 paru -S nipaplay-reload-bin
 # 或
@@ -113,6 +114,7 @@ yay -S nipaplay-reload-bin
 ```
 
 #### Gentoo Linux
+
 ```bash
 ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ```
@@ -120,29 +122,33 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ## 功能列表
 
 ### 播放体验
-*   **内核支持**：基于 fvp (libmdk) / media_kit / video_player / libmpv，性能强劲。
-*   **视频支持**：本地播放、Emby/Jellyfin 流媒体、WebDAV 挂载。
-*   **画质增强**：支持 Anime4K 超分（实验性）、CRT 着色器效果。
-*   **音频控制**：多音轨切换、倍速播放。
+
+* **内核支持**：基于 fvp (libmdk) / media_kit / video_player / libmpv，性能强劲。
+* **视频支持**：本地播放、Emby/Jellyfin 流媒体、WebDAV 挂载。
+* **画质增强**：支持 Anime4K 超分（实验性）、CRT 着色器效果。
+* **音频控制**：多音轨切换、倍速播放。
 
 ### 弹幕与字幕
-*   **弹幕**：滚动/顶底弹幕、轨迹记忆、防遮挡、本地挂载 (xml/json)。
-*   **字幕**：ASS/SRT 格式、多轨切换、样式自定义、本地挂载。
+
+* **弹幕**：滚动/顶底弹幕、轨迹记忆、防遮挡、本地挂载 (xml/json)。
+* **字幕**：ASS/SRT 格式、多轨切换、样式自定义、本地挂载。
 
 ### 番剧与同步
-*   **Bangumi**：进度同步、评分、评论。
-*   **新番表**：每日更新提醒，按周分类。
-*   **数据备份**：历史记录同步、多设备远程访问。
+
+* **Bangumi**：进度同步、评分、评论。
+* **新番表**：每日更新提醒，按周分类。
+* **数据备份**：历史记录同步、多设备远程访问。
 
 ### 个性化
-*   **主题**：亮色/暗色切换、自定义背景图。
-*   **操作**：自定义快捷键、适配平板/电视布局。
+
+* **主题**：亮色/暗色切换、自定义背景图。
+* **操作**：自定义快捷键、适配平板/电视布局。
 
 ## 文档与支持
 
-*   **[完整使用文档](Documentation/index.md)**：安装配置、Emby 连接教程、故障排查。
-*   **[贡献者指南](CONTRIBUTING_GUIDE/00-Introduction.md)**：如何参与开发、添加新功能。
-*   **反馈问题**：请在软件内的“开发者选项”中导出日志，或在 GitHub Issues 中提交。
+* **[完整使用文档](Documentation/index.md)**：安装配置、Emby 连接教程、故障排查。
+* **[贡献者指南](CONTRIBUTING_GUIDE/00-Introduction.md)**：如何参与开发、添加新功能。
+* **反馈问题**：请在软件内的“开发者选项”中导出日志，或在 GitHub Issues 中提交。
 
 ## 技术栈
 
@@ -181,10 +187,12 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 </div>
 
 ### 鸣谢
+
 感谢以下贡献者和支持者：
 EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将, 博易伯伯, 千葉あおい
 
 ### 看板娘
+
 [Pixiv Artwork](https://www.pixiv.net/artworks/130349456) (作者 MCDFsteve)
 
 ---
@@ -192,3 +200,4 @@ EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将
 <div align="center">
   <sub>Made with ❤️ by the NipaPlay Team</sub>
 </div>
+
