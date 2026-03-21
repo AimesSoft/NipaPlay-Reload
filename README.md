@@ -12,6 +12,7 @@
 
   ![GitHub release](https://img.shields.io/github/v/release/mcdfsteve/nipaplay-reload?style=flat-square&color=blue)
   ![GitHub downloads](https://img.shields.io/github/downloads/mcdfsteve/nipaplay-reload/total?style=flat-square&color=green)
+  [![Verified by Nucleus](https://verify.altermenta.com/check/835533f466a714f9/badge.svg)](https://verify.altermenta.com/check/835533f466a714f9)
   ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
   ![License](https://img.shields.io/github/license/mcdfsteve/nipaplay-reload?style=flat-square)
 
