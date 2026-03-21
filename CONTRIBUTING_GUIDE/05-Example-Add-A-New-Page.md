@@ -4,7 +4,7 @@
 
 **我们的目标**: 创建一个名为“贡献者名单”的新页面，并在设置页面添加入口，点击后可以跳转到这个新页面。这个页面上会显示一份为项目做出贡献的人员列表。
 
-我们将严格按照之前的流程，并重点展示如何与 AI 高效协作。
+我们将严格按照之前的流程，并重点展示如何与 Codex 高效协作。这里特别说明一下：**现在更符合实际的工作流，是让 Codex 直接在工作区里创建文件、修改现有文件、给出 diff，然后由你审查并验证，而不是让你手动复制粘贴整段代码。**
 
 ### 第 1 步：创建新分支
 
@@ -31,16 +31,28 @@ git checkout -b feat/add-contributors-page
 >    - 姓名: Contributor2, 链接: https://github.com/contributor2
 > 5. 列表中的每一项都要美观，并且可以点击，点击后能在浏览器中打开对应的 GitHub 链接。
 >
-> 请帮我生成这个页面的完整 Dart 代码。请将代码放在一个名为 `contributors_page.dart` 的新文件里。另外，请使用 `url_launcher` 这个库来打开链接，如果代码中用到了，记得提醒我需要添加这个依赖。”
+> 请直接在工作区里完成实现，不要只返回代码片段。请：
+> - 在 `lib/themes/nipaplay/pages/settings/` 下创建 `contributors_page.dart`
+> - 在 `lib/themes/nipaplay/pages/settings_page.dart` 增加入口
+> - 如果发现依赖缺失，请明确告诉我需要补什么
+> - 修改尽量小，并在完成后总结改了哪些文件、为什么这样改。”
 
-Codex 会理解你的需求，并生成一份完整的代码文件。这比我们自己从零开始写要快得多。
+Codex 会理解你的需求，并直接在工作区里修改文件。这比“先让助手生成整段代码，再手动搬运到编辑器里”更接近现在的真实协作方式。
 
-### 第 3 步：创建文件并应用代码
+### 第 3 步：审查 Codex 的改动，而不是手动粘贴
 
-1.  **创建文件**: 为了简化示例，我们先给 `nipaplay` 主题添加页面。在 `lib/themes/nipaplay/pages/settings/` 目录下创建一个新文件，命名为 `contributors_page.dart`。
-2.  **粘贴代码**: 将 AI 生成的代码完整地粘贴到这个新文件中。
+当 Codex 完成修改后，不要直接盲目接受。更推荐你做下面几件事：
 
-Codex 生成的代码可能类似这样：
+1.  **看它改了哪些文件**:
+    *   这次合理的结果通常是：
+        *   新增 `lib/themes/nipaplay/pages/settings/contributors_page.dart`
+        *   修改 `lib/themes/nipaplay/pages/settings_page.dart`
+2.  **看 diff 是否足够小**:
+    *   如果你只是想加一个页面入口，但 Codex 一口气改了很多无关文件，就应该让它收缩范围。
+3.  **确认它没有“只给建议不落地”**:
+    *   真正符合现在工作流的结果，是工作区里已经有了实际改动，而不是聊天框里一大段让你复制粘贴的代码。
+
+一个合理的结果大概会长这样：
 
 ```dart
 import 'package:flutter/material.dart';
@@ -92,56 +104,38 @@ class ContributorsPage extends StatelessWidget {
 }
 ```
 
+你不需要自己手动新建文件再把这些代码贴进去。更理想的方式是：**Codex 帮你把文件改好，你负责审查这些改动是否靠谱。**
+
 ### 第 4 步：处理依赖
 
-Codex 提醒我们用到了 `url_launcher` 库。这个项目当前已经依赖了它，所以通常不需要额外安装；如果你引入了新的第三方库，再去更新 `pubspec.yaml`。
+Codex 可能会提醒我们用到了 `url_launcher` 库。这个项目当前已经依赖了它，所以通常不需要额外安装；如果你引入了新的第三方库，再去更新 `pubspec.yaml`。
 
-1.  **确认依赖**: 打开 `pubspec.yaml`，确认 `url_launcher` 已经存在；如果不存在，再运行：
+1.  **先确认依赖是不是真的缺失**: 打开 `pubspec.yaml`，确认 `url_launcher` 是否已经存在；不要一看到提示就盲目添加。
+2.  **只有在确实缺失时再安装**:
     ```bash
     flutter pub add url_launcher
     ```
 
-### 第 5 步：添加入口 (再次与 Codex 协作)
+### 第 5 步：如果第一次结果不理想，继续让 Codex 收敛修改
 
-新页面创建好了，但现在应用里还没有地方可以进入这个页面。我们需要在设置页面添加一个入口。
+真实协作里，第一次结果不一定完美。如果你发现 Codex 的修改有点跑偏，可以继续这样约束它：
 
-1.  **定位文件**: 打开 `lib/themes/nipaplay/pages/settings_page.dart`。
-2.  **向 Codex 提问**: 把 `lib/themes/nipaplay/pages/settings_page.dart` 作为上下文，然后输入：
+> “请只保留与贡献者页面有关的最小修改，不要顺手重构设置页。”
 
-    > “这是我的设置页面代码。请在‘关于’选项的旁边，添加一个新的列表项，文本是‘贡献者名单’。当用户点击这个列表项时，请导航到我们刚刚创建的 `ContributorsPage`。记得帮我导入 `contributors_page.dart` 文件。”
+或者：
 
-Codex 会帮你找到合适的位置，并添加类似下面的代码：
+> “请解释你为什么修改了这两个文件，并确认没有改动其他主题页面。”
 
-```dart
-// ... 在文件顶部，AI 会帮你添加导入语句
-import 'settings/contributors_page.dart';
-
-// ... 在 build 方法的某个位置 ...
-ListTile(
-  leading: const Icon(Icons.people),
-  title: const Text('贡献者名单'),
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const ContributorsPage()),
-    );
-  },
-),
-ListTile( // 原有的“关于”选项
-  leading: const Icon(Icons.info_outline),
-  title: const Text('关于'),
-  // ...
-),
-```
+这一步很重要，因为好的协作不是“让 Codex 一次性全做完”，而是你逐步把它引导到更符合仓库风格的结果。
 
 ### 第 6 步：测试和格式化
 
-1.  **运行应用**: 在终端运行 `flutter run`。
-2.  **测试功能**: 导航到“设置”页面，你应该能看到新增的“贡献者名单”选项。点击它，应该能成功跳转到新页面。再点击页面上的任意一个贡献者，应该能用浏览器打开对应的 GitHub 链接。
-3.  **先做静态检查**: 在提交前先运行：
+1.  **先做静态检查**: 在提交前先运行：
     ```bash
     flutter analyze
     ```
+2.  **运行应用**: 在终端运行 `flutter run`。
+3.  **测试功能**: 导航到“设置”页面，你应该能看到新增的“贡献者名单”选项。点击它，应该能成功跳转到新页面。再点击页面上的任意一个贡献者，应该能用浏览器打开对应的 GitHub 链接。
 4.  **格式化代码**: 在提交前，别忘了运行格式化命令。
     ```bash
     dart format .
@@ -173,9 +167,9 @@ ListTile( // 原有的“关于”选项
 
 ## 总结
 
-恭喜你！你刚刚独立（在 AI 的帮助下）为项目添加了一个完整的新功能！
+恭喜你！你刚刚独立（在 Codex 的帮助下）为项目添加了一个完整的新功能！
 
-通过这个例子，你可以看到，即使你不完全理解每一行代码的细节，只要你能清晰地向 Codex 描述你的需求，就能完成很多有意义的贡献。随着你做得越来越多，你对代码的理解也会自然而然地加深。
+通过这个例子，你可以看到，即使你不完全理解每一行代码的细节，只要你能清晰地向 Codex 描述你的需求，并养成“限制改动范围 -> 看 diff -> 跑校验 -> 手动验证”的习惯，就能完成很多有意义的贡献。随着你做得越来越多，你对代码的理解也会自然而然地加深。
 
 ---
 
