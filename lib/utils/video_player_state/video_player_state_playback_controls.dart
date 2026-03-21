@@ -828,6 +828,14 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   // 设置上下文
   void setContext(BuildContext context) {
     _context = context;
+    _subtitleManager.onUserNotification = (message) {
+      final currentContext = _context;
+      if (currentContext == null || !currentContext.mounted) {
+        debugPrint('SubtitleManager提示被忽略（无可用上下文）: $message');
+        return;
+      }
+      BlurSnackBar.show(currentContext, message);
+    };
   }
 
   // 更新状态消息的方法

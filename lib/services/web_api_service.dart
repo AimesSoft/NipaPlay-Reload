@@ -53,6 +53,9 @@ class WebApiService {
     _router.get('/dandanplay/login_status', handleLoginStatusRequest);
     _router.post('/dandanplay/login', handleLoginRequest);
     _router.post('/dandanplay/logout', handleLogoutRequest);
+    _router.post('/dandanplay/refresh_login', handleRefreshLoginRequest);
+    _router.get(
+        '/dandanplay/bangumi/oauth_login', handleBangumiOAuthLoginRequest);
     _router.get('/dandanplay/play_history', handlePlayHistoryRequest);
     _router.get('/dandanplay/favorites', handleFavoritesRequest);
     _router.post('/dandanplay/send_danmaku', handleSendDanmakuRequest);
@@ -64,10 +67,11 @@ class WebApiService {
     // 本地媒体库相关API路由
     _router.get('/media/libraries', handleGetLibrariesRequest);
     _router.get('/media/local/items', handleGetLocalMediaItemsRequest);
-        _router.get('/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
-        _router.get('/history', handleGetHistoryRequest);
-        _router.post('/history/progress', handleUpdateHistoryProgressRequest);
-        _router.mount('/media/local/share/', _localMediaShareApi.router);
+    _router.get(
+        '/media/local/item/<animeId>', handleGetLocalMediaItemDetailRequest);
+    _router.get('/history', handleGetHistoryRequest);
+    _router.post('/history/progress', handleUpdateHistoryProgressRequest);
+    _router.mount('/media/local/share/', _localMediaShareApi.router);
     _router.mount('/media/local/manage/', _localMediaManagementApi.router);
     _router.mount('/settings/network/', _networkMediaSettingsApi.router);
   }
@@ -184,18 +188,18 @@ class WebApiService {
         final file = File(imageUrl);
         final exists = await file.exists();
         //debugPrint('[ImageProxy] File exists: $exists');
-        
+
         if (!exists) {
           return Response.notFound('Image file not found');
         }
 
         // 简单的安全检查
         final ext = imageUrl.toLowerCase();
-        if (!ext.endsWith('.jpg') && 
-            !ext.endsWith('.jpeg') && 
-            !ext.endsWith('.png') && 
-            !ext.endsWith('.webp') && 
-            !ext.endsWith('.gif') && 
+        if (!ext.endsWith('.jpg') &&
+            !ext.endsWith('.jpeg') &&
+            !ext.endsWith('.png') &&
+            !ext.endsWith('.webp') &&
+            !ext.endsWith('.gif') &&
             !ext.endsWith('.bmp')) {
           //debugPrint('[ImageProxy] Forbidden extension: $ext');
           return Response.forbidden('Access to non-image files is forbidden');
@@ -319,6 +323,10 @@ class WebApiService {
         'isLoggedIn': DandanplayService.isLoggedIn,
         'userName': DandanplayService.userName,
         'screenName': DandanplayService.screenName,
+        'linkedBangumi': DandanplayService.linkedBangumiAccount,
+        'linkedBangumiExpiresAt':
+            DandanplayService.linkedBangumiExpireTime?.toIso8601String(),
+        'loginTs': DandanplayService.loginTimestamp,
       };
 
       return Response.ok(
@@ -363,6 +371,59 @@ class WebApiService {
       );
     } catch (e) {
       return Response.internalServerError(body: 'Error during logout: $e');
+    }
+  }
+
+  Future<Response> handleBangumiOAuthLoginRequest(Request request) async {
+    try {
+      final redirectUrl = request.url.queryParameters['redirectUrl'];
+      final result = await DandanplayService.getBangumiOAuthLoginUrl(
+        redirectUrl: redirectUrl,
+      );
+
+      return Response.ok(
+        json.encode(result),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error getting bangumi oauth login url: $e',
+      );
+    }
+  }
+
+  Future<Response> handleRefreshLoginRequest(Request request) async {
+    try {
+      debugPrint(
+        '[WebApi][dandanplay/refresh_login] 入站请求: method=${request.method} '
+        'path=/${request.url.path} query=${request.url.query}',
+      );
+      final result = await DandanplayService.refreshLinkedBangumiStatus();
+      debugPrint(
+        '[WebApi][dandanplay/refresh_login] 刷新结果: success=${result['success']} '
+        'statusCode=${result['statusCode'] ?? '-'} '
+        'requestMethod=${result['requestMethod'] ?? '-'} allow=${result['allow'] ?? '-'} '
+        'requestUri=${result['requestUri'] ?? '-'} message=${result['message'] ?? '-'}',
+      );
+      final payload = <String, dynamic>{
+        ...result,
+        'isLoggedIn': DandanplayService.isLoggedIn,
+        'userName': DandanplayService.userName,
+        'screenName': DandanplayService.screenName,
+        'linkedBangumi': DandanplayService.linkedBangumiAccount,
+        'linkedBangumiExpiresAt':
+            DandanplayService.linkedBangumiExpireTime?.toIso8601String(),
+        'loginTs': DandanplayService.loginTimestamp,
+      };
+      return Response.ok(
+        json.encode(payload),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      debugPrint('[WebApi][dandanplay/refresh_login] 异常: $e');
+      return Response.internalServerError(
+        body: 'Error refreshing login status: $e',
+      );
     }
   }
 
@@ -573,20 +634,22 @@ class WebApiService {
         await watchHistoryProvider.loadHistory();
       }
 
-      final history = watchHistoryProvider.history.map((item) => {
-        'filePath': item.filePath,
-        'animeName': item.animeName,
-        'episodeTitle': item.episodeTitle,
-        'episodeId': item.episodeId,
-        'animeId': item.animeId,
-        'watchProgress': item.watchProgress,
-        'lastPosition': item.lastPosition,
-        'duration': item.duration,
-        'lastWatchTime': item.lastWatchTime.toIso8601String(),
-        'thumbnailPath': item.thumbnailPath,
-        'isFromScan': item.isFromScan,
-        'videoHash': item.videoHash,
-      }).toList();
+      final history = watchHistoryProvider.history
+          .map((item) => {
+                'filePath': item.filePath,
+                'animeName': item.animeName,
+                'episodeTitle': item.episodeTitle,
+                'episodeId': item.episodeId,
+                'animeId': item.animeId,
+                'watchProgress': item.watchProgress,
+                'lastPosition': item.lastPosition,
+                'duration': item.duration,
+                'lastWatchTime': item.lastWatchTime.toIso8601String(),
+                'thumbnailPath': item.thumbnailPath,
+                'isFromScan': item.isFromScan,
+                'videoHash': item.videoHash,
+              })
+          .toList();
 
       return Response.ok(
         json.encode({'success': true, 'data': history}),
@@ -657,12 +720,10 @@ class WebApiService {
       WatchHistoryItem? existingHistory =
           await watchHistoryProvider.getHistoryItem(filePath);
 
-      final double sanitizedProgress = progress == null || progress.isNaN
-          ? 0.0
-          : progress.clamp(0.0, 1.0);
-      final int sanitizedPosition = positionMs != null && positionMs > 0
-          ? positionMs
-          : 0;
+      final double sanitizedProgress =
+          progress == null || progress.isNaN ? 0.0 : progress.clamp(0.0, 1.0);
+      final int sanitizedPosition =
+          positionMs != null && positionMs > 0 ? positionMs : 0;
       final int? sanitizedDuration =
           durationMs != null && durationMs > 0 ? durationMs : null;
       double derivedProgress = sanitizedProgress;
@@ -691,14 +752,12 @@ class WebApiService {
           lastPosition: mergedPosition,
           duration: mergedDuration,
           lastWatchTime: clientUpdatedAt ?? DateTime.now(),
-          animeName:
-              (animeName != null && animeName.trim().isNotEmpty)
-                  ? animeName.trim()
-                  : existingHistory.animeName,
-          episodeTitle:
-              (episodeTitle != null && episodeTitle.trim().isNotEmpty)
-                  ? episodeTitle.trim()
-                  : existingHistory.episodeTitle,
+          animeName: (animeName != null && animeName.trim().isNotEmpty)
+              ? animeName.trim()
+              : existingHistory.animeName,
+          episodeTitle: (episodeTitle != null && episodeTitle.trim().isNotEmpty)
+              ? episodeTitle.trim()
+              : existingHistory.episodeTitle,
           animeId: animeId ?? existingHistory.animeId,
           episodeId: episodeId ?? existingHistory.episodeId,
           videoHash: videoHash ?? existingHistory.videoHash,
@@ -711,10 +770,9 @@ class WebApiService {
         updatedHistory = WatchHistoryItem(
           filePath: filePath,
           animeName: fallbackName.isNotEmpty ? fallbackName : '未知动画',
-          episodeTitle:
-              (episodeTitle != null && episodeTitle.trim().isNotEmpty)
-                  ? episodeTitle.trim()
-                  : null,
+          episodeTitle: (episodeTitle != null && episodeTitle.trim().isNotEmpty)
+              ? episodeTitle.trim()
+              : null,
           episodeId: episodeId,
           animeId: animeId,
           watchProgress: derivedProgress,

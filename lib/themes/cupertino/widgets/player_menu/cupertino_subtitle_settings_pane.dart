@@ -6,6 +6,7 @@ import 'package:nipaplay/player_menu/player_menu_pane_controllers.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_back_button.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_slider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class CupertinoSubtitleSettingsPane extends StatefulWidget {
@@ -20,21 +21,28 @@ class CupertinoSubtitleSettingsPane extends StatefulWidget {
 
 class _CupertinoSubtitleSettingsPaneState
     extends State<CupertinoSubtitleSettingsPane> {
+  final TextEditingController _subtitleDelayController =
+      TextEditingController();
   final TextEditingController _fontNameController = TextEditingController();
   final TextEditingController _textColorController = TextEditingController();
   final TextEditingController _borderColorController = TextEditingController();
   final TextEditingController _shadowColorController = TextEditingController();
+  final FocusNode _subtitleDelayFocus = FocusNode();
   final FocusNode _fontNameFocus = FocusNode();
   final FocusNode _textColorFocus = FocusNode();
   final FocusNode _borderColorFocus = FocusNode();
   final FocusNode _shadowColorFocus = FocusNode();
+  bool _subtitleDelayDirty = false;
+  double? _subtitleDelayPreviewValue;
 
   @override
   void dispose() {
+    _subtitleDelayController.dispose();
     _fontNameController.dispose();
     _textColorController.dispose();
     _borderColorController.dispose();
     _shadowColorController.dispose();
+    _subtitleDelayFocus.dispose();
     _fontNameFocus.dispose();
     _textColorFocus.dispose();
     _borderColorFocus.dispose();
@@ -76,10 +84,129 @@ class _CupertinoSubtitleSettingsPaneState
     await videoState.importSubtitleFontFile(file.path);
   }
 
+  double _currentSubtitleDelayDisplayValue(VideoPlayerState videoState) {
+    return _subtitleDelayPreviewValue ?? videoState.subtitleDelaySeconds;
+  }
+
+  void _syncSubtitleDelayController(VideoPlayerState videoState) {
+    if (_subtitleDelayFocus.hasFocus || _subtitleDelayDirty) return;
+    final value =
+        _formatDelayInput(_currentSubtitleDelayDisplayValue(videoState));
+    if (_subtitleDelayController.text != value) {
+      _subtitleDelayController.text = value;
+    }
+  }
+
+  String _trimTrailingZeros(String value) {
+    if (!value.contains('.')) return value;
+    return value
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  String _formatDelayInput(double value) {
+    if (value.abs() < 0.0001) return '0';
+    return _trimTrailingZeros(value.toStringAsFixed(3));
+  }
+
+  String _formatDelayDisplay(double value) {
+    final prefix = value > 0 ? '+' : '';
+    return '$prefix${value.toStringAsFixed(1)}s';
+  }
+
+  String _normalizeNumberInput(String value) {
+    return value
+        .trim()
+        .replaceAll('，', '.')
+        .replaceAll(',', '.')
+        .replaceAll('＋', '+')
+        .replaceAll('－', '-');
+  }
+
+  String _buildSubtitleDelayLimitHint(VideoPlayerState videoState) {
+    final limit = _formatDelayInput(videoState.subtitleDelayCustomLimitSeconds);
+    if (videoState.hasSubtitleDelayDurationLimit) {
+      return '可输入 -$limit ~ +$limit 秒（按当前视频时长限制）';
+    }
+    return '可输入 -$limit ~ +$limit 秒（当前时长未就绪时先按默认范围处理）';
+  }
+
+  Future<void> _applyCustomSubtitleDelay(VideoPlayerState videoState) async {
+    final input = _normalizeNumberInput(_subtitleDelayController.text);
+    if (input.isEmpty) {
+      BlurSnackBar.show(context, '请输入字幕延迟秒数');
+      return;
+    }
+
+    final value = double.tryParse(input);
+    if (value == null) {
+      BlurSnackBar.show(context, '请输入有效数字');
+      return;
+    }
+    if (!value.isFinite) {
+      BlurSnackBar.show(context, '请输入有限数字');
+      return;
+    }
+
+    final limit = videoState.subtitleDelayCustomLimitSeconds;
+    if (value.abs() - limit > 0.0001) {
+      final limitText = _formatDelayInput(limit);
+      BlurSnackBar.show(context, '当前视频仅支持 -$limitText ~ +$limitText 秒');
+      return;
+    }
+
+    await videoState.setSubtitleDelaySeconds(value);
+    if (!mounted) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _subtitleDelayDirty = false;
+      _subtitleDelayPreviewValue = null;
+    });
+    BlurSnackBar.show(context, '已设置字幕延迟为 ${_formatDelayDisplay(value)}');
+  }
+
+  void _handleSubtitleDelayInputChanged(String _) {
+    if (_subtitleDelayDirty) return;
+    setState(() {
+      _subtitleDelayDirty = true;
+      _subtitleDelayPreviewValue = null;
+    });
+  }
+
+  void _handleSubtitleDelaySliderStart(
+    VideoPlayerState videoState,
+    double _,
+  ) {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _subtitleDelayDirty = false;
+      _subtitleDelayPreviewValue = videoState.subtitleDelaySeconds;
+    });
+  }
+
+  void _handleSubtitleDelaySliderChanged(double value) {
+    setState(() {
+      _subtitleDelayPreviewValue = value;
+    });
+  }
+
+  Future<void> _handleSubtitleDelaySliderEnd(
+    VideoPlayerState videoState,
+    double value,
+  ) async {
+    await videoState.setSubtitleDelaySeconds(value);
+    if (!mounted) return;
+    setState(() {
+      _subtitleDelayDirty = false;
+      _subtitleDelayPreviewValue = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<SubtitleSettingsPaneController>();
     final videoState = controller.videoState;
+    _syncSubtitleDelayController(videoState);
     _syncController(
       controller: _fontNameController,
       focus: _fontNameFocus,
@@ -118,7 +245,8 @@ class _CupertinoSubtitleSettingsPaneState
                   ),
                 ),
                 CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   onPressed: videoState.resetSubtitleSettings,
                   child: const Text('回到默认'),
                 ),
@@ -137,31 +265,36 @@ class _CupertinoSubtitleSettingsPaneState
                   _buildSliderTile(
                     context,
                     title: '字幕大小',
-                    description:
-                        '${(controller.subtitleScale * 100).round()}%',
+                    description: '${(controller.subtitleScale * 100).round()}%',
                     value: controller.subtitleScale,
                     min: controller.minScale,
                     max: controller.maxScale,
-                    divisions: ((controller.maxScale - controller.minScale) /
-                            0.05)
-                        .round(),
+                    divisions:
+                        ((controller.maxScale - controller.minScale) / 0.05)
+                            .round(),
                     onChanged: controller.setSubtitleScale,
                   ),
                   _buildSliderTile(
                     context,
                     title: '字幕延迟',
-                    description:
-                        '${videoState.subtitleDelaySeconds >= 0 ? '+' : ''}${videoState.subtitleDelaySeconds.toStringAsFixed(1)}s',
-                    value: videoState.subtitleDelaySeconds,
-                    min: -5.0,
-                    max: 5.0,
-                    divisions: 100,
-                    onChanged: videoState.setSubtitleDelaySeconds,
+                    description: _formatDelayDisplay(
+                        _currentSubtitleDelayDisplayValue(videoState)),
+                    value: _currentSubtitleDelayDisplayValue(videoState),
+                    min: videoState.subtitleDelaySliderMinSeconds,
+                    max: videoState.subtitleDelaySliderMaxSeconds,
+                    divisions: videoState.subtitleDelaySliderDivisions,
+                    onChangeStart: (value) =>
+                        _handleSubtitleDelaySliderStart(videoState, value),
+                    onChanged: _handleSubtitleDelaySliderChanged,
+                    onChangeEnd: (value) =>
+                        _handleSubtitleDelaySliderEnd(videoState, value),
                   ),
+                  _buildSubtitleDelayInputTile(context, videoState),
                   _buildSliderTile(
                     context,
                     title: '字幕位置',
-                    description: '${videoState.subtitlePosition.toStringAsFixed(0)}%',
+                    description:
+                        '${videoState.subtitlePosition.toStringAsFixed(0)}%',
                     value: videoState.subtitlePosition,
                     min: VideoPlayerState.minSubtitlePosition,
                     max: VideoPlayerState.maxSubtitlePosition,
@@ -178,7 +311,8 @@ class _CupertinoSubtitleSettingsPaneState
                   _buildSliderTile(
                     context,
                     title: '水平边距',
-                    description: '${videoState.subtitleMarginX.toStringAsFixed(0)}px',
+                    description:
+                        '${videoState.subtitleMarginX.toStringAsFixed(0)}px',
                     value: videoState.subtitleMarginX,
                     min: 0,
                     max: 200,
@@ -188,7 +322,8 @@ class _CupertinoSubtitleSettingsPaneState
                   _buildSliderTile(
                     context,
                     title: '垂直边距',
-                    description: '${videoState.subtitleMarginY.toStringAsFixed(0)}px',
+                    description:
+                        '${videoState.subtitleMarginY.toStringAsFixed(0)}px',
                     value: videoState.subtitleMarginY,
                     min: 0,
                     max: 200,
@@ -203,7 +338,8 @@ class _CupertinoSubtitleSettingsPaneState
                   _buildSliderTile(
                     context,
                     title: '不透明度',
-                    description: '${(videoState.subtitleOpacity * 100).round()}%',
+                    description:
+                        '${(videoState.subtitleOpacity * 100).round()}%',
                     value: videoState.subtitleOpacity,
                     min: 0,
                     max: 1,
@@ -213,7 +349,8 @@ class _CupertinoSubtitleSettingsPaneState
                   _buildSliderTile(
                     context,
                     title: '描边大小',
-                    description: videoState.subtitleBorderSize.toStringAsFixed(1),
+                    description:
+                        videoState.subtitleBorderSize.toStringAsFixed(1),
                     value: videoState.subtitleBorderSize,
                     min: 0,
                     max: 10,
@@ -389,6 +526,73 @@ class _CupertinoSubtitleSettingsPaneState
     );
   }
 
+  Widget _buildSubtitleDelayInputTile(
+    BuildContext context,
+    VideoPlayerState videoState,
+  ) {
+    final secondaryColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '手动输入秒数',
+            style: CupertinoTheme.of(context)
+                .textTheme
+                .textStyle
+                .copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '滑块用于快速微调，正值延后，负值提前',
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  fontSize: 13,
+                  color: secondaryColor,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _buildSubtitleDelayLimitHint(videoState),
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  fontSize: 13,
+                  color: secondaryColor,
+                ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoTextField(
+                  controller: _subtitleDelayController,
+                  focusNode: _subtitleDelayFocus,
+                  placeholder: '例如 -12.5 或 8',
+                  keyboardType: const TextInputType.numberWithOptions(
+                    signed: true,
+                    decimal: true,
+                  ),
+                  suffix: const Padding(
+                    padding: EdgeInsets.only(right: 10),
+                    child: Text('秒'),
+                  ),
+                  onChanged: _handleSubtitleDelayInputChanged,
+                  onSubmitted: (_) => _applyCustomSubtitleDelay(videoState),
+                ),
+              ),
+              const SizedBox(width: 10),
+              CupertinoButton(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                onPressed: () => _applyCustomSubtitleDelay(videoState),
+                child: const Text('应用'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSliderTile(
     BuildContext context, {
     required String title,
@@ -398,6 +602,8 @@ class _CupertinoSubtitleSettingsPaneState
     required double max,
     required int divisions,
     required ValueChanged<double> onChanged,
+    ValueChanged<double>? onChangeStart,
+    ValueChanged<double>? onChangeEnd,
   }) {
     final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
     final valueStyle = textTheme.copyWith(
@@ -426,6 +632,8 @@ class _CupertinoSubtitleSettingsPaneState
             min: min,
             max: max,
             divisions: divisions,
+            onChangeStart: onChangeStart,
+            onChangeEnd: onChangeEnd,
             onChanged: onChanged,
           ),
         ],

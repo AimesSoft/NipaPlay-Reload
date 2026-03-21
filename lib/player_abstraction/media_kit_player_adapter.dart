@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
+import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -30,7 +31,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return null;
     }
     final version = Platform.operatingSystemVersion;
-    final versionMatch = RegExp(r'Version\s+(\d+)').firstMatch(version) ??
+    final versionMatch =
+        RegExp(r'Version\s+(\d+)').firstMatch(version) ??
         RegExp(r'macOS\s+(\d+)').firstMatch(version);
     if (versionMatch != null) {
       _cachedMacosMajor = int.tryParse(versionMatch.group(1)!);
@@ -112,21 +114,20 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   final bool _enableHardwareAcceleration;
 
   MediaKitPlayerAdapter({int? bufferSize})
-      : _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
-        _player = Player(
-          configuration: PlayerConfiguration(
-            libass: true,
-            libassAndroidFont: defaultTargetPlatform == TargetPlatform.android
-                ? 'assets/subfont.ttf'
-                : null,
-            libassAndroidFontName:
-                defaultTargetPlatform == TargetPlatform.android
-                    ? 'Droid Sans Fallback'
-                    : null,
-            bufferSize: bufferSize ?? _defaultBufferSize,
-            logLevel: _disableMpvLogs ? MPVLogLevel.error : MPVLogLevel.debug,
-          ),
-        ) {
+    : _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
+      _player = Player(
+        configuration: PlayerConfiguration(
+          libass: true,
+          libassAndroidFont: defaultTargetPlatform == TargetPlatform.android
+              ? 'assets/subfont.ttf'
+              : null,
+          libassAndroidFontName: defaultTargetPlatform == TargetPlatform.android
+              ? 'Droid Sans Fallback'
+              : null,
+          bufferSize: bufferSize ?? _defaultBufferSize,
+          logLevel: _disableMpvLogs ? MPVLogLevel.error : MPVLogLevel.debug,
+        ),
+      ) {
     _applyMpvLogLevelOverride();
     _controller = VideoController(
       _player,
@@ -265,8 +266,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       _state = playing
           ? PlayerPlaybackState.playing
           : (_player.state.position.inMilliseconds > 0
-              ? PlayerPlaybackState.paused
-              : PlayerPlaybackState.stopped);
+                ? PlayerPlaybackState.paused
+                : PlayerPlaybackState.stopped);
       if (playing) {
         _lastActualPosition = _player.state.position;
         _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
@@ -308,22 +309,28 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             //debugPrint('[MediaKit] 播放时获取到视频尺寸: ${_player.state.width}x${_player.state.height}');
             // 强制更新媒体信息
             _updateMediaInfoWithVideoDimensions(
-                _player.state.width!, _player.state.height!);
+              _player.state.width!,
+              _player.state.height!,
+            );
           }
         });
       }
     });
 
-    _trackSubscription = _player.stream.track.listen((trackEvent) {
-      // //debugPrint('MediaKitAdapter: Active track changed event received. Subtitle ID from event: ${trackEvent.subtitle.id}, Title: ${trackEvent.subtitle.title}');
-      // The listener callback itself is not async, so we don't await _handleActiveSubtitleTrackDataChange here.
-      // _handleActiveSubtitleTrackDataChange will run its async operations independently.
-      _handleActiveSubtitleTrackDataChange(trackEvent.subtitle);
-    }, onError: (error) {
-      //debugPrint('MediaKitAdapter: Error in player.stream.track: $error');
-    }, onDone: () {
-      //debugPrint('MediaKitAdapter: player.stream.track was closed.');
-    });
+    _trackSubscription = _player.stream.track.listen(
+      (trackEvent) {
+        // //debugPrint('MediaKitAdapter: Active track changed event received. Subtitle ID from event: ${trackEvent.subtitle.id}, Title: ${trackEvent.subtitle.title}');
+        // The listener callback itself is not async, so we don't await _handleActiveSubtitleTrackDataChange here.
+        // _handleActiveSubtitleTrackDataChange will run its async operations independently.
+        _handleActiveSubtitleTrackDataChange(trackEvent.subtitle);
+      },
+      onError: (error) {
+        //debugPrint('MediaKitAdapter: Error in player.stream.track: $error');
+      },
+      onDone: () {
+        //debugPrint('MediaKitAdapter: player.stream.track was closed.');
+      },
+    );
 
     _player.stream.error.listen((error) {
       debugPrint('MediaKit错误: $error');
@@ -347,12 +354,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     sb.writeln('============ MediaKit所有轨道信息 ============');
     final realVideoTracks = _filterRealTracks<VideoTrack>(tracks.video);
     final realAudioTracks = _filterRealTracks<AudioTrack>(tracks.audio);
-    final realSubtitleTracks =
-        _filterRealTracks<SubtitleTrack>(tracks.subtitle);
+    final realSubtitleTracks = _filterRealTracks<SubtitleTrack>(
+      tracks.subtitle,
+    );
     sb.writeln(
-        '视频轨道数: ${tracks.video.length}, 音频轨道数: ${tracks.audio.length}, 字幕轨道数: ${tracks.subtitle.length}');
+      '视频轨道数: ${tracks.video.length}, 音频轨道数: ${tracks.audio.length}, 字幕轨道数: ${tracks.subtitle.length}',
+    );
     sb.writeln(
-        '真实视频轨道数: ${realVideoTracks.length}, 真实音频轨道数: ${realAudioTracks.length}, 真实字幕轨道数: ${realSubtitleTracks.length}');
+      '真实视频轨道数: ${realVideoTracks.length}, 真实音频轨道数: ${realAudioTracks.length}, 真实字幕轨道数: ${realSubtitleTracks.length}',
+    );
     for (int i = 0; i < tracks.video.length; i++) {
       final track = tracks.video[i];
       int? width;
@@ -365,20 +375,24 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         height = null;
       }
       sb.writeln(
-          'V[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'} 编码:${track.codec ?? 'N/A'} width:$width height:$height');
+        'V[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'} 编码:${track.codec ?? 'N/A'} width:$width height:$height',
+      );
     }
     for (int i = 0; i < tracks.audio.length; i++) {
       final track = tracks.audio[i];
       sb.writeln(
-          'A[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'} 编码:${track.codec ?? 'N/A'}');
+        'A[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'} 编码:${track.codec ?? 'N/A'}',
+      );
     }
     for (int i = 0; i < tracks.subtitle.length; i++) {
       final track = tracks.subtitle[i];
       sb.writeln(
-          'S[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'}');
+        'S[$i] ID:${track.id} 标题:${track.title ?? 'N/A'} 语言:${track.language ?? 'N/A'}',
+      );
     }
     sb.writeln(
-        '原始API: V=${_player.state.tracks.video.length} A=${_player.state.tracks.audio.length} S=${_player.state.tracks.subtitle.length}');
+      '原始API: V=${_player.state.tracks.video.length} A=${_player.state.tracks.audio.length} S=${_player.state.tracks.subtitle.length}',
+    );
     sb.writeln('============================================');
     debugPrint(sb.toString());
   }
@@ -413,14 +427,19 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
 
     final realAudioTracks = _filterRealTracks<AudioTrack>(tracks.audio);
-    final realIncomingSubtitleTracks =
-        _filterRealTracks<SubtitleTrack>(tracks.subtitle);
+    final realIncomingSubtitleTracks = _filterRealTracks<SubtitleTrack>(
+      tracks.subtitle,
+    );
 
     // 针对Jellyfin流媒体的特殊处理
     if (_currentMedia.contains('jellyfin://') ||
         _currentMedia.contains('emby://')) {
       _handleJellyfinStreamingTracks(
-          tracks, realVideoTracks, realAudioTracks, realIncomingSubtitleTracks);
+        tracks,
+        realVideoTracks,
+        realAudioTracks,
+        realIncomingSubtitleTracks,
+      );
       return;
     }
     final embeddedSubtitleTracks = realIncomingSubtitleTracks
@@ -471,23 +490,25 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         final track = realAudioTracks[i];
         final title = track.title ?? track.language ?? 'Audio Track ${i + 1}';
         final language = track.language ?? '';
-        audioStreams.add(PlayerAudioStreamInfo(
-          codec: PlayerAudioCodecParams(
-            name: title,
-            channels: 0,
-            sampleRate: 0,
-            bitRate: null,
+        audioStreams.add(
+          PlayerAudioStreamInfo(
+            codec: PlayerAudioCodecParams(
+              name: title,
+              channels: 0,
+              sampleRate: 0,
+              bitRate: null,
+            ),
+            title: title,
+            language: language,
+            metadata: {
+              'id': track.id.toString(),
+              'title': title,
+              'language': language,
+              'index': i.toString(),
+            },
+            rawRepresentation: 'Audio: $title (ID: ${track.id})',
           ),
-          title: title,
-          language: language,
-          metadata: {
-            'id': track.id.toString(),
-            'title': title,
-            'language': language,
-            'index': i.toString(),
-          },
-          rawRepresentation: 'Audio: $title (ID: ${track.id})',
-        ));
+        );
       }
     }
 
@@ -500,24 +521,30 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         final trackIdStr = (track as dynamic).id as String;
 
         // Normalize here BEFORE creating PlayerSubtitleStreamInfo
-        final normInfo =
-            _normalizeSubtitleTrackInfoHelper(track.title, track.language, i);
+        final normInfo = _normalizeSubtitleTrackInfoHelper(
+          track.title,
+          track.language,
+          i,
+        );
 
-        resolvedSubtitleStreams.add(PlayerSubtitleStreamInfo(
-          title: normInfo.title, // Use normalized title
-          language: normInfo.language, // Use normalized language
-          metadata: {
-            'id': trackIdStr,
-            'title': normInfo.title, // Store normalized title in metadata too
-            'language': normInfo.language, // Store normalized language
-            'original_mk_title': track.title ?? '', // Keep original for reference
-            'original_mk_language':
-                track.language ?? '', // Keep original for reference
-            'index': i.toString(),
-          },
-          rawRepresentation:
-              'Subtitle: ${normInfo.title} (ID: $trackIdStr) Language: ${normInfo.language}',
-        ));
+        resolvedSubtitleStreams.add(
+          PlayerSubtitleStreamInfo(
+            title: normInfo.title, // Use normalized title
+            language: normInfo.language, // Use normalized language
+            metadata: {
+              'id': trackIdStr,
+              'title': normInfo.title, // Store normalized title in metadata too
+              'language': normInfo.language, // Store normalized language
+              'original_mk_title':
+                  track.title ?? '', // Keep original for reference
+              'original_mk_language':
+                  track.language ?? '', // Keep original for reference
+              'index': i.toString(),
+            },
+            rawRepresentation:
+                'Subtitle: ${normInfo.title} (ID: $trackIdStr) Language: ${normInfo.language}',
+          ),
+        );
       }
     } else if (_mediaInfo.subtitle != null && _mediaInfo.subtitle!.isNotEmpty) {
       // Preserve the existing list if incoming tracks are temporarily empty.
@@ -577,10 +604,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   /// 处理Jellyfin流媒体的轨道信息
   void _handleJellyfinStreamingTracks(
-      Tracks tracks,
-      List<VideoTrack> realVideoTracks,
-      List<AudioTrack> realAudioTracks,
-      List<SubtitleTrack> realSubtitleTracks) {
+    Tracks tracks,
+    List<VideoTrack> realVideoTracks,
+    List<AudioTrack> realAudioTracks,
+    List<SubtitleTrack> realSubtitleTracks,
+  ) {
     //debugPrint('MediaKitAdapter: 处理Jellyfin流媒体轨道信息');
 
     // 对于Jellyfin流媒体，即使轨道信息不完整，也要尝试创建基本的媒体信息
@@ -599,18 +627,20 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             name: 'Jellyfin Video Stream',
           ),
           codecName: 'unknown',
-        )
+        ),
       ];
     } else if (realVideoTracks.isNotEmpty) {
       videoStreams = realVideoTracks
-          .map((track) => PlayerVideoStreamInfo(
-                codec: PlayerVideoCodecParams(
-                  width: 0,
-                  height: 0,
-                  name: track.title ?? track.language ?? 'Jellyfin Video',
-                ),
-                codecName: track.codec ?? 'Unknown',
-              ))
+          .map(
+            (track) => PlayerVideoStreamInfo(
+              codec: PlayerVideoCodecParams(
+                width: 0,
+                height: 0,
+                name: track.title ?? track.language ?? 'Jellyfin Video',
+              ),
+              codecName: track.codec ?? 'Unknown',
+            ),
+          )
           .toList();
     }
 
@@ -633,7 +663,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             'index': '0',
           },
           rawRepresentation: 'Audio: Jellyfin Audio Stream',
-        )
+        ),
       ];
     } else if (realAudioTracks.isNotEmpty) {
       audioStreams = [];
@@ -641,23 +671,25 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         final track = realAudioTracks[i];
         final title = track.title ?? track.language ?? 'Audio Track ${i + 1}';
         final language = track.language ?? '';
-        audioStreams.add(PlayerAudioStreamInfo(
-          codec: PlayerAudioCodecParams(
-            name: title,
-            channels: 0,
-            sampleRate: 0,
-            bitRate: null,
+        audioStreams.add(
+          PlayerAudioStreamInfo(
+            codec: PlayerAudioCodecParams(
+              name: title,
+              channels: 0,
+              sampleRate: 0,
+              bitRate: null,
+            ),
+            title: title,
+            language: language,
+            metadata: {
+              'id': track.id.toString(),
+              'title': title,
+              'language': language,
+              'index': i.toString(),
+            },
+            rawRepresentation: 'Audio: $title (ID: ${track.id})',
           ),
-          title: title,
-          language: language,
-          metadata: {
-            'id': track.id.toString(),
-            'title': title,
-            'language': language,
-            'index': i.toString(),
-          },
-          rawRepresentation: 'Audio: $title (ID: ${track.id})',
-        ));
+        );
       }
     }
 
@@ -681,7 +713,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   // Made async to handle potential future from getProperty
   Future<void> _handleActiveSubtitleTrackDataChange(
-      SubtitleTrack subtitleData) async {
+    SubtitleTrack subtitleData,
+  ) async {
     String? idToProcess = subtitleData.id;
     final originalEventId =
         subtitleData.id; // Keep original event id for logging
@@ -828,7 +861,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       'chi', 'chs', 'zh', '中文', '简体', '繁体', 'simplified', 'traditional',
       'zho', 'zh-hans', 'zh-cn', 'zh-sg', 'sc', 'zh-hant', 'zh-tw', 'zh-hk',
       'tc',
-      'scjp', 'tcjp' // 支持字幕组常用的简体中文日语(scjp)和繁体中文日语(tcjp)格式
+      'scjp', 'tcjp', // 支持字幕组常用的简体中文日语(scjp)和繁体中文日语(tcjp)格式
     ];
 
     for (var p in patterns) {
@@ -889,13 +922,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         for (int i = 0; i < _mediaInfo.subtitle!.length; i++) {
           final subInfo = _mediaInfo.subtitle![i];
           // Use original title and language from metadata for more reliable matching against keywords
-          final titleLower =
-              (subInfo.metadata['title'] ?? subInfo.title ?? '').toLowerCase();
+          final titleLower = (subInfo.metadata['title'] ?? subInfo.title ?? '')
+              .toLowerCase();
           final langLower =
               (subInfo.metadata['language'] ?? subInfo.language ?? '')
                   .toLowerCase();
 
-          bool isSimplified = titleLower.contains('simplified') ||
+          bool isSimplified =
+              titleLower.contains('simplified') ||
               titleLower.contains('简体') ||
               langLower.contains('zh-hans') ||
               langLower.contains('zh-cn') ||
@@ -903,7 +937,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               titleLower.contains('scjp') ||
               langLower.contains('scjp');
 
-          bool isTraditional = titleLower.contains('traditional') ||
+          bool isTraditional =
+              titleLower.contains('traditional') ||
               titleLower.contains('繁体') ||
               langLower.contains('zh-hant') ||
               langLower.contains('zh-tw') ||
@@ -1155,7 +1190,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         }
         if (actualTrackData != null) {
           debugPrint(
-              '设置音频轨道: _mediaInfo索引=$uiSelectedMediaInfoIndex, ID=${actualTrackData.id}');
+            '设置音频轨道: _mediaInfo索引=$uiSelectedMediaInfoIndex, ID=${actualTrackData.id}',
+          );
           _player.setAudioTrack(actualTrackData);
         } else {
           _player.setAudioTrack(AudioTrack.auto());
@@ -1202,7 +1238,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     final hasNoDuration = _mediaInfo.duration <= 0;
     final hasNoPosition = _player.state.position.inMilliseconds <= 0;
-    final hasNoError = _mediaInfo.specificErrorMessage == null ||
+    final hasNoError =
+        _mediaInfo.specificErrorMessage == null ||
         _mediaInfo.specificErrorMessage!.isEmpty;
 
     return hasNoDuration && hasNoPosition && hasNoError;
@@ -1225,9 +1262,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         //debugPrint('MediaKitAdapter: setMedia (for subtitle) - Path is empty. Calling player.setSubtitleTrack(SubtitleTrack.no()). Main media and info remain UNCHANGED.');
         if (!_isDisposed) _player.setSubtitleTrack(SubtitleTrack.no());
       } else {
+        final subtitleUri = normalizeExternalSubtitleTrackUri(path);
         // Assuming path is a valid file URI or path that media_kit can handle for subtitles
         //debugPrint('MediaKitAdapter: setMedia (for subtitle) - Path is "$path". Calling player.setSubtitleTrack(SubtitleTrack.uri(path)). Main media and info remain UNCHANGED.');
-        if (!_isDisposed) _player.setSubtitleTrack(SubtitleTrack.uri(path));
+        if (!_isDisposed) {
+          _player.setSubtitleTrack(SubtitleTrack.uri(subtitleUri));
+        }
       }
       // Player events will handle updating _activeSubtitleTracks via _performSubtitleSyncLogic.
       return;
@@ -1403,18 +1443,24 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       final actualHeight = height > 0 ? height : videoHeight;
 
       Uint8List? bytes = await _player.screenshot(
-          format: 'image/png', includeLibassSubtitles: true);
+        format: 'image/png',
+        includeLibassSubtitles: true,
+      );
 
       if (bytes == null) {
         debugPrint('MediaKit: PNG截图失败，尝试JPEG格式');
         bytes = await _player.screenshot(
-            format: 'image/jpeg', includeLibassSubtitles: true);
+          format: 'image/jpeg',
+          includeLibassSubtitles: true,
+        );
       }
 
       if (bytes == null) {
         debugPrint('MediaKit: 所有格式截图失败，尝试原始BGRA格式');
         bytes = await _player.screenshot(
-            format: null, includeLibassSubtitles: true);
+          format: null,
+          includeLibassSubtitles: true,
+        );
       }
 
       if (bytes != null) {
@@ -1518,7 +1564,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'chi', 'zho', 'chinese', '中文',
           // Other languages as fallback
           'eng', 'en', 'english',
-          'jpn', 'ja', 'japanese'
+          'jpn', 'ja', 'japanese',
         ];
         final slangString = preferredSlangs.join(',');
         platform.setProperty?.call("slang", slangString);
@@ -1544,8 +1590,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           error.toString().contains('connection') ||
           error.toString().contains('timeout')) {
         //debugPrint('MediaKitAdapter: 流媒体网络连接错误，建议检查网络连接和服务器状态');
-        _mediaInfo =
-            _mediaInfo.copyWith(specificErrorMessage: '流媒体连接失败，请检查网络连接和服务器状态');
+        _mediaInfo = _mediaInfo.copyWith(
+          specificErrorMessage: '流媒体连接失败，请检查网络连接和服务器状态',
+        );
         _attemptJellyfinRetry('网络连接错误');
       }
       // 检查是否是认证问题
@@ -1554,8 +1601,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           error.toString().contains('401') ||
           error.toString().contains('403')) {
         //debugPrint('MediaKitAdapter: 流媒体认证错误，请检查API密钥和权限');
-        _mediaInfo =
-            _mediaInfo.copyWith(specificErrorMessage: '流媒体认证失败，请检查API密钥和访问权限');
+        _mediaInfo = _mediaInfo.copyWith(
+          specificErrorMessage: '流媒体认证失败，请检查API密钥和访问权限',
+        );
         // 认证错误不重试，因为重试也不会成功
       }
       // 检查是否是格式不支持
@@ -1564,14 +1612,16 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           error.toString().contains('unsupported')) {
         //debugPrint('MediaKitAdapter: 流媒体格式不支持，可能需要转码');
         _mediaInfo = _mediaInfo.copyWith(
-            specificErrorMessage: '当前播放内核不支持此流媒体格式，请尝试在服务器端启用转码');
+          specificErrorMessage: '当前播放内核不支持此流媒体格式，请尝试在服务器端启用转码',
+        );
         // 格式不支持不重试
       }
       // 其他流媒体错误
       else {
         //debugPrint('MediaKitAdapter: 未知流媒体错误');
-        _mediaInfo =
-            _mediaInfo.copyWith(specificErrorMessage: '流媒体播放失败，请检查服务器配置和网络连接');
+        _mediaInfo = _mediaInfo.copyWith(
+          specificErrorMessage: '流媒体播放失败，请检查服务器配置和网络连接',
+        );
         _attemptJellyfinRetry('未知错误');
       }
     }
@@ -1591,8 +1641,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
 
     _jellyfinRetryCount++;
-    final retryDelay =
-        Duration(seconds: _jellyfinRetryCount * 2); // 递增延迟：2秒、4秒、6秒
+    final retryDelay = Duration(
+      seconds: _jellyfinRetryCount * 2,
+    ); // 递增延迟：2秒、4秒、6秒
 
     //debugPrint('MediaKitAdapter: 准备重试Jellyfin流媒体播放 (第$_jellyfinRetryCount次，延迟${retryDelay.inSeconds}秒)');
 
@@ -1656,7 +1707,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         _lastPositionTimestamp = now;
       }
       final delta = now - _lastPositionTimestamp;
-      _interpolatedPosition = _lastActualPosition +
+      _interpolatedPosition =
+          _lastActualPosition +
           Duration(milliseconds: (delta * _player.state.rate).toInt());
 
       if (_player.state.duration > Duration.zero &&
@@ -1763,27 +1815,27 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       final tracks = _player.state.tracks;
       result['tracks'] = {
         'video': tracks.video
-            .map((t) => {
-                  'id': t.id,
-                  'title': t.title,
-                  'language': t.language,
-                  'codec': t.codec,
-                })
+            .map(
+              (t) => {
+                'id': t.id,
+                'title': t.title,
+                'language': t.language,
+                'codec': t.codec,
+              },
+            )
             .toList(),
         'audio': tracks.audio
-            .map((t) => {
-                  'id': t.id,
-                  'title': t.title,
-                  'language': t.language,
-                  'codec': t.codec,
-                })
+            .map(
+              (t) => {
+                'id': t.id,
+                'title': t.title,
+                'language': t.language,
+                'codec': t.codec,
+              },
+            )
             .toList(),
         'subtitle': tracks.subtitle
-            .map((t) => {
-                  'id': t.id,
-                  'title': t.title,
-                  'language': t.language,
-                })
+            .map((t) => {'id': t.id, 'title': t.title, 'language': t.language})
             .toList(),
       };
     } catch (_) {}
@@ -1836,8 +1888,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'hwdec-active': await _gp('hwdec-active'),
           'current-vo': await _gp('current-vo'),
           'video-params/colormatrix': await _gp('video-params/colormatrix'),
-          'video-params/colorprimaries':
-              await _gp('video-params/colorprimaries'),
+          'video-params/colorprimaries': await _gp(
+            'video-params/colorprimaries',
+          ),
           'video-params/transfer': await _gp('video-params/transfer'),
           'video-params/w': await _gp('video-params/w'),
           'video-params/h': await _gp('video-params/h'),
@@ -1850,8 +1903,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'audio-channels': await _gp('audio-channels'),
           'audio-params/channel-count': await _gp('audio-params/channel-count'),
           'audio-channel-layout': await _gp('audio-channel-layout'),
-          'audio-params/channel-layout':
-              await _gp('audio-params/channel-layout'),
+          'audio-params/channel-layout': await _gp(
+            'audio-params/channel-layout',
+          ),
           'audio-params/format': await _gp('audio-params/format'),
           'dwidth': await _gp('dwidth'),
           'dheight': await _gp('dheight'),
@@ -1888,27 +1942,27 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       final tracks = _player.state.tracks;
       result['tracks'] = {
         'video': tracks.video
-            .map((t) => {
-                  'id': t.id,
-                  'title': t.title,
-                  'language': t.language,
-                  'codec': t.codec,
-                })
+            .map(
+              (t) => {
+                'id': t.id,
+                'title': t.title,
+                'language': t.language,
+                'codec': t.codec,
+              },
+            )
             .toList(),
         'audio': tracks.audio
-            .map((t) => {
-                  'id': t.id,
-                  'title': t.title,
-                  'language': t.language,
-                  'codec': t.codec,
-                })
+            .map(
+              (t) => {
+                'id': t.id,
+                'title': t.title,
+                'language': t.language,
+                'codec': t.codec,
+              },
+            )
             .toList(),
         'subtitle': tracks.subtitle
-            .map((t) => {
-                  'id': t.id,
-                  'title': t.title,
-                  'language': t.language,
-                })
+            .map((t) => {'id': t.id, 'title': t.title, 'language': t.language})
             .toList(),
       };
     } catch (_) {}
@@ -1943,7 +1997,10 @@ String _getNormalizedLanguageHelper(String input) {
 
 // Method to produce normalized title and language for PlayerSubtitleStreamInfo
 ({String title, String language}) _normalizeSubtitleTrackInfoHelper(
-    String? rawTitle, String? rawLang, int trackIndexForFallback) {
+  String? rawTitle,
+  String? rawLang,
+  int trackIndexForFallback,
+) {
   String originalTitle = rawTitle ?? '';
   String originalLangCode = rawLang ?? '';
 
@@ -2034,9 +2091,12 @@ String _getNormalizedLanguageHelper(String input) {
       // Or finalLanguage="印尼语", originalTitle="Bahasa Indonesia". (Here originalTitleAsLang might be "印尼语")
       // We should combine them if originalTitle isn't already reflecting the language.
       if (finalLanguage != '未知' &&
-          !originalTitle.toLowerCase().contains(finalLanguage
-              .toLowerCase()
-              .substring(0, finalLanguage.length > 2 ? 2 : 1))) {
+          !originalTitle.toLowerCase().contains(
+            finalLanguage.toLowerCase().substring(
+              0,
+              finalLanguage.length > 2 ? 2 : 1,
+            ),
+          )) {
         // Avoids "简体中文 (简体中文 Commentary)" if originalTitle was "简体中文 Commentary"
         // Check if originalTitle already contains the language (or part of it)
         bool titleAlreadyHasLang = false;
@@ -2075,8 +2135,5 @@ class _PreparedNetworkMedia {
   final String url;
   final Map<String, String>? httpHeaders;
 
-  const _PreparedNetworkMedia({
-    required this.url,
-    this.httpHeaders,
-  });
+  const _PreparedNetworkMedia({required this.url, this.httpHeaders});
 }

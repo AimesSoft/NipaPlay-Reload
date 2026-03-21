@@ -6,6 +6,8 @@ const Color _fluentAccentColor = Color(0xFFFF2E55);
 class SettingsSlider extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeStart;
+  final ValueChanged<double>? onChangeEnd;
   final String label;
   final String Function(double value) displayTextBuilder;
   final double min;
@@ -16,6 +18,8 @@ class SettingsSlider extends StatefulWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.onChangeStart,
+    this.onChangeEnd,
     required this.label,
     required this.displayTextBuilder,
     this.min = 0.0,
@@ -41,11 +45,14 @@ class _SettingsSliderState extends State<SettingsSlider> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final divisions = _calculateDivisions();
+    final normalizedValue = widget.value.isFinite
+        ? widget.value.clamp(widget.min, widget.max).toDouble()
+        : widget.min;
     final accentColor = fluent.AccentColor.swatch({
       'normal': _fluentAccentColor,
       'default': _fluentAccentColor,
     });
-    final displayText = widget.displayTextBuilder(widget.value);
+    final displayText = widget.displayTextBuilder(normalizedValue);
     final labelStyle = TextStyle(
       color: colorScheme.onSurface,
       fontSize: 14,
@@ -78,10 +85,12 @@ class _SettingsSliderState extends State<SettingsSlider> {
           ),
           child: SizedBox(
             child: fluent.Slider(
-              value: widget.value,
+              value: normalizedValue,
               min: widget.min,
               max: widget.max,
               divisions: divisions,
+              onChangeStart: widget.onChangeStart,
+              onChangeEnd: widget.onChangeEnd,
               onChanged: widget.onChanged,
               label: displayText,
             ),

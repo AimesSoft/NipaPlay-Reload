@@ -1,51 +1,6 @@
 part of video_player_state;
 
 extension VideoPlayerStateSubtitles on VideoPlayerState {
-  // 获取字幕轨道的语言名称
-  String _getLanguageName(String language) {
-    // 语言代码映射
-    final Map<String, String> languageCodes = {
-      'chi': '中文',
-      'eng': '英文',
-      'jpn': '日语',
-      'kor': '韩语',
-      'fra': '法语',
-      'deu': '德语',
-      'spa': '西班牙语',
-      'ita': '意大利语',
-      'rus': '俄语',
-    };
-
-    // 常见的语言标识符
-    final Map<String, String> languagePatterns = {
-      r'chi|chs|zh|中文|简体|繁体|chi.*?simplified|chinese': '中文',
-      r'eng|en|英文|english': '英文',
-      r'jpn|ja|日文|japanese': '日语',
-      r'kor|ko|韩文|korean': '韩语',
-      r'fra|fr|法文|french': '法语',
-      r'ger|de|德文|german': '德语',
-      r'spa|es|西班牙文|spanish': '西班牙语',
-      r'ita|it|意大利文|italian': '意大利语',
-      r'rus|ru|俄文|russian': '俄语',
-    };
-
-    // 首先检查语言代码映射
-    final mappedLanguage = languageCodes[language.toLowerCase()];
-    if (mappedLanguage != null) {
-      return mappedLanguage;
-    }
-
-    // 然后检查语言标识符
-    for (final entry in languagePatterns.entries) {
-      final pattern = RegExp(entry.key, caseSensitive: false);
-      if (pattern.hasMatch(language.toLowerCase())) {
-        return entry.value;
-      }
-    }
-
-    return language;
-  }
-
   // 更新指定的字幕轨道信息
   void _updateSubtitleTracksInfo(int trackIndex) {
     if (player.mediaInfo.subtitle == null ||
@@ -79,7 +34,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
         if (languageMatch != null) {
           language = languageMatch.group(1)?.trim() ?? language;
           // 获取映射后的语言名称
-          language = _getLanguageName(language);
+          language = getSubtitleLanguageName(language);
         }
       }
     }
@@ -93,7 +48,8 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     });
 
     // 清除外部字幕信息的激活状态
-    if (player.activeSubtitleTracks.contains(trackIndex) &&
+    if (_subtitleManager.currentExternalSubtitlePath == null &&
+        player.activeSubtitleTracks.contains(trackIndex) &&
         _subtitleManager.subtitleTrackInfo.containsKey('external_subtitle')) {
       _subtitleManager
           .updateSubtitleTrackInfo('external_subtitle', {'isActive': false});
@@ -119,13 +75,14 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     }
 
     // 在更新完成后检查当前激活的字幕轨道并确保相应的信息被更新
-    if (player.activeSubtitleTracks.isNotEmpty) {
+    if (player.activeSubtitleTracks.isNotEmpty &&
+        _subtitleManager.currentExternalSubtitlePath == null) {
       final activeIndex = player.activeSubtitleTracks.first;
-      if (activeIndex > 0 && activeIndex <= player.mediaInfo.subtitle!.length) {
+      if (activeIndex >= 0 && activeIndex < player.mediaInfo.subtitle!.length) {
         // 激活的是内嵌字幕轨道
         _subtitleManager.updateSubtitleTrackInfo('embedded_subtitle', {
-          'index': activeIndex - 1, // MDK 字幕轨道从 1 开始，而我们的索引从 0 开始
-          'title': player.mediaInfo.subtitle![activeIndex - 1].toString(),
+          'index': activeIndex,
+          'title': player.mediaInfo.subtitle![activeIndex].toString(),
           'isActive': true,
         });
 
@@ -147,11 +104,13 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     _subtitleManager.setExternalSubtitle(path,
         isManualSetting: isManualSetting);
+    notifyListeners();
   }
 
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
+    notifyListeners();
   }
 
   // 桥接方法：预加载字幕文件
@@ -167,6 +126,16 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // 桥接方法：获取当前显示的字幕文本
   String getCurrentSubtitleText() {
     return _subtitleManager.getCurrentSubtitleText();
+  }
+
+  // 桥接方法：判断当前外挂字幕是否使用应用内叠层渲染
+  bool shouldRenderCurrentExternalSubtitleInApp() {
+    return _subtitleManager.shouldRenderCurrentExternalSubtitleInApp();
+  }
+
+  // 桥接方法：获取指定时间点的外挂字幕文本
+  String getCurrentExternalSubtitleTextAt(int positionMs) {
+    return _subtitleManager.getCurrentExternalSubtitleTextAt(positionMs);
   }
 
   // 桥接方法：当字幕轨道改变时调用

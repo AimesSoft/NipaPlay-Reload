@@ -13,6 +13,9 @@ import 'package:nipaplay/services/web_remote_access_service.dart';
 class DandanplayService {
   static const String appId = "nipaplayv1";
   static const String userAgent = "NipaPlay/1.0";
+  static const String _linkedBangumiAccountKey =
+      'dandanplay_linked_bangumi_account';
+  static const String _loginTimestampKey = 'dandanplay_login_timestamp';
   static const List<String> _servers = [
     'https://nipaplay.aimes-soft.com',
     'https://kurisu.aimes-soft.com'
@@ -23,10 +26,44 @@ class DandanplayService {
   static String? _screenName;
   static String? _token;
   static String? _appSecret;
-  
+  static Map<String, dynamic>? _linkedBangumiAccount;
+  static int? _loginTimestamp;
+
   static bool get isLoggedIn => _isLoggedIn;
   static String? get userName => _userName;
   static String? get screenName => _screenName;
+  static Map<String, dynamic>? get linkedBangumiAccount {
+    if (_linkedBangumiAccount == null) return null;
+    return Map<String, dynamic>.from(_linkedBangumiAccount!);
+  }
+
+  static int? get loginTimestamp => _loginTimestamp;
+  static DateTime? get linkedBangumiExpireTime {
+    final raw = _linkedBangumiAccount?['expires']?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  static String _maskToken(String? token) {
+    if (token == null || token.isEmpty) return '(empty)';
+    if (token.length <= 8) return '***';
+    return '${token.substring(0, 4)}...${token.substring(token.length - 4)}';
+  }
+
+  static String _previewBody(String body, {int maxLength = 280}) {
+    final normalized = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.length <= maxLength) return normalized;
+    return '${normalized.substring(0, maxLength)}...(truncated)';
+  }
+
+  static bool _allowContainsMethod(String? allowHeader, String method) {
+    if (allowHeader == null || allowHeader.trim().isEmpty) return false;
+    final target = method.toUpperCase();
+    return allowHeader
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .contains(target);
+  }
 
   // Web版本API基础URL
   static String _baseUrl = '';
@@ -51,8 +88,7 @@ class DandanplayService {
   }
 
   static Future<void> _ensureApiBaseUrl() async {
-    final explicitOverride =
-        WebRemoteAccessService.resolveBaseUrlFromQuery();
+    final explicitOverride = WebRemoteAccessService.resolveBaseUrlFromQuery();
     String? candidate = explicitOverride;
     if (candidate == null) {
       await WebRemoteAccessService.ensureInitialized();
@@ -86,18 +122,21 @@ class DandanplayService {
 
   static Future<String?> _getWebApiBaseUrl() async {
     await _ensureApiBaseUrl();
-    if (_useWebApiProxy && _webApiBaseUrl != null && _webApiBaseUrl!.isNotEmpty) {
+    if (_useWebApiProxy &&
+        _webApiBaseUrl != null &&
+        _webApiBaseUrl!.isNotEmpty) {
       return _webApiBaseUrl;
     }
     return null;
   }
-  
+
   static Future<void> initialize() async {
     // 从localStorage加载登录状态
     final prefs = await SharedPreferences.getInstance();
     _isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
+    _loadLinkedBangumiFromPrefs(prefs);
 
     await loadToken();
     await _ensureApiBaseUrl();
@@ -121,14 +160,14 @@ class DandanplayService {
       }
     }
   }
-  
+
   // 同步登录状态与本地客户端
   static Future<void> _syncLoginStatus(String webApiBaseUrl) async {
     try {
       final response = await http.get(
         Uri.parse('$webApiBaseUrl/api/dandanplay/login_status'),
       );
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         await _updateLoginStatus(
@@ -136,12 +175,22 @@ class DandanplayService {
           userName: data['userName'],
           screenName: data['screenName'],
         );
+        if (data is Map<String, dynamic>) {
+          final hasLinkedBangumi = data.containsKey('linkedBangumi');
+          final hasLoginTs = data.containsKey('loginTs');
+          if (hasLinkedBangumi || hasLoginTs) {
+            await _saveLinkedBangumiAccount(
+              _extractLinkedBangumiFromRoot(data),
+              loginTimestamp: _parseLoginTimestamp(data['loginTs']),
+            );
+          }
+        }
       }
     } catch (e) {
       debugPrint('[弹弹play服务-Web] 同步登录状态失败: $e');
     }
   }
-  
+
   // 更新本地存储的登录状态
   static Future<void> _updateLoginStatus({
     required bool isLoggedIn,
@@ -151,16 +200,16 @@ class DandanplayService {
     _isLoggedIn = isLoggedIn;
     _userName = userName;
     _screenName = screenName;
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('dandanplay_logged_in', isLoggedIn);
-    
+
     if (userName != null) {
       await prefs.setString('dandanplay_username', userName);
     } else {
       await prefs.remove('dandanplay_username');
     }
-    
+
     if (screenName != null) {
       await prefs.setString('dandanplay_screenname', screenName);
     } else {
@@ -178,7 +227,7 @@ class DandanplayService {
     await _ensureApiBaseUrl();
     return _baseUrl;
   }
-  
+
   static Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('dandanplay_token');
@@ -186,8 +235,9 @@ class DandanplayService {
       _isLoggedIn = true;
     }
   }
-  
-  static Future<void> saveLoginInfo(String token, String username, String screenName) async {
+
+  static Future<void> saveLoginInfo(
+      String token, String username, String screenName) async {
     _token = token;
     await _updateLoginStatus(
       isLoggedIn: true,
@@ -196,7 +246,7 @@ class DandanplayService {
     );
     await saveToken(token);
   }
-  
+
   static Future<void> clearLoginInfo() async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
@@ -210,21 +260,23 @@ class DandanplayService {
 
     await clearToken();
     await _updateLoginStatus(isLoggedIn: false);
+    await _saveLinkedBangumiAccount(null);
   }
-  
+
   static Future<void> saveToken(String token) async {
     if (token.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('dandanplay_token', token);
   }
-  
+
   static Future<void> clearToken() async {
     _token = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dandanplay_token');
   }
-  
-  static Future<Map<String, dynamic>?> getCachedVideoInfo(String fileHash) async {
+
+  static Future<Map<String, dynamic>?> getCachedVideoInfo(
+      String fileHash) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cache = prefs.getString(_videoCacheKey);
@@ -240,8 +292,9 @@ class DandanplayService {
       return null;
     }
   }
-  
-  static Future<void> saveVideoInfoToCache(String fileHash, Map<String, dynamic> videoInfo) async {
+
+  static Future<void> saveVideoInfoToCache(
+      String fileHash, Map<String, dynamic> videoInfo) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cache = prefs.getString(_videoCacheKey);
@@ -251,10 +304,9 @@ class DandanplayService {
       }
       cacheMap[fileHash] = videoInfo;
       await prefs.setString(_videoCacheKey, json.encode(cacheMap));
-    } catch (_) {
-    }
+    } catch (_) {}
   }
-  
+
   static Future<String> getAppSecret() async {
     if (_appSecret != null) {
       return _appSecret!;
@@ -297,14 +349,16 @@ class DandanplayService {
 
     throw lastException ?? Exception('获取应用密钥失败，请检查网络连接');
   }
-  
-  static String generateSignature(String appId, int timestamp, String apiPath, String appSecret) {
+
+  static String generateSignature(
+      String appId, int timestamp, String apiPath, String appSecret) {
     final signatureString = '$appId$timestamp$apiPath$appSecret';
     final hash = sha256.convert(utf8.encode(signatureString));
     return base64.encode(hash.bytes);
   }
-  
-  static Future<Map<String, dynamic>> login(String username, String password) async {
+
+  static Future<Map<String, dynamic>> login(
+      String username, String password) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
@@ -322,10 +376,20 @@ class DandanplayService {
         final data = json.decode(response.body);
 
         if (data['success'] == true) {
+          final linkedBangumi = data is Map<String, dynamic>
+              ? _extractLinkedBangumiFromRoot(data)
+              : null;
+          final loginTs = data is Map<String, dynamic>
+              ? _parseLoginTimestamp(data['ts'] ?? data['loginTs'])
+              : null;
           await saveLoginInfo(
             '',
             username,
             data['screenName'] ?? username,
+          );
+          await _saveLinkedBangumiAccount(
+            linkedBangumi,
+            loginTimestamp: loginTs,
           );
         }
 
@@ -369,7 +433,21 @@ class DandanplayService {
         if (data['token'] != null) {
           final screenName = data['user']?['screenName'] ?? username;
           await saveLoginInfo(data['token'], username, screenName);
-          return {'success': true, 'message': '登录成功'};
+          if (data is Map<String, dynamic>) {
+            await _saveLinkedBangumiAccount(
+              _extractLinkedBangumiFromRoot(data),
+              loginTimestamp: _parseLoginTimestamp(data['ts']),
+            );
+          } else {
+            await _saveLinkedBangumiAccount(null);
+          }
+          return {
+            'success': true,
+            'message': '登录成功',
+            if (_linkedBangumiAccount != null)
+              'linkedBangumi': _linkedBangumiAccount,
+            if (_loginTimestamp != null) 'ts': _loginTimestamp,
+          };
         } else {
           return {
             'success': false,
@@ -388,7 +466,294 @@ class DandanplayService {
       return {'success': false, 'message': '登录失败: ${e.toString()}'};
     }
   }
-  
+
+  static Future<Map<String, dynamic>> getBangumiOAuthLoginUrl({
+    String? redirectUrl,
+  }) async {
+    final webApiBaseUrl = await _getWebApiBaseUrl();
+    if (webApiBaseUrl != null) {
+      try {
+        final normalizedRedirect = redirectUrl?.trim();
+        final query = <String, String>{};
+        if (normalizedRedirect != null && normalizedRedirect.isNotEmpty) {
+          query['redirectUrl'] = normalizedRedirect;
+        }
+        final uri =
+            Uri.parse('$webApiBaseUrl/api/dandanplay/bangumi/oauth_login')
+                .replace(queryParameters: query);
+        final response = await http.get(uri);
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data is Map<String, dynamic>) {
+            return data;
+          }
+          return {'success': false, 'message': '授权接口返回数据格式错误'};
+        }
+        return {
+          'success': false,
+          'message': '获取Bangumi授权链接失败 (${response.statusCode})',
+        };
+      } catch (e) {
+        return {'success': false, 'message': '获取Bangumi授权链接失败: $e'};
+      }
+    }
+
+    if (!_isLoggedIn || _token == null || _token!.isEmpty) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/oauthprovider/bangumi/login';
+      final baseUrl = await getApiBaseUrl();
+      final normalizedRedirect = redirectUrl?.trim();
+      final query = <String, String>{};
+      if (normalizedRedirect != null && normalizedRedirect.isNotEmpty) {
+        query['redirectUrl'] = normalizedRedirect;
+      }
+      final uri = Uri.parse('$baseUrl$apiPath').replace(queryParameters: query);
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          final success = data['success'] == true;
+          final url = data['url']?.toString();
+          if (success && url != null && url.isNotEmpty) {
+            return {
+              'success': true,
+              'url': url,
+              if (data['state'] != null) 'state': data['state'],
+            };
+          }
+          return {
+            'success': false,
+            'message': data['errorMessage']?.toString() ?? '获取Bangumi授权链接失败',
+          };
+        }
+        return {'success': false, 'message': '授权接口返回数据格式错误'};
+      }
+
+      final errorMessage = response.headers['x-error-message'];
+      return {
+        'success': false,
+        'message': errorMessage == null || errorMessage.isEmpty
+            ? '获取Bangumi授权链接失败 (${response.statusCode})'
+            : '获取Bangumi授权链接失败 (${response.statusCode}): $errorMessage',
+      };
+    } catch (e) {
+      return {'success': false, 'message': '获取Bangumi授权链接失败: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> refreshLinkedBangumiStatus() async {
+    if (!_isLoggedIn) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+
+    final webApiBaseUrl = await _getWebApiBaseUrl();
+    if (webApiBaseUrl != null) {
+      try {
+        final requestUri =
+            Uri.parse('$webApiBaseUrl/api/dandanplay/refresh_login');
+        var requestMethod = 'POST';
+        debugPrint(
+          '[弹弹play服务-Web][Bangumi绑定刷新] 发起请求: method=$requestMethod uri=$requestUri',
+        );
+        var response = await http.post(
+          requestUri,
+        );
+        debugPrint(
+          '[弹弹play服务-Web][Bangumi绑定刷新] 响应: status=${response.statusCode} '
+          'allow=${response.headers['allow'] ?? '-'} '
+          'x-error-message=${response.headers['x-error-message'] ?? '-'} '
+          'body=${_previewBody(response.body)}',
+        );
+
+        final allowHeader = response.headers['allow'];
+        if (response.statusCode == 405 &&
+            _allowContainsMethod(allowHeader, 'GET')) {
+          debugPrint(
+            '[弹弹play服务-Web][Bangumi绑定刷新] 发现405且Allow=$allowHeader，改用GET重试',
+          );
+          requestMethod = 'GET';
+          response = await http.get(requestUri);
+          debugPrint(
+            '[弹弹play服务-Web][Bangumi绑定刷新] GET重试响应: status=${response.statusCode} '
+            'allow=${response.headers['allow'] ?? '-'} '
+            'x-error-message=${response.headers['x-error-message'] ?? '-'} '
+            'body=${_previewBody(response.body)}',
+          );
+        }
+
+        if (response.statusCode != 200) {
+          return {
+            'success': false,
+            'statusCode': response.statusCode,
+            'allow': response.headers['allow'],
+            'requestUri': requestUri.toString(),
+            'requestMethod': requestMethod,
+            'message':
+                '刷新绑定状态失败 (${response.statusCode}) [source=local-web-api method=$requestMethod path=/api/dandanplay/refresh_login]',
+          };
+        }
+
+        final data = json.decode(response.body);
+        if (data is! Map<String, dynamic>) {
+          return {'success': false, 'message': '刷新绑定状态失败：响应格式错误'};
+        }
+
+        await _updateLoginStatus(
+          isLoggedIn: data['isLoggedIn'] == true || _isLoggedIn,
+          userName: data['userName']?.toString() ?? _userName,
+          screenName: data['screenName']?.toString() ?? _screenName,
+        );
+        await _saveLinkedBangumiAccount(
+          _extractLinkedBangumiFromRoot(data),
+          loginTimestamp: _parseLoginTimestamp(data['loginTs'] ?? data['ts']),
+        );
+        debugPrint(
+          '[弹弹play服务-Web][Bangumi绑定刷新] 刷新成功: linked=${_linkedBangumiAccount != null} '
+          'expires=${linkedBangumiExpireTime?.toIso8601String() ?? '-'}',
+        );
+        data['requestMethod'] ??= requestMethod;
+        data['requestUri'] ??= requestUri.toString();
+        return data;
+      } catch (e) {
+        debugPrint('[弹弹play服务-Web][Bangumi绑定刷新] 请求异常: $e');
+        return {'success': false, 'message': '刷新绑定状态失败: $e'};
+      }
+    }
+
+    if (_token == null || _token!.isEmpty) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+
+    try {
+      final apiBaseUrl = await getApiBaseUrl();
+      final appSecret = await getAppSecret();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/login/renew';
+      final requestUri = Uri.parse('$apiBaseUrl$apiPath');
+      var requestMethod = 'POST';
+      debugPrint(
+        '[弹弹play服务-Web][Bangumi绑定刷新] 发起请求: method=$requestMethod uri=$requestUri '
+        'token=${_maskToken(_token)}',
+      );
+      var response = await http.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+      debugPrint(
+        '[弹弹play服务-Web][Bangumi绑定刷新] 响应: status=${response.statusCode} '
+        'allow=${response.headers['allow'] ?? '-'} '
+        'x-error-message=${response.headers['x-error-message'] ?? '-'} '
+        'body=${_previewBody(response.body)}',
+      );
+
+      final allowHeader = response.headers['allow'];
+      if (response.statusCode == 405 &&
+          _allowContainsMethod(allowHeader, 'GET')) {
+        debugPrint(
+          '[弹弹play服务-Web][Bangumi绑定刷新] 发现405且Allow=$allowHeader，改用GET重试',
+        );
+        requestMethod = 'GET';
+        response = await http.get(
+          requestUri,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': userAgent,
+            'X-AppId': appId,
+            'X-Signature':
+                generateSignature(appId, timestamp, apiPath, appSecret),
+            'X-Timestamp': '$timestamp',
+            'Authorization': 'Bearer $_token',
+          },
+        );
+        debugPrint(
+          '[弹弹play服务-Web][Bangumi绑定刷新] GET重试响应: status=${response.statusCode} '
+          'allow=${response.headers['allow'] ?? '-'} '
+          'x-error-message=${response.headers['x-error-message'] ?? '-'} '
+          'body=${_previewBody(response.body)}',
+        );
+      }
+
+      if (response.statusCode != 200) {
+        final errorMessage =
+            response.headers['x-error-message'] ?? response.body;
+        return {
+          'success': false,
+          'statusCode': response.statusCode,
+          'allow': response.headers['allow'],
+          'requestUri': requestUri.toString(),
+          'requestMethod': requestMethod,
+          'message':
+              '刷新绑定状态失败 (${response.statusCode}) [source=dandan-api method=$requestMethod path=$apiPath]'
+                  ': $errorMessage',
+        };
+      }
+
+      final data = json.decode(response.body);
+      if (data is! Map<String, dynamic>) {
+        return {'success': false, 'message': '刷新绑定状态失败：响应格式错误'};
+      }
+
+      if (data['success'] != true) {
+        return {
+          'success': false,
+          'message': data['errorMessage']?.toString() ?? '刷新绑定状态失败',
+        };
+      }
+
+      final token = data['token']?.toString();
+      if (token != null && token.isNotEmpty) {
+        _token = token;
+        await saveToken(token);
+      }
+
+      await _saveLinkedBangumiAccount(
+        _extractLinkedBangumiFromRoot(data),
+        loginTimestamp: _parseLoginTimestamp(data['ts']),
+      );
+
+      return {
+        'success': true,
+        'message': '已刷新绑定状态',
+        'linkedBangumi': linkedBangumiAccount,
+        'linkedBangumiExpiresAt': linkedBangumiExpireTime?.toIso8601String(),
+        'loginTs': _loginTimestamp,
+        'requestUri': requestUri.toString(),
+        'requestMethod': requestMethod,
+      };
+    } catch (e) {
+      debugPrint('[弹弹play服务-Web][Bangumi绑定刷新] 请求异常: $e');
+      return {'success': false, 'message': '刷新绑定状态失败: $e'};
+    }
+  }
+
   static Future<Map<String, dynamic>> register({
     required String username,
     required String password,
@@ -472,8 +837,7 @@ class DandanplayService {
         };
       }
 
-      final errorMessage =
-          response.headers['x-error-message'] ?? response.body;
+      final errorMessage = response.headers['x-error-message'] ?? response.body;
       return {
         'success': false,
         'message': '网络请求失败 (${response.statusCode}): $errorMessage'
@@ -484,7 +848,8 @@ class DandanplayService {
     }
   }
 
-  static Future<void> updateEpisodeWatchStatus(int episodeId, bool isWatched) async {
+  static Future<void> updateEpisodeWatchStatus(
+      int episodeId, bool isWatched) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
@@ -543,8 +908,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '更新观看状态失败');
         }
       } else {
-        final errorMessage =
-            response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
         throw Exception('更新观看状态失败: $errorMessage');
       }
     } catch (e) {
@@ -552,13 +916,14 @@ class DandanplayService {
       rethrow;
     }
   }
-  
+
   static Future<Map<String, dynamic>> getVideoInfo(String videoPath) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
         final response = await http.get(
-          Uri.parse('$webApiBaseUrl/api/danmaku/video_info?videoPath=${Uri.encodeComponent(videoPath)}'),
+          Uri.parse(
+              '$webApiBaseUrl/api/danmaku/video_info?videoPath=${Uri.encodeComponent(videoPath)}'),
         );
 
         if (response.statusCode == 200) {
@@ -612,13 +977,15 @@ class DandanplayService {
       return {'success': false, 'message': '获取视频信息失败: ${e.toString()}'};
     }
   }
-  
-  static Future<Map<String, dynamic>> getDanmaku(String episodeId, int animeId) async {
+
+  static Future<Map<String, dynamic>> getDanmaku(
+      String episodeId, int animeId) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
         final response = await http.get(
-          Uri.parse('$webApiBaseUrl/api/danmaku/load?episodeId=$episodeId&animeId=$animeId'),
+          Uri.parse(
+              '$webApiBaseUrl/api/danmaku/load?episodeId=$episodeId&animeId=$animeId'),
         );
 
         if (response.statusCode == 200) {
@@ -647,7 +1014,8 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
           'X-Timestamp': '$timestamp',
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
@@ -662,18 +1030,18 @@ class DandanplayService {
       return {'comments': [], 'count': 0};
     }
   }
-  
+
   // 确保getProxiedImageUrl方法可以被公开访问
   static String getProxiedImageUrl(String? imageUrl) {
     if (imageUrl == null || imageUrl.isEmpty) {
       return '';
     }
-    
+
     // 如果不是web端或没有本地Web API代理，直接返回原URL
     if (!kIsWeb || !_useWebApiProxy || _webApiBaseUrl == null) {
       return imageUrl;
     }
-    
+
     try {
       // 对URL进行Base64编码，以便在查询参数中安全传输
       final encodedUrl = base64Url.encode(utf8.encode(imageUrl));
@@ -683,8 +1051,9 @@ class DandanplayService {
       return imageUrl; // 出错时返回原始URL
     }
   }
-  
-  static Future<Map<String, dynamic>> getUserPlayHistory({DateTime? fromDate, DateTime? toDate}) async {
+
+  static Future<Map<String, dynamic>> getUserPlayHistory(
+      {DateTime? fromDate, DateTime? toDate}) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
@@ -711,7 +1080,8 @@ class DandanplayService {
             final animes = data['playHistoryAnimes'] as List;
             for (final anime in animes) {
               if (anime['imageUrl'] != null) {
-                anime['imageUrl'] = getProxiedImageUrl(anime['imageUrl'] as String);
+                anime['imageUrl'] =
+                    getProxiedImageUrl(anime['imageUrl'] as String);
               }
             }
           }
@@ -772,8 +1142,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '获取播放历史失败');
         }
       } else {
-        final errorMessage =
-            response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
         throw Exception('获取播放历史失败: $errorMessage');
       }
     } catch (e) {
@@ -781,7 +1150,7 @@ class DandanplayService {
       rethrow;
     }
   }
-  
+
   static Future<Map<String, dynamic>> addPlayHistory({
     required List<int> episodeIdList,
     bool addToFavorite = false,
@@ -860,8 +1229,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '提交播放历史失败');
         }
       } else {
-        final errorMessage =
-            response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
         throw Exception('提交播放历史失败: $errorMessage');
       }
     } catch (e) {
@@ -869,7 +1237,7 @@ class DandanplayService {
       rethrow;
     }
   }
-  
+
   static Future<Map<String, dynamic>> getBangumiDetails(int bangumiId) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
@@ -884,7 +1252,8 @@ class DandanplayService {
           if (kIsWeb && data['bangumi'] != null) {
             final bangumi = data['bangumi'];
             if (bangumi['imageUrl'] != null) {
-              bangumi['imageUrl'] = getProxiedImageUrl(bangumi['imageUrl'] as String);
+              bangumi['imageUrl'] =
+                  getProxiedImageUrl(bangumi['imageUrl'] as String);
             }
           }
 
@@ -924,48 +1293,50 @@ class DandanplayService {
       if (response.statusCode == 200) {
         return json.decode(response.body);
       }
-      final errorMessage =
-          response.headers['x-error-message'] ?? '请检查网络连接';
+      final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
       throw Exception('获取番剧详情失败: $errorMessage');
     } catch (e) {
       debugPrint('[弹弹play服务] 获取番剧详情时出错: $e');
       rethrow;
     }
   }
-  
-  static Future<Map<int, bool>> getEpisodesWatchStatus(List<int> episodeIds) async {
+
+  static Future<Map<int, bool>> getEpisodesWatchStatus(
+      List<int> episodeIds) async {
     try {
       // 先获取播放历史
       final historyData = await getUserPlayHistory();
       final Map<int, bool> watchStatus = {};
-      
-      if (historyData['success'] == true && historyData['playHistoryAnimes'] != null) {
+
+      if (historyData['success'] == true &&
+          historyData['playHistoryAnimes'] != null) {
         final List<dynamic> animes = historyData['playHistoryAnimes'];
-        
+
         // 遍历所有动画的观看历史
         for (final anime in animes) {
           if (anime['episodes'] != null) {
             final List<dynamic> episodes = anime['episodes'];
-            
+
             // 检查每个剧集的观看状态
             for (final episode in episodes) {
               final episodeId = episode['episodeId'] as int?;
               final lastWatched = episode['lastWatched'] as String?;
-              
+
               if (episodeId != null && episodeIds.contains(episodeId)) {
                 // 如果有lastWatched时间，说明已看过
-                watchStatus[episodeId] = lastWatched != null && lastWatched.isNotEmpty;
+                watchStatus[episodeId] =
+                    lastWatched != null && lastWatched.isNotEmpty;
               }
             }
           }
         }
       }
-      
+
       // 确保所有请求的episodeId都有状态
       for (final episodeId in episodeIds) {
         watchStatus.putIfAbsent(episodeId, () => false);
       }
-      
+
       return watchStatus;
     } catch (e) {
       debugPrint('[弹弹play服务-Web] 获取观看状态失败: $e');
@@ -977,8 +1348,9 @@ class DandanplayService {
       return defaultStatus;
     }
   }
-  
-  static Future<Map<String, dynamic>> getUserFavorites({bool onlyOnAir = false}) async {
+
+  static Future<Map<String, dynamic>> getUserFavorites(
+      {bool onlyOnAir = false}) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
@@ -1055,8 +1427,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '获取收藏列表失败');
         }
       } else {
-        final errorMessage =
-            response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
         throw Exception('获取收藏列表失败: $errorMessage');
       }
     } catch (e) {
@@ -1064,7 +1435,7 @@ class DandanplayService {
       rethrow;
     }
   }
-  
+
   static Future<Map<String, dynamic>> addFavorite({
     required int animeId,
     String? favoriteStatus,
@@ -1138,8 +1509,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '添加收藏失败');
         }
       } else {
-        final errorMessage =
-            response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
         throw Exception('添加收藏失败: $errorMessage');
       }
     } catch (e) {
@@ -1147,7 +1517,7 @@ class DandanplayService {
       rethrow;
     }
   }
-  
+
   static Future<Map<String, dynamic>> removeFavorite(int animeId) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
@@ -1198,8 +1568,7 @@ class DandanplayService {
           throw Exception(data['errorMessage'] ?? '取消收藏失败');
         }
       } else {
-        final errorMessage =
-            response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
         throw Exception('取消收藏失败: $errorMessage');
       }
     } catch (e) {
@@ -1207,14 +1576,15 @@ class DandanplayService {
       rethrow;
     }
   }
-  
+
   static Future<bool> isAnimeFavorited(int animeId) async {
     try {
       final favoritesData = await getUserFavorites();
-      
-      if (favoritesData['success'] == true && favoritesData['favorites'] != null) {
+
+      if (favoritesData['success'] == true &&
+          favoritesData['favorites'] != null) {
         final List<dynamic> favorites = favoritesData['favorites'];
-        
+
         // 检查列表中是否包含指定的animeId
         for (final favorite in favorites) {
           if (favorite['animeId'] == animeId) {
@@ -1222,30 +1592,31 @@ class DandanplayService {
           }
         }
       }
-      
+
       return false;
     } catch (e) {
       debugPrint('[弹弹play服务-Web] 检查收藏状态失败: $e');
       return false;
     }
   }
-  
+
   static Future<int> getUserRatingForAnime(int animeId) async {
     try {
       final bangumiDetails = await getBangumiDetails(animeId);
-      
-      if (bangumiDetails['success'] == true && bangumiDetails['bangumi'] != null) {
+
+      if (bangumiDetails['success'] == true &&
+          bangumiDetails['bangumi'] != null) {
         final bangumi = bangumiDetails['bangumi'];
         return bangumi['userRating'] as int? ?? 0;
       }
-      
+
       return 0;
     } catch (e) {
       debugPrint('[弹弹play服务-Web] 获取用户评分失败: $e');
       return 0;
     }
   }
-  
+
   static Future<Map<String, dynamic>> submitUserRating({
     required int animeId,
     required int rating,
@@ -1257,7 +1628,7 @@ class DandanplayService {
       // 不传favoriteStatus参数，这样不会影响现有的收藏状态
     );
   }
-  
+
   static Future<Map<String, dynamic>> sendDanmaku({
     required int episodeId,
     required double time,
@@ -1349,8 +1720,7 @@ class DandanplayService {
         }
         throw Exception(data['errorMessage'] ?? '发送弹幕失败');
       } else {
-        final errorMessage =
-            response.headers['x-error-message'] ?? '请检查网络连接';
+        final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
         throw Exception('发送弹幕失败: $errorMessage');
       }
     } catch (e) {
@@ -1557,7 +1927,9 @@ class DandanplayService {
 
   static String _extractAnimeTitleKeywordFromFileName(String fileName) {
     final keyword = MediaFilenameParser.extractAnimeTitleKeyword(fileName);
-    return keyword.isNotEmpty ? keyword : _extractRawBaseNameFromFileName(fileName);
+    return keyword.isNotEmpty
+        ? keyword
+        : _extractRawBaseNameFromFileName(fileName);
   }
 
   static int? _tryExtractEpisodeNumberFromFileName(String fileName) {
@@ -1835,6 +2207,72 @@ class DandanplayService {
     }).join('');
   }
 
+  static void _loadLinkedBangumiFromPrefs(SharedPreferences prefs) {
+    _linkedBangumiAccount = null;
+    _loginTimestamp = prefs.getInt(_loginTimestampKey);
+    final raw = prefs.getString(_linkedBangumiAccountKey);
+    if (raw == null || raw.isEmpty) return;
+
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is Map<String, dynamic>) {
+        _linkedBangumiAccount = Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {
+      _linkedBangumiAccount = null;
+    }
+  }
+
+  static Future<void> _saveLinkedBangumiAccount(
+    Map<String, dynamic>? account, {
+    int? loginTimestamp,
+  }) async {
+    _linkedBangumiAccount =
+        account == null ? null : Map<String, dynamic>.from(account);
+    _loginTimestamp = loginTimestamp;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (_linkedBangumiAccount == null) {
+      await prefs.remove(_linkedBangumiAccountKey);
+    } else {
+      await prefs.setString(
+        _linkedBangumiAccountKey,
+        json.encode(_linkedBangumiAccount),
+      );
+    }
+
+    if (_loginTimestamp == null) {
+      await prefs.remove(_loginTimestampKey);
+    } else {
+      await prefs.setInt(_loginTimestampKey, _loginTimestamp!);
+    }
+  }
+
+  static Map<String, dynamic>? _extractLinkedBangumiFromRoot(
+    Map<String, dynamic> data,
+  ) {
+    final direct = data['linkedBangumi'];
+    if (direct is Map) {
+      return Map<String, dynamic>.from(direct);
+    }
+
+    final linkedAccounts = data['linkedAccounts'];
+    if (linkedAccounts is Map) {
+      final bangumi = linkedAccounts['bangumi'];
+      if (bangumi is Map) {
+        return Map<String, dynamic>.from(bangumi);
+      }
+    }
+    return null;
+  }
+
+  static int? _parseLoginTimestamp(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
   // Web版本的账号注销方法（简化实现）
   static Future<Map<String, dynamic>> getWebToken({
     required String business,
@@ -1849,7 +2287,8 @@ class DandanplayService {
         debugPrint('[弹弹play服务-Web] 获取WebToken: business=$business');
 
         final response = await http.get(
-          Uri.parse('$webApiBaseUrl/api/dandanplay/webtoken?business=$business'),
+          Uri.parse(
+              '$webApiBaseUrl/api/dandanplay/webtoken?business=$business'),
         );
 
         debugPrint('[弹弹play服务-Web] 获取WebToken响应: ${response.statusCode}');
@@ -1938,4 +2377,4 @@ class DandanplayService {
       // 即使清理出错，也不抛出异常，因为主要的注销操作已经完成
     }
   }
-} 
+}

@@ -15,6 +15,9 @@ import 'package:nipaplay/utils/media_filename_parser.dart';
 class DandanplayService {
   static const String appId = "nipaplayv1";
   static const String userAgent = "NipaPlay/1.0";
+  static const String _linkedBangumiAccountKey =
+      'dandanplay_linked_bangumi_account';
+  static const String _loginTimestampKey = 'dandanplay_login_timestamp';
   static String? _token;
   static String? _appSecret;
   static const String _videoCacheKey = 'video_recognition_cache';
@@ -23,6 +26,8 @@ class DandanplayService {
   static bool _isLoggedIn = false;
   static String? _userName;
   static String? _screenName;
+  static Map<String, dynamic>? _linkedBangumiAccount;
+  static int? _loginTimestamp;
   static const List<String> _servers = [
     'https://nipaplay.aimes-soft.com',
     'https://kurisu.aimes-soft.com'
@@ -35,12 +40,102 @@ class DandanplayService {
   static bool get isLoggedIn => _isLoggedIn;
   static String? get userName => _userName;
   static String? get screenName => _screenName;
+  static Map<String, dynamic>? get linkedBangumiAccount {
+    if (_linkedBangumiAccount == null) return null;
+    return Map<String, dynamic>.from(_linkedBangumiAccount!);
+  }
+
+  static int? get loginTimestamp => _loginTimestamp;
+  static DateTime? get linkedBangumiExpireTime {
+    final raw = _linkedBangumiAccount?['expires']?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  static String _maskToken(String? token) {
+    if (token == null || token.isEmpty) return '(empty)';
+    if (token.length <= 8) return '***';
+    return '${token.substring(0, 4)}...${token.substring(token.length - 4)}';
+  }
+
+  static String _previewBody(String body, {int maxLength = 280}) {
+    final normalized = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.length <= maxLength) return normalized;
+    return '${normalized.substring(0, maxLength)}...(truncated)';
+  }
+
+  static bool _allowContainsMethod(String? allowHeader, String method) {
+    if (allowHeader == null || allowHeader.trim().isEmpty) return false;
+    final target = method.toUpperCase();
+    return allowHeader
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .contains(target);
+  }
+
+  static Map<String, String> _buildLoginRenewHeaders({
+    required int timestamp,
+    required String apiPath,
+    required String appSecret,
+  }) {
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'User-Agent': userAgent,
+      'X-AppId': appId,
+      'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+      'X-Timestamp': '$timestamp',
+      'Authorization': 'Bearer $_token',
+    };
+  }
+
+  static Future<Map<String, dynamic>> _requestLoginRenewWithFallback({
+    required Uri requestUri,
+    required Map<String, String> headers,
+    required String logTag,
+  }) async {
+    var methodUsed = 'POST';
+    debugPrint(
+      '[弹弹play服务][$logTag] 发起请求: method=$methodUsed uri=$requestUri token=${_maskToken(_token)}',
+    );
+    var response = await http.post(requestUri, headers: headers);
+    debugPrint(
+      '[弹弹play服务][$logTag] 响应: status=${response.statusCode} '
+      'allow=${response.headers['allow'] ?? '-'} '
+      'x-error-message=${response.headers['x-error-message'] ?? '-'} '
+      'body=${_previewBody(response.body)}',
+    );
+
+    final allowHeader = response.headers['allow'];
+    if (response.statusCode == 405 &&
+        _allowContainsMethod(allowHeader, 'GET')) {
+      debugPrint(
+        '[弹弹play服务][$logTag] 发现405且Allow=$allowHeader，改用GET重试',
+      );
+      methodUsed = 'GET';
+      final getHeaders = Map<String, String>.from(headers)
+        ..remove('Content-Type');
+      response = await http.get(requestUri, headers: getHeaders);
+      debugPrint(
+        '[弹弹play服务][$logTag] GET重试响应: status=${response.statusCode} '
+        'allow=${response.headers['allow'] ?? '-'} '
+        'x-error-message=${response.headers['x-error-message'] ?? '-'} '
+        'body=${_previewBody(response.body)}',
+      );
+    }
+
+    return {
+      'response': response,
+      'requestMethod': methodUsed,
+    };
+  }
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     _isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
     _userName = prefs.getString('dandanplay_username');
     _screenName = prefs.getString('dandanplay_screenname');
+    _loadLinkedBangumiFromPrefs(prefs);
     await loadToken();
 
     // 输出当前使用的弹弹play服务器
@@ -121,6 +216,8 @@ class DandanplayService {
     _userName = null;
     _screenName = null;
     _isLoggedIn = false;
+    _linkedBangumiAccount = null;
+    _loginTimestamp = null;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dandanplay_token');
@@ -128,6 +225,8 @@ class DandanplayService {
     await prefs.remove('dandanplay_screenname');
     await prefs.remove('dandanplay_logged_in');
     await prefs.remove(_lastTokenRenewKey);
+    await prefs.remove(_linkedBangumiAccountKey);
+    await prefs.remove(_loginTimestampKey);
   }
 
   // 检查并刷新Token
@@ -141,23 +240,26 @@ class DandanplayService {
     // 如果距离上次刷新超过21天，则刷新Token
     if (currentTime - lastRenewTime >= _tokenRenewInterval) {
       try {
+        const apiPath = '/api/v2/login/renew';
         final appSecret = await getAppSecret();
         final timestamp =
             (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
-        final response = await http.post(
-          Uri.parse('${await getApiBaseUrl()}/api/v2/login/renew'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': userAgent,
-            'X-AppId': appId,
-            'X-Signature': generateSignature(
-                appId, timestamp, '/api/v2/login/renew', appSecret),
-            'X-Timestamp': '$timestamp',
-            'Authorization': 'Bearer $_token',
-          },
+        final apiBaseUrl = await getApiBaseUrl();
+        final requestUri = Uri.parse('$apiBaseUrl$apiPath');
+        final headers = _buildLoginRenewHeaders(
+          timestamp: timestamp,
+          apiPath: apiPath,
+          appSecret: appSecret,
         );
+        final requestResult = await _requestLoginRenewWithFallback(
+          requestUri: requestUri,
+          headers: headers,
+          logTag: 'Token续期',
+        );
+        final response = requestResult['response'] as http.Response;
+        final requestMethod =
+            requestResult['requestMethod']?.toString() ?? 'POST';
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
@@ -166,15 +268,28 @@ class DandanplayService {
             _token = data['token'];
             await saveToken(_token!);
             await prefs.setInt(_lastTokenRenewKey, currentTime);
+            if (data is Map<String, dynamic>) {
+              final hasLinkedAccount = data.containsKey('linkedAccounts');
+              final hasLoginTs = data.containsKey('ts');
+              if (hasLinkedAccount || hasLoginTs) {
+                await _saveLinkedBangumiAccount(
+                  _extractLinkedBangumiAccount(data),
+                  loginTimestamp: _parseLoginTimestamp(data['ts']),
+                );
+              }
+            }
             //////debugPrint('Token已成功刷新');
           } else {
             //////debugPrint('Token刷新失败: ${data['errorMessage']}');
           }
         } else {
-          //////debugPrint('Token刷新请求失败: ${response.statusCode}');
+          debugPrint(
+            '[弹弹play服务][Token续期] 请求失败: method=$requestMethod '
+            'status=${response.statusCode} allow=${response.headers['allow'] ?? '-'}',
+          );
         }
       } catch (e) {
-        //////debugPrint('Token刷新时发生错误: $e');
+        debugPrint('[弹弹play服务][Token续期] 请求异常: $e');
       }
     }
   }
@@ -374,7 +489,21 @@ class DandanplayService {
           // 保存完整的登录信息，包括状态
           final screenName = data['user']?['screenName'] ?? username;
           await saveLoginInfo(data['token'], username, screenName);
-          return {'success': true, 'message': '登录成功'};
+          if (data is Map<String, dynamic>) {
+            await _saveLinkedBangumiAccount(
+              _extractLinkedBangumiAccount(data),
+              loginTimestamp: _parseLoginTimestamp(data['ts']),
+            );
+          } else {
+            await _saveLinkedBangumiAccount(null);
+          }
+          return {
+            'success': true,
+            'message': '登录成功',
+            if (_linkedBangumiAccount != null)
+              'linkedBangumi': _linkedBangumiAccount,
+            if (_loginTimestamp != null) 'ts': _loginTimestamp,
+          };
         } else {
           return {
             'success': false,
@@ -391,6 +520,149 @@ class DandanplayService {
       }
     } catch (e) {
       return {'success': false, 'message': '登录失败: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getBangumiOAuthLoginUrl({
+    String? redirectUrl,
+  }) async {
+    if (!_isLoggedIn || _token == null || _token!.isEmpty) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const apiPath = '/api/v2/oauthprovider/bangumi/login';
+      final baseUrl = await getApiBaseUrl();
+      final normalizedRedirect = redirectUrl?.trim();
+      final query = <String, String>{};
+      if (normalizedRedirect != null && normalizedRedirect.isNotEmpty) {
+        query['redirectUrl'] = normalizedRedirect;
+      }
+      final uri = Uri.parse('$baseUrl$apiPath').replace(queryParameters: query);
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature':
+              generateSignature(appId, timestamp, apiPath, appSecret),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          final success = data['success'] == true;
+          final url = data['url']?.toString();
+          if (success && url != null && url.isNotEmpty) {
+            return {
+              'success': true,
+              'url': url,
+              if (data['state'] != null) 'state': data['state'],
+            };
+          }
+          return {
+            'success': false,
+            'message': data['errorMessage']?.toString() ?? '获取Bangumi授权链接失败',
+          };
+        }
+        return {'success': false, 'message': '授权接口返回数据格式错误'};
+      }
+
+      final errorMessage = response.headers['x-error-message'];
+      return {
+        'success': false,
+        'message': errorMessage == null || errorMessage.isEmpty
+            ? '获取Bangumi授权链接失败 (${response.statusCode})'
+            : '获取Bangumi授权链接失败 (${response.statusCode}): $errorMessage',
+      };
+    } catch (e) {
+      return {'success': false, 'message': '获取Bangumi授权链接失败: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> refreshLinkedBangumiStatus() async {
+    if (!_isLoggedIn || _token == null || _token!.isEmpty) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+
+    try {
+      final apiBaseUrl = await getApiBaseUrl();
+      const apiPath = '/api/v2/login/renew';
+      final appSecret = await getAppSecret();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final requestUri = Uri.parse('$apiBaseUrl$apiPath');
+      final headers = _buildLoginRenewHeaders(
+        timestamp: timestamp,
+        apiPath: apiPath,
+        appSecret: appSecret,
+      );
+      final requestResult = await _requestLoginRenewWithFallback(
+        requestUri: requestUri,
+        headers: headers,
+        logTag: 'Bangumi绑定刷新',
+      );
+      final response = requestResult['response'] as http.Response;
+      final requestMethod =
+          requestResult['requestMethod']?.toString() ?? 'POST';
+
+      if (response.statusCode != 200) {
+        final errorMessage =
+            response.headers['x-error-message'] ?? response.body;
+        return {
+          'success': false,
+          'statusCode': response.statusCode,
+          'allow': response.headers['allow'],
+          'requestUri': requestUri.toString(),
+          'requestMethod': requestMethod,
+          'message':
+              '刷新绑定状态失败 (${response.statusCode}) [source=dandan-api method=$requestMethod path=$apiPath]'
+                  ': $errorMessage',
+        };
+      }
+
+      final data = json.decode(response.body);
+      if (data is! Map<String, dynamic>) {
+        return {'success': false, 'message': '刷新绑定状态失败：响应格式错误'};
+      }
+
+      if (data['success'] != true) {
+        return {
+          'success': false,
+          'message': data['errorMessage']?.toString() ?? '刷新绑定状态失败',
+        };
+      }
+
+      final token = data['token']?.toString();
+      if (token != null && token.isNotEmpty) {
+        _token = token;
+        await saveToken(token);
+      }
+
+      await _saveLinkedBangumiAccount(
+        _extractLinkedBangumiAccount(data),
+        loginTimestamp: _parseLoginTimestamp(data['ts']),
+      );
+
+      return {
+        'success': true,
+        'message': '已刷新绑定状态',
+        'linkedBangumi': linkedBangumiAccount,
+        'linkedBangumiExpiresAt': linkedBangumiExpireTime?.toIso8601String(),
+        'loginTs': _loginTimestamp,
+        'requestUri': requestUri.toString(),
+        'requestMethod': requestMethod,
+      };
+    } catch (e) {
+      debugPrint('[弹弹play服务][Bangumi绑定刷新] 请求异常: $e');
+      return {'success': false, 'message': '刷新绑定状态失败: $e'};
     }
   }
 
@@ -790,7 +1062,9 @@ class DandanplayService {
 
   static String _extractAnimeTitleKeywordFromFileName(String fileName) {
     final keyword = MediaFilenameParser.extractAnimeTitleKeyword(fileName);
-    return keyword.isNotEmpty ? keyword : _extractRawBaseNameFromFileName(fileName);
+    return keyword.isNotEmpty
+        ? keyword
+        : _extractRawBaseNameFromFileName(fileName);
   }
 
   static int? _tryExtractEpisodeNumberFromFileName(String fileName) {
@@ -1080,8 +1354,8 @@ class DandanplayService {
             .get(uri, headers: headers)
             .timeout(_danmakuRequestTimeout);
       } catch (e, st) {
-        final shouldRetry =
-            _shouldRetryDanmakuRequest(e) && attempt < _danmakuRequestMaxAttempts;
+        final shouldRetry = _shouldRetryDanmakuRequest(e) &&
+            attempt < _danmakuRequestMaxAttempts;
         if (!shouldRetry) {
           Error.throwWithStackTrace(e, st);
         }
@@ -1875,6 +2149,67 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 获取WebToken时出错: $e');
       rethrow;
     }
+  }
+
+  static void _loadLinkedBangumiFromPrefs(SharedPreferences prefs) {
+    _linkedBangumiAccount = null;
+    _loginTimestamp = prefs.getInt(_loginTimestampKey);
+    final raw = prefs.getString(_linkedBangumiAccountKey);
+    if (raw == null || raw.isEmpty) return;
+
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is Map<String, dynamic>) {
+        _linkedBangumiAccount = Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {
+      _linkedBangumiAccount = null;
+    }
+  }
+
+  static Future<void> _saveLinkedBangumiAccount(
+    Map<String, dynamic>? account, {
+    int? loginTimestamp,
+  }) async {
+    _linkedBangumiAccount =
+        account == null ? null : Map<String, dynamic>.from(account);
+    _loginTimestamp = loginTimestamp;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (_linkedBangumiAccount == null) {
+      await prefs.remove(_linkedBangumiAccountKey);
+    } else {
+      await prefs.setString(
+        _linkedBangumiAccountKey,
+        json.encode(_linkedBangumiAccount),
+      );
+    }
+
+    if (_loginTimestamp == null) {
+      await prefs.remove(_loginTimestampKey);
+    } else {
+      await prefs.setInt(_loginTimestampKey, _loginTimestamp!);
+    }
+  }
+
+  static Map<String, dynamic>? _extractLinkedBangumiAccount(
+    Map<String, dynamic> data,
+  ) {
+    final linkedAccounts = data['linkedAccounts'];
+    if (linkedAccounts is Map) {
+      final bangumi = linkedAccounts['bangumi'];
+      if (bangumi is Map) {
+        return Map<String, dynamic>.from(bangumi);
+      }
+    }
+    return null;
+  }
+
+  static int? _parseLoginTimestamp(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   // 开启账号注销流程

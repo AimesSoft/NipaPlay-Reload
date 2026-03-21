@@ -28,18 +28,16 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
   @override
   void showMessage(String message) {
     if (!mounted) return;
-    fluent.displayInfoBar(
-      context,
-      builder: (context, close) {
-        return fluent.InfoBar(
-          title: Text(message),
-          action: fluent.IconButton(
-            icon: const fluent.Icon(fluent.FluentIcons.chrome_close),
-            onPressed: close,
-          ),
-        );
-      },
-    );
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger != null) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      return;
+    }
+
+    debugPrint('[MaterialAccountPage] $message');
   }
 
   fluent.FluentThemeData _buildFluentThemeData(BuildContext context) {
@@ -131,8 +129,10 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         final logService = DebugLogService();
         try {
           // 先记录日志
-          logService.addLog('[Fluent账号页面] 注册对话框onLogin回调被调用', level: 'INFO', tag: 'AccountPage');
-          logService.addLog('[Fluent账号页面] 收到的values: ${values.toString()}', level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] 注册对话框onLogin回调被调用',
+              level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] 收到的values: ${values.toString()}',
+              level: 'INFO', tag: 'AccountPage');
 
           // 设置控制器的值
           registerUsernameController.text = values['username'] ?? '';
@@ -140,18 +140,24 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           registerEmailController.text = values['email'] ?? '';
           registerScreenNameController.text = values['screenName'] ?? '';
 
-          logService.addLog('[Fluent账号页面] 准备调用performRegister', level: 'INFO', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] 准备调用performRegister',
+              level: 'INFO', tag: 'AccountPage');
 
           // 调用注册方法
           await performRegister();
 
-          logService.addLog('[Fluent账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn', level: 'INFO', tag: 'AccountPage');
+          logService.addLog(
+              '[Fluent账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn',
+              level: 'INFO',
+              tag: 'AccountPage');
 
-          return LoginResult(success: isLoggedIn, message: isLoggedIn ? '注册成功' : '注册失败');
+          return LoginResult(
+              success: isLoggedIn, message: isLoggedIn ? '注册成功' : '注册失败');
         } catch (e) {
           // 捕获并记录详细错误
           print('[REGISTRATION ERROR]: $e');
-          logService.addLog('[Fluent账号页面] performRegister时发生异常: $e', level: 'ERROR', tag: 'AccountPage');
+          logService.addLog('[Fluent账号页面] performRegister时发生异常: $e',
+              level: 'ERROR', tag: 'AccountPage');
           return LoginResult(success: false, message: '注册失败: $e');
         }
       },
@@ -189,13 +195,14 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                     const SizedBox(height: 8),
                     Text(
                       '• 永久删除您的弹弹play账号\n• 清除所有个人数据和收藏\n• 无法恢复已发送的弹幕\n• 失去所有积分和等级',
-                      style:
-                          TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                      style: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.7)),
                     ),
                     const SizedBox(height: 16),
                     const Text(
                       '点击"继续注销"将在浏览器中打开注销页面，请在页面中完成最终确认。',
-                      style: TextStyle(color: fluent.Colors.warningPrimaryColor),
+                      style:
+                          TextStyle(color: fluent.Colors.warningPrimaryColor),
                     ),
                   ],
                 ),
@@ -214,26 +221,10 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                     hoverScale: _buttonHoverScale,
                     onTap: () async {
                       Navigator.of(dialogContext).pop();
-                      try {
-                        // Web和其他平台分别处理URL打开
-                        if (kIsWeb) {
-                          // Web平台暂时显示URL让用户手动复制
-                          showMessage('请复制以下链接到浏览器中打开：$deleteAccountUrl');
-                        } else {
-                          // 移动端和桌面端使用url_launcher
-                          final uri = Uri.parse(deleteAccountUrl);
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(
-                              uri,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          } else {
-                            showMessage('无法打开注销页面');
-                          }
-                        }
-                      } catch (e) {
-                        showMessage('打开注销页面失败: $e');
-                      }
+                      await _openExternalUrl(
+                        deleteAccountUrl,
+                        cannotOpenMessage: '无法打开注销页面',
+                      );
                     },
                   ),
                 ],
@@ -324,8 +315,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 const SizedBox(height: 4),
                 Text(
                   '已登录',
-                  locale:const Locale("zh-Hans","zh"),
-style: TextStyle(
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.6),
                     fontSize: 12,
                   ),
@@ -397,8 +388,8 @@ style: TextStyle(
           const SizedBox(height: 6),
           Text(
             "登录后可以同步观看记录和个人设置",
-            locale:const Locale("zh-Hans","zh"),
-style: subtitleStyle,
+            locale: const Locale("zh-Hans", "zh"),
+            style: subtitleStyle,
           ),
           const SizedBox(height: 16),
           _buildAuthControlButton(
@@ -409,8 +400,8 @@ style: subtitleStyle,
           const SizedBox(height: 6),
           Text(
             "创建新的弹弹play账号，享受完整功能",
-            locale:const Locale("zh-Hans","zh"),
-style: subtitleStyle,
+            locale: const Locale("zh-Hans", "zh"),
+            style: subtitleStyle,
           ),
         ],
       ),
@@ -444,7 +435,8 @@ style: subtitleStyle,
             ],
           ),
           const SizedBox(height: 16),
-
+          _buildDandanplayBangumiLinkCard(),
+          const SizedBox(height: 16),
           if (isBangumiLoggedIn) ...[
             // 已登录状态
             _buildBangumiLoggedInView(),
@@ -546,12 +538,16 @@ style: subtitleStyle,
             _buildActionButton(
               '同步到Bangumi',
               fluent.FluentIcons.sync,
-              isBangumiSyncing ? null : () => performBangumiSync(forceFullSync: false),
+              isBangumiSyncing
+                  ? null
+                  : () => performBangumiSync(forceFullSync: false),
             ),
             _buildActionButton(
               '同步所有本地记录',
               fluent.FluentIcons.sync_folder,
-              isBangumiSyncing ? null : () => performBangumiSync(forceFullSync: true),
+              isBangumiSyncing
+                  ? null
+                  : () => performBangumiSync(forceFullSync: true),
             ),
             _buildActionButton(
               '验证令牌',
@@ -603,25 +599,7 @@ style: subtitleStyle,
           text: '打开访问令牌页面',
           onTap: () async {
             const url = 'https://next.bgm.tv/demo/access-token';
-            try {
-              if (kIsWeb) {
-                // Web平台暂时显示URL让用户手动复制
-                showMessage('请复制以下链接到浏览器中打开：$url');
-              } else {
-                // 移动端和桌面端使用url_launcher
-                final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(
-                    uri,
-                    mode: LaunchMode.externalApplication,
-                  );
-                } else {
-                  showMessage('无法打开链接');
-                }
-              }
-            } catch (e) {
-              showMessage('打开链接失败：$e');
-            }
+            await _openExternalUrl(url, cannotOpenMessage: '无法打开链接');
           },
         ),
         const SizedBox(height: 4),
@@ -633,7 +611,7 @@ style: subtitleStyle,
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // 令牌输入框
         SizedBox(
           width: double.infinity,
@@ -656,6 +634,192 @@ style: subtitleStyle,
     );
   }
 
+  Widget _buildDandanplayBangumiLinkCard() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final linked = dandanLinkedBangumiInfo;
+    final expiresAt = dandanLinkedBangumiExpireTime;
+    final isExpired = expiresAt != null && expiresAt.isBefore(DateTime.now());
+    final displayRaw = linked?['display']?.toString();
+    final displayName = (displayRaw != null && displayRaw.trim().isNotEmpty)
+        ? displayRaw.trim()
+        : linked?['userName']?.toString();
+    final userId = linked?['userId']?.toString();
+
+    String statusText;
+    if (!isLoggedIn) {
+      statusText = '请先登录弹弹play账号后再绑定。';
+    } else if (linked == null) {
+      statusText = '当前未绑定 Bangumi 账号。';
+    } else {
+      final label = (displayName == null || displayName.isEmpty)
+          ? 'Bangumi用户'
+          : displayName;
+      statusText = userId == null || userId.isEmpty
+          ? '已绑定：$label'
+          : '已绑定：$label（ID: $userId）';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.onSurface.withOpacity(0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '弹弹play内置 Bangumi 绑定（仅同步进度）',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            statusText,
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: isExpired
+                  ? Colors.orange
+                  : colorScheme.onSurface.withOpacity(0.8),
+              fontSize: 12,
+            ),
+          ),
+          if (expiresAt != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '授权过期时间：${_formatAbsoluteDateTime(expiresAt)}',
+              locale: const Locale("zh-Hans", "zh"),
+              style: TextStyle(
+                color: isExpired
+                    ? Colors.orange
+                    : colorScheme.onSurface.withOpacity(0.7),
+                fontSize: 12,
+              ),
+            ),
+          ],
+          if (isExpired) ...[
+            const SizedBox(height: 4),
+            Text(
+              '授权已过期或续期失败，请重新授权。',
+              locale: const Locale("zh-Hans", "zh"),
+              style: const TextStyle(
+                color: Colors.orange,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          _buildAuthControlButton(
+            icon: fluent.FluentIcons.link,
+            text: isRequestingDandanBangumiAuth
+                ? '获取授权链接中...'
+                : (linked == null ? '绑定 Bangumi 账号' : '重新授权 Bangumi 账号'),
+            onTap: (!isLoggedIn || isRequestingDandanBangumiAuth)
+                ? null
+                : _startDandanBangumiAuthorize,
+          ),
+          const SizedBox(height: 8),
+          _buildAuthControlButton(
+            icon: fluent.FluentIcons.sync,
+            text: '我已完成授权，刷新状态',
+            onTap: !isLoggedIn ? null : _manualRefreshDandanBangumiStatus,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '此方式不支持评论，仅用于让弹弹服务器自动同步观看历史。',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.6),
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startDandanBangumiAuthorize() async {
+    final result = await requestBangumiOauthByDandanplay();
+    if (!mounted) return;
+
+    if (result['success'] != true) {
+      showMessage(result['message']?.toString() ?? '获取授权链接失败');
+      return;
+    }
+
+    final url = result['url']?.toString();
+    if (url == null || url.isEmpty) {
+      showMessage('授权链接为空');
+      return;
+    }
+    await _openExternalUrl(url, cannotOpenMessage: '无法打开Bangumi授权页面');
+    if (!mounted) return;
+    showMessage('已在浏览器打开授权页，完成后点击“我已完成授权，刷新状态”。');
+    _tryAutoRefreshDandanBangumiStatus();
+  }
+
+  Future<bool> _refreshDandanBangumiStatusAfterAuth() async {
+    final result = await refreshDandanBangumiLinkStatus();
+    if (!mounted) return result['success'] == true;
+    if (result['success'] != true) {
+      showMessage(result['message']?.toString() ?? '刷新绑定状态失败');
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _manualRefreshDandanBangumiStatus() async {
+    final success = await _refreshDandanBangumiStatusAfterAuth();
+    if (!mounted) return;
+    if (success && dandanLinkedBangumiInfo != null) {
+      showMessage('Bangumi账号绑定已更新。');
+    } else if (success) {
+      showMessage('暂未检测到绑定状态，请稍后再试。');
+    }
+  }
+
+  Future<void> _tryAutoRefreshDandanBangumiStatus() async {
+    for (var i = 0; i < 4; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      final result = await refreshDandanBangumiLinkStatus();
+      if (!mounted) return;
+      if (result['success'] == true && dandanLinkedBangumiInfo != null) {
+        showMessage('Bangumi账号绑定已更新。');
+        return;
+      }
+    }
+  }
+
+  Future<void> _openExternalUrl(
+    String url, {
+    String cannotOpenMessage = '无法打开链接',
+  }) async {
+    try {
+      if (kIsWeb) {
+        showMessage('请复制以下链接到浏览器中打开：$url');
+        return;
+      }
+      final uri = Uri.tryParse(url);
+      if (uri == null) {
+        showMessage('链接无效');
+        return;
+      }
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        showMessage(cannotOpenMessage);
+      }
+    } catch (e) {
+      showMessage('打开链接失败：$e');
+    }
+  }
+
   Widget _buildActionButton(
     String text,
     IconData icon,
@@ -671,7 +835,7 @@ style: subtitleStyle,
         hoverScale: _buttonHoverScale,
         onTap: () {
           if (isDisabled) return;
-          onPressed?.call();
+          onPressed();
         },
       ),
     );
@@ -690,6 +854,15 @@ style: subtitleStyle,
     } else {
       return '刚刚';
     }
+  }
+
+  String _formatAbsoluteDateTime(DateTime dateTime) {
+    final year = dateTime.year.toString().padLeft(4, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '$year-$month-$day $hour:$minute';
   }
 
   // 构建弹弹play页面内容

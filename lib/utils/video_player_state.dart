@@ -65,6 +65,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/seek_indicator.dart'; // Added 
 import 'package:volume_controller/volume_controller.dart';
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
+import 'subtitle_language_utils.dart';
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -470,6 +471,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
   static const double defaultSubtitleScale = 1.0;
+  static const double subtitleDelayQuickAdjustRangeSeconds = 30.0;
+  static const double subtitleDelayStep = 0.1;
   static const double defaultSubtitleDelaySeconds = 0.0;
   static const double defaultSubtitlePosition = 100.0;
   static const double minSubtitlePosition = 0.0;
@@ -540,6 +543,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _autoDanmakuOffset = 0.0; // 弹弹Play自动匹配的时间偏移
 
   // 添加播放速度相关状态
+  static const double minPlaybackRate = 0.01;
+  static const double maxPlaybackRate = 5.0;
   final String _playbackRateKey = 'playback_rate';
   double _playbackRate = 1.0; // 默认1倍速
   bool _isSpeedBoostActive = false; // 是否正在倍速播放（长按状态）
@@ -814,7 +819,50 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   DanmakuOutlineStyle get danmakuOutlineStyle => _danmakuOutlineStyle;
   DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
   double get subtitleScale => _subtitleScale;
-  double get subtitleDelaySeconds => _subtitleDelaySeconds;
+  double get subtitleDelayCustomLimitSeconds {
+    final durationSeconds = _duration.inMilliseconds / 1000;
+    if (durationSeconds <= 0) {
+      return subtitleDelayQuickAdjustRangeSeconds;
+    }
+    return durationSeconds.toDouble();
+  }
+
+  bool get hasSubtitleDelayDurationLimit => _duration.inMilliseconds > 0;
+
+  double _resolveSubtitleDelaySecondsForCurrentVideo(double value) {
+    final limit = subtitleDelayCustomLimitSeconds;
+    return value.clamp(-limit, limit).toDouble();
+  }
+
+  double clampSubtitleDelayToCurrentVideoDuration(double value) {
+    return _resolveSubtitleDelaySecondsForCurrentVideo(value);
+  }
+
+  double get subtitleDelaySeconds =>
+      _resolveSubtitleDelaySecondsForCurrentVideo(_subtitleDelaySeconds);
+
+  double get subtitleDelaySliderMinSeconds {
+    final limit = subtitleDelayCustomLimitSeconds;
+    final current = subtitleDelaySeconds;
+    return (current - subtitleDelayQuickAdjustRangeSeconds)
+        .clamp(-limit, limit)
+        .toDouble();
+  }
+
+  double get subtitleDelaySliderMaxSeconds {
+    final limit = subtitleDelayCustomLimitSeconds;
+    final current = subtitleDelaySeconds;
+    return (current + subtitleDelayQuickAdjustRangeSeconds)
+        .clamp(-limit, limit)
+        .toDouble();
+  }
+
+  int get subtitleDelaySliderDivisions {
+    final span = subtitleDelaySliderMaxSeconds - subtitleDelaySliderMinSeconds;
+    if (span <= 0) return 1;
+    return (span / subtitleDelayStep).round().clamp(1, 600);
+  }
+
   double get subtitlePosition => _subtitlePosition;
   SubtitleAlignX get subtitleAlignX => _subtitleAlignX;
   SubtitleAlignY get subtitleAlignY => _subtitleAlignY;

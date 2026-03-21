@@ -383,7 +383,6 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
             const trackBaseColor = Color.fromARGB(255, 125, 125, 125);
             const bufferTrackColor = Color.fromARGB(255, 176, 176, 176);
             const playedTrackColor = Color(0xFFFFFFFF);
-
             return widget.isDragging
                 ? Stack(
                     key: _sliderKey,

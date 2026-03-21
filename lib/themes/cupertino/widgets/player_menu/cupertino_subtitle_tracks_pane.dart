@@ -60,39 +60,63 @@ class _CupertinoSubtitleTracksPaneState
       _showMessage('当前平台暂不支持加载本地字幕');
       return;
     }
-    final path = widget.videoState.currentVideoPath;
+    final videoState = widget.videoState;
+    final path = videoState.currentVideoPath;
     if (path == null) {
       _showMessage('请先开始播放视频再加载字幕');
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
     try {
       final fileInfo = await _subtitleService.pickAndLoadSubtitleFile();
-      if (!mounted) return;
       if (fileInfo == null) {
-        setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
         return;
       }
 
       final existingIndex =
           _externalSubtitles.indexWhere((s) => s['path'] == fileInfo['path']);
       if (existingIndex >= 0) {
-        await _applyExternalSubtitle(fileInfo['path'] as String, existingIndex);
-        setState(() => _isLoading = false);
-        _showMessage('已切换到字幕：${fileInfo['name']}');
+        await _applyExternalSubtitleCore(
+          videoState: videoState,
+          videoPath: path,
+          filePath: fileInfo['path'] as String,
+          index: existingIndex,
+        );
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showMessage('已切换到字幕：${fileInfo['name']}');
+        }
         return;
       }
 
       await _subtitleService.addExternalSubtitle(path, fileInfo);
-      await _loadExternalSubtitles();
-      final newIndex = _externalSubtitles.length - 1;
+      final subtitles = await _subtitleService.loadExternalSubtitles(path);
+      final newIndex =
+          subtitles.indexWhere((s) => s['path'] == fileInfo['path']);
       if (newIndex >= 0) {
-        await _applyExternalSubtitle(fileInfo['path'] as String, newIndex);
+        await _applyExternalSubtitleCore(
+          videoState: videoState,
+          videoPath: path,
+          filePath: fileInfo['path'] as String,
+          index: newIndex,
+        );
+      } else {
+        videoState.forceSetExternalSubtitle(fileInfo['path'] as String);
       }
-      _showMessage('已加载字幕文件：${fileInfo['name']}');
+      if (mounted) {
+        await _loadExternalSubtitles();
+        _showMessage('已加载字幕文件：${fileInfo['name']}');
+      }
     } catch (error) {
-      _showMessage('加载字幕失败：$error');
+      if (mounted) {
+        _showMessage('加载字幕失败：$error');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -112,8 +136,8 @@ class _CupertinoSubtitleTracksPaneState
 
     try {
       setState(() => _isLoading = true);
-      final candidates =
-          await RemoteSubtitleService.instance.listCandidatesForVideo(videoPath);
+      final candidates = await RemoteSubtitleService.instance
+          .listCandidatesForVideo(videoPath);
       if (!mounted) return;
       setState(() => _isLoading = false);
 
@@ -199,9 +223,23 @@ class _CupertinoSubtitleTracksPaneState
     final path = widget.videoState.currentVideoPath;
     if (path == null) return;
 
-    await _subtitleService.setExternalSubtitleActive(path, index, true);
-    widget.videoState.forceSetExternalSubtitle(filePath);
+    await _applyExternalSubtitleCore(
+      videoState: widget.videoState,
+      videoPath: path,
+      filePath: filePath,
+      index: index,
+    );
     setState(() {});
+  }
+
+  Future<void> _applyExternalSubtitleCore({
+    required VideoPlayerState videoState,
+    required String videoPath,
+    required String filePath,
+    required int index,
+  }) async {
+    await _subtitleService.setExternalSubtitleActive(videoPath, index, true);
+    videoState.forceSetExternalSubtitle(filePath);
   }
 
   Future<void> _switchToEmbeddedSubtitle(int trackIndex) async {
@@ -356,8 +394,7 @@ class _CupertinoSubtitleTracksPaneState
                 if (isActive) {
                   await _switchToEmbeddedSubtitle(-1);
                 } else {
-                  await _applyExternalSubtitle(
-                      data['path'] as String, index);
+                  await _applyExternalSubtitle(data['path'] as String, index);
                 }
                 setState(() {});
               },
@@ -378,10 +415,11 @@ class _CupertinoSubtitleTracksPaneState
                 _externalSubtitles.any((s) => s['isActive'] == true);
             final bool isActive = !hasExternal &&
                 widget.videoState.player.activeSubtitleTracks.contains(index);
-            final String language =
-                _languageName(track.language ?? track.toString());
-            final String title =
-                track.title?.trim().isNotEmpty == true ? track.title! : '轨道 ${index + 1}';
+            final String language = _subtitleService
+                .getLanguageName(track.language ?? track.toString());
+            final String title = track.title?.trim().isNotEmpty == true
+                ? track.title!
+                : '轨道 ${index + 1}';
 
             return CupertinoListTile(
               leading: Icon(
@@ -460,19 +498,5 @@ class _CupertinoSubtitleTracksPaneState
         ];
       },
     );
-  }
-
-  String _languageName(String input) {
-    final String value = input.toLowerCase();
-    if (value.contains('chi') || value.contains('zh')) return '中文';
-    if (value.contains('eng') || value.contains('en')) return '英文';
-    if (value.contains('jpn') || value.contains('ja')) return '日语';
-    if (value.contains('kor') || value.contains('ko')) return '韩语';
-    if (value.contains('fra') || value.contains('fr')) return '法语';
-    if (value.contains('deu') || value.contains('de')) return '德语';
-    if (value.contains('spa') || value.contains('es')) return '西班牙语';
-    if (value.contains('ita') || value.contains('it')) return '意大利语';
-    if (value.contains('rus') || value.contains('ru')) return '俄语';
-    return input;
   }
 }
