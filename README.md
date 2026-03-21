@@ -93,7 +93,7 @@ NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 
 ### 快速下载
 
-- **GitHub Releases (推荐)**: [下载最新版本](https://github.com/mcdfsteve/nipaplay-reload/releases)
+- **GitHub Releases (推荐)**: [下载最新版本](https://github.com/AimesSoft/nipaplay-reload/releases)
 - **iOS (App Store)**: [点击下载](https://apps.apple.com/cn/app/nipaplay/id6751284970)
 
 ### 包管理器安装
@@ -101,7 +101,7 @@ NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 #### macOS (Homebrew)
 
 ```bash
-brew tap Shinokawa/nipaplay-reload
+brew tap AimesSoft/nipaplay-reload
 brew install --cask nipaplay-reload
 ```
 
