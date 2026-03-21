@@ -34,7 +34,7 @@
 3.  **再次向 AI 求助**: 如果你对如何选择代码感到困惑，可以把整个带有冲突标记的代码块复制给 AI，然后提问：“我遇到了 Git 合并冲突，请帮我分析下面的代码，并告诉我应该如何正确地合并它们。”
 4.  **完成合并**: 解决完所有冲突后，保存文件，然后执行：
     ```bash
-    git add .
+    git add [你刚刚解决冲突的文件]
     git commit -m "fix: Merge main and resolve conflicts"
     git push origin [你的分支名]
     ```

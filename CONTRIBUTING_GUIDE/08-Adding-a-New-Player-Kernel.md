@@ -141,7 +141,7 @@ flutter pub add dart_vlc
 
 最后，用户需要一个地方来选择使用你的新内核。
 
-1.  找到处理播放器设置的UI文件（例如 `lib/pages/settings/player_settings_page.dart`）。
+1.  找到处理播放器设置的UI文件（例如 `lib/themes/nipaplay/pages/settings/player_settings_page.dart`）。
 2.  在选择播放器内核的下拉菜单或列表中，添加“VLC”这个新选项。
 3.  确保当用户选择“VLC”时，应用会将 `PlayerKernelType.vlc` 这个值保存到 `SharedPreferences` 中，这样 `PlayerFactory` 在下次启动时就能读取到正确的设置。
 

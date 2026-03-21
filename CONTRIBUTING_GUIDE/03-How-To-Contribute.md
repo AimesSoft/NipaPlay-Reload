@@ -82,10 +82,10 @@
 现在，我们要找到“关于”页面的代码文件，并添加我们的文本。
 
 1. **定位文件**:
-    根据我们在上一章学到的知识，页面相关的代码应该在 `lib/pages/` 目录下。我们可以在 `lib/pages/settings/` 中找到一个名为 `about_page.dart` 的文件。
+    当前项目的设置页实现按主题组织。为了和下面的例子保持一致，我们先修改默认主题对应的关于页：`lib/themes/nipaplay/pages/settings/about_page.dart`。
 
 2. **向 AI 求助**:
-    打开 `about_page.dart` 文件。现在，我们不需要自己去读懂所有代码。我们可以直接让 AI 帮我们完成任务。
+    打开 `lib/themes/nipaplay/pages/settings/about_page.dart` 文件。现在，我们不需要自己去读懂所有代码。我们可以直接让 AI 帮我们完成任务。
     在 Cursor 中，选中整个文件的代码 (Cmd+A 或 Ctrl+A)，然后按下 `Cmd+K` (或 Ctrl+K)，在弹出的对话框中输入我们的需求：
 
     > “请在这个页面的 `build` 方法里，找到合适的位置，在应用版本号下面，添加一个 `Text` 组件，内容是‘由 [你的名字] 贡献’。请把 [你的名字] 替换成 MCDF。”
@@ -116,12 +116,12 @@
     git status
     ```
 
-    这个命令会告诉你哪些文件被修改了。你应该能看到 `lib/pages/settings/about_page.dart` 出现在列表中。
+    这个命令会告诉你哪些文件被修改了。你应该能看到 `lib/themes/nipaplay/pages/settings/about_page.dart` 出现在列表中。
 
 2. **暂存文件**:
 
     ```bash
-    git add lib/pages/settings/about_page.dart
+    git add lib/themes/nipaplay/pages/settings/about_page.dart
     ```
 
     这个命令告诉 Git，我们希望把这个文件的修改包含在下一次提交中。如果你修改了多个文件，可以多次使用 `git add`。
@@ -148,9 +148,6 @@ git push origin feat/add-contributor-name-to-about-page
 *   `git push`: 执行推送操作。
 *   `origin`: 代表你在 GitHub 上的 Fork 仓库。
 *   `feat/add-contributor-name-to-about-page`: 我们要推送的分支名。
-* `git push`: 执行推送操作。
-* `origin`: 代表你在 GitHub 上的 Fork 仓库。
-* `add-my-name-to-about-page`: 我们要推送的分支名。
 
 ### 第 5 步：创建拉取请求 (Pull Request)
 
@@ -160,7 +157,7 @@ git push origin feat/add-contributor-name-to-about-page
 2. GitHub 会自动检测到你刚刚推送了一个新分支，并显示一个黄色的提示条，上面有一个 "Compare & pull request" 按钮。点击它。
 3. 在 PR 页面确认合并目标：
     * base repository：`AimesSoft/NipaPlay-Reload`，base：`main`
-    * head repository：`[你的用户名]/NipaPlay-Reload`，compare：你刚推送的分支，例如 `add-my-name-to-about-page`
+    * head repository：`[你的用户名]/NipaPlay-Reload`，compare：你刚推送的分支，例如 `feat/add-contributor-name-to-about-page`
 4. 你会进入一个新的页面。请在这里填写 PR 的标题和描述。
     * **标题**: 通常使用你的 commit 信息即可，例如 "feat: Add contributor name to about page"。
     * **描述**: 详细说明你做了什么修改，为什么要做这个修改。如果这个修改解决了某个 Issue，可以在这里链接它 (例如 `Closes #123`)。

@@ -115,7 +115,7 @@ Widget buildPlatformSpecificWidget() {
 
 ### 第 1 步：定位并修改UI
 
-1.  打开设置页面文件，例如 `lib/pages/settings/player_settings_page.dart`。
+1.  打开设置页面文件，例如 `lib/themes/nipaplay/pages/settings/player_settings_page.dart`。如果你要同步支持 Cupertino 风格，还需要留意 `lib/themes/cupertino/pages/settings/pages/cupertino_player_settings_page.dart`。
 2.  找到你想要添加按钮的位置，比如在解码器设置旁边。
 3.  使用 `Platform.isWindows` 来决定是否构建这个按钮。
 
@@ -156,24 +156,32 @@ Widget buildPlatformSpecificWidget() {
 
 ### 第 2 步：实现平台特定逻辑
 
-现在我们来实现 `_showNvidiaGpuStatus` 方法。我们将复用项目中已有的 `_checkForNvidiaGpu` 逻辑。
+现在我们来实现 `_showNvidiaGpuStatus` 方法。下面给出一个可以直接工作的、自包含的示例；这样你照着写时不会因为调用项目中的私有方法而编译失败。
 
-1.  假设 `_checkForNvidiaGpu` 定义在 `lib/utils/decoder_manager.dart` 中，并且可以被外部访问。
-2.  在你的 `player_settings_page.dart` 中，实现 `_showNvidiaGpuStatus` 方法。
+1.  在你的 `player_settings_page.dart` 中，实现 `_showNvidiaGpuStatus` 方法。
+2.  如果你后续想复用 `DecoderManager` 里的检测逻辑，可以先把当前的私有方法 `_checkForNvidiaGpu()` 提炼成一个公共 helper，再由 UI 层调用。
 
     ```dart
     // (接上文)
     
-    // 假设 DecoderManager 是可以获取的实例
-    final decoderManager = DecoderManager(); 
-
     void _showNvidiaGpuStatus(BuildContext context) {
       // 再次确认是 Windows 平台
       if (!Platform.isWindows) {
         return;
       }
-      
-      final hasNvidia = decoderManager.checkForNvidiaGpu(); // 调用已有逻辑
+
+      bool hasNvidia = false;
+      try {
+        final result = Process.runSync(
+          'wmic',
+          ['path', 'win32_VideoController', 'get', 'name'],
+        );
+        final output = result.stdout.toString().toLowerCase();
+        hasNvidia = output.contains('nvidia');
+      } catch (e) {
+        debugPrint('检查 NVIDIA GPU 时出错: $e');
+      }
+
       final message = hasNvidia ? '检测到 NVIDIA 显卡。' : '未检测到 NVIDIA 显卡。';
       
       // 显示一个弹窗来展示结果
