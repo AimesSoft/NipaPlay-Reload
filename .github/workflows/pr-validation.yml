@@ -1,0 +1,57 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Analyze and Test
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - name: Setup Flutter Environment
+        uses: ./.github/actions/setup-flutter
+
+      - name: Generate build info json
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
+
+      - name: Run flutter analyze
+        run: flutter analyze --no-pub
+
+      - name: Detect root test files
+        id: detect_tests
+        shell: bash
+        run: |
+          if find test -type f -name '*_test.dart' -print -quit | grep -q .; then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run flutter test
+        if: steps.detect_tests.outputs.has_tests == 'true'
+        run: flutter test --no-pub --reporter expanded
+
+      - name: Skip flutter test
+        if: steps.detect_tests.outputs.has_tests != 'true'
+        run: echo "No root-level *_test.dart files found. Skipping flutter test."
