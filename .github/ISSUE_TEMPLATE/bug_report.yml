@@ -99,8 +99,7 @@ body:
       label: 播放内核（如适用）
       options:
         - FVP (libmdk)
-        - Media Kit
-        - Libmpv
+        - Media Kit (libmpv)
         - Video Player
         - 不适用 / 不确定
     validations:
@@ -137,10 +136,11 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: 日志、报错或截图
+      label: 日志或文本报错
       description: |
         建议附上日志。可以在“设置 -> 开发者选项 -> 终端输出”中复制或导出日志。
-        如果有截图、录屏、示例文件或报错堆栈，也可以一起贴在这里。
+        这里更适合粘贴文本内容，例如日志、报错信息或堆栈。
+        如果需要提供截图、录屏或示例文件，请先创建 Issue，再在后续评论中追加上传附件。
       render: shell
 
   - type: textarea
