@@ -14,11 +14,11 @@
 git checkout -b feat/add-contributors-page
 ```
 
-### 第 2 步：构思与规划 (与 AI 对话)
+### 第 2 步：构思与规划 (与 Codex 对话)
 
-在开始写代码之前，我们可以先和 AI 沟通我们的想法，让它帮我们规划。
+在开始写代码之前，我们可以先和 Codex 沟通我们的想法，让它帮我们规划。
 
-打开 Cursor，我们可以创建一个新的空白文件，或者在任意地方打开聊天窗口 (`Cmd/Ctrl + L`)，然后向 AI 提问：
+打开 VS Code，在 Codex 对话中描述需求，然后向它提问：
 
 > “你好，我正在为一个基于 Flutter 的项目 NipaPlay-Reload 贡献代码。我想添加一个名为‘贡献者名单’ (ContributorsPage) 的新页面。
 >
@@ -33,14 +33,14 @@ git checkout -b feat/add-contributors-page
 >
 > 请帮我生成这个页面的完整 Dart 代码。请将代码放在一个名为 `contributors_page.dart` 的新文件里。另外，请使用 `url_launcher` 这个库来打开链接，如果代码中用到了，记得提醒我需要添加这个依赖。”
 
-AI 会理解你的需求，并生成一份完整的代码文件。这比我们自己从零开始写要快得多。
+Codex 会理解你的需求，并生成一份完整的代码文件。这比我们自己从零开始写要快得多。
 
 ### 第 3 步：创建文件并应用代码
 
 1.  **创建文件**: 为了简化示例，我们先给 `nipaplay` 主题添加页面。在 `lib/themes/nipaplay/pages/settings/` 目录下创建一个新文件，命名为 `contributors_page.dart`。
 2.  **粘贴代码**: 将 AI 生成的代码完整地粘贴到这个新文件中。
 
-AI 生成的代码可能类似这样：
+Codex 生成的代码可能类似这样：
 
 ```dart
 import 'package:flutter/material.dart';
@@ -94,23 +94,23 @@ class ContributorsPage extends StatelessWidget {
 
 ### 第 4 步：处理依赖
 
-AI 提醒我们用到了 `url_launcher` 库。这个项目当前已经依赖了它，所以通常不需要额外安装；如果你引入了新的第三方库，再去更新 `pubspec.yaml`。
+Codex 提醒我们用到了 `url_launcher` 库。这个项目当前已经依赖了它，所以通常不需要额外安装；如果你引入了新的第三方库，再去更新 `pubspec.yaml`。
 
 1.  **确认依赖**: 打开 `pubspec.yaml`，确认 `url_launcher` 已经存在；如果不存在，再运行：
     ```bash
     flutter pub add url_launcher
     ```
 
-### 第 5 步：添加入口 (再次与 AI 协作)
+### 第 5 步：添加入口 (再次与 Codex 协作)
 
 新页面创建好了，但现在应用里还没有地方可以进入这个页面。我们需要在设置页面添加一个入口。
 
 1.  **定位文件**: 打开 `lib/themes/nipaplay/pages/settings_page.dart`。
-2.  **向 AI 提问**: 选中整个文件的代码，按下 `Cmd/Ctrl + K`，然后输入：
+2.  **向 Codex 提问**: 把 `lib/themes/nipaplay/pages/settings_page.dart` 作为上下文，然后输入：
 
     > “这是我的设置页面代码。请在‘关于’选项的旁边，添加一个新的列表项，文本是‘贡献者名单’。当用户点击这个列表项时，请导航到我们刚刚创建的 `ContributorsPage`。记得帮我导入 `contributors_page.dart` 文件。”
 
-AI 会帮你找到合适的位置，并添加类似下面的代码：
+Codex 会帮你找到合适的位置，并添加类似下面的代码：
 
 ```dart
 // ... 在文件顶部，AI 会帮你添加导入语句
@@ -138,7 +138,11 @@ ListTile( // 原有的“关于”选项
 
 1.  **运行应用**: 在终端运行 `flutter run`。
 2.  **测试功能**: 导航到“设置”页面，你应该能看到新增的“贡献者名单”选项。点击它，应该能成功跳转到新页面。再点击页面上的任意一个贡献者，应该能用浏览器打开对应的 GitHub 链接。
-3.  **格式化代码**: 在提交前，别忘了运行格式化命令。
+3.  **先做静态检查**: 在提交前先运行：
+    ```bash
+    flutter analyze
+    ```
+4.  **格式化代码**: 在提交前，别忘了运行格式化命令。
     ```bash
     dart format .
     ```
@@ -165,13 +169,13 @@ ListTile( // 原有的“关于”选项
     ```
 
 4.  **创建 Pull Request**:
-    去你的 GitHub Fork 仓库页面，点击 "Compare & pull request" 按钮，填写好标题和描述，然后提交。
+    去你的 GitHub Fork 仓库页面，点击 "Compare & pull request" 按钮，按照模板填写标题、改动说明、验证方式；如果页面有变化，尽量附上截图，然后提交。
 
 ## 总结
 
 恭喜你！你刚刚独立（在 AI 的帮助下）为项目添加了一个完整的新功能！
 
-通过这个例子，你可以看到，即使你不完全理解每一行代码的细节，只要你能清晰地向 AI 描述你的需求，就能完成很多有意义的贡献。随着你做得越来越多，你对代码的理解也会自然而然地加深。
+通过这个例子，你可以看到，即使你不完全理解每一行代码的细节，只要你能清晰地向 Codex 描述你的需求，就能完成很多有意义的贡献。随着你做得越来越多，你对代码的理解也会自然而然地加深。
 
 ---
 
