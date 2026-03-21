@@ -65,8 +65,8 @@
     }
     ```
 
-**与 AI 协作**:
-解析文件格式是一项繁琐但模式化的工作。你可以把 `ass` 文件的格式规范，或者一个文件示例交给 AI，然后提问：
+**与 Codex 协作**:
+解析文件格式是一项繁琐但模式化的工作。你可以把 `ass` 文件的格式规范，或者一个文件示例交给 Codex，然后提问：
 
 > “这是一个 `.ass` 字幕文件的示例：[粘贴示例内容]。请帮我用 Dart 编写一个解析器，它可以将每一行‘Dialogue’解析出来，并提取出开始时间、文本内容和样式信息。然后将这些信息转换成 `DanmakuContentItem` 对象列表。”
 
@@ -119,10 +119,11 @@
 
 ### 第 2 步：注册新的渲染引擎
 
-1.  打开 `lib/danmaku_abstraction/danmaku_kernel_factory.dart` (如果存在，或者类似的管理文件)。
+1.  打开 `lib/danmaku_abstraction/danmaku_kernel_factory.dart`。
 2.  在 `DanmakuRenderEngine` 枚举中添加你的新引擎，例如 `flame`。
-3.  修改工厂的创建逻辑，当被要求创建 `flame` 引擎时，返回你的 `FlameDanmakuRenderer` 的实例。
-4.  最后，在设置页面中添加一个选项，允许用户选择“Flame渲染引擎”。
+3.  再打开 `lib/danmaku_abstraction/danmaku_text_renderer_factory.dart`，把真正的渲染器创建逻辑接进去。当前代码里，具体实例的创建是在这个工厂里完成的，而不在 `DanmakuKernelFactory` 里。
+4.  如果你的新引擎还需要额外依赖、配置对象或覆盖层，也要把这些初始化逻辑补到对应的工厂或调用链里。
+5.  最后，在设置页面中添加一个选项，允许用户选择“Flame渲染引擎”。
 
 ## 总结
 
