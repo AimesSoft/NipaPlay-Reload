@@ -1962,8 +1962,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
 
     if (_isLoading) {
-      return const Center(
-          child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: textColor));
     }
     if (_error != null || _detailedAnime == null) {
       return Center(
@@ -1974,29 +1973,29 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             children: [
               Text('加载详情失败:',
                   locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.white.withOpacity(0.8))),
+                  style: TextStyle(color: textColor.withOpacity(0.8))),
               const SizedBox(height: 8),
               Text(
                 _error ?? '未知错误',
                 locale: Locale("zh-Hans", "zh"),
-                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                style: TextStyle(color: secondaryTextColor.withOpacity(0.9)),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.2)),
+                    backgroundColor: textColor.withOpacity(0.2)),
                 onPressed: _fetchAnimeDetails,
-                child: const Text('重试',
+                child: Text('重试',
                     locale: Locale("zh-Hans", "zh"),
-                    style: TextStyle(color: Colors.white)),
+                    style: TextStyle(color: textColor)),
               ),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('关闭',
+                child: Text('关闭',
                     locale: Locale("zh-Hans", "zh"),
-                    style: TextStyle(color: Colors.white70)),
+                    style: TextStyle(color: secondaryTextColor)),
               ),
             ],
           ),
