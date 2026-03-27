@@ -93,10 +93,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
               _FileItem(path: path, displayName: _displayNameFromPath(path)),
         )
         .toList(growable: true);
-    
+
     // 默认自动排序文件
     _sortFilesByEpisodeNumber();
-    
+
     if (widget.initialSearchKeyword?.trim().isNotEmpty == true) {
       _searchController.text = widget.initialSearchKeyword!.trim();
     }
@@ -148,10 +148,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
       _isDarkMode ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
 
   TextSelectionThemeData get _selectionTheme => TextSelectionThemeData(
-    cursorColor: _accentColor,
-    selectionColor: _accentColor.withOpacity(0.3),
-    selectionHandleColor: _accentColor,
-  );
+        cursorColor: _accentColor,
+        selectionColor: _accentColor.withOpacity(0.3),
+        selectionHandleColor: _accentColor,
+      );
 
   ButtonStyle _primaryButtonStyle() {
     return ButtonStyle(
@@ -194,8 +194,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
 
     try {
       final appSecret = await DandanplayService.getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/search/anime';
       final baseUrl = await DandanplayService.getApiBaseUrl();
       final url = '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword)}';
@@ -269,8 +269,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
 
     try {
       final appSecret = await DandanplayService.getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/bangumi/$animeId';
       final baseUrl = await DandanplayService.getApiBaseUrl();
       final url = '$baseUrl$apiPath';
@@ -304,8 +304,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
       }
 
       final data = json.decode(response.body);
-      final rawEpisodes =
-          (data is Map<String, dynamic> &&
+      final rawEpisodes = (data is Map<String, dynamic> &&
               data['success'] == true &&
               data['bangumi'] is Map<String, dynamic>)
           ? (data['bangumi'] as Map<String, dynamic>)['episodes']
@@ -460,9 +459,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     final iconColor = _mutedTextColor;
     final checkboxSide = BorderSide(color: _borderColor, width: 1);
     final backgroundColor = isDragging ? _surfaceColor : _panelAltColor;
-    final borderColor = isDragging
-        ? _accentColor.withOpacity(0.35)
-        : _borderColor;
+    final borderColor =
+        isDragging ? _accentColor.withOpacity(0.35) : _borderColor;
 
     return Container(
       key: ValueKey(item.path),
@@ -550,9 +548,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     final iconColor = _mutedTextColor;
     final checkboxSide = BorderSide(color: _borderColor, width: 1);
     final backgroundColor = isDragging ? _surfaceColor : _panelAltColor;
-    final borderColor = isDragging
-        ? _accentColor.withOpacity(0.35)
-        : _borderColor;
+    final borderColor =
+        isDragging ? _accentColor.withOpacity(0.35) : _borderColor;
 
     return Container(
       key: ValueKey(episode.episodeId),
@@ -924,22 +921,22 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                     ),
                   )
                 : _searchResults.isEmpty
-                ? _buildEmptyState('暂无搜索结果')
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    primary: false,
-                    itemCount: _searchResults.length,
-                    itemBuilder: (context, index) {
-                      final anime = _searchResults[index];
-                      final showBottomDivider =
-                          index != _searchResults.length - 1;
-                      return _buildSearchResultItem(
-                        anime,
-                        index,
-                        showBottomDivider: showBottomDivider,
-                      );
-                    },
-                  ),
+                    ? _buildEmptyState('暂无搜索结果')
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        primary: false,
+                        itemCount: _searchResults.length,
+                        itemBuilder: (context, index) {
+                          final anime = _searchResults[index];
+                          final showBottomDivider =
+                              index != _searchResults.length - 1;
+                          return _buildSearchResultItem(
+                            anime,
+                            index,
+                            showBottomDivider: showBottomDivider,
+                          );
+                        },
+                      ),
           ),
         ),
       ],
@@ -1053,8 +1050,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
               : globals.DialogSizes.getDialogWidth(
                   MediaQuery.of(context).size.width,
                 ),
-          maxHeightFactor:
-              (globals.isPhone &&
+          maxHeightFactor: (globals.isPhone &&
                   MediaQuery.of(context).size.shortestSide < 600)
               ? 0.9
               : 0.85,
@@ -1110,8 +1106,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                       child: Text(
                         _selectedAnime == null
                             ? (_searchMessage.isNotEmpty
-                                  ? _searchMessage
-                                  : '先在右侧搜索并选择番剧')
+                                ? _searchMessage
+                                : '先在右侧搜索并选择番剧')
                             : '对齐顺序后点击“一键匹配”',
                         style: TextStyle(color: _subTextColor),
                         maxLines: 1,
@@ -1145,15 +1141,15 @@ class _FileItem {
     required this.path,
     required this.displayName,
     this.selected = true,
-  }) : episodeNumber = _extractEpisodeNumber(displayName),
-       sortKey = _generateSortKey(_extractEpisodeNumber(displayName));
+  })  : episodeNumber = _extractEpisodeNumber(displayName),
+        sortKey = _generateSortKey(_extractEpisodeNumber(displayName));
 
   static String? _extractEpisodeNumber(String fileName) {
     // 匹配常见的剧集格式：[01], 01, E01, EP01, 第01话, 第1话, SP1, OVA, Lite等
     final patterns = [
       // 特殊格式：[SP01], SP01, OVA, Lite
-      RegExp(r'\[(SP\d+|OVA|Lite)\]', caseSensitive: false),
-      RegExp(r'[\s_\-\.](SP\d+|OVA|Lite)[\s_\-\.\]]', caseSensitive: false),
+      RegExp(r'\[(SP\d*|OVA\d*|Lite)\]', caseSensitive: false),
+      RegExp(r'[\s_\-\.](SP\d*|OVA\d*|Lite)[\s_\-\.\]]', caseSensitive: false),
       // 标准数字格式：[01], 01, 1
       RegExp(r'\[(\d{1,3})\]'),
       RegExp(r'[\s_\-\.](\d{1,3})[\s_\-\.\]]'),
@@ -1178,20 +1174,22 @@ class _FileItem {
 
   static int? _generateSortKey(String? episodeNumber) {
     if (episodeNumber == null) return null;
-    
+
     // 处理特殊剧集号
     if (episodeNumber.toLowerCase().startsWith('sp')) {
       final numPart = episodeNumber.substring(2);
       final num = int.tryParse(numPart) ?? 0;
       return 1000 + num; // SP剧集排在普通剧集之后
     }
-    if (episodeNumber.toLowerCase() == 'ova') {
-      return 2000; // OVA排在SP之后
+    if (episodeNumber.toLowerCase().startsWith('ova')) {
+      final numPart = episodeNumber.substring(3);
+      final num = int.tryParse(numPart) ?? 0;
+      return 2000 + num; // OVA排在SP之后
     }
     if (episodeNumber.toLowerCase() == 'lite') {
       return 3000; // Lite排在OVA之后
     }
-    
+
     // 处理普通数字剧集号
     final num = int.tryParse(episodeNumber);
     return num;
