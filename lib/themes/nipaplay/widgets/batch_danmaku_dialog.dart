@@ -1145,9 +1145,9 @@ class _FileItem {
         sortKey = _generateSortKey(_extractEpisodeNumber(displayName));
 
   static String? _extractEpisodeNumber(String fileName) {
-    // 匹配常见的剧集格式：[01], 01, E01, EP01, 第01话, 第1话, SP1, OVA, Lite等
+    // 匹配常见的剧集格式：[01], 01, E01, EP01, 第01话, 第1话, SP1, OVA/OVA01, Lite等
     final patterns = [
-      // 特殊格式：[SP01], SP01, OVA, Lite
+      // 特殊格式：[SP01], SP01, OVA/OVA01, Lite
       RegExp(r'\[(SP\d*|OVA\d*|Lite)\]', caseSensitive: false),
       RegExp(r'[\s_\-\.](SP\d*|OVA\d*|Lite)[\s_\-\.\]]', caseSensitive: false),
       // 标准数字格式：[01], 01, 1
