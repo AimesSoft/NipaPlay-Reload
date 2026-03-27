@@ -1152,8 +1152,8 @@ class _FileItem {
     // 匹配常见的剧集格式：[01], 01, E01, EP01, 第01话, 第1话, SP1, OVA, Lite等
     final patterns = [
       // 特殊格式：[SP01], SP01, OVA, Lite
-      RegExp(r'\[(SP\d+|OVA|Lite)\]', caseSensitive: false),
-      RegExp(r'[\s_\-\.](SP\d+|OVA|Lite)[\s_\-\.\]]', caseSensitive: false),
+      RegExp(r'\[(SP\d*|OVA\d*|Lite)\]', caseSensitive: false),
+      RegExp(r'[\s_\-\.](SP\d*|OVA\d*|Lite)[\s_\-\.\]]', caseSensitive: false),
       // 标准数字格式：[01], 01, 1
       RegExp(r'\[(\d{1,3})\]'),
       RegExp(r'[\s_\-\.](\d{1,3})[\s_\-\.\]]'),
