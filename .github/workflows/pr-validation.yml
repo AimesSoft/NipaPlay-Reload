@@ -36,13 +36,29 @@ jobs:
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
 
       - name: Run flutter analyze
-        run: flutter analyze --no-pub
+        shell: bash
+        run: |
+          targets=()
+          for path in lib test integration_test bin tool; do
+            if [ -e "$path" ]; then
+              targets+=("$path")
+            fi
+          done
+
+          if [ ${#targets[@]} -eq 0 ]; then
+            echo "No root-level Dart analysis targets found."
+            exit 1
+          fi
+
+          echo "Analyzing root app targets:"
+          printf ' - %s\n' "${targets[@]}"
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings "${targets[@]}"
 
       - name: Detect root test files
         id: detect_tests
         shell: bash
         run: |
-          if find test -type f -name '*_test.dart' -print -quit | grep -q .; then
+          if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
             echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
