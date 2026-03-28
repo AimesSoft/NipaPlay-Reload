@@ -1,3 +1,5 @@
+import 'package:xml/xml.dart';
+
 String encodeDanmakuXmlText(String input) {
   return input
       .replaceAll('&', '&amp;')
@@ -14,6 +16,104 @@ String decodeDanmakuXmlText(String input) {
       .replaceAll('&quot;', '"')
       .replaceAll('&apos;', "'")
       .replaceAll('&amp;', '&');
+}
+
+Map<String, dynamic> convertBilibiliXmlDanmakuToJson(String xmlContent) {
+  final comments = parseBilibiliXmlDanmakuComments(xmlContent);
+  return {
+    'count': comments.length,
+    'comments': comments,
+  };
+}
+
+List<Map<String, dynamic>> parseBilibiliXmlDanmakuComments(String xmlContent) {
+  try {
+    final document = XmlDocument.parse(xmlContent);
+    final comments = <Map<String, dynamic>>[];
+
+    for (final element in document.findAllElements('d')) {
+      final parsedComment = _buildBilibiliDanmakuComment(
+        pAttr: element.getAttribute('p') ?? '',
+        rawTextContent: element.innerText,
+      );
+      if (parsedComment != null) {
+        comments.add(parsedComment);
+      }
+    }
+
+    if (comments.isNotEmpty || !xmlContent.contains('<d')) {
+      return comments;
+    }
+  } on XmlParserException {
+    // Fall back to a more tolerant parser for slightly malformed exports.
+  }
+
+  final comments = <Map<String, dynamic>>[];
+  final danmakuRegex = RegExp(
+    r'<d\b[^>]*\bp="([^"]+)"[^>]*>([\s\S]*?)</d>',
+    caseSensitive: false,
+  );
+
+  for (final match in danmakuRegex.allMatches(xmlContent)) {
+    final parsedComment = _buildBilibiliDanmakuComment(
+      pAttr: match.group(1) ?? '',
+      rawTextContent: match.group(2) ?? '',
+    );
+    if (parsedComment != null) {
+      comments.add(parsedComment);
+    }
+  }
+
+  return comments;
+}
+
+Map<String, dynamic>? _buildBilibiliDanmakuComment({
+  required String pAttr,
+  required String rawTextContent,
+}) {
+  try {
+    final textContent = decodeDanmakuXmlText(rawTextContent);
+    if (textContent.isEmpty) return null;
+
+    final pParams = pAttr.split(',');
+    if (pParams.length < 4) return null;
+
+    final time = double.tryParse(pParams[0]) ?? 0.0;
+    final typeCode = int.tryParse(pParams[1]) ?? 1;
+    final fontSize = int.tryParse(pParams[2]) ?? 25;
+    final colorCode = int.tryParse(pParams[3]) ?? 16777215;
+
+    String danmakuType;
+    switch (typeCode) {
+      case 4:
+        danmakuType = 'bottom';
+        break;
+      case 5:
+        danmakuType = 'top';
+        break;
+      case 1:
+      case 6:
+      default:
+        danmakuType = 'scroll';
+        break;
+    }
+
+    final r = (colorCode >> 16) & 0xFF;
+    final g = (colorCode >> 8) & 0xFF;
+    final b = colorCode & 0xFF;
+    final color = 'rgb($r,$g,$b)';
+
+    return {
+      't': time,
+      'c': textContent,
+      'y': danmakuType,
+      'r': color,
+      'fontSize': fontSize,
+      'originalType': typeCode,
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 int parseDanmakuColorToInt(dynamic colorValue) {

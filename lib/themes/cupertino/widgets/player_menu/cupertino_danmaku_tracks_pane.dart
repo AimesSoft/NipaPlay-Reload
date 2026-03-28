@@ -62,8 +62,7 @@ class _CupertinoDanmakuTracksPaneState
       } else {
         final decoded = json.decode(content);
         if (decoded is Map) {
-          jsonData =
-              Map<String, dynamic>.from(decoded.cast<String, dynamic>());
+          jsonData = Map<String, dynamic>.from(decoded.cast<String, dynamic>());
         } else if (decoded is List) {
           jsonData = {'comments': decoded};
         } else {
@@ -113,64 +112,7 @@ class _CupertinoDanmakuTracksPaneState
   }
 
   Map<String, dynamic> _convertXmlToJson(String xmlContent) {
-    final List<Map<String, dynamic>> comments = [];
-
-    final RegExp danmakuRegex = RegExp(r'<d p="([^"]+)">([^<]+)</d>');
-    final Iterable<RegExpMatch> matches = danmakuRegex.allMatches(xmlContent);
-
-    for (final match in matches) {
-      try {
-        final String pAttr = match.group(1) ?? '';
-        final String rawTextContent = match.group(2) ?? '';
-        final String textContent = decodeDanmakuXmlText(rawTextContent);
-
-        if (textContent.isEmpty) continue;
-
-        final List<String> pParams = pAttr.split(',');
-        if (pParams.length < 4) continue;
-
-        final double time = double.tryParse(pParams[0]) ?? 0.0;
-        final int typeCode = int.tryParse(pParams[1]) ?? 1;
-        final int fontSize = int.tryParse(pParams[2]) ?? 25;
-        final int colorCode = int.tryParse(pParams[3]) ?? 16777215;
-
-        String danmakuType;
-        switch (typeCode) {
-          case 4:
-            danmakuType = 'bottom';
-            break;
-          case 5:
-            danmakuType = 'top';
-            break;
-          case 1:
-          case 6:
-          default:
-            danmakuType = 'scroll';
-            break;
-        }
-
-        final int r = (colorCode >> 16) & 0xFF;
-        final int g = (colorCode >> 8) & 0xFF;
-        final int b = colorCode & 0xFF;
-        final String color = 'rgb($r,$g,$b)';
-
-        comments.add({
-          't': time,
-          'c': textContent,
-          'y': danmakuType,
-          'r': color,
-          'fontSize': fontSize,
-          'originalType': typeCode,
-        });
-      } catch (_) {
-        continue;
-      }
-    }
-
-    return {
-      'count': comments.length,
-      'comments': comments,
-    };
+    return convertBilibiliXmlDanmakuToJson(xmlContent);
   }
 
   void _showMessage(String message) {
@@ -190,16 +132,18 @@ class _CupertinoDanmakuTracksPaneState
               children: [
                 Text(
                   '弹幕来源',
-                  style:
-                      CupertinoTheme.of(context).textTheme.navTitleTextStyle,
+                  style: CupertinoTheme.of(context).textTheme.navTitleTextStyle,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '管理当前弹幕状态并切换不同的来源',
-                  style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  style: CupertinoTheme.of(context)
+                      .textTheme
+                      .textStyle
+                      .copyWith(
                         fontSize: 13,
-                        color: CupertinoColors.secondaryLabel
-                            .resolveFrom(context),
+                        color:
+                            CupertinoColors.secondaryLabel.resolveFrom(context),
                       ),
                 ),
               ],
@@ -222,13 +166,11 @@ class _CupertinoDanmakuTracksPaneState
                     widget.videoState.danmakuList.isEmpty
                         ? '0条'
                         : '${widget.videoState.danmakuList.length}条',
-                    style: CupertinoTheme.of(context)
-                        .textTheme
-                        .textStyle
-                        .copyWith(
-                          color: CupertinoColors.secondaryLabel
-                              .resolveFrom(context),
-                        ),
+                    style:
+                        CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                              color: CupertinoColors.secondaryLabel
+                                  .resolveFrom(context),
+                            ),
                   ),
                 ),
               ],
@@ -287,7 +229,9 @@ class _CupertinoDanmakuTracksPaneState
       title: Text(title),
       subtitle: Text(subtitle),
       trailing: Icon(
-        enabled ? CupertinoIcons.check_mark_circled_solid : CupertinoIcons.circle,
+        enabled
+            ? CupertinoIcons.check_mark_circled_solid
+            : CupertinoIcons.circle,
         color: enabled
             ? CupertinoTheme.of(context).primaryColor
             : CupertinoColors.inactiveGray,
