@@ -63,7 +63,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
   bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
     if (videoState == null) return false;
-    return globals.isPhone && globals.isTablet && videoState.isAppBarHidden;
+    return globals.isTabletLikeMobile && videoState.isAppBarHidden;
   }
 
   bool get _useNipaplayControls {

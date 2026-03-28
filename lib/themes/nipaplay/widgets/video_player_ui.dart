@@ -49,8 +49,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   int _tapCount = 0;
   static const _phoneDoubleTapTimeout = Duration(milliseconds: 360);
   static const _desktopDoubleTapTimeout = Duration(milliseconds: 220);
-  Duration get _doubleTapTimeout =>
-      globals.isPhone ? _phoneDoubleTapTimeout : _desktopDoubleTapTimeout;
+  Duration get _doubleTapTimeout => globals.isMobilePlatform
+      ? _phoneDoubleTapTimeout
+      : _desktopDoubleTapTimeout;
   static const _mouseHideDelay = Duration(seconds: 3);
   static const _instantMouseHideDelay = Duration(milliseconds: 200);
   bool _isProcessingTap = false;
@@ -193,7 +194,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         videoState.setContext(context);
 
         // 如果不是手机，重置鼠标隐藏计时器
-        if (!globals.isPhone) {
+        if (!globals.isMobilePlatform) {
           _resetMouseHideTimer();
         }
       } catch (e) {
@@ -206,7 +207,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     if (!mounted) return;
     _videoPlayerStateInstance ??=
         Provider.of<VideoPlayerState>(context, listen: false);
@@ -218,7 +219,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   void _resetMouseHideTimer() {
     _mouseMoveTimer?.cancel();
-    if (!globals.isPhone) {
+    if (!globals.isMobilePlatform) {
       final videoState = _videoPlayerStateInstance ??
           Provider.of<VideoPlayerState>(context, listen: false);
       final hideDelay = videoState.instantHidePlayerUiEnabled
@@ -259,7 +260,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     _isProcessingTap = true;
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
-      if (globals.isPhone) {
+      if (globals.isMobilePlatform) {
         videoState.toggleControls();
       } else {
         videoState.togglePlayPause();
@@ -287,7 +288,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   // 添加长按手势处理方法
   void _handleLongPressStart(VideoPlayerState videoState) {
-    if (!globals.isPhone || !videoState.hasVideo) return;
+    if (!globals.isMobilePlatform || !videoState.hasVideo) return;
 
     // 开始倍速播放
     videoState.startSpeedBoost();
@@ -297,7 +298,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   void _handleLongPressEnd(VideoPlayerState videoState) {
-    if (!globals.isPhone || !videoState.hasVideo) return;
+    if (!globals.isMobilePlatform || !videoState.hasVideo) return;
 
     // 结束倍速播放
     videoState.stopSpeedBoost();

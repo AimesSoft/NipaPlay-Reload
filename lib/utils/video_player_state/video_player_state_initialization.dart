@@ -2,7 +2,7 @@ part of video_player_state;
 
 extension VideoPlayerStateInitialization on VideoPlayerState {
   Future<void> _initialize() async {
-    if (globals.isPhone) {
+    if (globals.isMobilePlatform) {
       // 使用新的屏幕方向管理器设置初始方向
       await ScreenOrientationManager.instance.setInitialOrientation();
       await _initializeSystemVolumeController();
@@ -99,7 +99,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   Future<void> _loadInitialBrightness() async {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     try {
       _currentBrightness = await ScreenBrightness().current;
       _initialDragBrightness =
@@ -114,7 +114,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   // Load initial system volume (placeholder)
   Future<void> _loadInitialVolume() async {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedVolume = prefs.getDouble(_playerVolumeKey);
@@ -148,7 +148,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   void startBrightnessDrag() {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     // Refresh _initialDragBrightness with the most up-to-date _currentBrightness
     // This handles cases where brightness might have been changed by other means
     // or if a previous drag was interrupted.
@@ -160,7 +160,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
   Future<void> updateBrightnessOnDrag(
       double verticalDragDelta, BuildContext context) async {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
 
     final screenHeight = MediaQuery.of(context).size.height;
     // 修改灵敏度：拖动屏幕高度的 80% (0.8) 对应亮度从0到1的变化。
@@ -185,7 +185,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   void endBrightnessDrag() {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     // _initialDragBrightness is already updated at the start of the next drag.
     // The indicator will hide via its own timer.
     // No specific action needed here unless we want to immediately save or something.
@@ -193,7 +193,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   void _showBrightnessIndicator() {
-    if (!globals.isPhone || _context == null) return;
+    if (!globals.isMobilePlatform || _context == null) return;
 
     final uiThemeProvider =
         Provider.of<UIThemeProvider>(_context!, listen: false);
@@ -253,7 +253,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   void _hideBrightnessIndicator() {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     _brightnessIndicatorTimer?.cancel();
 
     if (_isBrightnessIndicatorVisible) {

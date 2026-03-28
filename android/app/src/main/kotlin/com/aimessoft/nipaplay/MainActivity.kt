@@ -22,6 +22,9 @@ import androidx.core.content.ContextCompat
 import android.view.SurfaceHolder
 import android.view.View
 import android.app.ActivityManager
+import android.app.UiModeManager
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.SurfaceTexture
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
@@ -31,6 +34,7 @@ class MainActivity: FlutterActivity() {
     private val FILE_SELECTOR_CHANNEL = "plugins.flutter.io/file_selector"
     private val FILE_ASSOCIATION_CHANNEL = "file_association_channel"
     private val SYSTEM_SHARE_CHANNEL = "nipaplay/system_share"
+    private val DEVICE_PROFILE_CHANNEL = "nipaplay/device_profile"
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -157,6 +161,24 @@ class MainActivity: FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_PROFILE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getStartupDeviceProfile" -> {
+                        val configuration = resources.configuration
+                        result.success(
+                            mapOf(
+                                "isAndroidTv" to isAndroidTv(),
+                                "screenWidthDp" to configuration.screenWidthDp,
+                                "screenHeightDp" to configuration.screenHeightDp,
+                                "smallestScreenWidthDp" to configuration.smallestScreenWidthDp,
+                            )
+                        )
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         
         // 文件选择器通道 - 专用于优化视频文件选择，避免OOM - 现支持选择其他类型
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_SELECTOR_CHANNEL).setMethodCallHandler { call, result ->
@@ -287,6 +309,17 @@ class MainActivity: FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun isAndroidTv(): Boolean {
+        val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        val isTelevisionMode =
+            uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+        val hasTvFeature =
+            packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION) ||
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK_ONLY)
+        return isTelevisionMode || hasTvFeature
     }
 
     private fun guessMimeTypeFromPath(path: String): String? {

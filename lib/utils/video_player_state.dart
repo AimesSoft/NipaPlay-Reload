@@ -560,7 +560,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _skipSecondsKey = 'skip_seconds';
   int _skipSeconds = 90; // 默认90秒
   final String _pauseOnBackgroundKey = 'pause_on_background';
-  bool _pauseOnBackground = globals.isPhone;
+  bool _pauseOnBackground = globals.isMobilePlatform;
 
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
@@ -606,7 +606,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double? _pendingSystemVolume;
   bool _isDrainingSystemVolumeQueue = false;
 
-  bool get _useSystemVolume => globals.isPhone && !kIsWeb;
+  bool get _useSystemVolume => globals.isMobilePlatform && !kIsWeb;
 
   void _queueSystemVolumeUpdate(double volume) {
     if (!_useSystemVolume) return;
@@ -695,7 +695,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void _scheduleVolumePersistence({bool immediate = false}) {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     _volumePersistenceTimer?.cancel();
     if (immediate) {
       _volumePersistenceTimer = null;
