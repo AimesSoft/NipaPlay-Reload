@@ -46,7 +46,7 @@ class UIThemeProvider extends ChangeNotifier {
         isPhone: globals.isPhone,
         isWeb: kIsWeb,
         isIOS: !kIsWeb && Platform.isIOS,
-        isTablet: _isTabletLike,
+        isTablet: globals.isTablet,
       );
 
   Future<void> _loadTheme() async {
@@ -86,30 +86,10 @@ class UIThemeProvider extends ChangeNotifier {
     }
   }
 
-  bool get _isTabletLike {
-    if (kIsWeb || !globals.isPhone) {
-      return false;
-    }
-    return _deviceShortestSide >= 600;
-  }
-
-  bool get _isPhoneLike {
-    if (kIsWeb || !globals.isPhone) {
-      return false;
-    }
-    return !_isTabletLike;
-  }
-
-  double get _deviceShortestSide {
-    final window = WidgetsBinding.instance.window;
-    final size = window.physicalSize / window.devicePixelRatio;
-    return size.width < size.height ? size.width : size.height;
-  }
-
   String _lockedThemeId(ThemeEnvironment env) {
     if (env.isWeb) {
       return ThemeRegistry.resolveTheme(null, env).id;
     }
-    return _isPhoneLike ? ThemeIds.cupertino : ThemeIds.nipaplay;
+    return env.isPhone ? ThemeIds.cupertino : ThemeIds.nipaplay;
   }
 }

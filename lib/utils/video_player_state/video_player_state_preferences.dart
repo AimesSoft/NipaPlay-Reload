@@ -18,7 +18,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _tryRecoverFromError() async {
     try {
       // 使用屏幕方向管理器重置屏幕方向
-      if (globals.isPhone) {
+      if (globals.isMobilePlatform) {
         await ScreenOrientationManager.instance.resetOrientation();
       }
 
@@ -126,7 +126,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadPauseOnBackgroundSetting() async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getBool(_pauseOnBackgroundKey);
-    final bool resolvedValue = storedValue ?? globals.isPhone;
+    final bool resolvedValue = storedValue ?? globals.isMobilePlatform;
     if (_pauseOnBackground != resolvedValue) {
       _pauseOnBackground = resolvedValue;
       notifyListeners();

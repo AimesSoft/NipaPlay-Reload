@@ -300,7 +300,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
     if (videoState == null) return false;
-    return globals.isPhone && globals.isTablet && videoState.isAppBarHidden;
+    return globals.isTabletLikeMobile && videoState.isAppBarHidden;
   }
 
   Future<void> _showAirPlayPicker([VideoPlayerState? videoState]) async {

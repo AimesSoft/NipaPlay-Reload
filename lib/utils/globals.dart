@@ -1,11 +1,14 @@
 // globals.dart
 library globals;
+
+import 'dart:math' as math;
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-final strokeWidth = isPhone ? 0.7 : 1.0;
+double get strokeWidth => isPhone ? 0.7 : 1.0;
 //////全局变量/////
 double mobileThreshold = 550;
 // ignore: non_constant_identifier_names
@@ -15,41 +18,141 @@ String customBackgroundPath = 'assets/images/main_image.png'; // 添加自定义
 //////全局变量/////
 ///
 //////设备类型判断/////
+const MethodChannel _deviceProfileChannel =
+    MethodChannel('nipaplay/device_profile');
+
+bool _startupDeviceProfileInitialized = false;
+bool _startupTabletLike = false;
+bool _startupAndroidTv = false;
+
+class _DisplayMetrics {
+  const _DisplayMetrics({
+    required this.widthDp,
+    required this.heightDp,
+  });
+
+  final double widthDp;
+  final double heightDp;
+
+  double get shortestSideDp => math.min(widthDp, heightDp);
+  double get longestSideDp => math.max(widthDp, heightDp);
+  bool get isLandscape => widthDp > heightDp;
+  double get aspectRatio => longestSideDp / math.max(shortestSideDp, 1.0);
+}
+
+_DisplayMetrics _readDisplayMetrics() {
+  // ignore: deprecated_member_use
+  final window = WidgetsBinding.instance.window;
+  final size = window.physicalSize / window.devicePixelRatio;
+  return _DisplayMetrics(widthDp: size.width, heightDp: size.height);
+}
+
+bool _looksLikeLargeAndroidLandscapeDisplay(_DisplayMetrics metrics) {
+  if (!metrics.isLandscape) return false;
+  return metrics.shortestSideDp >= 520 &&
+      metrics.longestSideDp >= 900 &&
+      metrics.aspectRatio >= 1.6;
+}
+
+bool _resolveTabletLike({
+  required bool isAndroidTv,
+  required _DisplayMetrics metrics,
+}) {
+  if (isAndroidTv) return true;
+  if (metrics.shortestSideDp >= 600) return true;
+  if (!kIsWeb && Platform.isAndroid) {
+    return _looksLikeLargeAndroidLandscapeDisplay(metrics);
+  }
+  return false;
+}
+
+Future<void> initializeStartupDeviceProfile() async {
+  if (_startupDeviceProfileInitialized) return;
+
+  final metrics = _readDisplayMetrics();
+  var startupMetrics = metrics;
+  var isAndroidTv = false;
+
+  if (!kIsWeb && Platform.isAndroid) {
+    try {
+      final profile = await _deviceProfileChannel
+          .invokeMapMethod<String, dynamic>('getStartupDeviceProfile');
+      if (profile != null) {
+        isAndroidTv = profile['isAndroidTv'] == true;
+        final screenWidthDp = (profile['screenWidthDp'] as num?)?.toDouble();
+        final screenHeightDp = (profile['screenHeightDp'] as num?)?.toDouble();
+        final smallestWidthDp =
+            (profile['smallestScreenWidthDp'] as num?)?.toDouble();
+
+        if (screenWidthDp != null && screenHeightDp != null) {
+          startupMetrics =
+              _DisplayMetrics(widthDp: screenWidthDp, heightDp: screenHeightDp);
+        } else if (smallestWidthDp != null) {
+          startupMetrics = _DisplayMetrics(
+            widthDp: metrics.longestSideDp,
+            heightDp: smallestWidthDp,
+          );
+        }
+      }
+    } catch (_) {
+      // Fallback to Flutter-reported metrics if the platform channel is unavailable.
+    }
+  }
+
+  _startupAndroidTv = isAndroidTv;
+  _startupTabletLike = _resolveTabletLike(
+    isAndroidTv: isAndroidTv,
+    metrics: startupMetrics,
+  );
+  _startupDeviceProfileInitialized = true;
+}
+
+bool get isMobilePlatform {
+  if (kIsWeb) {
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android;
+  }
+  return Platform.isIOS || Platform.isAndroid;
+}
+
 bool get isMobile {
   // 获取屏幕宽度
   // ignore: deprecated_member_use
-  double screenWidth = WidgetsBinding.instance.window.physicalSize.width / WidgetsBinding.instance.window.devicePixelRatio;
-    // 排除平板设备，通常平板设备的宽度大于 600
-    return screenWidth < mobileThreshold;
+  double screenWidth = WidgetsBinding.instance.window.physicalSize.width /
+      WidgetsBinding.instance.window.devicePixelRatio;
+  // 排除平板设备，通常平板设备的宽度大于 600
+  return screenWidth < mobileThreshold;
 }
 
 bool get isPhone {
-  if (kIsWeb) {
-    // 对于Web平台，我们总是认为它需要采用手机式的响应式布局逻辑，
-    // 这样就可以直接复用 isTablet 来判断横竖屏。
-    return true;
-  }
-  //移动平台
-  return Platform.isIOS || Platform.isAndroid;
+  return isMobilePlatform && !isTablet;
 }
 
 // 判断是否为平板设备（移动设备短边 >= 600）
 bool get isTablet {
-  if (!isPhone) return false;
-  final window = WidgetsBinding.instance.window;
-  final size = window.physicalSize / window.devicePixelRatio;
-  final shortestSide = size.width < size.height ? size.width : size.height;
-  return shortestSide >= 600;
+  if (!isMobilePlatform) return false;
+  if (_startupDeviceProfileInitialized) {
+    return _startupTabletLike;
+  }
+  return _resolveTabletLike(
+    isAndroidTv: false,
+    metrics: _readDisplayMetrics(),
+  );
 }
+
+bool get isTabletLikeMobile => isMobilePlatform && isTablet;
+bool get isAndroidTv => _startupAndroidTv;
+
 bool get isTouch {
   //移动平台
   if (kIsWeb) {
     return defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.android;
   } else {
-    return Platform.isIOS || Platform.isAndroid;
+    return isMobilePlatform && !isAndroidTv;
   }
 }
+
 bool get noMenuButton {
   if (kIsWeb) {
     return true;
@@ -57,19 +160,23 @@ bool get noMenuButton {
   //没有三大键的设备
   return !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS;
 }
+
 bool get winLinDesktop {
   //windows和linux桌面平台
   return !kIsWeb && (Platform.isWindows || Platform.isLinux);
 }
+
 bool get isDesktop {
   //windows和linux和macOS桌面平台
-  return !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+  return !kIsWeb &&
+      (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 }
 
 bool get isDesktopOrTablet {
   //桌面平台或平板设备
   return isDesktop || isTablet;
 }
+
 //////设备类型判断/////
 ///
 /// 对话框尺寸管理
@@ -77,25 +184,26 @@ class DialogSizes {
   static double _screenHeight = 0.0;
   static double _screenWidth = 0.0;
   static bool _initialized = false;
-  
+
   /// 预设的对话框高度 - 在应用启动时计算
   static double loginDialogHeight = 400.0;
   static double serverDialogHeight = 500.0;
   static double generalDialogHeight = 350.0;
-  
+
   /// 初始化对话框尺寸（在应用启动时调用）
   static void initialize(double screenWidth, double screenHeight) {
     if (_initialized) return;
-    
+
     _screenWidth = screenWidth;
     _screenHeight = screenHeight;
     _initialized = true;
-    
+
     // 计算适合的对话框高度
     final isLandscape = screenWidth > screenHeight;
-    final shortestSide = screenWidth < screenHeight ? screenWidth : screenHeight;
+    final shortestSide =
+        screenWidth < screenHeight ? screenWidth : screenHeight;
     final isPhone = shortestSide < 600;
-    
+
     if (isPhone) {
       // 手机设备
       if (isLandscape) {
@@ -116,14 +224,14 @@ class DialogSizes {
       serverDialogHeight = 600.0;
       generalDialogHeight = 400.0;
     }
-    
   }
-  
+
   /// 获取适合的对话框宽度
   static double getDialogWidth(double screenWidth) {
-    final shortestSide = screenWidth < _screenHeight ? screenWidth : _screenHeight;
+    final shortestSide =
+        screenWidth < _screenHeight ? screenWidth : _screenHeight;
     final isPhone = shortestSide < 600;
-    
+
     if (isPhone) {
       return (screenWidth * 0.9).clamp(300.0, 450.0);
     } else if (shortestSide < 900) {
@@ -132,7 +240,7 @@ class DialogSizes {
       return 500.0;
     }
   }
-  
+
   /// 检查是否已初始化
   static bool get isInitialized => _initialized;
 }

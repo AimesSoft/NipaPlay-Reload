@@ -110,6 +110,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await globals.initializeStartupDeviceProfile();
   debugPaintBaselinesEnabled = false;
   debugPaintSizeEnabled = false;
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -117,8 +118,7 @@ void main(List<String> args) async {
     debugPaintSizeEnabled = false;
   });
 
-  final pipLaunchPayload =
-      DesktopPipWindowService.tryParseLaunchPayload(args);
+  final pipLaunchPayload = DesktopPipWindowService.tryParseLaunchPayload(args);
   final bool isSubWindowProcess =
       args.isNotEmpty && args.first == 'multi_window';
   if (isSubWindowProcess) {
@@ -524,8 +524,8 @@ void main(List<String> args) async {
 
       final themeMode = (results[0] as String?) ?? 'system';
       final animeDetailMode = (results[3] as String?) ?? 'simple';
-      final backgroundImageRenderMode =
-          (results[4] as String?) ?? BackgroundImageRenderMode.opacity.storageKey;
+      final backgroundImageRenderMode = (results[4] as String?) ??
+          BackgroundImageRenderMode.opacity.storageKey;
       final backgroundImageOverlayOpacity = (results[5] as double?) ??
           ThemeNotifier.defaultBackgroundImageOverlayOpacity;
 
@@ -598,10 +598,8 @@ void main(List<String> args) async {
       await windowManager.ensureInitialized();
       try {
         await windowManager.setIcon('assets/images/logo512.png');
-      } catch (e) {
-      }
-      final startupState =
-          await DesktopStartupWindowPreferences.loadState();
+      } catch (e) {}
+      final startupState = await DesktopStartupWindowPreferences.loadState();
       final startupPosition =
           await DesktopStartupWindowPreferences.loadPosition();
       final startupSize = await DesktopStartupWindowPreferences.loadSize();
@@ -727,8 +725,7 @@ class NipaPlayApp extends StatefulWidget {
   State<NipaPlayApp> createState() => _NipaPlayAppState();
 }
 
-class _NipaPlayAppState extends State<NipaPlayApp>
-    with WidgetsBindingObserver {
+class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
   bool _isDragging = false;
   Brightness _platformBrightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -917,8 +914,8 @@ class _NipaPlayAppState extends State<NipaPlayApp>
                 : MainPage(launchFilePath: widget.launchFilePath),
             cupertinoHomeBuilder: () => kIsWeb
                 ? WebRemoteAccessGate(
-                    child:
-                        CupertinoMainPage(launchFilePath: widget.launchFilePath),
+                    child: CupertinoMainPage(
+                        launchFilePath: widget.launchFilePath),
                   )
                 : CupertinoMainPage(launchFilePath: widget.launchFilePath),
           );
@@ -1457,7 +1454,8 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
     final Color iconColor = _isHovered
         ? const Color(0xFFFF2E55)
         : (isDarkMode ? Colors.white : Colors.black87);
-    final icon = isDarkMode ? Icons.nightlight_rounded : Icons.light_mode_rounded;
+    final icon =
+        isDarkMode ? Icons.nightlight_rounded : Icons.light_mode_rounded;
     final tooltip = isDarkMode ? '切换到日间模式' : '切换到夜间模式';
 
     return Tooltip(

@@ -1348,7 +1348,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
       try {
         final bool disableBackgroundDismiss =
-            globals.isPhone && globals.isTablet && _isAppBarHidden;
+            globals.isTabletLikeMobile && _isAppBarHidden;
         await DanmakuDialogManager().showSendDanmakuDialog(
           context: _context!,
           episodeId: episodeId!,
