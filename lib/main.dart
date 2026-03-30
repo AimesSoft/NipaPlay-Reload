@@ -18,6 +18,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
 import 'themes/nipaplay/pages/settings_page.dart';
+import 'themes/steamdeck/pages/big_screen_home_page.dart';
 import 'pages/play_video_page.dart';
 import 'pages/new_series_page.dart';
 import 'pages/dashboard_home_page.dart';
@@ -1389,6 +1390,21 @@ class MainPageState extends State<MainPage>
                   SizedBox(
                     height: kWindowCaptionHeight,
                     child: Center(
+                      child: _BigScreenEntryButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SteamDeckBigScreenPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: kWindowCaptionHeight,
+                    child: Center(
                       child: _SettingsEntryButton(
                         onPressed: () => SettingsPage.showWindow(context),
                       ),
@@ -1424,6 +1440,61 @@ class _SettingsEntryButton extends StatefulWidget {
 
   @override
   State<_SettingsEntryButton> createState() => _SettingsEntryButtonState();
+}
+
+class _BigScreenEntryButton extends StatefulWidget {
+  final VoidCallback onPressed;
+
+  const _BigScreenEntryButton({required this.onPressed});
+
+  @override
+  State<_BigScreenEntryButton> createState() => _BigScreenEntryButtonState();
+}
+
+class _BigScreenEntryButtonState extends State<_BigScreenEntryButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
+    }
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final Color iconColor = _isHovered
+        ? const Color(0xFFFF2E55)
+        : (isDarkMode ? Colors.white : Colors.black87);
+
+    return Tooltip(
+      message: '大屏幕模式',
+      child: MouseRegion(
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: Icon(
+              Icons.tv_rounded,
+              size: 22,
+              color: iconColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ThemeToggleButton extends StatefulWidget {

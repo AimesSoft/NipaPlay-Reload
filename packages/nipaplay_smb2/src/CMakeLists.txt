@@ -46,6 +46,44 @@ if(TARGET smb2)
   set_target_properties(smb2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
+if(NIPAPLAY_GLIBC_HEADERS_FALLBACK)
+  # When host glibc headers are missing and we compile against Flatpak SDK
+  # headers, libsmb2's configure checks can under-detect standard headers.
+  # Force these feature macros so the right libc headers are included.
+  set(_np_glibc_header_defs
+    HAVE_ARPA_INET_H=1
+    HAVE_DLFCN_H=1
+    HAVE_ERRNO_H=1
+    HAVE_FCNTL_H=1
+    HAVE_INTTYPES_H=1
+    HAVE_NETDB_H=1
+    HAVE_NETINET_IN_H=1
+    HAVE_NETINET_TCP_H=1
+    HAVE_LINGER=1
+    HAVE_POLL_H=1
+    HAVE_SOCKADDR_STORAGE=1
+    HAVE_STDIO_H=1
+    HAVE_STDLIB_H=1
+    HAVE_STRINGS_H=1
+    HAVE_STRING_H=1
+    HAVE_SYS_ERRNO_H=1
+    HAVE_SYS_FCNTL_H=1
+    HAVE_SYS_IOCTL_H=1
+    HAVE_SYS_POLL_H=1
+    HAVE_SYS_SOCKET_H=1
+    HAVE_SYS_STAT_H=1
+    HAVE_SYS_TIME_H=1
+    HAVE_SYS_TYPES_H=1
+    HAVE_SYS_UIO_H=1
+    HAVE_SYS_UNISTD_H=1
+    HAVE_TIME_H=1
+    HAVE_UNISTD_H=1
+  )
+  if(TARGET smb2)
+    target_compile_definitions(smb2 PRIVATE ${_np_glibc_header_defs})
+  endif()
+endif()
+
 add_library(nipaplay_smb2 SHARED
   "nipaplay_smb2.c"
 )
@@ -56,6 +94,9 @@ set_target_properties(nipaplay_smb2 PROPERTIES
 )
 
 target_compile_definitions(nipaplay_smb2 PUBLIC DART_SHARED_LIB)
+if(NIPAPLAY_GLIBC_HEADERS_FALLBACK)
+  target_compile_definitions(nipaplay_smb2 PRIVATE ${_np_glibc_header_defs})
+endif()
 
 target_link_libraries(nipaplay_smb2 PRIVATE smb2)
 

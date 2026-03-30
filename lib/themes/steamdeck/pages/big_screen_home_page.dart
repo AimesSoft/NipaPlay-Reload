@@ -153,17 +153,17 @@ class _SteamDeckBigScreenPageState extends State<SteamDeckBigScreenPage> {
   }
 
   String _resolveSeriesCover(List<WatchHistoryItem> episodes, int? animeId) {
-    for (final episode in episodes) {
-      final thumbnail = episode.thumbnailPath?.trim() ?? '';
-      if (_isUsableImagePath(thumbnail)) {
-        return thumbnail;
-      }
-    }
-
     if (animeId != null && animeId > 0) {
       final persisted = _persistedCoverUrls[animeId] ?? '';
       if (_isUsableImagePath(persisted)) {
         return persisted;
+      }
+    }
+
+    for (final episode in episodes) {
+      final thumbnail = episode.thumbnailPath?.trim() ?? '';
+      if (_isUsableImagePath(thumbnail)) {
+        return thumbnail;
       }
     }
     return '';
