@@ -132,10 +132,14 @@ class DanmakuCacheManager {
   ) async {
     if (kIsWeb) return;
     try {
+      // 去除重复弹幕
+      final uniqueComments = _removeDuplicateDanmaku(comments);
+      
       final jsonData = {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'animeId': animeId,
-        'comments': comments,
+        'comments': uniqueComments,
+        'count': uniqueComments.length
       };
 
       // 保存到内存缓存
@@ -185,12 +189,31 @@ class DanmakuCacheManager {
       final file = io.File(await _getCacheFilePath(episodeId));
       final jsonData = json.decode(await file.readAsString());
       final comments = jsonData['comments'] as List<dynamic>;
-      //////debugPrint('返回 ${comments.length} 条弹幕');
-      return comments;
+      // 去除重复弹幕
+      final uniqueComments = _removeDuplicateDanmaku(comments);
+      //////debugPrint('返回 ${uniqueComments.length} 条弹幕');
+      return uniqueComments;
     } catch (e) {
       //////debugPrint('从缓存获取弹幕时出错: $e');
       return null;
     }
+  }
+
+  /// 去除重复的弹幕
+  static List<dynamic> _removeDuplicateDanmaku(List<dynamic> comments) {
+    final seen = <String>{};
+    final uniqueComments = <dynamic>[];
+    
+    for (final comment in comments) {
+      // 将弹幕转换为唯一字符串表示，用于去重
+      final key = '${comment['time']}_${comment['content']}_${comment['type']}_${comment['color']}';
+      if (!seen.contains(key)) {
+        seen.add(key);
+        uniqueComments.add(comment);
+      }
+    }
+    
+    return uniqueComments;
   }
 
   static Future<void> clearExpiredCache() async {
