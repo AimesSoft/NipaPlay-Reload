@@ -44,7 +44,8 @@ class DanmakuCacheManager {
       final legacyEntities = await legacyDir.list().toList();
       final legacyFiles = legacyEntities.whereType<io.File>().where((file) {
         final fileName = path.basename(file.path);
-        return fileName.startsWith(_cacheKeyPrefix) && fileName.endsWith('.json');
+        return fileName.startsWith(_cacheKeyPrefix) &&
+            fileName.endsWith('.json');
       }).toList();
 
       if (legacyFiles.isEmpty) {
@@ -85,8 +86,8 @@ class DanmakuCacheManager {
         final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
         final now = DateTime.now();
 
-        final cacheDuration = animeId < _oldAnimeThreshold 
-            ? _oldAnimeCacheDuration 
+        final cacheDuration = animeId < _oldAnimeThreshold
+            ? _oldAnimeCacheDuration
             : _newAnimeCacheDuration;
 
         final isValid = now.difference(cacheTime) < cacheDuration;
@@ -107,8 +108,8 @@ class DanmakuCacheManager {
       final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
       final now = DateTime.now();
 
-      final cacheDuration = animeId < _oldAnimeThreshold 
-          ? _oldAnimeCacheDuration 
+      final cacheDuration = animeId < _oldAnimeThreshold
+          ? _oldAnimeCacheDuration
           : _newAnimeCacheDuration;
 
       final isValid = now.difference(cacheTime) < cacheDuration;
@@ -126,15 +127,12 @@ class DanmakuCacheManager {
   }
 
   static Future<void> saveDanmakuToCache(
-    String episodeId, 
-    int animeId, 
-    List<dynamic> comments
-  ) async {
+      String episodeId, int animeId, List<dynamic> comments) async {
     if (kIsWeb) return;
     try {
       // 去除重复弹幕
       final uniqueComments = _removeDuplicateDanmaku(comments);
-      
+
       final jsonData = {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'animeId': animeId,
@@ -166,14 +164,16 @@ class DanmakuCacheManager {
         final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
         final now = DateTime.now();
 
-        final cacheDuration = animeId < _oldAnimeThreshold 
-            ? _oldAnimeCacheDuration 
+        final cacheDuration = animeId < _oldAnimeThreshold
+            ? _oldAnimeCacheDuration
             : _newAnimeCacheDuration;
 
         if (now.difference(cacheTime) < cacheDuration) {
           final comments = cacheData['comments'] as List<dynamic>;
-          //////debugPrint('内存缓存有效，返回 ${comments.length} 条弹幕');
-          return comments;
+          // 对内存缓存中的数据也进行去重
+          final uniqueComments = _removeDuplicateDanmaku(comments);
+          //////debugPrint('内存缓存有效，返回 ${uniqueComments.length} 条弹幕');
+          return uniqueComments;
         } else {
           //////debugPrint('内存缓存已过期，移除');
           _memoryCache.remove(episodeId);
@@ -191,6 +191,16 @@ class DanmakuCacheManager {
       final comments = jsonData['comments'] as List<dynamic>;
       // 去除重复弹幕
       final uniqueComments = _removeDuplicateDanmaku(comments);
+
+      // 更新内存缓存，确保后续读取一致
+      final updatedCacheData = {
+        'timestamp': jsonData['timestamp'],
+        'animeId': jsonData['animeId'],
+        'comments': uniqueComments,
+        'count': uniqueComments.length
+      };
+      _memoryCache[episodeId] = updatedCacheData;
+
       //////debugPrint('返回 ${uniqueComments.length} 条弹幕');
       return uniqueComments;
     } catch (e) {
@@ -203,16 +213,17 @@ class DanmakuCacheManager {
   static List<dynamic> _removeDuplicateDanmaku(List<dynamic> comments) {
     final seen = <String>{};
     final uniqueComments = <dynamic>[];
-    
+
     for (final comment in comments) {
       // 将弹幕转换为唯一字符串表示，用于去重
-      final key = '${comment['time']}_${comment['content']}_${comment['type']}_${comment['color']}';
+      final key =
+          '${comment['time']}_${comment['content']}_${comment['type']}_${comment['color']}';
       if (!seen.contains(key)) {
         seen.add(key);
         uniqueComments.add(comment);
       }
     }
-    
+
     return uniqueComments;
   }
 
@@ -226,8 +237,8 @@ class DanmakuCacheManager {
         final animeId = cacheData['animeId'] as int;
         final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
 
-        final cacheDuration = animeId < _oldAnimeThreshold 
-            ? _oldAnimeCacheDuration 
+        final cacheDuration = animeId < _oldAnimeThreshold
+            ? _oldAnimeCacheDuration
             : _newAnimeCacheDuration;
 
         return now.difference(cacheTime) > cacheDuration;
@@ -249,8 +260,8 @@ class DanmakuCacheManager {
             final cacheTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
             final now = DateTime.now();
 
-            final cacheDuration = animeId < _oldAnimeThreshold 
-                ? _oldAnimeCacheDuration 
+            final cacheDuration = animeId < _oldAnimeThreshold
+                ? _oldAnimeCacheDuration
                 : _newAnimeCacheDuration;
 
             if (now.difference(cacheTime) > cacheDuration) {
