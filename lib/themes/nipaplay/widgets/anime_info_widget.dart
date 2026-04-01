@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 import 'control_shadow.dart';
+import 'dart:math' as math;
 // import 'package:nipaplay/utils/globals.dart' as globals; // globals is not used in this snippet
 
 class AnimeInfoWidget extends StatefulWidget {
   final VideoPlayerState videoState;
+  final double? maxWidth;
 
   const AnimeInfoWidget({
     super.key,
     required this.videoState,
+    this.maxWidth,
   });
 
   @override
@@ -40,7 +43,12 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
     final episodeTitle = _resolveTitle(widget.videoState.episodeTitle);
     final fileTitle = _resolveFileName(widget.videoState.currentVideoPath);
     final displayTitle = animeTitle ?? fileTitle ?? episodeTitle;
-    final maxInfoWidth = MediaQuery.of(context).size.width * 0.72;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final preferredMaxInfoWidth = widget.maxWidth ?? screenWidth * 0.72;
+    final maxInfoWidth = math.min(
+      screenWidth * 0.72,
+      math.max(80.0, preferredMaxInfoWidth),
+    );
     const shadowBleedWidth = 64.0;
     if (displayTitle == null) {
       return const SizedBox.shrink();
@@ -82,7 +90,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                           ),
                           maxLines: 1,
                           softWrap: false,
-                          overflow: TextOverflow.fade,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -108,7 +116,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
                                 episodeTitle,
                                 maxLines: 1,
                                 softWrap: false,
-                                overflow: TextOverflow.fade,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),

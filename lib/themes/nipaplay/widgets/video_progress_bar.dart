@@ -392,7 +392,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                       Padding(
                         padding: EdgeInsets.symmetric(vertical: verticalMargin),
                         child: Opacity(
-                          opacity: 0.5,
+                          opacity: 0.3,
                           child: ControlShadow(
                             borderRadius: BorderRadius.circular(trackHeight / 2),
                             child: Container(
@@ -415,7 +415,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                           widthFactor: bufferProgress,
                           alignment: Alignment.centerLeft,
                           child: Opacity(
-                            opacity: 0.5,
+                            opacity: 0.3,
                             child: Container(
                               height: trackHeight,
                               decoration: BoxDecoration(
@@ -461,7 +461,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color.fromARGB(82, 0, 0, 0),
+                                  color: const Color.fromARGB(100, 0, 0, 0),
                                   blurRadius:
                                       _isThumbHovered || widget.isDragging
                                           ? 12
@@ -469,7 +469,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                                   offset: const Offset(0, 2),
                                 ),
                                 BoxShadow(
-                                  color: const Color.fromARGB(82, 0, 0, 0),
+                                  color: const Color.fromARGB(100, 0, 0, 0),
                                   blurRadius:
                                       _isThumbHovered || widget.isDragging
                                           ? 20
@@ -560,7 +560,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Color.fromARGB(82, 0, 0, 0),
+                                  color: Color.fromARGB(100, 0, 0, 0),
                                   blurRadius:
                                       _isThumbHovered || widget.isDragging
                                           ? 12
@@ -568,7 +568,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                                   offset: const Offset(0, 2),
                                 ),
                                 BoxShadow(
-                                  color: Color.fromARGB(82, 0, 0, 0),
+                                  color: Color.fromARGB(100, 0, 0, 0),
                                   blurRadius:
                                       _isThumbHovered || widget.isDragging
                                           ? 20
