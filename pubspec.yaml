@@ -102,6 +102,7 @@ dependencies:
     path: packages/danmaku_canvas
   nipaplay_smb2:
     path: packages/nipaplay_smb2
+  battery_plus: ^7.0.0
 
 dev_dependencies:
   flutter_test:

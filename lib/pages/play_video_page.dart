@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/mobile_playback_status.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
@@ -492,6 +493,25 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         ),
+        if (globals.isMobilePlatform)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: AnimatedOpacity(
+                opacity: videoState.showControls ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(
+                  ignoring: !videoState.showControls,
+                  child: const Padding(
+                    padding: EdgeInsets.only(top: 6, right: 8),
+                    child: MobilePlaybackStatus(compact: true),
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (globals.isPhone && videoState.isFullscreen)
           Positioned(
             right: 0,
