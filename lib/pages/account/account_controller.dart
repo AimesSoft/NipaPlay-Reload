@@ -578,6 +578,19 @@ mixin AccountPageController<T extends StatefulWidget> on State<T> {
     }
   }
 
+  Future<Map<String, dynamic>> requestDandanBangumiManageUrl() async {
+    if (!isLoggedIn) {
+      return {'success': false, 'message': '请先登录弹弹play账号'};
+    }
+
+    try {
+      final url = await DandanplayService.startBangumiManageProcess();
+      return {'success': true, 'url': url};
+    } catch (e) {
+      return {'success': false, 'message': '获取Bangumi同步设置页面失败: $e'};
+    }
+  }
+
   Future<Map<String, dynamic>> refreshDandanBangumiLinkStatus() async {
     if (!isLoggedIn) {
       return {'success': false, 'message': '请先登录弹弹play账号'};
