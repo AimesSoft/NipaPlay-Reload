@@ -2247,6 +2247,37 @@ class DandanplayService {
     }
   }
 
+  // 打开Bangumi绑定管理页（播放历史同步开关/解绑）
+  static Future<String> startBangumiManageProcess() async {
+    if (!_isLoggedIn || _token == null) {
+      throw Exception('需要登录才能管理Bangumi绑定');
+    }
+
+    try {
+      debugPrint('[弹弹play服务] 开始打开Bangumi绑定管理页');
+
+      // Bangumi管理页要求使用 oauth_bangumi 业务标识获取WebToken
+      final webTokenData = await getWebToken(business: 'oauth_bangumi');
+      final webToken = webTokenData['webToken']?.toString();
+      debugPrint('[弹弹play服务] Bangumi管理页WebToken: $webToken');
+
+      if (webToken == null || webToken.isEmpty) {
+        debugPrint('[弹弹play服务] Bangumi管理页WebToken为空，完整响应: $webTokenData');
+        throw Exception('获取Bangumi管理页WebToken失败：响应中没有webToken字段');
+      }
+
+      final manageUri = Uri.parse(
+              '${await getApiBaseUrl()}/api/v2/oauthprovider/bangumi/manage')
+          .replace(queryParameters: {'webToken': webToken});
+      final manageUrl = manageUri.toString();
+      debugPrint('[弹弹play服务] Bangumi管理页URL: $manageUrl');
+      return manageUrl;
+    } catch (e) {
+      debugPrint('[弹弹play服务] 打开Bangumi管理页流程出错: $e');
+      rethrow;
+    }
+  }
+
   // 完成账号注销后的清理工作
   static Future<void> completeAccountDeletion() async {
     debugPrint('[弹弹play服务] 执行账号注销后的清理工作');

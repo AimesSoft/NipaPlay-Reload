@@ -14,6 +14,12 @@ enum RecentWatchingStyle {
   detailed, // 详细版（带截图）
 }
 
+// 定义 NipaPlay 主题弹窗显示区域模式
+enum NipaplayWindowDisplayMode {
+  windowed, // 窗口化
+  filledScreen, // 铺满屏幕（保留少量边距）
+}
+
 class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _widgetBlurEffectKey = 'enable_widget_blur_effect';
   static const String _animeCardActionKey = 'anime_card_action';
@@ -21,6 +27,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _recentWatchingStyleKey = 'recent_watching_style';
   static const String _uiScaleKey = 'ui_scale_factor';
   static const String _showAnimeCardSummaryKey = 'show_anime_card_summary';
+  static const String _windowDisplayModeKey = 'nipaplay_window_display_mode';
 
   static const double uiScaleMin = 1.0;
   static const double uiScaleMax = 1.3;
@@ -34,17 +41,19 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late RecentWatchingStyle _recentWatchingStyle;
   late double _uiScale;
   late bool _showAnimeCardSummary;
+  late NipaplayWindowDisplayMode _windowDisplayMode;
 
   // 获取设置值
   // 页面滑动动画始终启用
   bool get enablePageAnimation => true;
-  
+
   bool get enableWidgetBlurEffect => _enableWidgetBlurEffect;
   AnimeCardAction get animeCardAction => _animeCardAction;
   bool get showDanmakuDensityChart => _showDanmakuDensityChart;
   RecentWatchingStyle get recentWatchingStyle => _recentWatchingStyle;
   double get uiScale => _uiScale;
   bool get showAnimeCardSummary => _showAnimeCardSummary;
+  NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
 
   // 构造函数
   AppearanceSettingsProvider() {
@@ -55,6 +64,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _recentWatchingStyle = RecentWatchingStyle.simple; // 默认简洁版
     _uiScale = _resolveDefaultUiScale();
     _showAnimeCardSummary = true; // 默认显示番剧卡片简介
+    _windowDisplayMode = _resolveDefaultWindowDisplayMode();
     _loadSettings();
   }
 
@@ -63,6 +73,12 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       return defaultUiScale;
     }
     return globals.isTablet ? defaultTabletUiScale : defaultUiScale;
+  }
+
+  NipaplayWindowDisplayMode _resolveDefaultWindowDisplayMode() {
+    return globals.isTablet
+        ? NipaplayWindowDisplayMode.filledScreen
+        : NipaplayWindowDisplayMode.windowed;
   }
 
   // 从SharedPreferences加载设置
@@ -76,6 +92,16 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       _uiScale = (savedUiScale ?? _resolveDefaultUiScale())
           .clamp(uiScaleMin, uiScaleMax)
           .toDouble();
+      final savedWindowDisplayModeIndex = prefs.getInt(_windowDisplayModeKey);
+      if (savedWindowDisplayModeIndex != null &&
+          savedWindowDisplayModeIndex >= 0 &&
+          savedWindowDisplayModeIndex <
+              NipaplayWindowDisplayMode.values.length) {
+        _windowDisplayMode =
+            NipaplayWindowDisplayMode.values[savedWindowDisplayModeIndex];
+      } else {
+        _windowDisplayMode = _resolveDefaultWindowDisplayMode();
+      }
 
       // 加载番剧卡片点击行为设置
       final actionIndex = prefs.getInt(_animeCardActionKey);
@@ -186,6 +212,20 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setBool(_showAnimeCardSummaryKey, value);
     } catch (e) {
       debugPrint('保存番剧卡片简介显示设置时出错: $e');
+    }
+  }
+
+  Future<void> setWindowDisplayMode(NipaplayWindowDisplayMode value) async {
+    if (_windowDisplayMode == value) return;
+
+    _windowDisplayMode = value;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_windowDisplayModeKey, value.index);
+    } catch (e) {
+      debugPrint('保存窗口显示区域设置时出错: $e');
     }
   }
 }

@@ -37,6 +37,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
   final GlobalKey _animationDropdownKey = GlobalKey();
   final GlobalKey _backgroundRenderModeDropdownKey = GlobalKey();
+  final GlobalKey _windowDisplayModeDropdownKey = GlobalKey();
   late BackgroundImageRenderMode _backgroundImageRenderMode;
   late double _backgroundImageOverlayOpacity;
 
@@ -49,7 +50,8 @@ class _ThemeModePageState extends State<ThemeModePage> {
   }
 
   Future<void> _pickCustomBackground(BuildContext context) async {
-    if (Platform.isAndroid) { // 只在 Android 上使用 permission_handler
+    if (Platform.isAndroid) {
+      // 只在 Android 上使用 permission_handler
       final sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
       if (!mounted) return;
 
@@ -96,17 +98,22 @@ class _ThemeModePageState extends State<ThemeModePage> {
           );
         }
       }
-    } else if (Platform.isIOS) { // 在 iOS 上直接尝试选择
-      print("iOS: Bypassing permission_handler for custom background, directly calling ImagePicker.");
+    } else if (Platform.isIOS) {
+      // 在 iOS 上直接尝试选择
+      print(
+          "iOS: Bypassing permission_handler for custom background, directly calling ImagePicker.");
       await _pickImageFromGalleryForBackground(context); // 传递 context
-    } else { // 其他平台 (如果支持，也直接尝试)
-      print("Other platform: Bypassing permission_handler for custom background, directly calling ImagePicker.");
+    } else {
+      // 其他平台 (如果支持，也直接尝试)
+      print(
+          "Other platform: Bypassing permission_handler for custom background, directly calling ImagePicker.");
       await _pickImageFromGalleryForBackground(context); // 传递 context
     }
   }
 
   // 提取选择图片并设置为背景的逻辑
-  Future<void> _pickImageFromGalleryForBackground(BuildContext context) async { // 接收 context
+  Future<void> _pickImageFromGalleryForBackground(BuildContext context) async {
+    // 接收 context
     try {
       // 在异步操作前检查 mounted 状态
       if (!mounted) return;
@@ -124,41 +131,46 @@ class _ThemeModePageState extends State<ThemeModePage> {
 
       if (image != null) {
         final file = File(image.path);
-        
+
         // 获取原始文件的扩展名
-        String extension = path.extension(image.path); 
-        if (extension.isEmpty) { 
-          extension = '.jpg'; 
+        String extension = path.extension(image.path);
+        if (extension.isEmpty) {
+          extension = '.jpg';
         }
 
         // 生成基于时间戳的唯一文件名
-        final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-        final String uniqueFileName = 'custom_background_$timestamp$extension'; 
+        final String timestamp =
+            DateTime.now().millisecondsSinceEpoch.toString();
+        final String uniqueFileName = 'custom_background_$timestamp$extension';
 
         final appDir = await StorageService.getAppStorageDirectory();
-        final String backgroundDirectoryPath = path.join(appDir.path, 'backgrounds');
-        final targetPath = path.join(backgroundDirectoryPath, uniqueFileName); 
-        
+        final String backgroundDirectoryPath =
+            path.join(appDir.path, 'backgrounds');
+        final targetPath = path.join(backgroundDirectoryPath, uniqueFileName);
+
         final targetDirectory = Directory(backgroundDirectoryPath);
         if (!await targetDirectory.exists()) {
           await targetDirectory.create(recursive: true);
         }
-        
+
         // 复制文件
-        await file.copy(targetPath); 
-        
+        await file.copy(targetPath);
+
         // !! 获取旧路径，用于后续可能的比较和清理，如果 ThemeNotifier 先更新，这里需要注意
         // final oldPath = Provider.of<ThemeNotifier>(context, listen: false).customBackgroundPath;
 
         // 更新 ThemeNotifier 中的路径
-        Provider.of<ThemeNotifier>(context, listen: false).customBackgroundPath = targetPath;
-        
+        Provider.of<ThemeNotifier>(context, listen: false)
+            .customBackgroundPath = targetPath;
+
         // 清理旧的自定义背景图片
         final dir = Directory(backgroundDirectoryPath);
         if (await dir.exists()) {
           final List<FileSystemEntity> entities = await dir.list().toList();
           for (FileSystemEntity entity in entities) {
-            if (entity is File && entity.path != targetPath && path.basename(entity.path).startsWith('custom_background_')) {
+            if (entity is File &&
+                entity.path != targetPath &&
+                path.basename(entity.path).startsWith('custom_background_')) {
               try {
                 await entity.delete();
                 print('Deleted old background image: ${entity.path}');
@@ -170,9 +182,9 @@ class _ThemeModePageState extends State<ThemeModePage> {
         }
         // PaintingBinding.instance.imageCache.evict(FileImage(imageFileToClear)); // 这行不再需要，移除
         // print("Evicted image from cache: $targetPath"); // 这行关联代码也移除
-        
       } else {
-        print("Custom background image picking cancelled or failed (possibly due to permissions).");
+        print(
+            "Custom background image picking cancelled or failed (possibly due to permissions).");
       }
     } catch (e) {
       // 异步操作后再次检查 mounted 状态
@@ -192,7 +204,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 AppearanceSettingsProvider.uiScaleMin) /
             AppearanceSettingsProvider.uiScaleStep)
         .round();
-    
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Padding(
@@ -217,7 +229,8 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 DropdownMenuItemData(
                   title: "跟随系统",
                   value: ThemeMode.system,
-                  isSelected: widget.themeNotifier.themeMode == ThemeMode.system,
+                  isSelected:
+                      widget.themeNotifier.themeMode == ThemeMode.system,
                 ),
               ],
               onChanged: (mode) {
@@ -269,6 +282,34 @@ class _ThemeModePageState extends State<ThemeModePage> {
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             SettingsItem.dropdown(
+              title: "虚拟窗口显示区域",
+              subtitle: "调整 NipaPlay Window 控件的显示范围",
+              icon: Ionicons.expand_outline,
+              items: [
+                DropdownMenuItemData(
+                  title: "窗口化",
+                  value: NipaplayWindowDisplayMode.windowed,
+                  isSelected: appearanceSettings.windowDisplayMode ==
+                      NipaplayWindowDisplayMode.windowed,
+                  description: "居中弹窗，四周留有较大空白",
+                ),
+                DropdownMenuItemData(
+                  title: "铺满屏幕",
+                  value: NipaplayWindowDisplayMode.filledScreen,
+                  isSelected: appearanceSettings.windowDisplayMode ==
+                      NipaplayWindowDisplayMode.filledScreen,
+                  description: "贴近屏幕边缘，仅保留少量间距",
+                ),
+              ],
+              onChanged: (mode) {
+                if (mode is NipaplayWindowDisplayMode) {
+                  appearanceSettings.setWindowDisplayMode(mode);
+                }
+              },
+              dropdownKey: _windowDisplayModeDropdownKey,
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.dropdown(
               title: "背景图像",
               subtitle: "设置应用主界面的背景图片",
               icon: Ionicons.image_outline,
@@ -281,7 +322,8 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 DropdownMenuItemData(
                   title: "看板娘2",
                   value: "看板娘2",
-                  isSelected: widget.themeNotifier.backgroundImageMode == "看板娘2",
+                  isSelected:
+                      widget.themeNotifier.backgroundImageMode == "看板娘2",
                 ),
                 DropdownMenuItemData(
                   title: "关闭",
@@ -350,7 +392,8 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 },
                 dropdownKey: _blurDropdownKey,
               ),
-              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               SettingsItem.dropdown(
                 title: "背景图像渲染",
                 subtitle: "选择背景颜色与图片的合成方式",
@@ -379,7 +422,8 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 },
                 dropdownKey: _backgroundRenderModeDropdownKey,
               ),
-              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
               SettingsItem.slider(
                 title: "背景颜色叠加",
                 subtitle: "调整覆盖背景颜色的强度",
@@ -396,7 +440,8 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 },
                 labelFormatter: (value) => value.toStringAsFixed(2),
               ),
-              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             ],
           ],
         ),

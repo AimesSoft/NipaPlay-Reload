@@ -16,6 +16,7 @@ class CupertinoBangumiSection extends StatelessWidget {
   final DateTime? lastSyncTime;
   final TextEditingController tokenController;
   final VoidCallback onRequestDandanBangumiAuth;
+  final VoidCallback onOpenDandanBangumiManage;
   final VoidCallback onRefreshDandanBangumiStatus;
   final VoidCallback onSaveToken;
   final VoidCallback onClearToken;
@@ -40,6 +41,7 @@ class CupertinoBangumiSection extends StatelessWidget {
     required this.lastSyncTime,
     required this.tokenController,
     required this.onRequestDandanBangumiAuth,
+    required this.onOpenDandanBangumiManage,
     required this.onRefreshDandanBangumiStatus,
     required this.onSaveToken,
     required this.onClearToken,
@@ -147,13 +149,24 @@ class CupertinoBangumiSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           AdaptiveButton(
+            onPressed: (!isDandanplayLoggedIn ||
+                    linked == null ||
+                    isRequestingDandanBangumiAuth)
+                ? null
+                : onOpenDandanBangumiManage,
+            style: AdaptiveButtonStyle.bordered,
+            color: CupertinoTheme.of(context).primaryColor,
+            label: linked == null ? '先绑定后再管理同步设置' : '管理Bangumi同步设置',
+          ),
+          const SizedBox(height: 10),
+          AdaptiveButton(
             onPressed:
                 (!isDandanplayLoggedIn || isRefreshingDandanBangumiStatus)
                     ? null
                     : onRefreshDandanBangumiStatus,
             style: AdaptiveButtonStyle.bordered,
             color: CupertinoTheme.of(context).primaryColor,
-            label: isRefreshingDandanBangumiStatus ? '刷新中...' : '我已完成授权，刷新状态',
+            label: isRefreshingDandanBangumiStatus ? '刷新中...' : '我已完成网页操作，刷新状态',
           ),
           const SizedBox(height: 8),
           Text(

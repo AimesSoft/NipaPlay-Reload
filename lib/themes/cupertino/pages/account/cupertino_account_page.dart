@@ -290,7 +290,28 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
     }
     await _openExternalUrl(url);
     if (!mounted) return;
-    showMessage('已在浏览器打开授权页，完成后点击“我已完成授权，刷新状态”。');
+    showMessage('已在浏览器打开授权页，完成后点击“我已完成网页操作，刷新状态”。');
+    _tryAutoRefreshDandanBangumiStatus();
+  }
+
+  Future<void> _openDandanBangumiManagePage() async {
+    final result = await requestDandanBangumiManageUrl();
+    if (!mounted) return;
+
+    if (result['success'] != true) {
+      showMessage(result['message']?.toString() ?? '获取Bangumi同步设置页面失败');
+      return;
+    }
+
+    final url = result['url']?.toString();
+    if (url == null || url.isEmpty) {
+      showMessage('同步设置页面链接为空');
+      return;
+    }
+
+    await _openExternalUrl(url);
+    if (!mounted) return;
+    showMessage('已在浏览器打开同步设置页，网页内操作后请刷新状态或重新登录。');
     _tryAutoRefreshDandanBangumiStatus();
   }
 
@@ -501,6 +522,7 @@ class _CupertinoAccountPageState extends State<CupertinoAccountPage>
       lastSyncTime: lastBangumiSyncTime,
       tokenController: bangumiTokenController,
       onRequestDandanBangumiAuth: _startDandanBangumiAuthorize,
+      onOpenDandanBangumiManage: _openDandanBangumiManagePage,
       onRefreshDandanBangumiStatus: () {
         _refreshDandanBangumiStatusAfterAuth();
       },
