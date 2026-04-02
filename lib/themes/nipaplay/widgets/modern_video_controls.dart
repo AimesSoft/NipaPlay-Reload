@@ -17,10 +17,7 @@ import 'package:nipaplay/services/desktop_pip_window_service.dart';
 class ModernVideoControls extends StatefulWidget {
   final bool showFullscreenButton;
 
-  const ModernVideoControls({
-    super.key,
-    this.showFullscreenButton = true,
-  });
+  const ModernVideoControls({super.key, this.showFullscreenButton = true});
 
   @override
   State<ModernVideoControls> createState() => _ModernVideoControlsState();
@@ -87,10 +84,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       iconWidget = AnimatedSwitcher(
         duration: const Duration(milliseconds: 200),
         transitionBuilder: (child, animation) {
-          return ScaleTransition(
-            scale: animation,
-            child: child,
-          );
+          return ScaleTransition(scale: animation, child: child);
         },
         child: icon,
       );
@@ -132,9 +126,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
           child: BounceHoverScale(
             isHovered: isHovered,
             isPressed: isPressed,
-            child: ControlIconShadow(
-              child: iconWidget,
-            ),
+            child: ControlIconShadow(child: iconWidget),
           ),
         ),
       ),
@@ -142,8 +134,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   }
 
   void _showSettingsMenu(BuildContext buttonContext) {
-    final videoState =
-        Provider.of<VideoPlayerState>(buttonContext, listen: false);
+    final videoState = Provider.of<VideoPlayerState>(
+      buttonContext,
+      listen: false,
+    );
     _playlistOverlay?.remove();
     _playlistOverlay = null;
     _settingsOverlay?.remove();
@@ -179,8 +173,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   }
 
   void _showPlaylistMenu(BuildContext buttonContext) {
-    final videoState =
-        Provider.of<VideoPlayerState>(buttonContext, listen: false);
+    final videoState = Provider.of<VideoPlayerState>(
+      buttonContext,
+      listen: false,
+    );
     _settingsOverlay?.remove();
     _settingsOverlay = null;
     _playlistOverlay?.remove();
@@ -302,8 +298,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTapDown: (details) {
-                    _ignoreNextTap =
-                        _isTapOnProgressBar(details.globalPosition);
+                    _ignoreNextTap = _isTapOnProgressBar(
+                      details.globalPosition,
+                    );
                   },
                   onTapCancel: () {
                     _ignoreNextTap = false;
@@ -342,7 +339,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         // 开始拖动时，保存当前的播放状态
                                         _wasPlayingBeforeDrag =
                                             videoState.status ==
-                                                PlayerStatus.playing;
+                                            PlayerStatus.playing;
                                         // 如果是暂停状态，开始拖动时恢复播放
                                         if (videoState.status ==
                                             PlayerStatus.paused) {
@@ -372,15 +369,18 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           final canPlayPrevious =
                                               videoState.canPlayPreviousEpisode;
                                           return AnimatedOpacity(
-                                            opacity:
-                                                canPlayPrevious ? 1.0 : 0.3,
+                                            opacity: canPlayPrevious
+                                                ? 1.0
+                                                : 0.3,
                                             duration: const Duration(
-                                                milliseconds: 200),
+                                              milliseconds: 200,
+                                            ),
                                             child: _buildControlButton(
                                               icon: Icon(
                                                 Icons.skip_previous_rounded,
                                                 key: const ValueKey(
-                                                    'previous_episode'),
+                                                  'previous_episode',
+                                                ),
                                                 color: Colors.white,
                                                 size: globals.isPhone ? 36 : 28,
                                               ),
@@ -394,18 +394,22 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                   _isPreviousEpisodePressed,
                                               isHovered:
                                                   _isPreviousEpisodeHovered,
-                                              onHover: (value) => setState(() =>
-                                                  _isPreviousEpisodeHovered =
-                                                      value),
+                                              onHover: (value) => setState(
+                                                () =>
+                                                    _isPreviousEpisodeHovered =
+                                                        value,
+                                              ),
                                               onPressed: (value) => setState(
-                                                  () =>
-                                                      _isPreviousEpisodePressed =
-                                                          value),
+                                                () =>
+                                                    _isPreviousEpisodePressed =
+                                                        value,
+                                              ),
                                               tooltip: canPlayPrevious
                                                   ? _tooltipManager
-                                                      .formatActionWithShortcut(
+                                                        .formatActionWithShortcut(
                                                           'previous_episode',
-                                                          '上一话')
+                                                          '上一话',
+                                                        )
                                                   : '无法播放上一话',
                                               useAnimatedSwitcher: true,
                                             ),
@@ -422,45 +426,46 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           size: globals.isPhone ? 36 : 28,
                                         ),
                                         onTap: () {
-                                          final newPosition =
-                                              videoState.position -
-                                                  Duration(
-                                                      seconds: videoState
-                                                          .seekStepSeconds);
-                                          videoState.seekTo(newPosition);
+                                          videoState.seekBackwardByStep();
                                         },
                                         isPressed: _isRewindPressed,
                                         isHovered: _isRewindHovered,
                                         onHover: (value) => setState(
-                                            () => _isRewindHovered = value),
+                                          () => _isRewindHovered = value,
+                                        ),
                                         onPressed: (value) => setState(
-                                            () => _isRewindPressed = value),
+                                          () => _isRewindPressed = value,
+                                        ),
                                         tooltip: _tooltipManager
-                                            .formatActionWithShortcut('rewind',
-                                                '快退 ${videoState.seekStepSeconds} 秒'),
+                                            .formatActionWithShortcut(
+                                              'rewind',
+                                              '快退 ${videoState.seekStepDisplayLabel}',
+                                            ),
                                         useAnimatedSwitcher: true,
                                       ),
 
                                       // 播放/暂停按钮
                                       _buildControlButton(
                                         icon: AnimatedSwitcher(
-                                          duration:
-                                              const Duration(milliseconds: 200),
+                                          duration: const Duration(
+                                            milliseconds: 200,
+                                          ),
                                           transitionBuilder:
                                               (child, animation) {
-                                            return ScaleTransition(
-                                              scale: animation,
-                                              child: child,
-                                            );
-                                          },
+                                                return ScaleTransition(
+                                                  scale: animation,
+                                                  child: child,
+                                                );
+                                              },
                                           child: Icon(
                                             videoState.status ==
                                                     PlayerStatus.playing
                                                 ? Ionicons.pause
                                                 : Ionicons.play,
                                             key: ValueKey<bool>(
-                                                videoState.status ==
-                                                    PlayerStatus.playing),
+                                              videoState.status ==
+                                                  PlayerStatus.playing,
+                                            ),
                                             color: Colors.white,
                                             size: globals.isPhone ? 48 : 36,
                                           ),
@@ -470,17 +475,24 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         isPressed: _isPlayPressed,
                                         isHovered: _isPlayHovered,
                                         onHover: (value) => setState(
-                                            () => _isPlayHovered = value),
+                                          () => _isPlayHovered = value,
+                                        ),
                                         onPressed: (value) => setState(
-                                            () => _isPlayPressed = value),
-                                        tooltip: videoState.status ==
+                                          () => _isPlayPressed = value,
+                                        ),
+                                        tooltip:
+                                            videoState.status ==
                                                 PlayerStatus.playing
                                             ? _tooltipManager
-                                                .formatActionWithShortcut(
-                                                    'play_pause', '暂停')
+                                                  .formatActionWithShortcut(
+                                                    'play_pause',
+                                                    '暂停',
+                                                  )
                                             : _tooltipManager
-                                                .formatActionWithShortcut(
-                                                    'play_pause', '播放'),
+                                                  .formatActionWithShortcut(
+                                                    'play_pause',
+                                                    '播放',
+                                                  ),
                                         useAnimatedSwitcher: true,
                                       ),
 
@@ -493,22 +505,21 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           size: globals.isPhone ? 36 : 28,
                                         ),
                                         onTap: () {
-                                          final newPosition =
-                                              videoState.position +
-                                                  Duration(
-                                                      seconds: videoState
-                                                          .seekStepSeconds);
-                                          videoState.seekTo(newPosition);
+                                          videoState.seekForwardByStep();
                                         },
                                         isPressed: _isForwardPressed,
                                         isHovered: _isForwardHovered,
                                         onHover: (value) => setState(
-                                            () => _isForwardHovered = value),
+                                          () => _isForwardHovered = value,
+                                        ),
                                         onPressed: (value) => setState(
-                                            () => _isForwardPressed = value),
+                                          () => _isForwardPressed = value,
+                                        ),
                                         tooltip: _tooltipManager
-                                            .formatActionWithShortcut('forward',
-                                                '快进 ${videoState.seekStepSeconds} 秒'),
+                                            .formatActionWithShortcut(
+                                              'forward',
+                                              '快进 ${videoState.seekStepDisplayLabel}',
+                                            ),
                                         useAnimatedSwitcher: true,
                                       ),
 
@@ -520,12 +531,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           return AnimatedOpacity(
                                             opacity: canPlayNext ? 1.0 : 0.3,
                                             duration: const Duration(
-                                                milliseconds: 200),
+                                              milliseconds: 200,
+                                            ),
                                             child: _buildControlButton(
                                               icon: Icon(
                                                 Icons.skip_next_rounded,
                                                 key: const ValueKey(
-                                                    'next_episode'),
+                                                  'next_episode',
+                                                ),
                                                 color: Colors.white,
                                                 size: globals.isPhone ? 36 : 28,
                                               ),
@@ -537,16 +550,20 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                                   : () {},
                                               isPressed: _isNextEpisodePressed,
                                               isHovered: _isNextEpisodeHovered,
-                                              onHover: (value) => setState(() =>
-                                                  _isNextEpisodeHovered =
-                                                      value),
+                                              onHover: (value) => setState(
+                                                () => _isNextEpisodeHovered =
+                                                    value,
+                                              ),
                                               onPressed: (value) => setState(
-                                                  () => _isNextEpisodePressed =
-                                                      value),
+                                                () => _isNextEpisodePressed =
+                                                    value,
+                                              ),
                                               tooltip: canPlayNext
                                                   ? _tooltipManager
-                                                      .formatActionWithShortcut(
-                                                          'next_episode', '下一话')
+                                                        .formatActionWithShortcut(
+                                                          'next_episode',
+                                                          '下一话',
+                                                        )
                                                   : '无法播放下一话',
                                               useAnimatedSwitcher: true,
                                             ),
@@ -582,30 +599,37 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         _buildControlButton(
                                           icon: Icon(
                                             DesktopPipWindowService
-                                                    .instance.isCurrentWindowPip
+                                                    .instance
+                                                    .isCurrentWindowPip
                                                 ? Icons
-                                                    .picture_in_picture_rounded
+                                                      .picture_in_picture_rounded
                                                 : Icons
-                                                    .picture_in_picture_alt_rounded,
+                                                      .picture_in_picture_alt_rounded,
                                             key: ValueKey<bool>(
                                               DesktopPipWindowService
-                                                  .instance.isCurrentWindowPip,
+                                                  .instance
+                                                  .isCurrentWindowPip,
                                             ),
                                             color: Colors.white,
                                             size: globals.isPhone ? 36 : 28,
                                           ),
                                           onTap: () {
-                                            unawaited(_handlePipButtonTap(
-                                                videoState));
+                                            unawaited(
+                                              _handlePipButtonTap(videoState),
+                                            );
                                           },
                                           isPressed: _isPipPressed,
                                           isHovered: _isPipHovered,
                                           onHover: (value) => setState(
-                                              () => _isPipHovered = value),
+                                            () => _isPipHovered = value,
+                                          ),
                                           onPressed: (value) => setState(
-                                              () => _isPipPressed = value),
-                                          tooltip: DesktopPipWindowService
-                                                  .instance.isCurrentWindowPip
+                                            () => _isPipPressed = value,
+                                          ),
+                                          tooltip:
+                                              DesktopPipWindowService
+                                                  .instance
+                                                  .isCurrentWindowPip
                                               ? '关闭小窗并回到主播放'
                                               : '小窗播放',
                                           useAnimatedSwitcher: true,
@@ -630,15 +654,19 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                               ),
                                               onTap: () {
                                                 _showPlaylistMenu(
-                                                    buttonContext);
+                                                  buttonContext,
+                                                );
                                               },
                                               isPressed: _isPlaylistPressed,
                                               isHovered: _isPlaylistHovered,
-                                              onHover: (value) => setState(() =>
-                                                  _isPlaylistHovered = value),
+                                              onHover: (value) => setState(
+                                                () =>
+                                                    _isPlaylistHovered = value,
+                                              ),
                                               onPressed: (value) => setState(
-                                                  () => _isPlaylistPressed =
-                                                      value),
+                                                () =>
+                                                    _isPlaylistPressed = value,
+                                              ),
                                               tooltip: '播放列表',
                                               useAnimatedSwitcher: true,
                                             ),
@@ -660,15 +688,19 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                               ),
                                               onTap: () {
                                                 _showSettingsMenu(
-                                                    buttonContext);
+                                                  buttonContext,
+                                                );
                                               },
                                               isPressed: _isSettingsPressed,
                                               isHovered: _isSettingsHovered,
-                                              onHover: (value) => setState(() =>
-                                                  _isSettingsHovered = value),
+                                              onHover: (value) => setState(
+                                                () =>
+                                                    _isSettingsHovered = value,
+                                              ),
                                               onPressed: (value) => setState(
-                                                  () => _isSettingsPressed =
-                                                      value),
+                                                () =>
+                                                    _isSettingsPressed = value,
+                                              ),
                                               tooltip: '设置',
                                               useAnimatedSwitcher: true,
                                             ),
@@ -682,13 +714,15 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           icon: Icon(
                                             globals.isTablet
                                                 ? (videoState.isAppBarHidden
-                                                    ? Icons
-                                                        .fullscreen_exit_rounded
-                                                    : Icons.fullscreen_rounded)
+                                                      ? Icons
+                                                            .fullscreen_exit_rounded
+                                                      : Icons
+                                                            .fullscreen_rounded)
                                                 : (videoState.isFullscreen
-                                                    ? Icons
-                                                        .fullscreen_exit_rounded
-                                                    : Icons.fullscreen_rounded),
+                                                      ? Icons
+                                                            .fullscreen_exit_rounded
+                                                      : Icons
+                                                            .fullscreen_rounded),
                                             key: ValueKey<bool>(
                                               globals.isTablet
                                                   ? videoState.isAppBarHidden
@@ -699,24 +733,26 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           ),
                                           onTap: () => globals.isTablet
                                               ? videoState
-                                                  .toggleAppBarVisibility()
+                                                    .toggleAppBarVisibility()
                                               : videoState.toggleFullscreen(),
                                           isPressed: _isFullscreenPressed,
                                           isHovered: _isFullscreenHovered,
-                                          onHover: (value) => setState(() =>
-                                              _isFullscreenHovered = value),
-                                          onPressed: (value) => setState(() =>
-                                              _isFullscreenPressed = value),
+                                          onHover: (value) => setState(
+                                            () => _isFullscreenHovered = value,
+                                          ),
+                                          onPressed: (value) => setState(
+                                            () => _isFullscreenPressed = value,
+                                          ),
                                           tooltip: globals.isTablet
                                               ? (videoState.isAppBarHidden
-                                                  ? '显示菜单栏'
-                                                  : '隐藏菜单栏')
+                                                    ? '显示菜单栏'
+                                                    : '隐藏菜单栏')
                                               : globals.isPhone
-                                                  ? (videoState.isFullscreen
-                                                      ? '退出全屏'
-                                                      : '全屏')
-                                                  : _tooltipManager
-                                                      .formatActionWithShortcut(
+                                              ? (videoState.isFullscreen
+                                                    ? '退出全屏'
+                                                    : '全屏')
+                                              : _tooltipManager
+                                                    .formatActionWithShortcut(
                                                       'fullscreen',
                                                       videoState.isFullscreen
                                                           ? '退出全屏'

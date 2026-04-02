@@ -11,7 +11,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         // 进入全屏状态，隐藏系统UI
         try {
           await SystemChrome.setEnabledSystemUIMode(
-              SystemUiMode.immersiveSticky);
+            SystemUiMode.immersiveSticky,
+          );
         } catch (e) {
           debugPrint('隐藏系统UI时出错: $e');
         }
@@ -43,11 +44,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         try {
           final itemId = _currentVideoPath!.replaceFirst('jellyfin://', '');
           final syncService = JellyfinPlaybackSyncService();
-          final historyItem =
-              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem = await WatchHistoryManager.getHistoryItem(
+            _currentVideoPath!,
+          );
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem,
-                isCompleted: false);
+            await syncService.reportPlaybackStopped(
+              itemId,
+              historyItem,
+              isCompleted: false,
+            );
           }
         } catch (e) {
           debugPrint('Jellyfin播放停止同步失败: $e');
@@ -60,11 +65,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         try {
           final itemId = _currentVideoPath!.replaceFirst('emby://', '');
           final syncService = EmbyPlaybackSyncService();
-          final historyItem =
-              await WatchHistoryManager.getHistoryItem(_currentVideoPath!);
+          final historyItem = await WatchHistoryManager.getHistoryItem(
+            _currentVideoPath!,
+          );
           if (historyItem != null) {
-            await syncService.reportPlaybackStopped(itemId, historyItem,
-                isCompleted: false);
+            await syncService.reportPlaybackStopped(
+              itemId,
+              historyItem,
+              isCompleted: false,
+            );
           }
         } catch (e) {
           debugPrint('Emby播放停止同步失败: $e');
@@ -187,8 +196,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
   }
 
-  void _setStatus(PlayerStatus newStatus,
-      {String? message, bool clearPreviousMessages = false}) {
+  void _setStatus(
+    PlayerStatus newStatus, {
+    String? message,
+    bool clearPreviousMessages = false,
+  }) {
     // 在状态即将从loading或recognizing变为ready或playing时，设置最终加载阶段标志
     if ((_status == PlayerStatus.loading ||
             _status == PlayerStatus.recognizing) &&
@@ -274,8 +286,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     switch (_playbackEndAction) {
       case PlaybackEndAction.autoNext:
         if (_context != null && _context!.mounted) {
-          AutoNextEpisodeService.instance
-              .startAutoNextEpisode(_context!, _currentVideoPath!);
+          AutoNextEpisodeService.instance.startAutoNextEpisode(
+            _context!,
+            _currentVideoPath!,
+          );
         }
         break;
       case PlaybackEndAction.loop:
@@ -325,7 +339,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   void pause() {
     if (_status == PlayerStatus.playing) {
-      final bool isWindowsMediaKit = !kIsWeb &&
+      final bool isWindowsMediaKit =
+          !kIsWeb &&
           Platform.isWindows &&
           player.getPlayerKernelName() == 'Media Kit';
       if (isWindowsMediaKit) {
@@ -336,15 +351,18 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
-      player.pauseDirectly().then((_) {
-        //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
-        _setStatus(PlayerStatus.paused, message: '已暂停');
-      }).catchError((e) {
-        debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
-        // 尝试使用传统方法
-        player.state = PlaybackState.paused;
-        _setStatus(PlayerStatus.paused, message: '已暂停');
-      });
+      player
+          .pauseDirectly()
+          .then((_) {
+            //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
+            _setStatus(PlayerStatus.paused, message: '已暂停');
+          })
+          .catchError((e) {
+            debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
+            // 尝试使用传统方法
+            player.state = PlaybackState.paused;
+            _setStatus(PlayerStatus.paused, message: '已暂停');
+          });
 
       // Jellyfin同步：如果是Jellyfin流媒体，报告暂停状态
       if (_currentVideoPath != null &&
@@ -388,8 +406,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void play() {
     // <<< ADDED DEBUG LOG >>>
     debugPrint(
-        '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}');
-    final bool isWindowsMediaKit = !kIsWeb &&
+      '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}',
+    );
+    final bool isWindowsMediaKit =
+        !kIsWeb &&
         Platform.isWindows &&
         player.getPlayerKernelName() == 'Media Kit';
     if (isWindowsMediaKit) {
@@ -403,26 +423,30 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
       _lastPlaybackStartMs = DateTime.now().millisecondsSinceEpoch;
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
-      player.playDirectly().then((_) {
-        //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
-        // 设置状态
-        _setStatus(PlayerStatus.playing, message: '开始播放');
+      player
+          .playDirectly()
+          .then((_) {
+            //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
+            // 设置状态
+            _setStatus(PlayerStatus.playing, message: '开始播放');
 
-        // 播放开始时提交观看记录到弹弹play
-        _submitWatchHistoryToDandanplay();
-      }).catchError((e) {
-        debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
-        // 尝试使用传统方法
-        player.state = PlaybackState.playing;
-        _setStatus(PlayerStatus.playing, message: '开始播放');
+            // 播放开始时提交观看记录到弹弹play
+            _submitWatchHistoryToDandanplay();
+          })
+          .catchError((e) {
+            debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
+            // 尝试使用传统方法
+            player.state = PlaybackState.playing;
+            _setStatus(PlayerStatus.playing, message: '开始播放');
 
-        // 播放开始时提交观看记录到弹弹play
-        _submitWatchHistoryToDandanplay();
-      });
+            // 播放开始时提交观看记录到弹弹play
+            _submitWatchHistoryToDandanplay();
+          });
 
       // <<< ADDED DEBUG LOG >>>
       debugPrint(
-          '[VideoPlayerState] play() -> _status set to PlayerStatus.playing. Notifying listeners.');
+        '[VideoPlayerState] play() -> _status set to PlayerStatus.playing. Notifying listeners.',
+      );
 
       // 在首次播放时进行截图
       if (!_hasInitialScreenshot) {
@@ -557,6 +581,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     danmakuController = null;
     _setAutoDanmakuOffset(0.0);
     _videoDuration = Duration.zero;
+    _seekStepFrameRateEstimate = null;
+  }
+
+  void seekBackwardByStep() {
+    seekTo(position - seekStepDuration);
+  }
+
+  void seekForwardByStep() {
+    seekTo(position + seekStepDuration);
   }
 
   void seekTo(Duration position) {
@@ -577,8 +610,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       // 确保位置在有效范围内（0 到视频总时长）
       Duration clampedPosition = Duration(
-          milliseconds:
-              position.inMilliseconds.clamp(0, _duration.inMilliseconds));
+        milliseconds: position.inMilliseconds.clamp(
+          0,
+          _duration.inMilliseconds,
+        ),
+      );
 
       // 如果是暂停状态，先恢复播放
       if (_status == PlayerStatus.paused) {
@@ -865,7 +901,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   Future<void> updateVolumeOnDrag(
-      double verticalDragDelta, BuildContext context) async {
+    double verticalDragDelta,
+    BuildContext context,
+  ) async {
     if (!globals.isPhone) return;
 
     final screenHeight = MediaQuery.of(context).size.height;
@@ -911,8 +949,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     try {
       // Prioritize actual player volume, fallback to _currentVolume
       double currentVolume = player.volume ?? _currentVolume;
-      double newVolume =
-          (currentVolume + (step ?? _volumeStep)).clamp(0.0, 1.0);
+      double newVolume = (currentVolume + (step ?? _volumeStep)).clamp(
+        0.0,
+        1.0,
+      );
 
       player.volume = newVolume;
       unawaited(_setSystemVolume(newVolume));
@@ -934,8 +974,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     try {
       // Prioritize actual player volume, fallback to _currentVolume
       double currentVolume = player.volume ?? _currentVolume;
-      double newVolume =
-          (currentVolume - (step ?? _volumeStep)).clamp(0.0, 1.0);
+      double newVolume = (currentVolume - (step ?? _volumeStep)).clamp(
+        0.0,
+        1.0,
+      );
 
       player.volume = newVolume;
       unawaited(_setSystemVolume(newVolume));
@@ -1008,8 +1050,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void _showSeekIndicator() {
     if (!globals.isPhone || _context == null) return;
 
-    final uiThemeProvider =
-        Provider.of<UIThemeProvider>(_context!, listen: false);
+    final uiThemeProvider = Provider.of<UIThemeProvider>(
+      _context!,
+      listen: false,
+    );
     final bool useCupertinoStyle =
         uiThemeProvider.isCupertinoTheme && globals.isPhone;
 
