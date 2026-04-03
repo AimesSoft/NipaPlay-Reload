@@ -829,6 +829,34 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get subtitleDelaySeconds =>
       _resolveSubtitleDelaySecondsForCurrentVideo(_subtitleDelaySeconds);
 
+  double? _parseSeekStepFrameRateNumericToken(String value) {
+    final directNumber = double.tryParse(value);
+    if (directNumber != null && directNumber.isFinite && directNumber > 0) {
+      return directNumber;
+    }
+
+    final fractionMatch = RegExp(
+      r'^([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)$',
+    ).firstMatch(value);
+    if (fractionMatch == null) return null;
+
+    final numerator = double.tryParse(fractionMatch.group(1) ?? '');
+    final denominator = double.tryParse(fractionMatch.group(2) ?? '');
+    if (numerator == null ||
+        denominator == null ||
+        !numerator.isFinite ||
+        !denominator.isFinite ||
+        denominator <= 0) {
+      return null;
+    }
+
+    final fps = numerator / denominator;
+    if (fps.isFinite && fps > 0) {
+      return fps;
+    }
+    return null;
+  }
+
   double? _parseSeekStepFrameRateValue(dynamic value) {
     if (value == null) return null;
     if (value is num) {
@@ -842,16 +870,37 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       final trimmed = value.trim().toLowerCase();
       if (trimmed.isEmpty) return null;
 
-      final directNumber = double.tryParse(trimmed);
-      if (directNumber != null && directNumber.isFinite && directNumber > 0) {
-        return directNumber;
+      final directValue = _parseSeekStepFrameRateNumericToken(trimmed);
+      if (directValue != null) {
+        return directValue;
+      }
+
+      final labeledFractionMatch = RegExp(
+            r'([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
+          ).firstMatch(trimmed) ??
+          RegExp(
+            r'(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)\D*([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)',
+          ).firstMatch(trimmed);
+      if (labeledFractionMatch != null) {
+        final numerator = double.tryParse(labeledFractionMatch.group(1) ?? '');
+        final denominator = double.tryParse(labeledFractionMatch.group(2) ?? '');
+        if (numerator != null &&
+            denominator != null &&
+            numerator.isFinite &&
+            denominator.isFinite &&
+            denominator > 0) {
+          final fps = numerator / denominator;
+          if (fps.isFinite && fps > 0) {
+            return fps;
+          }
+        }
       }
 
       final labeledMatch = RegExp(
-            r'([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|framerate)',
+            r'([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
           ).firstMatch(trimmed) ??
           RegExp(
-            r'(?:fps|frame\s*rate|framerate)\D*([0-9]+(?:\.[0-9]+)?)',
+            r'(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)\D*([0-9]+(?:\.[0-9]+)?)',
           ).firstMatch(trimmed);
       if (labeledMatch != null) {
         final fps = double.tryParse(labeledMatch.group(1) ?? '');
