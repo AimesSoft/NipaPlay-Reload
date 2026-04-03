@@ -1,5 +1,5 @@
 name: 'Build Windows Package'
-description: '构建 Windows 应用并生成 ZIP 和安装程序'
+description: '构建 Windows 应用并生成 ZIP、MSIX 包 和安装程序'
 inputs:
   app-version:
     description: '应用版本号'
@@ -294,6 +294,43 @@ runs:
           throw "Installer file was not created: $finalPath"
         }
         echo "installer_path=$finalPath" >> $env:GITHUB_OUTPUT
+
+    - name: Update msix_version to match app version
+      id: update_msix_version
+      shell: pwsh
+      run: |
+        $appVersion = "${{ inputs.app-version }}"
+        # Convert app version to msix version format (add .0 at the end if needed)
+        if ($appVersion -notmatch '\.\d+$') {
+          $msixVersion = "$appVersion.0"
+        } else {
+          $msixVersion = $appVersion
+        }
+        # Ensure msix version has 4 parts
+        $versionParts = $msixVersion -split '\.'
+        if ($versionParts.Length -lt 4) {
+          $msixVersion = $msixVersion + (".0" * (4 - $versionParts.Length))
+        }
+        Write-Host "App version: $appVersion"
+        Write-Host "MSIX version: $msixVersion"
+        # Update pubspec.yaml with the new msix_version
+        (Get-Content pubspec.yaml) -replace 'msix_version: .*', "msix_version: $msixVersion" | Set-Content pubspec.yaml
+        echo "msix_version=$msixVersion" >> $env:GITHUB_OUTPUT
+
+    - name: Build MSIX package
+      id: msix_build
+      shell: pwsh
+      run: |
+        Write-Host "Building MSIX package..."
+        flutter build windows --msix
+        $msixPath = "build\windows\runner\Release\NipaPlay.msix"
+        if (-not (Test-Path $msixPath)) {
+          throw "MSIX package was not created: $msixPath"
+        }
+        # Copy MSIX to build output directory
+        $destPath = "build\windows\NipaPlay_${{ inputs.app-version }}_Windows_x64.msix"
+        Copy-Item -Path $msixPath -Destination $destPath -Force
+        echo "msix_path=$destPath" >> $env:GITHUB_OUTPUT
 
     - name: List Windows build artifacts
       shell: pwsh
