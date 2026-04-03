@@ -107,18 +107,9 @@ enum SubtitleAlignX { left, center, right }
 
 enum SubtitleAlignY { top, center, bottom }
 
-enum DanmakuOutlineStyle {
-  none,
-  stroke,
-  uniform,
-}
+enum DanmakuOutlineStyle { none, stroke, uniform }
 
-enum DanmakuShadowStyle {
-  none,
-  soft,
-  medium,
-  strong,
-}
+enum DanmakuShadowStyle { none, soft, medium, strong }
 
 enum PlayerStatus {
   idle, // 空闲状态
@@ -128,15 +119,10 @@ enum PlayerStatus {
   playing, // 播放中
   paused, // 暂停
   error, // 错误
-  disposed // 已释放
+  disposed, // 已释放
 }
 
-enum PlaybackEndAction {
-  autoNext,
-  loop,
-  pause,
-  exitPlayer,
-}
+enum PlaybackEndAction { autoNext, loop, pause, exitPlayer }
 
 extension PlaybackEndActionDisplay on PlaybackEndAction {
   static PlaybackEndAction fromPrefs(String? value) {
@@ -193,11 +179,7 @@ extension PlaybackEndActionDisplay on PlaybackEndAction {
   }
 }
 
-enum ScreenshotSaveTarget {
-  ask,
-  photos,
-  file,
-}
+enum ScreenshotSaveTarget { ask, photos, file }
 
 extension ScreenshotSaveTargetDisplay on ScreenshotSaveTarget {
   static ScreenshotSaveTarget fromPrefs(int? value) {
@@ -305,8 +287,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool _controlsVisibilityLocked = false;
   bool _isSeeking = false;
   final FocusNode _focusNode = FocusNode();
-  final GlobalKey screenshotBoundaryKey =
-      GlobalKey(debugLabel: 'player_screenshot_boundary');
+  final GlobalKey screenshotBoundaryKey = GlobalKey(
+    debugLabel: 'player_screenshot_boundary',
+  );
   bool _isCapturingScreenshot = false;
 
   // 添加重置标志，防止在重置过程中更新历史记录
@@ -545,6 +528,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 添加播放速度相关状态
   static const double minPlaybackRate = 0.01;
   static const double maxPlaybackRate = 5.0;
+  static const double defaultSeekStepFrameRate = 24.0;
+  static const double fallbackSeekStepMaxSeconds = 600.0;
+  static const double seekStepComparisonEpsilon = 0.0005;
   final String _playbackRateKey = 'playback_rate';
   double _playbackRate = 1.0; // 默认1倍速
   bool _isSpeedBoostActive = false; // 是否正在倍速播放（长按状态）
@@ -554,7 +540,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 快进快退时间设置
   final String _seekStepSecondsKey = 'seek_step_seconds';
-  int _seekStepSeconds = 10; // 默认10秒
+  double _seekStepSeconds = 10.0; // 默认10秒
+  double? _seekStepFrameRateEstimate;
 
   // 跳过时间设置
   final String _skipSecondsKey = 'skip_seconds';
@@ -591,8 +578,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   OverlayEntry? _brightnessOverlayEntry; // <<< ADDED THIS LINE
 
   // Volume Control State
-  static const Duration _volumeSaveDebounceDuration =
-      Duration(milliseconds: 400);
+  static const Duration _volumeSaveDebounceDuration = Duration(
+    milliseconds: 400,
+  );
   final String _playerVolumeKey = 'player_volume';
   double _currentVolume = 0.5; // Default volume
   double _initialDragVolume = 0.5;
@@ -841,6 +829,202 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double get subtitleDelaySeconds =>
       _resolveSubtitleDelaySecondsForCurrentVideo(_subtitleDelaySeconds);
 
+  double? _parseSeekStepFrameRateValue(dynamic value) {
+    if (value == null) return null;
+    if (value is num) {
+      final fps = value.toDouble();
+      if (fps.isFinite && fps > 0) {
+        return fps;
+      }
+      return null;
+    }
+    if (value is String) {
+      final trimmed = value.trim().toLowerCase();
+      if (trimmed.isEmpty) return null;
+
+      final directNumber = double.tryParse(trimmed);
+      if (directNumber != null && directNumber.isFinite && directNumber > 0) {
+        return directNumber;
+      }
+
+      final labeledMatch = RegExp(
+            r'([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|framerate)',
+          ).firstMatch(trimmed) ??
+          RegExp(
+            r'(?:fps|frame\s*rate|framerate)\D*([0-9]+(?:\.[0-9]+)?)',
+          ).firstMatch(trimmed);
+      if (labeledMatch != null) {
+        final fps = double.tryParse(labeledMatch.group(1) ?? '');
+        if (fps != null && fps.isFinite && fps > 0) {
+          return fps;
+        }
+      }
+    }
+    return null;
+  }
+
+  double? _extractSeekStepFrameRate(Map<String, dynamic> info) {
+    Map<String, dynamic> toStringKeyedMap(dynamic raw) {
+      if (raw is Map) {
+        return raw.map(
+          (dynamic key, dynamic value) => MapEntry(key.toString(), value),
+        );
+      }
+      return <String, dynamic>{};
+    }
+
+    final mpvProperties = toStringKeyedMap(info['mpvProperties']);
+    final directCandidates = <dynamic>[
+      mpvProperties['container-fps'],
+      mpvProperties['estimated-vf-fps'],
+      info['fps'],
+      info['frameRate'],
+    ];
+    for (final candidate in directCandidates) {
+      final parsed = _parseSeekStepFrameRateValue(candidate);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+
+    final videoEntries = info['video'];
+    if (videoEntries is List) {
+      for (final entry in videoEntries) {
+        final mapEntry = toStringKeyedMap(entry);
+        final parsed = _parseSeekStepFrameRateValue(mapEntry['fps']) ??
+            _parseSeekStepFrameRateValue(mapEntry['frameRate']) ??
+            _parseSeekStepFrameRateValue(mapEntry['frame_rate']) ??
+            _parseSeekStepFrameRateValue(mapEntry['raw']);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
+
+    final videoParams = toStringKeyedMap(info['videoParams']);
+    return _parseSeekStepFrameRateValue(videoParams['fps']) ??
+        _parseSeekStepFrameRateValue(videoParams['frameRate']);
+  }
+
+  String _trimTrailingZerosForDisplay(String value) {
+    if (!value.contains('.')) return value;
+    return value
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  String formatSeekStepSecondsValue(double value) {
+    final safeValue = value.isFinite ? value : 0.0;
+    if ((safeValue - safeValue.roundToDouble()).abs() <
+        seekStepComparisonEpsilon) {
+      return safeValue.round().toString();
+    }
+    final decimals = safeValue < 1 ? 3 : 2;
+    return _trimTrailingZerosForDisplay(safeValue.toStringAsFixed(decimals));
+  }
+
+  double get seekStepFrameRate {
+    if (_seekStepFrameRateEstimate != null &&
+        _seekStepFrameRateEstimate!.isFinite &&
+        _seekStepFrameRateEstimate! > 0) {
+      return _seekStepFrameRateEstimate!;
+    }
+    final detected = _extractSeekStepFrameRate(player.getDetailedMediaInfo());
+    if (detected == null) {
+      return defaultSeekStepFrameRate;
+    }
+    return detected;
+  }
+
+  Future<void> refreshSeekStepFrameRateEstimate() async {
+    if (!hasVideo) return;
+    try {
+      final info = await player.getDetailedMediaInfoAsync();
+      final detected = _extractSeekStepFrameRate(info);
+      if (detected == null || !detected.isFinite || detected <= 0) {
+        return;
+      }
+      if (_seekStepFrameRateEstimate != null &&
+          (_seekStepFrameRateEstimate! - detected).abs() <
+              seekStepComparisonEpsilon) {
+        return;
+      }
+      _seekStepFrameRateEstimate = detected;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  double get seekStepMinSeconds {
+    final max = seekStepMaxSeconds;
+    final frameSeconds = 1 / seekStepFrameRate;
+    final safeFrameSeconds = frameSeconds.isFinite && frameSeconds > 0
+        ? frameSeconds
+        : (1 / defaultSeekStepFrameRate);
+    if (max <= 0) {
+      return safeFrameSeconds;
+    }
+    return safeFrameSeconds.clamp(0.001, max).toDouble();
+  }
+
+  double get seekStepMaxSeconds {
+    final durationSeconds = _duration.inMilliseconds / 1000;
+    if (durationSeconds <= 0) {
+      return fallbackSeekStepMaxSeconds;
+    }
+    return durationSeconds.toDouble();
+  }
+
+  bool get hasSeekStepDurationLimit => _duration.inMilliseconds > 0;
+
+  double _resolveSeekStepSecondsForCurrentVideo(double value) {
+    final max = seekStepMaxSeconds;
+    if (max <= 0) {
+      return seekStepMinSeconds;
+    }
+    final min = seekStepMinSeconds.clamp(0.001, max).toDouble();
+    return value.clamp(min, max).toDouble();
+  }
+
+  double clampSeekStepToCurrentVideoDuration(double value) {
+    return _resolveSeekStepSecondsForCurrentVideo(value);
+  }
+
+  bool isFrameSeekStepValue(double value) =>
+      (value - seekStepMinSeconds).abs() < seekStepComparisonEpsilon;
+
+  String formatSeekStepLabel(
+    double value, {
+    bool preferFrameLabel = false,
+    bool includeFrameApproximation = false,
+  }) {
+    final resolved = _resolveSeekStepSecondsForCurrentVideo(value);
+    final secondsLabel = '${formatSeekStepSecondsValue(resolved)} 秒';
+    if (preferFrameLabel && isFrameSeekStepValue(resolved)) {
+      if (includeFrameApproximation) {
+        return '1 帧（约 $secondsLabel）';
+      }
+      return '1 帧';
+    }
+    return secondsLabel;
+  }
+
+  double get seekStepSeconds =>
+      _resolveSeekStepSecondsForCurrentVideo(_seekStepSeconds);
+
+  Duration get seekStepDuration {
+    final milliseconds = (seekStepSeconds * 1000).round();
+    return Duration(milliseconds: milliseconds <= 0 ? 1 : milliseconds);
+  }
+
+  String get seekStepDisplayLabel =>
+      formatSeekStepLabel(seekStepSeconds, preferFrameLabel: true);
+
+  String get seekStepSummaryLabel => formatSeekStepLabel(
+        seekStepSeconds,
+        preferFrameLabel: true,
+        includeFrameApproximation: true,
+      );
+
   double get subtitleDelaySliderMinSeconds {
     final limit = subtitleDelayCustomLimitSeconds;
     final current = subtitleDelaySeconds;
@@ -1012,8 +1196,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isSpeedBoostActive => _isSpeedBoostActive;
   double get speedBoostRate => _speedBoostRate;
 
-  // 快进快退时间的getter
-  int get seekStepSeconds => _seekStepSeconds;
   // 跳过时间的getter
   int get skipSeconds => _skipSeconds;
 
@@ -1220,8 +1402,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void onWindowUnmaximize() {}
 
   /// 获取当前时间窗口内的弹幕（分批加载/懒加载）
-  List<Map<String, dynamic>> getActiveDanmakuList(double currentTime,
-      {double window = 15.0}) {
+  List<Map<String, dynamic>> getActiveDanmakuList(
+    double currentTime, {
+    double window = 15.0,
+  }) {
     // 先过滤掉被屏蔽的弹幕
     final filteredDanmakuList = getFilteredDanmakuList();
 

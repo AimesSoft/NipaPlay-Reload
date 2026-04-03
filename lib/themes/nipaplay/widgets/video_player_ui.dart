@@ -30,10 +30,7 @@ import 'package:video_player/video_player.dart';
 class VideoPlayerUI extends StatefulWidget {
   final Widget? emptyPlaceholder;
 
-  const VideoPlayerUI({
-    super.key,
-    this.emptyPlaceholder,
-  });
+  const VideoPlayerUI({super.key, this.emptyPlaceholder});
 
   @override
   State<VideoPlayerUI> createState() => _VideoPlayerUIState();
@@ -107,10 +104,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (textureId == null || textureId < 0) {
       return const SizedBox.shrink();
     }
-    return Texture(
-      textureId: textureId,
-      filterQuality: FilterQuality.medium,
-    );
+    return Texture(textureId: textureId, filterQuality: FilterQuality.medium);
   }
 
   @override
@@ -131,8 +125,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     // more reliably, but for listen:false, initState is usually fine.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _videoPlayerStateInstance =
-            Provider.of<VideoPlayerState>(context, listen: false);
+        _videoPlayerStateInstance = Provider.of<VideoPlayerState>(
+          context,
+          listen: false,
+        );
         _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop =
             () async {
           if (mounted && _videoPlayerStateInstance != null) {
@@ -189,8 +185,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         // _registerKeyboardShortcuts();
 
         // 安全获取视频状态
-        final videoState =
-            Provider.of<VideoPlayerState>(context, listen: false);
+        final videoState = Provider.of<VideoPlayerState>(
+          context,
+          listen: false,
+        );
         videoState.setContext(context);
 
         // 如果不是手机，重置鼠标隐藏计时器
@@ -209,8 +207,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     super.didChangeAppLifecycleState(state);
     if (!globals.isMobilePlatform) return;
     if (!mounted) return;
-    _videoPlayerStateInstance ??=
-        Provider.of<VideoPlayerState>(context, listen: false);
+    _videoPlayerStateInstance ??= Provider.of<VideoPlayerState>(
+      context,
+      listen: false,
+    );
     _videoPlayerStateInstance?.handleAppLifecycleState(state);
   }
 
@@ -347,7 +347,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   void _handleHorizontalDragStart(
-      BuildContext context, DragStartDetails details) {
+    BuildContext context,
+    DragStartDetails details,
+  ) {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
       _isHorizontalDragging = true;
@@ -358,7 +360,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   void _handleHorizontalDragUpdate(
-      BuildContext context, DragUpdateDetails details) {
+    BuildContext context,
+    DragUpdateDetails details,
+  ) {
     if (_isHorizontalDragging) {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       if (details.primaryDelta != null && details.primaryDelta!.abs() > 0) {
@@ -512,7 +516,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   List<ContextMenuAction> _buildContextMenuActions(
-      VideoPlayerState videoState) {
+    VideoPlayerState videoState,
+  ) {
     final actions = <ContextMenuAction>[
       ContextMenuAction(
         icon: Icons.skip_previous_rounded,
@@ -528,23 +533,15 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       ),
       ContextMenuAction(
         icon: Icons.fast_forward_rounded,
-        label: '快进 ${videoState.seekStepSeconds} 秒',
+        label: '快进 ${videoState.seekStepDisplayLabel}',
         enabled: videoState.hasVideo,
-        onPressed: () {
-          final newPosition = videoState.position +
-              Duration(seconds: videoState.seekStepSeconds);
-          videoState.seekTo(newPosition);
-        },
+        onPressed: videoState.seekForwardByStep,
       ),
       ContextMenuAction(
         icon: Icons.fast_rewind_rounded,
-        label: '快退 ${videoState.seekStepSeconds} 秒',
+        label: '快退 ${videoState.seekStepDisplayLabel}',
         enabled: videoState.hasVideo,
-        onPressed: () {
-          final newPosition = videoState.position -
-              Duration(seconds: videoState.seekStepSeconds);
-          videoState.seekTo(newPosition);
-        },
+        onPressed: videoState.seekBackwardByStep,
       ),
       ContextMenuAction(
         icon: Icons.chat_bubble_outline_rounded,
@@ -715,7 +712,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                             builder: (context, posMs, __) {
                                               return DanmakuOverlay(
                                                 key: ValueKey(
-                                                    'danmaku_${videoState.danmakuOverlayKey}'),
+                                                  'danmaku_${videoState.danmakuOverlayKey}',
+                                                ),
                                                 currentPosition: posMs,
                                                 videoDuration: videoState
                                                     .videoDuration
@@ -723,8 +721,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                                     .toDouble(),
                                                 isPlaying: videoState.status ==
                                                     PlayerStatus.playing,
-                                                fontSize:
-                                                    getFontSize(videoState),
+                                                fontSize: getFontSize(
+                                                  videoState,
+                                                ),
                                                 isVisible:
                                                     videoState.danmakuVisible,
                                                 opacity: videoState
@@ -835,7 +834,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                               builder: (context, posMs, __) {
                                                 return DanmakuOverlay(
                                                   key: ValueKey(
-                                                      'danmaku_${videoState.danmakuOverlayKey}'),
+                                                    'danmaku_${videoState.danmakuOverlayKey}',
+                                                  ),
                                                   currentPosition: posMs,
                                                   videoDuration: videoState
                                                       .videoDuration
@@ -844,8 +844,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                                   isPlaying:
                                                       videoState.status ==
                                                           PlayerStatus.playing,
-                                                  fontSize:
-                                                      getFontSize(videoState),
+                                                  fontSize: getFontSize(
+                                                    videoState,
+                                                  ),
                                                   isVisible:
                                                       videoState.danmakuVisible,
                                                   opacity: videoState

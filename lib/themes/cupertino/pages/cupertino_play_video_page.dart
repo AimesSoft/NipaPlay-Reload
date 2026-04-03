@@ -236,8 +236,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           AdaptiveSnackBar.show(
             context,
             message: ok ? '截图已保存到相册' : '截图失败',
-            type:
-                ok ? AdaptiveSnackBarType.success : AdaptiveSnackBarType.error,
+            type: ok
+                ? AdaptiveSnackBarType.success
+                : AdaptiveSnackBarType.error,
           );
           return;
         }
@@ -276,7 +277,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   }
 
   List<ContextMenuAction> _buildContextMenuActions(
-      VideoPlayerState videoState) {
+    VideoPlayerState videoState,
+  ) {
     final actions = <ContextMenuAction>[
       ContextMenuAction(
         icon: Icons.skip_previous_rounded,
@@ -292,23 +294,15 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       ),
       ContextMenuAction(
         icon: Icons.fast_forward_rounded,
-        label: '快进 ${videoState.seekStepSeconds} 秒',
+        label: '快进 ${videoState.seekStepDisplayLabel}',
         enabled: videoState.hasVideo,
-        onPressed: () {
-          final newPosition = videoState.position +
-              Duration(seconds: videoState.seekStepSeconds);
-          videoState.seekTo(newPosition);
-        },
+        onPressed: videoState.seekForwardByStep,
       ),
       ContextMenuAction(
         icon: Icons.fast_rewind_rounded,
-        label: '快退 ${videoState.seekStepSeconds} 秒',
+        label: '快退 ${videoState.seekStepDisplayLabel}',
         enabled: videoState.hasVideo,
-        onPressed: () {
-          final newPosition = videoState.position -
-              Duration(seconds: videoState.seekStepSeconds);
-          videoState.seekTo(newPosition);
-        },
+        onPressed: videoState.seekBackwardByStep,
       ),
       ContextMenuAction(
         icon: Icons.chat_bubble_outline_rounded,
@@ -379,10 +373,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: const [
-              Text(
-                '点击下方 AirPlay 图标选择设备',
-                textAlign: TextAlign.center,
-              ),
+              Text('点击下方 AirPlay 图标选择设备', textAlign: TextAlign.center),
               SizedBox(height: 20),
               AirPlayRoutePicker(size: 56),
             ],
@@ -420,7 +411,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
     final textureId = videoState.player.textureId.value;
     final controller = kIsWeb ? videoState.player.videoPlayerController : null;
-    final hasVideo = videoState.hasVideo &&
+    final hasVideo =
+        videoState.hasVideo &&
         (kIsWeb || (textureId != null && textureId >= 0));
     final progressValue = _isDragging
         ? (_dragProgress ?? videoState.progress)
@@ -488,11 +480,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           aspectRatio: videoState.aspectRatio,
                           child: kIsWeb
                               ? (controller == null
-                                  ? const SizedBox.shrink()
-                                  : VideoPlayer(controller))
+                                    ? const SizedBox.shrink()
+                                    : VideoPlayer(controller))
                               : (textureId == null
-                                  ? const SizedBox.shrink()
-                                  : Texture(textureId: textureId)),
+                                    ? const SizedBox.shrink()
+                                    : Texture(textureId: textureId)),
                         ),
                       )
                     : _buildPlaceholder(videoState),
@@ -506,11 +498,12 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     valueListenable: videoState.playbackTimeMs,
                     builder: (context, posMs, __) {
                       return DanmakuOverlay(
-                        key:
-                            ValueKey('danmaku_${videoState.danmakuOverlayKey}'),
+                        key: ValueKey(
+                          'danmaku_${videoState.danmakuOverlayKey}',
+                        ),
                         currentPosition: posMs,
-                        videoDuration:
-                            videoState.duration.inMilliseconds.toDouble(),
+                        videoDuration: videoState.duration.inMilliseconds
+                            .toDouble(),
                         isPlaying: videoState.status == PlayerStatus.playing,
                         fontSize: videoState.actualDanmakuFontSize,
                         isVisible: videoState.danmakuVisible,
@@ -527,9 +520,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   child: ValueListenableBuilder<double>(
                     valueListenable: videoState.playbackTimeMs,
                     builder: (context, posMs, __) {
-                      return ExternalSubtitleOverlay(
-                        currentPositionMs: posMs,
-                      );
+                      return ExternalSubtitleOverlay(currentPositionMs: posMs);
                     },
                   ),
                 ),
@@ -565,7 +556,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
   Widget _buildNipaplayControls(VideoPlayerState videoState) {
     final bool uiLocked = globals.isPhone ? _isUiLocked : false;
-    final bool showLockButton = globals.isPhone &&
+    final bool showLockButton =
+        globals.isPhone &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
     final bool showShareButton =
         SystemShareService.isSupported && !globals.isDesktop;
@@ -610,8 +602,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 child: IgnorePointer(
                   ignoring: !videoState.showControls,
                   child: Padding(
-                    padding:
-                        EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
+                    padding: EdgeInsets.only(
+                      left: globals.isPhone ? 24.0 : 0.0,
+                    ),
                     child: Row(
                       children: [
                         MouseRegion(
@@ -636,9 +629,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           onPressed: () => _showSendDanmakuDialog(videoState),
                         ),
                         const SizedBox(width: 8.0),
-                        SkipButton(
-                          onPressed: () => videoState.skip(),
-                        ),
+                        SkipButton(onPressed: () => videoState.skip()),
                         const SizedBox(width: 12.0),
                         MouseRegion(
                           cursor: _isHoveringAnimeInfo
@@ -671,8 +662,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 child: IgnorePointer(
                   ignoring: !videoState.showControls,
                   child: Padding(
-                    padding:
-                        EdgeInsets.only(right: globals.isPhone ? 24.0 : 0.0),
+                    padding: EdgeInsets.only(
+                      right: globals.isPhone ? 24.0 : 0.0,
+                    ),
                     child: MouseRegion(
                       onEnter: (_) => videoState.setControlsHovered(true),
                       onExit: (_) => videoState.setControlsHovered(false),
@@ -703,12 +695,14 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           if (showShareButton) ...[
                             const SizedBox(width: 12),
                             ShadowActionButton(
-                              tooltip: (!kIsWeb &&
+                              tooltip:
+                                  (!kIsWeb &&
                                       defaultTargetPlatform ==
                                           TargetPlatform.iOS)
                                   ? '分享 / AirDrop'
                                   : '分享',
-                              icon: (!kIsWeb &&
+                              icon:
+                                  (!kIsWeb &&
                                       defaultTargetPlatform ==
                                           TargetPlatform.iOS)
                                   ? Icons.ios_share_rounded
@@ -811,8 +805,10 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
                 messages.last,
-                style:
-                    const TextStyle(color: CupertinoColors.white, fontSize: 14),
+                style: const TextStyle(
+                  color: CupertinoColors.white,
+                  fontSize: 14,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -844,8 +840,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
     final TabController? tabController =
         context.findAncestorWidgetOfExactType<DefaultTabController>() != null
-            ? DefaultTabController.of(context)
-            : null;
+        ? DefaultTabController.of(context)
+        : null;
 
     if (tabController == null) {
       _horizontalDragDistance = 0.0;
@@ -854,8 +850,10 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
     TabChangeNotifier? tabChangeNotifier;
     try {
-      tabChangeNotifier =
-          Provider.of<TabChangeNotifier>(context, listen: false);
+      tabChangeNotifier = Provider.of<TabChangeNotifier>(
+        context,
+        listen: false,
+      );
     } catch (_) {
       tabChangeNotifier = null;
     }
@@ -901,8 +899,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
   }
 
-  void _showUiLockButtonTemporarily(
-      [Duration duration = const Duration(seconds: 3)]) {
+  void _showUiLockButtonTemporarily([
+    Duration duration = const Duration(seconds: 3),
+  ]) {
     if (!mounted) return;
     if (!globals.isPhone) return;
     if (!_isUiLocked) return;
@@ -986,17 +985,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           actions: [
             HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop('photos'),
-              child: const Text(
-                '相册',
-                style: TextStyle(color: Colors.white),
-              ),
+              child: const Text('相册', style: TextStyle(color: Colors.white)),
             ),
             HoverScaleTextButton(
               onPressed: () => Navigator.of(context).pop('file'),
-              child: const Text(
-                '文件',
-                style: TextStyle(color: Colors.white),
-              ),
+              child: const Text('文件', style: TextStyle(color: Colors.white)),
             ),
           ],
           barrierDismissible: !_shouldDisableDialogDismiss(videoState),
@@ -1026,8 +1019,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
   }
 
-  Future<void> _showAirPlayPickerNipaplay(
-      [VideoPlayerState? videoState]) async {
+  Future<void> _showAirPlayPickerNipaplay([
+    VideoPlayerState? videoState,
+  ]) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
     final disableBackgroundDismiss = _shouldDisableDialogDismiss(videoState);
 
@@ -1108,8 +1102,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           ? AdaptiveButton.sfSymbol(
                               onPressed: () =>
                                   _showAirPlayPickerSheet(videoState),
-                              sfSymbol: const SFSymbol('airplayvideo',
-                                  size: 18, color: CupertinoColors.white),
+                              sfSymbol: const SFSymbol(
+                                'airplayvideo',
+                                size: 18,
+                                color: CupertinoColors.white,
+                              ),
                               style: AdaptiveButtonStyle.glass,
                               size: AdaptiveButtonSize.large,
                               useSmoothRectangleBorder: false,
@@ -1139,8 +1136,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                                 videoState.resetHideControlsTimer();
                                 _shareCurrentMedia(videoState);
                               },
-                              sfSymbol: const SFSymbol('square.and.arrow.up',
-                                  size: 18, color: CupertinoColors.white),
+                              sfSymbol: const SFSymbol(
+                                'square.and.arrow.up',
+                                size: 18,
+                                color: CupertinoColors.white,
+                              ),
                               style: AdaptiveButtonStyle.glass,
                               size: AdaptiveButtonSize.large,
                               useSmoothRectangleBorder: false,
@@ -1172,8 +1172,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                                 videoState.resetHideControlsTimer();
                                 _captureScreenshot(videoState);
                               },
-                              sfSymbol: const SFSymbol('camera',
-                                  size: 18, color: CupertinoColors.white),
+                              sfSymbol: const SFSymbol(
+                                'camera',
+                                size: 18,
+                                color: CupertinoColors.white,
+                              ),
                               style: AdaptiveButtonStyle.glass,
                               size: AdaptiveButtonSize.large,
                               useSmoothRectangleBorder: false,
@@ -1215,8 +1218,11 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     if (PlatformInfo.isIOS26OrHigher()) {
       button = AdaptiveButton.sfSymbol(
         onPressed: handlePress,
-        sfSymbol: const SFSymbol('chevron.backward',
-            size: 18, color: CupertinoColors.white),
+        sfSymbol: const SFSymbol(
+          'chevron.backward',
+          size: 18,
+          color: CupertinoColors.white,
+        ),
         style: AdaptiveButtonStyle.glass,
         size: AdaptiveButtonSize.large,
         useSmoothRectangleBorder: false,
@@ -1235,11 +1241,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
       );
     }
 
-    return SizedBox(
-      width: 44,
-      height: 44,
-      child: button,
-    );
+    return SizedBox(width: 44, height: 44, child: button);
   }
 
   Widget _buildSendDanmakuButton(VideoPlayerState videoState) {
@@ -1342,11 +1344,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
         size: _resolveControlButtonSize(size),
         enabled: enabled,
         useSmoothRectangleBorder: false,
-        child: Icon(
-          icon,
-          size: iconSize,
-          color: CupertinoColors.white,
-        ),
+        child: Icon(icon, size: iconSize, color: CupertinoColors.white),
       ),
     );
 
@@ -1358,7 +1356,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   }
 
   Widget _buildBottomControls(
-      VideoPlayerState videoState, double progressValue) {
+    VideoPlayerState videoState,
+    double progressValue,
+  ) {
     final duration = videoState.duration;
     final position = videoState.position;
     final totalMillis = duration.inMilliseconds;
@@ -1416,8 +1416,9 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   ),
                   SizedBox(height: isPhone ? 6 : 8),
                   AdaptiveSlider(
-                    value:
-                        totalMillis > 0 ? progressValue.clamp(0.0, 1.0) : 0.0,
+                    value: totalMillis > 0
+                        ? progressValue.clamp(0.0, 1.0)
+                        : 0.0,
                     min: 0.0,
                     max: 1.0,
                     activeColor: CupertinoColors.activeBlue,
@@ -1468,9 +1469,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                         icon: Icons.fast_rewind_rounded,
                         onPressed: () {
                           videoState.resetHideControlsTimer();
-                          final newPosition = videoState.position -
-                              Duration(seconds: videoState.seekStepSeconds);
-                          videoState.seekTo(newPosition);
+                          videoState.seekBackwardByStep();
                         },
                         enabled: videoState.hasVideo,
                         size: smallButtonExtent,
@@ -1487,9 +1486,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                         icon: Icons.fast_forward_rounded,
                         onPressed: () {
                           videoState.resetHideControlsTimer();
-                          final newPosition = videoState.position +
-                              Duration(seconds: videoState.seekStepSeconds);
-                          videoState.seekTo(newPosition);
+                          videoState.seekForwardByStep();
                         },
                         enabled: videoState.hasVideo,
                         size: smallButtonExtent,
@@ -1668,8 +1665,10 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   }
 
   void _showSettingsMenu(BuildContext buttonContext) {
-    final videoState =
-        Provider.of<VideoPlayerState>(buttonContext, listen: false);
+    final videoState = Provider.of<VideoPlayerState>(
+      buttonContext,
+      listen: false,
+    );
     _settingsOverlay?.remove();
     videoState.setControlsVisibilityLocked(true);
 

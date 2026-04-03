@@ -17,10 +17,7 @@ import 'package:nipaplay/services/desktop_pip_window_service.dart';
 class ModernVideoControls extends StatefulWidget {
   final bool showFullscreenButton;
 
-  const ModernVideoControls({
-    super.key,
-    this.showFullscreenButton = true,
-  });
+  const ModernVideoControls({super.key, this.showFullscreenButton = true});
 
   @override
   State<ModernVideoControls> createState() => _ModernVideoControlsState();
@@ -86,10 +83,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
       iconWidget = AnimatedSwitcher(
         duration: const Duration(milliseconds: 200),
         transitionBuilder: (child, animation) {
-          return ScaleTransition(
-            scale: animation,
-            child: child,
-          );
+          return ScaleTransition(scale: animation, child: child);
         },
         child: icon,
       );
@@ -131,9 +125,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
           child: BounceHoverScale(
             isHovered: isHovered,
             isPressed: isPressed,
-            child: ControlIconShadow(
-              child: iconWidget,
-            ),
+            child: ControlIconShadow(child: iconWidget),
           ),
         ),
       ),
@@ -141,8 +133,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   }
 
   void _showSettingsMenu(BuildContext buttonContext) {
-    final videoState =
-        Provider.of<VideoPlayerState>(buttonContext, listen: false);
+    final videoState = Provider.of<VideoPlayerState>(
+      buttonContext,
+      listen: false,
+    );
     _playlistOverlay?.remove();
     _playlistOverlay = null;
     _settingsOverlay?.remove();
@@ -178,8 +172,10 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   }
 
   void _showPlaylistMenu(BuildContext buttonContext) {
-    final videoState =
-        Provider.of<VideoPlayerState>(buttonContext, listen: false);
+    final videoState = Provider.of<VideoPlayerState>(
+      buttonContext,
+      listen: false,
+    );
     _settingsOverlay?.remove();
     _settingsOverlay = null;
     _playlistOverlay?.remove();
@@ -412,12 +408,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         size: globals.isPhone ? 36 : 28,
                                       ),
                                       onTap: () {
-                                        final newPosition = videoState
-                                                .position -
-                                            Duration(
-                                                seconds:
-                                                    videoState.seekStepSeconds);
-                                        videoState.seekTo(newPosition);
+                                        videoState.seekBackwardByStep();
                                       },
                                       isPressed: _isRewindPressed,
                                       isHovered: _isRewindHovered,
@@ -427,7 +418,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           () => _isRewindPressed = value),
                                       tooltip: _tooltipManager
                                           .formatActionWithShortcut('rewind',
-                                              '快退 ${videoState.seekStepSeconds} 秒'),
+                                              '快退 ${videoState.seekStepDisplayLabel}'),
                                       useAnimatedSwitcher: true,
                                     ),
 
@@ -481,12 +472,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         size: globals.isPhone ? 36 : 28,
                                       ),
                                       onTap: () {
-                                        final newPosition = videoState
-                                                .position +
-                                            Duration(
-                                                seconds:
-                                                    videoState.seekStepSeconds);
-                                        videoState.seekTo(newPosition);
+                                        videoState.seekForwardByStep();
                                       },
                                       isPressed: _isForwardPressed,
                                       isHovered: _isForwardHovered,
@@ -496,7 +482,7 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           () => _isForwardPressed = value),
                                       tooltip: _tooltipManager
                                           .formatActionWithShortcut('forward',
-                                              '快进 ${videoState.seekStepSeconds} 秒'),
+                                              '快进 ${videoState.seekStepDisplayLabel}'),
                                       useAnimatedSwitcher: true,
                                     ),
 
@@ -580,7 +566,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         ),
                                         onTap: () {
                                           unawaited(
-                                              _handlePipButtonTap(videoState));
+                                            _handlePipButtonTap(videoState),
+                                          );
                                         },
                                         isPressed: _isPipPressed,
                                         isHovered: _isPipHovered,
