@@ -189,7 +189,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ### 鸣谢
 
 感谢以下贡献者和支持者：
-EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将, 博易伯伯, 千葉あおい
+EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将, 博易伯伯, 千葉あおい, Kean
 
 ### 看板娘
 
@@ -200,4 +200,3 @@ EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将
 <div align="center">
   <sub>Made with ❤️ by the NipaPlay Team</sub>
 </div>
-
