@@ -12,4 +12,3 @@ Description: A cross platform danmaku video player.
 Homepage: https://github.com/AimesSoft/NipaPlay-Reload
 Depends: libgtk-3-0, libmpv1 | libmpv2, libmimalloc2.0, ffmpeg, libass9, libsqlite3-0, libcanberra-gtk3-module, gtk3-nocsd, libgtk3-nocsd0
 Recommends: mpv
- 

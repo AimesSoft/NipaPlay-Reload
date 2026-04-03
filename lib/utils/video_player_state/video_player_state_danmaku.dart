@@ -169,65 +169,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   }
 
   Map<String, dynamic> _convertBilibiliXmlDanmakuToJson(String xmlContent) {
-    final List<Map<String, dynamic>> comments = [];
-
-    final RegExp danmakuRegex = RegExp(r'<d p="([^"]+)">([^<]+)</d>');
-    final Iterable<RegExpMatch> matches = danmakuRegex.allMatches(xmlContent);
-
-    for (final match in matches) {
-      try {
-        final String pAttr = match.group(1) ?? '';
-        final String rawTextContent = match.group(2) ?? '';
-        final String textContent = decodeDanmakuXmlText(rawTextContent);
-
-        if (textContent.isEmpty) continue;
-
-        final List<String> pParams = pAttr.split(',');
-        if (pParams.length < 4) continue;
-
-        // XML弹幕格式参数：时间,类型,字号,颜色,时间戳,池,用户id,弹幕id
-        final double time = double.tryParse(pParams[0]) ?? 0.0;
-        final int typeCode = int.tryParse(pParams[1]) ?? 1;
-        final int fontSize = int.tryParse(pParams[2]) ?? 25;
-        final int colorCode = int.tryParse(pParams[3]) ?? 16777215;
-
-        String danmakuType;
-        switch (typeCode) {
-          case 4:
-            danmakuType = 'bottom';
-            break;
-          case 5:
-            danmakuType = 'top';
-            break;
-          case 1:
-          case 6:
-          default:
-            danmakuType = 'scroll';
-            break;
-        }
-
-        final int r = (colorCode >> 16) & 0xFF;
-        final int g = (colorCode >> 8) & 0xFF;
-        final int b = colorCode & 0xFF;
-        final String color = 'rgb($r,$g,$b)';
-
-        comments.add({
-          't': time,
-          'c': textContent,
-          'y': danmakuType,
-          'r': color,
-          'fontSize': fontSize,
-          'originalType': typeCode,
-        });
-      } catch (_) {
-        continue;
-      }
-    }
-
-    return {
-      'count': comments.length,
-      'comments': comments,
-    };
+    return convertBilibiliXmlDanmakuToJson(xmlContent);
   }
 
   int _countLocalDanmakuComments(Map<String, dynamic> jsonData) {
@@ -1406,7 +1348,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
       try {
         final bool disableBackgroundDismiss =
-            globals.isPhone && globals.isTablet && _isAppBarHidden;
+            globals.isTabletLikeMobile && _isAppBarHidden;
         await DanmakuDialogManager().showSendDanmakuDialog(
           context: _context!,
           episodeId: episodeId!,

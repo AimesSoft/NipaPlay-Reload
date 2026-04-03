@@ -56,6 +56,7 @@ class WebApiService {
     _router.post('/dandanplay/refresh_login', handleRefreshLoginRequest);
     _router.get(
         '/dandanplay/bangumi/oauth_login', handleBangumiOAuthLoginRequest);
+    _router.get('/dandanplay/webtoken', handleWebTokenRequest);
     _router.get('/dandanplay/play_history', handlePlayHistoryRequest);
     _router.get('/dandanplay/favorites', handleFavoritesRequest);
     _router.post('/dandanplay/send_danmaku', handleSendDanmakuRequest);
@@ -423,6 +424,27 @@ class WebApiService {
       debugPrint('[WebApi][dandanplay/refresh_login] 异常: $e');
       return Response.internalServerError(
         body: 'Error refreshing login status: $e',
+      );
+    }
+  }
+
+  Future<Response> handleWebTokenRequest(Request request) async {
+    try {
+      final business = request.url.queryParameters['business']?.trim();
+      if (business == null || business.isEmpty) {
+        return Response.badRequest(
+          body: 'Missing required query parameter: business',
+        );
+      }
+
+      final result = await DandanplayService.getWebToken(business: business);
+      return Response.ok(
+        json.encode(result),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error getting web token: $e',
       );
     }
   }

@@ -547,7 +547,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _skipSecondsKey = 'skip_seconds';
   int _skipSeconds = 90; // 默认90秒
   final String _pauseOnBackgroundKey = 'pause_on_background';
-  bool _pauseOnBackground = globals.isPhone;
+  bool _pauseOnBackground = globals.isMobilePlatform;
 
   dynamic danmakuController; // 添加弹幕控制器属性
   Duration _videoDuration = Duration.zero; // 添加视频时长状态
@@ -594,7 +594,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double? _pendingSystemVolume;
   bool _isDrainingSystemVolumeQueue = false;
 
-  bool get _useSystemVolume => globals.isPhone && !kIsWeb;
+  bool get _useSystemVolume => globals.isMobilePlatform && !kIsWeb;
 
   void _queueSystemVolumeUpdate(double volume) {
     if (!_useSystemVolume) return;
@@ -637,9 +637,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _dragSeekStartPosition = Duration.zero;
   double _accumulatedDragDx = 0.0;
   Timer?
-  _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
+      _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
   OverlayEntry?
-  _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
+      _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
   Duration _dragSeekTargetPosition =
       Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
@@ -683,7 +683,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void _scheduleVolumePersistence({bool immediate = false}) {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     _volumePersistenceTimer?.cancel();
     if (immediate) {
       _volumePersistenceTimer = null;
@@ -839,11 +839,25 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       return null;
     }
     if (value is String) {
-      final match = RegExp(r'([\d]+(?:\.\d+)?)').firstMatch(value.trim());
-      if (match == null) return null;
-      final fps = double.tryParse(match.group(1) ?? '');
-      if (fps != null && fps.isFinite && fps > 0) {
-        return fps;
+      final trimmed = value.trim().toLowerCase();
+      if (trimmed.isEmpty) return null;
+
+      final directNumber = double.tryParse(trimmed);
+      if (directNumber != null && directNumber.isFinite && directNumber > 0) {
+        return directNumber;
+      }
+
+      final labeledMatch = RegExp(
+            r'([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|framerate)',
+          ).firstMatch(trimmed) ??
+          RegExp(
+            r'(?:fps|frame\s*rate|framerate)\D*([0-9]+(?:\.[0-9]+)?)',
+          ).firstMatch(trimmed);
+      if (labeledMatch != null) {
+        final fps = double.tryParse(labeledMatch.group(1) ?? '');
+        if (fps != null && fps.isFinite && fps > 0) {
+          return fps;
+        }
       }
     }
     return null;
@@ -877,11 +891,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (videoEntries is List) {
       for (final entry in videoEntries) {
         final mapEntry = toStringKeyedMap(entry);
-        final parsed =
-            _parseSeekStepFrameRateValue(mapEntry['fps']) ??
+        final parsed = _parseSeekStepFrameRateValue(mapEntry['fps']) ??
             _parseSeekStepFrameRateValue(mapEntry['frameRate']) ??
-            _parseSeekStepFrameRateValue(mapEntry['raw']) ??
-            _parseSeekStepFrameRateValue(entry);
+            _parseSeekStepFrameRateValue(mapEntry['frame_rate']) ??
+            _parseSeekStepFrameRateValue(mapEntry['raw']);
         if (parsed != null) {
           return parsed;
         }
@@ -1007,10 +1020,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       formatSeekStepLabel(seekStepSeconds, preferFrameLabel: true);
 
   String get seekStepSummaryLabel => formatSeekStepLabel(
-    seekStepSeconds,
-    preferFrameLabel: true,
-    includeFrameApproximation: true,
-  );
+        seekStepSeconds,
+        preferFrameLabel: true,
+        includeFrameApproximation: true,
+      );
 
   double get subtitleDelaySliderMinSeconds {
     final limit = subtitleDelayCustomLimitSeconds;

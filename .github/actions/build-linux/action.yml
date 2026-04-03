@@ -262,7 +262,8 @@ runs:
         echo "Creating DEBIAN/control"
         sed -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
             -e "s/ARCH_PLACEHOLDER/${ARCH}/g" \
-            "${ASSETS_LINUX_DIR}/DEBIAN/control.template" > "${DEB_ROOT}/DEBIAN/control"
+            "${ASSETS_LINUX_DIR}/DEBIAN/control.template" | \
+          sed '${/^[[:space:]]*$/d;}' > "${DEB_ROOT}/DEBIAN/control"
         
         # Copy postinst/postrm scripts if they exist
         if [ -f "${ASSETS_LINUX_DIR}/DEBIAN/postinst" ]; then

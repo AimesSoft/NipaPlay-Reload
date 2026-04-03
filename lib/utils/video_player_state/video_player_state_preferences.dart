@@ -18,7 +18,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _tryRecoverFromError() async {
     try {
       // 使用屏幕方向管理器重置屏幕方向
-      if (globals.isPhone) {
+      if (globals.isMobilePlatform) {
         await ScreenOrientationManager.instance.resetOrientation();
       }
 
@@ -128,7 +128,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadPauseOnBackgroundSetting() async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getBool(_pauseOnBackgroundKey);
-    final bool resolvedValue = storedValue ?? globals.isPhone;
+    final bool resolvedValue = storedValue ?? globals.isMobilePlatform;
     if (_pauseOnBackground != resolvedValue) {
       _pauseOnBackground = resolvedValue;
       notifyListeners();
@@ -406,11 +406,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final resolved = storedValue == null
         ? PlayerFactory.defaultPrecacheBufferSizeMb
         : storedValue
-              .clamp(
-                PlayerFactory.minPrecacheBufferSizeMb,
-                PlayerFactory.maxPrecacheBufferSizeMb,
-              )
-              .toInt();
+            .clamp(
+              PlayerFactory.minPrecacheBufferSizeMb,
+              PlayerFactory.maxPrecacheBufferSizeMb,
+            )
+            .toInt();
     _precacheBufferSizeMb = resolved;
     notifyListeners();
   }
@@ -418,9 +418,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadPrecacheBufferDuration() async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getInt(_precacheBufferDurationSecondsKey);
-    final resolved = (storedValue ?? _precacheBufferDurationSeconds)
-        .clamp(1, 120)
-        .toInt();
+    final resolved =
+        (storedValue ?? _precacheBufferDurationSeconds).clamp(1, 120).toInt();
     _precacheBufferDurationSeconds = resolved;
     notifyListeners();
   }
@@ -541,11 +540,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 加载快进快退时间设置
   Future<void> _loadSeekStepSeconds() async {
     final prefs = await SharedPreferences.getInstance();
-    final stored =
-        prefs.getDouble(_seekStepSecondsKey) ??
+    final stored = prefs.getDouble(_seekStepSecondsKey) ??
         prefs.getInt(_seekStepSecondsKey)?.toDouble() ??
         10.0;
-    _seekStepSeconds = clampSeekStepToCurrentVideoDuration(stored);
+    _seekStepSeconds = stored;
     notifyListeners();
   }
 
@@ -698,8 +696,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       if (anime4kEnabled) {
         final List<String> anime4kPaths =
             await Anime4KShaderManager.getShaderPathsForProfile(
-              _anime4kProfile,
-            );
+          _anime4kProfile,
+        );
         _anime4kShaderPaths = List.unmodifiable(anime4kPaths);
         shaderPaths.addAll(anime4kPaths);
       } else {
@@ -905,8 +903,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
 
-    final bool upscaleEnabled =
-        _doubleResolutionPlaybackEnabled ||
+    final bool upscaleEnabled = _doubleResolutionPlaybackEnabled ||
         _anime4kProfile != Anime4KProfile.off;
     if (!upscaleEnabled || !hasVideo) {
       return;
@@ -923,8 +920,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         return;
       }
 
-      final bool playbackReady =
-          player.state == PlaybackState.playing ||
+      final bool playbackReady = player.state == PlaybackState.playing ||
           player.state == PlaybackState.paused;
       if (!playbackReady) {
         if (attempt < 6) {
@@ -991,8 +987,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         await Future.delayed(interval);
       }
 
-      final Map<String, dynamic> info = await player
-          .getDetailedMediaInfoAsync();
+      final Map<String, dynamic> info =
+          await player.getDetailedMediaInfoAsync();
 
       final Map<String, dynamic> mpvProps = _toStringKeyedMap(
         info['mpvProperties'],
@@ -1001,22 +997,18 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         info['videoParams'],
       );
 
-      srcWidth =
-          _toInt(mpvProps['video-params/w']) ??
+      srcWidth = _toInt(mpvProps['video-params/w']) ??
           _toInt(videoParams['width']) ??
           srcWidth;
-      srcHeight =
-          _toInt(mpvProps['video-params/h']) ??
+      srcHeight = _toInt(mpvProps['video-params/h']) ??
           _toInt(videoParams['height']) ??
           srcHeight;
 
-      dispWidth =
-          _toInt(mpvProps['dwidth']) ??
+      dispWidth = _toInt(mpvProps['dwidth']) ??
           _toInt(mpvProps['video-out-params/w']) ??
           _toInt(mpvProps['video-params/dw']) ??
           dispWidth;
-      dispHeight =
-          _toInt(mpvProps['dheight']) ??
+      dispHeight = _toInt(mpvProps['dheight']) ??
           _toInt(mpvProps['video-out-params/h']) ??
           _toInt(mpvProps['video-params/dh']) ??
           dispHeight;
@@ -1177,10 +1169,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> _loadDanmakuDisplayEffectSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final loadedFontFilePath = (prefs.getString(_danmakuFontFilePathKey) ?? '')
-        .trim();
-    var loadedFontFamily = (prefs.getString(_danmakuFontFamilyKey) ?? '')
-        .trim();
+    final loadedFontFilePath =
+        (prefs.getString(_danmakuFontFilePathKey) ?? '').trim();
+    var loadedFontFamily =
+        (prefs.getString(_danmakuFontFamilyKey) ?? '').trim();
     final loadedOutlineStyle = _resolveDanmakuOutlineStyle(
       prefs.getInt(_danmakuOutlineStyleKey),
     );
@@ -1206,8 +1198,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       }
     }
 
-    final changed =
-        _danmakuFontFilePath != effectiveFontPath ||
+    final changed = _danmakuFontFilePath != effectiveFontPath ||
         _danmakuFontFamily != loadedFontFamily ||
         _danmakuOutlineStyle != loadedOutlineStyle ||
         _danmakuShadowStyle != loadedShadowStyle;
@@ -1399,26 +1390,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       prefs.getDouble(_subtitleScaleKey) ??
           VideoPlayerState.defaultSubtitleScale,
     );
-    _subtitleDelaySeconds =
-        prefs.getDouble(_subtitleDelayKey) ??
+    _subtitleDelaySeconds = prefs.getDouble(_subtitleDelayKey) ??
         VideoPlayerState.defaultSubtitleDelaySeconds;
     _subtitlePosition = _clampSubtitlePosition(
       prefs.getDouble(_subtitlePositionKey) ??
           VideoPlayerState.defaultSubtitlePosition,
     );
-    _subtitleAlignX =
-        SubtitleAlignX.values[(prefs.getInt(_subtitleAlignXKey) ??
-                VideoPlayerState.defaultSubtitleAlignX.index)
-            .clamp(0, SubtitleAlignX.values.length - 1)];
-    _subtitleAlignY =
-        SubtitleAlignY.values[(prefs.getInt(_subtitleAlignYKey) ??
-                VideoPlayerState.defaultSubtitleAlignY.index)
-            .clamp(0, SubtitleAlignY.values.length - 1)];
-    _subtitleMarginX =
-        prefs.getDouble(_subtitleMarginXKey) ??
+    _subtitleAlignX = SubtitleAlignX.values[(prefs.getInt(_subtitleAlignXKey) ??
+            VideoPlayerState.defaultSubtitleAlignX.index)
+        .clamp(0, SubtitleAlignX.values.length - 1)];
+    _subtitleAlignY = SubtitleAlignY.values[(prefs.getInt(_subtitleAlignYKey) ??
+            VideoPlayerState.defaultSubtitleAlignY.index)
+        .clamp(0, SubtitleAlignY.values.length - 1)];
+    _subtitleMarginX = prefs.getDouble(_subtitleMarginXKey) ??
         VideoPlayerState.defaultSubtitleMarginX;
-    _subtitleMarginY =
-        prefs.getDouble(_subtitleMarginYKey) ??
+    _subtitleMarginY = prefs.getDouble(_subtitleMarginYKey) ??
         VideoPlayerState.defaultSubtitleMarginY;
     _subtitleOpacity = _clampSubtitleOpacity(
       prefs.getDouble(_subtitleOpacityKey) ??
@@ -1434,23 +1420,19 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     );
     _subtitleBold = prefs.getBool(_subtitleBoldKey) ?? false;
     _subtitleItalic = prefs.getBool(_subtitleItalicKey) ?? false;
-    _subtitleColorValue =
-        prefs.getInt(_subtitleColorKey) ??
+    _subtitleColorValue = prefs.getInt(_subtitleColorKey) ??
         VideoPlayerState.defaultSubtitleColorValue;
-    _subtitleBorderColorValue =
-        prefs.getInt(_subtitleBorderColorKey) ??
+    _subtitleBorderColorValue = prefs.getInt(_subtitleBorderColorKey) ??
         VideoPlayerState.defaultSubtitleBorderColorValue;
-    _subtitleShadowColorValue =
-        prefs.getInt(_subtitleShadowColorKey) ??
+    _subtitleShadowColorValue = prefs.getInt(_subtitleShadowColorKey) ??
         VideoPlayerState.defaultSubtitleShadowColorValue;
     _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
     _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
-    _subtitleOverrideMode =
-        SubtitleStyleOverrideMode.values[(prefs.getInt(
-                  _subtitleOverrideModeKey,
-                ) ??
-                VideoPlayerState.defaultSubtitleOverrideMode.index)
-            .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
+    _subtitleOverrideMode = SubtitleStyleOverrideMode.values[(prefs.getInt(
+              _subtitleOverrideModeKey,
+            ) ??
+            VideoPlayerState.defaultSubtitleOverrideMode.index)
+        .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
     await applySubtitleStylePreference();
     notifyListeners();
   }
@@ -1954,7 +1936,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await SecurityBookmarkService.createBookmark(resolvedPath);
       resolvedPath =
           await SecurityBookmarkService.resolveBookmark(resolvedPath) ??
-          resolvedPath;
+              resolvedPath;
     }
 
     try {

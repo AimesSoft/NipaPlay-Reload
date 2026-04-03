@@ -5,6 +5,7 @@ import 'package:nipaplay/pages/account/account_controller.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -28,16 +29,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
   @override
   void showMessage(String message) {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger != null) {
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-      return;
-    }
-
-    debugPrint('[MaterialAccountPage] $message');
+    BlurSnackBar.show(context, message);
   }
 
   fluent.FluentThemeData _buildFluentThemeData(BuildContext context) {
@@ -725,8 +717,17 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           ),
           const SizedBox(height: 8),
           _buildAuthControlButton(
+            icon: fluent.FluentIcons.link,
+            text: linked == null ? '先绑定后再管理同步设置' : '管理Bangumi同步设置',
+            onTap:
+                (!isLoggedIn || linked == null || isRequestingDandanBangumiAuth)
+                    ? null
+                    : _openDandanBangumiManagePage,
+          ),
+          const SizedBox(height: 8),
+          _buildAuthControlButton(
             icon: fluent.FluentIcons.sync,
-            text: '我已完成授权，刷新状态',
+            text: '我已完成网页操作，刷新状态',
             onTap: !isLoggedIn ? null : _manualRefreshDandanBangumiStatus,
           ),
           const SizedBox(height: 6),
@@ -759,7 +760,28 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     }
     await _openExternalUrl(url, cannotOpenMessage: '无法打开Bangumi授权页面');
     if (!mounted) return;
-    showMessage('已在浏览器打开授权页，完成后点击“我已完成授权，刷新状态”。');
+    showMessage('已在浏览器打开授权页，完成后点击“我已完成网页操作，刷新状态”。');
+    _tryAutoRefreshDandanBangumiStatus();
+  }
+
+  Future<void> _openDandanBangumiManagePage() async {
+    final result = await requestDandanBangumiManageUrl();
+    if (!mounted) return;
+
+    if (result['success'] != true) {
+      showMessage(result['message']?.toString() ?? '获取Bangumi同步设置页面失败');
+      return;
+    }
+
+    final url = result['url']?.toString();
+    if (url == null || url.isEmpty) {
+      showMessage('同步设置页面链接为空');
+      return;
+    }
+
+    await _openExternalUrl(url, cannotOpenMessage: '无法打开Bangumi同步设置页面');
+    if (!mounted) return;
+    showMessage('已在浏览器打开同步设置页，网页内操作后请刷新状态或重新登录。');
     _tryAutoRefreshDandanBangumiStatus();
   }
 

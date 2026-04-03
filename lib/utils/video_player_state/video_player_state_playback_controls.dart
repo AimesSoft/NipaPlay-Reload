@@ -140,7 +140,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _isAppBarHidden = false; // 重置平板设备菜单栏隐藏状态
 
       // 重置系统UI显示状态
-      if (globals.isPhone && globals.isTablet) {
+      if (globals.isTabletLikeMobile) {
         try {
           await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
         } catch (e) {
@@ -151,7 +151,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _setStatus(PlayerStatus.idle);
 
       // 使用屏幕方向管理器重置屏幕方向
-      if (globals.isPhone) {
+      if (globals.isMobilePlatform) {
         await ScreenOrientationManager.instance.resetOrientation();
       }
 
@@ -339,8 +339,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   void pause() {
     if (_status == PlayerStatus.playing) {
-      final bool isWindowsMediaKit =
-          !kIsWeb &&
+      final bool isWindowsMediaKit = !kIsWeb &&
           Platform.isWindows &&
           player.getPlayerKernelName() == 'Media Kit';
       if (isWindowsMediaKit) {
@@ -351,18 +350,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
-      player
-          .pauseDirectly()
-          .then((_) {
-            //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
-            _setStatus(PlayerStatus.paused, message: '已暂停');
-          })
-          .catchError((e) {
-            debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
-            // 尝试使用传统方法
-            player.state = PlaybackState.paused;
-            _setStatus(PlayerStatus.paused, message: '已暂停');
-          });
+      player.pauseDirectly().then((_) {
+        //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
+        _setStatus(PlayerStatus.paused, message: '已暂停');
+      }).catchError((e) {
+        debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
+        // 尝试使用传统方法
+        player.state = PlaybackState.paused;
+        _setStatus(PlayerStatus.paused, message: '已暂停');
+      });
 
       // Jellyfin同步：如果是Jellyfin流媒体，报告暂停状态
       if (_currentVideoPath != null &&
@@ -408,8 +404,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     debugPrint(
       '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}',
     );
-    final bool isWindowsMediaKit =
-        !kIsWeb &&
+    final bool isWindowsMediaKit = !kIsWeb &&
         Platform.isWindows &&
         player.getPlayerKernelName() == 'Media Kit';
     if (isWindowsMediaKit) {
@@ -423,25 +418,22 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
       _lastPlaybackStartMs = DateTime.now().millisecondsSinceEpoch;
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
-      player
-          .playDirectly()
-          .then((_) {
-            //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
-            // 设置状态
-            _setStatus(PlayerStatus.playing, message: '开始播放');
+      player.playDirectly().then((_) {
+        //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
+        // 设置状态
+        _setStatus(PlayerStatus.playing, message: '开始播放');
 
-            // 播放开始时提交观看记录到弹弹play
-            _submitWatchHistoryToDandanplay();
-          })
-          .catchError((e) {
-            debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
-            // 尝试使用传统方法
-            player.state = PlaybackState.playing;
-            _setStatus(PlayerStatus.playing, message: '开始播放');
+        // 播放开始时提交观看记录到弹弹play
+        _submitWatchHistoryToDandanplay();
+      }).catchError((e) {
+        debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
+        // 尝试使用传统方法
+        player.state = PlaybackState.playing;
+        _setStatus(PlayerStatus.playing, message: '开始播放');
 
-            // 播放开始时提交观看记录到弹弹play
-            _submitWatchHistoryToDandanplay();
-          });
+        // 播放开始时提交观看记录到弹弹play
+        _submitWatchHistoryToDandanplay();
+      });
 
       // <<< ADDED DEBUG LOG >>>
       debugPrint(
@@ -676,7 +668,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _autoHideTimer?.cancel();
       setShowControls(true);
     } else {
-      if (_instantHidePlayerUiEnabled && !globals.isPhone) {
+      if (_instantHidePlayerUiEnabled && !globals.isMobilePlatform) {
         _hideControlsTimer?.cancel();
         _hideMouseTimer?.cancel();
         _autoHideTimer?.cancel();
@@ -693,7 +685,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       return;
     }
     _hideMouseTimer?.cancel();
-    if (hasVideo && !_isControlsHovered && !globals.isPhone) {
+    if (hasVideo && !_isControlsHovered && !globals.isMobilePlatform) {
       _hideMouseTimer = Timer(const Duration(milliseconds: 1500), () {
         setShowControls(false);
       });
@@ -706,7 +698,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
     _hideControlsTimer?.cancel();
     setShowControls(true);
-    if (hasVideo && !_isControlsHovered && !globals.isPhone) {
+    if (hasVideo && !_isControlsHovered && !globals.isMobilePlatform) {
       _hideControlsTimer = Timer(const Duration(milliseconds: 1500), () {
         setShowControls(false);
       });
@@ -717,7 +709,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     if (_controlsVisibilityLocked) {
       return;
     }
-    if (!_isControlsHovered && !globals.isPhone) {
+    if (!_isControlsHovered && !globals.isMobilePlatform) {
       resetHideControlsTimer();
       resetHideMouseTimer();
     }
@@ -823,7 +815,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   // 已移除 _startPositionUpdateTimer，功能已合并到 _startUiUpdateTimer
 
   bool shouldShowAppBar() {
-    if (globals.isPhone) {
+    if (globals.isMobilePlatform) {
       if (isTablet) {
         // 平板设备：根据 _isAppBarHidden 状态决定是否显示菜单栏
         return !hasVideo || !_isAppBarHidden;
@@ -894,7 +886,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   // Volume Drag Methods
   void startVolumeDrag() {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     _initialDragVolume = _currentVolume;
     _showVolumeIndicator(); // We'll define this next
     debugPrint("Volume drag started. Initial drag volume: $_initialDragVolume");
@@ -904,7 +896,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     double verticalDragDelta,
     BuildContext context,
   ) async {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
 
     final screenHeight = MediaQuery.of(context).size.height;
     // 拖动约 60% 屏幕高度对应 0~100% 音量变化，便于慢速微调。
@@ -935,7 +927,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void endVolumeDrag() {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     debugPrint("Volume drag ended. Current volume: $_currentVolume");
     _scheduleVolumePersistence(immediate: true);
   }
@@ -944,7 +936,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   static const double _volumeStep = 0.05; // 5% volume change per key press
 
   void increaseVolume({double? step}) {
-    if (globals.isPhone) return; // Only for PC
+    if (globals.isMobilePlatform) return; // Only for PC
 
     try {
       // Prioritize actual player volume, fallback to _currentVolume
@@ -969,7 +961,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void decreaseVolume({double? step}) {
-    if (globals.isPhone) return; // Only for PC
+    if (globals.isMobilePlatform) return; // Only for PC
 
     try {
       // Prioritize actual player volume, fallback to _currentVolume
@@ -995,7 +987,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   // Seek Drag Methods
   void startSeekDrag(BuildContext context) {
-    if (!globals.isPhone) return; // Add platform check
+    if (!globals.isMobilePlatform) return; // Add platform check
     if (!hasVideo) return;
     _isSeekingViaDrag = true;
     _dragSeekStartPosition = _position;
@@ -1007,7 +999,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void updateSeekDrag(double deltaDx, BuildContext context) {
-    if (!globals.isPhone) return; // Add platform check
+    if (!globals.isMobilePlatform) return; // Add platform check
     if (!hasVideo || !_isSeekingViaDrag) return;
 
     _accumulatedDragDx += deltaDx;
@@ -1035,7 +1027,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void endSeekDrag() {
-    if (!globals.isPhone) return; // Add platform check
+    if (!globals.isMobilePlatform) return; // Add platform check
     if (!hasVideo || !_isSeekingViaDrag) return;
 
     seekTo(_dragSeekTargetPosition);
@@ -1048,7 +1040,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   // Seek Indicator Overlay Methods
   void _showSeekIndicator() {
-    if (!globals.isPhone || _context == null) return;
+    if (!globals.isMobilePlatform || _context == null) return;
 
     final uiThemeProvider = Provider.of<UIThemeProvider>(
       _context!,
@@ -1090,7 +1082,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void _hideSeekIndicator() {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     _seekIndicatorTimer?.cancel();
 
     if (_isSeekIndicatorVisible) {

@@ -40,7 +40,6 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isSettingsHovered = false;
   bool _isFullscreenHovered = false;
   bool _isDragging = false;
-  bool? _wasPlayingBeforeDrag;
   bool _playStateChangedByDrag = false;
   OverlayEntry? _playlistOverlay;
   OverlayEntry? _settingsOverlay;
@@ -294,482 +293,413 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
             return Focus(
               canRequestFocus: true,
               autofocus: true,
-              child: Container(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (details) {
-                    _ignoreNextTap = _isTapOnProgressBar(
-                      details.globalPosition,
-                    );
-                  },
-                  onTapCancel: () {
-                    _ignoreNextTap = false;
-                  },
-                  onTap: _handleTap,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            bottom: videoState.controlBarHeight,
-                            left: 20,
-                            right: 20,
-                          ),
-                          child: MouseRegion(
-                            onEnter: (_) => videoState.setControlsHovered(true),
-                            onExit: (_) => videoState.setControlsHovered(false),
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: globals.isPhone ? 6 : 20,
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  VideoProgressBar(
-                                    key: _progressBarKey,
-                                    videoState: videoState,
-                                    hoverTime: null,
-                                    isDragging: _isDragging,
-                                    onPositionUpdate: (position) {},
-                                    onDraggingStateChange: (isDragging) {
-                                      if (isDragging) {
-                                        // 开始拖动时，保存当前的播放状态
-                                        _wasPlayingBeforeDrag =
-                                            videoState.status ==
-                                            PlayerStatus.playing;
-                                        // 如果是暂停状态，开始拖动时恢复播放
-                                        if (videoState.status ==
-                                            PlayerStatus.paused) {
-                                          _playStateChangedByDrag = true;
-                                          videoState.togglePlayPause();
-                                        }
-                                      } else {
-                                        // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
-                                        if (_playStateChangedByDrag) {
-                                          videoState.togglePlayPause();
-                                          _playStateChangedByDrag = false;
-                                        }
-                                        _wasPlayingBeforeDrag = null;
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  _ignoreNextTap = _isTapOnProgressBar(details.globalPosition);
+                },
+                onTapCancel: () {
+                  _ignoreNextTap = false;
+                },
+                onTap: _handleTap,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          bottom: videoState.controlBarHeight,
+                          left: 20,
+                          right: 20,
+                        ),
+                        child: MouseRegion(
+                          onEnter: (_) => videoState.setControlsHovered(true),
+                          onExit: (_) => videoState.setControlsHovered(false),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: globals.isPhone ? 6 : 20,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                VideoProgressBar(
+                                  key: _progressBarKey,
+                                  videoState: videoState,
+                                  hoverTime: null,
+                                  isDragging: _isDragging,
+                                  onPositionUpdate: (position) {},
+                                  onDraggingStateChange: (isDragging) {
+                                    if (isDragging) {
+                                      // 如果是暂停状态，开始拖动时恢复播放
+                                      if (videoState.status ==
+                                          PlayerStatus.paused) {
+                                        _playStateChangedByDrag = true;
+                                        videoState.togglePlayPause();
                                       }
-                                      setState(() {
-                                        _isDragging = isDragging;
-                                      });
-                                    },
-                                    formatDuration: _formatDuration,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      // 上一话按钮
-                                      Consumer<VideoPlayerState>(
-                                        builder: (context, videoState, child) {
-                                          final canPlayPrevious =
-                                              videoState.canPlayPreviousEpisode;
-                                          return AnimatedOpacity(
-                                            opacity: canPlayPrevious
-                                                ? 1.0
-                                                : 0.3,
-                                            duration: const Duration(
-                                              milliseconds: 200,
+                                    } else {
+                                      // 拖动结束时，只有当是因为拖动而改变的播放状态时才恢复
+                                      if (_playStateChangedByDrag) {
+                                        videoState.togglePlayPause();
+                                        _playStateChangedByDrag = false;
+                                      }
+                                    }
+                                    setState(() {
+                                      _isDragging = isDragging;
+                                    });
+                                  },
+                                  formatDuration: _formatDuration,
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    // 上一话按钮
+                                    Consumer<VideoPlayerState>(
+                                      builder: (context, videoState, child) {
+                                        final canPlayPrevious =
+                                            videoState.canPlayPreviousEpisode;
+                                        return AnimatedOpacity(
+                                          opacity: canPlayPrevious ? 1.0 : 0.3,
+                                          duration:
+                                              const Duration(milliseconds: 200),
+                                          child: _buildControlButton(
+                                            icon: Icon(
+                                              Icons.skip_previous_rounded,
+                                              key: const ValueKey(
+                                                  'previous_episode'),
+                                              color: Colors.white,
+                                              size: globals.isPhone ? 36 : 28,
                                             ),
-                                            child: _buildControlButton(
-                                              icon: Icon(
-                                                Icons.skip_previous_rounded,
-                                                key: const ValueKey(
-                                                  'previous_episode',
-                                                ),
-                                                color: Colors.white,
-                                                size: globals.isPhone ? 36 : 28,
-                                              ),
-                                              onTap: canPlayPrevious
-                                                  ? () {
-                                                      videoState
-                                                          .playPreviousEpisode();
-                                                    }
-                                                  : () {},
-                                              isPressed:
-                                                  _isPreviousEpisodePressed,
-                                              isHovered:
-                                                  _isPreviousEpisodeHovered,
-                                              onHover: (value) => setState(
-                                                () =>
-                                                    _isPreviousEpisodeHovered =
-                                                        value,
-                                              ),
-                                              onPressed: (value) => setState(
-                                                () =>
-                                                    _isPreviousEpisodePressed =
-                                                        value,
-                                              ),
-                                              tooltip: canPlayPrevious
-                                                  ? _tooltipManager
-                                                        .formatActionWithShortcut(
-                                                          'previous_episode',
-                                                          '上一话',
-                                                        )
-                                                  : '无法播放上一话',
-                                              useAnimatedSwitcher: true,
-                                            ),
+                                            onTap: canPlayPrevious
+                                                ? () {
+                                                    videoState
+                                                        .playPreviousEpisode();
+                                                  }
+                                                : () {},
+                                            isPressed:
+                                                _isPreviousEpisodePressed,
+                                            isHovered:
+                                                _isPreviousEpisodeHovered,
+                                            onHover: (value) => setState(() =>
+                                                _isPreviousEpisodeHovered =
+                                                    value),
+                                            onPressed: (value) => setState(() =>
+                                                _isPreviousEpisodePressed =
+                                                    value),
+                                            tooltip: canPlayPrevious
+                                                ? _tooltipManager
+                                                    .formatActionWithShortcut(
+                                                        'previous_episode',
+                                                        '上一话')
+                                                : '无法播放上一话',
+                                            useAnimatedSwitcher: true,
+                                          ),
+                                        );
+                                      },
+                                    ),
+
+                                    // 快退按钮
+                                    _buildControlButton(
+                                      icon: Icon(
+                                        Icons.fast_rewind_rounded,
+                                        key: const ValueKey('rewind'),
+                                        color: Colors.white,
+                                        size: globals.isPhone ? 36 : 28,
+                                      ),
+                                      onTap: () {
+                                        videoState.seekBackwardByStep();
+                                      },
+                                      isPressed: _isRewindPressed,
+                                      isHovered: _isRewindHovered,
+                                      onHover: (value) => setState(
+                                          () => _isRewindHovered = value),
+                                      onPressed: (value) => setState(
+                                          () => _isRewindPressed = value),
+                                      tooltip: _tooltipManager
+                                          .formatActionWithShortcut('rewind',
+                                              '快退 ${videoState.seekStepDisplayLabel}'),
+                                      useAnimatedSwitcher: true,
+                                    ),
+
+                                    // 播放/暂停按钮
+                                    _buildControlButton(
+                                      icon: AnimatedSwitcher(
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        transitionBuilder: (child, animation) {
+                                          return ScaleTransition(
+                                            scale: animation,
+                                            child: child,
                                           );
                                         },
-                                      ),
-
-                                      // 快退按钮
-                                      _buildControlButton(
-                                        icon: Icon(
-                                          Icons.fast_rewind_rounded,
-                                          key: const ValueKey('rewind'),
-                                          color: Colors.white,
-                                          size: globals.isPhone ? 36 : 28,
-                                        ),
-                                        onTap: () {
-                                          videoState.seekBackwardByStep();
-                                        },
-                                        isPressed: _isRewindPressed,
-                                        isHovered: _isRewindHovered,
-                                        onHover: (value) => setState(
-                                          () => _isRewindHovered = value,
-                                        ),
-                                        onPressed: (value) => setState(
-                                          () => _isRewindPressed = value,
-                                        ),
-                                        tooltip: _tooltipManager
-                                            .formatActionWithShortcut(
-                                              'rewind',
-                                              '快退 ${videoState.seekStepDisplayLabel}',
-                                            ),
-                                        useAnimatedSwitcher: true,
-                                      ),
-
-                                      // 播放/暂停按钮
-                                      _buildControlButton(
-                                        icon: AnimatedSwitcher(
-                                          duration: const Duration(
-                                            milliseconds: 200,
-                                          ),
-                                          transitionBuilder:
-                                              (child, animation) {
-                                                return ScaleTransition(
-                                                  scale: animation,
-                                                  child: child,
-                                                );
-                                              },
-                                          child: Icon(
-                                            videoState.status ==
-                                                    PlayerStatus.playing
-                                                ? Ionicons.pause
-                                                : Ionicons.play,
-                                            key: ValueKey<bool>(
+                                        child: Icon(
+                                          videoState.status ==
+                                                  PlayerStatus.playing
+                                              ? Ionicons.pause
+                                              : Ionicons.play,
+                                          key: ValueKey<bool>(
                                               videoState.status ==
-                                                  PlayerStatus.playing,
-                                            ),
-                                            color: Colors.white,
-                                            size: globals.isPhone ? 48 : 36,
-                                          ),
+                                                  PlayerStatus.playing),
+                                          color: Colors.white,
+                                          size: globals.isPhone ? 48 : 36,
                                         ),
-                                        onTap: () =>
-                                            videoState.togglePlayPause(),
-                                        isPressed: _isPlayPressed,
-                                        isHovered: _isPlayHovered,
-                                        onHover: (value) => setState(
-                                          () => _isPlayHovered = value,
-                                        ),
-                                        onPressed: (value) => setState(
-                                          () => _isPlayPressed = value,
-                                        ),
-                                        tooltip:
-                                            videoState.status ==
-                                                PlayerStatus.playing
-                                            ? _tooltipManager
-                                                  .formatActionWithShortcut(
-                                                    'play_pause',
-                                                    '暂停',
-                                                  )
-                                            : _tooltipManager
-                                                  .formatActionWithShortcut(
-                                                    'play_pause',
-                                                    '播放',
-                                                  ),
-                                        useAnimatedSwitcher: true,
                                       ),
+                                      onTap: () => videoState.togglePlayPause(),
+                                      isPressed: _isPlayPressed,
+                                      isHovered: _isPlayHovered,
+                                      onHover: (value) => setState(
+                                          () => _isPlayHovered = value),
+                                      onPressed: (value) => setState(
+                                          () => _isPlayPressed = value),
+                                      tooltip: videoState.status ==
+                                              PlayerStatus.playing
+                                          ? _tooltipManager
+                                              .formatActionWithShortcut(
+                                                  'play_pause', '暂停')
+                                          : _tooltipManager
+                                              .formatActionWithShortcut(
+                                                  'play_pause', '播放'),
+                                      useAnimatedSwitcher: true,
+                                    ),
 
-                                      // 快进按钮
+                                    // 快进按钮
+                                    _buildControlButton(
+                                      icon: Icon(
+                                        Icons.fast_forward_rounded,
+                                        key: const ValueKey('forward'),
+                                        color: Colors.white,
+                                        size: globals.isPhone ? 36 : 28,
+                                      ),
+                                      onTap: () {
+                                        videoState.seekForwardByStep();
+                                      },
+                                      isPressed: _isForwardPressed,
+                                      isHovered: _isForwardHovered,
+                                      onHover: (value) => setState(
+                                          () => _isForwardHovered = value),
+                                      onPressed: (value) => setState(
+                                          () => _isForwardPressed = value),
+                                      tooltip: _tooltipManager
+                                          .formatActionWithShortcut('forward',
+                                              '快进 ${videoState.seekStepDisplayLabel}'),
+                                      useAnimatedSwitcher: true,
+                                    ),
+
+                                    // 下一话按钮
+                                    Consumer<VideoPlayerState>(
+                                      builder: (context, videoState, child) {
+                                        final canPlayNext =
+                                            videoState.canPlayNextEpisode;
+                                        return AnimatedOpacity(
+                                          opacity: canPlayNext ? 1.0 : 0.3,
+                                          duration:
+                                              const Duration(milliseconds: 200),
+                                          child: _buildControlButton(
+                                            icon: Icon(
+                                              Icons.skip_next_rounded,
+                                              key: const ValueKey(
+                                                  'next_episode'),
+                                              color: Colors.white,
+                                              size: globals.isPhone ? 36 : 28,
+                                            ),
+                                            onTap: canPlayNext
+                                                ? () {
+                                                    videoState
+                                                        .playNextEpisode();
+                                                  }
+                                                : () {},
+                                            isPressed: _isNextEpisodePressed,
+                                            isHovered: _isNextEpisodeHovered,
+                                            onHover: (value) => setState(() =>
+                                                _isNextEpisodeHovered = value),
+                                            onPressed: (value) => setState(() =>
+                                                _isNextEpisodePressed = value),
+                                            tooltip: canPlayNext
+                                                ? _tooltipManager
+                                                    .formatActionWithShortcut(
+                                                        'next_episode', '下一话')
+                                                : '无法播放下一话',
+                                            useAnimatedSwitcher: true,
+                                          ),
+                                        );
+                                      },
+                                    ),
+
+                                    const Spacer(),
+
+                                    // 时间显示
+                                    ControlTextShadow(
+                                      child: Text(
+                                        '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.normal,
+                                          height: 1.0,
+                                          textBaseline: TextBaseline.alphabetic,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        softWrap: false,
+                                        overflow: TextOverflow.visible,
+                                      ),
+                                    ),
+
+                                    const SizedBox(width: 12),
+
+                                    if (globals.isDesktop &&
+                                        DesktopPipWindowService
+                                            .isFeatureEnabled)
                                       _buildControlButton(
                                         icon: Icon(
-                                          Icons.fast_forward_rounded,
-                                          key: const ValueKey('forward'),
+                                          DesktopPipWindowService
+                                                  .instance.isCurrentWindowPip
+                                              ? Icons.picture_in_picture_rounded
+                                              : Icons
+                                                  .picture_in_picture_alt_rounded,
+                                          key: ValueKey<bool>(
+                                            DesktopPipWindowService
+                                                .instance.isCurrentWindowPip,
+                                          ),
                                           color: Colors.white,
                                           size: globals.isPhone ? 36 : 28,
                                         ),
                                         onTap: () {
-                                          videoState.seekForwardByStep();
+                                          unawaited(
+                                            _handlePipButtonTap(videoState),
+                                          );
                                         },
-                                        isPressed: _isForwardPressed,
-                                        isHovered: _isForwardHovered,
+                                        isPressed: _isPipPressed,
+                                        isHovered: _isPipHovered,
                                         onHover: (value) => setState(
-                                          () => _isForwardHovered = value,
-                                        ),
+                                            () => _isPipHovered = value),
                                         onPressed: (value) => setState(
-                                          () => _isForwardPressed = value,
-                                        ),
-                                        tooltip: _tooltipManager
-                                            .formatActionWithShortcut(
-                                              'forward',
-                                              '快进 ${videoState.seekStepDisplayLabel}',
-                                            ),
+                                            () => _isPipPressed = value),
+                                        tooltip: DesktopPipWindowService
+                                                .instance.isCurrentWindowPip
+                                            ? '关闭小窗并回到主播放'
+                                            : '小窗播放',
                                         useAnimatedSwitcher: true,
                                       ),
 
-                                      // 下一话按钮
-                                      Consumer<VideoPlayerState>(
-                                        builder: (context, videoState, child) {
-                                          final canPlayNext =
-                                              videoState.canPlayNextEpisode;
-                                          return AnimatedOpacity(
-                                            opacity: canPlayNext ? 1.0 : 0.3,
-                                            duration: const Duration(
-                                              milliseconds: 200,
-                                            ),
-                                            child: _buildControlButton(
-                                              icon: Icon(
-                                                Icons.skip_next_rounded,
-                                                key: const ValueKey(
-                                                  'next_episode',
-                                                ),
-                                                color: Colors.white,
-                                                size: globals.isPhone ? 36 : 28,
-                                              ),
-                                              onTap: canPlayNext
-                                                  ? () {
-                                                      videoState
-                                                          .playNextEpisode();
-                                                    }
-                                                  : () {},
-                                              isPressed: _isNextEpisodePressed,
-                                              isHovered: _isNextEpisodeHovered,
-                                              onHover: (value) => setState(
-                                                () => _isNextEpisodeHovered =
-                                                    value,
-                                              ),
-                                              onPressed: (value) => setState(
-                                                () => _isNextEpisodePressed =
-                                                    value,
-                                              ),
-                                              tooltip: canPlayNext
-                                                  ? _tooltipManager
-                                                        .formatActionWithShortcut(
-                                                          'next_episode',
-                                                          '下一话',
-                                                        )
-                                                  : '无法播放下一话',
-                                              useAnimatedSwitcher: true,
-                                            ),
-                                          );
-                                        },
-                                      ),
-
-                                      const Spacer(),
-
-                                      // 时间显示
-                                      ControlTextShadow(
-                                        child: Text(
-                                          '${_formatDuration(videoState.position)} / ${_formatDuration(videoState.duration)}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.normal,
-                                            height: 1.0,
-                                            textBaseline:
-                                                TextBaseline.alphabetic,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                          softWrap: false,
-                                          overflow: TextOverflow.visible,
-                                        ),
-                                      ),
-
+                                    if (globals.isDesktop &&
+                                        DesktopPipWindowService
+                                            .isFeatureEnabled)
                                       const SizedBox(width: 12),
 
-                                      if (globals.isDesktop &&
-                                          DesktopPipWindowService
-                                              .isFeatureEnabled)
-                                        _buildControlButton(
-                                          icon: Icon(
-                                            DesktopPipWindowService
-                                                    .instance
-                                                    .isCurrentWindowPip
-                                                ? Icons
-                                                      .picture_in_picture_rounded
-                                                : Icons
-                                                      .picture_in_picture_alt_rounded,
-                                            key: ValueKey<bool>(
-                                              DesktopPipWindowService
-                                                  .instance
-                                                  .isCurrentWindowPip,
+                                    // 播放列表按钮（独立于设置菜单）
+                                    Builder(
+                                      builder: (buttonContext) {
+                                        return SizedBox(
+                                          key: _playlistButtonKey,
+                                          child: _buildControlButton(
+                                            icon: Icon(
+                                              Icons.playlist_play_rounded,
+                                              key: const ValueKey('playlist'),
+                                              color: Colors.white,
+                                              size: globals.isPhone ? 36 : 28,
                                             ),
-                                            color: Colors.white,
-                                            size: globals.isPhone ? 36 : 28,
+                                            onTap: () {
+                                              _showPlaylistMenu(buttonContext);
+                                            },
+                                            isPressed: _isPlaylistPressed,
+                                            isHovered: _isPlaylistHovered,
+                                            onHover: (value) => setState(() =>
+                                                _isPlaylistHovered = value),
+                                            onPressed: (value) => setState(() =>
+                                                _isPlaylistPressed = value),
+                                            tooltip: '播放列表',
+                                            useAnimatedSwitcher: true,
                                           ),
-                                          onTap: () {
-                                            unawaited(
-                                              _handlePipButtonTap(videoState),
-                                            );
-                                          },
-                                          isPressed: _isPipPressed,
-                                          isHovered: _isPipHovered,
-                                          onHover: (value) => setState(
-                                            () => _isPipHovered = value,
-                                          ),
-                                          onPressed: (value) => setState(
-                                            () => _isPipPressed = value,
-                                          ),
-                                          tooltip:
-                                              DesktopPipWindowService
-                                                  .instance
-                                                  .isCurrentWindowPip
-                                              ? '关闭小窗并回到主播放'
-                                              : '小窗播放',
-                                          useAnimatedSwitcher: true,
-                                        ),
+                                        );
+                                      },
+                                    ),
 
-                                      if (globals.isDesktop &&
-                                          DesktopPipWindowService
-                                              .isFeatureEnabled)
-                                        const SizedBox(width: 12),
-
-                                      // 播放列表按钮（独立于设置菜单）
-                                      Builder(
-                                        builder: (buttonContext) {
-                                          return SizedBox(
-                                            key: _playlistButtonKey,
-                                            child: _buildControlButton(
-                                              icon: Icon(
-                                                Icons.playlist_play_rounded,
-                                                key: const ValueKey('playlist'),
-                                                color: Colors.white,
-                                                size: globals.isPhone ? 36 : 28,
-                                              ),
-                                              onTap: () {
-                                                _showPlaylistMenu(
-                                                  buttonContext,
-                                                );
-                                              },
-                                              isPressed: _isPlaylistPressed,
-                                              isHovered: _isPlaylistHovered,
-                                              onHover: (value) => setState(
-                                                () =>
-                                                    _isPlaylistHovered = value,
-                                              ),
-                                              onPressed: (value) => setState(
-                                                () =>
-                                                    _isPlaylistPressed = value,
-                                              ),
-                                              tooltip: '播放列表',
-                                              useAnimatedSwitcher: true,
+                                    // 设置按钮
+                                    Builder(
+                                      builder: (buttonContext) {
+                                        return SizedBox(
+                                          key: _settingsButtonKey,
+                                          child: _buildControlButton(
+                                            icon: Icon(
+                                              Icons.tune_rounded,
+                                              key: const ValueKey('settings'),
+                                              color: Colors.white,
+                                              size: globals.isPhone ? 36 : 28,
                                             ),
-                                          );
-                                        },
-                                      ),
+                                            onTap: () {
+                                              _showSettingsMenu(buttonContext);
+                                            },
+                                            isPressed: _isSettingsPressed,
+                                            isHovered: _isSettingsHovered,
+                                            onHover: (value) => setState(() =>
+                                                _isSettingsHovered = value),
+                                            onPressed: (value) => setState(() =>
+                                                _isSettingsPressed = value),
+                                            tooltip: '设置',
+                                            useAnimatedSwitcher: true,
+                                          ),
+                                        );
+                                      },
+                                    ),
 
-                                      // 设置按钮
-                                      Builder(
-                                        builder: (buttonContext) {
-                                          return SizedBox(
-                                            key: _settingsButtonKey,
-                                            child: _buildControlButton(
-                                              icon: Icon(
-                                                Icons.tune_rounded,
-                                                key: const ValueKey('settings'),
-                                                color: Colors.white,
-                                                size: globals.isPhone ? 36 : 28,
-                                              ),
-                                              onTap: () {
-                                                _showSettingsMenu(
-                                                  buttonContext,
-                                                );
-                                              },
-                                              isPressed: _isSettingsPressed,
-                                              isHovered: _isSettingsHovered,
-                                              onHover: (value) => setState(
-                                                () =>
-                                                    _isSettingsHovered = value,
-                                              ),
-                                              onPressed: (value) => setState(
-                                                () =>
-                                                    _isSettingsPressed = value,
-                                              ),
-                                              tooltip: '设置',
-                                              useAnimatedSwitcher: true,
-                                            ),
-                                          );
-                                        },
-                                      ),
-
-                                      // 全屏按钮（所有平台）或菜单栏切换按钮（平板）
-                                      if (widget.showFullscreenButton)
-                                        _buildControlButton(
-                                          icon: Icon(
-                                            globals.isTablet
-                                                ? (videoState.isAppBarHidden
-                                                      ? Icons
-                                                            .fullscreen_exit_rounded
-                                                      : Icons
-                                                            .fullscreen_rounded)
-                                                : (videoState.isFullscreen
-                                                      ? Icons
-                                                            .fullscreen_exit_rounded
-                                                      : Icons
-                                                            .fullscreen_rounded),
-                                            key: ValueKey<bool>(
-                                              globals.isTablet
-                                                  ? videoState.isAppBarHidden
-                                                  : videoState.isFullscreen,
-                                            ),
-                                            color: Colors.white,
-                                            size: globals.isPhone ? 36 : 32,
-                                          ),
-                                          onTap: () => globals.isTablet
-                                              ? videoState
-                                                    .toggleAppBarVisibility()
-                                              : videoState.toggleFullscreen(),
-                                          isPressed: _isFullscreenPressed,
-                                          isHovered: _isFullscreenHovered,
-                                          onHover: (value) => setState(
-                                            () => _isFullscreenHovered = value,
-                                          ),
-                                          onPressed: (value) => setState(
-                                            () => _isFullscreenPressed = value,
-                                          ),
-                                          tooltip: globals.isTablet
+                                    // 全屏按钮（所有平台）或菜单栏切换按钮（平板）
+                                    if (widget.showFullscreenButton)
+                                      _buildControlButton(
+                                        icon: Icon(
+                                          globals.isTablet
                                               ? (videoState.isAppBarHidden
-                                                    ? '显示菜单栏'
-                                                    : '隐藏菜单栏')
-                                              : globals.isPhone
-                                              ? (videoState.isFullscreen
+                                                  ? Icons
+                                                      .fullscreen_exit_rounded
+                                                  : Icons.fullscreen_rounded)
+                                              : (videoState.isFullscreen
+                                                  ? Icons
+                                                      .fullscreen_exit_rounded
+                                                  : Icons.fullscreen_rounded),
+                                          key: ValueKey<bool>(
+                                            globals.isTablet
+                                                ? videoState.isAppBarHidden
+                                                : videoState.isFullscreen,
+                                          ),
+                                          color: Colors.white,
+                                          size: globals.isPhone ? 36 : 32,
+                                        ),
+                                        onTap: () => globals.isTablet
+                                            ? videoState
+                                                .toggleAppBarVisibility()
+                                            : videoState.toggleFullscreen(),
+                                        isPressed: _isFullscreenPressed,
+                                        isHovered: _isFullscreenHovered,
+                                        onHover: (value) => setState(
+                                            () => _isFullscreenHovered = value),
+                                        onPressed: (value) => setState(
+                                            () => _isFullscreenPressed = value),
+                                        tooltip: globals.isTablet
+                                            ? (videoState.isAppBarHidden
+                                                ? '显示菜单栏'
+                                                : '隐藏菜单栏')
+                                            : globals.isPhone
+                                                ? (videoState.isFullscreen
                                                     ? '退出全屏'
                                                     : '全屏')
-                                              : _tooltipManager
+                                                : _tooltipManager
                                                     .formatActionWithShortcut(
-                                                      'fullscreen',
-                                                      videoState.isFullscreen
-                                                          ? '退出全屏'
-                                                          : '全屏',
-                                                    ),
-                                          useCustomAnimation: true,
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                                    'fullscreen',
+                                                    videoState.isFullscreen
+                                                        ? '退出全屏'
+                                                        : '全屏',
+                                                  ),
+                                        useCustomAnimation: true,
+                                      ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             );

@@ -13,12 +13,12 @@ class ControlShadow extends StatelessWidget {
     this.padding = EdgeInsets.zero,
     this.shadows = const [
       BoxShadow(
-        color: Color(0xC0000000),
+        color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 10,
         offset: Offset(0, 2),
       ),
       BoxShadow(
-        color: Color(0x80000000),
+        color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 18,
         offset: Offset(0, 6),
       ),
@@ -50,12 +50,12 @@ class ControlIconShadow extends StatelessWidget {
     required this.child,
     this.shadows = const [
       Shadow(
-        color: Color(0xCC000000),
+        color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 10,
         offset: Offset(0, 2),
       ),
       Shadow(
-        color: Color(0x99000000),
+        color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 18,
         offset: Offset(0, 4),
       ),
@@ -80,12 +80,12 @@ class ControlTextShadow extends StatelessWidget {
     required this.child,
     this.shadows = const [
       Shadow(
-        color: Color(0xCC000000),
+        color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 10,
         offset: Offset(0, 2),
       ),
       Shadow(
-        color: Color(0x99000000),
+        color: Color.fromARGB(100, 0, 0, 0),
         blurRadius: 18,
         offset: Offset(0, 4),
       ),

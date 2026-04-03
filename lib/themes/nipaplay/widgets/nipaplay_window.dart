@@ -2,8 +2,10 @@ import 'dart:ui' as ui;
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:provider/provider.dart';
 
 /// 一个通用的窗口脚手架，提供 Nipaplay 风格的视觉外观。
 /// 包含：背景图片/模糊、点击背景关闭、阴影圆角容器。
@@ -40,6 +42,8 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   static const double _contentTopPadding = 14;
   static const double _windowControlPadding = 5;
   static const double _windowControlGap = 6;
+  static const double _windowedMargin = 20;
+  static const double _filledScreenMargin = 10;
   bool _allowBackgroundDismiss = false;
   Animation<double>? _routeAnimation;
   void Function(AnimationStatus)? _routeStatusListener;
@@ -133,30 +137,49 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   }
 
   Widget _buildMacCloseButton(BuildContext context) {
+    final bool prominent = globals.isTablet;
     final onClose = _resolveCloseHandler(context);
+    final double hitSize = prominent ? 36 : 28;
+    final double buttonSize = prominent ? 20 : 14;
     return Tooltip(
       message: '关闭',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onClose,
         child: SizedBox(
-          width: 28,
-          height: 28,
+          width: hitSize,
+          height: hitSize,
           child: Center(
             child: Container(
-              width: 14,
-              height: 14,
+              width: buttonSize,
+              height: buttonSize,
               decoration: BoxDecoration(
-                color: const Color(0xFFFF5F57),
-                borderRadius: BorderRadius.circular(7),
+                color: prominent
+                    ? const Color(0xFFFF4D4F)
+                    : const Color(0xFFFF5F57),
+                borderRadius: BorderRadius.circular(buttonSize / 2),
+                border: prominent
+                    ? Border.all(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        width: 1,
+                      )
+                    : null,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 2,
+                    color:
+                        Colors.black.withValues(alpha: prominent ? 0.3 : 0.2),
+                    blurRadius: prominent ? 6 : 2,
                     offset: const Offset(0, 1),
                   ),
                 ],
               ),
+              child: prominent
+                  ? const Icon(
+                      fluent.FluentIcons.chrome_close,
+                      size: 12,
+                      color: Colors.white,
+                    )
+                  : null,
             ),
           ),
         ),
@@ -167,19 +190,43 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   Widget _buildFluentCloseButton(BuildContext context) {
     final onClose = _resolveCloseHandler(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool prominent = globals.isTablet;
     return Tooltip(
       message: '关闭',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onClose,
         child: SizedBox(
-          width: 28,
-          height: 28,
+          width: prominent ? 36 : 28,
+          height: prominent ? 36 : 28,
           child: Center(
-            child: Icon(
-              fluent.FluentIcons.chrome_close,
-              size: 14,
-              color: isDark ? Colors.white : Colors.black87,
+            child: Container(
+              width: prominent ? 30 : 28,
+              height: prominent ? 30 : 28,
+              decoration: prominent
+                  ? BoxDecoration(
+                      color: const Color(0xFFFF4D4F),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.28),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    )
+                  : null,
+              child: Icon(
+                fluent.FluentIcons.chrome_close,
+                size: prominent ? 18 : 14,
+                color: prominent
+                    ? Colors.white
+                    : (isDark ? Colors.white : Colors.black87),
+              ),
             ),
           ),
         ),
@@ -189,6 +236,9 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
+    final bool useFilledScreenLayout = appearanceSettings.windowDisplayMode ==
+        NipaplayWindowDisplayMode.filledScreen;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bgColor = widget.backgroundColor ??
         (isDark ? const Color(0xFF2C2C2C) : Colors.white);
@@ -196,6 +246,24 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     final bool useMacStyleCloseButton = _useMacStyleCloseButton();
     final Widget? topRightAction = widget.topRightAction;
     final bool showCloseButton = widget.showCloseButton;
+    final mediaQuery = MediaQuery.of(context);
+    final EdgeInsets safePadding = mediaQuery.padding;
+    final Size screenSize = mediaQuery.size;
+    final double horizontalMargin =
+        useFilledScreenLayout ? _filledScreenMargin : _windowedMargin;
+    final double topMargin = safePadding.top + horizontalMargin;
+    final double bottomMargin = useFilledScreenLayout
+        ? safePadding.bottom + _filledScreenMargin
+        : _windowedMargin;
+    final double effectiveMaxWidth = useFilledScreenLayout
+        ? (screenSize.width - horizontalMargin * 2).clamp(0.0, screenSize.width)
+        : widget.maxWidth;
+    final double effectiveMaxHeight = useFilledScreenLayout
+        ? (screenSize.height - topMargin - bottomMargin)
+            .clamp(0.0, screenSize.height)
+        : screenSize.height * widget.maxHeightFactor;
+    final double windowControlPadding =
+        globals.isTablet ? _windowControlPadding + 3 : _windowControlPadding;
 
     return Theme(
       data: Theme.of(context).copyWith(
@@ -218,16 +286,15 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                     onTap: () {}, // 阻止点击内容区域时关闭
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxWidth: widget.maxWidth,
-                        maxHeight: MediaQuery.of(context).size.height *
-                            widget.maxHeightFactor,
+                        maxWidth: effectiveMaxWidth,
+                        maxHeight: effectiveMaxHeight,
                       ),
                       child: Padding(
                         padding: EdgeInsets.fromLTRB(
-                          20,
-                          MediaQuery.of(context).padding.top + 20,
-                          20,
-                          20,
+                          horizontalMargin,
+                          topMargin,
+                          horizontalMargin,
+                          bottomMargin,
                         ),
                         child: Container(
                           clipBehavior: Clip.antiAlias,
@@ -236,7 +303,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                             borderRadius: BorderRadius.circular(15),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
+                                color: Colors.black.withValues(alpha: 0.2),
                                 blurRadius: 15,
                                 offset: const Offset(0, 5),
                               ),
@@ -271,8 +338,8 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                       begin: Alignment.topCenter,
                                       end: Alignment.bottomCenter,
                                       colors: [
-                                        bgColor.withOpacity(0.1),
-                                        bgColor.withOpacity(0.4),
+                                        bgColor.withValues(alpha: 0.1),
+                                        bgColor.withValues(alpha: 0.4),
                                       ],
                                     ),
                                   ),
@@ -310,21 +377,21 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                               else if (showCloseButton &&
                                   topRightAction == null)
                                 Positioned(
-                                  top: _windowControlPadding,
-                                  right: _windowControlPadding,
+                                  top: windowControlPadding,
+                                  right: windowControlPadding,
                                   child: _buildFluentCloseButton(context),
                                 ),
                               if (topRightAction != null)
                                 Positioned(
-                                  top: _windowControlPadding,
-                                  right: _windowControlPadding,
+                                  top: windowControlPadding,
+                                  right: windowControlPadding,
                                   child: showCloseButton
                                       ? (useMacStyleCloseButton
-                                          ? topRightAction!
+                                          ? topRightAction
                                           : Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                topRightAction!,
+                                                topRightAction,
                                                 const SizedBox(
                                                   width: _windowControlGap,
                                                 ),
@@ -333,7 +400,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                                 ),
                                               ],
                                             ))
-                                      : topRightAction!,
+                                      : topRightAction,
                                 ),
                             ],
                           ),

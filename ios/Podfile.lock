@@ -1,6 +1,8 @@
 PODS:
   - adaptive_platform_ui (0.1.0):
     - Flutter
+  - battery_plus (1.0.0):
+    - Flutter
   - charset_converter (0.0.1):
     - Flutter
   - DKImagePickerController/Core (4.3.9):
@@ -81,6 +83,7 @@ PODS:
 
 DEPENDENCIES:
   - adaptive_platform_ui (from `.symlinks/plugins/adaptive_platform_ui/ios`)
+  - battery_plus (from `.symlinks/plugins/battery_plus/ios`)
   - charset_converter (from `.symlinks/plugins/charset_converter/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - file_selector_ios (from `.symlinks/plugins/file_selector_ios/ios`)
@@ -111,6 +114,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   adaptive_platform_ui:
     :path: ".symlinks/plugins/adaptive_platform_ui/ios"
+  battery_plus:
+    :path: ".symlinks/plugins/battery_plus/ios"
   charset_converter:
     :path: ".symlinks/plugins/charset_converter/ios"
   file_picker:
@@ -152,6 +157,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   adaptive_platform_ui: f54f620666d1797636f9ef06f49137ef2cc13611
+  battery_plus: b42253f6d2dde71712f8c36fef456d99121c5977
   charset_converter: 82bc1d2e3c70dcb51bf769e9772e3ae5b2571695
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60

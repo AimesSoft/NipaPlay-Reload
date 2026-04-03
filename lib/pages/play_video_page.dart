@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/mobile_playback_status.dart';
 import 'package:nipaplay/utils/hotkey_service.dart';
 
 class PlayVideoPage extends StatefulWidget {
@@ -300,7 +301,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
     if (videoState == null) return false;
-    return globals.isPhone && globals.isTablet && videoState.isAppBarHidden;
+    return globals.isTabletLikeMobile && videoState.isAppBarHidden;
   }
 
   Future<void> _showAirPlayPicker([VideoPlayerState? videoState]) async {
@@ -374,6 +375,24 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     final bool showShareButton =
         SystemShareService.isSupported && !globals.isDesktop;
     final bool showScreenshotButton = !kIsWeb && globals.isPhone;
+    final bool showAirPlayButton =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+    final int rightButtonCount = (showAirPlayButton ? 1 : 0) +
+        (showScreenshotButton ? 1 : 0) +
+        (showShareButton ? 1 : 0);
+    final double rightButtonsWidth = rightButtonCount > 0
+        ? rightButtonCount * 42.0 + (rightButtonCount - 1) * 12.0
+        : 0.0;
+    final double availableTitleWidth = (MediaQuery.of(context).size.width -
+            (16.0 + (globals.isPhone ? 24.0 : 0.0)) -
+            116.0 -
+            (16.0 + (globals.isPhone ? 24.0 : 0.0)) -
+            rightButtonsWidth -
+            (globals.isMobilePlatform ? 86.0 : 0.0) -
+            24.0)
+        .clamp(80.0, 600.0)
+        .toDouble();
 
     return Stack(
       clipBehavior: Clip.none,
@@ -422,7 +441,10 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                           setState(() => _isHoveringAnimeInfo = true),
                       onExit: (_) =>
                           setState(() => _isHoveringAnimeInfo = false),
-                      child: AnimeInfoWidget(videoState: videoState),
+                      child: AnimeInfoWidget(
+                        videoState: videoState,
+                        maxWidth: availableTitleWidth,
+                      ),
                     ),
                   ],
                 ),
@@ -445,8 +467,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   onExit: (_) => videoState.setControlsHovered(false),
                   child: Row(
                     children: [
-                      if (!kIsWeb &&
-                          defaultTargetPlatform == TargetPlatform.iOS)
+                      if (showAirPlayButton)
                         ShadowActionButton(
                           tooltip: '投屏 (AirPlay)',
                           icon: Icons.airplay_rounded,
@@ -492,6 +513,25 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         ),
+        if (globals.isMobilePlatform)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: AnimatedOpacity(
+                opacity: videoState.showControls ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(
+                  ignoring: !videoState.showControls,
+                  child: const Padding(
+                    padding: EdgeInsets.only(top: 6, right: 8),
+                    child: MobilePlaybackStatus(compact: true),
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (globals.isPhone && videoState.isFullscreen)
           Positioned(
             right: 0,
