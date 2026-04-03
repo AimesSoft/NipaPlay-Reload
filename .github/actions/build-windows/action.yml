@@ -321,13 +321,16 @@ runs:
       id: msix_build
       shell: pwsh
       run: |
-        Write-Host "Building MSIX package..."
-        flutter build windows --msix
-        $msixPath = "build\windows\runner\Release\NipaPlay.msix"
+        Write-Host "Building MSIX package using msix:create..."
+        # 使用msix包的命令生成MSIX文件
+        flutter pub run msix:create --store
+        # 直接在Release目录中查找MSIX文件
+        $msixPath = "build\windows\x64\runner\Release\NipaPlay.msix"
         if (-not (Test-Path $msixPath)) {
-          throw "MSIX package was not created: $msixPath"
+          throw "MSIX package was not created at: $msixPath"
         }
-        # Copy MSIX to build output directory
+        Write-Host "MSIX package created at: $msixPath"
+        # 复制MSIX到构建输出目录
         $destPath = "build\windows\NipaPlay_${{ inputs.app-version }}_Windows_x64.msix"
         Copy-Item -Path $msixPath -Destination $destPath -Force
         echo "msix_path=$destPath" >> $env:GITHUB_OUTPUT
