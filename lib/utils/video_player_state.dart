@@ -879,7 +879,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             r'([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
           ).firstMatch(trimmed) ??
           RegExp(
-            r'(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)\D*([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)',
+            r'(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)[\s:=]*([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)',
           ).firstMatch(trimmed);
       if (labeledFractionMatch != null) {
         final numerator = double.tryParse(labeledFractionMatch.group(1) ?? '');
@@ -900,7 +900,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
             r'([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
           ).firstMatch(trimmed) ??
           RegExp(
-            r'(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)\D*([0-9]+(?:\.[0-9]+)?)',
+            r'(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)[\s:=]*([0-9]+(?:\.[0-9]+)?)',
           ).firstMatch(trimmed);
       if (labeledMatch != null) {
         final fps = double.tryParse(labeledMatch.group(1) ?? '');
