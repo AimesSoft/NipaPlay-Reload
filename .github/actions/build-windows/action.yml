@@ -300,21 +300,42 @@ runs:
       shell: pwsh
       run: |
         $appVersion = "${{ inputs.app-version }}"
-        # Convert app version to msix version format (add .0 at the end if needed)
-        if ($appVersion -notmatch '\.\d+$') {
-          $msixVersion = "$appVersion.0"
-        } else {
-          $msixVersion = $appVersion
+        # 剥离build metadata（+及其后的内容）
+        if ($appVersion -match '\+') {
+          $appVersion = $appVersion -split '\+' | Select-Object -First 1
         }
-        # Ensure msix version has 4 parts
-        $versionParts = $msixVersion -split '\.'
-        if ($versionParts.Length -lt 4) {
-          $msixVersion = $msixVersion + (".0" * (4 - $versionParts.Length))
+        # 分割版本号部分
+        $versionParts = $appVersion -split '\.'
+        # 确保有4个部分
+        while ($versionParts.Length -lt 4) {
+          $versionParts += "0"
         }
-        Write-Host "App version: $appVersion"
+        # 确保每部分都是0-65535的整数
+        $msixVersionParts = @()
+        foreach ($part in $versionParts) {
+          $intPart = [int]$part
+          if ($intPart -lt 0) {
+            $intPart = 0
+          } elseif ($intPart -gt 65535) {
+            $intPart = 65535
+          }
+          $msixVersionParts += $intPart.ToString()
+        }
+        # 构建MSIX版本号
+        $msixVersion = $msixVersionParts -join '.'
+        Write-Host "App version: ${{ inputs.app-version }}"
         Write-Host "MSIX version: $msixVersion"
         # Update pubspec.yaml with the new msix_version
-        (Get-Content pubspec.yaml) -replace 'msix_version: .*', "msix_version: $msixVersion" | Set-Content pubspec.yaml
+        # 读取文件内容，显式指定UTF8编码
+        $content = Get-Content -Path pubspec.yaml -Encoding UTF8
+        # 使用精确的正则表达式，锚定行首和缩进
+        $updatedContent = $content -replace '^(\s*)msix_version: .*', "`$1msix_version: $msixVersion"
+        # 检查是否成功替换
+        if ($updatedContent -eq $content) {
+          throw "Failed to update msix_version in pubspec.yaml"
+        }
+        # 写回文件，保持UTF8编码
+        Set-Content -Path pubspec.yaml -Value $updatedContent -Encoding UTF8
         echo "msix_version=$msixVersion" >> $env:GITHUB_OUTPUT
 
     - name: Build MSIX package
