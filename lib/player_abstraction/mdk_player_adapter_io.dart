@@ -344,39 +344,11 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   PlayerMediaInfo get mediaInfo => _toPlayerMediaInfo(_mdkPlayer.mediaInfo);
 
-  List<int> _mapSubtitleTrackIndicesFromMdk(List<int> value) {
-    final subtitleTracks = _mdkPlayer.mediaInfo.subtitle;
-    if (subtitleTracks == null || subtitleTracks.isEmpty) {
-      return List<int>.from(value);
-    }
-
-    return value.map((trackIndex) {
-      final uiIndex =
-          subtitleTracks.indexWhere((track) => track.index == trackIndex);
-      return uiIndex >= 0 ? uiIndex : trackIndex;
-    }).toList();
-  }
-
-  List<int> _mapSubtitleTrackIndicesToMdk(List<int> value) {
-    final subtitleTracks = _mdkPlayer.mediaInfo.subtitle;
-    if (subtitleTracks == null || subtitleTracks.isEmpty) {
-      return List<int>.from(value);
-    }
-
-    return value.map((uiIndex) {
-      if (uiIndex >= 0 && uiIndex < subtitleTracks.length) {
-        return subtitleTracks[uiIndex].index;
-      }
-      return uiIndex;
-    }).toList();
-  }
-
   @override
-  List<int> get activeSubtitleTracks =>
-      _mapSubtitleTrackIndicesFromMdk(_mdkPlayer.activeSubtitleTracks);
+  List<int> get activeSubtitleTracks => _mdkPlayer.activeSubtitleTracks;
   @override
   set activeSubtitleTracks(List<int> value) =>
-      _mdkPlayer.activeSubtitleTracks = _mapSubtitleTrackIndicesToMdk(value);
+      _mdkPlayer.activeSubtitleTracks = value;
 
   @override
   List<int> get activeAudioTracks => _mdkPlayer.activeAudioTracks;
