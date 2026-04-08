@@ -403,7 +403,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           },
         ),
         Positioned(
-          top: 16.0,
+          top: 10.0,
           left: 16.0,
           child: AnimatedOpacity(
             opacity: videoState.showControls ? 1.0 : 0.0,
@@ -411,7 +411,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             child: IgnorePointer(
               ignoring: !videoState.showControls,
               child: Padding(
-                padding: EdgeInsets.only(left: globals.isPhone ? 24.0 : 0.0),
+                padding: EdgeInsets.only(
+                  left: globals.isPhone ? 24.0 : 0.0,
+                  top: 6.0,
+                  bottom: 12.0,
+                ),
                 child: Row(
                   children: [
                     MouseRegion(
@@ -453,7 +457,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           ),
         ),
         Positioned(
-          top: 16.0,
+          top: 10.0,
           right: 16.0,
           child: AnimatedOpacity(
             opacity: videoState.showControls ? 1.0 : 0.0,
@@ -461,7 +465,11 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             child: IgnorePointer(
               ignoring: !videoState.showControls,
               child: Padding(
-                padding: EdgeInsets.only(right: globals.isPhone ? 24.0 : 0.0),
+                padding: EdgeInsets.only(
+                  right: globals.isPhone ? 24.0 : 0.0,
+                  top: 6.0,
+                  bottom: 12.0,
+                ),
                 child: MouseRegion(
                   onEnter: (_) => videoState.setControlsHovered(true),
                   onExit: (_) => videoState.setControlsHovered(false),
