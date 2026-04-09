@@ -362,9 +362,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
 
   Widget _buildHeader() {
     final title = _showEpisodesView ? '选择匹配的剧集' : '手动匹配弹幕';
-    final subtitle = _showEpisodesView
-        ? '选择对应的剧集以获取正确的弹幕'
-        : '搜索动画并选择要匹配的剧集';
+    final subtitle = _showEpisodesView ? '选择对应的剧集以获取正确的弹幕' : '搜索动画并选择要匹配的剧集';
 
     return Row(
       children: [
@@ -613,9 +611,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                 : _panelAltColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected
-                  ? _accentColor.withOpacity(0.6)
-                  : _borderColor,
+              color: isSelected ? _accentColor.withOpacity(0.6) : _borderColor,
             ),
           ),
           child: Row(
@@ -677,8 +673,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                     : ListView.separated(
                         padding: const EdgeInsets.all(12),
                         itemCount: _currentMatches.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final match = _currentMatches[index];
                           return _buildAnimeItem(match);
@@ -733,9 +728,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
   Widget _buildEpisodesPanel() {
     final bool isError =
         _episodesMessage.contains('出错') || _episodesMessage.contains('失败');
-    final hintText = _selectedEpisode == null
-        ? '请选择一个剧集来匹配弹幕'
-        : '已选择剧集，可确认匹配';
+    final hintText = _selectedEpisode == null ? '请选择一个剧集来匹配弹幕' : '已选择剧集，可确认匹配';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -765,8 +758,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                     : ListView.separated(
                         padding: const EdgeInsets.all(12),
                         itemCount: _currentEpisodes.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final episode = _currentEpisodes[index];
                           return _buildEpisodeItem(episode);
@@ -779,8 +771,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           Text(
             hintText,
             style: TextStyle(
-              color:
-                  _selectedEpisode == null ? _subTextColor : _accentColor,
+              color: _selectedEpisode == null ? _subTextColor : _accentColor,
               fontSize: 12,
             ),
           ),
@@ -841,10 +832,8 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     final dialogWidth = screenSize.width >= 960
         ? 900.0
         : globals.DialogSizes.getDialogWidth(screenSize.width);
-    final maxHeightFactor = (globals.isPhone && screenSize.shortestSide < 600)
-        ? 0.9
-        : 0.85;
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final maxHeightFactor =
+        (globals.isPhone && screenSize.shortestSide < 600) ? 0.9 : 0.85;
 
     return Focus(
       autofocus: true,
@@ -856,8 +845,9 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           maxHeightFactor: maxHeightFactor,
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight),
+          child: SingleChildScrollView(
+            padding:
+                const EdgeInsets.fromLTRB(24, 16, 24, 100), // 增加底部padding以容纳键盘
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -867,7 +857,8 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                   _buildSearchBar(),
                   const SizedBox(height: 12),
                 ],
-                Expanded(
+                Container(
+                  height: 400,
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final isWideLayout = constraints.maxWidth >= 720;
