@@ -1039,6 +1039,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
 
   @override
   Widget build(BuildContext context) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     return Focus(
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
@@ -1056,13 +1057,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
               : 0.85,
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              24,
-              16,
-              24,
-              24 + MediaQuery.of(context).viewInsets.bottom,
-            ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight), // 使用viewInsets.bottom适应键盘高度
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1070,7 +1066,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                 const SizedBox(height: 16),
                 _buildSearchBar(),
                 const SizedBox(height: 12),
-                Expanded(
+                Container(
+                  height: 500,
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final isWideLayout = constraints.maxWidth >= 820;
