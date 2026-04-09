@@ -1039,6 +1039,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
 
   @override
   Widget build(BuildContext context) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     return Focus(
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
@@ -1057,8 +1058,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
           child: SingleChildScrollView(
-            padding:
-                const EdgeInsets.fromLTRB(24, 16, 24, 100), // 增加底部padding以容纳键盘
+            padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight), // 使用viewInsets.bottom适应键盘高度
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
