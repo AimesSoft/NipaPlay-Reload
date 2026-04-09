@@ -656,26 +656,26 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                           );
                         }
                       : null,
-                  onLongPressStart: globals.isPhone
+                  onLongPressStart: globals.isMobilePlatform
                       ? (details) => _handleLongPressStart(videoState)
                       : null,
-                  onLongPressEnd: globals.isPhone
+                  onLongPressEnd: globals.isMobilePlatform
                       ? (details) => _handleLongPressEnd(videoState)
                       : null,
-                  onHorizontalDragStart: globals.isPhone
+                  onHorizontalDragStart: globals.isMobilePlatform
                       ? (details) =>
                           _handleHorizontalDragStart(context, details)
                       : null,
-                  onHorizontalDragUpdate: globals.isPhone
+                  onHorizontalDragUpdate: globals.isMobilePlatform
                       ? (details) =>
                           _handleHorizontalDragUpdate(context, details)
                       : null,
-                  onHorizontalDragEnd: globals.isPhone
+                  onHorizontalDragEnd: globals.isMobilePlatform
                       ? (details) => _handleHorizontalDragEnd(context, details)
                       : null,
                   child: FocusScope(
                     node: FocusScopeNode(),
-                    child: globals.isPhone
+                    child: globals.isMobilePlatform
                         ? RepaintBoundary(
                             key: videoState.screenshotBoundaryKey,
                             child: Stack(
@@ -779,10 +779,12 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                     child: SpeedBoostIndicator(),
                                   ),
 
-                                if (globals.isPhone && videoState.hasVideo)
+                                if (globals.isMobilePlatform &&
+                                    videoState.hasVideo)
                                   const BrightnessGestureArea(),
 
-                                if (globals.isPhone && videoState.hasVideo)
+                                if (globals.isMobilePlatform &&
+                                    videoState.hasVideo)
                                   const VolumeGestureArea(),
 
                                 // 底部1像素白色进度条
