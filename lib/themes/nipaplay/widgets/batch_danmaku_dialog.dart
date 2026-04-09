@@ -1194,7 +1194,7 @@ class _FileItem {
       return 4000; // Lite排在OAD之后
     }
     if (episodeNumber.toLowerCase() == 'special') {
-      return 5000; // Special排在OAD之后
+      return 5000; // Special排在Lite之后
     }
     // 处理普通数字剧集号
     final num = int.tryParse(episodeNumber);
