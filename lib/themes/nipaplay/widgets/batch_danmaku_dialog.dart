@@ -1058,7 +1058,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight), // 使用viewInsets.bottom适应键盘高度
+            padding: EdgeInsets.fromLTRB(
+                24, 16, 24, 24 + keyboardHeight), // 使用viewInsets.bottom适应键盘高度
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1142,11 +1143,12 @@ class _FileItem {
         sortKey = _generateSortKey(_extractEpisodeNumber(displayName));
 
   static String? _extractEpisodeNumber(String fileName) {
-    // 匹配常见的剧集格式：[01], 01, E01, EP01, 第01话, 第1话, SP1, OVA/OVA01, Lite等
+    // 匹配常见的剧集格式：[01], 01, E01, EP01, 第01话, 第1话, SP/SP1, OVA/OVA01, OAD/OAD01, Special, Lite等
     final patterns = [
-      // 特殊格式：[SP01], SP01, OVA/OVA01, Lite
-      RegExp(r'\[(SP\d*|OVA\d*|Lite)\]', caseSensitive: false),
-      RegExp(r'[\s_\-\.](SP\d*|OVA\d*|Lite)[\s_\-\.\]]', caseSensitive: false),
+      // 特殊格式：[SP01], SP01, OVA/OVA01, OAD/OAD01, Special, Lite
+      RegExp(r'\[(SP\d*|OVA\d*|OAD\d*|Special|Lite)\]', caseSensitive: false),
+      RegExp(r'[\s_\-\.](SP\d*|OVA\d*|OAD\d*|Special|Lite)[\s_\-\.\]]',
+          caseSensitive: false),
       // 标准数字格式：[01], 01, 1
       RegExp(r'\[(\d{1,3})\]'),
       RegExp(r'[\s_\-\.](\d{1,3})[\s_\-\.\]]'),
@@ -1183,10 +1185,17 @@ class _FileItem {
       final num = int.tryParse(numPart) ?? 0;
       return 2000 + num; // OVA排在SP之后
     }
-    if (episodeNumber.toLowerCase() == 'lite') {
-      return 3000; // Lite排在OVA之后
+    if (episodeNumber.toLowerCase().startsWith('oad')) {
+      final numPart = episodeNumber.substring(3);
+      final num = int.tryParse(numPart) ?? 0;
+      return 3000 + num; // OAD排在OVA之后
     }
-
+    if (episodeNumber.toLowerCase() == 'lite') {
+      return 4000; // Lite排在OAD之后
+    }
+    if (episodeNumber.toLowerCase() == 'special') {
+      return 5000; // Special排在OAD之后
+    }
     // 处理普通数字剧集号
     final num = int.tryParse(episodeNumber);
     return num;
