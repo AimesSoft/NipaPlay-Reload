@@ -138,7 +138,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   }
 
   void _toggleUiLock(VideoPlayerState videoState) {
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     final nextLocked = !_isUiLocked;
     _uiLockButtonTimer?.cancel();
     setState(() {
@@ -155,7 +155,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   void _showUiLockButtonTemporarily(
       [Duration duration = const Duration(seconds: 3)]) {
     if (!mounted) return;
-    if (!globals.isPhone) return;
+    if (!globals.isMobilePlatform) return;
     if (!_isUiLocked) return;
 
     _uiLockButtonTimer?.cancel();
@@ -369,12 +369,12 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   }
 
   Widget _buildMaterialControls(VideoPlayerState videoState) {
-    final bool uiLocked = globals.isPhone ? _isUiLocked : false;
-    final bool showLockButton = globals.isPhone &&
+    final bool uiLocked = globals.isMobilePlatform ? _isUiLocked : false;
+    final bool showLockButton = globals.isMobilePlatform &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
     final bool showShareButton =
         SystemShareService.isSupported && !globals.isDesktop;
-    final bool showScreenshotButton = !kIsWeb && globals.isPhone;
+    final bool showScreenshotButton = !kIsWeb && globals.isMobilePlatform;
     final bool showAirPlayButton =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
@@ -540,7 +540,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               ),
             ),
           ),
-        if (globals.isPhone && videoState.isFullscreen)
+        if (globals.isMobilePlatform && videoState.isFullscreen)
           Positioned(
             right: 0,
             top: 0,
@@ -564,9 +564,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               child: const SizedBox.expand(),
             ),
           ),
-        if (globals.isPhone)
+        if (globals.isMobilePlatform)
           Positioned(
-            left: 16.0 + (globals.isPhone ? 24.0 : 0.0),
+            left: 16.0 + (globals.isMobilePlatform ? 24.0 : 0.0),
             top: 0,
             bottom: 0,
             child: Center(
