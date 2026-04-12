@@ -1,9 +1,11 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 
 import '../widgets/appearance_setting_tile.dart';
+import '../widgets/language_setting_tile.dart';
 import '../widgets/player_setting_tile.dart';
 import '../widgets/external_player_setting_tile.dart';
 import '../widgets/network_setting_tile.dart';
@@ -33,7 +35,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Text('基础设置', style: textStyle),
+          child: Text(context.l10n.settingsBasicSection, style: textStyle),
         ),
         const SizedBox(height: 8),
         CupertinoSettingsGroupCard(
@@ -41,6 +43,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
           backgroundColor: resolveSettingsSectionBackground(context),
           children: [
             CupertinoAppearanceSettingTile(),
+            CupertinoLanguageSettingTile(),
             CupertinoPlayerSettingTile(),
             CupertinoExternalPlayerSettingTile(),
             CupertinoNetworkSettingTile(),

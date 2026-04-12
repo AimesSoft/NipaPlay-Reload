@@ -1,6 +1,8 @@
 class SettingsKeys {
   SettingsKeys._();
 
+  static const String appLanguageMode = 'app_language_mode';
+
   static const String clearDanmakuCacheOnLaunch =
       'clear_danmaku_cache_on_launch';
 

@@ -157,6 +157,7 @@ hooks:
 # following page: https://dart.dev/tools/pub/pubspec
 # The following section is specific to Flutter packages.
 flutter:
+  generate: true
   assets:
     - pubspec.lock
     - packages/adaptive_platform_ui/pubspec.yaml

@@ -1,0 +1,92 @@
+{
+  "@@locale": "zh",
+  "appTitle": "NipaPlay",
+  "tabHome": "主页",
+  "tabVideoPlay": "视频播放",
+  "tabMediaLibrary": "媒体库",
+  "tabAccount": "个人中心",
+  "tabSettings": "设置",
+  "settingsLabel": "设置",
+  "toggleToLightMode": "切换到日间模式",
+  "toggleToDarkMode": "切换到夜间模式",
+  "language": "语言",
+  "languageSettingsTitle": "语言设置",
+  "languageSettingsSubtitle": "选择界面显示语言",
+  "languageAuto": "自动（跟随系统）",
+  "languageSimplifiedChinese": "简体中文",
+  "languageTraditionalChinese": "繁體中文",
+  "currentLanguage": "当前：{language}",
+  "@currentLanguage": {
+    "placeholders": {
+      "language": {}
+    }
+  },
+  "languageTileSubtitle": "切换简体中文或繁體中文",
+  "settingsBasicSection": "基础设置",
+  "settingsAboutSection": "关于",
+  "appearance": "外观",
+  "lightMode": "浅色模式",
+  "darkMode": "深色模式",
+  "followSystem": "跟随系统",
+  "player": "播放器",
+  "playerKernelCurrentMdk": "当前：MDK",
+  "playerKernelCurrentVideoPlayer": "当前：Video Player",
+  "playerKernelCurrentLibmpv": "当前：Libmpv",
+  "externalCall": "外部调用",
+  "externalPlayerEnabled": "已启用外部播放器",
+  "externalPlayerDisabled": "未启用外部播放器",
+  "desktopOnlySupported": "仅桌面端支持",
+  "networkSettings": "网络设置",
+  "networkSettingsSubtitle": "弹弹play 服务器及自定义地址",
+  "storage": "存储",
+  "storageSettingsSubtitle": "管理弹幕缓存与清理策略",
+  "networkMediaLibrary": "网络媒体库",
+  "noConnectedServer": "尚未连接任何服务器",
+  "mediaLibraryNotSelected": "未选择媒体库",
+  "mediaLibraryNotMatched": "未匹配到媒体库",
+  "mediaLibraryAndCount": "{first} 等 {count} 个",
+  "@mediaLibraryAndCount": {
+    "placeholders": {
+      "first": {},
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mediaServerSummary": "{server} · {summary}",
+  "@mediaServerSummary": {
+    "placeholders": {
+      "server": {},
+      "summary": {}
+    }
+  },
+  "developerOptions": "开发者选项",
+  "developerOptionsSubtitle": "终端输出、依赖版本、构建信息",
+  "about": "关于",
+  "loading": "加载中…",
+  "currentVersion": "当前版本：{version}",
+  "@currentVersion": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "versionLoadFailed": "版本信息获取失败",
+  "general": "通用",
+  "backupAndRestore": "备份与恢复",
+  "shortcuts": "快捷键",
+  "remoteAccess": "远程访问",
+  "remoteMediaLibrary": "远程媒体库",
+  "appearanceSettings": "外观设置",
+  "generalSettings": "通用设置",
+  "storageSettings": "存储设置",
+  "playerSettings": "播放器设置",
+  "shortcutsSettings": "快捷键设置",
+  "rememberDanmakuOffset": "记忆弹幕偏移",
+  "rememberDanmakuOffsetSubtitle": "切换视频时保留当前手动偏移（自动匹配偏移仍会重置）。",
+  "rememberDanmakuOffsetEnabled": "已开启弹幕偏移记忆",
+  "rememberDanmakuOffsetDisabled": "已关闭弹幕偏移记忆",
+  "danmakuConvertToSimplified": "弹幕转换简体中文",
+  "danmakuConvertToSimplifiedSubtitle": "开启后，将繁体中文弹幕转换为简体显示。",
+  "danmakuConvertToSimplifiedEnabled": "已开启弹幕转换简体中文",
+  "danmakuConvertToSimplifiedDisabled": "已关闭弹幕转换简体中文"
+}

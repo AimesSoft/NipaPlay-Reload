@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/themes/cupertino/pages/account/cupertino_account_page.dart';
@@ -58,7 +59,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cupertinoTheme = CupertinoTheme.of(context);
+    final l10n = context.l10n;
     const Color activeColor = Color(0xFFFF2E55);
     final Color inactiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
@@ -95,45 +96,45 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
                     activeColor: activeColor,
                     inactiveColor: inactiveColor,
                     height: tabBarHeight,
-                    items: const [
+                    items: [
                       BottomNavigationBarItem(
                         icon: Icon(CupertinoIcons.house),
                         activeIcon: Icon(CupertinoIcons.house_fill),
-                        label: '主页',
+                        label: l10n.tabHome,
                       ),
                       BottomNavigationBarItem(
                         icon: Icon(CupertinoIcons.play_rectangle),
                         activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
-                        label: '媒体库',
+                        label: l10n.tabMediaLibrary,
                       ),
                       BottomNavigationBarItem(
                         icon: Icon(CupertinoIcons.person_crop_circle),
                         activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
-                        label: '账户',
+                        label: l10n.tabAccount,
                       ),
                       BottomNavigationBarItem(
                         icon: Icon(CupertinoIcons.gear_alt),
                         activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-                        label: '设置',
+                        label: l10n.tabSettings,
                       ),
                     ],
                   ),
-                  items: const [
+                  items: [
                     AdaptiveNavigationDestination(
                       icon: 'house.fill',
-                      label: '主页',
+                      label: l10n.tabHome,
                     ),
                     AdaptiveNavigationDestination(
                       icon: 'play.rectangle.fill',
-                      label: '媒体库',
+                      label: l10n.tabMediaLibrary,
                     ),
                     AdaptiveNavigationDestination(
                       icon: 'person.crop.circle.fill',
-                      label: '账户',
+                      label: l10n.tabAccount,
                     ),
                     AdaptiveNavigationDestination(
                       icon: 'gearshape.fill',
-                      label: '设置',
+                      label: l10n.tabSettings,
                     ),
                   ],
                   selectedIndex: _selectedIndex,

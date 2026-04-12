@@ -3,6 +3,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1303,9 +1304,8 @@ class _CupertinoPlayerSettingsPageState
                       CupertinoIcons.timer,
                       color: resolveSettingsIconColor(context),
                     ),
-                    title: const Text('记忆弹幕偏移'),
-                    subtitle:
-                        const Text('切换视频时保留当前手动偏移（自动匹配偏移仍会重置）。'),
+                    title: Text(context.l10n.rememberDanmakuOffset),
+                    subtitle: Text(context.l10n.rememberDanmakuOffsetSubtitle),
                     trailing: AdaptiveSwitch(
                       value: videoState.rememberDanmakuOffset,
                       onChanged: (value) async {
@@ -1313,7 +1313,9 @@ class _CupertinoPlayerSettingsPageState
                         if (!mounted) return;
                         AdaptiveSnackBar.show(
                           context,
-                          message: value ? '已开启弹幕偏移记忆' : '已关闭弹幕偏移记忆',
+                          message: value
+                              ? context.l10n.rememberDanmakuOffsetEnabled
+                              : context.l10n.rememberDanmakuOffsetDisabled,
                           type: AdaptiveSnackBarType.success,
                         );
                       },
@@ -1324,8 +1326,9 @@ class _CupertinoPlayerSettingsPageState
                       if (!mounted) return;
                       AdaptiveSnackBar.show(
                         context,
-                        message:
-                            newValue ? '已开启弹幕偏移记忆' : '已关闭弹幕偏移记忆',
+                        message: newValue
+                            ? context.l10n.rememberDanmakuOffsetEnabled
+                            : context.l10n.rememberDanmakuOffsetDisabled,
                         type: AdaptiveSnackBarType.success,
                       );
                     },
@@ -1338,8 +1341,8 @@ class _CupertinoPlayerSettingsPageState
                   CupertinoIcons.textformat_abc,
                   color: resolveSettingsIconColor(context),
                 ),
-                title: const Text('弹幕转换简体中文'),
-                subtitle: const Text('开启后，将繁体中文弹幕转换为简体显示。'),
+                title: Text(context.l10n.danmakuConvertToSimplified),
+                subtitle: Text(context.l10n.danmakuConvertToSimplifiedSubtitle),
                 trailing: AdaptiveSwitch(
                   value: settingsProvider.danmakuConvertToSimplified,
                   onChanged: (value) {
@@ -1347,7 +1350,9 @@ class _CupertinoPlayerSettingsPageState
                     if (mounted) {
                       AdaptiveSnackBar.show(
                         context,
-                        message: value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文',
+                        message: value
+                            ? context.l10n.danmakuConvertToSimplifiedEnabled
+                            : context.l10n.danmakuConvertToSimplifiedDisabled,
                         type: AdaptiveSnackBarType.success,
                       );
                     }
@@ -1360,7 +1365,9 @@ class _CupertinoPlayerSettingsPageState
                   if (mounted) {
                     AdaptiveSnackBar.show(
                       context,
-                      message: newValue ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文',
+                      message: newValue
+                          ? context.l10n.danmakuConvertToSimplifiedEnabled
+                          : context.l10n.danmakuConvertToSimplifiedDisabled,
                       type: AdaptiveSnackBarType.success,
                     );
                   }

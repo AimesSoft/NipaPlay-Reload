@@ -38,6 +38,9 @@ class ThemeBuildContext {
   final GlobalKey<NavigatorState> navigatorKey;
   final String? launchFilePath;
   final ThemeEnvironment environment;
+  final Locale locale;
+  final List<Locale> supportedLocales;
+  final List<LocalizationsDelegate<dynamic>> localizationsDelegates;
   final Map<String, dynamic> _settings;
   final Widget Function(Widget child) overlayBuilder;
   final Widget Function() materialHomeBuilder;
@@ -49,6 +52,9 @@ class ThemeBuildContext {
     required this.navigatorKey,
     required this.launchFilePath,
     required this.environment,
+    required this.locale,
+    required this.supportedLocales,
+    required this.localizationsDelegates,
     required Map<String, dynamic> settings,
     required this.overlayBuilder,
     required this.materialHomeBuilder,

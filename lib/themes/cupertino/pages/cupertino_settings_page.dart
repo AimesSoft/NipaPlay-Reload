@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'settings/sections/cupertino_settings_general_section.dart';
 import 'settings/sections/cupertino_settings_about_section.dart';
@@ -98,7 +99,7 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
-                    '设置',
+                    context.l10n.settingsLabel,
                     style: CupertinoTheme.of(context)
                         .textTheme
                         .navLargeTitleTextStyle,
