@@ -21,14 +21,14 @@ class _AboutPageState extends State<AboutPage> {
   String _version = '加载中...';
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
+  bool _isAutoCheckEnabled = true;
   bool _isUpdateButtonHovered = false;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
-    // 静默检查更新，不显示加载状态
-    _checkForUpdates();
+    _initAutoCheckUpdateSetting();
   }
 
   Future<void> _loadVersion() async {
@@ -45,6 +45,29 @@ class _AboutPageState extends State<AboutPage> {
           _version = '获取失败';
         });
       }
+    }
+  }
+
+  Future<void> _initAutoCheckUpdateSetting() async {
+    final enabled = await UpdateService.isAutoCheckEnabled();
+    if (!mounted) return;
+    setState(() {
+      _isAutoCheckEnabled = enabled;
+    });
+    if (enabled) {
+      // 静默检查更新，不显示加载状态
+      _checkForUpdates();
+    }
+  }
+
+  Future<void> _setAutoCheckEnabled(bool enabled) async {
+    if (_isAutoCheckEnabled == enabled) return;
+    setState(() {
+      _isAutoCheckEnabled = enabled;
+    });
+    await UpdateService.setAutoCheckEnabled(enabled);
+    if (enabled) {
+      _checkForUpdates();
     }
   }
 
@@ -149,8 +172,8 @@ class _AboutPageState extends State<AboutPage> {
                     child: AdaptiveMarkdown(
                       data: notes,
                       brightness: Theme.of(context).brightness,
-                      baseTextStyle:
-                          TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
+                      baseTextStyle: TextStyle(
+                          color: colorScheme.onSurface.withOpacity(0.9)),
                       linkColor: Colors.lightBlueAccent,
                       onTapLink: (href) {
                         _launchURL(href);
@@ -304,11 +327,11 @@ class _AboutPageState extends State<AboutPage> {
     final bool showUpdateButtonHover =
         isUpdateButtonEnabled && _isUpdateButtonHovered;
     const Color updateAccentColor = Color(0xFFFF2E55);
-    final Color updateIdleColor = colorScheme.onSurface
-        .withOpacity(isUpdateButtonEnabled ? 0.75 : 0.4);
+    final Color updateIdleColor =
+        colorScheme.onSurface.withOpacity(isUpdateButtonEnabled ? 0.75 : 0.4);
     final Color updateButtonColor =
         showUpdateButtonHover ? updateAccentColor : updateIdleColor;
-    
+
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24.0),
@@ -323,7 +346,8 @@ class _AboutPageState extends State<AboutPage> {
             errorBuilder: (context, error, stackTrace) {
               return Icon(Ionicons.image_outline,
                   size: 100,
-                  color: colorScheme.onSurface.withOpacity(0.7)); // Placeholder if logo fails
+                  color: colorScheme.onSurface
+                      .withOpacity(0.7)); // Placeholder if logo fails
             },
           ),
           const SizedBox(height: 24),
@@ -431,6 +455,37 @@ class _AboutPageState extends State<AboutPage> {
           ),
           const SizedBox(height: 20),
 
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '自动检测更新',
+                style: textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.88),
+                    ) ??
+                    TextStyle(
+                      color: colorScheme.onSurface.withValues(alpha: 0.88),
+                    ),
+              ),
+              const SizedBox(width: 10),
+              Switch(
+                value: _isAutoCheckEnabled,
+                onChanged: _setAutoCheckEnabled,
+                activeThumbColor: updateAccentColor,
+              ),
+            ],
+          ),
+          Text(
+            '关闭后仅手动检测',
+            style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface.withValues(alpha: 0.65),
+                ) ??
+                TextStyle(
+                  color: colorScheme.onSurface.withValues(alpha: 0.65),
+                ),
+          ),
+          const SizedBox(height: 20),
+
           _buildInfoCard(
             context: context,
             children: [
@@ -516,7 +571,8 @@ class _AboutPageState extends State<AboutPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Ionicons.logo_github,
-                          color: colorScheme.onSurface.withOpacity(0.8), size: 20),
+                          color: colorScheme.onSurface.withOpacity(0.8),
+                          size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'AimesSoft/NipaPlay-Reload',
@@ -541,7 +597,8 @@ class _AboutPageState extends State<AboutPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Ionicons.chatbubbles_outline,
-                          color: colorScheme.onSurface.withOpacity(0.8), size: 20),
+                          color: colorScheme.onSurface.withOpacity(0.8),
+                          size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'QQ群: 961207150',
@@ -566,7 +623,8 @@ class _AboutPageState extends State<AboutPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Ionicons.globe_outline,
-                          color: colorScheme.onSurface.withOpacity(0.8), size: 20),
+                          color: colorScheme.onSurface.withOpacity(0.8),
+                          size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'NipaPlay 官方网站',

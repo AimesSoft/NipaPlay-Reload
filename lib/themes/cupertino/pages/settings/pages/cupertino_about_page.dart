@@ -28,12 +28,13 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
   String _version = '加载中…';
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
+  bool _isAutoCheckEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
-    _checkForUpdates();
+    _initAutoCheckUpdateSetting();
   }
 
   Future<void> _loadVersion() async {
@@ -48,6 +49,28 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       setState(() {
         _version = '获取失败';
       });
+    }
+  }
+
+  Future<void> _initAutoCheckUpdateSetting() async {
+    final enabled = await UpdateService.isAutoCheckEnabled();
+    if (!mounted) return;
+    setState(() {
+      _isAutoCheckEnabled = enabled;
+    });
+    if (enabled) {
+      _checkForUpdates();
+    }
+  }
+
+  Future<void> _setAutoCheckEnabled(bool enabled) async {
+    if (_isAutoCheckEnabled == enabled) return;
+    setState(() {
+      _isAutoCheckEnabled = enabled;
+    });
+    await UpdateService.setAutoCheckEnabled(enabled);
+    if (enabled) {
+      _checkForUpdates();
     }
   }
 
@@ -517,6 +540,32 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                   ],
                 )
               : const Text('检测更新'),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '自动检测更新',
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 14,
+                    color: secondaryColor,
+                  ),
+            ),
+            const SizedBox(width: 10),
+            CupertinoSwitch(
+              value: _isAutoCheckEnabled,
+              onChanged: _setAutoCheckEnabled,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '关闭后仅手动检测',
+          style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                fontSize: 12,
+                color: secondaryColor,
+              ),
         ),
       ],
     );
