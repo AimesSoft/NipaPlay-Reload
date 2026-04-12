@@ -1,6 +1,24 @@
 part of video_player_state;
 
 extension VideoPlayerStateInitialization on VideoPlayerState {
+  Future<void> _loadVideoEnhancementSettingsEarly() async {
+    try {
+      await _loadDoubleResolutionPlayback();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 提前加载双倍分辨率设置失败: $e');
+    }
+    try {
+      await _loadAnime4KProfile();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 提前加载 Anime4K 设置失败: $e');
+    }
+    try {
+      await _loadCrtProfile();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 提前加载 CRT 设置失败: $e');
+    }
+  }
+
   Future<void> _initialize() async {
     if (globals.isMobilePlatform) {
       // 使用新的屏幕方向管理器设置初始方向
@@ -14,6 +32,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     _setupWindowManagerListener();
     _focusNode.requestFocus();
     await _loadLastVideo();
+    await _loadVideoEnhancementSettingsEarly();
     await _loadMinimalProgressBarSettings(); // 加载最小化进度条设置
     await _loadPrecacheBufferSize(); // 加载播放预缓存大小
     await _loadPrecacheBufferDuration(); // 加载播放预缓存时长
@@ -53,13 +72,6 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载跳过时间设置
     await _loadSkipSeconds();
-
-    // 加载双倍分辨率播放设置
-    await _loadDoubleResolutionPlayback();
-
-    // 加载 Anime4K 设置并尝试立即应用
-    await _loadAnime4KProfile();
-    await _loadCrtProfile();
 
     // 加载播放结束行为设置
     await _loadPlaybackEndAction();

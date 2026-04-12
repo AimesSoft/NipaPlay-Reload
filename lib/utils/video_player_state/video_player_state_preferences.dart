@@ -570,9 +570,97 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     notifyListeners();
   }
 
+  bool _readCompatibleBool(
+    SharedPreferences prefs,
+    String key, {
+    required bool defaultValue,
+  }) {
+    try {
+      final bool? boolValue = prefs.getBool(key);
+      if (boolValue != null) return boolValue;
+    } catch (_) {}
+    try {
+      final int? intValue = prefs.getInt(key);
+      if (intValue != null) return intValue != 0;
+    } catch (_) {}
+    try {
+      final String? text = prefs.getString(key);
+      if (text != null) {
+        final normalized = text.trim().toLowerCase();
+        if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
+          return true;
+        }
+        if (normalized == 'false' || normalized == '0' || normalized == 'no') {
+          return false;
+        }
+      }
+    } catch (_) {}
+    return defaultValue;
+  }
+
+  int _readCompatibleInt(
+    SharedPreferences prefs,
+    String key, {
+    required int defaultValue,
+  }) {
+    try {
+      final int? intValue = prefs.getInt(key);
+      if (intValue != null) return intValue;
+    } catch (_) {}
+    try {
+      final bool? boolValue = prefs.getBool(key);
+      if (boolValue != null) return boolValue ? 1 : 0;
+    } catch (_) {}
+    try {
+      final String? text = prefs.getString(key);
+      if (text != null) {
+        final parsed = int.tryParse(text.trim());
+        if (parsed != null) return parsed;
+        final normalized = text.trim().toLowerCase();
+        if (normalized == 'true') return 1;
+        if (normalized == 'false') return 0;
+      }
+    } catch (_) {}
+    return defaultValue;
+  }
+
+  Future<void> _persistBoolWithRetry(
+    SharedPreferences prefs,
+    String key,
+    bool value, {
+    required String settingName,
+  }) async {
+    bool ok = await prefs.setBool(key, value);
+    if (ok) return;
+    await prefs.remove(key);
+    ok = await prefs.setBool(key, value);
+    if (!ok) {
+      debugPrint('[VideoPlayerState] 保存$settingName失败: key=$key, value=$value');
+    }
+  }
+
+  Future<void> _persistIntWithRetry(
+    SharedPreferences prefs,
+    String key,
+    int value, {
+    required String settingName,
+  }) async {
+    bool ok = await prefs.setInt(key, value);
+    if (ok) return;
+    await prefs.remove(key);
+    ok = await prefs.setInt(key, value);
+    if (!ok) {
+      debugPrint('[VideoPlayerState] 保存$settingName失败: key=$key, value=$value');
+    }
+  }
+
   Future<void> _loadDoubleResolutionPlayback() async {
     final prefs = await SharedPreferences.getInstance();
-    final resolved = prefs.getBool(_doubleResolutionPlaybackKey) ?? false;
+    final resolved = _readCompatibleBool(
+      prefs,
+      _doubleResolutionPlaybackKey,
+      defaultValue: false,
+    );
     if (_doubleResolutionPlaybackEnabled != resolved) {
       _doubleResolutionPlaybackEnabled = resolved;
       notifyListeners();
@@ -590,7 +678,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_doubleResolutionPlaybackKey, enabled);
+    await _persistBoolWithRetry(
+      prefs,
+      _doubleResolutionPlaybackKey,
+      enabled,
+      settingName: '双倍分辨率播放',
+    );
     _doubleResolutionPlaybackEnabled = enabled;
     if (!hasVideo) {
       await applyAnime4KProfileToCurrentPlayer();
@@ -601,8 +694,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadAnime4KProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final int stored =
-          prefs.getInt(_anime4kProfileKey) ?? Anime4KProfile.off.index;
+      final int stored = _readCompatibleInt(
+        prefs,
+        _anime4kProfileKey,
+        defaultValue: Anime4KProfile.off.index,
+      );
       if (stored >= 0 && stored < Anime4KProfile.values.length) {
         _anime4kProfile = Anime4KProfile.values[stored];
       } else {
@@ -629,7 +725,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _anime4kProfile = profile;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_anime4kProfileKey, profile.index);
+      await _persistIntWithRetry(
+        prefs,
+        _anime4kProfileKey,
+        profile.index,
+        settingName: 'Anime4K 超分辨率',
+      );
     } catch (e) {
       debugPrint('[VideoPlayerState] 保存 Anime4K 设置失败: $e');
     }
@@ -643,7 +744,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadCrtProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final int stored = prefs.getInt(_crtProfileKey) ?? CrtProfile.off.index;
+      final int stored = _readCompatibleInt(
+        prefs,
+        _crtProfileKey,
+        defaultValue: CrtProfile.off.index,
+      );
       if (stored >= 0 && stored < CrtProfile.values.length) {
         _crtProfile = CrtProfile.values[stored];
       } else {
@@ -667,7 +772,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _crtProfile = profile;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_crtProfileKey, profile.index);
+      await _persistIntWithRetry(
+        prefs,
+        _crtProfileKey,
+        profile.index,
+        settingName: 'CRT 显示效果',
+      );
     } catch (e) {
       debugPrint('[VideoPlayerState] 保存 CRT 设置失败: $e');
     }
