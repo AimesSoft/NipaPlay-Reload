@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 
@@ -13,6 +14,7 @@ class CupertinoNetworkServerConnectionDialog {
     BuildContext context,
     MediaServerType serverType,
   ) async {
+    final l10n = context.l10n;
     final serverLabel =
         serverType == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
 
@@ -20,20 +22,20 @@ class CupertinoNetworkServerConnectionDialog {
     final serverUrl = await showCupertinoDialog<String>(
       context: context,
       builder: (context) => IOS26AlertDialog(
-        title: '连接 $serverLabel 服务器',
-        input: const AdaptiveAlertDialogInput(
-          placeholder: '例如：http://192.168.1.100:8096',
+        title: l10n.connectServerDialogTitle(serverLabel),
+        input: AdaptiveAlertDialogInput(
+          placeholder: l10n.serverUrlInputPlaceholder,
           initialValue: '',
           keyboardType: TextInputType.url,
         ),
         actions: [
           AlertAction(
-            title: '取消',
+            title: l10n.cancel,
             style: AlertActionStyle.cancel,
             onPressed: () {},
           ),
           AlertAction(
-            title: '下一步',
+            title: l10n.nextStep,
             style: AlertActionStyle.primary,
             onPressed: () {},
           ),
@@ -51,20 +53,20 @@ class CupertinoNetworkServerConnectionDialog {
     final username = await showCupertinoDialog<String>(
       context: context,
       builder: (context) => IOS26AlertDialog(
-        title: '连接 $serverLabel 服务器',
-        input: const AdaptiveAlertDialogInput(
-          placeholder: '输入用户名',
+        title: l10n.connectServerDialogTitle(serverLabel),
+        input: AdaptiveAlertDialogInput(
+          placeholder: l10n.inputUsernamePlaceholder,
           initialValue: '',
           keyboardType: TextInputType.text,
         ),
         actions: [
           AlertAction(
-            title: '取消',
+            title: l10n.cancel,
             style: AlertActionStyle.cancel,
             onPressed: () {},
           ),
           AlertAction(
-            title: '下一步',
+            title: l10n.nextStep,
             style: AlertActionStyle.primary,
             onPressed: () {},
           ),
@@ -82,21 +84,21 @@ class CupertinoNetworkServerConnectionDialog {
     final password = await showCupertinoDialog<String>(
       context: context,
       builder: (context) => IOS26AlertDialog(
-        title: '连接 $serverLabel 服务器',
-        input: const AdaptiveAlertDialogInput(
-          placeholder: '输入密码',
+        title: l10n.connectServerDialogTitle(serverLabel),
+        input: AdaptiveAlertDialogInput(
+          placeholder: l10n.inputPasswordPlaceholder,
           initialValue: '',
           keyboardType: TextInputType.text,
           obscureText: true,
         ),
         actions: [
           AlertAction(
-            title: '取消',
+            title: l10n.cancel,
             style: AlertActionStyle.cancel,
             onPressed: () {},
           ),
           AlertAction(
-            title: '连接',
+            title: l10n.connectAction,
             style: AlertActionStyle.primary,
             onPressed: () {},
           ),
@@ -130,14 +132,14 @@ class CupertinoNetworkServerConnectionDialog {
         if (connected) {
           AdaptiveSnackBar.show(
             context,
-            message: '$serverLabel 服务器已连接',
+            message: l10n.networkServerConnected(serverLabel),
             type: AdaptiveSnackBarType.success,
           );
           return true;
         } else {
           AdaptiveSnackBar.show(
             context,
-            message: '连接失败，请检查服务器地址和凭证',
+            message: l10n.connectFailedCheckCredentials,
             type: AdaptiveSnackBarType.error,
           );
           return false;
@@ -147,7 +149,7 @@ class CupertinoNetworkServerConnectionDialog {
       if (context.mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: '连接错误：$e',
+          message: l10n.connectFailedWithError('$e'),
           type: AdaptiveSnackBarType.error,
         );
       }

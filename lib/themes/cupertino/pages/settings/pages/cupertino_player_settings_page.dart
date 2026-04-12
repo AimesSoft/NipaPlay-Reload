@@ -111,7 +111,7 @@ class _CupertinoPlayerSettingsPageState
     if (!mounted) return;
     AdaptiveSnackBar.show(
       context,
-      message: '播放器内核已切换',
+      message: context.l10n.playerKernelSwitched,
       type: AdaptiveSnackBarType.success,
     );
     setState(() {
@@ -184,7 +184,7 @@ class _CupertinoPlayerSettingsPageState
     if (!mounted) return;
     AdaptiveSnackBar.show(
       context,
-      message: '弹幕渲染引擎已切换',
+      message: context.l10n.danmakuRenderEngineSwitched,
       type: AdaptiveSnackBarType.success,
     );
     setState(() {
@@ -202,7 +202,7 @@ class _CupertinoPlayerSettingsPageState
     if (url.isEmpty) {
       AdaptiveSnackBar.show(
         context,
-        message: '请输入 AI 接口 URL',
+        message: context.l10n.enterAiApiUrl,
         type: AdaptiveSnackBarType.error,
       );
       return;
@@ -210,7 +210,7 @@ class _CupertinoPlayerSettingsPageState
     if (model.isEmpty) {
       AdaptiveSnackBar.show(
         context,
-        message: '请输入模型名称',
+        message: context.l10n.enterModelName,
         type: AdaptiveSnackBarType.error,
       );
       return;
@@ -218,7 +218,7 @@ class _CupertinoPlayerSettingsPageState
     if (apiKeyInput.isEmpty) {
       AdaptiveSnackBar.show(
         context,
-        message: '请输入 API Key',
+        message: context.l10n.enterApiKey,
         type: AdaptiveSnackBarType.error,
       );
       return;
@@ -240,14 +240,14 @@ class _CupertinoPlayerSettingsPageState
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '防剧透 AI 设置已保存',
+        message: context.l10n.spoilerAiSettingsSaved,
         type: AdaptiveSnackBarType.success,
       );
     } catch (e) {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '保存失败: $e',
+        message: context.l10n.saveFailedWithError('$e'),
         type: AdaptiveSnackBarType.error,
       );
     } finally {
@@ -273,89 +273,89 @@ class _CupertinoPlayerSettingsPageState
   String _getPlayerKernelDescription(PlayerKernelType type) {
     switch (type) {
       case PlayerKernelType.mdk:
-        return 'MDK 多媒体开发套件，支持硬件解码（默认优先；不支持时回落软件解码）。';
+        return context.l10n.playerKernelDescriptionMdk;
       case PlayerKernelType.videoPlayer:
-        return 'Flutter 官方 Video Player，兼容性好。';
+        return context.l10n.playerKernelDescriptionVideoPlayer;
       case PlayerKernelType.mediaKit:
-        return 'MediaKit (Libmpv) 播放器，支持硬件解码与高级特性。';
+        return context.l10n.playerKernelDescriptionLibmpv;
     }
   }
 
   String _getDanmakuRenderEngineDescription(DanmakuRenderEngine engine) {
     switch (engine) {
       case DanmakuRenderEngine.cpu:
-        return 'CPU 渲染：兼容性最佳，适合大多数场景。';
+        return context.l10n.danmakuRenderEngineDescriptionCpu;
       case DanmakuRenderEngine.gpu:
-        return 'GPU 渲染（实验性）：性能更高，但仍在开发中。';
+        return context.l10n.danmakuRenderEngineDescriptionGpuExperimental;
       case DanmakuRenderEngine.canvas:
-        return 'Canvas 弹幕（实验性）：高性能，低功耗。';
+        return context.l10n.danmakuRenderEngineDescriptionCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
-        return 'NipaPlay Next：CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
+        return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
     }
   }
 
   String _getAnime4KProfileTitle(Anime4KProfile profile) {
     switch (profile) {
       case Anime4KProfile.off:
-        return '关闭';
+        return context.l10n.qualityProfileOff;
       case Anime4KProfile.lite:
-        return '轻量';
+        return context.l10n.qualityProfileLite;
       case Anime4KProfile.standard:
-        return '标准';
+        return context.l10n.qualityProfileStandard;
       case Anime4KProfile.high:
-        return '高质量';
+        return context.l10n.qualityProfileHigh;
     }
   }
 
   String _getAnime4KProfileDescription(Anime4KProfile profile) {
     switch (profile) {
       case Anime4KProfile.off:
-        return '保持原始画面，不进行超分辨率处理。';
+        return context.l10n.anime4kProfileDescriptionOff;
       case Anime4KProfile.lite:
-        return '适度超分辨率与降噪，性能消耗较低。';
+        return context.l10n.anime4kProfileDescriptionLite;
       case Anime4KProfile.standard:
-        return '画质与性能平衡的标准方案。';
+        return context.l10n.anime4kProfileDescriptionStandard;
       case Anime4KProfile.high:
-        return '追求最佳画质，性能需求最高。';
+        return context.l10n.anime4kProfileDescriptionHigh;
     }
   }
 
   String _getCrtProfileTitle(CrtProfile profile) {
     switch (profile) {
       case CrtProfile.off:
-        return '关闭';
+        return context.l10n.qualityProfileOff;
       case CrtProfile.lite:
-        return '轻量';
+        return context.l10n.qualityProfileLite;
       case CrtProfile.standard:
-        return '标准';
+        return context.l10n.qualityProfileStandard;
       case CrtProfile.high:
-        return '高质量';
+        return context.l10n.qualityProfileHigh;
     }
   }
 
   String _getCrtProfileDescription(CrtProfile profile) {
     switch (profile) {
       case CrtProfile.off:
-        return '保持原始画面，不启用 CRT 效果。';
+        return context.l10n.crtProfileDescriptionOff;
       case CrtProfile.lite:
-        return '扫描线 + 暗角，性能开销较小。';
+        return context.l10n.crtProfileDescriptionLite;
       case CrtProfile.standard:
-        return '增加曲面与栅格，画面更接近 CRT。';
+        return context.l10n.crtProfileDescriptionStandard;
       case CrtProfile.high:
-        return '加入辉光与色散，效果最佳但性能开销更高。';
+        return context.l10n.crtProfileDescriptionHigh;
     }
   }
 
   String _danmakuTitle(DanmakuRenderEngine engine) {
     switch (engine) {
       case DanmakuRenderEngine.cpu:
-        return 'CPU 渲染';
+        return context.l10n.danmakuRenderEngineTitleCpu;
       case DanmakuRenderEngine.gpu:
-        return 'GPU 渲染 (实验性)';
+        return context.l10n.danmakuRenderEngineTitleGpuExperimental;
       case DanmakuRenderEngine.canvas:
-        return 'Canvas 弹幕 (实验性)';
+        return context.l10n.danmakuRenderEngineTitleCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
-        return 'NipaPlay Next';
+        return context.l10n.danmakuRenderEngineTitleNipaplayNext;
     }
   }
 
@@ -403,22 +403,25 @@ class _CupertinoPlayerSettingsPageState
         .toList();
   }
 
-  String _spoilerAiFormatTitle(SpoilerAiApiFormat format) {
+  String _spoilerAiFormatTitle(
+    BuildContext context,
+    SpoilerAiApiFormat format,
+  ) {
     switch (format) {
       case SpoilerAiApiFormat.openai:
-        return 'OpenAI 兼容';
+        return context.l10n.openAiCompatible;
       case SpoilerAiApiFormat.gemini:
         return 'Gemini';
     }
   }
 
-  List<AdaptivePopupMenuEntry> _spoilerAiFormatMenuItems() {
-    return const [
+  List<AdaptivePopupMenuEntry> _spoilerAiFormatMenuItems(BuildContext context) {
+    return [
       AdaptivePopupMenuItem<SpoilerAiApiFormat>(
-        label: 'OpenAI 兼容',
+        label: context.l10n.openAiCompatible,
         value: SpoilerAiApiFormat.openai,
       ),
-      AdaptivePopupMenuItem<SpoilerAiApiFormat>(
+      const AdaptivePopupMenuItem<SpoilerAiApiFormat>(
         label: 'Gemini',
         value: SpoilerAiApiFormat.gemini,
       ),
@@ -504,10 +507,8 @@ class _CupertinoPlayerSettingsPageState
     bool enabled,
   ) {
     final double value = videoState.precacheBufferSizeMb.toDouble();
-    final double minValue =
-        PlayerFactory.minPrecacheBufferSizeMb.toDouble();
-    final double maxValue =
-        PlayerFactory.maxPrecacheBufferSizeMb.toDouble();
+    final double minValue = PlayerFactory.minPrecacheBufferSizeMb.toDouble();
+    final double maxValue = PlayerFactory.maxPrecacheBufferSizeMb.toDouble();
     final ValueChanged<double>? onChanged = enabled
         ? (value) {
             videoState.setPrecacheBufferSizeMb(value.round());
@@ -588,12 +589,12 @@ class _CupertinoPlayerSettingsPageState
   Widget build(BuildContext context) {
     if (kIsWeb) {
       return AdaptiveScaffold(
-        appBar: const AdaptiveAppBar(
-          title: '播放器',
+        appBar: AdaptiveAppBar(
+          title: context.l10n.player,
           useNativeToolbar: true,
         ),
-        body: const Center(
-          child: Text('播放器设置在 Web 平台不可用'),
+        body: Center(
+          child: Text(context.l10n.playerUnavailableOnWeb),
         ),
       );
     }
@@ -621,7 +622,7 @@ class _CupertinoPlayerSettingsPageState
               CupertinoIcons.play_rectangle,
               color: resolveSettingsIconColor(context),
             ),
-            title: const Text('播放器内核'),
+            title: Text(context.l10n.playerKernel),
             subtitle: Text(_getPlayerKernelDescription(_selectedKernelType)),
             trailing: AdaptivePopupMenuButton.widget<PlayerKernelType>(
               items: _kernelMenuItems(),
@@ -655,13 +656,13 @@ class _CupertinoPlayerSettingsPageState
                   }
                   if (value) {
                     if (settingsProvider.externalPlayerPath.trim().isEmpty) {
-                      final picked =
-                          await FilePickerService().pickExternalPlayerExecutable();
+                      final picked = await FilePickerService()
+                          .pickExternalPlayerExecutable();
                       if (picked == null || picked.trim().isEmpty) {
                         if (!mounted) return;
                         AdaptiveSnackBar.show(
                           context,
-                          message: '已取消选择外部播放器',
+                          message: context.l10n.externalPlayerSelectionCanceled,
                           type: AdaptiveSnackBarType.info,
                         );
                         await settingsProvider.setUseExternalPlayer(false);
@@ -673,7 +674,7 @@ class _CupertinoPlayerSettingsPageState
                     if (!mounted) return;
                     AdaptiveSnackBar.show(
                       context,
-                      message: '已启用外部播放器',
+                      message: context.l10n.externalPlayerEnabled,
                       type: AdaptiveSnackBarType.success,
                     );
                   } else {
@@ -681,7 +682,7 @@ class _CupertinoPlayerSettingsPageState
                     if (!mounted) return;
                     AdaptiveSnackBar.show(
                       context,
-                      message: '已关闭外部播放器',
+                      message: context.l10n.externalPlayerDisabled,
                       type: AdaptiveSnackBarType.success,
                     );
                   }
@@ -692,8 +693,8 @@ class _CupertinoPlayerSettingsPageState
                     CupertinoIcons.square_arrow_up,
                     color: resolveSettingsIconColor(context),
                   ),
-                  title: const Text('启用外部播放器'),
-                  subtitle: const Text('开启后将使用外部播放器播放视频'),
+                  title: Text(context.l10n.externalPlayerEnableTitle),
+                  subtitle: Text(context.l10n.externalPlayerEnableSubtitle),
                   trailing: AdaptiveSwitch(
                     value: settingsProvider.useExternalPlayer,
                     onChanged: toggleExternal,
@@ -707,14 +708,15 @@ class _CupertinoPlayerSettingsPageState
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, child) {
                 final path = settingsProvider.externalPlayerPath.trim();
-                final subtitle =
-                    path.isEmpty ? '未选择外部播放器' : path;
+                final subtitle = path.isEmpty
+                    ? context.l10n.externalPlayerNotSelected
+                    : path;
                 return CupertinoSettingsTile(
                   leading: Icon(
                     CupertinoIcons.folder,
                     color: resolveSettingsIconColor(context),
                   ),
-                  title: const Text('选择外部播放器'),
+                  title: Text(context.l10n.externalPlayerSelectTitle),
                   subtitle: Text(subtitle),
                   showChevron: true,
                   onTap: () async {
@@ -724,7 +726,7 @@ class _CupertinoPlayerSettingsPageState
                       if (!mounted) return;
                       AdaptiveSnackBar.show(
                         context,
-                        message: '已取消选择外部播放器',
+                        message: context.l10n.externalPlayerSelectionCanceled,
                         type: AdaptiveSnackBarType.info,
                       );
                       return;
@@ -733,7 +735,7 @@ class _CupertinoPlayerSettingsPageState
                     if (!mounted) return;
                     AdaptiveSnackBar.show(
                       context,
-                      message: '已更新外部播放器',
+                      message: context.l10n.externalPlayerUpdated,
                       type: AdaptiveSnackBarType.success,
                     );
                   },
@@ -759,8 +761,8 @@ class _CupertinoPlayerSettingsPageState
                     CupertinoIcons.bolt,
                     color: resolveSettingsIconColor(context),
                   ),
-                  title: const Text('硬件解码'),
-                  subtitle: const Text('仅对 MDK / Libmpv 生效'),
+                  title: Text(context.l10n.hardwareDecoding),
+                  subtitle: Text(context.l10n.hardwareDecodingSubtitle),
                   trailing: AdaptiveSwitch(
                     value: videoState.useHardwareDecoder,
                     onChanged: (value) async {
@@ -768,7 +770,9 @@ class _CupertinoPlayerSettingsPageState
                       if (!mounted) return;
                       AdaptiveSnackBar.show(
                         context,
-                        message: value ? '已开启硬件解码' : '已关闭硬件解码',
+                        message: value
+                            ? context.l10n.hardwareDecodingEnabled
+                            : context.l10n.hardwareDecodingDisabled,
                         type: AdaptiveSnackBarType.success,
                       );
                     },
@@ -779,7 +783,9 @@ class _CupertinoPlayerSettingsPageState
                     if (!mounted) return;
                     AdaptiveSnackBar.show(
                       context,
-                      message: newValue ? '已开启硬件解码' : '已关闭硬件解码',
+                      message: newValue
+                          ? context.l10n.hardwareDecodingEnabled
+                          : context.l10n.hardwareDecodingDisabled,
                       type: AdaptiveSnackBarType.success,
                     );
                   },
@@ -805,8 +811,8 @@ class _CupertinoPlayerSettingsPageState
                     CupertinoIcons.pause_circle,
                     color: resolveSettingsIconColor(context),
                   ),
-                  title: const Text('后台自动暂停'),
-                  subtitle: const Text('切到后台或锁屏时自动暂停播放'),
+                  title: Text(context.l10n.pauseOnBackgroundTitle),
+                  subtitle: Text(context.l10n.pauseOnBackgroundSubtitle),
                   trailing: AdaptiveSwitch(
                     value: videoState.pauseOnBackground,
                     onChanged: (value) async {
@@ -814,7 +820,9 @@ class _CupertinoPlayerSettingsPageState
                       if (!mounted) return;
                       AdaptiveSnackBar.show(
                         context,
-                        message: value ? '后台自动暂停已开启' : '后台自动暂停已关闭',
+                        message: value
+                            ? context.l10n.pauseOnBackgroundEnabled
+                            : context.l10n.pauseOnBackgroundDisabled,
                         type: AdaptiveSnackBarType.success,
                       );
                     },
@@ -823,9 +831,9 @@ class _CupertinoPlayerSettingsPageState
                 ),
               ],
             );
-      },
-    ),
-  ],
+          },
+        ),
+      ],
       const SizedBox(height: 16),
       Consumer<VideoPlayerState>(
         builder: (context, videoState, child) {
@@ -842,7 +850,7 @@ class _CupertinoPlayerSettingsPageState
                   CupertinoIcons.play_circle,
                   color: resolveSettingsIconColor(context),
                 ),
-                title: const Text('播放结束操作'),
+                title: Text(context.l10n.playbackEndActionTitle),
                 subtitle: Text(videoState.playbackEndAction.description),
                 trailing: AdaptivePopupMenuButton.widget<PlaybackEndAction>(
                   items: _playbackEndActionMenuItems(),
@@ -860,16 +868,16 @@ class _CupertinoPlayerSettingsPageState
                     String message;
                     switch (action) {
                       case PlaybackEndAction.autoNext:
-                        message = '播放结束后将自动进入下一话';
+                        message = context.l10n.playbackEndActionAutoNextMessage;
                         break;
                       case PlaybackEndAction.loop:
-                        message = '播放结束后将从头循环播放';
+                        message = context.l10n.playbackEndActionLoopMessage;
                         break;
                       case PlaybackEndAction.pause:
-                        message = '播放结束后将停留在当前页面';
+                        message = context.l10n.playbackEndActionPauseMessage;
                         break;
                       case PlaybackEndAction.exitPlayer:
-                        message = '播放结束后将返回上一页';
+                        message = context.l10n.playbackEndActionExitMessage;
                         break;
                     }
                     AdaptiveSnackBar.show(
@@ -889,11 +897,13 @@ class _CupertinoPlayerSettingsPageState
                       CupertinoIcons.timer,
                       color: resolveSettingsIconColor(context),
                     ),
-                    title: const Text('自动连播倒计时'),
+                    title: Text(context.l10n.autoNextCountdownTitle),
                     subtitle: Text(
                       isAutoNext
-                          ? '自动跳转下一话前等待 ${videoState.autoNextCountdownSeconds} 秒'
-                          : '需先启用自动播放下一话',
+                          ? context.l10n.autoNextCountdownWaitSeconds(
+                              videoState.autoNextCountdownSeconds,
+                            )
+                          : context.l10n.autoNextCountdownNeedAutoNext,
                     ),
                     backgroundColor: tileBackground,
                     contentPadding:
@@ -930,9 +940,8 @@ class _CupertinoPlayerSettingsPageState
                     CupertinoIcons.photo_on_rectangle,
                     color: resolveSettingsIconColor(context),
                   ),
-                  title: const Text('时间轴截图预览'),
-                  subtitle:
-                      const Text('悬停进度条时显示缩略图（本地/WebDAV/SMB/共享媒体库生效）'),
+                  title: Text(context.l10n.timelinePreviewTitle),
+                  subtitle: Text(context.l10n.timelinePreviewSubtitle),
                   trailing: AdaptiveSwitch(
                     value: videoState.timelinePreviewEnabled,
                     onChanged: (value) async {
@@ -940,17 +949,21 @@ class _CupertinoPlayerSettingsPageState
                         final bool? confirm = await showCupertinoDialog<bool>(
                           context: context,
                           builder: (context) => CupertinoAlertDialog(
-                            title: const Text('开启警告'),
-                            content: const Text('开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？'),
+                            title: Text(context.l10n.enableWarning),
+                            content: Text(
+                              context.l10n.timelinePreviewEnableWarningContent,
+                            ),
                             actions: [
                               CupertinoDialogAction(
-                                onPressed: () => Navigator.of(context).pop(false),
-                                child: const Text('取消'),
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                child: Text(context.l10n.cancel),
                               ),
                               CupertinoDialogAction(
                                 isDestructiveAction: true,
-                                onPressed: () => Navigator.of(context).pop(true),
-                                child: const Text('确认'),
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
+                                child: Text(context.l10n.confirm),
                               ),
                             ],
                           ),
@@ -961,7 +974,9 @@ class _CupertinoPlayerSettingsPageState
                       if (!mounted) return;
                       AdaptiveSnackBar.show(
                         context,
-                        message: value ? '已开启时间轴截图预览' : '已关闭时间轴截图预览',
+                        message: value
+                            ? context.l10n.timelinePreviewEnabled
+                            : context.l10n.timelinePreviewDisabled,
                         type: AdaptiveSnackBarType.success,
                       );
                     },
@@ -993,13 +1008,21 @@ class _CupertinoPlayerSettingsPageState
                       CupertinoIcons.tray_full,
                       color: resolveSettingsIconColor(context),
                     ),
-                    title: Text(isMdk ? '播放预缓存时长' : '播放预缓存大小'),
+                    title: Text(
+                      isMdk
+                          ? context.l10n.playPrecacheDuration
+                          : context.l10n.playPrecacheSize,
+                    ),
                     subtitle: Text(
                       isMdk
-                          ? '当前 ${videoState.precacheBufferDurationSeconds} 秒，修改后立即生效'
+                          ? context.l10n.currentPrecacheDurationSeconds(
+                              videoState.precacheBufferDurationSeconds,
+                            )
                           : (enableSetting
-                              ? '当前 ${videoState.precacheBufferSizeMb} MB，修改后重新打开视频生效'
-                              : '仅 Libmpv 内核生效'),
+                              ? context.l10n.currentPrecacheSizeMb(
+                                  videoState.precacheBufferSizeMb,
+                                )
+                              : context.l10n.libmpvKernelOnly),
                     ),
                     backgroundColor: tileBackground,
                     contentPadding:
@@ -1030,8 +1053,7 @@ class _CupertinoPlayerSettingsPageState
       if (_selectedKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            final bool supportsUpscale =
-                videoState.isDoubleResolutionSupported;
+            final bool supportsUpscale = videoState.isDoubleResolutionSupported;
             if (!supportsUpscale) {
               return const SizedBox.shrink();
             }
@@ -1049,10 +1071,9 @@ class _CupertinoPlayerSettingsPageState
                         CupertinoIcons.textformat_abc,
                         color: resolveSettingsIconColor(context),
                       ),
-                      title: const Text('双倍分辨率播放视频'),
-                      subtitle: const Text(
-                        '以 2x 分辨率渲染画面，改善内嵌字幕清晰度（仅 Libmpv，不与 Anime4K 叠加）',
-                      ),
+                      title: Text(context.l10n.doubleResolutionPlaybackTitle),
+                      subtitle:
+                          Text(context.l10n.doubleResolutionPlaybackSubtitle),
                       trailing: AdaptiveSwitch(
                         value: videoState.doubleResolutionPlaybackEnabled,
                         onChanged: (value) async {
@@ -1061,10 +1082,11 @@ class _CupertinoPlayerSettingsPageState
                           if (!mounted) return;
                           final bool deferApply = videoState.hasVideo;
                           final String message = deferApply
-                              ? '已保存，重新打开视频生效'
+                              ? context.l10n.settingSavedReopenVideoToApply
                               : (value
-                                  ? '已开启双倍分辨率播放'
-                                  : '已关闭双倍分辨率播放');
+                                  ? context.l10n.doubleResolutionPlaybackEnabled
+                                  : context
+                                      .l10n.doubleResolutionPlaybackDisabled);
                           AdaptiveSnackBar.show(
                             context,
                             message: message,
@@ -1080,10 +1102,10 @@ class _CupertinoPlayerSettingsPageState
                         if (!mounted) return;
                         final bool deferApply = videoState.hasVideo;
                         final String message = deferApply
-                            ? '已保存，重新打开视频生效'
+                            ? context.l10n.settingSavedReopenVideoToApply
                             : (newValue
-                                ? '已开启双倍分辨率播放'
-                                : '已关闭双倍分辨率播放');
+                                ? context.l10n.doubleResolutionPlaybackEnabled
+                                : context.l10n.doubleResolutionPlaybackDisabled);
                         AdaptiveSnackBar.show(
                           context,
                           message: message,
@@ -1131,7 +1153,7 @@ class _CupertinoPlayerSettingsPageState
                         CupertinoIcons.tv,
                         color: resolveSettingsIconColor(context),
                       ),
-                      title: const Text('Anime4K 超分辨率（实验性）'),
+                      title: Text(context.l10n.anime4kSuperResolutionTitle),
                       subtitle: Text(
                         _getAnime4KProfileDescription(currentProfile),
                       ),
@@ -1154,10 +1176,10 @@ class _CupertinoPlayerSettingsPageState
                             final bool deferApply = videoState.hasVideo;
                             final option = _getAnime4KProfileTitle(profile);
                             final message = deferApply
-                                ? '已保存，重新打开视频生效'
+                                ? context.l10n.settingSavedReopenVideoToApply
                                 : (profile == Anime4KProfile.off
-                                    ? '已关闭 Anime4K'
-                                    : 'Anime4K 已切换为$option');
+                                    ? context.l10n.anime4kDisabled
+                                    : context.l10n.anime4kSwitchedTo(option));
                             AdaptiveSnackBar.show(
                               context,
                               message: message,
@@ -1207,7 +1229,7 @@ class _CupertinoPlayerSettingsPageState
                         CupertinoIcons.tv,
                         color: resolveSettingsIconColor(context),
                       ),
-                      title: const Text('CRT 显示效果'),
+                      title: Text(context.l10n.crtDisplayEffectTitle),
                       subtitle: Text(
                         _getCrtProfileDescription(currentProfile),
                       ),
@@ -1236,8 +1258,8 @@ class _CupertinoPlayerSettingsPageState
                             if (!mounted) return;
                             final option = _getCrtProfileTitle(profile);
                             final message = profile == CrtProfile.off
-                                ? '已关闭 CRT'
-                                : 'CRT 已切换为$option';
+                                ? context.l10n.crtDisabled
+                                : context.l10n.crtSwitchedTo(option);
                             AdaptiveSnackBar.show(
                               context,
                               message: message,
@@ -1266,7 +1288,7 @@ class _CupertinoPlayerSettingsPageState
               CupertinoIcons.bubble_left_bubble_right,
               color: resolveSettingsIconColor(context),
             ),
-            title: const Text('弹幕渲染引擎'),
+            title: Text(context.l10n.danmakuRenderEngine),
             subtitle: Text(
               _getDanmakuRenderEngineDescription(_selectedDanmakuRenderEngine),
             ),
@@ -1381,15 +1403,17 @@ class _CupertinoPlayerSettingsPageState
                       CupertinoIcons.eye_slash,
                       color: resolveSettingsIconColor(context),
                     ),
-                    title: const Text('防剧透模式'),
-                    subtitle: const Text('开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕。'),
+                    title: Text(context.l10n.spoilerPreventionMode),
+                    subtitle: Text(
+                      context.l10n.spoilerPreventionModeSubtitle,
+                    ),
                     trailing: AdaptiveSwitch(
                       value: videoState.spoilerPreventionEnabled,
                       onChanged: (value) async {
                         if (value && !videoState.spoilerAiConfigReady) {
                           AdaptiveSnackBar.show(
                             context,
-                            message: '请先填写并保存 AI 接口配置',
+                            message: context.l10n.fillAndSaveAiConfigFirst,
                             type: AdaptiveSnackBarType.error,
                           );
                           return;
@@ -1398,17 +1422,20 @@ class _CupertinoPlayerSettingsPageState
                         if (!mounted) return;
                         AdaptiveSnackBar.show(
                           context,
-                          message: value ? '已开启防剧透模式' : '已关闭防剧透模式',
+                          message: value
+                              ? context.l10n.spoilerPreventionModeEnabled
+                              : context.l10n.spoilerPreventionModeDisabled,
                           type: AdaptiveSnackBarType.success,
                         );
                       },
                     ),
                     onTap: () async {
-                      final bool newValue = !videoState.spoilerPreventionEnabled;
+                      final bool newValue =
+                          !videoState.spoilerPreventionEnabled;
                       if (newValue && !videoState.spoilerAiConfigReady) {
                         AdaptiveSnackBar.show(
                           context,
-                          message: '请先填写并保存 AI 接口配置',
+                          message: context.l10n.fillAndSaveAiConfigFirst,
                           type: AdaptiveSnackBarType.error,
                         );
                         return;
@@ -1417,7 +1444,9 @@ class _CupertinoPlayerSettingsPageState
                       if (!mounted) return;
                       AdaptiveSnackBar.show(
                         context,
-                        message: newValue ? '已开启防剧透模式' : '已关闭防剧透模式',
+                        message: newValue
+                            ? context.l10n.spoilerPreventionModeEnabled
+                            : context.l10n.spoilerPreventionModeDisabled,
                         type: AdaptiveSnackBarType.success,
                       );
                     },
@@ -1430,8 +1459,8 @@ class _CupertinoPlayerSettingsPageState
                   CupertinoIcons.refresh,
                   color: resolveSettingsIconColor(context),
                 ),
-                title: const Text('播放时自动匹配弹幕'),
-                subtitle: const Text('关闭后播放时不再自动识别并加载弹幕，可在弹幕设置中手动匹配。'),
+                title: Text(context.l10n.autoMatchDanmakuOnPlayTitle),
+                subtitle: Text(context.l10n.autoMatchDanmakuOnPlaySubtitle),
                 trailing: AdaptiveSwitch(
                   value: settingsProvider.autoMatchDanmakuOnPlay,
                   onChanged: (value) {
@@ -1440,22 +1469,23 @@ class _CupertinoPlayerSettingsPageState
                       AdaptiveSnackBar.show(
                         context,
                         message: value
-                            ? '已开启播放时自动匹配弹幕'
-                            : '已关闭播放时自动匹配弹幕（可手动匹配）',
+                            ? context.l10n.autoMatchDanmakuOnPlayEnabled
+                            : context.l10n.autoMatchDanmakuOnPlayDisabledManual,
                         type: AdaptiveSnackBarType.success,
                       );
                     }
                   },
                 ),
                 onTap: () {
-                  final bool newValue = !settingsProvider.autoMatchDanmakuOnPlay;
+                  final bool newValue =
+                      !settingsProvider.autoMatchDanmakuOnPlay;
                   settingsProvider.setAutoMatchDanmakuOnPlay(newValue);
                   if (mounted) {
                     AdaptiveSnackBar.show(
                       context,
                       message: newValue
-                          ? '已开启播放时自动匹配弹幕'
-                          : '已关闭播放时自动匹配弹幕（可手动匹配）',
+                          ? context.l10n.autoMatchDanmakuOnPlayEnabled
+                          : context.l10n.autoMatchDanmakuOnPlayDisabledManual,
                       type: AdaptiveSnackBarType.success,
                     );
                   }
@@ -1467,19 +1497,21 @@ class _CupertinoPlayerSettingsPageState
                   CupertinoIcons.search,
                   color: resolveSettingsIconColor(context),
                 ),
-                title: const Text('哈希匹配失败自动匹配弹幕'),
-                subtitle: const Text('哈希匹配失败时默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单。'),
+                title: Text(context.l10n.autoMatchOnHashFailTitle),
+                subtitle: Text(context.l10n.autoMatchOnHashFailSubtitle),
                 trailing: AdaptiveSwitch(
-                  value:
-                      settingsProvider.autoMatchDanmakuFirstSearchResultOnHashFail,
+                  value: settingsProvider
+                      .autoMatchDanmakuFirstSearchResultOnHashFail,
                   onChanged: (value) {
                     settingsProvider
                         .setAutoMatchDanmakuFirstSearchResultOnHashFail(value);
                     if (mounted) {
                       AdaptiveSnackBar.show(
                         context,
-                        message:
-                            value ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
+                        message: value
+                            ? context.l10n.autoMatchOnHashFailEnabled
+                            : context
+                                .l10n.autoMatchOnHashFailDisabledShowSearch,
                         type: AdaptiveSnackBarType.success,
                       );
                     }
@@ -1493,8 +1525,9 @@ class _CupertinoPlayerSettingsPageState
                   if (mounted) {
                     AdaptiveSnackBar.show(
                       context,
-                      message:
-                          newValue ? '已开启匹配失败自动匹配' : '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）',
+                      message: newValue
+                          ? context.l10n.autoMatchOnHashFailEnabled
+                          : context.l10n.autoMatchOnHashFailDisabledShowSearch,
                       type: AdaptiveSnackBarType.success,
                     );
                   }
@@ -1515,7 +1548,8 @@ class _CupertinoPlayerSettingsPageState
           final modelHint = isGemini ? 'gemini-1.5-flash' : 'gpt-5';
 
           final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
-          final Color subtitleColor = resolveSettingsSecondaryTextColor(context);
+          final Color subtitleColor =
+              resolveSettingsSecondaryTextColor(context);
           final Color iconColor = resolveSettingsIconColor(context);
 
           return Column(
@@ -1536,7 +1570,7 @@ class _CupertinoPlayerSettingsPageState
                                 size: 18, color: iconColor),
                             const SizedBox(width: 8),
                             Text(
-                              '防剧透 AI 设置',
+                              context.l10n.spoilerAiSettingsTitle,
                               style: textTheme.copyWith(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -1546,7 +1580,7 @@ class _CupertinoPlayerSettingsPageState
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '开启防剧透前请先填写并保存配置（必须提供接口 URL / Key / 模型）。',
+                          context.l10n.spoilerAiSettingsDescription,
                           style: textTheme.copyWith(
                             fontSize: 13,
                             color: subtitleColor,
@@ -1555,8 +1589,8 @@ class _CupertinoPlayerSettingsPageState
                         const SizedBox(height: 6),
                         Text(
                           isGemini
-                              ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
-                              : 'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。',
+                              ? context.l10n.spoilerAiGeminiUrlNote
+                              : context.l10n.spoilerAiOpenAiUrlNote,
                           style: textTheme.copyWith(
                             fontSize: 13,
                             color: subtitleColor,
@@ -1566,7 +1600,7 @@ class _CupertinoPlayerSettingsPageState
                         Row(
                           children: [
                             Text(
-                              '接口格式',
+                              context.l10n.apiFormatLabel,
                               style: textTheme.copyWith(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
@@ -1574,11 +1608,14 @@ class _CupertinoPlayerSettingsPageState
                             ),
                             const Spacer(),
                             AdaptivePopupMenuButton.widget<SpoilerAiApiFormat>(
-                              items: _spoilerAiFormatMenuItems(),
+                              items: _spoilerAiFormatMenuItems(context),
                               buttonStyle: PopupButtonStyle.gray,
                               child: _buildMenuChip(
                                 context,
-                                _spoilerAiFormatTitle(_spoilerAiApiFormatDraft),
+                                _spoilerAiFormatTitle(
+                                  context,
+                                  _spoilerAiApiFormatDraft,
+                                ),
                               ),
                               onSelected: (index, entry) {
                                 final format = entry.value ??
@@ -1626,7 +1663,7 @@ class _CupertinoPlayerSettingsPageState
                         const SizedBox(height: 12),
                         CupertinoTextField(
                           controller: _spoilerAiApiKeyController,
-                          placeholder: '请输入你的 API Key',
+                          placeholder: context.l10n.enterYourApiKey,
                           autocorrect: false,
                           enableSuggestions: false,
                           padding: const EdgeInsets.symmetric(
@@ -1641,7 +1678,9 @@ class _CupertinoPlayerSettingsPageState
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
+                          context.l10n.temperatureLabel(
+                            _spoilerAiTemperatureDraft.toStringAsFixed(2),
+                          ),
                           style: textTheme.copyWith(
                             fontSize: 13,
                             color: subtitleColor,
@@ -1671,7 +1710,7 @@ class _CupertinoPlayerSettingsPageState
                                   : () => _saveSpoilerAiSettings(videoState),
                               child: _isSavingSpoilerAiSettings
                                   ? const CupertinoActivityIndicator(radius: 8)
-                                  : const Text('保存配置'),
+                                  : Text(context.l10n.saveConfiguration),
                             ),
                           ),
                         ),
@@ -1687,8 +1726,8 @@ class _CupertinoPlayerSettingsPageState
     ];
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '播放器',
+      appBar: AdaptiveAppBar(
+        title: context.l10n.player,
         useNativeToolbar: true,
       ),
       body: ColoredBox(

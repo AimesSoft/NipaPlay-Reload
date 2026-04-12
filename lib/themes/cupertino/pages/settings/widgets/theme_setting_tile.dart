@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_ui_theme_settings_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
@@ -12,7 +13,9 @@ class CupertinoThemeSettingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<UIThemeProvider>(
       builder: (context, provider, child) {
-        final subtitle = '当前：${provider.currentThemeDescriptor.displayName}';
+        final subtitle = context.l10n.currentTheme(
+          provider.currentThemeDescriptor.displayName,
+        );
 
         final tileColor = resolveSettingsTileBackground(context);
 
@@ -21,7 +24,7 @@ class CupertinoThemeSettingTile extends StatelessWidget {
             CupertinoIcons.sparkles,
             color: resolveSettingsIconColor(context),
           ),
-          title: const Text('主题（实验性）'),
+          title: Text(context.l10n.uiThemeExperimental),
           subtitle: Text(subtitle),
           backgroundColor: tileColor,
           showChevron: true,

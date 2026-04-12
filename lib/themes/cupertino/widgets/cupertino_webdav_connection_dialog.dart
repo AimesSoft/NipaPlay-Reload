@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 
@@ -11,7 +12,9 @@ class CupertinoWebDAVConnectionDialog {
     Future<bool> Function(WebDAVConnection)? onSave,
     Future<bool> Function(WebDAVConnection)? onTest,
   }) {
-    final title = editConnection == null ? '添加 WebDAV 服务器' : '编辑 WebDAV 服务器';
+    final title = editConnection == null
+        ? context.l10n.webdavAddServer
+        : context.l10n.webdavEditServer;
     return CupertinoBottomSheet.show<bool>(
       context: context,
       title: title,
@@ -78,10 +81,10 @@ class _CupertinoWebDAVConnectionSheetState
   String? _validateInputs() {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
-      return '请输入 WebDAV 地址';
+      return context.l10n.webdavEnterAddress;
     }
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return '请输入有效的 URL（http/https）';
+      return context.l10n.webdavInvalidUrl;
     }
     return null;
   }
@@ -96,7 +99,7 @@ class _CupertinoWebDAVConnectionSheetState
         return username.isNotEmpty ? '${uri.host}@$username' : uri.host;
       }
     } catch (_) {}
-    return 'WebDAV 连接';
+    return context.l10n.webdavConnection;
   }
 
   WebDAVConnection _buildConnection() {
@@ -134,7 +137,7 @@ class _CupertinoWebDAVConnectionSheetState
       if (mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: '测试失败：$e',
+          message: context.l10n.webdavTestFailedWithError('$e'),
           type: AdaptiveSnackBarType.error,
         );
       }
@@ -143,19 +146,19 @@ class _CupertinoWebDAVConnectionSheetState
     if (!mounted) return;
     setState(() {
       _isTesting = false;
-      _errorMessage = success ? null : '连接测试失败，请检查地址和认证信息';
+      _errorMessage = success ? null : context.l10n.webdavTestFailedCheckInfo;
     });
 
     if (success) {
       AdaptiveSnackBar.show(
         context,
-        message: '连接测试成功',
+        message: context.l10n.webdavTestSuccess,
         type: AdaptiveSnackBarType.success,
       );
     } else {
       AdaptiveSnackBar.show(
         context,
-        message: '连接测试失败',
+        message: context.l10n.webdavTestFailed,
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -193,7 +196,7 @@ class _CupertinoWebDAVConnectionSheetState
       if (mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: '保存失败：$e',
+          message: context.l10n.saveFailedWithError('$e'),
           type: AdaptiveSnackBarType.error,
         );
       }
@@ -205,7 +208,7 @@ class _CupertinoWebDAVConnectionSheetState
     } else {
       setState(() {
         _isSaving = false;
-        _errorMessage = '保存失败，请检查地址和认证信息';
+        _errorMessage = context.l10n.webdavSaveFailedCheckInfo;
       });
     }
   }
@@ -270,7 +273,7 @@ class _CupertinoWebDAVConnectionSheetState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '连接 WebDAV 服务器后可浏览目录并选择媒体文件夹。',
+                    context.l10n.webdavConnectHint,
                     style: TextStyle(fontSize: 13, color: secondaryLabel),
                   ),
                   if (_errorMessage != null) ...[
@@ -292,14 +295,14 @@ class _CupertinoWebDAVConnectionSheetState
                 children: [
                   _buildField(
                     context,
-                    label: '连接名称（可选）',
+                    label: context.l10n.webdavConnectionNameOptional,
                     controller: _nameController,
-                    placeholder: '留空自动生成',
+                    placeholder: context.l10n.leaveEmptyAutoGenerate,
                   ),
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: 'WebDAV 地址',
+                    label: context.l10n.webdavAddress,
                     controller: _urlController,
                     placeholder: 'https://your-server.com/webdav',
                     keyboardType: TextInputType.url,
@@ -307,16 +310,16 @@ class _CupertinoWebDAVConnectionSheetState
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: '用户名（可选）',
+                    label: context.l10n.usernameOptional,
                     controller: _usernameController,
-                    placeholder: '可留空',
+                    placeholder: context.l10n.canBeEmpty,
                   ),
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: '密码（可选）',
+                    label: context.l10n.passwordOptional,
                     controller: _passwordController,
-                    placeholder: '可留空',
+                    placeholder: context.l10n.canBeEmpty,
                     obscureText: true,
                   ),
                 ],
@@ -334,7 +337,7 @@ class _CupertinoWebDAVConnectionSheetState
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: _isTesting
                           ? const CupertinoActivityIndicator(radius: 8)
-                          : const Text('测试连接'),
+                          : Text(context.l10n.testConnection),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -344,7 +347,7 @@ class _CupertinoWebDAVConnectionSheetState
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: _isSaving
                           ? const CupertinoActivityIndicator(radius: 8)
-                          : const Text('保存'),
+                          : Text(context.l10n.save),
                     ),
                   ),
                 ],

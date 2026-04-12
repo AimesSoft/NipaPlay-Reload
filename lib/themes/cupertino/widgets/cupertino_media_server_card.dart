@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 /// Cupertino 风格的网络媒体服务器状态卡片。
@@ -95,7 +96,8 @@ class CupertinoMediaServerCard extends StatelessWidget {
                             : 'assets/emby.svg',
                         width: 20,
                         height: 20,
-                        colorFilter: ColorFilter.mode(accentColor, BlendMode.srcIn),
+                        colorFilter:
+                            ColorFilter.mode(accentColor, BlendMode.srcIn),
                       )
                     : Icon(icon, color: accentColor, size: 20),
               ),
@@ -143,7 +145,9 @@ class CupertinoMediaServerCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        connected ? '已连接' : '未连接',
+        connected
+            ? context.l10n.mediaServerStatusConnected
+            : context.l10n.mediaServerStatusDisconnected,
         style: TextStyle(
           color: pillColor,
           fontSize: 12,
@@ -161,9 +165,17 @@ class CupertinoMediaServerCard extends StatelessWidget {
     final List<Widget> children = [];
 
     children.addAll([
-      _buildInfoRow(context, label: '服务器地址', value: serverUrl ?? '未知'),
+      _buildInfoRow(
+        context,
+        label: context.l10n.mediaServerInfoServerUrl,
+        value: serverUrl ?? context.l10n.mediaServerUnknown,
+      ),
       const SizedBox(height: 8),
-      _buildInfoRow(context, label: '登录用户', value: username ?? '匿名'),
+      _buildInfoRow(
+        context,
+        label: context.l10n.mediaServerInfoUsername,
+        value: username ?? context.l10n.mediaServerAnonymous,
+      ),
     ]);
 
     if (mediaItemCount != null) {
@@ -171,7 +183,7 @@ class CupertinoMediaServerCard extends StatelessWidget {
         const SizedBox(height: 8),
         _buildInfoRow(
           context,
-          label: '媒体条目',
+          label: context.l10n.mediaServerInfoItemCount,
           value: mediaItemCount!.toString(),
         ),
       ]);
@@ -181,7 +193,7 @@ class CupertinoMediaServerCard extends StatelessWidget {
       children.addAll([
         const SizedBox(height: 12),
         Text(
-          '已选媒体库',
+          context.l10n.mediaServerInfoSelectedLibraries,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -222,7 +234,7 @@ class CupertinoMediaServerCard extends StatelessWidget {
           if (onViewLibrary != null)
             _buildActionButton(
               context,
-              label: '查看媒体库',
+              label: context.l10n.mediaServerViewLibrary,
               icon: CupertinoIcons.collections,
               onPressed: onViewLibrary!,
               primary: true,
@@ -230,20 +242,20 @@ class CupertinoMediaServerCard extends StatelessWidget {
           if (onRefresh != null)
             _buildActionButton(
               context,
-              label: '刷新',
+              label: context.l10n.mediaServerRefresh,
               icon: CupertinoIcons.refresh,
               onPressed: onRefresh!,
             ),
           _buildActionButton(
             context,
-            label: '管理服务器',
+            label: context.l10n.mediaServerManageServer,
             icon: CupertinoIcons.slider_horizontal_3,
             onPressed: onManage,
           ),
           if (onDisconnect != null)
             _buildActionButton(
               context,
-              label: '断开连接',
+              label: context.l10n.disconnect,
               icon: CupertinoIcons.clear,
               onPressed: onDisconnect!,
               destructive: true,
@@ -259,7 +271,8 @@ class CupertinoMediaServerCard extends StatelessWidget {
     BuildContext context,
     Color secondaryLabelColor,
   ) {
-    final String description = disconnectedDescription ?? '尚未连接此媒体服务器，点击下方按钮完成登录。';
+    final String description =
+        disconnectedDescription ?? context.l10n.mediaServerDisconnectedHint;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +288,7 @@ class CupertinoMediaServerCard extends StatelessWidget {
         const SizedBox(height: 18),
         _buildFilledButton(
           context,
-          label: '连接服务器',
+          label: context.l10n.mediaServerConnectServer,
           icon: CupertinoIcons.cloud_download,
           onPressed: onManage,
         ),
@@ -400,9 +413,8 @@ class CupertinoMediaServerCard extends StatelessWidget {
       CupertinoColors.systemRed,
       context,
     );
-    final Color backgroundColor = destructive
-        ? destructiveBackground
-        : primaryBackground;
+    final Color backgroundColor =
+        destructive ? destructiveBackground : primaryBackground;
     final Color textColor;
     if (destructive || primary) {
       textColor = CupertinoColors.white;

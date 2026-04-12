@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 
 class CupertinoAppearancePreviewCard extends StatelessWidget {
@@ -24,14 +25,14 @@ class CupertinoAppearancePreviewCard extends StatelessWidget {
     final String description;
 
     if (isSystem) {
-      title = '跟随系统';
-      description = '根据系统外观自动切换浅色或深色模式。';
+      title = context.l10n.followSystem;
+      description = context.l10n.appearancePreviewFollowSystemDescription;
     } else if (isDark) {
-      title = '深色模式';
-      description = '使用偏暗的配色方案，适合夜间或弱光环境。';
+      title = context.l10n.darkMode;
+      description = context.l10n.appearancePreviewDarkDescription;
     } else {
-      title = '浅色模式';
-      description = '使用明亮的配色方案，适合日间或高亮环境。';
+      title = context.l10n.lightMode;
+      description = context.l10n.appearancePreviewLightDescription;
     }
 
     return Container(
@@ -44,7 +45,7 @@ class CupertinoAppearancePreviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '效果预览',
+            context.l10n.appearancePreviewTitle,
             style: CupertinoTheme.of(context)
                 .textTheme
                 .textStyle

@@ -64,6 +64,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String currentTheme(Object theme) {
+    return '当前：$theme';
+  }
+
+  @override
   String get languageTileSubtitle => '切换简体中文或繁體中文';
 
   @override
@@ -92,6 +97,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appearanceFollowSystemSubtitle => '自动根据系统设置切换外观。';
+
+  @override
+  String get appearancePreviewTitle => '效果预览';
+
+  @override
+  String get appearancePreviewFollowSystemDescription => '根据系统外观自动切换浅色或深色模式。';
+
+  @override
+  String get appearancePreviewDarkDescription => '使用偏暗的配色方案，适合夜间或弱光环境。';
+
+  @override
+  String get appearancePreviewLightDescription => '使用明亮的配色方案，适合日间或高亮环境。';
 
   @override
   String get appearanceAnimeDetailStyle => '番剧详情样式';
@@ -156,6 +173,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get player => '播放器';
 
   @override
+  String get playerKernel => '播放器内核';
+
+  @override
   String get playerKernelCurrentMdk => '当前：MDK';
 
   @override
@@ -163,6 +183,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playerKernelCurrentLibmpv => '当前：Libmpv';
+
+  @override
+  String get playerKernelSwitched => '播放器内核已切换';
+
+  @override
+  String get playerKernelDescriptionMdk =>
+      'MDK 多媒体开发套件，支持硬件解码（默认优先；不支持时回落软件解码）。';
+
+  @override
+  String get playerKernelDescriptionVideoPlayer =>
+      'Flutter 官方 Video Player，兼容性好。';
+
+  @override
+  String get playerKernelDescriptionLibmpv =>
+      'MediaKit (Libmpv) 播放器，支持硬件解码与高级特性。';
 
   @override
   String get externalCall => '外部调用';
@@ -214,6 +249,45 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get networkMediaLibrary => '网络媒体库';
+
+  @override
+  String get mediaServerStatusConnected => '已连接';
+
+  @override
+  String get mediaServerStatusDisconnected => '未连接';
+
+  @override
+  String get mediaServerInfoServerUrl => '服务器地址';
+
+  @override
+  String get mediaServerInfoUsername => '登录用户';
+
+  @override
+  String get mediaServerInfoItemCount => '媒体条目';
+
+  @override
+  String get mediaServerInfoSelectedLibraries => '已选媒体库';
+
+  @override
+  String get mediaServerUnknown => '未知';
+
+  @override
+  String get mediaServerAnonymous => '匿名';
+
+  @override
+  String get mediaServerViewLibrary => '查看媒体库';
+
+  @override
+  String get mediaServerRefresh => '刷新';
+
+  @override
+  String get mediaServerManageServer => '管理服务器';
+
+  @override
+  String get mediaServerConnectServer => '连接服务器';
+
+  @override
+  String get mediaServerDisconnectedHint => '尚未连接此媒体服务器，点击下方按钮完成登录。';
 
   @override
   String get retry => '重试';
@@ -343,11 +417,137 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String connectServerDialogTitle(Object server) {
+    return '连接 $server 服务器';
+  }
+
+  @override
+  String get serverUrlInputPlaceholder => '例如：http://192.168.1.100:8096';
+
+  @override
+  String get inputUsernamePlaceholder => '输入用户名';
+
+  @override
+  String get inputPasswordPlaceholder => '输入密码';
+
+  @override
+  String get nextStep => '下一步';
+
+  @override
+  String get connectAction => '连接';
+
+  @override
+  String get testConnection => '测试连接';
+
+  @override
+  String get canBeEmpty => '可留空';
+
+  @override
+  String get leaveEmptyAutoGenerate => '留空自动生成';
+
+  @override
+  String get usernameOptional => '用户名（可选）';
+
+  @override
+  String get passwordOptional => '密码（可选）';
+
+  @override
+  String get connectFailedCheckCredentials => '连接失败，请检查服务器地址和凭证';
+
+  @override
+  String get webdavAddServer => '添加 WebDAV 服务器';
+
+  @override
+  String get webdavEditServer => '编辑 WebDAV 服务器';
+
+  @override
+  String get webdavEnterAddress => '请输入 WebDAV 地址';
+
+  @override
+  String get webdavInvalidUrl => '请输入有效的 URL（http/https）';
+
+  @override
+  String get webdavConnection => 'WebDAV 连接';
+
+  @override
+  String webdavTestFailedWithError(Object error) {
+    return '测试失败：$error';
+  }
+
+  @override
+  String get webdavTestFailedCheckInfo => '连接测试失败，请检查地址和认证信息';
+
+  @override
+  String get webdavTestSuccess => '连接测试成功';
+
+  @override
+  String get webdavTestFailed => '连接测试失败';
+
+  @override
+  String get webdavSaveFailedCheckInfo => '保存失败，请检查地址和认证信息';
+
+  @override
+  String get webdavConnectHint => '连接 WebDAV 服务器后可浏览目录并选择媒体文件夹。';
+
+  @override
+  String get webdavConnectionNameOptional => '连接名称（可选）';
+
+  @override
+  String get webdavAddress => 'WebDAV 地址';
+
+  @override
+  String get smbAddServer => '添加 SMB 服务器';
+
+  @override
+  String get smbEditServer => '编辑 SMB 服务器';
+
+  @override
+  String get smbEnterHostOrIp => '请输入主机或 IP 地址';
+
+  @override
+  String get smbInvalidPortRange => '端口无效，请输入 1-65535';
+
+  @override
+  String get smbAnonymousHint => '用户名/密码可留空以匿名访问；支持填写域名。';
+
+  @override
+  String get smbHostOrIp => '主机 / IP';
+
+  @override
+  String get smbHostOrIpPlaceholder => '例如：192.168.1.10 或 nas.local';
+
+  @override
+  String get smbPort => '端口';
+
+  @override
+  String get smbDefaultPort445 => '默认 445';
+
+  @override
+  String get smbDomainOptional => '域（可选）';
+
+  @override
+  String get smbDomainPlaceholder => '例如：WORKGROUP';
+
+  @override
   String get connectJellyfinOrEmbyFirst => '请先连接 Jellyfin 或 Emby 服务器';
 
   @override
   String get networkMediaLibraryIntro =>
       '在此管理 Jellyfin / Emby 服务器连接，并设置弹弹play 远程媒体库。';
+
+  @override
+  String get currentServerNotConnectedHint => '当前服务器未连接，请返回重新选择。';
+
+  @override
+  String get loadingRemoteMediaLibrary => '正在加载远程媒体库...';
+
+  @override
+  String get noRemoteMediaItems => '暂未获取到远程媒体条目';
+
+  @override
+  String recordedAtDate(Object date) {
+    return '收录于 $date';
+  }
 
   @override
   String get jellyfinMediaServerTitle => 'Jellyfin 媒体服务器';
@@ -360,6 +560,110 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get embyDisconnectedDescription => '连接 Emby 服务器后可浏览个人媒体库并远程播放。';
+
+  @override
+  String get dandanRemoteCardTitle => '弹弹play 远程访问';
+
+  @override
+  String get dandanRemoteManageAccessTitle => '管理弹弹play远程访问';
+
+  @override
+  String get dandanRemoteConnectAccessTitle => '连接弹弹play远程访问';
+
+  @override
+  String get dandanRemoteAddressPrompt => '请输入桌面端显示的远程服务地址。';
+
+  @override
+  String get dandanRemoteAddressPlaceholder => '例如：http://192.168.1.2:23333';
+
+  @override
+  String get dandanRemoteApiTokenOptionalTitle => 'API 密钥（可选）';
+
+  @override
+  String dandanRemoteApiTokenPrompt(Object actionLabel) {
+    return '如已在弹弹play 桌面端启用 API 验证，请输入对应的密钥；未启用可直接点击$actionLabel。';
+  }
+
+  @override
+  String get enterApiToken => '请输入 API 密钥';
+
+  @override
+  String get optionalApiTokenHint => '可留空，按需填写';
+
+  @override
+  String get dandanRemoteStatusSynced => '已同步';
+
+  @override
+  String get dandanRemoteStatusConnectFailed => '连接失败';
+
+  @override
+  String get dandanRemoteStatusNotConfigured => '未配置';
+
+  @override
+  String get unknownErrorOccurred => '出现未知错误';
+
+  @override
+  String get dandanRemoteServerAddressLabel => '服务器地址';
+
+  @override
+  String get dandanRemoteLastSyncedLabel => '最近同步';
+
+  @override
+  String get dandanRemoteAnimeEntries => '番剧条目';
+
+  @override
+  String get dandanRemoteVideoFiles => '视频文件';
+
+  @override
+  String get dandanRemoteNoRecordsHint => '暂无远程媒体记录，可尝试刷新或确认远程访问设置。';
+
+  @override
+  String get dandanRemoteRecentUpdates => '最近更新';
+
+  @override
+  String dandanRemoteEpisodeCount(int count) {
+    return '共 $count 集';
+  }
+
+  @override
+  String get dandanRemoteManageConnection => '管理连接';
+
+  @override
+  String get dandanRemoteSyncing => '同步中...';
+
+  @override
+  String get dandanRemoteRefreshLibrary => '刷新媒体库';
+
+  @override
+  String get dandanRemoteDisconnectedHintLong =>
+      '通过弹弹play 桌面端开启远程访问后，可在此同步家中电脑或 NAS 上的番剧记录并直接播放。';
+
+  @override
+  String get pleaseWait => '请稍候...';
+
+  @override
+  String get connectDandanRemoteService => '连接弹弹play 远程服务';
+
+  @override
+  String get noRecordYet => '暂无记录';
+
+  @override
+  String get justNow => '刚刚';
+
+  @override
+  String minutesAgo(int minutes) {
+    return '$minutes 分钟前';
+  }
+
+  @override
+  String hoursAgo(int hours) {
+    return '$hours 小时前';
+  }
+
+  @override
+  String daysAgo(int days) {
+    return '$days 天前';
+  }
 
   @override
   String get dandanRemoteConfigUpdated => '弹弹play 远程服务配置已更新';
@@ -400,6 +704,55 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String serverMediaLibraryTitle(Object server) {
+    return '$server 媒体库';
+  }
+
+  @override
+  String get serverLabel => '服务器';
+
+  @override
+  String get accountLabel => '账户';
+
+  @override
+  String get mediaLibrary => '媒体库';
+
+  @override
+  String get noMediaLibrary => '暂无媒体库';
+
+  @override
+  String get checkServerConnection => '请检查服务器连接';
+
+  @override
+  String get transcodeSettings => '转码设置';
+
+  @override
+  String currentDefaultQuality(Object quality) {
+    return '当前默认质量: $quality';
+  }
+
+  @override
+  String get enableTranscode => '启用转码';
+
+  @override
+  String get defaultQuality => '默认清晰度';
+
+  @override
+  String get tvShowsLibrary => '电视剧库';
+
+  @override
+  String get moviesLibrary => '电影库';
+
+  @override
+  String get boxsetsLibrary => '合集库';
+
+  @override
+  String get folderLibrary => '文件夹';
+
+  @override
+  String get mixedLibrary => '混合库';
+
+  @override
   String get developerOptions => '开发者选项';
 
   @override
@@ -416,6 +769,51 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dependencyVersionsSubtitle => '查看依赖库与版本号（含 GitHub 跳转）';
+
+  @override
+  String get invalidLink => '链接无效';
+
+  @override
+  String get unknown => '未知';
+
+  @override
+  String get localSource => '本地';
+
+  @override
+  String get dependencyTypeDirectMain => '直接依赖';
+
+  @override
+  String get dependencyTypeDirectDev => '开发依赖';
+
+  @override
+  String get dependencyTypeTransitive => '间接依赖';
+
+  @override
+  String get dependencyTypeUnknown => '未知来源';
+
+  @override
+  String get parsingDependencyInfo => '正在解析依赖信息...';
+
+  @override
+  String get readDependencyListFailed => '读取依赖列表失败';
+
+  @override
+  String dependencySummaryWithOther(
+      int total, int directMain, int directDev, int transitive, int other) {
+    return '共 $total 个库 · 直接 $directMain / 开发 $directDev / 间接 $transitive / 其他 $other';
+  }
+
+  @override
+  String dependencySummaryNoOther(
+      int total, int directMain, int directDev, int transitive) {
+    return '共 $total 个库 · 直接 $directMain / 开发 $directDev / 间接 $transitive';
+  }
+
+  @override
+  String dependencyEntrySubtitle(
+      Object version, Object dependencyType, Object sourceType) {
+    return '版本: $version · $dependencyType · $sourceType';
+  }
 
   @override
   String get buildInfo => '构建信息';
@@ -461,6 +859,288 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get spoilerAiDebugPrintDisabled => '已关闭 AI 调试打印';
+
+  @override
+  String get playerUnavailableOnWeb => '播放器设置在 Web 平台不可用';
+
+  @override
+  String get danmakuRenderEngine => '弹幕渲染引擎';
+
+  @override
+  String get danmakuRenderEngineSwitched => '弹幕渲染引擎已切换';
+
+  @override
+  String get danmakuRenderEngineDescriptionCpu => 'CPU 渲染：兼容性最佳，适合大多数场景。';
+
+  @override
+  String get danmakuRenderEngineDescriptionGpuExperimental =>
+      'GPU 渲染（实验性）：性能更高，但仍在开发中。';
+
+  @override
+  String get danmakuRenderEngineDescriptionCanvasExperimental =>
+      'Canvas 弹幕（实验性）：高性能，低功耗。';
+
+  @override
+  String get danmakuRenderEngineDescriptionNipaplayNext =>
+      'NipaPlay Next：CPU 弹幕和 Canvas 弹幕优点的集合体，包含两边的全部优点。';
+
+  @override
+  String get danmakuRenderEngineTitleCpu => 'CPU 渲染';
+
+  @override
+  String get danmakuRenderEngineTitleGpuExperimental => 'GPU 渲染 (实验性)';
+
+  @override
+  String get danmakuRenderEngineTitleCanvasExperimental => 'Canvas 弹幕 (实验性)';
+
+  @override
+  String get danmakuRenderEngineTitleNipaplayNext => 'NipaPlay Next';
+
+  @override
+  String get qualityProfileOff => '关闭';
+
+  @override
+  String get qualityProfileLite => '轻量';
+
+  @override
+  String get qualityProfileStandard => '标准';
+
+  @override
+  String get qualityProfileHigh => '高质量';
+
+  @override
+  String get doubleResolutionPlaybackTitle => '双倍分辨率播放视频';
+
+  @override
+  String get doubleResolutionPlaybackSubtitle =>
+      '以 2x 分辨率渲染画面，改善内嵌字幕清晰度（仅 Libmpv，不与 Anime4K 叠加）';
+
+  @override
+  String get settingSavedReopenVideoToApply => '已保存，重新打开视频生效';
+
+  @override
+  String get doubleResolutionPlaybackEnabled => '已开启双倍分辨率播放';
+
+  @override
+  String get doubleResolutionPlaybackDisabled => '已关闭双倍分辨率播放';
+
+  @override
+  String get anime4kSuperResolutionTitle => 'Anime4K 超分辨率（实验性）';
+
+  @override
+  String get anime4kProfileDescriptionOff => '保持原始画面，不进行超分辨率处理。';
+
+  @override
+  String get anime4kProfileDescriptionLite => '适度超分辨率与降噪，性能消耗较低。';
+
+  @override
+  String get anime4kProfileDescriptionStandard => '画质与性能平衡的标准方案。';
+
+  @override
+  String get anime4kProfileDescriptionHigh => '追求最佳画质，性能需求最高。';
+
+  @override
+  String get anime4kDisabled => '已关闭 Anime4K';
+
+  @override
+  String anime4kSwitchedTo(Object option) {
+    return 'Anime4K 已切换为 $option';
+  }
+
+  @override
+  String get crtDisplayEffectTitle => 'CRT 显示效果';
+
+  @override
+  String get crtProfileDescriptionOff => '保持原始画面，不启用 CRT 效果。';
+
+  @override
+  String get crtProfileDescriptionLite => '扫描线 + 暗角，性能开销较小。';
+
+  @override
+  String get crtProfileDescriptionStandard => '增加曲面与栅格，画面更接近 CRT。';
+
+  @override
+  String get crtProfileDescriptionHigh => '加入辉光与色散，效果最佳但性能开销更高。';
+
+  @override
+  String get crtDisabled => '已关闭 CRT';
+
+  @override
+  String crtSwitchedTo(Object option) {
+    return 'CRT 已切换为 $option';
+  }
+
+  @override
+  String get enterAiApiUrl => '请输入 AI 接口 URL';
+
+  @override
+  String get enterModelName => '请输入模型名称';
+
+  @override
+  String get enterApiKey => '请输入 API Key';
+
+  @override
+  String get spoilerAiSettingsSaved => '防剧透 AI 设置已保存';
+
+  @override
+  String get spoilerPreventionMode => '防剧透模式';
+
+  @override
+  String get spoilerPreventionModeSubtitle => '开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕。';
+
+  @override
+  String get fillAndSaveAiConfigFirst => '请先填写并保存 AI 接口配置';
+
+  @override
+  String get spoilerPreventionModeEnabled => '已开启防剧透模式';
+
+  @override
+  String get spoilerPreventionModeDisabled => '已关闭防剧透模式';
+
+  @override
+  String get autoMatchDanmakuOnPlayTitle => '播放时自动匹配弹幕';
+
+  @override
+  String get autoMatchDanmakuOnPlaySubtitle => '关闭后播放时不再自动识别并加载弹幕，可在弹幕设置中手动匹配。';
+
+  @override
+  String get autoMatchDanmakuOnPlayEnabled => '已开启播放时自动匹配弹幕';
+
+  @override
+  String get autoMatchDanmakuOnPlayDisabledManual => '已关闭播放时自动匹配弹幕（可手动匹配）';
+
+  @override
+  String get autoMatchOnHashFailTitle => '哈希匹配失败自动匹配弹幕';
+
+  @override
+  String get autoMatchOnHashFailSubtitle =>
+      '哈希匹配失败时默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单。';
+
+  @override
+  String get autoMatchOnHashFailEnabled => '已开启匹配失败自动匹配';
+
+  @override
+  String get autoMatchOnHashFailDisabledShowSearch => '已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）';
+
+  @override
+  String get hardwareDecoding => '硬件解码';
+
+  @override
+  String get hardwareDecodingSubtitle => '仅对 MDK / Libmpv 生效';
+
+  @override
+  String get hardwareDecodingEnabled => '已开启硬件解码';
+
+  @override
+  String get hardwareDecodingDisabled => '已关闭硬件解码';
+
+  @override
+  String get pauseOnBackgroundTitle => '后台自动暂停';
+
+  @override
+  String get pauseOnBackgroundSubtitle => '切到后台或锁屏时自动暂停播放';
+
+  @override
+  String get pauseOnBackgroundEnabled => '后台自动暂停已开启';
+
+  @override
+  String get pauseOnBackgroundDisabled => '后台自动暂停已关闭';
+
+  @override
+  String get playbackEndActionTitle => '播放结束操作';
+
+  @override
+  String get playbackEndActionAutoNextMessage => '播放结束后将自动进入下一话';
+
+  @override
+  String get playbackEndActionLoopMessage => '播放结束后将从头循环播放';
+
+  @override
+  String get playbackEndActionPauseMessage => '播放结束后将停留在当前页面';
+
+  @override
+  String get playbackEndActionExitMessage => '播放结束后将返回上一页';
+
+  @override
+  String get autoNextCountdownTitle => '自动连播倒计时';
+
+  @override
+  String autoNextCountdownWaitSeconds(int seconds) {
+    return '自动跳转下一话前等待 $seconds 秒';
+  }
+
+  @override
+  String get autoNextCountdownNeedAutoNext => '需先启用自动播放下一话';
+
+  @override
+  String get timelinePreviewTitle => '时间轴截图预览';
+
+  @override
+  String get timelinePreviewSubtitle => '悬停进度条时显示缩略图（本地/WebDAV/SMB/共享媒体库生效）';
+
+  @override
+  String get enableWarning => '开启警告';
+
+  @override
+  String get timelinePreviewEnableWarningContent =>
+      '开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？';
+
+  @override
+  String get timelinePreviewEnabled => '已开启时间轴截图预览';
+
+  @override
+  String get timelinePreviewDisabled => '已关闭时间轴截图预览';
+
+  @override
+  String get playPrecacheDuration => '播放预缓存时长';
+
+  @override
+  String get playPrecacheSize => '播放预缓存大小';
+
+  @override
+  String currentPrecacheDurationSeconds(int seconds) {
+    return '当前 $seconds 秒，修改后立即生效';
+  }
+
+  @override
+  String currentPrecacheSizeMb(int mb) {
+    return '当前 $mb MB，修改后重新打开视频生效';
+  }
+
+  @override
+  String get libmpvKernelOnly => '仅 Libmpv 内核生效';
+
+  @override
+  String get spoilerAiSettingsTitle => '防剧透 AI 设置';
+
+  @override
+  String get spoilerAiSettingsDescription =>
+      '开启防剧透前请先填写并保存配置（必须提供接口 URL / Key / 模型）。';
+
+  @override
+  String get spoilerAiGeminiUrlNote =>
+      'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。';
+
+  @override
+  String get spoilerAiOpenAiUrlNote =>
+      'OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。';
+
+  @override
+  String get apiFormatLabel => '接口格式';
+
+  @override
+  String get openAiCompatible => 'OpenAI 兼容';
+
+  @override
+  String get enterYourApiKey => '请输入你的 API Key';
+
+  @override
+  String temperatureLabel(Object value) {
+    return '温度：$value';
+  }
+
+  @override
+  String get saveConfiguration => '保存配置';
 
   @override
   String get about => '关于';
@@ -911,6 +1591,11 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   }
 
   @override
+  String currentTheme(Object theme) {
+    return '目前：$theme';
+  }
+
+  @override
   String get languageTileSubtitle => '切換簡體中文或繁體中文';
 
   @override
@@ -939,6 +1624,18 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get appearanceFollowSystemSubtitle => '自動依系統設定切換外觀。';
+
+  @override
+  String get appearancePreviewTitle => '效果預覽';
+
+  @override
+  String get appearancePreviewFollowSystemDescription => '依系統外觀自動切換淺色或深色模式。';
+
+  @override
+  String get appearancePreviewDarkDescription => '使用偏暗的配色方案，適合夜間或弱光環境。';
+
+  @override
+  String get appearancePreviewLightDescription => '使用明亮的配色方案，適合日間或高亮環境。';
 
   @override
   String get appearanceAnimeDetailStyle => '番劇詳情樣式';
@@ -1003,6 +1700,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get player => '播放器';
 
   @override
+  String get playerKernel => '播放器內核';
+
+  @override
   String get playerKernelCurrentMdk => '目前：MDK';
 
   @override
@@ -1010,6 +1710,21 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get playerKernelCurrentLibmpv => '目前：Libmpv';
+
+  @override
+  String get playerKernelSwitched => '播放器內核已切換';
+
+  @override
+  String get playerKernelDescriptionMdk =>
+      'MDK 多媒體開發套件，支援硬體解碼（預設優先；不支援時回退軟體解碼）。';
+
+  @override
+  String get playerKernelDescriptionVideoPlayer =>
+      'Flutter 官方 Video Player，相容性佳。';
+
+  @override
+  String get playerKernelDescriptionLibmpv =>
+      'MediaKit (Libmpv) 播放器，支援硬體解碼與進階特性。';
 
   @override
   String get externalCall => '外部調用';
@@ -1061,6 +1776,45 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get networkMediaLibrary => '網路媒體庫';
+
+  @override
+  String get mediaServerStatusConnected => '已連接';
+
+  @override
+  String get mediaServerStatusDisconnected => '未連接';
+
+  @override
+  String get mediaServerInfoServerUrl => '伺服器地址';
+
+  @override
+  String get mediaServerInfoUsername => '登入用戶';
+
+  @override
+  String get mediaServerInfoItemCount => '媒體條目';
+
+  @override
+  String get mediaServerInfoSelectedLibraries => '已選媒體庫';
+
+  @override
+  String get mediaServerUnknown => '未知';
+
+  @override
+  String get mediaServerAnonymous => '匿名';
+
+  @override
+  String get mediaServerViewLibrary => '查看媒體庫';
+
+  @override
+  String get mediaServerRefresh => '重新整理';
+
+  @override
+  String get mediaServerManageServer => '管理伺服器';
+
+  @override
+  String get mediaServerConnectServer => '連接伺服器';
+
+  @override
+  String get mediaServerDisconnectedHint => '尚未連接此媒體伺服器，點擊下方按鈕完成登入。';
 
   @override
   String get retry => '重試';
@@ -1190,11 +1944,137 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   }
 
   @override
+  String connectServerDialogTitle(Object server) {
+    return '連接 $server 伺服器';
+  }
+
+  @override
+  String get serverUrlInputPlaceholder => '例如：http://192.168.1.100:8096';
+
+  @override
+  String get inputUsernamePlaceholder => '輸入用戶名';
+
+  @override
+  String get inputPasswordPlaceholder => '輸入密碼';
+
+  @override
+  String get nextStep => '下一步';
+
+  @override
+  String get connectAction => '連接';
+
+  @override
+  String get testConnection => '測試連接';
+
+  @override
+  String get canBeEmpty => '可留空';
+
+  @override
+  String get leaveEmptyAutoGenerate => '留空自動產生';
+
+  @override
+  String get usernameOptional => '用戶名（可選）';
+
+  @override
+  String get passwordOptional => '密碼（可選）';
+
+  @override
+  String get connectFailedCheckCredentials => '連接失敗，請檢查伺服器地址與憑證';
+
+  @override
+  String get webdavAddServer => '新增 WebDAV 伺服器';
+
+  @override
+  String get webdavEditServer => '編輯 WebDAV 伺服器';
+
+  @override
+  String get webdavEnterAddress => '請輸入 WebDAV 位址';
+
+  @override
+  String get webdavInvalidUrl => '請輸入有效的 URL（http/https）';
+
+  @override
+  String get webdavConnection => 'WebDAV 連接';
+
+  @override
+  String webdavTestFailedWithError(Object error) {
+    return '測試失敗：$error';
+  }
+
+  @override
+  String get webdavTestFailedCheckInfo => '連接測試失敗，請檢查位址和認證資訊';
+
+  @override
+  String get webdavTestSuccess => '連接測試成功';
+
+  @override
+  String get webdavTestFailed => '連接測試失敗';
+
+  @override
+  String get webdavSaveFailedCheckInfo => '儲存失敗，請檢查位址和認證資訊';
+
+  @override
+  String get webdavConnectHint => '連接 WebDAV 伺服器後可瀏覽目錄並選擇媒體資料夾。';
+
+  @override
+  String get webdavConnectionNameOptional => '連接名稱（可選）';
+
+  @override
+  String get webdavAddress => 'WebDAV 位址';
+
+  @override
+  String get smbAddServer => '新增 SMB 伺服器';
+
+  @override
+  String get smbEditServer => '編輯 SMB 伺服器';
+
+  @override
+  String get smbEnterHostOrIp => '請輸入主機或 IP 位址';
+
+  @override
+  String get smbInvalidPortRange => '連接埠無效，請輸入 1-65535';
+
+  @override
+  String get smbAnonymousHint => '用戶名/密碼可留空以匿名存取；支援填寫網域名稱。';
+
+  @override
+  String get smbHostOrIp => '主機 / IP';
+
+  @override
+  String get smbHostOrIpPlaceholder => '例如：192.168.1.10 或 nas.local';
+
+  @override
+  String get smbPort => '連接埠';
+
+  @override
+  String get smbDefaultPort445 => '預設 445';
+
+  @override
+  String get smbDomainOptional => '網域（可選）';
+
+  @override
+  String get smbDomainPlaceholder => '例如：WORKGROUP';
+
+  @override
   String get connectJellyfinOrEmbyFirst => '請先連接 Jellyfin 或 Emby 伺服器';
 
   @override
   String get networkMediaLibraryIntro =>
       '在此管理 Jellyfin / Emby 伺服器連接，並設定彈彈play 遠端媒體庫。';
+
+  @override
+  String get currentServerNotConnectedHint => '目前伺服器未連接，請返回重新選擇。';
+
+  @override
+  String get loadingRemoteMediaLibrary => '正在載入遠端媒體庫...';
+
+  @override
+  String get noRemoteMediaItems => '尚未取得遠端媒體條目';
+
+  @override
+  String recordedAtDate(Object date) {
+    return '收錄於 $date';
+  }
 
   @override
   String get jellyfinMediaServerTitle => 'Jellyfin 媒體伺服器';
@@ -1207,6 +2087,110 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get embyDisconnectedDescription => '連接 Emby 伺服器後可瀏覽個人媒體庫並遠端播放。';
+
+  @override
+  String get dandanRemoteCardTitle => '彈彈play 遠端存取';
+
+  @override
+  String get dandanRemoteManageAccessTitle => '管理彈彈play遠端存取';
+
+  @override
+  String get dandanRemoteConnectAccessTitle => '連接彈彈play遠端存取';
+
+  @override
+  String get dandanRemoteAddressPrompt => '請輸入桌面端顯示的遠端服務地址。';
+
+  @override
+  String get dandanRemoteAddressPlaceholder => '例如：http://192.168.1.2:23333';
+
+  @override
+  String get dandanRemoteApiTokenOptionalTitle => 'API 金鑰（可選）';
+
+  @override
+  String dandanRemoteApiTokenPrompt(Object actionLabel) {
+    return '若已在彈彈play 桌面端啟用 API 驗證，請輸入對應金鑰；未啟用可直接點擊$actionLabel。';
+  }
+
+  @override
+  String get enterApiToken => '請輸入 API 金鑰';
+
+  @override
+  String get optionalApiTokenHint => '可留空，按需填寫';
+
+  @override
+  String get dandanRemoteStatusSynced => '已同步';
+
+  @override
+  String get dandanRemoteStatusConnectFailed => '連接失敗';
+
+  @override
+  String get dandanRemoteStatusNotConfigured => '未設定';
+
+  @override
+  String get unknownErrorOccurred => '發生未知錯誤';
+
+  @override
+  String get dandanRemoteServerAddressLabel => '伺服器地址';
+
+  @override
+  String get dandanRemoteLastSyncedLabel => '最近同步';
+
+  @override
+  String get dandanRemoteAnimeEntries => '番劇條目';
+
+  @override
+  String get dandanRemoteVideoFiles => '影片檔案';
+
+  @override
+  String get dandanRemoteNoRecordsHint => '暫無遠端媒體記錄，可嘗試重新整理或確認遠端存取設定。';
+
+  @override
+  String get dandanRemoteRecentUpdates => '最近更新';
+
+  @override
+  String dandanRemoteEpisodeCount(int count) {
+    return '共 $count 集';
+  }
+
+  @override
+  String get dandanRemoteManageConnection => '管理連接';
+
+  @override
+  String get dandanRemoteSyncing => '同步中...';
+
+  @override
+  String get dandanRemoteRefreshLibrary => '重新整理媒體庫';
+
+  @override
+  String get dandanRemoteDisconnectedHintLong =>
+      '透過彈彈play 桌面端開啟遠端存取後，可在此同步家中電腦或 NAS 上的番劇記錄並直接播放。';
+
+  @override
+  String get pleaseWait => '請稍候...';
+
+  @override
+  String get connectDandanRemoteService => '連接彈彈play 遠端服務';
+
+  @override
+  String get noRecordYet => '暫無記錄';
+
+  @override
+  String get justNow => '剛剛';
+
+  @override
+  String minutesAgo(int minutes) {
+    return '$minutes 分鐘前';
+  }
+
+  @override
+  String hoursAgo(int hours) {
+    return '$hours 小時前';
+  }
+
+  @override
+  String daysAgo(int days) {
+    return '$days 天前';
+  }
 
   @override
   String get dandanRemoteConfigUpdated => '彈彈play 遠端服務設定已更新';
@@ -1247,6 +2231,55 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   }
 
   @override
+  String serverMediaLibraryTitle(Object server) {
+    return '$server 媒體庫';
+  }
+
+  @override
+  String get serverLabel => '伺服器';
+
+  @override
+  String get accountLabel => '帳戶';
+
+  @override
+  String get mediaLibrary => '媒體庫';
+
+  @override
+  String get noMediaLibrary => '暫無媒體庫';
+
+  @override
+  String get checkServerConnection => '請檢查伺服器連接';
+
+  @override
+  String get transcodeSettings => '轉碼設定';
+
+  @override
+  String currentDefaultQuality(Object quality) {
+    return '目前預設畫質: $quality';
+  }
+
+  @override
+  String get enableTranscode => '啟用轉碼';
+
+  @override
+  String get defaultQuality => '預設清晰度';
+
+  @override
+  String get tvShowsLibrary => '電視劇庫';
+
+  @override
+  String get moviesLibrary => '電影庫';
+
+  @override
+  String get boxsetsLibrary => '合集庫';
+
+  @override
+  String get folderLibrary => '資料夾';
+
+  @override
+  String get mixedLibrary => '混合庫';
+
+  @override
   String get developerOptions => '開發者選項';
 
   @override
@@ -1263,6 +2296,51 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get dependencyVersionsSubtitle => '查看依賴庫與版本號（含 GitHub 跳轉）';
+
+  @override
+  String get invalidLink => '連結無效';
+
+  @override
+  String get unknown => '未知';
+
+  @override
+  String get localSource => '本地';
+
+  @override
+  String get dependencyTypeDirectMain => '直接依賴';
+
+  @override
+  String get dependencyTypeDirectDev => '開發依賴';
+
+  @override
+  String get dependencyTypeTransitive => '間接依賴';
+
+  @override
+  String get dependencyTypeUnknown => '未知來源';
+
+  @override
+  String get parsingDependencyInfo => '正在解析依賴資訊...';
+
+  @override
+  String get readDependencyListFailed => '讀取依賴清單失敗';
+
+  @override
+  String dependencySummaryWithOther(
+      int total, int directMain, int directDev, int transitive, int other) {
+    return '共 $total 個庫 · 直接 $directMain / 開發 $directDev / 間接 $transitive / 其他 $other';
+  }
+
+  @override
+  String dependencySummaryNoOther(
+      int total, int directMain, int directDev, int transitive) {
+    return '共 $total 個庫 · 直接 $directMain / 開發 $directDev / 間接 $transitive';
+  }
+
+  @override
+  String dependencyEntrySubtitle(
+      Object version, Object dependencyType, Object sourceType) {
+    return '版本: $version · $dependencyType · $sourceType';
+  }
 
   @override
   String get buildInfo => '建置資訊';
@@ -1308,6 +2386,288 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get spoilerAiDebugPrintDisabled => '已關閉 AI 除錯列印';
+
+  @override
+  String get playerUnavailableOnWeb => '播放器設定在 Web 平台不可用';
+
+  @override
+  String get danmakuRenderEngine => '彈幕渲染引擎';
+
+  @override
+  String get danmakuRenderEngineSwitched => '彈幕渲染引擎已切換';
+
+  @override
+  String get danmakuRenderEngineDescriptionCpu => 'CPU 渲染：相容性最佳，適合大多數場景。';
+
+  @override
+  String get danmakuRenderEngineDescriptionGpuExperimental =>
+      'GPU 渲染（實驗性）：效能更高，但仍在開發中。';
+
+  @override
+  String get danmakuRenderEngineDescriptionCanvasExperimental =>
+      'Canvas 彈幕（實驗性）：高效能、低功耗。';
+
+  @override
+  String get danmakuRenderEngineDescriptionNipaplayNext =>
+      'NipaPlay Next：CPU 彈幕和 Canvas 彈幕優點的集合體，包含兩邊的全部優點。';
+
+  @override
+  String get danmakuRenderEngineTitleCpu => 'CPU 渲染';
+
+  @override
+  String get danmakuRenderEngineTitleGpuExperimental => 'GPU 渲染 (實驗性)';
+
+  @override
+  String get danmakuRenderEngineTitleCanvasExperimental => 'Canvas 彈幕 (實驗性)';
+
+  @override
+  String get danmakuRenderEngineTitleNipaplayNext => 'NipaPlay Next';
+
+  @override
+  String get qualityProfileOff => '關閉';
+
+  @override
+  String get qualityProfileLite => '輕量';
+
+  @override
+  String get qualityProfileStandard => '標準';
+
+  @override
+  String get qualityProfileHigh => '高品質';
+
+  @override
+  String get doubleResolutionPlaybackTitle => '雙倍解析度播放影片';
+
+  @override
+  String get doubleResolutionPlaybackSubtitle =>
+      '以 2x 解析度渲染畫面，改善內嵌字幕清晰度（僅 Libmpv，不與 Anime4K 疊加）';
+
+  @override
+  String get settingSavedReopenVideoToApply => '已儲存，重新開啟影片生效';
+
+  @override
+  String get doubleResolutionPlaybackEnabled => '已開啟雙倍解析度播放';
+
+  @override
+  String get doubleResolutionPlaybackDisabled => '已關閉雙倍解析度播放';
+
+  @override
+  String get anime4kSuperResolutionTitle => 'Anime4K 超解析度（實驗性）';
+
+  @override
+  String get anime4kProfileDescriptionOff => '保持原始畫面，不進行超解析度處理。';
+
+  @override
+  String get anime4kProfileDescriptionLite => '適度超解析度與降噪，效能消耗較低。';
+
+  @override
+  String get anime4kProfileDescriptionStandard => '畫質與效能平衡的標準方案。';
+
+  @override
+  String get anime4kProfileDescriptionHigh => '追求最佳畫質，效能需求最高。';
+
+  @override
+  String get anime4kDisabled => '已關閉 Anime4K';
+
+  @override
+  String anime4kSwitchedTo(Object option) {
+    return 'Anime4K 已切換為 $option';
+  }
+
+  @override
+  String get crtDisplayEffectTitle => 'CRT 顯示效果';
+
+  @override
+  String get crtProfileDescriptionOff => '保持原始畫面，不啟用 CRT 效果。';
+
+  @override
+  String get crtProfileDescriptionLite => '掃描線 + 暗角，效能開銷較小。';
+
+  @override
+  String get crtProfileDescriptionStandard => '增加曲面與柵格，畫面更接近 CRT。';
+
+  @override
+  String get crtProfileDescriptionHigh => '加入輝光與色散，效果最佳但效能開銷更高。';
+
+  @override
+  String get crtDisabled => '已關閉 CRT';
+
+  @override
+  String crtSwitchedTo(Object option) {
+    return 'CRT 已切換為 $option';
+  }
+
+  @override
+  String get enterAiApiUrl => '請輸入 AI 介面 URL';
+
+  @override
+  String get enterModelName => '請輸入模型名稱';
+
+  @override
+  String get enterApiKey => '請輸入 API Key';
+
+  @override
+  String get spoilerAiSettingsSaved => '防劇透 AI 設定已儲存';
+
+  @override
+  String get spoilerPreventionMode => '防劇透模式';
+
+  @override
+  String get spoilerPreventionModeSubtitle => '開啟後，載入彈幕時將透過 AI 識別並屏蔽疑似劇透彈幕。';
+
+  @override
+  String get fillAndSaveAiConfigFirst => '請先填寫並儲存 AI 介面設定';
+
+  @override
+  String get spoilerPreventionModeEnabled => '已開啟防劇透模式';
+
+  @override
+  String get spoilerPreventionModeDisabled => '已關閉防劇透模式';
+
+  @override
+  String get autoMatchDanmakuOnPlayTitle => '播放時自動匹配彈幕';
+
+  @override
+  String get autoMatchDanmakuOnPlaySubtitle => '關閉後播放時不再自動識別並載入彈幕，可在彈幕設定中手動匹配。';
+
+  @override
+  String get autoMatchDanmakuOnPlayEnabled => '已開啟播放時自動匹配彈幕';
+
+  @override
+  String get autoMatchDanmakuOnPlayDisabledManual => '已關閉播放時自動匹配彈幕（可手動匹配）';
+
+  @override
+  String get autoMatchOnHashFailTitle => '哈希匹配失敗自動匹配彈幕';
+
+  @override
+  String get autoMatchOnHashFailSubtitle =>
+      '哈希匹配失敗時預設使用檔名搜尋的第一個結果自動匹配；關閉後將彈出搜尋彈幕選單。';
+
+  @override
+  String get autoMatchOnHashFailEnabled => '已開啟匹配失敗自動匹配';
+
+  @override
+  String get autoMatchOnHashFailDisabledShowSearch => '已關閉匹配失敗自動匹配（將彈出搜尋彈幕選單）';
+
+  @override
+  String get hardwareDecoding => '硬體解碼';
+
+  @override
+  String get hardwareDecodingSubtitle => '僅對 MDK / Libmpv 生效';
+
+  @override
+  String get hardwareDecodingEnabled => '已開啟硬體解碼';
+
+  @override
+  String get hardwareDecodingDisabled => '已關閉硬體解碼';
+
+  @override
+  String get pauseOnBackgroundTitle => '背景自動暫停';
+
+  @override
+  String get pauseOnBackgroundSubtitle => '切到背景或鎖屏時自動暫停播放';
+
+  @override
+  String get pauseOnBackgroundEnabled => '背景自動暫停已開啟';
+
+  @override
+  String get pauseOnBackgroundDisabled => '背景自動暫停已關閉';
+
+  @override
+  String get playbackEndActionTitle => '播放結束操作';
+
+  @override
+  String get playbackEndActionAutoNextMessage => '播放結束後將自動進入下一話';
+
+  @override
+  String get playbackEndActionLoopMessage => '播放結束後將從頭循環播放';
+
+  @override
+  String get playbackEndActionPauseMessage => '播放結束後將停留在目前頁面';
+
+  @override
+  String get playbackEndActionExitMessage => '播放結束後將返回上一頁';
+
+  @override
+  String get autoNextCountdownTitle => '自動連播倒計時';
+
+  @override
+  String autoNextCountdownWaitSeconds(int seconds) {
+    return '自動跳轉下一話前等待 $seconds 秒';
+  }
+
+  @override
+  String get autoNextCountdownNeedAutoNext => '需先啟用自動播放下一話';
+
+  @override
+  String get timelinePreviewTitle => '時間軸截圖預覽';
+
+  @override
+  String get timelinePreviewSubtitle => '懸停進度條時顯示縮圖（本地/WebDAV/SMB/共享媒體庫生效）';
+
+  @override
+  String get enableWarning => '開啟警告';
+
+  @override
+  String get timelinePreviewEnableWarningContent =>
+      '開啟時間軸截圖預覽會在背景即時生成截圖，可能導致播放卡頓或效能下降。是否確認開啟？';
+
+  @override
+  String get timelinePreviewEnabled => '已開啟時間軸截圖預覽';
+
+  @override
+  String get timelinePreviewDisabled => '已關閉時間軸截圖預覽';
+
+  @override
+  String get playPrecacheDuration => '播放預快取時長';
+
+  @override
+  String get playPrecacheSize => '播放預快取大小';
+
+  @override
+  String currentPrecacheDurationSeconds(int seconds) {
+    return '目前 $seconds 秒，修改後立即生效';
+  }
+
+  @override
+  String currentPrecacheSizeMb(int mb) {
+    return '目前 $mb MB，修改後重新開啟影片生效';
+  }
+
+  @override
+  String get libmpvKernelOnly => '僅 Libmpv 內核生效';
+
+  @override
+  String get spoilerAiSettingsTitle => '防劇透 AI 設定';
+
+  @override
+  String get spoilerAiSettingsDescription =>
+      '開啟防劇透前請先填寫並儲存設定（必須提供介面 URL / Key / 模型）。';
+
+  @override
+  String get spoilerAiGeminiUrlNote =>
+      'Gemini：URL 可填到 /v1beta/models，實際請求會自動拼接 /<模型>:generateContent。';
+
+  @override
+  String get spoilerAiOpenAiUrlNote =>
+      'OpenAI：URL 建議填寫 /v1/chat/completions（相容介面亦可）。';
+
+  @override
+  String get apiFormatLabel => '介面格式';
+
+  @override
+  String get openAiCompatible => 'OpenAI 相容';
+
+  @override
+  String get enterYourApiKey => '請輸入你的 API Key';
+
+  @override
+  String temperatureLabel(Object value) {
+    return '溫度：$value';
+  }
+
+  @override
+  String get saveConfiguration => '儲存設定';
 
   @override
   String get about => '關於';
