@@ -27,6 +27,12 @@
       "server": {}
     }
   },
+  "currentTheme": "当前：{theme}",
+  "@currentTheme": {
+    "placeholders": {
+      "theme": {}
+    }
+  },
   "languageTileSubtitle": "切换简体中文或繁體中文",
   "settingsBasicSection": "基础设置",
   "settingsAboutSection": "关于",
@@ -37,6 +43,10 @@
   "appearanceDarkModeSubtitle": "降低亮度，保护视力并节省电量。",
   "followSystem": "跟随系统",
   "appearanceFollowSystemSubtitle": "自动根据系统设置切换外观。",
+  "appearancePreviewTitle": "效果预览",
+  "appearancePreviewFollowSystemDescription": "根据系统外观自动切换浅色或深色模式。",
+  "appearancePreviewDarkDescription": "使用偏暗的配色方案，适合夜间或弱光环境。",
+  "appearancePreviewLightDescription": "使用明亮的配色方案，适合日间或高亮环境。",
   "appearanceAnimeDetailStyle": "番剧详情样式",
   "appearanceDetailSimple": "简洁模式",
   "appearanceDetailSimpleSubtitle": "经典布局，信息分栏展示。",
@@ -62,9 +72,14 @@
   "restartApp": "重启应用",
   "refreshPageApplyTheme": "请手动刷新页面以应用新主题",
   "player": "播放器",
+  "playerKernel": "播放器内核",
   "playerKernelCurrentMdk": "当前：MDK",
   "playerKernelCurrentVideoPlayer": "当前：Video Player",
   "playerKernelCurrentLibmpv": "当前：Libmpv",
+  "playerKernelSwitched": "播放器内核已切换",
+  "playerKernelDescriptionMdk": "MDK 多媒体开发套件，支持硬件解码（默认优先；不支持时回落软件解码）。",
+  "playerKernelDescriptionVideoPlayer": "Flutter 官方 Video Player，兼容性好。",
+  "playerKernelDescriptionLibmpv": "MediaKit (Libmpv) 播放器，支持硬件解码与高级特性。",
   "externalCall": "外部调用",
   "externalPlayerEnabled": "已启用外部播放器",
   "externalPlayerDisabled": "未启用外部播放器",
@@ -82,6 +97,19 @@
   "storage": "存储",
   "storageSettingsSubtitle": "管理弹幕缓存与清理策略",
   "networkMediaLibrary": "网络媒体库",
+  "mediaServerStatusConnected": "已连接",
+  "mediaServerStatusDisconnected": "未连接",
+  "mediaServerInfoServerUrl": "服务器地址",
+  "mediaServerInfoUsername": "登录用户",
+  "mediaServerInfoItemCount": "媒体条目",
+  "mediaServerInfoSelectedLibraries": "已选媒体库",
+  "mediaServerUnknown": "未知",
+  "mediaServerAnonymous": "匿名",
+  "mediaServerViewLibrary": "查看媒体库",
+  "mediaServerRefresh": "刷新",
+  "mediaServerManageServer": "管理服务器",
+  "mediaServerConnectServer": "连接服务器",
+  "mediaServerDisconnectedHint": "尚未连接此媒体服务器，点击下方按钮完成登录。",
   "retry": "重试",
   "save": "保存",
   "disconnect": "断开连接",
@@ -186,12 +214,131 @@
       "server": {}
     }
   },
+  "connectServerDialogTitle": "连接 {server} 服务器",
+  "@connectServerDialogTitle": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "serverUrlInputPlaceholder": "例如：http://192.168.1.100:8096",
+  "inputUsernamePlaceholder": "输入用户名",
+  "inputPasswordPlaceholder": "输入密码",
+  "nextStep": "下一步",
+  "connectAction": "连接",
+  "testConnection": "测试连接",
+  "canBeEmpty": "可留空",
+  "leaveEmptyAutoGenerate": "留空自动生成",
+  "usernameOptional": "用户名（可选）",
+  "passwordOptional": "密码（可选）",
+  "connectFailedCheckCredentials": "连接失败，请检查服务器地址和凭证",
+  "webdavAddServer": "添加 WebDAV 服务器",
+  "webdavEditServer": "编辑 WebDAV 服务器",
+  "webdavEnterAddress": "请输入 WebDAV 地址",
+  "webdavInvalidUrl": "请输入有效的 URL（http/https）",
+  "webdavConnection": "WebDAV 连接",
+  "webdavTestFailedWithError": "测试失败：{error}",
+  "@webdavTestFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "webdavTestFailedCheckInfo": "连接测试失败，请检查地址和认证信息",
+  "webdavTestSuccess": "连接测试成功",
+  "webdavTestFailed": "连接测试失败",
+  "webdavSaveFailedCheckInfo": "保存失败，请检查地址和认证信息",
+  "webdavConnectHint": "连接 WebDAV 服务器后可浏览目录并选择媒体文件夹。",
+  "webdavConnectionNameOptional": "连接名称（可选）",
+  "webdavAddress": "WebDAV 地址",
+  "smbAddServer": "添加 SMB 服务器",
+  "smbEditServer": "编辑 SMB 服务器",
+  "smbEnterHostOrIp": "请输入主机或 IP 地址",
+  "smbInvalidPortRange": "端口无效，请输入 1-65535",
+  "smbAnonymousHint": "用户名/密码可留空以匿名访问；支持填写域名。",
+  "smbHostOrIp": "主机 / IP",
+  "smbHostOrIpPlaceholder": "例如：192.168.1.10 或 nas.local",
+  "smbPort": "端口",
+  "smbDefaultPort445": "默认 445",
+  "smbDomainOptional": "域（可选）",
+  "smbDomainPlaceholder": "例如：WORKGROUP",
   "connectJellyfinOrEmbyFirst": "请先连接 Jellyfin 或 Emby 服务器",
   "networkMediaLibraryIntro": "在此管理 Jellyfin / Emby 服务器连接，并设置弹弹play 远程媒体库。",
+  "currentServerNotConnectedHint": "当前服务器未连接，请返回重新选择。",
+  "loadingRemoteMediaLibrary": "正在加载远程媒体库...",
+  "noRemoteMediaItems": "暂未获取到远程媒体条目",
+  "recordedAtDate": "收录于 {date}",
+  "@recordedAtDate": {
+    "placeholders": {
+      "date": {}
+    }
+  },
   "jellyfinMediaServerTitle": "Jellyfin 媒体服务器",
   "jellyfinDisconnectedDescription": "连接 Jellyfin 服务器以同步远程媒体库与播放记录。",
   "embyMediaServerTitle": "Emby 媒体服务器",
   "embyDisconnectedDescription": "连接 Emby 服务器后可浏览个人媒体库并远程播放。",
+  "dandanRemoteCardTitle": "弹弹play 远程访问",
+  "dandanRemoteManageAccessTitle": "管理弹弹play远程访问",
+  "dandanRemoteConnectAccessTitle": "连接弹弹play远程访问",
+  "dandanRemoteAddressPrompt": "请输入桌面端显示的远程服务地址。",
+  "dandanRemoteAddressPlaceholder": "例如：http://192.168.1.2:23333",
+  "dandanRemoteApiTokenOptionalTitle": "API 密钥（可选）",
+  "dandanRemoteApiTokenPrompt": "如已在弹弹play 桌面端启用 API 验证，请输入对应的密钥；未启用可直接点击{actionLabel}。",
+  "@dandanRemoteApiTokenPrompt": {
+    "placeholders": {
+      "actionLabel": {}
+    }
+  },
+  "enterApiToken": "请输入 API 密钥",
+  "optionalApiTokenHint": "可留空，按需填写",
+  "dandanRemoteStatusSynced": "已同步",
+  "dandanRemoteStatusConnectFailed": "连接失败",
+  "dandanRemoteStatusNotConfigured": "未配置",
+  "unknownErrorOccurred": "出现未知错误",
+  "dandanRemoteServerAddressLabel": "服务器地址",
+  "dandanRemoteLastSyncedLabel": "最近同步",
+  "dandanRemoteAnimeEntries": "番剧条目",
+  "dandanRemoteVideoFiles": "视频文件",
+  "dandanRemoteNoRecordsHint": "暂无远程媒体记录，可尝试刷新或确认远程访问设置。",
+  "dandanRemoteRecentUpdates": "最近更新",
+  "dandanRemoteEpisodeCount": "共 {count} 集",
+  "@dandanRemoteEpisodeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dandanRemoteManageConnection": "管理连接",
+  "dandanRemoteSyncing": "同步中...",
+  "dandanRemoteRefreshLibrary": "刷新媒体库",
+  "dandanRemoteDisconnectedHintLong": "通过弹弹play 桌面端开启远程访问后，可在此同步家中电脑或 NAS 上的番剧记录并直接播放。",
+  "pleaseWait": "请稍候...",
+  "connectDandanRemoteService": "连接弹弹play 远程服务",
+  "noRecordYet": "暂无记录",
+  "justNow": "刚刚",
+  "minutesAgo": "{minutes} 分钟前",
+  "@minutesAgo": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgo": "{hours} 小时前",
+  "@hoursAgo": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "daysAgo": "{days} 天前",
+  "@daysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
   "dandanRemoteConfigUpdated": "弹弹play 远程服务配置已更新",
   "dandanRemoteConnected": "弹弹play 远程服务已连接",
   "dandanRemoteDisconnected": "已断开与弹弹play远程服务的连接",
@@ -217,12 +364,91 @@
       "summary": {}
     }
   },
+  "serverMediaLibraryTitle": "{server} 媒体库",
+  "@serverMediaLibraryTitle": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "serverLabel": "服务器",
+  "accountLabel": "账户",
+  "mediaLibrary": "媒体库",
+  "noMediaLibrary": "暂无媒体库",
+  "checkServerConnection": "请检查服务器连接",
+  "transcodeSettings": "转码设置",
+  "currentDefaultQuality": "当前默认质量: {quality}",
+  "@currentDefaultQuality": {
+    "placeholders": {
+      "quality": {}
+    }
+  },
+  "enableTranscode": "启用转码",
+  "defaultQuality": "默认清晰度",
+  "tvShowsLibrary": "电视剧库",
+  "moviesLibrary": "电影库",
+  "boxsetsLibrary": "合集库",
+  "folderLibrary": "文件夹",
+  "mixedLibrary": "混合库",
   "developerOptions": "开发者选项",
   "developerOptionsSubtitle": "终端输出、依赖版本、构建信息",
   "terminalOutput": "终端输出",
   "terminalOutputSubtitle": "查看日志、复制内容或生成二维码分享",
   "dependencyVersions": "依赖库版本",
   "dependencyVersionsSubtitle": "查看依赖库与版本号（含 GitHub 跳转）",
+  "invalidLink": "链接无效",
+  "unknown": "未知",
+  "localSource": "本地",
+  "dependencyTypeDirectMain": "直接依赖",
+  "dependencyTypeDirectDev": "开发依赖",
+  "dependencyTypeTransitive": "间接依赖",
+  "dependencyTypeUnknown": "未知来源",
+  "parsingDependencyInfo": "正在解析依赖信息...",
+  "readDependencyListFailed": "读取依赖列表失败",
+  "dependencySummaryWithOther": "共 {total} 个库 · 直接 {directMain} / 开发 {directDev} / 间接 {transitive} / 其他 {other}",
+  "@dependencySummaryWithOther": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "directMain": {
+        "type": "int"
+      },
+      "directDev": {
+        "type": "int"
+      },
+      "transitive": {
+        "type": "int"
+      },
+      "other": {
+        "type": "int"
+      }
+    }
+  },
+  "dependencySummaryNoOther": "共 {total} 个库 · 直接 {directMain} / 开发 {directDev} / 间接 {transitive}",
+  "@dependencySummaryNoOther": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "directMain": {
+        "type": "int"
+      },
+      "directDev": {
+        "type": "int"
+      },
+      "transitive": {
+        "type": "int"
+      }
+    }
+  },
+  "dependencyEntrySubtitle": "版本: {version} · {dependencyType} · {sourceType}",
+  "@dependencyEntrySubtitle": {
+    "placeholders": {
+      "version": {},
+      "dependencyType": {},
+      "sourceType": {}
+    }
+  },
   "buildInfo": "构建信息",
   "buildInfoSubtitle": "查看构建时间、处理器、内存与系统架构",
   "fileLogWriteTitle": "日志写入文件",
@@ -238,6 +464,129 @@
   "spoilerAiDebugPrintNeedSpoilerMode": "需先启用防剧透模式",
   "spoilerAiDebugPrintEnabled": "已开启 AI 调试打印",
   "spoilerAiDebugPrintDisabled": "已关闭 AI 调试打印",
+  "playerUnavailableOnWeb": "播放器设置在 Web 平台不可用",
+  "danmakuRenderEngine": "弹幕渲染引擎",
+  "danmakuRenderEngineSwitched": "弹幕渲染引擎已切换",
+  "danmakuRenderEngineDescriptionCpu": "CPU 渲染：兼容性最佳，适合大多数场景。",
+  "danmakuRenderEngineDescriptionGpuExperimental": "GPU 渲染（实验性）：性能更高，但仍在开发中。",
+  "danmakuRenderEngineDescriptionCanvasExperimental": "Canvas 弹幕（实验性）：高性能，低功耗。",
+  "danmakuRenderEngineDescriptionNipaplayNext": "NipaPlay Next：CPU 弹幕和 Canvas 弹幕优点的集合体，包含两边的全部优点。",
+  "danmakuRenderEngineTitleCpu": "CPU 渲染",
+  "danmakuRenderEngineTitleGpuExperimental": "GPU 渲染 (实验性)",
+  "danmakuRenderEngineTitleCanvasExperimental": "Canvas 弹幕 (实验性)",
+  "danmakuRenderEngineTitleNipaplayNext": "NipaPlay Next",
+  "qualityProfileOff": "关闭",
+  "qualityProfileLite": "轻量",
+  "qualityProfileStandard": "标准",
+  "qualityProfileHigh": "高质量",
+  "doubleResolutionPlaybackTitle": "双倍分辨率播放视频",
+  "doubleResolutionPlaybackSubtitle": "以 2x 分辨率渲染画面，改善内嵌字幕清晰度（仅 Libmpv，不与 Anime4K 叠加）",
+  "settingSavedReopenVideoToApply": "已保存，重新打开视频生效",
+  "doubleResolutionPlaybackEnabled": "已开启双倍分辨率播放",
+  "doubleResolutionPlaybackDisabled": "已关闭双倍分辨率播放",
+  "anime4kSuperResolutionTitle": "Anime4K 超分辨率（实验性）",
+  "anime4kProfileDescriptionOff": "保持原始画面，不进行超分辨率处理。",
+  "anime4kProfileDescriptionLite": "适度超分辨率与降噪，性能消耗较低。",
+  "anime4kProfileDescriptionStandard": "画质与性能平衡的标准方案。",
+  "anime4kProfileDescriptionHigh": "追求最佳画质，性能需求最高。",
+  "anime4kDisabled": "已关闭 Anime4K",
+  "anime4kSwitchedTo": "Anime4K 已切换为 {option}",
+  "@anime4kSwitchedTo": {
+    "placeholders": {
+      "option": {}
+    }
+  },
+  "crtDisplayEffectTitle": "CRT 显示效果",
+  "crtProfileDescriptionOff": "保持原始画面，不启用 CRT 效果。",
+  "crtProfileDescriptionLite": "扫描线 + 暗角，性能开销较小。",
+  "crtProfileDescriptionStandard": "增加曲面与栅格，画面更接近 CRT。",
+  "crtProfileDescriptionHigh": "加入辉光与色散，效果最佳但性能开销更高。",
+  "crtDisabled": "已关闭 CRT",
+  "crtSwitchedTo": "CRT 已切换为 {option}",
+  "@crtSwitchedTo": {
+    "placeholders": {
+      "option": {}
+    }
+  },
+  "enterAiApiUrl": "请输入 AI 接口 URL",
+  "enterModelName": "请输入模型名称",
+  "enterApiKey": "请输入 API Key",
+  "spoilerAiSettingsSaved": "防剧透 AI 设置已保存",
+  "spoilerPreventionMode": "防剧透模式",
+  "spoilerPreventionModeSubtitle": "开启后，加载弹幕后将通过 AI 识别并屏蔽疑似剧透弹幕。",
+  "fillAndSaveAiConfigFirst": "请先填写并保存 AI 接口配置",
+  "spoilerPreventionModeEnabled": "已开启防剧透模式",
+  "spoilerPreventionModeDisabled": "已关闭防剧透模式",
+  "autoMatchDanmakuOnPlayTitle": "播放时自动匹配弹幕",
+  "autoMatchDanmakuOnPlaySubtitle": "关闭后播放时不再自动识别并加载弹幕，可在弹幕设置中手动匹配。",
+  "autoMatchDanmakuOnPlayEnabled": "已开启播放时自动匹配弹幕",
+  "autoMatchDanmakuOnPlayDisabledManual": "已关闭播放时自动匹配弹幕（可手动匹配）",
+  "autoMatchOnHashFailTitle": "哈希匹配失败自动匹配弹幕",
+  "autoMatchOnHashFailSubtitle": "哈希匹配失败时默认使用文件名搜索的第一个结果自动匹配；关闭后将弹出搜索弹幕菜单。",
+  "autoMatchOnHashFailEnabled": "已开启匹配失败自动匹配",
+  "autoMatchOnHashFailDisabledShowSearch": "已关闭匹配失败自动匹配（将弹出搜索弹幕菜单）",
+  "hardwareDecoding": "硬件解码",
+  "hardwareDecodingSubtitle": "仅对 MDK / Libmpv 生效",
+  "hardwareDecodingEnabled": "已开启硬件解码",
+  "hardwareDecodingDisabled": "已关闭硬件解码",
+  "pauseOnBackgroundTitle": "后台自动暂停",
+  "pauseOnBackgroundSubtitle": "切到后台或锁屏时自动暂停播放",
+  "pauseOnBackgroundEnabled": "后台自动暂停已开启",
+  "pauseOnBackgroundDisabled": "后台自动暂停已关闭",
+  "playbackEndActionTitle": "播放结束操作",
+  "playbackEndActionAutoNextMessage": "播放结束后将自动进入下一话",
+  "playbackEndActionLoopMessage": "播放结束后将从头循环播放",
+  "playbackEndActionPauseMessage": "播放结束后将停留在当前页面",
+  "playbackEndActionExitMessage": "播放结束后将返回上一页",
+  "autoNextCountdownTitle": "自动连播倒计时",
+  "autoNextCountdownWaitSeconds": "自动跳转下一话前等待 {seconds} 秒",
+  "@autoNextCountdownWaitSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "autoNextCountdownNeedAutoNext": "需先启用自动播放下一话",
+  "timelinePreviewTitle": "时间轴截图预览",
+  "timelinePreviewSubtitle": "悬停进度条时显示缩略图（本地/WebDAV/SMB/共享媒体库生效）",
+  "enableWarning": "开启警告",
+  "timelinePreviewEnableWarningContent": "开启时间轴截图预览会在后台实时生成截图，可能导致播放卡顿或性能下降。是否确认开启？",
+  "timelinePreviewEnabled": "已开启时间轴截图预览",
+  "timelinePreviewDisabled": "已关闭时间轴截图预览",
+  "playPrecacheDuration": "播放预缓存时长",
+  "playPrecacheSize": "播放预缓存大小",
+  "currentPrecacheDurationSeconds": "当前 {seconds} 秒，修改后立即生效",
+  "@currentPrecacheDurationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "currentPrecacheSizeMb": "当前 {mb} MB，修改后重新打开视频生效",
+  "@currentPrecacheSizeMb": {
+    "placeholders": {
+      "mb": {
+        "type": "int"
+      }
+    }
+  },
+  "libmpvKernelOnly": "仅 Libmpv 内核生效",
+  "spoilerAiSettingsTitle": "防剧透 AI 设置",
+  "spoilerAiSettingsDescription": "开启防剧透前请先填写并保存配置（必须提供接口 URL / Key / 模型）。",
+  "spoilerAiGeminiUrlNote": "Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。",
+  "spoilerAiOpenAiUrlNote": "OpenAI：URL 建议填写 /v1/chat/completions（兼容接口亦可）。",
+  "apiFormatLabel": "接口格式",
+  "openAiCompatible": "OpenAI 兼容",
+  "enterYourApiKey": "请输入你的 API Key",
+  "temperatureLabel": "温度：{value}",
+  "@temperatureLabel": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "saveConfiguration": "保存配置",
   "about": "关于",
   "loading": "加载中…",
   "currentVersion": "当前版本：{version}",

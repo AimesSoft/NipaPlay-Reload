@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 
@@ -15,33 +16,34 @@ class DandanplayConnectionConfig {
 }
 
 /// 显示原生 iOS 26 风格的连接对话框，依次采集地址与 API 密钥
-Future<DandanplayConnectionConfig?>
-    showCupertinoDandanplayConnectionDialog({
+Future<DandanplayConnectionConfig?> showCupertinoDandanplayConnectionDialog({
   required BuildContext context,
   required DandanplayRemoteProvider provider,
 }) async {
+  final l10n = context.l10n;
   final bool hasExisting = provider.serverUrl?.isNotEmpty == true;
-  final String dialogTitle =
-      hasExisting ? '管理弹弹play远程访问' : '连接弹弹play远程访问';
+  final String dialogTitle = hasExisting
+      ? l10n.dandanRemoteManageAccessTitle
+      : l10n.dandanRemoteConnectAccessTitle;
 
   final String? baseUrl = await showCupertinoDialog<String>(
     context: context,
     builder: (context) => IOS26AlertDialog(
       title: dialogTitle,
-      message: '请输入桌面端显示的远程服务地址。',
+      message: l10n.dandanRemoteAddressPrompt,
       input: AdaptiveAlertDialogInput(
-        placeholder: '例如：http://192.168.1.2:23333',
+        placeholder: l10n.dandanRemoteAddressPlaceholder,
         initialValue: provider.serverUrl ?? '',
         keyboardType: TextInputType.url,
       ),
       actions: [
         AlertAction(
-          title: '取消',
+          title: l10n.cancel,
           style: AlertActionStyle.cancel,
           onPressed: () {},
         ),
         AlertAction(
-          title: '下一步',
+          title: l10n.nextStep,
           style: AlertActionStyle.primary,
           onPressed: () {},
         ),
@@ -53,23 +55,26 @@ Future<DandanplayConnectionConfig?>
   if (trimmedBaseUrl.isEmpty) {
     return null;
   }
+  if (!context.mounted) {
+    return null;
+  }
 
-  final String actionLabel = hasExisting ? '保存' : '连接';
+  final String actionLabel = hasExisting ? l10n.save : l10n.connectAction;
 
   final String? token = await showCupertinoDialog<String>(
     context: context,
     builder: (context) => IOS26AlertDialog(
-      title: 'API 密钥（可选）',
-      message:
-          '如已在弹弹play 桌面端启用 API 验证，请输入对应的密钥；未启用可直接点击$actionLabel。',
+      title: l10n.dandanRemoteApiTokenOptionalTitle,
+      message: l10n.dandanRemoteApiTokenPrompt(actionLabel),
       input: AdaptiveAlertDialogInput(
-        placeholder:
-            provider.tokenRequired ? '请输入 API 密钥' : '可留空，按需填写',
+        placeholder: provider.tokenRequired
+            ? l10n.enterApiToken
+            : l10n.optionalApiTokenHint,
         obscureText: true,
       ),
       actions: [
         AlertAction(
-          title: '取消',
+          title: l10n.cancel,
           style: AlertActionStyle.cancel,
           onPressed: () {},
         ),
