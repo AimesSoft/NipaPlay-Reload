@@ -30,13 +30,12 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
   bool _versionLoadFailed = false;
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
-  bool _isAutoCheckEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
-    _initAutoCheckUpdateSetting();
+    _checkForUpdatesInBackgroundIfEnabled();
   }
 
   Future<void> _loadVersion() async {
@@ -55,26 +54,10 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     }
   }
 
-  Future<void> _initAutoCheckUpdateSetting() async {
+  Future<void> _checkForUpdatesInBackgroundIfEnabled() async {
     final enabled = await UpdateService.isAutoCheckEnabled();
-    if (!mounted) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    if (enabled) {
-      _checkForUpdates();
-    }
-  }
-
-  Future<void> _setAutoCheckEnabled(bool enabled) async {
-    if (_isAutoCheckEnabled == enabled) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    await UpdateService.setAutoCheckEnabled(enabled);
-    if (enabled) {
-      _checkForUpdates();
-    }
+    if (!enabled || !mounted) return;
+    _checkForUpdates();
   }
 
   Future<void> _checkForUpdates() async {
@@ -547,32 +530,6 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                   ],
                 )
               : Text(context.l10n.aboutCheckUpdates),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              context.l10n.aboutAutoCheckUpdates,
-              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                    fontSize: 14,
-                    color: secondaryColor,
-                  ),
-            ),
-            const SizedBox(width: 10),
-            CupertinoSwitch(
-              value: _isAutoCheckEnabled,
-              onChanged: _setAutoCheckEnabled,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          context.l10n.aboutManualOnlyWhenDisabled,
-          style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                fontSize: 12,
-                color: secondaryColor,
-              ),
         ),
       ],
     );

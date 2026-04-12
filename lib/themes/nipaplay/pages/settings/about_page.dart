@@ -23,14 +23,13 @@ class _AboutPageState extends State<AboutPage> {
   bool _versionLoadFailed = false;
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
-  bool _isAutoCheckEnabled = true;
   bool _isUpdateButtonHovered = false;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
-    _initAutoCheckUpdateSetting();
+    _checkForUpdatesInBackgroundIfEnabled();
   }
 
   Future<void> _loadVersion() async {
@@ -51,27 +50,11 @@ class _AboutPageState extends State<AboutPage> {
     }
   }
 
-  Future<void> _initAutoCheckUpdateSetting() async {
+  Future<void> _checkForUpdatesInBackgroundIfEnabled() async {
     final enabled = await UpdateService.isAutoCheckEnabled();
-    if (!mounted) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    if (enabled) {
-      // 静默检查更新，不显示加载状态
-      _checkForUpdates();
-    }
-  }
-
-  Future<void> _setAutoCheckEnabled(bool enabled) async {
-    if (_isAutoCheckEnabled == enabled) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    await UpdateService.setAutoCheckEnabled(enabled);
-    if (enabled) {
-      _checkForUpdates();
-    }
+    if (!enabled || !mounted) return;
+    // 静默检查更新，不显示加载状态
+    _checkForUpdates();
   }
 
   Future<void> _checkForUpdates() async {
@@ -460,37 +443,6 @@ class _AboutPageState extends State<AboutPage> {
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                l10n.aboutAutoCheckUpdates,
-                style: textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.88),
-                    ) ??
-                    TextStyle(
-                      color: colorScheme.onSurface.withValues(alpha: 0.88),
-                    ),
-              ),
-              const SizedBox(width: 10),
-              Switch(
-                value: _isAutoCheckEnabled,
-                onChanged: _setAutoCheckEnabled,
-                activeThumbColor: updateAccentColor,
-              ),
-            ],
-          ),
-          Text(
-            l10n.aboutManualOnlyWhenDisabled,
-            style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.65),
-                ) ??
-                TextStyle(
-                  color: colorScheme.onSurface.withValues(alpha: 0.65),
-                ),
           ),
           const SizedBox(height: 20),
 

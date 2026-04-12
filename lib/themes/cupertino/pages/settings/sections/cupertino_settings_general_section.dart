@@ -12,6 +12,7 @@ import '../widgets/network_setting_tile.dart';
 import '../widgets/media_server_setting_tile.dart';
 import '../widgets/developer_setting_tile.dart';
 import '../widgets/storage_setting_tile.dart';
+import '../widgets/update_check_setting_tile.dart';
 
 class CupertinoSettingsGeneralSection extends StatelessWidget {
   const CupertinoSettingsGeneralSection({super.key});
@@ -44,6 +45,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
           children: [
             CupertinoAppearanceSettingTile(),
             CupertinoLanguageSettingTile(),
+            CupertinoUpdateCheckSettingTile(),
             CupertinoPlayerSettingTile(),
             CupertinoExternalPlayerSettingTile(),
             CupertinoNetworkSettingTile(),

@@ -15,6 +15,9 @@ class SettingsKeys {
 
   static const String externalPlayerPath = 'external_player_path';
 
-  static const String autoCheckUpdatesOnAboutPage =
+  static const String autoCheckUpdatesInBackground =
+      'auto_check_updates_in_background';
+
+  static const String legacyAutoCheckUpdatesOnAboutPage =
       'auto_check_updates_on_about_page';
 }
