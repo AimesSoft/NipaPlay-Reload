@@ -753,6 +753,181 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mixedLibrary => '混合库';
 
   @override
+  String get userActivityTitle => '我的活动记录';
+
+  @override
+  String get userActivityTabWatched => '观看';
+
+  @override
+  String get userActivityTabFavorites => '收藏';
+
+  @override
+  String get userActivityTabRated => '评分';
+
+  @override
+  String userActivityTabWatchedCount(int count) {
+    return '观看($count)';
+  }
+
+  @override
+  String userActivityTabFavoritesCount(int count) {
+    return '收藏($count)';
+  }
+
+  @override
+  String userActivityTabRatedCount(int count) {
+    return '评分($count)';
+  }
+
+  @override
+  String get userActivityNoWatchedRecords => '暂无观看记录';
+
+  @override
+  String get userActivityNoFavorites => '暂无收藏';
+
+  @override
+  String get userActivityNoRatings => '暂无评分记录';
+
+  @override
+  String get userActivityNotLoggedIn => '未登录弹弹play账号';
+
+  @override
+  String userActivityWatchedEpisode(Object episode) {
+    return '看到：$episode';
+  }
+
+  @override
+  String userActivityWatchedUpdatedTime(Object time) {
+    return '更新时间：$time';
+  }
+
+  @override
+  String get userActivityWatchedOnly => '已观看';
+
+  @override
+  String userActivityStatusWithValue(Object status) {
+    return '状态：$status';
+  }
+
+  @override
+  String userActivityRatingWithValue(int rating) {
+    return '评分：$rating';
+  }
+
+  @override
+  String get userActivityUnknownTitle => '未知标题';
+
+  @override
+  String get ratingLevelMasterpiece => '神作';
+
+  @override
+  String get ratingLevelGreat => '很棒';
+
+  @override
+  String get ratingLevelGood => '不错';
+
+  @override
+  String get ratingLevelAverage => '一般';
+
+  @override
+  String get ratingLevelOkay => '还行';
+
+  @override
+  String get ratingLevelPoor => '较差';
+
+  @override
+  String get ratingLevelVeryPoor => '很差';
+
+  @override
+  String get ratingLevelTerrible => '极差';
+
+  @override
+  String get favoriteStatusFollowing => '关注中';
+
+  @override
+  String get favoriteStatusFinished => '已完成';
+
+  @override
+  String get favoriteStatusAbandoned => '已弃坑';
+
+  @override
+  String get favoriteStatusFavorited => '已收藏';
+
+  @override
+  String get weekdaySunday => '周日';
+
+  @override
+  String get weekdayMonday => '周一';
+
+  @override
+  String get weekdayTuesday => '周二';
+
+  @override
+  String get weekdayWednesday => '周三';
+
+  @override
+  String get weekdayThursday => '周四';
+
+  @override
+  String get weekdayFriday => '周五';
+
+  @override
+  String get weekdaySaturday => '周六';
+
+  @override
+  String get newSeriesNoTodayAnime => '本日无新番';
+
+  @override
+  String get newSeriesUpdateTimeTbd => '更新时间未定';
+
+  @override
+  String get newSeriesSearchDescription => '搜索新番\n按标签、类型快速筛选\n查找你感兴趣的新番';
+
+  @override
+  String get newSeriesSortDescriptionAscending => '切换为正序显示\n今天的新番排在最前';
+
+  @override
+  String get newSeriesSortDescriptionDescending => '切换为倒序显示\n今天的新番排在最后';
+
+  @override
+  String get newSeriesInitializingPlayer => '正在初始化播放器...';
+
+  @override
+  String newSeriesPlayerLoadFailedWithError(Object error) {
+    return '播放器加载失败: $error';
+  }
+
+  @override
+  String newSeriesErrorOccurredWithError(Object error) {
+    return '发生错误: $error';
+  }
+
+  @override
+  String newSeriesHandlePlayRequestFailedWithError(Object error) {
+    return '处理播放请求时出错: $error';
+  }
+
+  @override
+  String newSeriesAnimeCount(int count) {
+    return '$count 部动画';
+  }
+
+  @override
+  String get newSeriesRemoteAddressNotConfigured => '未配置远程访问地址';
+
+  @override
+  String get newSeriesNetworkTimeout => '网络请求超时，请检查网络连接后重试';
+
+  @override
+  String get newSeriesNetworkConnectionFailed => '网络连接失败，请检查网络设置';
+
+  @override
+  String get newSeriesServerUnavailableRetryLater => '服务器无法连接，请稍后重试';
+
+  @override
+  String get newSeriesServerDataFormatError => '服务器返回数据格式错误';
+
+  @override
   String get developerOptions => '开发者选项';
 
   @override
@@ -2278,6 +2453,181 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get mixedLibrary => '混合庫';
+
+  @override
+  String get userActivityTitle => '我的活動記錄';
+
+  @override
+  String get userActivityTabWatched => '觀看';
+
+  @override
+  String get userActivityTabFavorites => '收藏';
+
+  @override
+  String get userActivityTabRated => '評分';
+
+  @override
+  String userActivityTabWatchedCount(int count) {
+    return '觀看($count)';
+  }
+
+  @override
+  String userActivityTabFavoritesCount(int count) {
+    return '收藏($count)';
+  }
+
+  @override
+  String userActivityTabRatedCount(int count) {
+    return '評分($count)';
+  }
+
+  @override
+  String get userActivityNoWatchedRecords => '暫無觀看記錄';
+
+  @override
+  String get userActivityNoFavorites => '暫無收藏';
+
+  @override
+  String get userActivityNoRatings => '暫無評分記錄';
+
+  @override
+  String get userActivityNotLoggedIn => '未登入彈彈play帳號';
+
+  @override
+  String userActivityWatchedEpisode(Object episode) {
+    return '看到：$episode';
+  }
+
+  @override
+  String userActivityWatchedUpdatedTime(Object time) {
+    return '更新時間：$time';
+  }
+
+  @override
+  String get userActivityWatchedOnly => '已觀看';
+
+  @override
+  String userActivityStatusWithValue(Object status) {
+    return '狀態：$status';
+  }
+
+  @override
+  String userActivityRatingWithValue(int rating) {
+    return '評分：$rating';
+  }
+
+  @override
+  String get userActivityUnknownTitle => '未知標題';
+
+  @override
+  String get ratingLevelMasterpiece => '神作';
+
+  @override
+  String get ratingLevelGreat => '很棒';
+
+  @override
+  String get ratingLevelGood => '不錯';
+
+  @override
+  String get ratingLevelAverage => '一般';
+
+  @override
+  String get ratingLevelOkay => '還行';
+
+  @override
+  String get ratingLevelPoor => '較差';
+
+  @override
+  String get ratingLevelVeryPoor => '很差';
+
+  @override
+  String get ratingLevelTerrible => '極差';
+
+  @override
+  String get favoriteStatusFollowing => '關注中';
+
+  @override
+  String get favoriteStatusFinished => '已完成';
+
+  @override
+  String get favoriteStatusAbandoned => '已棄坑';
+
+  @override
+  String get favoriteStatusFavorited => '已收藏';
+
+  @override
+  String get weekdaySunday => '週日';
+
+  @override
+  String get weekdayMonday => '週一';
+
+  @override
+  String get weekdayTuesday => '週二';
+
+  @override
+  String get weekdayWednesday => '週三';
+
+  @override
+  String get weekdayThursday => '週四';
+
+  @override
+  String get weekdayFriday => '週五';
+
+  @override
+  String get weekdaySaturday => '週六';
+
+  @override
+  String get newSeriesNoTodayAnime => '本日無新番';
+
+  @override
+  String get newSeriesUpdateTimeTbd => '更新時間未定';
+
+  @override
+  String get newSeriesSearchDescription => '搜尋新番\n按標籤、類型快速篩選\n查找你感興趣的新番';
+
+  @override
+  String get newSeriesSortDescriptionAscending => '切換為正序顯示\n今天的新番排在最前';
+
+  @override
+  String get newSeriesSortDescriptionDescending => '切換為倒序顯示\n今天的新番排在最後';
+
+  @override
+  String get newSeriesInitializingPlayer => '正在初始化播放器...';
+
+  @override
+  String newSeriesPlayerLoadFailedWithError(Object error) {
+    return '播放器載入失敗: $error';
+  }
+
+  @override
+  String newSeriesErrorOccurredWithError(Object error) {
+    return '發生錯誤: $error';
+  }
+
+  @override
+  String newSeriesHandlePlayRequestFailedWithError(Object error) {
+    return '處理播放請求時出錯: $error';
+  }
+
+  @override
+  String newSeriesAnimeCount(int count) {
+    return '$count 部動畫';
+  }
+
+  @override
+  String get newSeriesRemoteAddressNotConfigured => '未配置遠端存取位址';
+
+  @override
+  String get newSeriesNetworkTimeout => '網路請求逾時，請檢查網路連線後重試';
+
+  @override
+  String get newSeriesNetworkConnectionFailed => '網路連線失敗，請檢查網路設定';
+
+  @override
+  String get newSeriesServerUnavailableRetryLater => '伺服器無法連線，請稍後重試';
+
+  @override
+  String get newSeriesServerDataFormatError => '伺服器回傳資料格式錯誤';
 
   @override
   String get developerOptions => '開發者選項';

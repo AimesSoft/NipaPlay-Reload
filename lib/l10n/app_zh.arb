@@ -389,6 +389,122 @@
   "boxsetsLibrary": "合集库",
   "folderLibrary": "文件夹",
   "mixedLibrary": "混合库",
+  "userActivityTitle": "我的活动记录",
+  "userActivityTabWatched": "观看",
+  "userActivityTabFavorites": "收藏",
+  "userActivityTabRated": "评分",
+  "userActivityTabWatchedCount": "观看({count})",
+  "@userActivityTabWatchedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityTabFavoritesCount": "收藏({count})",
+  "@userActivityTabFavoritesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityTabRatedCount": "评分({count})",
+  "@userActivityTabRatedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityNoWatchedRecords": "暂无观看记录",
+  "userActivityNoFavorites": "暂无收藏",
+  "userActivityNoRatings": "暂无评分记录",
+  "userActivityNotLoggedIn": "未登录弹弹play账号",
+  "userActivityWatchedEpisode": "看到：{episode}",
+  "@userActivityWatchedEpisode": {
+    "placeholders": {
+      "episode": {}
+    }
+  },
+  "userActivityWatchedUpdatedTime": "更新时间：{time}",
+  "@userActivityWatchedUpdatedTime": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "userActivityWatchedOnly": "已观看",
+  "userActivityStatusWithValue": "状态：{status}",
+  "@userActivityStatusWithValue": {
+    "placeholders": {
+      "status": {}
+    }
+  },
+  "userActivityRatingWithValue": "评分：{rating}",
+  "@userActivityRatingWithValue": {
+    "placeholders": {
+      "rating": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityUnknownTitle": "未知标题",
+  "ratingLevelMasterpiece": "神作",
+  "ratingLevelGreat": "很棒",
+  "ratingLevelGood": "不错",
+  "ratingLevelAverage": "一般",
+  "ratingLevelOkay": "还行",
+  "ratingLevelPoor": "较差",
+  "ratingLevelVeryPoor": "很差",
+  "ratingLevelTerrible": "极差",
+  "favoriteStatusFollowing": "关注中",
+  "favoriteStatusFinished": "已完成",
+  "favoriteStatusAbandoned": "已弃坑",
+  "favoriteStatusFavorited": "已收藏",
+  "weekdaySunday": "周日",
+  "weekdayMonday": "周一",
+  "weekdayTuesday": "周二",
+  "weekdayWednesday": "周三",
+  "weekdayThursday": "周四",
+  "weekdayFriday": "周五",
+  "weekdaySaturday": "周六",
+  "newSeriesNoTodayAnime": "本日无新番",
+  "newSeriesUpdateTimeTbd": "更新时间未定",
+  "newSeriesSearchDescription": "搜索新番\n按标签、类型快速筛选\n查找你感兴趣的新番",
+  "newSeriesSortDescriptionAscending": "切换为正序显示\n今天的新番排在最前",
+  "newSeriesSortDescriptionDescending": "切换为倒序显示\n今天的新番排在最后",
+  "newSeriesInitializingPlayer": "正在初始化播放器...",
+  "newSeriesPlayerLoadFailedWithError": "播放器加载失败: {error}",
+  "@newSeriesPlayerLoadFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "newSeriesErrorOccurredWithError": "发生错误: {error}",
+  "@newSeriesErrorOccurredWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "newSeriesHandlePlayRequestFailedWithError": "处理播放请求时出错: {error}",
+  "@newSeriesHandlePlayRequestFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "newSeriesAnimeCount": "{count} 部动画",
+  "@newSeriesAnimeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "newSeriesRemoteAddressNotConfigured": "未配置远程访问地址",
+  "newSeriesNetworkTimeout": "网络请求超时，请检查网络连接后重试",
+  "newSeriesNetworkConnectionFailed": "网络连接失败，请检查网络设置",
+  "newSeriesServerUnavailableRetryLater": "服务器无法连接，请稍后重试",
+  "newSeriesServerDataFormatError": "服务器返回数据格式错误",
   "developerOptions": "开发者选项",
   "developerOptionsSubtitle": "终端输出、依赖版本、构建信息",
   "terminalOutput": "终端输出",

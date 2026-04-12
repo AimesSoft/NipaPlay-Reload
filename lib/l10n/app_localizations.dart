@@ -1453,6 +1453,312 @@ abstract class AppLocalizations {
   /// **'混合库'**
   String get mixedLibrary;
 
+  /// No description provided for @userActivityTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的活动记录'**
+  String get userActivityTitle;
+
+  /// No description provided for @userActivityTabWatched.
+  ///
+  /// In zh, this message translates to:
+  /// **'观看'**
+  String get userActivityTabWatched;
+
+  /// No description provided for @userActivityTabFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏'**
+  String get userActivityTabFavorites;
+
+  /// No description provided for @userActivityTabRated.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分'**
+  String get userActivityTabRated;
+
+  /// No description provided for @userActivityTabWatchedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'观看({count})'**
+  String userActivityTabWatchedCount(int count);
+
+  /// No description provided for @userActivityTabFavoritesCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏({count})'**
+  String userActivityTabFavoritesCount(int count);
+
+  /// No description provided for @userActivityTabRatedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分({count})'**
+  String userActivityTabRatedCount(int count);
+
+  /// No description provided for @userActivityNoWatchedRecords.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无观看记录'**
+  String get userActivityNoWatchedRecords;
+
+  /// No description provided for @userActivityNoFavorites.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无收藏'**
+  String get userActivityNoFavorites;
+
+  /// No description provided for @userActivityNoRatings.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无评分记录'**
+  String get userActivityNoRatings;
+
+  /// No description provided for @userActivityNotLoggedIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'未登录弹弹play账号'**
+  String get userActivityNotLoggedIn;
+
+  /// No description provided for @userActivityWatchedEpisode.
+  ///
+  /// In zh, this message translates to:
+  /// **'看到：{episode}'**
+  String userActivityWatchedEpisode(Object episode);
+
+  /// No description provided for @userActivityWatchedUpdatedTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新时间：{time}'**
+  String userActivityWatchedUpdatedTime(Object time);
+
+  /// No description provided for @userActivityWatchedOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'已观看'**
+  String get userActivityWatchedOnly;
+
+  /// No description provided for @userActivityStatusWithValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态：{status}'**
+  String userActivityStatusWithValue(Object status);
+
+  /// No description provided for @userActivityRatingWithValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'评分：{rating}'**
+  String userActivityRatingWithValue(int rating);
+
+  /// No description provided for @userActivityUnknownTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知标题'**
+  String get userActivityUnknownTitle;
+
+  /// No description provided for @ratingLevelMasterpiece.
+  ///
+  /// In zh, this message translates to:
+  /// **'神作'**
+  String get ratingLevelMasterpiece;
+
+  /// No description provided for @ratingLevelGreat.
+  ///
+  /// In zh, this message translates to:
+  /// **'很棒'**
+  String get ratingLevelGreat;
+
+  /// No description provided for @ratingLevelGood.
+  ///
+  /// In zh, this message translates to:
+  /// **'不错'**
+  String get ratingLevelGood;
+
+  /// No description provided for @ratingLevelAverage.
+  ///
+  /// In zh, this message translates to:
+  /// **'一般'**
+  String get ratingLevelAverage;
+
+  /// No description provided for @ratingLevelOkay.
+  ///
+  /// In zh, this message translates to:
+  /// **'还行'**
+  String get ratingLevelOkay;
+
+  /// No description provided for @ratingLevelPoor.
+  ///
+  /// In zh, this message translates to:
+  /// **'较差'**
+  String get ratingLevelPoor;
+
+  /// No description provided for @ratingLevelVeryPoor.
+  ///
+  /// In zh, this message translates to:
+  /// **'很差'**
+  String get ratingLevelVeryPoor;
+
+  /// No description provided for @ratingLevelTerrible.
+  ///
+  /// In zh, this message translates to:
+  /// **'极差'**
+  String get ratingLevelTerrible;
+
+  /// No description provided for @favoriteStatusFollowing.
+  ///
+  /// In zh, this message translates to:
+  /// **'关注中'**
+  String get favoriteStatusFollowing;
+
+  /// No description provided for @favoriteStatusFinished.
+  ///
+  /// In zh, this message translates to:
+  /// **'已完成'**
+  String get favoriteStatusFinished;
+
+  /// No description provided for @favoriteStatusAbandoned.
+  ///
+  /// In zh, this message translates to:
+  /// **'已弃坑'**
+  String get favoriteStatusAbandoned;
+
+  /// No description provided for @favoriteStatusFavorited.
+  ///
+  /// In zh, this message translates to:
+  /// **'已收藏'**
+  String get favoriteStatusFavorited;
+
+  /// No description provided for @weekdaySunday.
+  ///
+  /// In zh, this message translates to:
+  /// **'周日'**
+  String get weekdaySunday;
+
+  /// No description provided for @weekdayMonday.
+  ///
+  /// In zh, this message translates to:
+  /// **'周一'**
+  String get weekdayMonday;
+
+  /// No description provided for @weekdayTuesday.
+  ///
+  /// In zh, this message translates to:
+  /// **'周二'**
+  String get weekdayTuesday;
+
+  /// No description provided for @weekdayWednesday.
+  ///
+  /// In zh, this message translates to:
+  /// **'周三'**
+  String get weekdayWednesday;
+
+  /// No description provided for @weekdayThursday.
+  ///
+  /// In zh, this message translates to:
+  /// **'周四'**
+  String get weekdayThursday;
+
+  /// No description provided for @weekdayFriday.
+  ///
+  /// In zh, this message translates to:
+  /// **'周五'**
+  String get weekdayFriday;
+
+  /// No description provided for @weekdaySaturday.
+  ///
+  /// In zh, this message translates to:
+  /// **'周六'**
+  String get weekdaySaturday;
+
+  /// No description provided for @newSeriesNoTodayAnime.
+  ///
+  /// In zh, this message translates to:
+  /// **'本日无新番'**
+  String get newSeriesNoTodayAnime;
+
+  /// No description provided for @newSeriesUpdateTimeTbd.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新时间未定'**
+  String get newSeriesUpdateTimeTbd;
+
+  /// No description provided for @newSeriesSearchDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索新番\n按标签、类型快速筛选\n查找你感兴趣的新番'**
+  String get newSeriesSearchDescription;
+
+  /// No description provided for @newSeriesSortDescriptionAscending.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换为正序显示\n今天的新番排在最前'**
+  String get newSeriesSortDescriptionAscending;
+
+  /// No description provided for @newSeriesSortDescriptionDescending.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换为倒序显示\n今天的新番排在最后'**
+  String get newSeriesSortDescriptionDescending;
+
+  /// No description provided for @newSeriesInitializingPlayer.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在初始化播放器...'**
+  String get newSeriesInitializingPlayer;
+
+  /// No description provided for @newSeriesPlayerLoadFailedWithError.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放器加载失败: {error}'**
+  String newSeriesPlayerLoadFailedWithError(Object error);
+
+  /// No description provided for @newSeriesErrorOccurredWithError.
+  ///
+  /// In zh, this message translates to:
+  /// **'发生错误: {error}'**
+  String newSeriesErrorOccurredWithError(Object error);
+
+  /// No description provided for @newSeriesHandlePlayRequestFailedWithError.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理播放请求时出错: {error}'**
+  String newSeriesHandlePlayRequestFailedWithError(Object error);
+
+  /// No description provided for @newSeriesAnimeCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 部动画'**
+  String newSeriesAnimeCount(int count);
+
+  /// No description provided for @newSeriesRemoteAddressNotConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'未配置远程访问地址'**
+  String get newSeriesRemoteAddressNotConfigured;
+
+  /// No description provided for @newSeriesNetworkTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络请求超时，请检查网络连接后重试'**
+  String get newSeriesNetworkTimeout;
+
+  /// No description provided for @newSeriesNetworkConnectionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络连接失败，请检查网络设置'**
+  String get newSeriesNetworkConnectionFailed;
+
+  /// No description provided for @newSeriesServerUnavailableRetryLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器无法连接，请稍后重试'**
+  String get newSeriesServerUnavailableRetryLater;
+
+  /// No description provided for @newSeriesServerDataFormatError.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务器返回数据格式错误'**
+  String get newSeriesServerDataFormatError;
+
   /// No description provided for @developerOptions.
   ///
   /// In zh, this message translates to:
