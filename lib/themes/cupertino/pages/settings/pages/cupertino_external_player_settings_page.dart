@@ -1,6 +1,7 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -22,8 +23,8 @@ class CupertinoExternalPlayerSettingsPage extends StatelessWidget {
     final bool externalSupported = globals.isDesktop;
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '外部调用',
+      appBar: AdaptiveAppBar(
+        title: context.l10n.externalCall,
         useNativeToolbar: true,
       ),
       body: ColoredBox(
@@ -41,8 +42,8 @@ class CupertinoExternalPlayerSettingsPage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   externalSupported
-                      ? '启用后，所有播放操作将通过外部播放器打开。'
-                      : '仅桌面端支持外部播放器调用。',
+                      ? context.l10n.externalPlayerIntroDesktop
+                      : context.l10n.externalPlayerIntroUnsupported,
                   style: TextStyle(
                     fontSize: 13,
                     color: resolveSettingsSecondaryTextColor(context),
@@ -75,14 +76,16 @@ class CupertinoExternalPlayerSettingsPage extends StatelessWidget {
               if (!externalSupported) {
                 return;
               }
+              final l10n = context.l10n;
               if (value) {
                 if (settingsProvider.externalPlayerPath.trim().isEmpty) {
                   final picked =
                       await FilePickerService().pickExternalPlayerExecutable();
                   if (picked == null || picked.trim().isEmpty) {
+                    if (!context.mounted) return;
                     AdaptiveSnackBar.show(
                       context,
-                      message: '已取消选择外部播放器',
+                      message: l10n.externalPlayerSelectionCanceled,
                       type: AdaptiveSnackBarType.info,
                     );
                     await settingsProvider.setUseExternalPlayer(false);
@@ -91,16 +94,18 @@ class CupertinoExternalPlayerSettingsPage extends StatelessWidget {
                   await settingsProvider.setExternalPlayerPath(picked);
                 }
                 await settingsProvider.setUseExternalPlayer(true);
+                if (!context.mounted) return;
                 AdaptiveSnackBar.show(
                   context,
-                  message: '已启用外部播放器',
+                  message: l10n.externalPlayerEnabled,
                   type: AdaptiveSnackBarType.success,
                 );
               } else {
                 await settingsProvider.setUseExternalPlayer(false);
+                if (!context.mounted) return;
                 AdaptiveSnackBar.show(
                   context,
-                  message: '已关闭外部播放器',
+                  message: l10n.externalPlayerDisabled,
                   type: AdaptiveSnackBarType.success,
                 );
               }
@@ -111,8 +116,10 @@ class CupertinoExternalPlayerSettingsPage extends StatelessWidget {
                 CupertinoIcons.square_arrow_up,
                 color: resolveSettingsIconColor(context),
               ),
-              title: const Text('启用外部播放器'),
-              subtitle: Text(externalSupported ? '开启后将使用外部播放器播放视频' : '仅桌面端支持'),
+              title: Text(context.l10n.externalPlayerEnableTitle),
+              subtitle: Text(externalSupported
+                  ? context.l10n.externalPlayerEnableSubtitle
+                  : context.l10n.desktopOnlySupported),
               trailing: AdaptiveSwitch(
                 value: settingsProvider.useExternalPlayer,
                 onChanged: externalSupported ? toggleExternal : null,
@@ -128,32 +135,37 @@ class CupertinoExternalPlayerSettingsPage extends StatelessWidget {
           builder: (context, settingsProvider, child) {
             final path = settingsProvider.externalPlayerPath.trim();
             final subtitle = !externalSupported
-                ? '仅桌面端支持'
-                : (path.isEmpty ? '未选择外部播放器' : path);
+                ? context.l10n.desktopOnlySupported
+                : (path.isEmpty
+                    ? context.l10n.externalPlayerNotSelected
+                    : path);
             return CupertinoSettingsTile(
               leading: Icon(
                 CupertinoIcons.folder,
                 color: resolveSettingsIconColor(context),
               ),
-              title: const Text('选择外部播放器'),
+              title: Text(context.l10n.externalPlayerSelectTitle),
               subtitle: Text(subtitle),
               showChevron: true,
               onTap: externalSupported
                   ? () async {
+                      final l10n = context.l10n;
                       final picked = await FilePickerService()
                           .pickExternalPlayerExecutable();
                       if (picked == null || picked.trim().isEmpty) {
+                        if (!context.mounted) return;
                         AdaptiveSnackBar.show(
                           context,
-                          message: '已取消选择外部播放器',
+                          message: l10n.externalPlayerSelectionCanceled,
                           type: AdaptiveSnackBarType.info,
                         );
                         return;
                       }
                       await settingsProvider.setExternalPlayerPath(picked);
+                      if (!context.mounted) return;
                       AdaptiveSnackBar.show(
                         context,
-                        message: '已更新外部播放器',
+                        message: l10n.externalPlayerUpdated,
                         type: AdaptiveSnackBarType.success,
                       );
                     }
