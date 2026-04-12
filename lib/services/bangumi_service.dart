@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
 import './dandanplay_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/utils/chinese_converter.dart';
 
 class BangumiService {
   static final BangumiService instance = BangumiService._();
@@ -258,8 +259,10 @@ class BangumiService {
               .clear(); // Clear old memory list cache before populating with new data
           for (var animeData in data) {
             try {
-              final anime = BangumiAnime.fromDandanplayIntro(
+              var anime = BangumiAnime.fromDandanplayIntro(
                   animeData as Map<String, dynamic>);
+              // 转换为繁体中文（如果需要）
+              anime = await ChineseConverter.convertAnime(anime);
               _listCache[anime.id.toString()] = anime; // Update memory cache
               animes.add(anime);
             } catch (e) {
@@ -364,6 +367,10 @@ class BangumiService {
   }
 
   Future<BangumiAnime> getAnimeDetails(int animeId) async {
+    // 检查是否需要繁体中文
+    final isTraditional = await ChineseConverter.isTraditionalChineseEnvironment(null);
+    final expectedLanguage = isTraditional ? 'zh_Hant' : 'zh';
+
     // 检查内存缓存
     if (_detailsCache.containsKey(animeId)) {
       final cacheTime = _detailsCacheTime[animeId];
@@ -371,8 +378,16 @@ class BangumiService {
         final cachedAnime = _detailsCache[animeId]!;
         // 检查缓存数据是否包含标签信息
         if (cachedAnime.tags != null && cachedAnime.tags!.isNotEmpty) {
-          //debugPrint('[番剧服务] 从内存缓存获取番剧 $animeId 的详情 (缓存时间: ${_getCacheDurationForAnime(animeId).inHours}小时)');
-          return cachedAnime;
+          // 检查语言是否匹配
+          if (cachedAnime.language == expectedLanguage) {
+            //debugPrint('[番剧服务] 从内存缓存获取番剧 $animeId 的详情 (缓存时间: ${_getCacheDurationForAnime(animeId).inHours}小时)');
+            return cachedAnime;
+          } else {
+            //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存语言不匹配，将重新获取');
+            // 移除缓存，强制重新获取
+            _detailsCache.remove(animeId);
+            _detailsCacheTime.remove(animeId);
+          }
         } else {
           //debugPrint('[番剧服务] 番剧 $animeId 的内存缓存缺少标签信息，将重新获取');
           // 移除缓存，强制重新获取
@@ -389,8 +404,17 @@ class BangumiService {
     if (diskCachedDetail != null) {
       // 检查磁盘缓存是否包含标签信息
       if (diskCachedDetail.tags != null && diskCachedDetail.tags!.isNotEmpty) {
-        //debugPrint('[番剧服务] 从磁盘缓存获取番剧 $animeId 的详情成功');
-        return diskCachedDetail;
+        // 检查语言是否匹配
+        if (diskCachedDetail.language == expectedLanguage) {
+          //debugPrint('[番剧服务] 从磁盘缓存获取番剧 $animeId 的详情成功');
+          return diskCachedDetail;
+        } else {
+          //debugPrint('[番剧服务] 番剧 $animeId 的磁盘缓存语言不匹配，将重新获取');
+          // 删除有问题的磁盘缓存
+          final prefs = await SharedPreferences.getInstance();
+          final cacheKey = '$_detailsCacheKeyPrefix$animeId';
+          await prefs.remove(cacheKey);
+        }
       } else {
         //debugPrint('[番剧服务] 番剧 $animeId 的磁盘缓存缺少标签信息，将重新获取');
         // 删除有问题的磁盘缓存
@@ -412,7 +436,7 @@ class BangumiService {
             json.decode(utf8.decode(response.bodyBytes));
         if (decodedResponse['success'] == true &&
             decodedResponse['bangumi'] != null) {
-          final anime = BangumiAnime.fromDandanplayDetail(
+          var anime = BangumiAnime.fromDandanplayDetail(
               decodedResponse['bangumi'] as Map<String, dynamic>);
 
           // 验证获取的数据是否包含标签
@@ -421,6 +445,9 @@ class BangumiService {
           } else {
             //debugPrint('[番剧服务] 警告：API获取的番剧 $animeId 没有标签信息');
           }
+
+          // 转换为繁体中文（如果需要）
+          anime = await ChineseConverter.convertAnime(anime);
 
           // 更新内存缓存
           _detailsCache[animeId] = anime;

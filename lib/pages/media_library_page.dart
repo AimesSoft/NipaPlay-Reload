@@ -29,6 +29,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'dart:ui' as ui;
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/utils/chinese_converter.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -627,9 +628,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
         Future<void> fetchDetailForItem() async {
           try {
-            // 如果已经有详细数据，则跳过获取
+            // 检查已缓存的详细数据是否语言匹配
             if (_fetchedFullAnimeData.containsKey(historyItem.animeId!)) {
-              return;
+              final cachedAnime = _fetchedFullAnimeData[historyItem.animeId!];
+              // 检查语言是否匹配
+              final isTraditional =
+                  await ChineseConverter.isTraditionalChineseEnvironment(null);
+              final expectedLanguage = isTraditional ? 'zh_Hant' : 'zh';
+              if (cachedAnime?.language == expectedLanguage) {
+                return; // 语言匹配，跳过获取
+              }
             }
 
             final animeDetail = await BangumiService.instance
@@ -684,8 +692,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
   }
 
   Future<void> _preloadAnimeDetail(int animeId) async {
+    // 检查已缓存的详细数据是否语言匹配
     if (_fetchedFullAnimeData.containsKey(animeId)) {
-      return;
+      final cachedAnime = _fetchedFullAnimeData[animeId];
+      // 检查语言是否匹配
+      final isTraditional =
+          await ChineseConverter.isTraditionalChineseEnvironment(null);
+      final expectedLanguage = isTraditional ? 'zh_Hant' : 'zh';
+      if (cachedAnime?.language == expectedLanguage) {
+        return; // 语言匹配，跳过获取
+      }
     }
 
     try {

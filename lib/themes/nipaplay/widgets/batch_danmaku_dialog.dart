@@ -10,6 +10,7 @@ import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/global_hotkey_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/chinese_converter.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
@@ -231,6 +232,19 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           ? List<Map<String, dynamic>>.from(data['animes'] as List)
           : <Map<String, dynamic>>[];
 
+      // 对搜索结果进行简繁转换
+      final isTraditional =
+          await ChineseConverter.isTraditionalChineseEnvironment(context);
+      if (isTraditional) {
+        // 对每个搜索结果进行转换
+        for (var anime in results) {
+          if (anime['animeTitle'] != null) {
+            anime['animeTitle'] =
+                ChineseConverter.convert(anime['animeTitle'].toString());
+          }
+        }
+      }
+
       setState(() {
         _isSearching = false;
         _searchResults = results;
@@ -311,16 +325,24 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           : (data is Map<String, dynamic> ? data['episodes'] : null);
 
       final parsedEpisodes = <_EpisodeItem>[];
+      // 检查是否需要繁体中文
+      final isTraditional =
+          await ChineseConverter.isTraditionalChineseEnvironment(context);
       if (rawEpisodes is List) {
         for (final entry in rawEpisodes) {
           if (entry is! Map) continue;
           final map = Map<String, dynamic>.from(entry);
           final episodeId = _tryParsePositiveInt(map['episodeId']);
           if (episodeId == null) continue;
+          var episodeTitle = map['episodeTitle']?.toString().trim() ?? '未命名剧集';
+          // 对剧集标题进行简繁转换
+          if (isTraditional) {
+            episodeTitle = ChineseConverter.convert(episodeTitle);
+          }
           parsedEpisodes.add(
             _EpisodeItem(
               episodeId: episodeId,
-              episodeTitle: map['episodeTitle']?.toString().trim() ?? '未命名剧集',
+              episodeTitle: episodeTitle,
               episodeNumber: _tryParsePositiveInt(map['episodeNumber']),
             ),
           );
