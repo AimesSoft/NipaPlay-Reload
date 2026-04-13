@@ -354,10 +354,21 @@ class DesktopExitHandler
     _scheduleHardExitFallback();
     await _prepareForExit();
 
+    if (Platform.isMacOS) {
+      try {
+        // 给最近一次偏好写入一个短暂收尾窗口，避免刚改完设置立即退出时丢失。
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        await windowManager.destroy();
+        return;
+      } catch (e) {
+        debugPrint('[DesktopExitHandler] macOS destroy 失败，回退为 close: $e');
+      }
+    }
+
     try {
       await _closeWindowSafely();
     } catch (_) {}
-    if (Platform.isMacOS || Platform.isLinux) {
+    if (Platform.isLinux) {
       exit(0);
     }
   }

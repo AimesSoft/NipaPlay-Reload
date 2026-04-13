@@ -1,17 +1,15 @@
 // blur_dropdown.dart
 // ignore_for_file: deprecated_member_use
 
-import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:provider/provider.dart';
 
 class BlurDropdown<T> extends StatefulWidget {
   final GlobalKey dropdownKey;
   final List<DropdownMenuItemData<T>> items;
-  final ValueChanged<T> onItemSelected;
+  final FutureOr<void> Function(T value) onItemSelected;
 
   const BlurDropdown({
     super.key,
@@ -29,6 +27,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     with SingleTickerProviderStateMixin {
   OverlayEntry? _overlayEntry;
   bool _isDropdownOpen = false;
+  bool _isSelecting = false;
   T? _currentSelectedValue;
 
   late AnimationController _animationController;
@@ -118,10 +117,11 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const activeColor = Color(0xFFFF2E55);
-    final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1);
-    final bgColor = isDark 
-        ? Colors.white.withValues(alpha: 0.12) 
-        : Colors.white;
+    final idleBorderColor = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : Colors.black.withValues(alpha: 0.1);
+    final bgColor =
+        isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white;
 
     return Container(
       height: 40, // 统一高度
@@ -140,6 +140,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
         children: [
           GestureDetector(
             onTap: () {
+              if (_isSelecting) return;
               if (_animationController.isAnimating) return;
               if (_isDropdownOpen) {
                 _closeDropdown();
@@ -158,12 +159,12 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                   ),
                   const SizedBox(width: 10),
                   RotationTransition(
-                    turns:
-                        Tween(begin: 0.0, end: 0.5).animate(_animationController),
+                    turns: Tween(begin: 0.0, end: 0.5)
+                        .animate(_animationController),
                     child: Icon(
                       Ionicons.chevron_down_outline,
-                      color: _isDropdownOpen 
-                          ? activeColor 
+                      color: _isDropdownOpen
+                          ? activeColor
                           : (isDark ? Colors.white : Colors.black87),
                     ),
                   ),
@@ -186,6 +187,26 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       }
     }
     return widget.items.first.title;
+  }
+
+  Future<void> _handleItemSelected(T value) async {
+    if (_isSelecting) return;
+    setState(() {
+      _isSelecting = true;
+      _currentSelectedValue = value;
+    });
+    try {
+      await widget.onItemSelected(value);
+    } catch (e) {
+      debugPrint('[BlurDropdown] 选项回调执行失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSelecting = false;
+        });
+        _closeDropdown();
+      }
+    }
   }
 
   void _openDropdown() {
@@ -216,10 +237,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     final Color borderColor = isDark
         ? Colors.white.withValues(alpha: 0.1)
         : Colors.black.withValues(alpha: 0.1);
-    
-    final Color dropdownBgColor = isDark
-        ? const Color(0xFF2C2C2C)
-        : const Color(0xFFFFFFFF);
+
+    final Color dropdownBgColor =
+        isDark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFFFF);
 
     _overlayEntry = OverlayEntry(
       builder: (context) {
@@ -227,7 +247,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
           children: [
             Positioned.fill(
               child: GestureDetector(
-                onTap: _closeDropdown,
+                onTap: _isSelecting ? null : _closeDropdown,
                 behavior: HitTestBehavior.opaque,
                 child: Container(color: Colors.transparent),
               ),
@@ -284,13 +304,11 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                       itemBuilder: (context, index) {
                         final item = widget.items[index];
                         final Widget menuItem = InkWell(
-                          onTap: () {
-                            setState(() {
-                              _currentSelectedValue = item.value;
-                            });
-                            widget.onItemSelected(item.value);
-                            _closeDropdown();
-                          },
+                          onTap: _isSelecting
+                              ? null
+                              : () async {
+                                  await _handleItemSelected(item.value);
+                                },
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
@@ -299,11 +317,15 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                             ),
                             decoration: BoxDecoration(
                               color: item.value == _currentSelectedValue
-                                  ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05))
+                                  ? (isDark
+                                      ? Colors.white.withValues(alpha: 0.1)
+                                      : Colors.black.withValues(alpha: 0.05))
                                   : Colors.transparent,
                               border: Border(
                                 bottom: BorderSide(
-                                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.1)
+                                      : Colors.black.withValues(alpha: 0.05),
                                   width: 0.5,
                                 ),
                               ),
@@ -335,7 +357,8 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
   }
 
   void _closeDropdown() {
-    if (!_isDropdownOpen || (_animationController.status == AnimationStatus.reverse)) {
+    if (!_isDropdownOpen ||
+        (_animationController.status == AnimationStatus.reverse)) {
       return;
     }
     _animationController.reverse().then((_) {

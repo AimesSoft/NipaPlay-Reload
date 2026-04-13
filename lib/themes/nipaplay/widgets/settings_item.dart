@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -10,18 +12,22 @@ const Color _fluentAccentColor = Color(0xFFFF2E55);
 enum SettingsItemType {
   /// 下拉菜单类型
   dropdown,
-  /// 开关类型  
+
+  /// 开关类型
   toggle,
+
   /// 按钮类型（可点击执行操作）
   button,
+
   /// 滑块类型
   slider,
+
   /// 快捷键设置类型
   hotkey,
 }
 
 /// 统一的设置项组件
-/// 
+///
 /// 支持多种类型的设置项：
 /// - 下拉菜单（dropdown）
 /// - 开关（toggle）
@@ -31,72 +37,72 @@ enum SettingsItemType {
 class SettingsItem extends StatelessWidget {
   /// 设置项标题
   final String title;
-  
+
   /// 设置项描述
   final String? subtitle;
-  
+
   /// 设置项类型
   final SettingsItemType type;
-  
+
   /// 图标（可选）
   final IconData? icon;
-  
+
   /// 是否启用，默认为true
   final bool enabled;
-  
+
   // === 下拉菜单相关参数 ===
   /// 下拉菜单的选项列表
   final List<DropdownMenuItemData>? dropdownItems;
-  
+
   /// 下拉菜单选择回调
-  final Function(dynamic)? onDropdownChanged;
-  
+  final FutureOr<void> Function(dynamic)? onDropdownChanged;
+
   /// 下拉菜单的GlobalKey
   final GlobalKey? dropdownKey;
-  
+
   // === 开关相关参数 ===
   /// 开关的当前值
   final bool? switchValue;
-  
+
   /// 开关状态改变回调
   final Function(bool)? onSwitchChanged;
-  
+
   // === 按钮相关参数 ===
   /// 按钮点击回调
   final VoidCallback? onTap;
-  
+
   /// 按钮右侧图标（默认为箭头）
   final IconData? trailingIcon;
-  
+
   /// 按钮是否为危险操作（使用红色图标）
   final bool isDestructive;
-  
+
   // === 滑块相关参数 ===
   /// 滑块当前值
   final double? sliderValue;
-  
+
   /// 滑块最小值
   final double? sliderMin;
-  
+
   /// 滑块最大值
   final double? sliderMax;
-  
+
   /// 滑块分段数量
   final int? sliderDivisions;
-  
+
   /// 滑块值改变回调
   final Function(double)? onSliderChanged;
-  
+
   /// 滑块值格式化函数
   final String Function(double)? sliderLabelFormatter;
-  
+
   // === 快捷键相关参数 ===
   /// 当前快捷键文本
   final String? hotkeyText;
-  
+
   /// 是否正在录制快捷键
   final bool isRecording;
-  
+
   /// 快捷键点击回调
   final VoidCallback? onHotkeyTap;
 
@@ -138,7 +144,7 @@ class SettingsItem extends StatelessWidget {
     IconData? icon,
     bool enabled = true,
     required List<DropdownMenuItemData> items,
-    required Function(dynamic) onChanged,
+    required FutureOr<void> Function(dynamic) onChanged,
     GlobalKey? dropdownKey,
   }) {
     return SettingsItem(

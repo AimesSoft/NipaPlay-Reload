@@ -540,10 +540,23 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 加载快进快退时间设置
   Future<void> _loadSeekStepSeconds() async {
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getDouble(_seekStepSecondsKey) ??
-        prefs.getInt(_seekStepSecondsKey)?.toDouble() ??
-        10.0;
-    _seekStepSeconds = stored;
+    try {
+      _seekStepSeconds = prefs.getDouble(_seekStepSecondsKey) ?? 10.0;
+    } catch (e) {
+      // 旧数据类型异常（例如曾写入为 int）时，直接重置为默认值并统一写回 double。
+      _seekStepSeconds = 10.0;
+      debugPrint(
+        '[VideoPlayerState] 读取$_seekStepSecondsKey失败，已重置为默认值: $e',
+      );
+      try {
+        await prefs.remove(_seekStepSecondsKey);
+        await prefs.setDouble(_seekStepSecondsKey, _seekStepSeconds);
+      } catch (persistError) {
+        debugPrint(
+          '[VideoPlayerState] 重置$_seekStepSecondsKey失败: $persistError',
+        );
+      }
+    }
     notifyListeners();
   }
 

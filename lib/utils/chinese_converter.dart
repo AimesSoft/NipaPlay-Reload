@@ -155,9 +155,6 @@ class ChineseConverter {
           isTraditional =
               AppLocaleUtils.isTraditionalChineseLocale(systemLocale);
         }
-
-        print(
-            '简转繁环境检查 (prefs): languageMode=$languageMode, isTraditional=$isTraditional');
         return isTraditional;
       } catch (e) {
         print('获取语言设置失败: $e');
