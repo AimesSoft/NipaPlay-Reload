@@ -17,6 +17,7 @@ class ChineseConverter {
     try {
       _ensureDictLoaded();
       final result = ChineseHelper.convertToTraditionalChinese(text);
+      print('简转繁转换: $text -> $result');
       return result;
     } catch (e) {
       print('简转繁失败: $e');
@@ -31,6 +32,7 @@ class ChineseConverter {
     try {
       _ensureDictLoaded();
       final result = ChineseHelper.convertToTraditionalChinese(text);
+      print('简转繁转换 (async): $text -> $result');
       return result;
     } catch (e) {
       print('简转繁失败 (async): $e');

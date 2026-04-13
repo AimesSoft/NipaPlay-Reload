@@ -30,7 +30,6 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'dart:ui' as ui;
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/chinese_converter.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -86,12 +85,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
   bool _isJellyfinConnected = false;
   bool _isSyncing = false;
-
-  // 新增状态变量
-  String? _lastLanguageSetting; // 上次检查的语言设置
-  bool _isManualRefresh = false; // 是否是手动刷新
-  Set<int> _existingAnimeIds = {}; // 已存在的番剧ID
-  bool _languageUpdated = false; // 语言是否已更新
 
   // 🔥 临时禁用页面保活
   // @override
@@ -253,12 +246,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     final uniqueAnimeItemsFromHistory = latestHistoryItemMap.values.toList();
     uniqueAnimeItemsFromHistory
         .sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
-
-    // 记录已存在的番剧ID
-    _existingAnimeIds = latestHistoryItemMap.keys.toSet();
-
-    // 检查语言设置是否变化
-    _checkLanguageChange();
 
     Map<int, String> loadedPersistedUrls = {};
     final prefs = await SharedPreferences.getInstance();
@@ -477,12 +464,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     });
 
     try {
-      // 检查语言设置是否变化
-      await _checkLanguageChange();
-
-      // 设置为手动刷新模式
-      _isManualRefresh = true;
-
       final historyProvider =
           Provider.of<WatchHistoryProvider>(context, listen: false);
       historyProvider.clearInvalidPathCache();
@@ -642,12 +623,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
     for (var historyItem in _uniqueLibraryItems) {
       if (historyItem.animeId != null) {
-        // 检查是否是手动刷新，如果是，只处理新增的条目，除非语言已更新
-        if (_isManualRefresh &&
-            !_languageUpdated &&
-            _existingAnimeIds.contains(historyItem.animeId!)) {
-          continue; // 跳过已存在的条目
-        }
+        // 🔥 修改条件：只要动画ID不为空，就尝试获取详情
+        // 不再跳过已有图片或已缓存的项目
 
         Future<void> fetchDetailForItem() async {
           try {
@@ -703,10 +680,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
     await Future.wait(pendingRequests);
 
-    // 重置标志
-    _isManualRefresh = false;
-    _languageUpdated = false; // 重置语言更新标志
-
     // 🔥 CPU优化：最后一次性刷新UI，而不是每个项目都setState
     if (mounted) {
       setState(() {
@@ -742,27 +715,6 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     } catch (e) {
       // Silent fail
     }
-  }
-
-  Future<void> _checkLanguageChange() async {
-    // 获取当前语言设置
-    final prefs = await SharedPreferences.getInstance();
-    final currentLanguage =
-        prefs.getString(SettingsKeys.appLanguageMode) ?? 'auto';
-
-    // 检查语言设置是否变化
-    if (_lastLanguageSetting != null &&
-        _lastLanguageSetting != currentLanguage) {
-      // 语言设置变化，标记所有缓存为需要更新
-      _fetchedFullAnimeData.clear();
-      // 标记语言已更新
-      _languageUpdated = true;
-      // 重新获取所有番剧详情
-      await _fetchAndPersistFullDetailsInBackground();
-    }
-
-    // 更新上次语言设置
-    _lastLanguageSetting = currentLanguage;
   }
 
   void _navigateToAnimeDetail(int animeId) {
