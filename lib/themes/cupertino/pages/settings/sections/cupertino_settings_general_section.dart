@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.
 import '../widgets/appearance_setting_tile.dart';
 import '../widgets/language_setting_tile.dart';
 import '../widgets/player_setting_tile.dart';
+import '../widgets/danmaku_setting_tile.dart';
 import '../widgets/external_player_setting_tile.dart';
 import '../widgets/network_setting_tile.dart';
 import '../widgets/media_server_setting_tile.dart';
@@ -19,10 +20,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = CupertinoTheme.of(context)
-        .textTheme
-        .textStyle
-        .copyWith(
+    final textStyle = CupertinoTheme.of(context).textTheme.textStyle.copyWith(
           fontSize: 13,
           color: CupertinoDynamicColor.resolve(
             CupertinoColors.systemGrey,
@@ -47,6 +45,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
             CupertinoLanguageSettingTile(),
             CupertinoUpdateCheckSettingTile(),
             CupertinoPlayerSettingTile(),
+            CupertinoDanmakuSettingTile(),
             CupertinoExternalPlayerSettingTile(),
             CupertinoNetworkSettingTile(),
             CupertinoStorageSettingTile(),

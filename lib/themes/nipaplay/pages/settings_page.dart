@@ -14,6 +14,7 @@ import 'package:nipaplay/utils/globals.dart'
     as globals; // 导入包含 isDesktop 的全局变量文件
 import 'package:nipaplay/pages/shortcuts_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
+import 'package:nipaplay/themes/nipaplay/pages/settings/danmaku_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart'; // 导入外部调用设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
@@ -102,6 +103,7 @@ class _SettingsPageState extends State<SettingsPage>
   static const String _entryNetwork = 'network';
   static const String _entryBackupRestore = 'backup_restore';
   static const String _entryPlayer = 'player';
+  static const String _entryDanmaku = 'danmaku';
   static const String _entryExternalPlayer = 'external_player';
   static const String _entryShortcuts = 'shortcuts';
   static const String _entryRemoteMediaLibrary = 'remote_media_library';
@@ -214,7 +216,8 @@ class _SettingsPageState extends State<SettingsPage>
     // ResponsiveContainer 会根据 isDesktop 决定是否显示 currentPage
     return SettingsNoRippleTheme(
       child: ResponsiveContainer(
-        currentPage: currentPage ?? Container(), // 将当前页面状态传递给 ResponsiveContainer
+        currentPage:
+            currentPage ?? Container(), // 将当前页面状态传递给 ResponsiveContainer
         // child 是 ListView，始终显示
         child: ListView.separated(
           itemCount: entries.length,
@@ -291,6 +294,16 @@ class _SettingsPageState extends State<SettingsPage>
         icon: Ionicons.play_circle_outline,
         pageTitle: l10n.playerSettings,
         page: const PlayerSettingsPage(),
+      ),
+    );
+
+    entries.add(
+      const _SettingEntry(
+        id: _entryDanmaku,
+        title: '弹幕',
+        icon: Ionicons.hardware_chip_outline,
+        pageTitle: '弹幕设置',
+        page: DanmakuSettingsPage(),
       ),
     );
 
