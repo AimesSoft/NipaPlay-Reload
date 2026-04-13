@@ -3,6 +3,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
 import 'package:nipaplay/models/emby_model.dart';
@@ -77,8 +78,8 @@ class _CupertinoMediaServerSettingsPageState
     final platform = _clientPlatformLabel();
     final customDeviceId =
         await MediaServerDeviceIdService.instance.getCustomDeviceId();
-    final generatedDeviceId =
-        await MediaServerDeviceIdService.instance.getOrCreateGeneratedDeviceId();
+    final generatedDeviceId = await MediaServerDeviceIdService.instance
+        .getOrCreateGeneratedDeviceId();
     final effectiveDeviceId =
         await MediaServerDeviceIdService.instance.getEffectiveDeviceId(
       appName: appName,
@@ -101,17 +102,18 @@ class _CupertinoMediaServerSettingsPageState
   }
 
   Widget _buildDeviceIdSection(BuildContext context) {
+    final l10n = context.l10n;
     return FutureBuilder<_MediaServerDeviceIdInfo>(
       future: _deviceIdInfoFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const CupertinoSettingsGroupCard(
+          return CupertinoSettingsGroupCard(
             margin: EdgeInsets.zero,
             children: [
               CupertinoSettingsTile(
-                title: Text('设备标识 (DeviceId)'),
-                subtitle: Text('正在加载...'),
-                trailing: CupertinoActivityIndicator(radius: 10),
+                title: Text(l10n.deviceIdTitle),
+                subtitle: Text(l10n.loading),
+                trailing: const CupertinoActivityIndicator(radius: 10),
               ),
             ],
           );
@@ -123,14 +125,16 @@ class _CupertinoMediaServerSettingsPageState
             margin: EdgeInsets.zero,
             children: [
               CupertinoSettingsTile(
-                title: const Text('设备标识 (DeviceId)'),
+                title: Text(l10n.deviceIdTitle),
                 subtitle: Text(
-                  snapshot.hasError ? '加载失败：${snapshot.error}' : '加载失败',
+                  snapshot.hasError
+                      ? l10n.loadFailedWithError('${snapshot.error}')
+                      : l10n.loadFailed,
                 ),
                 trailing: CupertinoButton(
                   padding: EdgeInsets.zero,
                   onPressed: _refreshDeviceIdInfo,
-                  child: const Text('重试'),
+                  child: Text(l10n.retry),
                 ),
               ),
             ],
@@ -139,36 +143,36 @@ class _CupertinoMediaServerSettingsPageState
 
         final bool hasCustom = info.customDeviceId != null;
         final String customSubtitle = hasCustom
-            ? '已设置：${info.customDeviceId}'
-            : '未设置（使用自动生成）';
+            ? l10n.deviceIdCustomSet(info.customDeviceId!)
+            : l10n.deviceIdCustomUnset;
 
         return CupertinoSettingsGroupCard(
           margin: EdgeInsets.zero,
           addDividers: true,
           children: [
             CupertinoSettingsTile(
-              title: const Text('设备标识 (DeviceId)'),
-              subtitle: const Text('用于 Jellyfin / Emby 区分不同设备，避免互踢登出。'),
+              title: Text(l10n.deviceIdTitle),
+              subtitle: Text(l10n.deviceIdDescription),
               showChevron: true,
               onTap: () => _showCustomDeviceIdDialog(info),
             ),
             CupertinoSettingsTile(
-              title: const Text('当前 DeviceId'),
+              title: Text(l10n.deviceIdCurrent),
               subtitle: Text(info.effectiveDeviceId),
             ),
             CupertinoSettingsTile(
-              title: const Text('自动生成标识'),
+              title: Text(l10n.deviceIdGenerated),
               subtitle: Text(info.generatedDeviceId),
             ),
             CupertinoSettingsTile(
-              title: const Text('自定义 DeviceId'),
+              title: Text(l10n.deviceIdCustom),
               subtitle: Text(customSubtitle),
               showChevron: true,
               onTap: () => _showCustomDeviceIdDialog(info),
             ),
             CupertinoSettingsTile(
-              title: const Text('恢复自动生成'),
-              subtitle: const Text('清除自定义 DeviceId'),
+              title: Text(l10n.deviceIdRestoreAuto),
+              subtitle: Text(l10n.deviceIdRestoreAutoSubtitle),
               onTap: hasCustom
                   ? () async {
                       try {
@@ -178,14 +182,14 @@ class _CupertinoMediaServerSettingsPageState
                         _refreshDeviceIdInfo();
                         AdaptiveSnackBar.show(
                           context,
-                          message: '已恢复自动生成的设备ID',
+                          message: l10n.deviceIdRestoreSuccess,
                           type: AdaptiveSnackBarType.success,
                         );
                       } catch (e) {
                         if (!context.mounted) return;
                         AdaptiveSnackBar.show(
                           context,
-                          message: '操作失败：$e',
+                          message: l10n.operationFailed('$e'),
                           type: AdaptiveSnackBarType.error,
                         );
                       }
@@ -199,35 +203,36 @@ class _CupertinoMediaServerSettingsPageState
   }
 
   Future<void> _showCustomDeviceIdDialog(_MediaServerDeviceIdInfo info) async {
+    final l10n = context.l10n;
     final controller = TextEditingController(text: info.customDeviceId ?? '');
 
     final String? input = await showCupertinoDialog<String>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('自定义 DeviceId'),
+        title: Text(l10n.deviceIdDialogTitle),
         content: Column(
           children: [
             const SizedBox(height: 12),
-            const Text('留空表示使用自动生成的设备标识。'),
+            Text(l10n.deviceIdDialogHint),
             const SizedBox(height: 12),
             CupertinoTextField(
               controller: controller,
-              placeholder: '例如: My-iPhone-01',
+              placeholder: l10n.deviceIdDialogPlaceholder,
               autocorrect: false,
             ),
             const SizedBox(height: 8),
-            const Text('不要包含双引号/换行，长度不超过128。'),
+            Text(l10n.deviceIdDialogValidationHint),
           ],
         ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             onPressed: () => Navigator.of(ctx).pop(controller.text),
             isDefaultAction: true,
-            child: const Text('保存'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -243,27 +248,28 @@ class _CupertinoMediaServerSettingsPageState
       _refreshDeviceIdInfo();
       AdaptiveSnackBar.show(
         context,
-        message: '设备ID已更新，建议断开并重新连接服务器',
+        message: l10n.deviceIdUpdatedHint,
         type: AdaptiveSnackBarType.success,
       );
     } on FormatException {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: 'DeviceId 无效：请避免双引号/换行，且长度 ≤ 128',
+        message: l10n.deviceIdInvalid,
         type: AdaptiveSnackBarType.error,
       );
     } catch (e) {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '保存失败：$e',
+        message: l10n.saveFailedWithError('$e'),
         type: AdaptiveSnackBarType.error,
       );
     }
   }
 
   Future<void> _showNetworkServerDialog(MediaServerType type) async {
+    final l10n = context.l10n;
     // 检查是否已连接
     bool isConnected;
     if (type == MediaServerType.jellyfin) {
@@ -280,7 +286,7 @@ class _CupertinoMediaServerSettingsPageState
         final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
         AdaptiveSnackBar.show(
           context,
-          message: '$label 服务器已连接',
+          message: l10n.networkServerConnected(label),
           type: AdaptiveSnackBarType.success,
         );
       }
@@ -299,7 +305,7 @@ class _CupertinoMediaServerSettingsPageState
       final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
       AdaptiveSnackBar.show(
         context,
-        message: '$label 服务器设置已更新',
+        message: l10n.networkServerSettingsUpdated(label),
         type: AdaptiveSnackBarType.success,
       );
     }
@@ -332,6 +338,7 @@ class _CupertinoMediaServerSettingsPageState
 
   Future<void> _disconnectNetworkServer(MediaServerType type) async {
     final buildContext = context;
+    final l10n = buildContext.l10n;
     final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
     final jellyfinProvider = buildContext.read<JellyfinProvider>();
     final embyProvider = buildContext.read<EmbyProvider>();
@@ -339,17 +346,17 @@ class _CupertinoMediaServerSettingsPageState
     final confirm = await showCupertinoDialog<bool>(
       context: buildContext,
       builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('断开连接'),
-        content: Text('确定要断开与 $label 服务器的连接吗？'),
+        title: Text(l10n.disconnect),
+        content: Text(l10n.disconnectServerConfirm(label)),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('断开连接'),
+            child: Text(l10n.disconnect),
           ),
         ],
       ),
@@ -367,27 +374,28 @@ class _CupertinoMediaServerSettingsPageState
       if (!buildContext.mounted) return;
       AdaptiveSnackBar.show(
         buildContext,
-        message: '$label 已断开连接',
+        message: l10n.networkServerDisconnected(label),
         type: AdaptiveSnackBarType.success,
       );
     } catch (e) {
       if (!buildContext.mounted) return;
       AdaptiveSnackBar.show(
         buildContext,
-        message: '断开 $label 失败：$e',
+        message: l10n.disconnectServerFailed(label, '$e'),
         type: AdaptiveSnackBarType.error,
       );
     }
   }
 
   Future<void> _refreshNetworkMedia(MediaServerType type) async {
+    final l10n = context.l10n;
     final label = type == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby';
     if (type == MediaServerType.jellyfin) {
       final provider = context.read<JellyfinProvider>();
       if (!provider.isConnected) {
         AdaptiveSnackBar.show(
           context,
-          message: '尚未连接到 $label 服务器',
+          message: l10n.networkServerNotConnected(label),
           type: AdaptiveSnackBarType.warning,
         );
         return;
@@ -399,7 +407,7 @@ class _CupertinoMediaServerSettingsPageState
       if (!provider.isConnected) {
         AdaptiveSnackBar.show(
           context,
-          message: '尚未连接到 $label 服务器',
+          message: l10n.networkServerNotConnected(label),
           type: AdaptiveSnackBarType.warning,
         );
         return;
@@ -411,7 +419,7 @@ class _CupertinoMediaServerSettingsPageState
     if (!mounted) return;
     AdaptiveSnackBar.show(
       context,
-      message: '$label 媒体库已刷新',
+      message: l10n.networkLibraryRefreshed(label),
       type: AdaptiveSnackBarType.success,
     );
   }
@@ -419,13 +427,14 @@ class _CupertinoMediaServerSettingsPageState
   Future<void> _showNetworkMediaLibraryBottomSheet({
     MediaServerType? initialServer,
   }) async {
+    final l10n = context.l10n;
     final jellyfinProvider = context.read<JellyfinProvider>();
     final embyProvider = context.read<EmbyProvider>();
 
     if (!jellyfinProvider.isConnected && !embyProvider.isConnected) {
       AdaptiveSnackBar.show(
         context,
-        message: '请先连接 Jellyfin 或 Emby 服务器',
+        message: l10n.connectJellyfinOrEmbyFirst,
         type: AdaptiveSnackBarType.warning,
       );
       return;
@@ -433,7 +442,7 @@ class _CupertinoMediaServerSettingsPageState
 
     await CupertinoBottomSheet.show(
       context: context,
-      title: '网络媒体库',
+      title: l10n.networkMediaLibrary,
       floatingTitle: true,
       child: CupertinoNetworkMediaLibrarySheet(
         jellyfinProvider: jellyfinProvider,
@@ -459,6 +468,7 @@ class _CupertinoMediaServerSettingsPageState
   Future<void> _showDandanplayConnectionDialog(
     DandanplayRemoteProvider provider,
   ) async {
+    final l10n = context.l10n;
     final bool hasExisting = provider.serverUrl?.isNotEmpty == true;
     final config = await showCupertinoDandanplayConnectionDialog(
       context: context,
@@ -477,15 +487,15 @@ class _CupertinoMediaServerSettingsPageState
       AdaptiveSnackBar.show(
         context,
         message: hasExisting
-            ? '弹弹play 远程服务配置已更新'
-            : '弹弹play 远程服务已连接',
+            ? l10n.dandanRemoteConfigUpdated
+            : l10n.dandanRemoteConnected,
         type: AdaptiveSnackBarType.success,
       );
     } catch (e) {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '连接失败：$e',
+        message: l10n.connectFailedWithError('$e'),
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -494,19 +504,20 @@ class _CupertinoMediaServerSettingsPageState
   Future<void> _refreshDandanLibrary(
     DandanplayRemoteProvider provider,
   ) async {
+    final l10n = context.l10n;
     try {
       await provider.refresh();
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '远程媒体库已刷新',
+        message: l10n.remoteLibraryRefreshed,
         type: AdaptiveSnackBarType.success,
       );
     } catch (e) {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '刷新失败：$e',
+        message: l10n.refreshFailedWithError('$e'),
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -515,22 +526,21 @@ class _CupertinoMediaServerSettingsPageState
   Future<void> _disconnectDandanplay(
     DandanplayRemoteProvider provider,
   ) async {
+    final l10n = context.l10n;
     final confirm = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('断开弹弹play远程服务'),
-        content: const Text(
-          '确定要断开与弹弹play远程服务的连接吗？\n\n这将清除保存的服务器地址与 API 密钥。',
-        ),
+        title: Text(l10n.disconnectDandanRemoteTitle),
+        content: Text(l10n.disconnectDandanRemoteContent),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('断开连接'),
+            child: Text(l10n.disconnect),
           ),
         ],
       ),
@@ -543,14 +553,14 @@ class _CupertinoMediaServerSettingsPageState
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '已断开与弹弹play远程服务的连接',
+        message: l10n.dandanRemoteDisconnected,
         type: AdaptiveSnackBarType.success,
       );
     } catch (e) {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '断开失败：$e',
+        message: l10n.disconnectFailedWithError('$e'),
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -562,11 +572,12 @@ class _CupertinoMediaServerSettingsPageState
       CupertinoColors.systemGroupedBackground,
       context,
     );
+    final l10n = context.l10n;
     final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '网络媒体库',
+      appBar: AdaptiveAppBar(
+        title: l10n.networkMediaLibrary,
         useNativeToolbar: true,
       ),
       body: ColoredBox(
@@ -604,12 +615,12 @@ class _CupertinoMediaServerSettingsPageState
                 padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
                 children: [
                   Text(
-                    '在此管理 Jellyfin / Emby 服务器连接，并设置弹弹play 远程媒体库。',
+                    l10n.networkMediaLibraryIntro,
                     style: descriptionStyle,
                   ),
                   const SizedBox(height: 16),
                   CupertinoMediaServerCard(
-                    title: 'Jellyfin 媒体服务器',
+                    title: l10n.jellyfinMediaServerTitle,
                     icon: CupertinoIcons.tv,
                     accentColor: CupertinoColors.systemBlue,
                     isConnected: jellyfinProvider.isConnected,
@@ -645,12 +656,13 @@ class _CupertinoMediaServerSettingsPageState
                               MediaServerType.jellyfin,
                             )
                         : null,
-                    disconnectedDescription: '连接 Jellyfin 服务器以同步远程媒体库与播放记录。',
+                    disconnectedDescription:
+                        l10n.jellyfinDisconnectedDescription,
                     serverBrand: ServerBrand.jellyfin,
                   ),
                   const SizedBox(height: 16),
                   CupertinoMediaServerCard(
-                    title: 'Emby 媒体服务器',
+                    title: l10n.embyMediaServerTitle,
                     icon: CupertinoIcons.play_rectangle,
                     accentColor: const Color(0xFF52B54B),
                     isConnected: embyProvider.isConnected,
@@ -682,7 +694,7 @@ class _CupertinoMediaServerSettingsPageState
                     onRefresh: embyProvider.isConnected
                         ? () => _refreshNetworkMedia(MediaServerType.emby)
                         : null,
-                    disconnectedDescription: '连接 Emby 服务器后可浏览个人媒体库并远程播放。',
+                    disconnectedDescription: l10n.embyDisconnectedDescription,
                     serverBrand: ServerBrand.emby,
                   ),
                   const SizedBox(height: 16),

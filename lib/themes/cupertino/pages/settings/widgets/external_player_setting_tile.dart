@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_external_player_settings_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -18,16 +19,16 @@ class CupertinoExternalPlayerSettingTile extends StatelessWidget {
       builder: (context, settingsProvider, child) {
         final String subtitle = externalSupported
             ? (settingsProvider.useExternalPlayer
-                ? '已启用外部播放器'
-                : '未启用外部播放器')
-            : '仅桌面端支持';
+                ? context.l10n.externalPlayerEnabled
+                : context.l10n.externalPlayerDisabled)
+            : context.l10n.desktopOnlySupported;
 
         return CupertinoSettingsTile(
           leading: Icon(
             CupertinoIcons.square_arrow_up,
             color: resolveSettingsIconColor(context),
           ),
-          title: const Text('外部调用'),
+          title: Text(context.l10n.externalCall),
           subtitle: Text(subtitle),
           backgroundColor: tileColor,
           showChevron: true,

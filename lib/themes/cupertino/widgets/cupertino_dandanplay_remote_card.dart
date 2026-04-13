@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
 
@@ -100,7 +101,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: Text(
-            '弹弹play 远程访问',
+            context.l10n.dandanRemoteCardTitle,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -127,19 +128,19 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
         CupertinoColors.systemGreen,
         context,
       );
-      label = '已同步';
+      label = context.l10n.dandanRemoteStatusSynced;
     } else if (hasConfig) {
       pillColor = CupertinoDynamicColor.resolve(
         CupertinoColors.systemOrange,
         context,
       );
-      label = '连接失败';
+      label = context.l10n.dandanRemoteStatusConnectFailed;
     } else {
       pillColor = CupertinoDynamicColor.resolve(
         CupertinoColors.systemGrey,
         context,
       );
-      label = '未配置';
+      label = context.l10n.dandanRemoteStatusNotConfigured;
     }
 
     return Container(
@@ -183,7 +184,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              errorMessage ?? '出现未知错误',
+              errorMessage ?? context.l10n.unknownErrorOccurred,
               style: TextStyle(
                 color: borderColor,
                 fontSize: 13,
@@ -201,14 +202,16 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
     children.addAll([
       _buildInfoRow(
         context,
-        label: '服务器地址',
-        value: serverUrl?.isNotEmpty == true ? serverUrl! : '未知',
+        label: context.l10n.dandanRemoteServerAddressLabel,
+        value: serverUrl?.isNotEmpty == true
+            ? serverUrl!
+            : context.l10n.mediaServerUnknown,
       ),
       const SizedBox(height: 8),
       _buildInfoRow(
         context,
-        label: '最近同步',
-        value: _formatRelativeTime(lastSyncedAt),
+        label: context.l10n.dandanRemoteLastSyncedLabel,
+        value: _formatRelativeTime(context, lastSyncedAt),
       ),
       const SizedBox(height: 12),
       _buildStatsRow(context),
@@ -221,10 +224,19 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
   }
 
   Widget _buildStatsRow(BuildContext context) {
-    final stats = [
-      {'label': '番剧条目', 'value': '$animeGroupCount'},
-      {'label': '视频文件', 'value': '$episodeCount'},
-      {'label': '最近同步', 'value': _formatRelativeTime(lastSyncedAt)},
+    final List<Map<String, String>> stats = [
+      {
+        'label': context.l10n.dandanRemoteAnimeEntries,
+        'value': '$animeGroupCount',
+      },
+      {
+        'label': context.l10n.dandanRemoteVideoFiles,
+        'value': '$episodeCount',
+      },
+      {
+        'label': context.l10n.dandanRemoteLastSyncedLabel,
+        'value': _formatRelativeTime(context, lastSyncedAt),
+      },
     ];
 
     return Row(
@@ -235,8 +247,8 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
             padding: EdgeInsets.only(right: index == stats.length - 1 ? 0 : 12),
             child: _buildStatTile(
               context,
-              label: stat['label']! as String,
-              value: stat['value']! as String,
+              label: stat['label']!,
+              value: stat['value']!,
             ),
           ),
         );
@@ -310,7 +322,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
-          '暂无远程媒体记录，可尝试刷新或确认远程访问设置。',
+          context.l10n.dandanRemoteNoRecordsHint,
           style: TextStyle(fontSize: 13, color: textColor, height: 1.35),
         ),
       );
@@ -325,7 +337,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '最近更新',
+          context.l10n.dandanRemoteRecentUpdates,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -353,7 +365,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
     );
 
     final String subtitle =
-        '${latest.episodeTitle} · ${_formatRelativeTime(latest.lastPlay ?? latest.created)}';
+        '${latest.episodeTitle} · ${_formatRelativeTime(context, latest.lastPlay ?? latest.created)}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -418,7 +430,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              '共 ${group.episodeCount} 集',
+              context.l10n.dandanRemoteEpisodeCount(group.episodeCount),
               style: TextStyle(color: secondary, fontSize: 12),
             ),
           ),
@@ -432,7 +444,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
     buttons.add(
       _buildActionButton(
         context,
-        label: '管理连接',
+        label: context.l10n.dandanRemoteManageConnection,
         icon: CupertinoIcons.slider_horizontal_3,
         onPressed: isLoading ? null : onManage,
       ),
@@ -442,7 +454,9 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
       buttons.add(
         _buildActionButton(
           context,
-          label: isLoading ? '同步中...' : '刷新媒体库',
+          label: isLoading
+              ? context.l10n.dandanRemoteSyncing
+              : context.l10n.dandanRemoteRefreshLibrary,
           icon: CupertinoIcons.refresh,
           onPressed: isLoading ? null : onRefresh,
         ),
@@ -453,7 +467,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
       buttons.add(
         _buildActionButton(
           context,
-          label: '断开连接',
+          label: context.l10n.disconnect,
           icon: CupertinoIcons.clear,
           onPressed: isLoading ? null : onDisconnect,
           destructive: true,
@@ -542,7 +556,7 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '通过弹弹play 桌面端开启远程访问后，可在此同步家中电脑或 NAS 上的番剧记录并直接播放。',
+          context.l10n.dandanRemoteDisconnectedHintLong,
           style: TextStyle(
             fontSize: 14,
             height: 1.4,
@@ -558,7 +572,9 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
             children: [
               const Icon(CupertinoIcons.link),
               const SizedBox(width: 6),
-              Text(isLoading ? '请稍候...' : '连接弹弹play 远程服务'),
+              Text(isLoading
+                  ? context.l10n.pleaseWait
+                  : context.l10n.connectDandanRemoteService),
             ],
           ),
         ),
@@ -605,23 +621,23 @@ class CupertinoDandanplayRemoteCard extends StatelessWidget {
     );
   }
 
-  String _formatRelativeTime(DateTime? timestamp) {
+  String _formatRelativeTime(BuildContext context, DateTime? timestamp) {
     if (timestamp == null) {
-      return '暂无记录';
+      return context.l10n.noRecordYet;
     }
     final now = DateTime.now();
     final diff = now.difference(timestamp);
     if (diff.inMinutes < 1) {
-      return '刚刚';
+      return context.l10n.justNow;
     }
     if (diff.inHours < 1) {
-      return '${diff.inMinutes} 分钟前';
+      return context.l10n.minutesAgo(diff.inMinutes);
     }
     if (diff.inDays < 1) {
-      return '${diff.inHours} 小时前';
+      return context.l10n.hoursAgo(diff.inHours);
     }
     if (diff.inDays < 7) {
-      return '${diff.inDays} 天前';
+      return context.l10n.daysAgo(diff.inDays);
     }
 
     String twoDigits(int value) => value.toString().padLeft(2, '0');

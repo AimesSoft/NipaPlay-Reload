@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
@@ -42,7 +43,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
       if (mounted) {
         setState(() {
           isLoading = false;
-          error = '未登录弹弹play账号';
+          error = context.l10n.userActivityNotLoggedIn;
         });
       }
       logService.addWarning('用户活动加载失败: 未登录弹弹play账号', tag: 'UserActivity');
@@ -171,7 +172,7 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
       logService.addError('用户活动异常堆栈: $stackTrace', tag: 'UserActivity');
       if (mounted) {
         setState(() {
-          error = '加载失败: ${e.toString()}';
+          error = context.l10n.loadFailedWithError(e.toString());
           isLoading = false;
         });
       }
@@ -195,13 +196,13 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
       final difference = now.difference(dateTime);
       
       if (difference.inDays > 0) {
-        return '${difference.inDays}天前';
+        return context.l10n.daysAgo(difference.inDays);
       } else if (difference.inHours > 0) {
-        return '${difference.inHours}小时前';
+        return context.l10n.hoursAgo(difference.inHours);
       } else if (difference.inMinutes > 0) {
-        return '${difference.inMinutes}分钟前';
+        return context.l10n.minutesAgo(difference.inMinutes);
       } else {
-        return '刚刚';
+        return context.l10n.justNow;
       }
     } catch (e) {
       return '';
@@ -210,14 +211,14 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
 
   /// 获取评分文本
   String getRatingText(int rating) {
-    if (rating >= 9) return '神作';
-    if (rating >= 8) return '很棒';
-    if (rating >= 7) return '不错';
-    if (rating >= 6) return '一般';
-    if (rating >= 5) return '还行';
-    if (rating >= 4) return '较差';
-    if (rating >= 3) return '很差';
-    return '极差';
+    if (rating >= 9) return context.l10n.ratingLevelMasterpiece;
+    if (rating >= 8) return context.l10n.ratingLevelGreat;
+    if (rating >= 7) return context.l10n.ratingLevelGood;
+    if (rating >= 6) return context.l10n.ratingLevelAverage;
+    if (rating >= 5) return context.l10n.ratingLevelOkay;
+    if (rating >= 4) return context.l10n.ratingLevelPoor;
+    if (rating >= 3) return context.l10n.ratingLevelVeryPoor;
+    return context.l10n.ratingLevelTerrible;
   }
 
   /// 处理图片URL（Web代理）
@@ -232,13 +233,13 @@ mixin UserActivityController<T extends StatefulWidget> on State<T>, TickerProvid
   String getFavoriteStatusText(String? status) {
     switch (status) {
       case 'favorited':
-        return '关注中';
+        return context.l10n.favoriteStatusFollowing;
       case 'finished':
-        return '已完成';
+        return context.l10n.favoriteStatusFinished;
       case 'abandoned':
-        return '已弃坑';
+        return context.l10n.favoriteStatusAbandoned;
       default:
-        return '已收藏';
+        return context.l10n.favoriteStatusFavorited;
     }
   }
 }

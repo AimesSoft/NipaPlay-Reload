@@ -7,6 +7,7 @@ import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/global_hotkey_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/chinese_converter.dart';
 
 /// 手动弹幕匹配对话框
 ///
@@ -144,6 +145,21 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
 
     try {
       final results = await _searchAnime(keyword);
+      
+      // 检查是否需要转换为繁体中文（不使用context，避免异步间隙问题）
+      final isTraditional = await ChineseConverter.isTraditionalChineseEnvironment(null);
+      if (isTraditional) {
+        // 转换搜索结果
+        for (var result in results) {
+          if (result.containsKey('animeTitle')) {
+            result['animeTitle'] = ChineseConverter.convert(result['animeTitle']);
+          }
+          if (result.containsKey('typeDescription')) {
+            result['typeDescription'] = ChineseConverter.convert(result['typeDescription']);
+          }
+        }
+      }
+      
       setState(() {
         _isSearching = false;
         _currentMatches = results;
@@ -276,8 +292,19 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           final bangumi = data['bangumi'];
 
           if (bangumi['episodes'] != null && bangumi['episodes'] is List) {
-            final episodes =
-                List<Map<String, dynamic>>.from(bangumi['episodes']);
+            final episodes = List<Map<String, dynamic>>.from(bangumi['episodes']);
+            
+            // 检查是否需要转换为繁体中文（不使用context，避免异步间隙问题）
+            final isTraditional = await ChineseConverter.isTraditionalChineseEnvironment(null);
+            if (isTraditional) {
+              // 转换剧集标题
+              for (var episode in episodes) {
+                if (episode.containsKey('episodeTitle')) {
+                  episode['episodeTitle'] = ChineseConverter.convert(episode['episodeTitle']);
+                }
+              }
+            }
+            
             setState(() {
               _currentEpisodes = episodes;
               _episodesMessage = episodes.isEmpty ? '该动画暂无剧集信息' : '';

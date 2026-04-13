@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -56,7 +57,7 @@ class _StoragePageState extends State<StoragePage> {
     if (value) {
       await _clearDanmakuCache(showSnack: false);
       if (mounted) {
-        BlurSnackBar.show(context, '已启用启动时清理弹幕缓存');
+        BlurSnackBar.show(context, context.l10n.enabledClearOnLaunchSnack);
       }
     }
   }
@@ -69,11 +70,11 @@ class _StoragePageState extends State<StoragePage> {
     try {
       await DanmakuCacheManager.clearAllCache();
       if (mounted && showSnack) {
-        BlurSnackBar.show(context, '弹幕缓存已清理');
+        BlurSnackBar.show(context, context.l10n.danmakuCacheCleared);
       }
     } catch (e) {
       if (mounted && showSnack) {
-        BlurSnackBar.show(context, '清理弹幕缓存失败: $e');
+        BlurSnackBar.show(context, context.l10n.clearDanmakuCacheFailed('$e'));
       }
     } finally {
       if (mounted) {
@@ -92,11 +93,11 @@ class _StoragePageState extends State<StoragePage> {
     try {
       await ImageCacheManager.instance.clearCache();
       if (mounted) {
-        BlurSnackBar.show(context, '图片缓存已清除');
+        BlurSnackBar.show(context, context.l10n.imageCacheCleared);
       }
     } catch (e) {
       if (mounted) {
-        BlurSnackBar.show(context, '清除图片缓存失败: $e');
+        BlurSnackBar.show(context, context.l10n.clearImageCacheFailed('$e'));
       }
     } finally {
       if (mounted) {
@@ -111,21 +112,19 @@ class _StoragePageState extends State<StoragePage> {
     final colorScheme = Theme.of(context).colorScheme;
     final bool? confirm = await BlurDialog.show<bool>(
       context: context,
-      title: '确认清除缓存',
-      content: '确定要清除封面与缩略图等图片缓存吗？',
+      title: context.l10n.confirmClearCacheTitle,
+      content: context.l10n.confirmClearImageCacheContent,
       actions: [
         HoverScaleTextButton(
           child: Text(
-            '取消',
-            locale: const Locale('zh-Hans', 'zh'),
+            context.l10n.cancel,
             style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
           ),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
           child: Text(
-            '确定',
-            locale: const Locale('zh-Hans', 'zh'),
+            context.l10n.confirm,
             style: TextStyle(color: colorScheme.onSurface),
           ),
           onPressed: () => Navigator.of(context).pop(true),
@@ -141,6 +140,7 @@ class _StoragePageState extends State<StoragePage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -150,16 +150,17 @@ class _StoragePageState extends State<StoragePage> {
     return ListView(
       children: [
         SettingsItem.toggle(
-          title: '每次启动时清理弹幕缓存',
-          subtitle: '重启应用时自动删除所有已缓存的弹幕文件，确保数据实时',
+          title: l10n.clearDanmakuCacheOnLaunchTitle,
+          subtitle: l10n.clearDanmakuCacheOnLaunchSubtitleNipaplay,
           icon: Ionicons.refresh_outline,
           value: _clearOnLaunch,
           onChanged: _updateClearOnLaunch,
         ),
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         SettingsItem.button(
-          title: '立即清理弹幕缓存',
-          subtitle: _isClearing ? '正在清理...' : '删除缓存/缓存异常时可手动清理',
+          title: l10n.clearDanmakuCacheNow,
+          subtitle:
+              _isClearing ? l10n.clearingInProgress : l10n.clearDanmakuCacheManualHintNipaplay,
           icon: Ionicons.trash_bin_outline,
           isDestructive: true,
           enabled: !_isClearing,
@@ -170,7 +171,7 @@ class _StoragePageState extends State<StoragePage> {
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text(
-            '弹幕缓存文件存储在 cache/danmaku/ 目录下，占用空间较大时可随时清理。',
+            l10n.danmakuCacheDescriptionNipaplay,
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
@@ -182,8 +183,8 @@ class _StoragePageState extends State<StoragePage> {
           builder: (context, videoState, child) {
             final currentPath = (videoState.screenshotSaveDirectory ?? '').trim();
             return SettingsItem.button(
-              title: '截图保存位置',
-              subtitle: currentPath.isEmpty ? '默认：下载目录' : currentPath,
+              title: l10n.screenshotSaveLocation,
+              subtitle: currentPath.isEmpty ? l10n.defaultDownloadDir : currentPath,
               icon: Icons.camera_alt_outlined,
               onTap: () async {
                 final selected = await FilePickerService().pickDirectory(
@@ -192,7 +193,7 @@ class _StoragePageState extends State<StoragePage> {
                 if (selected == null || selected.trim().isEmpty) return;
                 await videoState.setScreenshotSaveDirectory(selected);
                 if (!context.mounted) return;
-                BlurSnackBar.show(context, '截图保存位置已更新');
+                BlurSnackBar.show(context, l10n.screenshotSaveLocationUpdated);
               },
             );
           },
@@ -202,8 +203,8 @@ class _StoragePageState extends State<StoragePage> {
           Consumer<VideoPlayerState>(
             builder: (context, videoState, child) {
               return SettingsItem.dropdown(
-                title: '截图默认保存位置',
-                subtitle: 'iOS 截图后默认保存到相册或文件',
+                title: l10n.screenshotDefaultSaveTarget,
+                subtitle: l10n.screenshotDefaultSaveTargetMessage,
                 icon: Icons.save_alt,
                 items: [
                   DropdownMenuItemData(
@@ -211,21 +212,21 @@ class _StoragePageState extends State<StoragePage> {
                     value: ScreenshotSaveTarget.ask,
                     isSelected:
                         videoState.screenshotSaveTarget == ScreenshotSaveTarget.ask,
-                    description: '每次截图时弹出选择框',
+                    description: l10n.screenshotSaveAskDescription,
                   ),
                   DropdownMenuItemData(
                     title: ScreenshotSaveTarget.photos.label,
                     value: ScreenshotSaveTarget.photos,
                     isSelected: videoState.screenshotSaveTarget ==
                         ScreenshotSaveTarget.photos,
-                    description: '截图后直接保存到相册',
+                    description: l10n.screenshotSavePhotosDescription,
                   ),
                   DropdownMenuItemData(
                     title: ScreenshotSaveTarget.file.label,
                     value: ScreenshotSaveTarget.file,
                     isSelected:
                         videoState.screenshotSaveTarget == ScreenshotSaveTarget.file,
-                    description: '截图后直接保存为文件',
+                    description: l10n.screenshotSaveFileDescription,
                   ),
                 ],
                 onChanged: (value) {
@@ -239,8 +240,9 @@ class _StoragePageState extends State<StoragePage> {
         ],
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         SettingsItem.button(
-          title: '清除图片缓存',
-          subtitle: _isClearingImageCache ? '正在清理...' : '清除封面与缩略图等图片缓存',
+          title: l10n.clearImageCache,
+          subtitle:
+              _isClearingImageCache ? l10n.clearingInProgress : l10n.clearImageCacheHint,
           icon: Ionicons.trash_outline,
           trailingIcon: Ionicons.chevron_forward_outline,
           isDestructive: true,
@@ -251,7 +253,7 @@ class _StoragePageState extends State<StoragePage> {
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text(
-            '图片缓存包含封面与播放缩略图，存储在应用缓存目录中，可定期清理。',
+            l10n.imageCacheDescriptionNipaplay,
             style: Theme.of(context)
                 .textTheme
                 .bodySmall

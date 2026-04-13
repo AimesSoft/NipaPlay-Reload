@@ -1054,6 +1054,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.2"
+  pinyin:
+    dependency: "direct main"
+    description:
+      name: pinyin
+      sha256: "240f271a3c71af20c8d2757756b5ee8e9d79a955d37abad4b3568fd406b22411"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.0"
   platform:
     dependency: transitive
     description:

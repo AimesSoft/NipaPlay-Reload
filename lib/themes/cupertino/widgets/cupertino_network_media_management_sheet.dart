@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
@@ -87,6 +88,7 @@ class _CupertinoNetworkMediaManagementSheetState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final provider = _getProvider();
     final libraries = provider.availableLibraries;
     final username = provider.username;
@@ -94,7 +96,7 @@ class _CupertinoNetworkMediaManagementSheetState
 
     return AdaptiveScaffold(
       appBar: AdaptiveAppBar(
-        title: '$_serverName 媒体库',
+        title: l10n.serverMediaLibraryTitle(_serverName),
         useNativeToolbar: true,
         actions: [
           AdaptiveAppBarAction(
@@ -168,7 +170,7 @@ class _CupertinoNetworkMediaManagementSheetState
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '服务器',
+                                      l10n.serverLabel,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: CupertinoDynamicColor.resolve(
@@ -179,7 +181,7 @@ class _CupertinoNetworkMediaManagementSheetState
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      serverUrl ?? '未知',
+                                      serverUrl ?? l10n.mediaServerUnknown,
                                       style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
@@ -213,7 +215,7 @@ class _CupertinoNetworkMediaManagementSheetState
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '账户',
+                                      l10n.accountLabel,
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: CupertinoDynamicColor.resolve(
@@ -224,7 +226,7 @@ class _CupertinoNetworkMediaManagementSheetState
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      username ?? '匿名',
+                                      username ?? l10n.mediaServerAnonymous,
                                       style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
@@ -247,7 +249,7 @@ class _CupertinoNetworkMediaManagementSheetState
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Text(
-                    '媒体库',
+                    l10n.mediaLibrary,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -280,7 +282,7 @@ class _CupertinoNetworkMediaManagementSheetState
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            '暂无媒体库',
+                            l10n.noMediaLibrary,
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -292,7 +294,7 @@ class _CupertinoNetworkMediaManagementSheetState
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '请检查服务器连接',
+                            l10n.checkServerConnection,
                             style: TextStyle(
                               fontSize: 14,
                               color: CupertinoDynamicColor.resolve(
@@ -384,10 +386,14 @@ class _CupertinoNetworkMediaManagementSheetState
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          _getLibraryTypeLabel(library.type),
+                                          _getLibraryTypeLabel(
+                                            context,
+                                            library.type,
+                                          ),
                                           style: TextStyle(
                                             fontSize: 13,
-                                            color: CupertinoDynamicColor.resolve(
+                                            color:
+                                                CupertinoDynamicColor.resolve(
                                               CupertinoColors.secondaryLabel,
                                               context,
                                             ),
@@ -429,6 +435,7 @@ class _CupertinoNetworkMediaManagementSheetState
   }
 
   Widget _buildTranscodeSection() {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -480,7 +487,7 @@ class _CupertinoNetworkMediaManagementSheetState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '转码设置',
+                        l10n.transcodeSettings,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -492,7 +499,9 @@ class _CupertinoNetworkMediaManagementSheetState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '当前默认质量: ${_selectedQuality.displayName}',
+                        l10n.currentDefaultQuality(
+                          _selectedQuality.displayName,
+                        ),
                         style: TextStyle(
                           fontSize: 12,
                           color: CupertinoDynamicColor.resolve(
@@ -560,7 +569,7 @@ class _CupertinoNetworkMediaManagementSheetState
                     children: [
                       Expanded(
                         child: Text(
-                          '启用转码',
+                          l10n.enableTranscode,
                           style: TextStyle(
                             fontSize: 14,
                             color: CupertinoDynamicColor.resolve(
@@ -580,7 +589,7 @@ class _CupertinoNetworkMediaManagementSheetState
                   if (_transcodeEnabled) ...[
                     const SizedBox(height: 16),
                     Text(
-                      '默认清晰度',
+                      l10n.defaultQuality,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -601,7 +610,8 @@ class _CupertinoNetworkMediaManagementSheetState
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(8),
                             color: isSelected
-                                ? CupertinoColors.systemOrange.withValues(alpha: 0.1)
+                                ? CupertinoColors.systemOrange
+                                    .withValues(alpha: 0.1)
                                 : CupertinoDynamicColor.resolve(
                                     CupertinoColors.systemGrey5,
                                     context,
@@ -732,20 +742,21 @@ class _CupertinoNetworkMediaManagementSheetState
     }
   }
 
-  String _getLibraryTypeLabel(String? type) {
+  String _getLibraryTypeLabel(BuildContext context, String? type) {
+    final l10n = context.l10n;
     switch (type) {
       case 'tvshows':
-        return '电视剧库';
+        return l10n.tvShowsLibrary;
       case 'movies':
-        return '电影库';
+        return l10n.moviesLibrary;
       case 'boxsets':
-        return '合集库';
+        return l10n.boxsetsLibrary;
       case 'folders':
-        return '文件夹';
+        return l10n.folderLibrary;
       case 'mixed':
-        return '混合库';
+        return l10n.mixedLibrary;
       default:
-        return '媒体库';
+        return l10n.mediaLibrary;
     }
   }
 }

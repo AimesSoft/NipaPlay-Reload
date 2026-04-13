@@ -1,5 +1,6 @@
 // about_page.dart
 import 'package:flutter/material.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -18,17 +19,17 @@ class AboutPage extends StatefulWidget {
 }
 
 class _AboutPageState extends State<AboutPage> {
-  String _version = '加载中...';
+  String _version = '';
+  bool _versionLoadFailed = false;
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
-  bool _isAutoCheckEnabled = true;
   bool _isUpdateButtonHovered = false;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
-    _initAutoCheckUpdateSetting();
+    _checkForUpdatesInBackgroundIfEnabled();
   }
 
   Future<void> _loadVersion() async {
@@ -37,38 +38,23 @@ class _AboutPageState extends State<AboutPage> {
       if (mounted) {
         setState(() {
           _version = info.version;
+          _versionLoadFailed = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _version = '获取失败';
+          _versionLoadFailed = true;
         });
       }
     }
   }
 
-  Future<void> _initAutoCheckUpdateSetting() async {
+  Future<void> _checkForUpdatesInBackgroundIfEnabled() async {
     final enabled = await UpdateService.isAutoCheckEnabled();
-    if (!mounted) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    if (enabled) {
-      // 静默检查更新，不显示加载状态
-      _checkForUpdates();
-    }
-  }
-
-  Future<void> _setAutoCheckEnabled(bool enabled) async {
-    if (_isAutoCheckEnabled == enabled) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    await UpdateService.setAutoCheckEnabled(enabled);
-    if (enabled) {
-      _checkForUpdates();
-    }
+    if (!enabled || !mounted) return;
+    // 静默检查更新，不显示加载状态
+    _checkForUpdates();
   }
 
   Future<void> _checkForUpdates() async {
@@ -115,12 +101,14 @@ class _AboutPageState extends State<AboutPage> {
     final colorScheme = Theme.of(context).colorScheme;
     final notes = info.releaseNotes.trim().isNotEmpty
         ? info.releaseNotes.trim()
-        : '暂无更新内容';
+        : context.l10n.aboutNoReleaseNotes;
     final publishedAt = _formatPublishedAt(info.publishedAt);
 
     await BlurDialog.show(
       context: context,
-      title: info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本',
+      title: info.hasUpdate
+          ? context.l10n.aboutFoundNewVersion(info.latestVersion)
+          : context.l10n.aboutCurrentIsLatest,
       contentWidget: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Column(
@@ -128,21 +116,21 @@ class _AboutPageState extends State<AboutPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '当前版本: ${info.currentVersion}',
+              context.l10n.aboutCurrentVersionLabel(info.currentVersion),
               style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
             ),
             Text(
-              '最新版本: ${info.latestVersion}',
+              context.l10n.aboutLatestVersionLabel(info.latestVersion),
               style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
             ),
             if (info.releaseName.trim().isNotEmpty)
               Text(
-                '版本名称: ${info.releaseName.trim()}',
+                context.l10n.aboutReleaseNameLabel(info.releaseName.trim()),
                 style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
               ),
             if (publishedAt.isNotEmpty)
               Text(
-                '发布时间: $publishedAt',
+                context.l10n.aboutPublishedAtLabel(publishedAt),
                 style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
               ),
             if (info.error != null && info.error!.trim().isNotEmpty) ...[
@@ -154,7 +142,7 @@ class _AboutPageState extends State<AboutPage> {
             ],
             const SizedBox(height: 12),
             Text(
-              '更新内容',
+              context.l10n.aboutReleaseNotesTitle,
               style: TextStyle(
                 color: colorScheme.onSurface,
                 fontSize: 14,
@@ -194,14 +182,14 @@ class _AboutPageState extends State<AboutPage> {
               _launchURL(info.releaseUrl);
             },
             child: Text(
-              '查看发布页',
+              context.l10n.aboutOpenReleasePage,
               style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
-            '关闭',
+            context.l10n.close,
             style: TextStyle(color: colorScheme.onSurface),
           ),
         ),
@@ -234,13 +222,13 @@ class _AboutPageState extends State<AboutPage> {
       final colorScheme = Theme.of(context).colorScheme;
       await BlurDialog.show(
         context: context,
-        title: '检查更新失败',
-        content: '请稍后再试',
+        title: context.l10n.updateCheckFailed,
+        content: context.l10n.pleaseTryAgainLater,
         actions: [
           HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(
-              '关闭',
+              context.l10n.close,
               style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
@@ -258,7 +246,7 @@ class _AboutPageState extends State<AboutPage> {
       // Log or show a snackbar if url can't be launched
       //debugPrint('Could not launch $urlString');
       if (mounted) {
-        BlurSnackBar.show(context, '无法打开链接: $urlString');
+        BlurSnackBar.show(context, context.l10n.cannotOpenLink(urlString));
       }
     }
   }
@@ -267,7 +255,7 @@ class _AboutPageState extends State<AboutPage> {
     final colorScheme = Theme.of(context).colorScheme;
     BlurDialog.show(
       context: context,
-      title: '赞赏码',
+      title: context.l10n.appreciationCode,
       contentWidget: ConstrainedBox(
         constraints: const BoxConstraints(
           maxWidth: 300,
@@ -291,7 +279,7 @@ class _AboutPageState extends State<AboutPage> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      '赞赏码图片加载失败',
+                      context.l10n.appreciationImageLoadFailed,
                       style: TextStyle(
                         color: colorScheme.onSurface.withOpacity(0.7),
                         fontSize: 14,
@@ -308,7 +296,7 @@ class _AboutPageState extends State<AboutPage> {
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
-            '关闭',
+            context.l10n.close,
             style: TextStyle(color: colorScheme.onSurface),
           ),
         ),
@@ -326,6 +314,7 @@ class _AboutPageState extends State<AboutPage> {
     final bool isUpdateButtonEnabled = !_isCheckingUpdate;
     final bool showUpdateButtonHover =
         isUpdateButtonEnabled && _isUpdateButtonHovered;
+    final l10n = context.l10n;
     const Color updateAccentColor = Color(0xFFFF2E55);
     final Color updateIdleColor =
         colorScheme.onSurface.withOpacity(isUpdateButtonEnabled ? 0.75 : 0.4);
@@ -366,7 +355,7 @@ class _AboutPageState extends State<AboutPage> {
                         ? SystemMouseCursors.click
                         : SystemMouseCursors.basic,
                     child: Text(
-                      'NipaPlay Reload 当前版本: $_version',
+                      l10n.aboutVersionBanner(_displayVersionText(context)),
                       style: textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.onSurface,
@@ -440,7 +429,9 @@ class _AboutPageState extends State<AboutPage> {
                           ),
                         const SizedBox(width: 6),
                         Text(
-                          _isCheckingUpdate ? '检测中...' : '检测更新',
+                          _isCheckingUpdate
+                              ? l10n.aboutCheckingUpdates
+                              : l10n.aboutCheckUpdates,
                           style: textTheme.labelLarge?.copyWith(
                                 color: updateButtonColor,
                               ) ??
@@ -455,54 +446,20 @@ class _AboutPageState extends State<AboutPage> {
           ),
           const SizedBox(height: 20),
 
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '自动检测更新',
-                style: textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.88),
-                    ) ??
-                    TextStyle(
-                      color: colorScheme.onSurface.withValues(alpha: 0.88),
-                    ),
-              ),
-              const SizedBox(width: 10),
-              Switch(
-                value: _isAutoCheckEnabled,
-                onChanged: _setAutoCheckEnabled,
-                activeThumbColor: updateAccentColor,
-              ),
-            ],
-          ),
-          Text(
-            '关闭后仅手动检测',
-            style: textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurface.withValues(alpha: 0.65),
-                ) ??
-                TextStyle(
-                  color: colorScheme.onSurface.withValues(alpha: 0.65),
-                ),
-          ),
-          const SizedBox(height: 20),
-
           _buildInfoCard(
             context: context,
             children: [
               _buildRichText(
                 context,
                 [
-                  const TextSpan(
-                      text: 'NipaPlay,名字来自《寒蝉鸣泣之时》里古手梨花 (ふるて りか) 的标志性口头禅 "'),
+                  TextSpan(text: l10n.aboutStoryPrefix),
                   TextSpan(
                       text: 'にぱ〜☆',
-                      locale: Locale("zh-Hans", "zh"),
                       style: TextStyle(
                           color: Colors.pinkAccent[100],
                           fontWeight: FontWeight.bold,
                           fontStyle: FontStyle.italic)),
-                  const TextSpan(
-                      text: '" \n为解决我 macOS和Linux 、IOS看番不便。我创造了 NipaPlay。'),
+                  TextSpan(text: l10n.aboutStorySuffix),
                 ],
               ),
             ],
@@ -511,33 +468,31 @@ class _AboutPageState extends State<AboutPage> {
 
           _buildInfoCard(
             context: context,
-            title: '致谢',
+            title: l10n.acknowledgements,
             children: [
               _buildRichText(context, [
-                const TextSpan(text: '感谢弹弹play (DandanPlay) 和开发者 '),
+                TextSpan(text: l10n.aboutThanksDandanplayPrefix),
                 TextSpan(
                     text: 'Kaedei',
-                    locale: Locale("zh-Hans", "zh"),
                     style: TextStyle(
                         color: Colors.lightBlueAccent[100],
                         fontWeight: FontWeight.bold)),
-                const TextSpan(text: '！提供了 NipaPlay 相关api接口和开发帮助。'),
+                TextSpan(text: l10n.aboutThanksDandanplaySuffix),
               ]),
               _buildRichText(context, [
-                const TextSpan(text: '感谢开发者 '),
+                TextSpan(text: l10n.aboutThanksSakikoPrefix),
                 TextSpan(
                     text: 'Sakiko',
-                    locale: Locale("zh-Hans", "zh"),
                     style: TextStyle(
                         color: Colors.lightBlueAccent[100],
                         fontWeight: FontWeight.bold)),
-                const TextSpan(text: '！提供了Emby和Jellyfin的媒体库支持。'),
+                TextSpan(text: l10n.aboutThanksSakikoSuffix),
               ]),
               const SizedBox(height: 12),
               _buildRichText(
                 context,
-                const [
-                  TextSpan(text: '感谢下列用户的赞助支持：'),
+                [
+                  TextSpan(text: l10n.thanksSponsorUsers),
                 ],
               ),
               const SizedBox(height: 12),
@@ -554,12 +509,10 @@ class _AboutPageState extends State<AboutPage> {
 
           _buildInfoCard(
             context: context,
-            title: '开源与社区',
+            title: l10n.openSourceCommunity,
             children: [
               _buildRichText(context, [
-                const TextSpan(
-                    text:
-                        '欢迎贡献代码，或者将其发布到各个软件仓库。(不会 Dart 也没关系，用 Cursor 这种ai编程也是可以的。)'),
+                TextSpan(text: l10n.aboutCommunityHint),
               ]),
               const SizedBox(height: 16),
               GestureDetector(
@@ -601,8 +554,7 @@ class _AboutPageState extends State<AboutPage> {
                           size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        'QQ群: 961207150',
-                        locale: Locale("zh-Hans", "zh"),
+                        l10n.aboutQqGroup('961207150'),
                         style: TextStyle(
                           color: Colors.cyanAccent[100],
                           decoration: TextDecoration.underline,
@@ -627,8 +579,7 @@ class _AboutPageState extends State<AboutPage> {
                           size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        'NipaPlay 官方网站',
-                        locale: Locale("zh-Hans", "zh"),
+                        l10n.aboutOfficialWebsite,
                         style: TextStyle(
                           color: Colors.cyanAccent[100],
                           decoration: TextDecoration.underline,
@@ -646,12 +597,13 @@ class _AboutPageState extends State<AboutPage> {
 
           _buildInfoCard(
             context: context,
-            title: '赞助支持',
+            title: l10n.sponsorSupport,
             children: [
               _buildRichText(context, [
-                const TextSpan(
-                    text:
-                        '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。'),
+                TextSpan(
+                  text:
+                      '${l10n.aboutSponsorParagraph1}${l10n.aboutSponsorParagraph2}',
+                ),
               ]),
               const SizedBox(height: 16),
               GestureDetector(
@@ -665,7 +617,7 @@ class _AboutPageState extends State<AboutPage> {
                           color: Colors.pinkAccent[100], size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        '爱发电赞助页面',
+                        l10n.aboutAfdianSponsorPage,
                         style: TextStyle(
                           color: Colors.pinkAccent[100],
                           decoration: TextDecoration.underline,
@@ -689,7 +641,7 @@ class _AboutPageState extends State<AboutPage> {
                           color: Colors.orangeAccent[100], size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        '赞赏码',
+                        l10n.appreciationCode,
                         style: TextStyle(
                           color: Colors.orangeAccent[100],
                           decoration: TextDecoration.underline,
@@ -730,6 +682,16 @@ class _AboutPageState extends State<AboutPage> {
         ),
       ],
     );
+  }
+
+  String _displayVersionText(BuildContext context) {
+    if (_versionLoadFailed) {
+      return context.l10n.versionLoadFailed;
+    }
+    if (_version.isEmpty) {
+      return context.l10n.loading;
+    }
+    return _version;
   }
 
   Widget _buildInfoCard(

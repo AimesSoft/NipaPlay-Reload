@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
@@ -19,7 +20,7 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
   Future<void> _openTerminalOutput(BuildContext context) async {
     await CupertinoBottomSheet.show(
       context: context,
-      title: '终端输出',
+      title: context.l10n.terminalOutput,
       floatingTitle: true,
       child: const CupertinoDebugLogViewerSheet(),
     );
@@ -28,7 +29,7 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
   Future<void> _openDependencyVersions(BuildContext context) async {
     await CupertinoBottomSheet.show(
       context: context,
-      title: '依赖库版本',
+      title: context.l10n.dependencyVersions,
       floatingTitle: true,
       child: const CupertinoDependencyVersionsSheet(),
     );
@@ -37,7 +38,7 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
   Future<void> _openBuildInfo(BuildContext context) async {
     await CupertinoBottomSheet.show(
       context: context,
-      title: '构建信息',
+      title: context.l10n.buildInfo,
       floatingTitle: true,
       child: const CupertinoBuildInfoSheet(),
     );
@@ -47,14 +48,15 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DeveloperOptionsProvider>(
       builder: (context, devOptions, child) {
-    final Color backgroundColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.systemGroupedBackground,
-      context,
-    );
-    final double topPadding = MediaQuery.of(context).padding.top + 64;
-    return AdaptiveScaffold(
-          appBar: const AdaptiveAppBar(
-            title: '开发者选项',
+        final l10n = context.l10n;
+        final Color backgroundColor = CupertinoDynamicColor.resolve(
+          CupertinoColors.systemGroupedBackground,
+          context,
+        );
+        final double topPadding = MediaQuery.of(context).padding.top + 64;
+        return AdaptiveScaffold(
+          appBar: AdaptiveAppBar(
+            title: l10n.developerOptions,
             useNativeToolbar: true,
           ),
           body: ColoredBox(
@@ -78,8 +80,8 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                           CupertinoIcons.command,
                           color: resolveSettingsIconColor(context),
                         ),
-                        title: const Text('终端输出'),
-                        subtitle: const Text('查看日志、复制内容或生成二维码分享'),
+                        title: Text(l10n.terminalOutput),
+                        subtitle: Text(l10n.terminalOutputSubtitle),
                         backgroundColor: resolveSettingsTileBackground(context),
                         showChevron: true,
                         onTap: () => _openTerminalOutput(context),
@@ -89,8 +91,8 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                           CupertinoIcons.list_bullet,
                           color: resolveSettingsIconColor(context),
                         ),
-                        title: const Text('依赖库版本'),
-                        subtitle: const Text('查看依赖库与版本号（含 GitHub 跳转）'),
+                        title: Text(l10n.dependencyVersions),
+                        subtitle: Text(l10n.dependencyVersionsSubtitle),
                         backgroundColor: resolveSettingsTileBackground(context),
                         showChevron: true,
                         onTap: () => _openDependencyVersions(context),
@@ -100,8 +102,8 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                           CupertinoIcons.info_circle,
                           color: resolveSettingsIconColor(context),
                         ),
-                        title: const Text('构建信息'),
-                        subtitle: const Text('查看构建时间、处理器、内存与系统架构'),
+                        title: Text(l10n.buildInfo),
+                        subtitle: Text(l10n.buildInfoSubtitle),
                         backgroundColor: resolveSettingsTileBackground(context),
                         showChevron: true,
                         onTap: () => _openBuildInfo(context),
@@ -119,8 +121,8 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                           CupertinoIcons.folder,
                           color: resolveSettingsIconColor(context),
                         ),
-                        title: const Text('日志写入文件'),
-                        subtitle: const Text('每 1 秒写入磁盘，保留最近 5 份日志文件'),
+                        title: Text(l10n.fileLogWriteTitle),
+                        subtitle: Text(l10n.fileLogWriteSubtitle),
                         trailing: AdaptiveSwitch(
                           value: devOptions.enableFileLog,
                           onChanged: (value) async {
@@ -134,7 +136,9 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                             if (!context.mounted) return;
                             AdaptiveSnackBar.show(
                               context,
-                              message: value ? '已开启日志写入文件' : '已关闭日志写入文件',
+                              message: value
+                                  ? l10n.fileLogWriteEnabled
+                                  : l10n.fileLogWriteDisabled,
                               type: AdaptiveSnackBarType.success,
                             );
                           },
@@ -151,8 +155,9 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                           if (!context.mounted) return;
                           AdaptiveSnackBar.show(
                             context,
-                            message:
-                                newValue ? '已开启日志写入文件' : '已关闭日志写入文件',
+                            message: newValue
+                                ? l10n.fileLogWriteEnabled
+                                : l10n.fileLogWriteDisabled,
                             type: AdaptiveSnackBarType.success,
                           );
                         },
@@ -163,8 +168,8 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                           CupertinoIcons.folder_open,
                           color: resolveSettingsIconColor(context),
                         ),
-                        title: const Text('打开日志路径'),
-                        subtitle: const Text('在文件管理器中打开日志目录'),
+                        title: Text(l10n.openLogDirectoryTitle),
+                        subtitle: Text(l10n.openLogDirectorySubtitle),
                         backgroundColor: resolveSettingsTileBackground(context),
                         showChevron: true,
                         onTap: () async {
@@ -172,7 +177,9 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                           if (!context.mounted) return;
                           AdaptiveSnackBar.show(
                             context,
-                            message: ok ? '已打开日志目录' : '打开日志目录失败',
+                            message: ok
+                                ? l10n.logDirectoryOpened
+                                : l10n.openLogDirectoryFailed,
                             type: ok
                                 ? AdaptiveSnackBarType.success
                                 : AdaptiveSnackBarType.error,
@@ -196,11 +203,11 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                               CupertinoIcons.info_circle,
                               color: resolveSettingsIconColor(context),
                             ),
-                            title: const Text('调试：打印 AI 返回内容'),
+                            title: Text(l10n.spoilerAiDebugPrintTitle),
                             subtitle: Text(
                               enabled
-                                  ? '开启后会在日志里打印 AI 返回的原始文本与命中弹幕。'
-                                  : '需先启用防剧透模式',
+                                  ? l10n.spoilerAiDebugPrintEnabledHint
+                                  : l10n.spoilerAiDebugPrintNeedSpoilerMode,
                             ),
                             trailing: AdaptiveSwitch(
                               value: videoState.spoilerAiDebugPrintResponse,
@@ -214,8 +221,8 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                                       AdaptiveSnackBar.show(
                                         context,
                                         message: value
-                                            ? '已开启 AI 调试打印'
-                                            : '已关闭 AI 调试打印',
+                                            ? l10n.spoilerAiDebugPrintEnabled
+                                            : l10n.spoilerAiDebugPrintDisabled,
                                         type: AdaptiveSnackBarType.success,
                                       );
                                     }
@@ -233,8 +240,8 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                                     AdaptiveSnackBar.show(
                                       context,
                                       message: newValue
-                                          ? '已开启 AI 调试打印'
-                                          : '已关闭 AI 调试打印',
+                                          ? l10n.spoilerAiDebugPrintEnabled
+                                          : l10n.spoilerAiDebugPrintDisabled,
                                       type: AdaptiveSnackBarType.success,
                                     );
                                   }

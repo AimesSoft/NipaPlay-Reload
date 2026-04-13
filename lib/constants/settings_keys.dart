@@ -1,6 +1,8 @@
 class SettingsKeys {
   SettingsKeys._();
 
+  static const String appLanguageMode = 'app_language_mode';
+
   static const String clearDanmakuCacheOnLaunch =
       'clear_danmaku_cache_on_launch';
 
@@ -13,6 +15,9 @@ class SettingsKeys {
 
   static const String externalPlayerPath = 'external_player_path';
 
-  static const String autoCheckUpdatesOnAboutPage =
+  static const String autoCheckUpdatesInBackground =
+      'auto_check_updates_in_background';
+
+  static const String legacyAutoCheckUpdatesOnAboutPage =
       'auto_check_updates_on_about_page';
 }

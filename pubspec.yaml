@@ -103,6 +103,7 @@ dependencies:
   nipaplay_smb2:
     path: packages/nipaplay_smb2
   battery_plus: ^7.0.0
+  pinyin: ^3.3.0
 
 dev_dependencies:
   flutter_test:
@@ -157,6 +158,7 @@ hooks:
 # following page: https://dart.dev/tools/pub/pubspec
 # The following section is specific to Flutter packages.
 flutter:
+  generate: true
   assets:
     - pubspec.lock
     - packages/adaptive_platform_ui/pubspec.yaml

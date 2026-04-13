@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_about_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -14,7 +15,8 @@ class CupertinoAboutSettingTile extends StatefulWidget {
 
 class _CupertinoAboutSettingTileState
     extends State<CupertinoAboutSettingTile> {
-  String _versionLabel = '加载中…';
+  String? _version;
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -27,12 +29,13 @@ class _CupertinoAboutSettingTileState
       final info = await PackageInfo.fromPlatform();
       if (!mounted) return;
       setState(() {
-        _versionLabel = '当前版本：${info.version}';
+        _version = info.version;
+        _loadFailed = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _versionLabel = '版本信息获取失败';
+        _loadFailed = true;
       });
     }
   }
@@ -40,14 +43,19 @@ class _CupertinoAboutSettingTileState
   @override
   Widget build(BuildContext context) {
     final tileColor = resolveSettingsTileBackground(context);
+    final subtitle = _loadFailed
+        ? context.l10n.versionLoadFailed
+        : (_version == null
+            ? context.l10n.loading
+            : context.l10n.currentVersion(_version!));
 
     return CupertinoSettingsTile(
       leading: Icon(
         CupertinoIcons.info_circle,
         color: resolveSettingsIconColor(context),
       ),
-      title: const Text('关于'),
-      subtitle: Text(_versionLabel),
+      title: Text(context.l10n.about),
+      subtitle: Text(subtitle),
       backgroundColor: tileColor,
       showChevron: true,
       onTap: () {

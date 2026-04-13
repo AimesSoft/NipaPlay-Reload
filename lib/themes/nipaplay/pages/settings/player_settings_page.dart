@@ -11,6 +11,7 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -909,8 +910,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             return SettingsItem.toggle(
-              title: "记忆弹幕偏移",
-              subtitle: "切换视频时保留当前手动偏移（自动匹配偏移仍会重置）",
+              title: context.l10n.rememberDanmakuOffset,
+              subtitle: context.l10n.rememberDanmakuOffsetSubtitle,
               icon: Icons.av_timer,
               value: videoState.rememberDanmakuOffset,
               onChanged: (bool value) async {
@@ -918,7 +919,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 if (!context.mounted) return;
                 BlurSnackBar.show(
                   context,
-                  value ? '已开启弹幕偏移记忆' : '已关闭弹幕偏移记忆',
+                  value
+                      ? context.l10n.rememberDanmakuOffsetEnabled
+                      : context.l10n.rememberDanmakuOffsetDisabled,
                 );
               },
             );
@@ -931,15 +934,19 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         Consumer<SettingsProvider>(
           builder: (context, settingsProvider, child) {
             return SettingsItem.toggle(
-              title: "弹幕转换简体中文",
-              subtitle: "开启后，繁体中文弹幕将转换为简体中文显示",
+              title: context.l10n.danmakuConvertToSimplified,
+              subtitle: context.l10n.danmakuConvertToSimplifiedSubtitle,
               icon: Ionicons.language_outline,
               value: settingsProvider.danmakuConvertToSimplified,
               onChanged: (bool value) {
                 settingsProvider.setDanmakuConvertToSimplified(value);
                 if (context.mounted) {
                   BlurSnackBar.show(
-                      context, value ? '已开启弹幕转换简体中文' : '已关闭弹幕转换简体中文');
+                    context,
+                    value
+                        ? context.l10n.danmakuConvertToSimplifiedEnabled
+                        : context.l10n.danmakuConvertToSimplifiedDisabled,
+                  );
                 }
               },
             );

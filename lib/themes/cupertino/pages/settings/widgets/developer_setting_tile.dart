@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_developer_options_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
@@ -14,8 +15,8 @@ class CupertinoDeveloperSettingTile extends StatelessWidget {
 
     return CupertinoSettingsTile(
       leading: Icon(CupertinoIcons.command, color: iconColor),
-      title: const Text('开发者选项'),
-      subtitle: const Text('终端输出、依赖版本、构建信息'),
+      title: Text(context.l10n.developerOptions),
+      subtitle: Text(context.l10n.developerOptionsSubtitle),
       backgroundColor: tileColor,
       showChevron: true,
       onTap: () {

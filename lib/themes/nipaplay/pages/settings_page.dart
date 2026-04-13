@@ -1,6 +1,7 @@
 // settings_page.dart
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeModePage
 import 'package:nipaplay/themes/nipaplay/pages/settings/general_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/developer_options_page.dart'; // 导入开发者选项页面
@@ -21,6 +22,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/language_page.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
@@ -67,8 +69,7 @@ class SettingsPage extends StatefulWidget {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                     child: Text(
-                      '设置',
-                      locale: const Locale("zh-Hans", "zh"),
+                      innerContext.l10n.settingsLabel,
                       style: titleStyle,
                     ),
                   ),
@@ -93,9 +94,9 @@ class _SettingsPageState extends State<SettingsPage>
   // 也可以考虑给它一个初始值，这样桌面端一进来右侧不是空的
   Widget? currentPage; // 初始可以为 null
   late TabController _tabController;
-  static const Locale _titleLocale = Locale("zh-Hans", "zh");
   static const Color _selectedColor = Color(0xFFFF2E55);
   static const String _entryAppearance = 'appearance';
+  static const String _entryLanguage = 'language';
   static const String _entryGeneral = 'general';
   static const String _entryStorage = 'storage';
   static const String _entryNetwork = 'network';
@@ -164,7 +165,6 @@ class _SettingsPageState extends State<SettingsPage>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Text(title,
-              locale: _titleLocale,
               style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -230,36 +230,44 @@ class _SettingsPageState extends State<SettingsPage>
 
   List<_SettingEntry> _buildSettingEntries(BuildContext context) {
     final themeNotifier = context.read<ThemeNotifier>();
+    final l10n = context.l10n;
     final entries = <_SettingEntry>[
       _SettingEntry(
         id: _entryAppearance,
-        title: "外观",
+        title: l10n.appearance,
         icon: Ionicons.color_palette_outline,
-        pageTitle: "外观设置",
+        pageTitle: l10n.appearanceSettings,
         page: ThemeModePage(themeNotifier: themeNotifier),
       ),
     ];
 
     entries.addAll([
       _SettingEntry(
+        id: _entryLanguage,
+        title: l10n.language,
+        icon: Ionicons.language_outline,
+        pageTitle: l10n.languageSettingsTitle,
+        page: const LanguagePage(),
+      ),
+      _SettingEntry(
         id: _entryGeneral,
-        title: "通用",
+        title: l10n.general,
         icon: Ionicons.settings_outline,
-        pageTitle: "通用设置",
+        pageTitle: l10n.generalSettings,
         page: const GeneralPage(),
       ),
       _SettingEntry(
         id: _entryStorage,
-        title: "存储",
+        title: l10n.storage,
         icon: Ionicons.folder_open_outline,
-        pageTitle: "存储设置",
+        pageTitle: l10n.storageSettings,
         page: const StoragePage(),
       ),
       _SettingEntry(
         id: _entryNetwork,
-        title: "网络",
+        title: l10n.networkSettings,
         icon: Ionicons.wifi_outline,
-        pageTitle: "网络设置",
+        pageTitle: l10n.networkSettings,
         page: const NetworkSettingsPage(),
       ),
     ]);
@@ -268,9 +276,9 @@ class _SettingsPageState extends State<SettingsPage>
       entries.add(
         _SettingEntry(
           id: _entryBackupRestore,
-          title: "备份与恢复",
+          title: l10n.backupAndRestore,
           icon: Ionicons.cloud_upload_outline,
-          pageTitle: "备份与恢复",
+          pageTitle: l10n.backupAndRestore,
           page: const BackupRestorePage(),
         ),
       );
@@ -279,9 +287,9 @@ class _SettingsPageState extends State<SettingsPage>
     entries.add(
       _SettingEntry(
         id: _entryPlayer,
-        title: "播放器",
+        title: l10n.player,
         icon: Ionicons.play_circle_outline,
-        pageTitle: "播放器设置",
+        pageTitle: l10n.playerSettings,
         page: const PlayerSettingsPage(),
       ),
     );
@@ -289,9 +297,9 @@ class _SettingsPageState extends State<SettingsPage>
     entries.add(
       _SettingEntry(
         id: _entryExternalPlayer,
-        title: "外部调用",
+        title: l10n.externalCall,
         icon: Ionicons.open_outline,
-        pageTitle: "外部调用",
+        pageTitle: l10n.externalCall,
         page: const ExternalPlayerSettingsPage(),
       ),
     );
@@ -300,16 +308,16 @@ class _SettingsPageState extends State<SettingsPage>
       entries.addAll([
         _SettingEntry(
           id: _entryShortcuts,
-          title: "快捷键",
+          title: l10n.shortcuts,
           icon: Ionicons.key_outline,
-          pageTitle: "快捷键设置",
+          pageTitle: l10n.shortcutsSettings,
           page: const ShortcutsSettingsPage(),
         ),
         _SettingEntry(
           id: SettingsPage.entryRemoteAccess,
-          title: "远程访问",
+          title: l10n.remoteAccess,
           icon: Ionicons.link_outline,
-          pageTitle: "远程访问",
+          pageTitle: l10n.remoteAccess,
           page: const RemoteAccessPage(),
         ),
       ]);
@@ -318,23 +326,23 @@ class _SettingsPageState extends State<SettingsPage>
     entries.addAll([
       _SettingEntry(
         id: _entryRemoteMediaLibrary,
-        title: "远程媒体库",
+        title: l10n.remoteMediaLibrary,
         icon: Ionicons.library_outline,
-        pageTitle: "远程媒体库",
+        pageTitle: l10n.remoteMediaLibrary,
         page: const RemoteMediaLibraryPage(),
       ),
       _SettingEntry(
         id: _entryDeveloperOptions,
-        title: "开发者选项",
+        title: l10n.developerOptions,
         icon: Ionicons.code_slash_outline,
-        pageTitle: "开发者选项",
+        pageTitle: l10n.developerOptions,
         page: const DeveloperOptionsPage(),
       ),
       _SettingEntry(
         id: _entryAbout,
-        title: "关于",
+        title: l10n.about,
         icon: Ionicons.information_circle_outline,
-        pageTitle: "关于",
+        pageTitle: l10n.about,
         page: const AboutPage(),
       ),
     ]);
@@ -348,10 +356,10 @@ class _SettingsPageState extends State<SettingsPage>
     final itemColor = isSelected ? _selectedColor : colorScheme.onSurface;
     return ListTile(
       leading: Icon(entry.icon, color: itemColor),
-      title: Text(entry.title,
-          locale: _titleLocale,
-          style: TextStyle(
-              color: itemColor, fontWeight: FontWeight.bold)),
+      title: Text(
+        entry.title,
+        style: TextStyle(color: itemColor, fontWeight: FontWeight.bold),
+      ),
       onTap: () => _handleItemTap(entry.id, entry.page, entry.pageTitle),
     );
   }

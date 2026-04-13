@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' show ThemeMode;
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_appearance_settings_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -9,15 +10,14 @@ import 'package:provider/provider.dart';
 class CupertinoAppearanceSettingTile extends StatelessWidget {
   const CupertinoAppearanceSettingTile({super.key});
 
-  String _modeLabel(ThemeMode mode) {
+  String _modeLabel(BuildContext context, ThemeMode mode) {
     switch (mode) {
       case ThemeMode.light:
-        return '浅色模式';
+        return context.l10n.lightMode;
       case ThemeMode.dark:
-        return '深色模式';
+        return context.l10n.darkMode;
       case ThemeMode.system:
-      default:
-        return '跟随系统';
+        return context.l10n.followSystem;
     }
   }
 
@@ -32,8 +32,8 @@ class CupertinoAppearanceSettingTile extends StatelessWidget {
         CupertinoIcons.paintbrush,
         color: resolveSettingsIconColor(context),
       ),
-      title: const Text('外观'),
-      subtitle: Text(_modeLabel(themeMode)),
+      title: Text(context.l10n.appearance),
+      subtitle: Text(_modeLabel(context, themeMode)),
       backgroundColor: tileColor,
       showChevron: true,
       onTap: () {

@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/models/emby_model.dart';
@@ -21,13 +22,14 @@ class CupertinoMediaServerSettingTile extends StatelessWidget {
     return Consumer2<JellyfinProvider, EmbyProvider>(
       builder: (context, jellyfinProvider, embyProvider, _) {
         final subtitle = _buildSubtitle(
+          context,
           jellyfinProvider,
           embyProvider,
         );
 
         return CupertinoSettingsTile(
           leading: Icon(CupertinoIcons.cloud, color: iconColor),
-          title: const Text('网络媒体库'),
+          title: Text(context.l10n.networkMediaLibrary),
           subtitle: Text(subtitle),
           backgroundColor: backgroundColor,
           showChevron: true,
@@ -44,6 +46,7 @@ class CupertinoMediaServerSettingTile extends StatelessWidget {
   }
 
   String _buildSubtitle(
+    BuildContext context,
     JellyfinProvider jellyfinProvider,
     EmbyProvider embyProvider,
   ) {
@@ -51,20 +54,34 @@ class CupertinoMediaServerSettingTile extends StatelessWidget {
     final bool embyConnected = embyProvider.isConnected;
 
     if (!jellyfinConnected && !embyConnected) {
-      return '尚未连接任何服务器';
+      return context.l10n.noConnectedServer;
     }
 
     final List<String> segments = [];
 
     if (jellyfinConnected) {
       segments.add(
-        'Jellyfin · ${_resolveSummary(jellyfinProvider.availableLibraries, jellyfinProvider.selectedLibraryIds)}',
+        context.l10n.mediaServerSummary(
+          'Jellyfin',
+          _resolveSummary(
+            context,
+            jellyfinProvider.availableLibraries,
+            jellyfinProvider.selectedLibraryIds,
+          ),
+        ),
       );
     }
 
     if (embyConnected) {
       segments.add(
-        'Emby · ${_resolveSummary(embyProvider.availableLibraries, embyProvider.selectedLibraryIds)}',
+        context.l10n.mediaServerSummary(
+          'Emby',
+          _resolveSummary(
+            context,
+            embyProvider.availableLibraries,
+            embyProvider.selectedLibraryIds,
+          ),
+        ),
       );
     }
 
@@ -72,11 +89,12 @@ class CupertinoMediaServerSettingTile extends StatelessWidget {
   }
 
   String _resolveSummary<T>(
+    BuildContext context,
     List<T> libraries,
     Iterable<String> selectedIds,
   ) {
     if (selectedIds.isEmpty) {
-      return '未选择媒体库';
+      return context.l10n.mediaLibraryNotSelected;
     }
 
     final Map<String, String> nameMap = {
@@ -96,13 +114,13 @@ class CupertinoMediaServerSettingTile extends StatelessWidget {
     }
 
     if (names.isEmpty) {
-      return '未匹配到媒体库';
+      return context.l10n.mediaLibraryNotMatched;
     }
 
     if (names.length == 1) {
       return names.first;
     }
 
-    return '${names.first} 等 ${names.length} 个';
+    return context.l10n.mediaLibraryAndCount(names.first, names.length);
   }
 }

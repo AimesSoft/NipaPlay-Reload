@@ -39,8 +39,12 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
       themeMode: context.themeNotifier.themeMode,
       themeAnimationDuration: const Duration(milliseconds: 420),
       themeAnimationCurve: Curves.easeInOutCubic,
-      localizationsDelegates: fluent.FluentLocalizations.localizationsDelegates,
-      supportedLocales: fluent.FluentLocalizations.supportedLocales,
+      locale: context.locale,
+      localizationsDelegates: [
+        ...context.localizationsDelegates,
+        ...fluent.FluentLocalizations.localizationsDelegates,
+      ],
+      supportedLocales: context.supportedLocales,
       navigatorKey: context.navigatorKey,
       home: context.materialHomeBuilder(),
       builder: (buildContext, appChild) {
