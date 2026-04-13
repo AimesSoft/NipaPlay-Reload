@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -59,7 +60,7 @@ class _CupertinoStorageSettingsPageState
       if (mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: '已启用启动时清理弹幕缓存',
+          message: context.l10n.enabledClearOnLaunchSnack,
           type: AdaptiveSnackBarType.info,
         );
       }
@@ -76,7 +77,7 @@ class _CupertinoStorageSettingsPageState
       if (mounted && showMessage) {
         AdaptiveSnackBar.show(
           context,
-          message: '弹幕缓存已清理',
+          message: context.l10n.danmakuCacheCleared,
           type: AdaptiveSnackBarType.success,
         );
       }
@@ -84,7 +85,7 @@ class _CupertinoStorageSettingsPageState
       if (mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: '清理失败: $e',
+          message: context.l10n.clearFailed('$e'),
           type: AdaptiveSnackBarType.error,
         );
       }
@@ -107,7 +108,7 @@ class _CupertinoStorageSettingsPageState
       if (mounted && showMessage) {
         AdaptiveSnackBar.show(
           context,
-          message: '图片缓存已清除',
+          message: context.l10n.imageCacheCleared,
           type: AdaptiveSnackBarType.success,
         );
       }
@@ -115,7 +116,7 @@ class _CupertinoStorageSettingsPageState
       if (mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: '清理失败: $e',
+          message: context.l10n.clearFailed('$e'),
           type: AdaptiveSnackBarType.error,
         );
       }
@@ -132,17 +133,17 @@ class _CupertinoStorageSettingsPageState
     final confirm = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('确认清除缓存'),
-        content: const Text('确定要清除封面与缩略图等图片缓存吗？'),
+        title: Text(context.l10n.confirmClearCacheTitle),
+        content: Text(context.l10n.confirmClearImageCacheContent),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('确定'),
+            child: Text(context.l10n.confirm),
           ),
         ],
       ),
@@ -164,8 +165,8 @@ class _CupertinoStorageSettingsPageState
     final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '存储设置',
+      appBar: AdaptiveAppBar(
+        title: context.l10n.storageSettings,
         useNativeToolbar: true,
       ),
       body: ColoredBox(
@@ -192,8 +193,8 @@ class _CupertinoStorageSettingsPageState
                             CupertinoIcons.refresh_circled,
                             color: resolveSettingsIconColor(context),
                           ),
-                          title: const Text('每次启动时清理弹幕缓存'),
-                          subtitle: const Text('自动删除 cache/danmaku/ 目录下的弹幕缓存'),
+                          title: Text(context.l10n.clearDanmakuCacheOnLaunchTitle),
+                          subtitle: Text(context.l10n.clearDanmakuCacheOnLaunchSubtitle),
                           trailing: CupertinoSwitch(
                             value: _clearOnLaunch,
                             onChanged: _toggleClearOnLaunch,
@@ -217,9 +218,11 @@ class _CupertinoStorageSettingsPageState
                                 CupertinoIcons.camera,
                                 color: resolveSettingsIconColor(context),
                               ),
-                              title: const Text('截图保存位置'),
+                              title: Text(context.l10n.screenshotSaveLocation),
                               subtitle: Text(
-                                currentPath.isEmpty ? '默认：下载目录' : currentPath,
+                                currentPath.isEmpty
+                                    ? context.l10n.defaultDownloadDir
+                                    : currentPath,
                               ),
                               showChevron: true,
                               onTap: () async {
@@ -237,7 +240,7 @@ class _CupertinoStorageSettingsPageState
                                 if (!mounted) return;
                                 AdaptiveSnackBar.show(
                                   context,
-                                  message: '截图保存位置已更新',
+                                  message: context.l10n.screenshotSaveLocationUpdated,
                                   type: AdaptiveSnackBarType.success,
                                 );
                               },
@@ -254,7 +257,7 @@ class _CupertinoStorageSettingsPageState
                                   CupertinoIcons.photo_on_rectangle,
                                   color: resolveSettingsIconColor(context),
                                 ),
-                                title: const Text('截图默认保存位置'),
+                                title: Text(context.l10n.screenshotDefaultSaveTarget),
                                 subtitle: Text(videoState.screenshotSaveTarget.label),
                                 showChevron: true,
                                 onTap: () async {
@@ -262,8 +265,8 @@ class _CupertinoStorageSettingsPageState
                                       await showCupertinoModalPopupWithBottomBar<ScreenshotSaveTarget>(
                                     context: context,
                                     builder: (ctx) => CupertinoActionSheet(
-                                      title: const Text('截图默认保存位置'),
-                                      message: const Text('选择截图后的默认保存方式'),
+                                      title: Text(context.l10n.screenshotDefaultSaveTarget),
+                                      message: Text(context.l10n.screenshotDefaultSaveTargetMessage),
                                       actions: [
                                         CupertinoActionSheetAction(
                                           onPressed: () => Navigator.of(ctx)
@@ -290,7 +293,7 @@ class _CupertinoStorageSettingsPageState
                                       cancelButton: CupertinoActionSheetAction(
                                         isDefaultAction: true,
                                         onPressed: () => Navigator.of(ctx).pop(),
-                                        child: const Text('取消'),
+                                        child: Text(context.l10n.cancel),
                                       ),
                                     ),
                                   );
@@ -311,11 +314,11 @@ class _CupertinoStorageSettingsPageState
                               context,
                             ),
                           ),
-                          title: const Text('立即清理弹幕缓存'),
+                          title: Text(context.l10n.clearDanmakuCacheNow),
                           subtitle: Text(
                             _isClearing
-                                ? '正在清理...'
-                                : '当弹幕异常或占用空间过大时可手动清理',
+                                ? context.l10n.clearingInProgress
+                                : context.l10n.clearDanmakuCacheManualHint,
                           ),
                           onTap: _isClearing
                               ? null
@@ -337,11 +340,11 @@ class _CupertinoStorageSettingsPageState
                               context,
                             ),
                           ),
-                          title: const Text('清除图片缓存'),
+                          title: Text(context.l10n.clearImageCache),
                           subtitle: Text(
                             _isClearingImageCache
-                                ? '正在清理...'
-                                : '清除封面与缩略图等图片缓存',
+                                ? context.l10n.clearingInProgress
+                                : context.l10n.clearImageCacheHint,
                           ),
                           onTap: _isClearingImageCache
                               ? null
@@ -362,7 +365,7 @@ class _CupertinoStorageSettingsPageState
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Text(
-                        '弹幕缓存将存储在应用缓存目录 cache/danmaku/ 中，启用自动清理可减轻空间占用。',
+                        context.l10n.danmakuCacheDescription,
                         style: CupertinoTheme.of(context)
                             .textTheme
                             .textStyle
@@ -379,7 +382,7 @@ class _CupertinoStorageSettingsPageState
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Text(
-                        '图片缓存包含封面与播放缩略图，存储在应用缓存目录中，可按需清理。',
+                        context.l10n.imageCacheDescription,
                         style: CupertinoTheme.of(context)
                             .textTheme
                             .textStyle

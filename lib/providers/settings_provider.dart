@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/l10n/app_locale_utils.dart';
 
 class SettingsProvider with ChangeNotifier {
   late SharedPreferences _prefs;
@@ -42,8 +43,20 @@ class SettingsProvider with ChangeNotifier {
     _prefs = await SharedPreferences.getInstance();
     // Load blur power, defaulting to 0.0 if not set (无模糊)
     _blurPower = _prefs.getDouble(_blurPowerKey) ?? _defaultBlur;
-    // Load danmaku convert setting, defaulting to true if not set
-    _danmakuConvertToSimplified = _prefs.getBool(_danmakuConvertKey) ?? true;
+    // 当用户仍为“自动语言”且系统为繁中时，首次默认关闭“弹幕转简体”。
+    final savedDanmakuConvert = _prefs.getBool(_danmakuConvertKey);
+    if (savedDanmakuConvert != null) {
+      _danmakuConvertToSimplified = savedDanmakuConvert;
+    } else {
+      final languageMode = _prefs.getString(SettingsKeys.appLanguageMode) ?? 'auto';
+      if (languageMode == 'auto') {
+        final systemLocale = WidgetsBinding.instance.platformDispatcher.locale;
+        _danmakuConvertToSimplified =
+            !AppLocaleUtils.isTraditionalChineseLocale(systemLocale);
+      } else {
+        _danmakuConvertToSimplified = true;
+      }
+    }
     _autoMatchDanmakuFirstSearchResultOnHashFail =
         _prefs.getBool(SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail) ??
             true;

@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import '../widgets/about_setting_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -26,7 +27,7 @@ class CupertinoSettingsAboutSection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Text('关于', style: textStyle),
+          child: Text(context.l10n.settingsAboutSection, style: textStyle),
         ),
         const SizedBox(height: 8),
         CupertinoSettingsGroupCard(

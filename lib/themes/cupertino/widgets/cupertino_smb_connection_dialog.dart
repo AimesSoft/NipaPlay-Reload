@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/services/smb_service.dart';
 
@@ -10,7 +11,9 @@ class CupertinoSmbConnectionDialog {
     SMBConnection? editConnection,
     Future<bool> Function(SMBConnection)? onSave,
   }) {
-    final title = editConnection == null ? '添加 SMB 服务器' : '编辑 SMB 服务器';
+    final title = editConnection == null
+        ? context.l10n.smbAddServer
+        : context.l10n.smbEditServer;
     return CupertinoBottomSheet.show<bool>(
       context: context,
       title: title,
@@ -74,13 +77,13 @@ class _CupertinoSmbConnectionSheetState
   String? _validateInputs() {
     final host = _hostController.text.trim();
     if (host.isEmpty) {
-      return '请输入主机或 IP 地址';
+      return context.l10n.smbEnterHostOrIp;
     }
     final portText = _portController.text.trim();
     if (portText.isNotEmpty) {
       final port = int.tryParse(portText);
       if (port == null || port <= 0 || port > 65535) {
-        return '端口无效，请输入 1-65535';
+        return context.l10n.smbInvalidPortRange;
       }
     }
     return null;
@@ -138,7 +141,7 @@ class _CupertinoSmbConnectionSheetState
       if (mounted) {
         AdaptiveSnackBar.show(
           context,
-          message: '保存失败：$e',
+          message: context.l10n.saveFailedWithError('$e'),
           type: AdaptiveSnackBarType.error,
         );
       }
@@ -150,7 +153,7 @@ class _CupertinoSmbConnectionSheetState
     } else {
       setState(() {
         _isSaving = false;
-        _errorMessage = '连接失败，请检查地址和认证信息';
+        _errorMessage = context.l10n.connectFailedCheckCredentials;
       });
     }
   }
@@ -215,7 +218,7 @@ class _CupertinoSmbConnectionSheetState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '用户名/密码可留空以匿名访问；支持填写域名。',
+                    context.l10n.smbAnonymousHint,
                     style: TextStyle(fontSize: 13, color: secondaryLabel),
                   ),
                   if (_errorMessage != null) ...[
@@ -237,40 +240,40 @@ class _CupertinoSmbConnectionSheetState
                 children: [
                   _buildField(
                     context,
-                    label: '主机 / IP',
+                    label: context.l10n.smbHostOrIp,
                     controller: _hostController,
-                    placeholder: '例如：192.168.1.10 或 nas.local',
+                    placeholder: context.l10n.smbHostOrIpPlaceholder,
                     keyboardType: TextInputType.url,
                   ),
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: '端口',
+                    label: context.l10n.smbPort,
                     controller: _portController,
-                    placeholder: '默认 445',
+                    placeholder: context.l10n.smbDefaultPort445,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   ),
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: '域（可选）',
+                    label: context.l10n.smbDomainOptional,
                     controller: _domainController,
-                    placeholder: '例如：WORKGROUP',
+                    placeholder: context.l10n.smbDomainPlaceholder,
                   ),
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: '用户名（可选）',
+                    label: context.l10n.usernameOptional,
                     controller: _usernameController,
-                    placeholder: '可留空',
+                    placeholder: context.l10n.canBeEmpty,
                   ),
                   const SizedBox(height: 12),
                   _buildField(
                     context,
-                    label: '密码（可选）',
+                    label: context.l10n.passwordOptional,
                     controller: _passwordController,
-                    placeholder: '可留空',
+                    placeholder: context.l10n.canBeEmpty,
                     obscureText: true,
                   ),
                 ],
@@ -285,7 +288,7 @@ class _CupertinoSmbConnectionSheetState
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: _isSaving
                     ? const CupertinoActivityIndicator(radius: 8)
-                    : const Text('保存'),
+                    : Text(context.l10n.save),
               ),
             ),
           ),

@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nipaplay/models/emby_model.dart';
@@ -60,8 +61,7 @@ class _CupertinoNetworkMediaLibrarySheetState
           widget.jellyfinProvider.isConnected) {
         return initial;
       }
-      if (initial == MediaServerType.emby &&
-          widget.embyProvider.isConnected) {
+      if (initial == MediaServerType.emby && widget.embyProvider.isConnected) {
         return initial;
       }
     }
@@ -111,6 +111,7 @@ class _CupertinoNetworkMediaLibrarySheetState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     _ensureActiveServer();
 
     final backgroundColor = CupertinoDynamicColor.resolve(
@@ -123,11 +124,8 @@ class _CupertinoNetworkMediaLibrarySheetState
     final bool embyConnected = widget.embyProvider.isConnected;
     final bool showSegmented = jellyfinConnected && embyConnected;
 
-    final bool isJellyfinActive =
-        _activeServer == MediaServerType.jellyfin;
-    final bool connected = isJellyfinActive
-        ? jellyfinConnected
-        : embyConnected;
+    final bool isJellyfinActive = _activeServer == MediaServerType.jellyfin;
+    final bool connected = isJellyfinActive ? jellyfinConnected : embyConnected;
     final bool isLoading = isJellyfinActive
         ? widget.jellyfinProvider.isLoading
         : widget.embyProvider.isLoading;
@@ -157,7 +155,7 @@ class _CupertinoNetworkMediaLibrarySheetState
               hasScrollBody: false,
               child: Center(
                 child: Text(
-                  '当前服务器未连接，请返回重新选择。',
+                  l10n.currentServerNotConnectedHint,
                   style: TextStyle(
                     fontSize: 14,
                     color: CupertinoDynamicColor.resolve(
@@ -178,10 +176,10 @@ class _CupertinoNetworkMediaLibrarySheetState
               hasScrollBody: false,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  CupertinoActivityIndicator(),
-                  SizedBox(height: 12),
-                  Text('正在加载远程媒体库...'),
+                children: [
+                  const CupertinoActivityIndicator(),
+                  const SizedBox(height: 12),
+                  Text(l10n.loadingRemoteMediaLibrary),
                 ],
               ),
             ),
@@ -208,13 +206,13 @@ class _CupertinoNetworkMediaLibrarySheetState
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      errorMessage ?? '加载失败',
+                      errorMessage ?? l10n.loadFailed,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     CupertinoButton(
                       onPressed: _handleRefresh,
-                      child: const Text('重试'),
+                      child: Text(l10n.retry),
                     ),
                   ],
                 ),
@@ -240,11 +238,11 @@ class _CupertinoNetworkMediaLibrarySheetState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('暂未获取到远程媒体条目'),
+                  Text(l10n.noRemoteMediaItems),
                   const SizedBox(height: 12),
                   CupertinoButton(
                     onPressed: _handleRefresh,
-                    child: const Text('刷新'),
+                    child: Text(l10n.mediaServerRefresh),
                   ),
                 ],
               ),
@@ -294,7 +292,8 @@ class _CupertinoNetworkMediaLibrarySheetState
 
         slivers.add(
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(20, showSegmented ? 0 : topSpacing, 20, 24),
+            padding:
+                EdgeInsets.fromLTRB(20, showSegmented ? 0 : topSpacing, 20, 24),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
@@ -328,7 +327,8 @@ class _CupertinoNetworkMediaLibrarySheetState
       child: CupertinoAnimeCard(
         title: item.name,
         imageUrl: imageUrl.isEmpty ? null : imageUrl,
-        episodeLabel: '收录于 ${_dateFormatter.format(item.dateAdded.toLocal())}',
+        episodeLabel: context.l10n
+            .recordedAtDate(_dateFormatter.format(item.dateAdded.toLocal())),
         lastWatchTime: item.dateAdded,
         sourceLabel: 'Jellyfin',
         rating: double.tryParse(item.communityRating ?? ''),
@@ -351,7 +351,8 @@ class _CupertinoNetworkMediaLibrarySheetState
       child: CupertinoAnimeCard(
         title: item.name,
         imageUrl: imageUrl.isEmpty ? null : imageUrl,
-        episodeLabel: '收录于 ${_dateFormatter.format(item.dateAdded.toLocal())}',
+        episodeLabel: context.l10n
+            .recordedAtDate(_dateFormatter.format(item.dateAdded.toLocal())),
         lastWatchTime: item.dateAdded,
         sourceLabel: 'Emby',
         rating: double.tryParse(item.communityRating ?? ''),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
@@ -58,19 +59,23 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
 
     if (mounted) {
       BlurSnackBar.show(
-          context, '弹弹play服务器已切换到: ${_getServerDisplayName(serverUrl)}');
+        context,
+        context.l10n.networkServerSwitchedTo(
+          _getServerDisplayName(context, serverUrl),
+        ),
+      );
     }
   }
 
   Future<void> _saveCustomServer() async {
     final input = _customServerController.text.trim();
     if (input.isEmpty) {
-      BlurSnackBar.show(context, '请输入服务器地址');
+      BlurSnackBar.show(context, context.l10n.enterServerAddress);
       return;
     }
 
     if (!NetworkSettings.isValidServerUrl(input)) {
-      BlurSnackBar.show(context, '服务器地址格式不正确，请以 http/https 开头');
+      BlurSnackBar.show(context, context.l10n.invalidServerAddress);
       return;
     }
 
@@ -87,29 +92,29 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       _isSavingCustom = false;
     });
 
-    BlurSnackBar.show(context, '已切换到自定义服务器');
+    BlurSnackBar.show(context, context.l10n.switchedToCustomServer);
   }
 
-  String _getServerDisplayName(String serverUrl) {
+  String _getServerDisplayName(BuildContext context, String serverUrl) {
     switch (serverUrl) {
       case NetworkSettings.primaryServer:
-        return '主服务器';
+        return context.l10n.primaryServer;
       case NetworkSettings.backupServer:
-        return '备用服务器';
+        return context.l10n.backupServer;
       default:
         return serverUrl;
     }
   }
 
-  List<DropdownMenuItemData> _getServerDropdownItems() {
+  List<DropdownMenuItemData> _getServerDropdownItems(BuildContext context) {
     final items = [
       DropdownMenuItemData(
-        title: '主服务器 (推荐)',
+        title: context.l10n.networkPrimaryServerRecommended,
         value: NetworkSettings.primaryServer,
         isSelected: _currentServer == NetworkSettings.primaryServer,
       ),
       DropdownMenuItemData(
-        title: '备用服务器',
+        title: context.l10n.networkBackupServer,
         value: NetworkSettings.backupServer,
         isSelected: _currentServer == NetworkSettings.backupServer,
       ),
@@ -118,7 +123,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     if (NetworkSettings.isCustomServer(_currentServer)) {
       items.add(
         DropdownMenuItemData(
-          title: '自定义：$_currentServer',
+          title: context.l10n.customServerWithValue(_currentServer),
           value: _currentServer,
           isSelected: true,
         ),
@@ -130,6 +135,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.transparent,
@@ -146,10 +152,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       body: ListView(
         children: [
           SettingsItem.dropdown(
-            title: "弹弹play服务器",
-            subtitle: "选择弹弹play弹幕服务器。备用服务器可在主服务器无法访问时使用。",
+            title: l10n.dandanplayServer,
+            subtitle: l10n.networkServerSelectSubtitle,
             icon: Ionicons.server_outline,
-            items: _getServerDropdownItems(),
+            items: _getServerDropdownItems(context),
             onChanged: (serverUrl) => _changeServer(serverUrl),
             dropdownKey: _serverDropdownKey,
           ),
@@ -166,7 +172,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         color: colorScheme.onSurface, size: 18),
                     const SizedBox(width: 8),
                     Text(
-                      '自定义服务器',
+                      l10n.customServer,
                       style: TextStyle(
                         color: colorScheme.onSurface,
                         fontSize: 14,
@@ -177,7 +183,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '输入兼容弹弹play接口规范的弹幕服务器地址，例如 https://example.com',
+                  l10n.customServerInputHint,
                   style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
                 ),
                 const SizedBox(height: 12),
@@ -185,7 +191,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   controller: _customServerController,
                   cursorColor: const Color(0xFFff2e55),
                   decoration: InputDecoration(
-                    hintText: 'https://your-danmaku-server.com',
+                    hintText: l10n.customServerPlaceholder,
                     hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
                     filled: true,
                     fillColor: colorScheme.onSurface.withOpacity(0.1),
@@ -205,7 +211,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   alignment: Alignment.centerRight,
                   child: BlurButton(
                     icon: _isSavingCustom ? null : Ionicons.checkmark_outline,
-                    text: _isSavingCustom ? '保存中...' : '使用该服务器',
+                    text: _isSavingCustom ? l10n.saving : l10n.useThisServer,
                     onTap: _isSavingCustom ? () {} : _saveCustomServer,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
@@ -232,7 +238,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '当前服务器信息',
+                      l10n.currentServerInfo,
                       style: TextStyle(
                         color: colorScheme.onSurface,
                         fontSize: 14,
@@ -243,7 +249,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '服务器: ${_getServerDisplayName(_currentServer)}',
+                  l10n.serverField(_getServerDisplayName(context, _currentServer)),
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 13,
@@ -251,7 +257,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'URL: $_currentServer',
+                  l10n.urlField(_currentServer),
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.6),
                     fontSize: 12,
@@ -276,7 +282,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '服务器说明',
+                      l10n.serverDescriptionTitle,
                       style: TextStyle(
                         color: colorScheme.onSurface,
                         fontSize: 14,
@@ -287,7 +293,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '• 主服务器：api.dandanplay.net（官方服务器，推荐使用）',
+                  l10n.serverBullet(
+                    l10n.primaryServer,
+                    l10n.networkServerDescriptionPrimary,
+                  ),
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 12,
@@ -295,7 +304,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '• 备用服务器：139.224.252.88:16001（镜像服务器，主服务器无法访问时使用）',
+                  l10n.serverBullet(
+                    l10n.backupServer,
+                    l10n.networkServerDescriptionBackup,
+                  ),
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 12,

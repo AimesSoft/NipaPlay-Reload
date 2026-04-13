@@ -2,6 +2,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -58,8 +59,8 @@ class _CupertinoUIThemeSettingsPageState
     }
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '主题（实验性）',
+      appBar: AdaptiveAppBar(
+        title: context.l10n.uiThemeExperimental,
         useNativeToolbar: true,
       ),
       body: ColoredBox(
@@ -97,7 +98,7 @@ class _CupertinoUIThemeSettingsPageState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  '提示：切换主题后需要重新启动应用才能完全生效。',
+                  context.l10n.uiThemeRestartHint,
                   style:
                       CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                             fontSize: 13,
@@ -132,16 +133,16 @@ class _CupertinoUIThemeSettingsPageState
     bool confirmed = false;
     await AdaptiveAlertDialog.show(
       context: context,
-      title: '主题切换提示',
-      message: '切换到 ${theme.displayName} 主题需要重启应用才能完全生效。\n\n是否要立即重启应用？',
+      title: context.l10n.uiThemeSwitchDialogTitle,
+      message: context.l10n.uiThemeSwitchDialogMessage(theme.displayName),
       actions: [
         AlertAction(
-          title: '取消',
+          title: context.l10n.cancel,
           style: AlertActionStyle.cancel,
           onPressed: () {},
         ),
         AlertAction(
-          title: '重启应用',
+          title: context.l10n.restartApp,
           style: AlertActionStyle.primary,
           onPressed: () {
             confirmed = true;
@@ -166,7 +167,7 @@ class _CupertinoUIThemeSettingsPageState
     if (kIsWeb) {
       AdaptiveSnackBar.show(
         context,
-        message: '请手动刷新页面以应用新主题',
+        message: context.l10n.refreshPageApplyTheme,
         type: AdaptiveSnackBarType.info,
       );
       return;

@@ -1,4 +1,5 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_network_settings_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
@@ -14,8 +15,8 @@ class CupertinoNetworkSettingTile extends StatelessWidget {
 
     return CupertinoSettingsTile(
       leading: Icon(CupertinoIcons.globe, color: iconColor),
-      title: const Text('网络设置'),
-      subtitle: const Text('弹弹play 服务器及自定义地址'),
+      title: Text(context.l10n.networkSettings),
+      subtitle: Text(context.l10n.networkSettingsSubtitle),
       backgroundColor: tileColor,
       showChevron: true,
       onTap: () {

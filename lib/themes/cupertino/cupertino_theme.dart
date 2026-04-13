@@ -1,7 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
-import 'package:flutter/material.dart' show ColorScheme, Locale, ThemeMode;
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter/material.dart' show ColorScheme;
 import 'package:dynamic_color/dynamic_color.dart';
 
 import 'package:nipaplay/themes/theme_descriptor.dart';
@@ -56,15 +55,9 @@ class CupertinoThemeDescriptor extends ThemeDescriptor {
             brightness: Brightness.dark,
             primaryColor: _cupertinoAccentColor,
           ),
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-          ],
-          supportedLocales: const [
-            Locale('zh', 'CN'),
-            Locale('en', ''),
-          ],
+          locale: context.locale,
+          localizationsDelegates: context.localizationsDelegates,
+          supportedLocales: context.supportedLocales,
           home: context.cupertinoHomeBuilder(),
           builder: (buildContext, appChild) {
             final child = context.overlayBuilder(

@@ -6,6 +6,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:nipaplay/l10n/app_locale_utils.dart';
+import 'package:nipaplay/l10n/app_localizations.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -71,6 +74,7 @@ import 'services/hotkey_service_initializer.dart';
 import 'utils/shortcut_tooltip_manager.dart';
 import 'utils/hotkey_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
@@ -626,6 +630,7 @@ void main(List<String> args) async {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => BottomBarProvider()),
+          ChangeNotifierProvider(create: (_) => AppLanguageProvider()),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
           ChangeNotifierProvider(create: (_) => VideoPlayerState()),
           ChangeNotifierProvider(
@@ -785,6 +790,16 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
     }
   }
 
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    if (!mounted) {
+      return;
+    }
+    context.read<AppLanguageProvider>().refreshSystemLocale(
+          locales?.isNotEmpty == true ? locales!.first : null,
+        );
+  }
+
   Future<void> _handleSingleInstanceMessage(
     SingleInstanceMessage message,
   ) async {
@@ -849,8 +864,18 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
           _handleDroppedFile(filePath);
         }
       },
-      child: Consumer2<ThemeNotifier, UIThemeProvider>(
-        builder: (context, themeNotifier, uiThemeProvider, child) {
+      child: Consumer3<ThemeNotifier, UIThemeProvider, AppLanguageProvider>(
+        builder:
+            (context, themeNotifier, uiThemeProvider, appLanguageProvider, _) {
+          final localizationsDelegates = <LocalizationsDelegate<dynamic>>[
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ];
+          const supportedLocales = AppLocaleUtils.supportedLocales;
+          final locale = appLanguageProvider.locale;
+
           final effectiveBrightness = _resolveEffectiveBrightness(
             themeNotifier.themeMode,
             _platformBrightness,
@@ -866,6 +891,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
               MaterialApp(
                 title: 'NipaPlay',
                 debugShowCheckedModeBanner: false,
+                locale: locale,
+                localizationsDelegates: localizationsDelegates,
+                supportedLocales: supportedLocales,
                 home: const SplashScreen(),
                 builder: (context, appChild) {
                   return Stack(
@@ -900,6 +928,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
             navigatorKey: navigatorKey,
             launchFilePath: widget.launchFilePath,
             environment: environment,
+            locale: locale,
+            supportedLocales: supportedLocales,
+            localizationsDelegates: localizationsDelegates,
             settings: uiThemeProvider.currentThemeSettings,
             overlayBuilder: overlayBuilder,
             materialHomeBuilder: () => kIsWeb
@@ -1315,7 +1346,7 @@ class MainPageState extends State<MainPage>
           builder: (context, shouldShowAppBar, child) {
             return CustomScaffold(
               pages: widget.pages,
-              tabPage: createTabLabels(),
+              tabPage: createTabLabels(context),
               pageIsHome: true,
               shouldShowAppBar: shouldShowAppBar,
               tabController: globalTabController,
@@ -1456,7 +1487,9 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
         : (isDarkMode ? Colors.white : Colors.black87);
     final icon =
         isDarkMode ? Icons.nightlight_rounded : Icons.light_mode_rounded;
-    final tooltip = isDarkMode ? '切换到日间模式' : '切换到夜间模式';
+    final tooltip = isDarkMode
+        ? context.l10n.toggleToLightMode
+        : context.l10n.toggleToDarkMode;
 
     return Tooltip(
       message: tooltip,
@@ -1525,7 +1558,7 @@ class _SettingsEntryButtonState extends State<_SettingsEntryButton> {
         : (isDarkMode ? Colors.white : Colors.black87);
 
     return Tooltip(
-      message: '设置',
+      message: context.l10n.settingsLabel,
       child: MouseRegion(
         onEnter: (_) => _setHovered(true),
         onExit: (_) => _setHovered(false),

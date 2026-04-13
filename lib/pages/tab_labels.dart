@@ -1,23 +1,24 @@
 // tab_labels.dart
 import 'package:flutter/material.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
-List<Widget> createTabLabels() {
+List<Widget> createTabLabels(BuildContext context) {
   List<Widget> tabs = [
-    const Padding(
+    Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: HoverZoomTab(text: "主页"),
+      child: HoverZoomTab(text: context.l10n.tabHome),
     ),
-    const Padding(
+    Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: HoverZoomTab(text: "视频播放"),
+      child: HoverZoomTab(text: context.l10n.tabVideoPlay),
     ),
-    const Padding(
+    Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: HoverZoomTab(text: "媒体库"),
+      child: HoverZoomTab(text: context.l10n.tabMediaLibrary),
     ),
-    const Padding(
+    Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: HoverZoomTab(text: "个人中心"),
+      child: HoverZoomTab(text: context.l10n.tabAccount),
     ),
   ];
 
@@ -100,7 +101,6 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
               ],
               Text(
                 widget.text,
-                locale: const Locale("zh-Hans", "zh"),
                 style: TextStyle(
                   color: solidColor,
                   fontSize: widget.fontSize,

@@ -4,6 +4,7 @@ import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/controllers/user_activity_controller.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
@@ -39,8 +40,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
         Row(
           children: [
             Text(
-              '我的活动记录',
-              locale:Locale("zh-Hans","zh"),
+              context.l10n.userActivityTitle,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -50,7 +50,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             const Spacer(),
             BlurButton(
               icon: Ionicons.refresh_outline,
-              text: '刷新',
+              text: context.l10n.mediaServerRefresh,
               flatStyle: true,
               hoverScale: _buttonHoverScale,
               onTap: () {
@@ -68,7 +68,9 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4.0),
               child: HoverZoomTab(
-                text: '观看(${recentWatched.length})',
+                text: context.l10n.userActivityTabWatchedCount(
+                  recentWatched.length,
+                ),
                 fontSize: 18,
                 icon: const Icon(
                   Ionicons.play_circle_outline,
@@ -79,7 +81,9 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4.0),
               child: HoverZoomTab(
-                text: '收藏(${favorites.length})',
+                text: context.l10n.userActivityTabFavoritesCount(
+                  favorites.length,
+                ),
                 fontSize: 18,
                 icon: const Icon(
                   Ionicons.heart_outline,
@@ -90,7 +94,9 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4.0),
               child: HoverZoomTab(
-                text: '评分(${rated.length})',
+                text: context.l10n.userActivityTabRatedCount(
+                  rated.length,
+                ),
                 fontSize: 18,
                 icon: const Icon(
                   Ionicons.star_outline,
@@ -181,7 +187,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
           const SizedBox(height: 16),
           BlurButton(
             icon: Ionicons.refresh_outline,
-            text: '重试',
+            text: context.l10n.retry,
             flatStyle: true,
             hoverScale: _buttonHoverScale,
             onTap: loadUserActivity,
@@ -196,7 +202,10 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
     final textSecondary = theme.resources.textFillColorSecondary;
 
     if (recentWatched.isEmpty) {
-      return _buildEmptyState('暂无观看记录', Ionicons.play_circle_outline);
+      return _buildEmptyState(
+        context.l10n.userActivityNoWatchedRecords,
+        Ionicons.play_circle_outline,
+      );
     }
 
     return ListView.builder(
@@ -207,8 +216,10 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
         return _buildAnimeListItem(
           item: item,
           subtitle: item['lastEpisodeTitle'] != null 
-              ? '看到: ${item['lastEpisodeTitle']}'
-              : '已观看',
+              ? context.l10n.userActivityWatchedEpisode(
+                  item['lastEpisodeTitle'].toString(),
+                )
+              : context.l10n.userActivityWatchedOnly,
           trailing: item['lastWatchedTime'] != null
               ? Text(
                   formatTime(item['lastWatchedTime']),
@@ -224,10 +235,11 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
   }
 
   Widget _buildFavoritesList() {
-    final theme = fluent.FluentTheme.of(context);
-
     if (favorites.isEmpty) {
-      return _buildEmptyState('暂无收藏', Ionicons.heart_outline);
+      return _buildEmptyState(
+        context.l10n.userActivityNoFavorites,
+        Ionicons.heart_outline,
+      );
     }
 
     return ListView.builder(
@@ -268,7 +280,10 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
 
   Widget _buildRatedList() {
     if (rated.isEmpty) {
-      return _buildEmptyState('暂无评分记录', Ionicons.star_outline);
+      return _buildEmptyState(
+        context.l10n.userActivityNoRatings,
+        Ionicons.star_outline,
+      );
     }
 
     return ListView.builder(
@@ -442,7 +457,8 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.item['animeTitle'] ?? '未知标题',
+                            widget.item['animeTitle'] ??
+                                context.l10n.userActivityUnknownTitle,
                             style: TextStyle(
                               color: textPrimary,
                               fontSize: 14,

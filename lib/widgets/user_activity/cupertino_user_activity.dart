@@ -1,5 +1,6 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/controllers/user_activity_controller.dart';
@@ -60,7 +61,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
         Row(
           children: [
             Text(
-              '我的活动记录',
+              context.l10n.userActivityTitle,
               style: CupertinoTheme.of(context)
                   .textTheme
                   .textStyle
@@ -137,7 +138,11 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
           fontWeight: FontWeight.w500,
         ),
         child: AdaptiveSegmentedControl(
-          labels: const ['观看', '收藏', '评分'],
+          labels: [
+            context.l10n.userActivityTabWatched,
+            context.l10n.userActivityTabFavorites,
+            context.l10n.userActivityTabRated,
+          ],
           selectedIndex: _selectedIndex,
           color: segmentColor,
           onValueChanged: _onSegmentChanged,
@@ -183,7 +188,7 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
             AdaptiveButton(
               onPressed: loadUserActivity,
               style: AdaptiveButtonStyle.tinted,
-              label: '重试',
+              label: context.l10n.retry,
             ),
           ],
         ),
@@ -196,8 +201,10 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
 
     if (items.isEmpty) {
       final String emptyText = _selectedIndex == 0
-          ? '暂无观看记录'
-          : (_selectedIndex == 1 ? '暂无收藏内容' : '尚未对作品评分');
+          ? context.l10n.userActivityNoWatchedRecords
+          : (_selectedIndex == 1
+              ? context.l10n.userActivityNoFavorites
+              : context.l10n.userActivityNoRatings);
 
       return Container(
         decoration: BoxDecoration(
@@ -249,7 +256,9 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
 
   Widget _buildActivityTile(Map<String, dynamic> item) {
     final int? animeId = item['animeId'] as int?;
-    final String title = (item['animeTitle'] ?? '未知作品').toString();
+    final String title =
+        (item['animeTitle'] ?? context.l10n.userActivityUnknownTitle)
+            .toString();
 
     final String subtitle;
     if (_selectedIndex == 0) {
@@ -257,19 +266,20 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       final String watched = formatTime(item['lastWatchedTime'] as String?);
       subtitle = [
         if (episodeTitle != null && episodeTitle.isNotEmpty)
-          '看到：$episodeTitle',
-        if (watched.isNotEmpty) '更新时间：$watched',
+          context.l10n.userActivityWatchedEpisode(episodeTitle),
+        if (watched.isNotEmpty) context.l10n.userActivityWatchedUpdatedTime(watched),
       ].join('\n');
     } else if (_selectedIndex == 1) {
       final String? status = item['favoriteStatus'] as String?;
       final int rating = item['rating'] as int? ?? 0;
       subtitle = [
-        if (status != null && status.isNotEmpty) '状态：$status',
-        if (rating > 0) '评分：$rating',
+        if (status != null && status.isNotEmpty)
+          context.l10n.userActivityStatusWithValue(getFavoriteStatusText(status)),
+        if (rating > 0) context.l10n.userActivityRatingWithValue(rating),
       ].join('\n');
     } else {
       final int rating = item['rating'] as int? ?? 0;
-      subtitle = '评分：$rating';
+      subtitle = context.l10n.userActivityRatingWithValue(rating);
     }
 
     final tileColor = resolveSettingsTileBackground(context);
@@ -349,7 +359,9 @@ class _CupertinoUserActivityState extends State<CupertinoUserActivity>
       }
     }
 
-    final title = (item['animeTitle'] ?? '未知作品').toString();
+    final title =
+        (item['animeTitle'] ?? context.l10n.userActivityUnknownTitle)
+            .toString();
     final imageUrl = item['imageUrl'] as String?;
     final rawTime = item['lastWatchedTime'] as String?;
     final parsed = rawTime != null

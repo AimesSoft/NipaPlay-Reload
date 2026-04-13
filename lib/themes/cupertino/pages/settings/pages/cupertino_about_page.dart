@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:flutter/material.dart' show SystemMouseCursors;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -25,16 +26,16 @@ class CupertinoAboutPage extends StatefulWidget {
 }
 
 class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
-  String _version = '加载中…';
+  String _version = '';
+  bool _versionLoadFailed = false;
   UpdateInfo? _updateInfo;
   bool _isCheckingUpdate = false;
-  bool _isAutoCheckEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _loadVersion();
-    _initAutoCheckUpdateSetting();
+    _checkForUpdatesInBackgroundIfEnabled();
   }
 
   Future<void> _loadVersion() async {
@@ -43,35 +44,20 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       if (!mounted) return;
       setState(() {
         _version = info.version;
+        _versionLoadFailed = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _version = '获取失败';
+        _versionLoadFailed = true;
       });
     }
   }
 
-  Future<void> _initAutoCheckUpdateSetting() async {
+  Future<void> _checkForUpdatesInBackgroundIfEnabled() async {
     final enabled = await UpdateService.isAutoCheckEnabled();
-    if (!mounted) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    if (enabled) {
-      _checkForUpdates();
-    }
-  }
-
-  Future<void> _setAutoCheckEnabled(bool enabled) async {
-    if (_isAutoCheckEnabled == enabled) return;
-    setState(() {
-      _isAutoCheckEnabled = enabled;
-    });
-    await UpdateService.setAutoCheckEnabled(enabled);
-    if (enabled) {
-      _checkForUpdates();
-    }
+    if (!enabled || !mounted) return;
+    _checkForUpdates();
   }
 
   Future<void> _checkForUpdates() async {
@@ -104,7 +90,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
   Future<void> _showUpdateDialog(UpdateInfo info) async {
     final notes = info.releaseNotes.trim().isNotEmpty
         ? info.releaseNotes.trim()
-        : '暂无更新内容';
+        : context.l10n.aboutNoReleaseNotes;
     final publishedAt = _formatPublishedAt(info.publishedAt);
     final brightness = CupertinoTheme.brightnessOf(context);
     final notesBackground = CupertinoDynamicColor.resolve(
@@ -123,18 +109,21 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
 
     await BlurDialog.show(
       context: context,
-      title: info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本',
+      title: info.hasUpdate
+          ? context.l10n.aboutFoundNewVersion(info.latestVersion)
+          : context.l10n.aboutCurrentIsLatest,
       contentWidget: SizedBox(
         width: double.infinity,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('当前版本: ${info.currentVersion}'),
-            Text('最新版本: ${info.latestVersion}'),
+            Text(context.l10n.aboutCurrentVersionLabel(info.currentVersion)),
+            Text(context.l10n.aboutLatestVersionLabel(info.latestVersion)),
             if (info.releaseName.trim().isNotEmpty)
-              Text('版本名称: ${info.releaseName.trim()}'),
-            if (publishedAt.isNotEmpty) Text('发布时间: $publishedAt'),
+              Text(context.l10n.aboutReleaseNameLabel(info.releaseName.trim())),
+            if (publishedAt.isNotEmpty)
+              Text(context.l10n.aboutPublishedAtLabel(publishedAt)),
             if (info.error != null && info.error!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -146,8 +135,8 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
               ),
             ],
             const SizedBox(height: 12),
-            const Text(
-              '更新内容',
+            Text(
+              context.l10n.aboutReleaseNotesTitle,
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
@@ -189,11 +178,11 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
               Navigator.of(context).pop();
               _launchURL(info.releaseUrl);
             },
-            child: const Text('跳转'),
+            child: Text(context.l10n.aboutOpenReleasePage),
           ),
         CupertinoDialogAction(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
+          child: Text(context.l10n.close),
         ),
       ],
     );
@@ -223,12 +212,12 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     if (info == null) {
       await BlurDialog.show(
         context: context,
-        title: '检查更新失败',
-        content: '请稍后再试',
+        title: context.l10n.updateCheckFailed,
+        content: context.l10n.pleaseTryAgainLater,
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('关闭'),
+            child: Text(context.l10n.close),
           ),
         ],
       );
@@ -244,7 +233,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '无法打开链接: $urlString',
+        message: context.l10n.cannotOpenLink(urlString),
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -253,7 +242,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
   void _showAppreciationQR() {
     CupertinoBottomSheet.show(
       context: context,
-      title: '赞赏码',
+      title: context.l10n.appreciationCode,
       heightRatio: 0.82,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -298,7 +287,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              '赞赏码图片加载失败',
+                              context.l10n.appreciationImageLoadFailed,
                               style: TextStyle(
                                 color: errorTextColor,
                                 fontSize: 14,
@@ -335,8 +324,8 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
     final accentColor = CupertinoTheme.of(context).primaryColor;
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '关于',
+      appBar: AdaptiveAppBar(
+        title: context.l10n.about,
         useNativeToolbar: true,
       ),
       body: ColoredBox(
@@ -365,8 +354,8 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                       _buildRichSection(
                         context,
                         title: null,
-                        content: const [
-                          TextSpan(text: 'NipaPlay，名字来自《寒蝉鸣泣之时》中古手梨花的口头禅 "'),
+                        content: [
+                          TextSpan(text: context.l10n.aboutStoryPrefix),
                           TextSpan(
                             text: 'にぱ〜☆',
                             style: TextStyle(
@@ -376,19 +365,17 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                             ),
                           ),
                           TextSpan(
-                            text:
-                                '"。为了解决我在 macOS、Linux、iOS 上看番不便的问题，我创造了 NipaPlay。',
+                            text: context.l10n.aboutStorySuffix,
                           ),
                         ],
                       ),
                       const SizedBox(height: 20),
                       _buildRichSection(
                         context,
-                        title: '致谢',
+                        title: context.l10n.acknowledgements,
                         content: [
-                          const TextSpan(
-                            text: '感谢弹弹play (DandanPlay) 以及开发者 ',
-                          ),
+                          TextSpan(
+                              text: context.l10n.aboutThanksDandanplayPrefix),
                           TextSpan(
                             text: 'Kaedei',
                             style: TextStyle(
@@ -396,8 +383,11 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const TextSpan(text: ' 提供的接口与开发帮助。\n\n'),
-                          const TextSpan(text: '感谢开发者 '),
+                          TextSpan(
+                            text:
+                                '${context.l10n.aboutThanksDandanplaySuffix}\n\n',
+                          ),
+                          TextSpan(text: context.l10n.aboutThanksSakikoPrefix),
                           TextSpan(
                             text: 'Sakiko',
                             style: TextStyle(
@@ -405,13 +395,13 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const TextSpan(text: ' 帮助实现 Emby 与 Jellyfin 媒体库支持。'),
+                          TextSpan(text: context.l10n.aboutThanksSakikoSuffix),
                         ],
                         trailing: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '感谢下列用户的赞助支持：',
+                              context.l10n.thanksSponsorUsers,
                               style: CupertinoTheme.of(context)
                                   .textTheme
                                   .textStyle
@@ -483,7 +473,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
               clipBehavior: Clip.none,
               children: [
                 Text(
-                  'NipaPlay Reload 当前版本：$_version',
+                  context.l10n.aboutVersionBanner(_displayVersionText(context)),
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w600,
@@ -531,41 +521,15 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           onPressed: _isCheckingUpdate ? null : _manualCheckForUpdates,
           child: _isCheckingUpdate
-              ? const Row(
+              ? Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CupertinoActivityIndicator(radius: 8),
-                    SizedBox(width: 8),
-                    Text('检测中…'),
+                    const CupertinoActivityIndicator(radius: 8),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.aboutCheckingUpdates),
                   ],
                 )
-              : const Text('检测更新'),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '自动检测更新',
-              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                    fontSize: 14,
-                    color: secondaryColor,
-                  ),
-            ),
-            const SizedBox(width: 10),
-            CupertinoSwitch(
-              value: _isAutoCheckEnabled,
-              onChanged: _setAutoCheckEnabled,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '关闭后仅手动检测',
-          style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
-                fontSize: 12,
-                color: secondaryColor,
-              ),
+              : Text(context.l10n.aboutCheckUpdates),
         ),
       ],
     );
@@ -631,12 +595,12 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       ),
       (
         icon: Ionicons.chatbubbles_outline,
-        label: 'QQ群: 961207150',
+        label: context.l10n.aboutQqGroup('961207150'),
         url: 'https://qm.qq.com/q/w9j09QJn4Q',
       ),
       (
         icon: Ionicons.globe_outline,
-        label: 'NipaPlay 官方网站',
+        label: context.l10n.aboutOfficialWebsite,
         url: 'https://nipaplay.aimes-soft.com',
       ),
     ];
@@ -647,7 +611,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         child: Text(
-          '开源与社区',
+          context.l10n.openSourceCommunity,
           style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -687,7 +651,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Text(
-          '欢迎贡献代码，或将应用发布到更多平台。不会 Dart 也没关系，借助 AI 编程同样可以。',
+          context.l10n.aboutCommunityHint,
           style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                 fontSize: 13,
                 color: CupertinoDynamicColor.resolve(
@@ -716,7 +680,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            '赞助支持',
+            context.l10n.sponsorSupport,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -726,7 +690,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Text(
-            '如果你喜欢 NipaPlay 并且希望支持项目的持续开发，欢迎通过爱发电进行赞助。',
+            context.l10n.aboutSponsorParagraph1,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 14,
                   color: CupertinoDynamicColor.resolve(
@@ -740,7 +704,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Text(
-            '赞助者的名字将会出现在项目的 README 文件和每次软件更新后的关于页面名单中。',
+            context.l10n.aboutSponsorParagraph2,
             style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                   fontSize: 14,
                   color: CupertinoDynamicColor.resolve(
@@ -757,7 +721,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
             Ionicons.heart,
             color: CupertinoColors.systemPink,
           ),
-          title: const Text('爱发电赞助页面'),
+          title: Text(context.l10n.aboutAfdianSponsorPage),
           trailing: Icon(
             CupertinoIcons.arrow_up_right,
             color: resolveSettingsIconColor(context),
@@ -771,7 +735,7 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
             Ionicons.qr_code,
             color: CupertinoColors.systemOrange,
           ),
-          title: const Text('赞赏码'),
+          title: Text(context.l10n.appreciationCode),
           trailing: Icon(
             CupertinoIcons.chevron_forward,
             color: resolveSettingsIconColor(context),
@@ -833,5 +797,15 @@ class _CupertinoAboutPageState extends State<CupertinoAboutPage> {
       margin: const EdgeInsetsDirectional.only(start: 20),
       color: resolveSettingsSeparatorColor(context),
     );
+  }
+
+  String _displayVersionText(BuildContext context) {
+    if (_versionLoadFailed) {
+      return context.l10n.versionLoadFailed;
+    }
+    if (_version.isEmpty) {
+      return context.l10n.loading;
+    }
+    return _version;
   }
 }

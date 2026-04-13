@@ -3,6 +3,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
@@ -38,7 +39,7 @@ class _CupertinoDependencyVersionsSheetState
     if (uri == null) {
       AdaptiveSnackBar.show(
         context,
-        message: '链接无效',
+        message: context.l10n.invalidLink,
         type: AdaptiveSnackBarType.error,
       );
       return;
@@ -47,7 +48,7 @@ class _CupertinoDependencyVersionsSheetState
       if (!mounted) return;
       AdaptiveSnackBar.show(
         context,
-        message: '无法打开链接: $urlString',
+        message: context.l10n.cannotOpenLink(urlString),
         type: AdaptiveSnackBarType.error,
       );
     }
@@ -56,13 +57,15 @@ class _CupertinoDependencyVersionsSheetState
   String _formatDependencyType(String dependency) {
     switch (dependency) {
       case 'direct main':
-        return '直接依赖';
+        return context.l10n.dependencyTypeDirectMain;
       case 'direct dev':
-        return '开发依赖';
+        return context.l10n.dependencyTypeDirectDev;
       case 'transitive':
-        return '间接依赖';
+        return context.l10n.dependencyTypeTransitive;
       default:
-        return dependency.isEmpty ? '未知来源' : dependency;
+        return dependency.isEmpty
+            ? context.l10n.dependencyTypeUnknown
+            : dependency;
     }
   }
 
@@ -71,11 +74,11 @@ class _CupertinoDependencyVersionsSheetState
       case 'git':
         return 'git';
       case 'path':
-        return '本地';
+        return context.l10n.localSource;
       case 'hosted':
         return 'pub.dev';
       default:
-        return source.isEmpty ? '未知' : source;
+        return source.isEmpty ? context.l10n.unknown : source;
     }
   }
 
@@ -91,10 +94,10 @@ class _CupertinoDependencyVersionsSheetState
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(20, topSpacing + 32, 20, 24),
                   child: Column(
-                    children: const [
-                      CupertinoActivityIndicator(),
-                      SizedBox(height: 12),
-                      Text('正在解析依赖信息...'),
+                    children: [
+                      const CupertinoActivityIndicator(),
+                      const SizedBox(height: 12),
+                      Text(context.l10n.parsingDependencyInfo),
                     ],
                   ),
                 ),
@@ -119,12 +122,12 @@ class _CupertinoDependencyVersionsSheetState
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text('读取依赖列表失败'),
+                      Text(context.l10n.readDependencyListFailed),
                       const SizedBox(height: 12),
                       CupertinoButton.filled(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         onPressed: _reload,
-                        child: const Text('重试'),
+                        child: Text(context.l10n.retry),
                       ),
                     ],
                   ),
@@ -158,8 +161,19 @@ class _CupertinoDependencyVersionsSheetState
                 padding: EdgeInsets.fromLTRB(20, topSpacing + 12, 20, 12),
                 child: Text(
                   other > 0
-                      ? '共 $total 个库 · 直接 $directMain / 开发 $directDev / 间接 $transitive / 其他 $other'
-                      : '共 $total 个库 · 直接 $directMain / 开发 $directDev / 间接 $transitive',
+                      ? context.l10n.dependencySummaryWithOther(
+                          total,
+                          directMain,
+                          directDev,
+                          transitive,
+                          other,
+                        )
+                      : context.l10n.dependencySummaryNoOther(
+                          total,
+                          directMain,
+                          directDev,
+                          transitive,
+                        ),
                   style: TextStyle(
                     fontSize: 13,
                     color: labelColor,
@@ -181,7 +195,11 @@ class _CupertinoDependencyVersionsSheetState
                         ),
                         title: Text(entry.name),
                         subtitle: Text(
-                          '版本: ${entry.version} · ${_formatDependencyType(entry.dependency)} · ${_formatSourceType(entry.source)}',
+                          context.l10n.dependencyEntrySubtitle(
+                            entry.version,
+                            _formatDependencyType(entry.dependency),
+                            _formatSourceType(entry.source),
+                          ),
                         ),
                         trailing: Icon(
                           Ionicons.logo_github,

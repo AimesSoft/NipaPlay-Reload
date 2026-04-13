@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -63,7 +64,9 @@ class _CupertinoNetworkSettingsPageState
 
     AdaptiveSnackBar.show(
       context,
-      message: '弹弹play 服务器已切换到 ${_getServerDisplayName(serverUrl)}',
+      message: context.l10n.networkServerSwitchedTo(
+        _getServerDisplayName(context, serverUrl),
+      ),
       type: AdaptiveSnackBarType.success,
     );
   }
@@ -73,7 +76,7 @@ class _CupertinoNetworkSettingsPageState
     if (input.isEmpty) {
       AdaptiveSnackBar.show(
         context,
-        message: '请输入服务器地址',
+        message: context.l10n.enterServerAddress,
         type: AdaptiveSnackBarType.warning,
       );
       return;
@@ -81,7 +84,7 @@ class _CupertinoNetworkSettingsPageState
     if (!NetworkSettings.isValidServerUrl(input)) {
       AdaptiveSnackBar.show(
         context,
-        message: '服务器地址格式不正确，请以 http/https 开头',
+        message: context.l10n.invalidServerAddress,
         type: AdaptiveSnackBarType.error,
       );
       return;
@@ -100,7 +103,7 @@ class _CupertinoNetworkSettingsPageState
       });
       AdaptiveSnackBar.show(
         context,
-        message: '已切换到自定义服务器',
+        message: context.l10n.switchedToCustomServer,
         type: AdaptiveSnackBarType.success,
       );
     } finally {
@@ -115,12 +118,12 @@ class _CupertinoNetworkSettingsPageState
   Future<void> _showServerPicker() async {
     final List<_ServerOption> options = [
       _ServerOption(
-        label: '主服务器 (推荐)',
+        label: context.l10n.networkPrimaryServerRecommended,
         value: NetworkSettings.primaryServer,
         description: 'api.dandanplay.net',
       ),
       _ServerOption(
-        label: '备用服务器',
+        label: context.l10n.networkBackupServer,
         value: NetworkSettings.backupServer,
         description: '139.224.252.88:16001',
       ),
@@ -129,7 +132,7 @@ class _CupertinoNetworkSettingsPageState
     if (NetworkSettings.isCustomServer(_currentServer)) {
       options.add(
         _ServerOption(
-          label: '当前自定义服务器',
+          label: context.l10n.networkCurrentCustomServer,
           value: _currentServer,
           description: _currentServer,
         ),
@@ -140,7 +143,7 @@ class _CupertinoNetworkSettingsPageState
       context: context,
       builder: (context) {
         return CupertinoActionSheet(
-          title: const Text('选择弹弹play 服务器'),
+          title: Text(context.l10n.networkSelectServer),
           actions: options
               .map(
                 (option) => CupertinoActionSheetAction(
@@ -168,7 +171,7 @@ class _CupertinoNetworkSettingsPageState
           cancelButton: CupertinoActionSheetAction(
             isDefaultAction: true,
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
         );
       },
@@ -179,12 +182,12 @@ class _CupertinoNetworkSettingsPageState
     }
   }
 
-  String _getServerDisplayName(String serverUrl) {
+  String _getServerDisplayName(BuildContext context, String serverUrl) {
     switch (serverUrl) {
       case NetworkSettings.primaryServer:
-        return '主服务器';
+        return context.l10n.primaryServer;
       case NetworkSettings.backupServer:
-        return '备用服务器';
+        return context.l10n.backupServer;
       default:
         return serverUrl;
     }
@@ -199,8 +202,8 @@ class _CupertinoNetworkSettingsPageState
     final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '网络设置',
+      appBar: AdaptiveAppBar(
+        title: context.l10n.networkSettings,
         useNativeToolbar: true,
       ),
       body: ColoredBox(
@@ -243,8 +246,12 @@ class _CupertinoNetworkSettingsPageState
             CupertinoIcons.cloud,
             color: resolveSettingsIconColor(context),
           ),
-          title: const Text('弹弹play 服务器'),
-          subtitle: Text('当前：${_getServerDisplayName(_currentServer)}'),
+          title: Text(context.l10n.dandanplayServer),
+          subtitle: Text(
+            context.l10n.currentServer(
+              _getServerDisplayName(context, _currentServer),
+            ),
+          ),
           backgroundColor: tileColor,
           showChevron: true,
           onTap: _showServerPicker,
@@ -274,7 +281,7 @@ class _CupertinoNetworkSettingsPageState
                       size: 18, color: iconColor),
                   const SizedBox(width: 8),
                   Text(
-                    '自定义服务器',
+                    context.l10n.customServer,
                     style: textTheme.copyWith(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -284,7 +291,7 @@ class _CupertinoNetworkSettingsPageState
               ),
               const SizedBox(height: 8),
               Text(
-                '输入兼容弹弹play API 的弹幕服务器地址，例如 https://example.com',
+                context.l10n.customServerInputHint,
                 style: textTheme.copyWith(
                   fontSize: 13,
                   color: subtitleColor,
@@ -293,7 +300,7 @@ class _CupertinoNetworkSettingsPageState
               const SizedBox(height: 12),
               CupertinoTextField(
                 controller: _customServerController,
-                placeholder: 'https://your-danmaku-server.com',
+                placeholder: context.l10n.customServerPlaceholder,
                 keyboardType: TextInputType.url,
                 autocorrect: false,
                 enableSuggestions: false,
@@ -318,7 +325,7 @@ class _CupertinoNetworkSettingsPageState
                     onPressed: _isSavingCustom ? null : _saveCustomServer,
                     child: _isSavingCustom
                         ? const CupertinoActivityIndicator(radius: 8)
-                        : const Text('使用该服务器'),
+                        : Text(context.l10n.useThisServer),
                   ),
                 ),
               ),
@@ -335,7 +342,16 @@ class _CupertinoNetworkSettingsPageState
     final Color separatorColor = resolveSettingsSeparatorColor(context);
     final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
     final Color secondaryColor = resolveSettingsSecondaryTextColor(context);
-    final serverList = NetworkSettings.getAvailableServers();
+    final serverList = [
+      (
+        name: context.l10n.primaryServer,
+        description: context.l10n.networkServerDescriptionPrimary,
+      ),
+      (
+        name: context.l10n.backupServer,
+        description: context.l10n.networkServerDescriptionBackup,
+      ),
+    ];
 
     return CupertinoSettingsGroupCard(
       margin: EdgeInsets.zero,
@@ -351,7 +367,7 @@ class _CupertinoNetworkSettingsPageState
                   Icon(CupertinoIcons.info, size: 18, color: iconColor),
                   const SizedBox(width: 8),
                   Text(
-                    '当前服务器信息',
+                    context.l10n.currentServerInfo,
                     style: textTheme.copyWith(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -361,12 +377,14 @@ class _CupertinoNetworkSettingsPageState
               ),
               const SizedBox(height: 12),
               Text(
-                '服务器：${_getServerDisplayName(_currentServer)}',
+                context.l10n.serverField(
+                  _getServerDisplayName(context, _currentServer),
+                ),
                 style: textTheme.copyWith(fontSize: 14),
               ),
               const SizedBox(height: 4),
               Text(
-                'URL：$_currentServer',
+                context.l10n.urlField(_currentServer),
                 style: textTheme.copyWith(
                   fontSize: 13,
                   color: secondaryColor,
@@ -386,7 +404,7 @@ class _CupertinoNetworkSettingsPageState
                   Icon(CupertinoIcons.book, size: 18, color: iconColor),
                   const SizedBox(width: 8),
                   Text(
-                    '服务器说明',
+                    context.l10n.serverDescriptionTitle,
                     style: textTheme.copyWith(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -397,12 +415,13 @@ class _CupertinoNetworkSettingsPageState
               const SizedBox(height: 12),
               ...serverList.map(
                 (server) {
-                  final name = server['name'] ?? '';
-                  final description = server['description'] ?? '';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
-                      '• $name：$description',
+                      context.l10n.serverBullet(
+                        server.name,
+                        server.description,
+                      ),
                       style: textTheme.copyWith(
                         fontSize: 13,
                         color: secondaryColor,

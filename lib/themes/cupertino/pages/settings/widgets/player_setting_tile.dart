@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/cupertino/pages/settings/pages/cupertino_player_settings_page.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
@@ -14,33 +15,20 @@ class CupertinoPlayerSettingTile extends StatefulWidget {
 
 class _CupertinoPlayerSettingTileState
     extends State<CupertinoPlayerSettingTile> {
-  late String _kernelName;
-
-  @override
-  void initState() {
-    super.initState();
-    _kernelName = _kernelLabel(PlayerFactory.getKernelType());
-  }
-
-  String _kernelLabel(PlayerKernelType type) {
+  String _kernelLabel(BuildContext context, PlayerKernelType type) {
     switch (type) {
       case PlayerKernelType.mdk:
-        return '当前：MDK';
+        return context.l10n.playerKernelCurrentMdk;
       case PlayerKernelType.videoPlayer:
-        return '当前：Video Player';
+        return context.l10n.playerKernelCurrentVideoPlayer;
       case PlayerKernelType.mediaKit:
-        return '当前：Libmpv';
+        return context.l10n.playerKernelCurrentLibmpv;
     }
-  }
-
-  Future<void> _refreshKernelName() async {
-    setState(() {
-      _kernelName = _kernelLabel(PlayerFactory.getKernelType());
-    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final kernelName = _kernelLabel(context, PlayerFactory.getKernelType());
     final tileColor = resolveSettingsTileBackground(context);
 
     return CupertinoSettingsTile(
@@ -48,8 +36,8 @@ class _CupertinoPlayerSettingTileState
         CupertinoIcons.play_circle,
         color: resolveSettingsIconColor(context),
       ),
-      title: const Text('播放器'),
-      subtitle: Text(_kernelName),
+      title: Text(context.l10n.player),
+      subtitle: Text(kernelName),
       backgroundColor: tileColor,
       showChevron: true,
       onTap: () async {
@@ -59,7 +47,7 @@ class _CupertinoPlayerSettingTileState
           ),
         );
         if (!mounted) return;
-        await _refreshKernelName();
+        setState(() {});
       },
     );
   }

@@ -13,6 +13,8 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/services/desktop_exit_preferences.dart';
 import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
+import 'package:nipaplay/services/update_service.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Define the key for SharedPreferences
@@ -43,6 +45,7 @@ class _GeneralPageState extends State<GeneralPage> {
   DesktopStartupWindowPosition _startupWindowPosition =
       DesktopStartupWindowPreferences.defaultPosition;
   Size _startupWindowSize = DesktopStartupWindowPreferences.defaultWindowSize;
+  bool _autoCheckUpdatesEnabled = true;
   final GlobalKey _startupWindowStateDropdownKey = GlobalKey();
   final GlobalKey _startupWindowPositionDropdownKey = GlobalKey();
   final GlobalKey _startupWindowSizeDropdownKey = GlobalKey();
@@ -101,6 +104,7 @@ class _GeneralPageState extends State<GeneralPage> {
     final startupPosition =
         await DesktopStartupWindowPreferences.loadPosition();
     final startupSize = await DesktopStartupWindowPreferences.loadSize();
+    final autoCheckUpdatesEnabled = await UpdateService.isAutoCheckEnabled();
     if (mounted) {
       setState(() {
         var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
@@ -108,6 +112,7 @@ class _GeneralPageState extends State<GeneralPage> {
         _startupWindowState = startupState;
         _startupWindowPosition = startupPosition;
         _startupWindowSize = startupSize;
+        _autoCheckUpdatesEnabled = autoCheckUpdatesEnabled;
 
         if (storedIndex < 0) {
           storedIndex = 0;
@@ -127,6 +132,14 @@ class _GeneralPageState extends State<GeneralPage> {
 
   Future<void> _saveDesktopExitBehavior(DesktopExitBehavior behavior) async {
     await DesktopExitPreferences.save(behavior);
+  }
+
+  Future<void> _setAutoCheckUpdatesEnabled(bool enabled) async {
+    if (_autoCheckUpdatesEnabled == enabled) return;
+    setState(() {
+      _autoCheckUpdatesEnabled = enabled;
+    });
+    await UpdateService.setAutoCheckEnabled(enabled);
   }
 
   List<DropdownMenuItemData<DesktopStartupWindowState>>
@@ -512,6 +525,7 @@ class _GeneralPageState extends State<GeneralPage> {
         _defaultPageIndex = snapshot.data ?? 0;
 
         final colorScheme = Theme.of(context).colorScheme;
+        final l10n = context.l10n;
 
         final List<Widget> items = [];
 
@@ -631,6 +645,18 @@ class _GeneralPageState extends State<GeneralPage> {
               _saveDefaultPagePreference(index);
             },
             dropdownKey: _defaultPageDropdownKey,
+          ),
+        );
+        items.add(
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        );
+        items.add(
+          SettingsItem.toggle(
+            title: l10n.aboutAutoCheckUpdates,
+            subtitle: l10n.aboutManualOnlyWhenDisabled,
+            icon: Ionicons.cloud_outline,
+            value: _autoCheckUpdatesEnabled,
+            onChanged: _setAutoCheckUpdatesEnabled,
           ),
         );
         items.add(

@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:provider/provider.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
@@ -74,8 +75,8 @@ class _CupertinoAppearanceSettingsPageState
     final double topPadding = MediaQuery.of(context).padding.top + 64;
 
     return AdaptiveScaffold(
-      appBar: const AdaptiveAppBar(
-        title: '外观',
+      appBar: AdaptiveAppBar(
+        title: context.l10n.appearance,
         useNativeToolbar: true,
       ),
       body: ColoredBox(
@@ -97,18 +98,18 @@ class _CupertinoAppearanceSettingsPageState
                 children: [
                   _buildThemeOptionTile(
                     mode: ThemeMode.light,
-                    title: '浅色模式',
-                    subtitle: '保持明亮的界面与对比度。',
+                    title: context.l10n.lightMode,
+                    subtitle: context.l10n.appearanceLightModeSubtitle,
                   ),
                   _buildThemeOptionTile(
                     mode: ThemeMode.dark,
-                    title: '深色模式',
-                    subtitle: '降低亮度，保护视力并节省电量。',
+                    title: context.l10n.darkMode,
+                    subtitle: context.l10n.appearanceDarkModeSubtitle,
                   ),
                   _buildThemeOptionTile(
                     mode: ThemeMode.system,
-                    title: '跟随系统',
-                    subtitle: '自动根据系统设置切换外观。',
+                    title: context.l10n.followSystem,
+                    subtitle: context.l10n.appearanceFollowSystemSubtitle,
                   ),
                 ],
               ),
@@ -116,7 +117,7 @@ class _CupertinoAppearanceSettingsPageState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  '番剧详情样式',
+                  context.l10n.appearanceAnimeDetailStyle,
                   style:
                       CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                             fontSize: 13,
@@ -137,13 +138,13 @@ class _CupertinoAppearanceSettingsPageState
                 children: [
                   _buildDetailModeTile(
                     mode: AnimeDetailDisplayMode.simple,
-                    title: '简洁模式',
-                    subtitle: '经典布局，信息分栏展示。',
+                    title: context.l10n.appearanceDetailSimple,
+                    subtitle: context.l10n.appearanceDetailSimpleSubtitle,
                   ),
                   _buildDetailModeTile(
                     mode: AnimeDetailDisplayMode.vivid,
-                    title: '绚丽模式',
-                    subtitle: '海报主视觉、横向剧集卡片。',
+                    title: context.l10n.appearanceDetailVivid,
+                    subtitle: context.l10n.appearanceDetailVividSubtitle,
                   ),
                 ],
               ),
@@ -151,7 +152,7 @@ class _CupertinoAppearanceSettingsPageState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  '最近观看样式',
+                  context.l10n.appearanceRecentWatchingStyle,
                   style:
                       CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                             fontSize: 13,
@@ -172,13 +173,13 @@ class _CupertinoAppearanceSettingsPageState
                 children: [
                   _buildRecentStyleTile(
                     style: RecentWatchingStyle.simple,
-                    title: '简洁版',
-                    subtitle: '纯文本列表，节省空间。',
+                    title: context.l10n.appearanceRecentSimple,
+                    subtitle: context.l10n.appearanceRecentSimpleSubtitle,
                   ),
                   _buildRecentStyleTile(
                     style: RecentWatchingStyle.detailed,
-                    title: '详细版',
-                    subtitle: '带截图的横向滚动卡片。',
+                    title: context.l10n.appearanceRecentDetailed,
+                    subtitle: context.l10n.appearanceRecentDetailedSubtitle,
                   ),
                 ],
               ),
@@ -186,7 +187,7 @@ class _CupertinoAppearanceSettingsPageState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  '主页板块',
+                  context.l10n.appearanceHomeSections,
                   style:
                       CupertinoTheme.of(context).textTheme.textStyle.copyWith(
                             fontSize: 13,
@@ -218,8 +219,8 @@ class _CupertinoAppearanceSettingsPageState
                       CupertinoIcons.refresh,
                       color: resolveSettingsIconColor(context),
                     ),
-                    title: const Text('恢复默认'),
-                    subtitle: const Text('恢复默认排序与显示状态'),
+                    title: Text(context.l10n.restoreDefaults),
+                    subtitle: Text(context.l10n.restoreDefaultsSubtitle),
                     backgroundColor: resolveSettingsTileBackground(context),
                     onTap: homeSections.restoreDefaults,
                   ),

@@ -23,6 +23,9 @@ class BangumiAnime {
   final String? searchKeyword;
 
   final List<EpisodeData>? episodeList; // Changed from 'episodes' to 'episodeList' to avoid conflict if 'episodes' is a field name in JSON for BangumiDetails itself.
+  
+  // 新增字段：存储番剧信息的语言类型
+  final String? language; // 'zh' for简体中文, 'zh_Hant' for繁体中文
 
   bool get hasDetails => summary != null && (rating != null || ratingDetails != null) && (tags != null || metadata != null);
 
@@ -48,6 +51,7 @@ class BangumiAnime {
     this.titles,
     this.searchKeyword,
     this.episodeList,
+    this.language,
   });
 
   BangumiAnime copyWith({
@@ -72,6 +76,7 @@ class BangumiAnime {
     List<Map<String, String>>? titles,
     String? searchKeyword,
     List<EpisodeData>? episodeList,
+    String? language,
   }) {
     return BangumiAnime(
       id: id ?? this.id,
@@ -95,6 +100,7 @@ class BangumiAnime {
       titles: titles ?? this.titles,
       searchKeyword: searchKeyword ?? this.searchKeyword,
       episodeList: episodeList ?? this.episodeList,
+      language: language ?? this.language,
     );
   }
 
@@ -127,6 +133,7 @@ class BangumiAnime {
       typeDescription: null,
       titles: null,
       episodeList: null, // Episodes are not in BangumiIntro
+      language: 'zh', // 默认语言为简体中文
     );
   }
 
@@ -246,6 +253,7 @@ class BangumiAnime {
       titles: parsedTitles,
       searchKeyword: json['searchKeyword'] as String?,
       episodeList: parsedEpisodeList,
+      language: 'zh', // 默认语言为简体中文
     );
   }
 
@@ -281,6 +289,7 @@ class BangumiAnime {
         'episodeTitle': e.title,
         'airDate': e.airDate
       }).toList(), // 额外保存一份原始格式的数据，确保fromDandanplayDetail能正确解析
+      'language': language, // 保存番剧信息的语言类型
     };
   }
 
@@ -377,6 +386,7 @@ class BangumiAnime {
       titles: titles,
       searchKeyword: json['searchKeyword']?.toString(),
       episodeList: parsedEpisodeList,
+      language: json['language']?.toString() ?? 'zh', // 从JSON读取language字段，默认为简体中文
     );
   }
 }

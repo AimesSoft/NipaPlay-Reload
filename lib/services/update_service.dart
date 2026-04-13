@@ -13,13 +13,23 @@ class UpdateService {
 
   static Future<bool> isAutoCheckEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsKeys.autoCheckUpdatesOnAboutPage) ??
-        _defaultAutoCheckEnabled;
+    final latest = prefs.getBool(SettingsKeys.autoCheckUpdatesInBackground);
+    if (latest != null) return latest;
+
+    final legacy =
+        prefs.getBool(SettingsKeys.legacyAutoCheckUpdatesOnAboutPage);
+    if (legacy != null) {
+      await prefs.setBool(SettingsKeys.autoCheckUpdatesInBackground, legacy);
+      return legacy;
+    }
+
+    return _defaultAutoCheckEnabled;
   }
 
   static Future<void> setAutoCheckEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsKeys.autoCheckUpdatesOnAboutPage, enabled);
+    await prefs.setBool(SettingsKeys.autoCheckUpdatesInBackground, enabled);
+    await prefs.remove(SettingsKeys.legacyAutoCheckUpdatesOnAboutPage);
     debugPrint('自动检测更新已${enabled ? "开启" : "关闭"}');
   }
 

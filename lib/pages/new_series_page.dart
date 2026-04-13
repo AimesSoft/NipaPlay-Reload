@@ -25,6 +25,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dar
 import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 
 class NewSeriesPage extends StatefulWidget {
   const NewSeriesPage({super.key});
@@ -42,7 +43,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   
   // States for loading video from detail page
   bool _isLoadingVideoFromDetail = false;
-  String _loadingMessageForDetail = '正在加载视频...';
+  String _loadingMessageForDetail = '';
 
   // Override wantKeepAlive for AutomaticKeepAliveClientMixin
   @override
@@ -60,17 +61,26 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     TagSearchModal.show(context);
   }
 
-  // 添加星期几的映射
-  static const Map<int, String> _weekdays = {
-    0: '周日',
-    1: '周一',
-    2: '周二',
-    3: '周三',
-    4: '周四',
-    5: '周五',
-    6: '周六',
-    -1: '未知', // For animes with null or invalid airWeekday
-  };
+  String _weekdayText(int weekday) {
+    switch (weekday) {
+      case 0:
+        return context.l10n.weekdaySunday;
+      case 1:
+        return context.l10n.weekdayMonday;
+      case 2:
+        return context.l10n.weekdayTuesday;
+      case 3:
+        return context.l10n.weekdayWednesday;
+      case 4:
+        return context.l10n.weekdayThursday;
+      case 5:
+        return context.l10n.weekdayFriday;
+      case 6:
+        return context.l10n.weekdaySaturday;
+      default:
+        return context.l10n.unknown;
+    }
+  }
 
   @override
   void initState() {
@@ -88,6 +98,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   Future<void> _loadAnimes({bool forceRefresh = false}) async {
+    final l10n = context.l10n;
     try {
       if (!mounted) {
         return;
@@ -105,7 +116,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
           final apiUri =
               WebRemoteAccessService.apiUri('/api/bangumi/calendar');
           if (apiUri == null) {
-            throw Exception('未配置远程访问地址');
+            throw Exception(l10n.newSeriesRemoteAddressNotConfigured);
           }
           final response = await http.get(apiUri);
           if (response.statusCode == 200) {
@@ -136,13 +147,13 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     } catch (e) {
       String errorMsg = e.toString();
       if (e is TimeoutException) {
-        errorMsg = '网络请求超时，请检查网络连接后重试';
+        errorMsg = l10n.newSeriesNetworkTimeout;
       } else if (errorMsg.contains('SocketException')) {
-        errorMsg = '网络连接失败，请检查网络设置';
+        errorMsg = l10n.newSeriesNetworkConnectionFailed;
       } else if (errorMsg.contains('HttpException')) {
-        errorMsg = '服务器无法连接，请稍后重试';
+        errorMsg = l10n.newSeriesServerUnavailableRetryLater;
       } else if (errorMsg.contains('FormatException')) {
-        errorMsg = '服务器返回数据格式错误';
+        errorMsg = l10n.newSeriesServerDataFormatError;
       }
       
       if (mounted) {
@@ -257,14 +268,13 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
   }
 
   SliverToBoxAdapter _buildEmptyDaySliver() {
-    return const SliverToBoxAdapter(
+    return SliverToBoxAdapter(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
         child: Center(
           child: Text(
-            "本日无新番",
-            locale: Locale("zh-Hans", "zh"),
-            style: TextStyle(color: Colors.white70),
+            context.l10n.newSeriesNoTodayAnime,
+            style: const TextStyle(color: Colors.white70),
           ),
         ),
       ),
@@ -307,11 +317,11 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('加载失败: $_error'),
+            Text(context.l10n.loadFailedWithError(_error!)),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => _loadAnimes(),
-              child: const Text('重试'),
+              child: Text(context.l10n.retry),
             ),
           ],
         ),
@@ -341,7 +351,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
             for (final weekday in knownWeekdays) ...[
               _buildWeekdayHeaderSliver(
                 context,
-                title: _weekdays[weekday] ?? '未知',
+                title: _weekdayText(weekday),
                 weekdayKey: weekday,
                 count: groupedAnimes[weekday]?.length ?? 0,
                 isToday: weekday == today,
@@ -359,7 +369,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
               _buildWeekdayHeaderSliver(
                 context,
-                title: '更新时间未定',
+                title: context.l10n.newSeriesUpdateTimeTbd,
                 weekdayKey: -1,
                 count: unknownAnimes.length,
                 isToday: false,
@@ -379,14 +389,16 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
               FloatingActionGlassButton(
                 iconData: Ionicons.search_outline,
                 onPressed: _showSearchModal,
-                description: '搜索新番\n按标签、类型快速筛选\n查找你感兴趣的新番',
+                description: context.l10n.newSeriesSearchDescription,
               ),
               const SizedBox(height: 16), // 按钮之间的间距
               // 排序按钮
               FloatingActionGlassButton(
                 iconData: _isReversed ? Ionicons.chevron_up_outline : Ionicons.chevron_down_outline,
                 onPressed: _toggleSort,
-                description: _isReversed ? '切换为正序显示\n今天的新番排在最前' : '切换为倒序显示\n今天的新番排在最后',
+                description: _isReversed
+                    ? context.l10n.newSeriesSortDescriptionAscending
+                    : context.l10n.newSeriesSortDescriptionDescending,
               ),
             ],
           ),
@@ -428,7 +440,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
 
     setState(() {
       _isLoadingVideoFromDetail = true;
-      _loadingMessageForDetail = '正在初始化播放器...';
+      _loadingMessageForDetail = context.l10n.newSeriesInitializingPlayer;
     });
 
     final playableItem = PlayableItem(
@@ -498,7 +510,12 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
                 setState(() {
                   _isLoadingVideoFromDetail = false;
                 });
-                BlurSnackBar.show(context, '播放器加载失败: ${videoState.error ?? '未知错误'}');
+                BlurSnackBar.show(
+                  context,
+                  context.l10n.newSeriesPlayerLoadFailedWithError(
+                    videoState.error ?? context.l10n.unknownErrorOccurred,
+                  ),
+                );
               }
             });
         } else if (tabChangeLogicExecutedInDetail && (videoState.status == PlayerStatus.ready || videoState.status == PlayerStatus.playing)) {
@@ -514,9 +531,13 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
       if (mounted) {
         setState(() {
           _isLoadingVideoFromDetail = false;
-          _loadingMessageForDetail = '发生错误: $e';
+          _loadingMessageForDetail =
+              context.l10n.newSeriesErrorOccurredWithError('$e');
         });
-        BlurSnackBar.show(context, '处理播放请求时出错: $e');
+        BlurSnackBar.show(
+          context,
+          context.l10n.newSeriesHandlePlayRequestFailedWithError('$e'),
+        );
       }
     }
   }
@@ -528,7 +549,7 @@ class _NewSeriesPageState extends State<NewSeriesPage> with AutomaticKeepAliveCl
     required int count,
     required bool isToday,
   }) {
-    final String countText = '$count 部动画';
+    final String countText = context.l10n.newSeriesAnimeCount(count);
 
     return Padding(
       padding: const EdgeInsets.only(top: 16.0, bottom: 4.0),
