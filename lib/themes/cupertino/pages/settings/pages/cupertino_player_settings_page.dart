@@ -889,38 +889,37 @@ class _CupertinoPlayerSettingsPageState
                 ),
                 backgroundColor: tileBackground,
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  CupertinoSettingsTile(
-                    leading: Icon(
-                      CupertinoIcons.timer,
-                      color: resolveSettingsIconColor(context),
+              if (isAutoNext)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    CupertinoSettingsTile(
+                      leading: Icon(
+                        CupertinoIcons.timer,
+                        color: resolveSettingsIconColor(context),
+                      ),
+                      title: Text(context.l10n.autoNextCountdownTitle),
+                      subtitle: Text(
+                        context.l10n.autoNextCountdownWaitSeconds(
+                          videoState.autoNextCountdownSeconds,
+                        ),
+                      ),
+                      backgroundColor: tileBackground,
+                      contentPadding:
+                          const EdgeInsetsDirectional.fromSTEB(20, 12, 16, 8),
                     ),
-                    title: Text(context.l10n.autoNextCountdownTitle),
-                    subtitle: Text(
-                      isAutoNext
-                          ? context.l10n.autoNextCountdownWaitSeconds(
-                              videoState.autoNextCountdownSeconds,
-                            )
-                          : context.l10n.autoNextCountdownNeedAutoNext,
+                    Container(
+                      color: tileBackground,
+                      padding:
+                          const EdgeInsetsDirectional.fromSTEB(20, 0, 16, 12),
+                      child: _buildAutoNextCountdownSlider(
+                        context,
+                        videoState,
+                        isAutoNext,
+                      ),
                     ),
-                    backgroundColor: tileBackground,
-                    contentPadding:
-                        const EdgeInsetsDirectional.fromSTEB(20, 12, 16, 8),
-                  ),
-                  Container(
-                    color: tileBackground,
-                    padding:
-                        const EdgeInsetsDirectional.fromSTEB(20, 0, 16, 12),
-                    child: _buildAutoNextCountdownSlider(
-                      context,
-                      videoState,
-                      isAutoNext,
-                    ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
           );
         },

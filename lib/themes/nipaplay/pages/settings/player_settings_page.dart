@@ -619,33 +619,36 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           },
         ),
 
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             final bool isAutoNext =
                 videoState.playbackEndAction == PlaybackEndAction.autoNext;
+            if (!isAutoNext) {
+              return const SizedBox.shrink();
+            }
             final double minSeconds =
                 AutoNextEpisodeService.minCountdownSeconds.toDouble();
             final double maxSeconds =
                 AutoNextEpisodeService.maxCountdownSeconds.toDouble();
             final divisions = AutoNextEpisodeService.maxCountdownSeconds -
                 AutoNextEpisodeService.minCountdownSeconds;
-            return SettingsItem.slider(
-              title: '自动连播倒计时',
-              subtitle: isAutoNext
-                  ? '播放结束后等待多久再自动播放下一话'
-                  : '该设置在“播放结束操作”选择“自动播放下一话”时才会生效',
-              icon: Ionicons.timer_outline,
-              enabled: isAutoNext,
-              value: videoState.autoNextCountdownSeconds.toDouble(),
-              min: minSeconds,
-              max: maxSeconds,
-              divisions: divisions,
-              onChanged: (value) {
-                videoState.setAutoNextCountdownSeconds(value.round());
-              },
-              labelFormatter: (value) => '${value.round()} 秒',
+            return Column(
+              children: [
+                Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+                SettingsItem.slider(
+                  title: '自动连播倒计时',
+                  subtitle: '播放结束后等待多久再自动播放下一话',
+                  icon: Ionicons.timer_outline,
+                  value: videoState.autoNextCountdownSeconds.toDouble(),
+                  min: minSeconds,
+                  max: maxSeconds,
+                  divisions: divisions,
+                  onChanged: (value) {
+                    videoState.setAutoNextCountdownSeconds(value.round());
+                  },
+                  labelFormatter: (value) => '${value.round()} 秒',
+                ),
+              ],
             );
           },
         ),
