@@ -755,10 +755,16 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
         _lastLanguageSetting != currentLanguage) {
       // 语言设置变化，标记所有缓存为需要更新
       _fetchedFullAnimeData.clear();
+      // 清空卡片Widget缓存，避免显示旧语言的内容
+      _cardWidgetCache.clear();
       // 标记语言已更新
       _languageUpdated = true;
       // 重新获取所有番剧详情
       await _fetchAndPersistFullDetailsInBackground();
+      // 触发UI重建，确保显示新语言的内容
+      if (mounted) {
+        setState(() {});
+      }
     }
 
     // 更新上次语言设置
