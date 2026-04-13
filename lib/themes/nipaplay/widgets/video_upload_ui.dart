@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -228,6 +229,11 @@ class _VideoUploadUIState extends State<VideoUploadUI>
   }
 
   void _toggleUrlInput() {
+    if (globals.isTabletLikeMobile) {
+      unawaited(_showUrlInputDialog());
+      return;
+    }
+
     setState(() {
       _showUrlInput = !_showUrlInput;
     });
@@ -238,6 +244,130 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         _urlFocusNode.requestFocus();
       });
     }
+  }
+
+  Future<void> _showUrlInputDialog() async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    var requestedFocus = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        if (!requestedFocus) {
+          requestedFocus = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _urlFocusNode.requestFocus();
+          });
+        }
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color:
+                    colorScheme.surface.withOpacity(isDarkMode ? 0.94 : 0.98),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: textColor.withOpacity(0.12)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '输入链接',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '支持 http/https 串流直链，建议使用 Media Kit 或 MDK 内核。',
+                    style: TextStyle(
+                      color: textColor.withOpacity(0.72),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _urlController,
+                    focusNode: _urlFocusNode,
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.go,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    onSubmitted: (_) =>
+                        _handlePlayFromUrlFromDialog(dialogContext),
+                    decoration: InputDecoration(
+                      hintText: 'https://example.com/video.mp4 或签名下载直链',
+                      filled: true,
+                      fillColor: colorScheme.surface.withOpacity(
+                        isDarkMode ? 0.58 : 0.94,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: Text('取消', style: TextStyle(color: textColor)),
+                      ),
+                      TextButton(
+                        onPressed:
+                            _isSubmittingUrl ? null : _pasteUrlFromClipboard,
+                        child: Text('粘贴', style: TextStyle(color: textColor)),
+                      ),
+                      TextButton(
+                        onPressed: _isSubmittingUrl
+                            ? null
+                            : () => _handlePlayFromUrlFromDialog(dialogContext),
+                        child: Text(
+                          _isSubmittingUrl ? '处理中...' : '播放链接',
+                          style: const TextStyle(
+                            color: Color(0xFFFF2E55),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handlePlayFromUrlFromDialog(BuildContext dialogContext) async {
+    final success = await _handlePlayFromUrl();
+    if (!success || !mounted) return;
+    if (!dialogContext.mounted) return;
+    Navigator.of(dialogContext).pop();
   }
 
   Widget _buildUrlInputCard(BuildContext context, Color textColor) {
@@ -336,8 +466,8 @@ class _VideoUploadUIState extends State<VideoUploadUI>
     }
   }
 
-  Future<void> _handlePlayFromUrl() async {
-    if (_isSubmittingUrl) return;
+  Future<bool> _handlePlayFromUrl() async {
+    if (_isSubmittingUrl) return false;
 
     final rawInput = _urlController.text.trim();
     final uri = Uri.tryParse(rawInput);
@@ -349,7 +479,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
     if (!isValidHttpUrl) {
       BlurSnackBar.show(context, '请输入有效的 http/https 视频链接');
       _urlFocusNode.requestFocus();
-      return;
+      return false;
     }
 
     setState(() {
@@ -366,14 +496,17 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         playableItem,
       )) {
         videoState.resetPlayer();
-        return;
+        return true;
       }
 
       await videoState.initializePlayer(rawInput);
+      return true;
     } catch (e) {
-      if (!mounted) return;
-      BlurSnackBar.show(context, '播放链接失败: $e');
+      if (mounted) {
+        BlurSnackBar.show(context, '播放链接失败: $e');
+      }
       await videoState.resetPlayer();
+      return false;
     } finally {
       if (mounted) {
         setState(() {

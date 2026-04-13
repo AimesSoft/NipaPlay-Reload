@@ -626,6 +626,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         debugPrint(
             'VideoPlayerState: Device is phone. Setting video playing orientation.');
         await ScreenOrientationManager.instance.setVideoPlayingOrientation();
+        await _restoreSystemUiOverlayStyleIfNeeded();
 
         // 平板设备默认隐藏菜单栏（全屏状态）
         if (globals.isTablet) {
@@ -640,6 +641,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           } catch (e) {
             debugPrint('隐藏系统UI时出错: $e');
           }
+          await _restoreSystemUiOverlayStyleIfNeeded();
         }
       }
 

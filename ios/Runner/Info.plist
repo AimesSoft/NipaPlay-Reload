@@ -229,6 +229,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
 	<key>UISupportsDocumentBrowser</key>
 	<true/>
 	<key>UTImportedTypeDeclarations</key>

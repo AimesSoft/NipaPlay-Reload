@@ -1,6 +1,25 @@
 part of video_player_state;
 
 extension VideoPlayerStatePlaybackControls on VideoPlayerState {
+  Future<void> _restoreSystemUiOverlayStyleIfNeeded() async {
+    if (kIsWeb || !(Platform.isIOS || Platform.isAndroid)) return;
+
+    final context = _context;
+    final brightness = (context != null && context.mounted)
+        ? Theme.of(context).brightness
+        : WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    final isDark = brightness == Brightness.dark;
+
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        // iOS 使用 statusBarBrightness 控制图标颜色，值与期望颜色相反
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      ),
+    );
+  }
+
   // 切换菜单栏显示/隐藏状态（仅用于平板设备）
   void toggleAppBarVisibility() async {
     if (isTablet) {
@@ -24,6 +43,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           debugPrint('显示系统UI时出错: $e');
         }
       }
+      await _restoreSystemUiOverlayStyleIfNeeded();
 
       notifyListeners();
     }
@@ -146,6 +166,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         } catch (e) {
           debugPrint('重置系统UI时出错: $e');
         }
+        await _restoreSystemUiOverlayStyleIfNeeded();
       }
 
       _setStatus(PlayerStatus.idle);
@@ -153,6 +174,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 使用屏幕方向管理器重置屏幕方向
       if (globals.isMobilePlatform) {
         await ScreenOrientationManager.instance.resetOrientation();
+        await _restoreSystemUiOverlayStyleIfNeeded();
       }
 
       // 关闭唤醒锁

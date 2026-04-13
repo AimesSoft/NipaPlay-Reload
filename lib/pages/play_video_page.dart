@@ -230,6 +230,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
     try {
       if (Platform.isIOS) {
+        final colorScheme = Theme.of(context).colorScheme;
+        final actionColor = colorScheme.onSurface.withOpacity(0.82);
+        final cancelColor = colorScheme.onSurface.withOpacity(0.58);
         String? destination;
         switch (videoState.screenshotSaveTarget) {
           case ScreenshotSaveTarget.photos:
@@ -246,23 +249,23 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
               actions: [
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop('photos'),
-                  child: const Text(
+                  child: Text(
                     '相册',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: actionColor),
                   ),
                 ),
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop('file'),
-                  child: const Text(
+                  child: Text(
                     '文件',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: actionColor),
                   ),
                 ),
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text(
+                  child: Text(
                     '取消',
-                    style: TextStyle(color: Colors.white70),
+                    style: TextStyle(color: cancelColor),
                   ),
                 ),
               ],

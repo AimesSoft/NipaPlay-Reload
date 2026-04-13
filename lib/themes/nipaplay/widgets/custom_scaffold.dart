@@ -1,5 +1,6 @@
 // widgets/custom_scaffold.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
@@ -29,6 +30,7 @@ class CustomScaffold extends StatefulWidget {
 
 class _CustomScaffoldState extends State<CustomScaffold> {
   int? _lastTabIndex;
+  String? _lastAppBarOverlayLogSignature;
 
   void _handlePageChangedBySwitchableView(int index) {
     if (widget.tabController != null && widget.tabController!.index != index) {
@@ -107,11 +109,19 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     final bool hasVideo = context.select<VideoPlayerState, bool>(
       (videoState) => videoState.hasVideo,
     );
-    final bool showTabDivider = widget.pageIsHome &&
-        widget.tabController?.index == 1 &&
-        hasVideo;
-    final Color tabDividerColor =
-        isDarkMode ? Colors.white24 : Colors.black12;
+    final bool showTabDivider =
+        widget.pageIsHome && widget.tabController?.index == 1 && hasVideo;
+    final Color tabDividerColor = isDarkMode ? Colors.white24 : Colors.black12;
+    final appBarOverlayStyle = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
+      // iOS 使用 statusBarBrightness 控制图标颜色，值与期望颜色相反
+      statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+    );
+    _logAppBarOverlayStyle(
+      isDarkMode: isDarkMode,
+      overlayStyle: appBarOverlayStyle,
+    );
 
     return BackgroundWithBlur(
       child: Scaffold(
@@ -136,6 +146,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                       ),
                 backgroundColor: Colors.transparent,
                 elevation: 0,
+                systemOverlayStyle: appBarOverlayStyle,
                 bottom: _LogoTabBar(
                   tabBar: TabBar(
                     controller: widget.tabController,
@@ -181,6 +192,26 @@ class _CustomScaffoldState extends State<CustomScaffold> {
           ),
         ),
       ),
+    );
+  }
+
+  void _logAppBarOverlayStyle({
+    required bool isDarkMode,
+    required SystemUiOverlayStyle overlayStyle,
+  }) {
+    final signature = [
+      isDarkMode.toString(),
+      overlayStyle.statusBarIconBrightness?.name ?? 'null',
+      overlayStyle.statusBarBrightness?.name ?? 'null',
+    ].join('|');
+    if (signature == _lastAppBarOverlayLogSignature) return;
+    _lastAppBarOverlayLogSignature = signature;
+
+    debugPrint(
+      '[SystemUI][AppBar] '
+      'isDark=$isDarkMode, '
+      'icon=${overlayStyle.statusBarIconBrightness?.name}, '
+      'ios=${overlayStyle.statusBarBrightness?.name}',
     );
   }
 }

@@ -734,6 +734,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
   bool _isDragging = false;
   Brightness _platformBrightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  String? _lastSystemUiLogSignature;
 
   @override
   void initState() {
@@ -784,6 +785,10 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
     final brightness =
         WidgetsBinding.instance.platformDispatcher.platformBrightness;
     if (brightness != _platformBrightness) {
+      debugPrint(
+        '[SystemUI] Platform brightness changed: '
+        '${_platformBrightness.name} -> ${brightness.name}',
+      );
       setState(() {
         _platformBrightness = brightness;
       });
@@ -882,6 +887,14 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
           );
           final overlayStyle =
               _buildMobileSystemUiOverlayStyle(effectiveBrightness);
+          _logSystemUiOverlayDecision(
+            themeMode: themeNotifier.themeMode,
+            platformBrightness: _platformBrightness,
+            effectiveBrightness: effectiveBrightness,
+            uiThemeId: uiThemeProvider.currentThemeId,
+            uiThemeInitialized: uiThemeProvider.isInitialized,
+            overlayStyle: overlayStyle,
+          );
           if (overlayStyle != null) {
             SystemChrome.setSystemUIOverlayStyle(overlayStyle);
           }
@@ -957,6 +970,39 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
           );
         },
       ),
+    );
+  }
+
+  void _logSystemUiOverlayDecision({
+    required ThemeMode themeMode,
+    required Brightness platformBrightness,
+    required Brightness effectiveBrightness,
+    required String uiThemeId,
+    required bool uiThemeInitialized,
+    required SystemUiOverlayStyle? overlayStyle,
+  }) {
+    final signature = [
+      themeMode.name,
+      platformBrightness.name,
+      effectiveBrightness.name,
+      uiThemeId,
+      uiThemeInitialized.toString(),
+      overlayStyle?.statusBarIconBrightness?.name ?? 'null',
+      overlayStyle?.statusBarBrightness?.name ?? 'null',
+      overlayStyle == null ? 'null' : 'non-null',
+    ].join('|');
+    if (signature == _lastSystemUiLogSignature) return;
+    _lastSystemUiLogSignature = signature;
+
+    debugPrint(
+      '[SystemUI] Apply overlay: '
+      'themeMode=${themeMode.name}, '
+      'platform=${platformBrightness.name}, '
+      'effective=${effectiveBrightness.name}, '
+      'uiTheme=$uiThemeId(init=$uiThemeInitialized), '
+      'icon=${overlayStyle?.statusBarIconBrightness?.name}, '
+      'ios=${overlayStyle?.statusBarBrightness?.name}, '
+      'overlay=${overlayStyle == null ? 'null' : 'set'}',
     );
   }
 
