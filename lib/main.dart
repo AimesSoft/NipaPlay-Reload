@@ -1,4 +1,5 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -164,6 +165,9 @@ void main(List<String> args) async {
   }
 
   WatchHistoryDatabase.ensureInitialized();
+
+  // 初始化远程控制访问保护服务
+  await RemoteControlAccessGuardService.instance.loadTrustedDevices();
 
   // 安装 HTTP 客户端覆盖（自签名证书信任规则），尽早生效
   await HttpClientInitializer.install();

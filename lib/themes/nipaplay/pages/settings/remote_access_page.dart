@@ -1,7 +1,9 @@
 // remote_access_page.dart
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/service_provider.dart';
+import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
@@ -28,6 +30,10 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   bool _isLoadingPublicIp = false;
   int _currentPort = 1180;
 
+  // Trusted devices
+  List<Map<String, dynamic>> _trustedDevices = [];
+  bool _isLoadingTrustedDevices = false;
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +44,10 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     final server = ServiceProvider.webServer;
     await server.loadSettings();
     final receiverEnabled = await RemoteControlSettings.isReceiverEnabled();
+
+    // 加载受信任设备
+    await _loadTrustedDevices();
+
     if (mounted) {
       setState(() {
         _webServerEnabled = server.isRunning;
@@ -48,6 +58,51 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
           _updateAccessUrls();
         }
       });
+    }
+  }
+
+  Future<void> _loadTrustedDevices() async {
+    setState(() {
+      _isLoadingTrustedDevices = true;
+    });
+
+    try {
+      final guardService = RemoteControlAccessGuardService.instance;
+      // 确保受信任设备已加载
+      await guardService.loadTrustedDevices();
+      final devices = await guardService.getTrustedDevices();
+      if (mounted) {
+        setState(() {
+          _trustedDevices = devices;
+        });
+      }
+    } catch (e) {
+      debugPrint('加载受信任设备失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingTrustedDevices = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _removeTrustedDevice(String clientKey) async {
+    try {
+      final guardService = RemoteControlAccessGuardService.instance;
+      await guardService.removeTrustedDevice(clientKey);
+      if (mounted) {
+        setState(() {
+          _trustedDevices
+              .removeWhere((device) => device['clientKey'] == clientKey);
+        });
+        BlurSnackBar.show(context, '已移除受信任设备');
+      }
+    } catch (e) {
+      debugPrint('移除受信任设备失败: $e');
+      if (mounted) {
+        BlurSnackBar.show(context, '移除受信任设备失败');
+      }
     }
   }
 
@@ -309,6 +364,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       padding: const EdgeInsets.all(24.0),
       children: [
         _buildWebServerSection(),
+        if (_receiverEnabled) _buildTrustedDevicesSection(),
       ],
     );
   }
@@ -599,6 +655,152 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             ),
           ),
           if (trailing != null) trailing,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrustedDevicesSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DefaultTextStyle.merge(
+      style: _pageTextStyle(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Icon(
+                Ionicons.shield_checkmark_outline,
+                color: colorScheme.onSurface,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '受信任设备',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '受信任的设备可以直接连接并控制播放器，无需再次确认。',
+            style: TextStyle(
+              color: colorScheme.onSurface.withValues(alpha: 0.7),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingTrustedDevices)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_trustedDevices.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                '暂无受信任设备',
+                style: TextStyle(
+                  color: colorScheme.onSurface.withValues(alpha: 0.5),
+                  fontSize: 14,
+                ),
+              ),
+            )
+          else
+            Column(
+              children: _trustedDevices.map((device) {
+                final clientName = device['clientName'] as String? ?? '未知设备';
+                final platform = device['platform'] as String? ?? '未知平台';
+                final remoteIp = device['remoteIp'] as String? ?? '未知IP';
+                final trustedAt = device['trustedAt'] as String? ?? '';
+                final clientKey = device['clientKey'] as String;
+
+                String trustedTime = '未知时间';
+                if (trustedAt.isNotEmpty) {
+                  try {
+                    final date = DateTime.parse(trustedAt);
+                    trustedTime =
+                        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                  } catch (e) {
+                    // 解析失败，使用原始值
+                  }
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Container(
+                    padding: const EdgeInsets.all(16.0),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8.0),
+                      border: Border.all(
+                        color: colorScheme.onSurface.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Ionicons.phone_portrait_outline,
+                          color: colorScheme.primary,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                clientName,
+                                style: TextStyle(
+                                  color: colorScheme.onSurface,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$platform · $remoteIp',
+                                style: TextStyle(
+                                  color: colorScheme.onSurface
+                                      .withValues(alpha: 0.7),
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '信任时间: $trustedTime',
+                                style: TextStyle(
+                                  color: colorScheme.onSurface
+                                      .withValues(alpha: 0.5),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.delete,
+                            color: colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                          onPressed: () {
+                            _removeTrustedDevice(clientKey);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
         ],
       ),
     );
