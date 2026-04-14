@@ -305,8 +305,10 @@ class _RemoteControllerPanelState extends State<_RemoteControllerPanel> {
       });
     }
     try {
-      final payload =
-          await RemoteControlClientService.fetchState(widget.baseUrl);
+      final payload = await RemoteControlClientService.fetchState(
+        widget.baseUrl,
+        requestAccess: true,
+      );
       if (!mounted || payload == null) return;
       setState(() {
         _payload = payload;
@@ -669,6 +671,7 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
         widget.baseUrl,
         paneId: widget.paneId,
         includeParameters: true,
+        requestAccess: true,
       );
       if (!mounted || payload == null) return;
       final raw = payload['parameters'];
@@ -785,11 +788,13 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
         final toggle = PlatformInfo.isIOS26OrHigher()
             ? AdaptiveSwitch(
                 value: value,
-                onChanged: _isSending ? null : (next) => _setParameter(key, next),
+                onChanged:
+                    _isSending ? null : (next) => _setParameter(key, next),
               )
             : CupertinoSwitch(
                 value: value,
-                onChanged: _isSending ? null : (next) => _setParameter(key, next),
+                onChanged:
+                    _isSending ? null : (next) => _setParameter(key, next),
               );
         return _row(
           label: label,

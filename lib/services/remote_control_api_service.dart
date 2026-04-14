@@ -4,6 +4,7 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 
 import 'package:nipaplay/services/player_remote_control_bridge.dart';
+import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 
 class RemoteControlApiService {
   RemoteControlApiService() {
@@ -12,6 +13,8 @@ class RemoteControlApiService {
   }
 
   final Router _router = Router();
+  final RemoteControlAccessGuardService _accessGuard =
+      RemoteControlAccessGuardService.instance;
 
   Router get router => _router;
 
@@ -23,11 +26,19 @@ class RemoteControlApiService {
       final includeParameters =
           request.url.queryParameters['includeParameters'] == '1' ||
               paneId != null;
+      final requestAccess = request.url.queryParameters['requestAccess'] == '1';
+      final access = await _accessGuard.evaluate(
+        request,
+        requestAccess: requestAccess,
+      );
 
       final payload = await PlayerRemoteControlBridge.instance.buildPayload(
         paneId: paneId,
         includeParameters: includeParameters,
       );
+      payload['controlAuthorized'] = access.isAuthorized;
+      payload['controlAuthorizationStatus'] = access.status.name;
+      payload['controlAuthorizationMessage'] = _stateAuthMessage(access.status);
       return _json(<String, dynamic>{
         'success': true,
         'data': payload,
@@ -87,6 +98,22 @@ class RemoteControlApiService {
       args.addAll(Map<String, dynamic>.from(rawArgs));
     }
 
+    final access = await _accessGuard.evaluate(
+      request,
+      requestAccess: true,
+    );
+    if (!access.isAuthorized) {
+      return _json(
+        <String, dynamic>{
+          'success': false,
+          'code': 'remote_control_not_authorized',
+          'authorizationStatus': access.status.name,
+          'message': _commandAuthMessage(access.status),
+        },
+        statusCode: 403,
+      );
+    }
+
     try {
       final result = await PlayerRemoteControlBridge.instance.executeCommand(
         command,
@@ -110,5 +137,31 @@ class RemoteControlApiService {
       body: json.encode(body),
       headers: const {'Content-Type': 'application/json; charset=utf-8'},
     );
+  }
+
+  String _stateAuthMessage(RemoteControlAccessStatus status) {
+    switch (status) {
+      case RemoteControlAccessStatus.authorized:
+        return '已授权';
+      case RemoteControlAccessStatus.pending:
+        return '等待被控端确认连接';
+      case RemoteControlAccessStatus.denied:
+        return '被控端拒绝了连接请求';
+      case RemoteControlAccessStatus.required:
+        return '尚未发起连接请求';
+    }
+  }
+
+  String _commandAuthMessage(RemoteControlAccessStatus status) {
+    switch (status) {
+      case RemoteControlAccessStatus.authorized:
+        return '已授权';
+      case RemoteControlAccessStatus.pending:
+        return '等待被控端确认连接';
+      case RemoteControlAccessStatus.denied:
+        return '被控端拒绝了连接请求';
+      case RemoteControlAccessStatus.required:
+        return '未获得被控端授权';
+    }
   }
 }
