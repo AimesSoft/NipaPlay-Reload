@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/services/web_server_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/remote_control_settings.dart';
 
 import 'dandanplay_remote_provider.dart';
 import 'emby_provider.dart';
@@ -44,6 +45,17 @@ class ServiceProvider {
     // 远程访问服务：若用户开启了“软件启动自动开启”，则在此启动服务
     try {
       await webServer.loadSettings();
+      if (!kIsWeb) {
+        final receiverEnabled = await RemoteControlSettings.isReceiverEnabled();
+        if (receiverEnabled && !webServer.isRunning) {
+          final started = await webServer.startServer();
+          if (!started) {
+            debugPrint(
+              'ServiceProvider: 遥控接收端启动失败: ${webServer.lastStartErrorMessage ?? 'unknown'}',
+            );
+          }
+        }
+      }
     } catch (e) {
       debugPrint('ServiceProvider: WebServer 初始化失败: $e');
     }

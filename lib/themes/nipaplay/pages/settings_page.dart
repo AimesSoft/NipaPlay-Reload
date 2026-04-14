@@ -224,7 +224,7 @@ class _SettingsPageState extends State<SettingsPage>
           itemBuilder: (context, index) => _buildSettingTile(entries[index]),
           separatorBuilder: (context, index) => Divider(
             height: 1,
-            color: colorScheme.onSurface.withOpacity(0.08),
+            color: colorScheme.onSurface.withValues(alpha: 0.08),
           ),
         ),
       ),

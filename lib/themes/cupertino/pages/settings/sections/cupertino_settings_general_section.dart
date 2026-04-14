@@ -11,6 +11,7 @@ import '../widgets/danmaku_setting_tile.dart';
 import '../widgets/external_player_setting_tile.dart';
 import '../widgets/network_setting_tile.dart';
 import '../widgets/media_server_setting_tile.dart';
+import '../widgets/remote_controller_setting_tile.dart';
 import '../widgets/developer_setting_tile.dart';
 import '../widgets/storage_setting_tile.dart';
 import '../widgets/update_check_setting_tile.dart';
@@ -40,7 +41,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
         CupertinoSettingsGroupCard(
           addDividers: true,
           backgroundColor: resolveSettingsSectionBackground(context),
-          children: [
+          children: const [
             CupertinoAppearanceSettingTile(),
             CupertinoLanguageSettingTile(),
             CupertinoUpdateCheckSettingTile(),
@@ -48,6 +49,7 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
             CupertinoDanmakuSettingTile(),
             CupertinoExternalPlayerSettingTile(),
             CupertinoNetworkSettingTile(),
+            CupertinoRemoteControllerSettingTile(),
             CupertinoStorageSettingTile(),
             CupertinoMediaServerSettingTile(),
             CupertinoDeveloperSettingTile(),

@@ -37,6 +37,7 @@ import 'package:nipaplay/services/web_remote_history_sync_service.dart';
 import 'package:nipaplay/services/timeline_danmaku_service.dart'; // 导入时间轴弹幕服务
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/player_remote_control_bridge.dart';
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -679,6 +680,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     _subtitleManager = SubtitleManager(player: player);
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
+    PlayerRemoteControlBridge.instance.attach(this);
     _initialize();
   }
 
@@ -883,7 +885,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           ).firstMatch(trimmed);
       if (labeledFractionMatch != null) {
         final numerator = double.tryParse(labeledFractionMatch.group(1) ?? '');
-        final denominator = double.tryParse(labeledFractionMatch.group(2) ?? '');
+        final denominator =
+            double.tryParse(labeledFractionMatch.group(2) ?? '');
         if (numerator != null &&
             denominator != null &&
             numerator.isFinite &&
@@ -1256,6 +1259,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
+    PlayerRemoteControlBridge.instance.detach(this);
     // 在销毁前进行一次截图
     if (hasVideo) {
       _captureConditionalScreenshot("销毁前");
