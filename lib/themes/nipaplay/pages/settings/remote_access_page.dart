@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
 
 class RemoteAccessPage extends StatefulWidget {
@@ -20,6 +21,7 @@ class RemoteAccessPage extends StatefulWidget {
 class _RemoteAccessPageState extends State<RemoteAccessPage> {
   // Remote access service state
   bool _webServerEnabled = false;
+  bool _receiverEnabled = true;
   bool _autoStartEnabled = false;
   List<String> _accessUrls = [];
   String? _publicIpUrl;
@@ -35,9 +37,11 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   Future<void> _loadWebServerState() async {
     final server = ServiceProvider.webServer;
     await server.loadSettings();
+    final receiverEnabled = await RemoteControlSettings.isReceiverEnabled();
     if (mounted) {
       setState(() {
         _webServerEnabled = server.isRunning;
+        _receiverEnabled = receiverEnabled;
         _autoStartEnabled = server.autoStart;
         _currentPort = server.port;
         if (_webServerEnabled) {
@@ -57,21 +61,22 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       _fetchPublicIp();
     }
   }
-  
+
   Future<void> _fetchPublicIp() async {
     if (!_webServerEnabled) return;
-    
+
     setState(() {
       _isLoadingPublicIp = true;
     });
-    
+
     try {
       // 尝试从多个API获取公网IP
-      final response = await http.get(Uri.parse('https://api.ipify.org')).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => throw Exception('获取公网IP超时'),
-      );
-      
+      final response =
+          await http.get(Uri.parse('https://api.ipify.org')).timeout(
+                const Duration(seconds: 5),
+                onTimeout: () => throw Exception('获取公网IP超时'),
+              );
+
       if (response.statusCode == 200) {
         final ip = response.body.trim();
         // 确保是有效的IP地址
@@ -134,6 +139,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     });
 
     await ServiceProvider.webServer.setAutoStart(enabled);
+    if (!mounted) return;
 
     if (enabled) {
       BlurSnackBar.show(context, '已开启自动开启：下次启动将自动启用远程访问');
@@ -144,6 +150,30 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         BlurSnackBar.show(context, '已关闭自动开启');
       }
     }
+  }
+
+  Future<void> _toggleReceiver(bool enabled) async {
+    setState(() {
+      _receiverEnabled = enabled;
+    });
+    await RemoteControlSettings.setReceiverEnabled(enabled);
+
+    if (enabled && !_webServerEnabled) {
+      final server = ServiceProvider.webServer;
+      final success = await server.startServer(port: _currentPort);
+      if (!mounted) return;
+      if (success) {
+        setState(() {
+          _webServerEnabled = true;
+        });
+        await _updateAccessUrls();
+      } else {
+        _showStartServerErrorDialog(server.lastStartErrorMessage ?? '未知原因');
+      }
+    }
+
+    if (!mounted) return;
+    BlurSnackBar.show(context, enabled ? '被遥控端已开启' : '被遥控端已关闭');
   }
 
   void _copyUrl(String url) {
@@ -180,12 +210,14 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         cursorColor: const Color(0xFFFF2E55),
         decoration: InputDecoration(
           labelText: '端口 (1-65535)',
-          labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+          labelStyle:
+              TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7)),
           focusedBorder: UnderlineInputBorder(
             borderSide: BorderSide(color: colorScheme.onSurface),
           ),
           enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.38)),
+            borderSide: BorderSide(
+                color: colorScheme.onSurface.withValues(alpha: 0.38)),
           ),
         ),
         style: const TextStyle(color: Color(0xFFFF2E55)),
@@ -193,7 +225,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       actions: [
         HoverScaleTextButton(
           text: '取消',
-          idleColor: colorScheme.onSurface.withOpacity(0.7),
+          idleColor: colorScheme.onSurface.withValues(alpha: 0.7),
           onPressed: () => Navigator.of(context).pop(),
         ),
         HoverScaleTextButton(
@@ -320,23 +352,33 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
           const SizedBox(height: 16),
 
           Text(
-            '启用后可供其他 NipaPlay 客户端远程访问本机媒体库。此功能正在开发中，部分功能可能不完整。',
+            '启用后可供其他 NipaPlay 客户端远程访问本机媒体库，并可作为被遥控端供控制端自动发现与遥控。',
             style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.7),
+              color: colorScheme.onSurface.withValues(alpha: 0.7),
               fontSize: 14,
             ),
           ),
 
           const SizedBox(height: 16),
-          
+
           // 启用/禁用开关
           _buildSettingItem(
             icon: Icons.power_settings_new,
             title: '启用远程访问服务',
-            subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库',
+            subtitle: '允许其他 NipaPlay 客户端远程访问本机媒体库（URL/端口由此统一管理）',
             trailing: FluentSettingsSwitch(
               value: _webServerEnabled,
               onChanged: _toggleWebServer,
+            ),
+          ),
+
+          _buildSettingItem(
+            icon: Icons.settings_remote,
+            title: '启用被遥控端',
+            subtitle: '允许控制端读取播放器菜单参数并进行遥控（需开启远程访问服务）',
+            trailing: FluentSettingsSwitch(
+              value: _receiverEnabled,
+              onChanged: _toggleReceiver,
             ),
           ),
 
@@ -352,7 +394,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
           ),
 
           const SizedBox(height: 8),
-          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          Divider(
+              color: colorScheme.onSurface.withValues(alpha: 0.12), height: 1),
           const SizedBox(height: 8),
 
           if (_webServerEnabled) ...[
@@ -360,7 +403,9 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             _buildAccessAddressSection(),
 
             const SizedBox(height: 8),
-            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1),
             const SizedBox(height: 8),
           ],
 
@@ -379,7 +424,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       ),
     );
   }
-  
+
   Widget _buildAccessAddressSection() {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
@@ -391,7 +436,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             children: [
               Icon(
                 Icons.link,
-                color: colorScheme.onSurface.withOpacity(0.7),
+                color: colorScheme.onSurface.withValues(alpha: 0.7),
                 size: 20,
               ),
               const SizedBox(width: 16),
@@ -412,14 +457,19 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             '• 内网：同一 Wi‑Fi/局域网的其他设备访问（推荐）\n'
             '• 外网：需要公网 IP + 路由器端口转发/防火墙放行后才能访问（注意安全）',
             style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.6),
+              color: colorScheme.onSurface.withValues(alpha: 0.6),
               fontSize: 13,
               height: 1.35,
             ),
           ),
           const SizedBox(height: 12),
           if (_accessUrls.isEmpty)
-            Text('正在获取地址...', style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)))
+            Text(
+              '正在获取地址...',
+              style: TextStyle(
+                color: colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            )
           else
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -435,16 +485,16 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onSurface),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                colorScheme.onSurface),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          '正在获取公网IP...',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                          )
-                        ),
+                        Text('正在获取公网IP...',
+                            style: TextStyle(
+                              color:
+                                  colorScheme.onSurface.withValues(alpha: 0.7),
+                            )),
                       ],
                     ),
                   )
@@ -456,7 +506,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       ),
     );
   }
-  
+
   Widget _buildAddressItem(String url) {
     final colorScheme = Theme.of(context).colorScheme;
     final type = RemoteAccessAddressUtils.classifyUrl(url);
@@ -465,7 +515,10 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       RemoteAccessAddressType.local => (Icons.computer, colorScheme.primary),
       RemoteAccessAddressType.lan => (Icons.lan, colorScheme.secondary),
       RemoteAccessAddressType.wan => (Icons.public, colorScheme.tertiary),
-      RemoteAccessAddressType.unknown => (Icons.link, colorScheme.onSurface.withOpacity(0.38)),
+      RemoteAccessAddressType.unknown => (
+          Icons.link,
+          colorScheme.onSurface.withValues(alpha: 0.38)
+        ),
     };
 
     return Padding(
@@ -488,7 +541,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               url,
               style: _monospaceStyle(
                 context,
-                colorScheme.onSurface.withOpacity(0.7),
+                colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
           ),
@@ -518,7 +571,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         children: [
           Icon(
             icon,
-            color: colorScheme.onSurface.withOpacity(0.7),
+            color: colorScheme.onSurface.withValues(alpha: 0.7),
             size: 20,
           ),
           const SizedBox(width: 16),
@@ -538,7 +591,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: colorScheme.onSurface.withOpacity(0.7),
+                    color: colorScheme.onSurface.withValues(alpha: 0.7),
                     fontSize: 14,
                   ),
                 ),
@@ -556,19 +609,11 @@ class _HoverScaleIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final Color? idleColor;
-  final Color hoverColor;
-  final double size;
-  final double hoverScale;
-  final EdgeInsetsGeometry padding;
 
   const _HoverScaleIconButton({
     required this.icon,
     required this.onPressed,
     this.idleColor,
-    this.hoverColor = const Color(0xFFFF2E55),
-    this.size = 20,
-    this.hoverScale = 1.1,
-    this.padding = const EdgeInsets.all(6),
   });
 
   @override
@@ -580,9 +625,13 @@ class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    const hoverColor = Color(0xFFFF2E55);
+    const iconSize = 20.0;
+    const hoverScale = 1.1;
+    const padding = EdgeInsets.all(6);
     final baseColor =
         widget.idleColor ?? Theme.of(context).colorScheme.onSurface;
-    final color = _isHovered ? widget.hoverColor : baseColor;
+    final color = _isHovered ? hoverColor : baseColor;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -592,12 +641,12 @@ class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onPressed,
         child: AnimatedScale(
-          scale: _isHovered ? widget.hoverScale : 1.0,
+          scale: _isHovered ? hoverScale : 1.0,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutBack,
           child: Padding(
-            padding: widget.padding,
-            child: Icon(widget.icon, size: widget.size, color: color),
+            padding: padding,
+            child: Icon(widget.icon, size: iconSize, color: color),
           ),
         ),
       ),

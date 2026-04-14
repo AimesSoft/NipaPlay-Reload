@@ -17,7 +17,17 @@ class RemoteControlApiService {
 
   Future<Response> _handleState(Request request) async {
     try {
-      final payload = await PlayerRemoteControlBridge.instance.buildPayload();
+      final rawPaneId = request.url.queryParameters['paneId']?.trim();
+      final paneId =
+          (rawPaneId == null || rawPaneId.isEmpty) ? null : rawPaneId;
+      final includeParameters =
+          request.url.queryParameters['includeParameters'] == '1' ||
+              paneId != null;
+
+      final payload = await PlayerRemoteControlBridge.instance.buildPayload(
+        paneId: paneId,
+        includeParameters: includeParameters,
+      );
       return _json(<String, dynamic>{
         'success': true,
         'data': payload,

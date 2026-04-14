@@ -34,9 +34,15 @@ class PlayerRemoteControlBridge {
 
   bool get isAttached => _videoState != null;
 
-  Future<Map<String, dynamic>> buildPayload() async {
+  Future<Map<String, dynamic>> buildPayload({
+    String? paneId,
+    bool includeParameters = false,
+  }) async {
     final enabled = await RemoteControlSettings.isReceiverEnabled();
     final state = _videoState;
+    final normalizedPaneId = paneId?.trim();
+    final shouldIncludeParameters =
+        includeParameters || (normalizedPaneId?.isNotEmpty ?? false);
     if (state == null) {
       return {
         'receiverEnabled': enabled,
@@ -49,7 +55,13 @@ class PlayerRemoteControlBridge {
     }
 
     final menuItems = _buildVisibleMenuItems(state);
-    final parameters = await _buildParameters(state, menuItems);
+    final parameters = shouldIncludeParameters
+        ? await _buildParameters(
+            state,
+            menuItems,
+            paneId: normalizedPaneId,
+          )
+        : const <Map<String, dynamic>>[];
 
     return {
       'receiverEnabled': enabled,
@@ -196,12 +208,16 @@ class PlayerRemoteControlBridge {
 
   Future<List<Map<String, dynamic>>> _buildParameters(
     VideoPlayerState state,
-    List<Map<String, dynamic>> menuItems,
-  ) async {
+    List<Map<String, dynamic>> menuItems, {
+    String? paneId,
+  }) async {
     final visiblePaneIds = menuItems
         .map((item) => item['paneId']?.toString() ?? '')
         .where((id) => id.isNotEmpty)
         .toSet();
+    if (paneId != null && paneId.isNotEmpty) {
+      visiblePaneIds.removeWhere((id) => id != paneId);
+    }
 
     bool paneVisible(PlayerMenuPaneId paneId) =>
         visiblePaneIds.contains(paneId.name);
