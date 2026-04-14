@@ -104,6 +104,9 @@ class PlayerRemoteControlBridge {
         case 'toggle_play_pause':
           state.togglePlayPause();
           break;
+        case 'toggle_playback_rate':
+          state.togglePlaybackRate();
+          break;
         case 'play_next_episode':
           await state.playNextEpisode();
           break;

@@ -401,6 +401,7 @@ class _RemoteControllerPanelState extends State<_RemoteControllerPanel> {
   Widget build(BuildContext context) {
     final snapshot = _payload?['snapshot'] as Map<String, dynamic>?;
     final isPaused = snapshot?['isPaused'] == true;
+    final playbackRate = (snapshot?['playbackRate'] as num?)?.toDouble() ?? 1.0;
     final title = snapshot?['animeTitle']?.toString();
     final episode = snapshot?['episodeTitle']?.toString();
     final hostLabel = widget.hostname?.trim().isNotEmpty == true
@@ -450,7 +451,10 @@ class _RemoteControllerPanelState extends State<_RemoteControllerPanel> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildQuickActions(isPaused),
+              child: _buildQuickActions(
+                isPaused,
+                playbackRate: playbackRate,
+              ),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
@@ -473,42 +477,65 @@ class _RemoteControllerPanelState extends State<_RemoteControllerPanel> {
     );
   }
 
-  Widget _buildQuickActions(bool isPaused) {
-    return Row(
+  Widget _buildQuickActions(
+    bool isPaused, {
+    required double playbackRate,
+  }) {
+    final isBoosted = playbackRate > 1.01;
+    return Column(
       children: [
-        Expanded(
-          child: CupertinoButton.filled(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            onPressed:
-                _isSending ? null : () => _sendCommand('play_previous_episode'),
-            child: const Text('上一话'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: CupertinoButton.filled(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                onPressed: _isSending
+                    ? null
+                    : () => _sendCommand('play_previous_episode'),
+                child: const Text('上一话'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: CupertinoButton.filled(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                onPressed:
+                    _isSending ? null : () => _sendCommand('toggle_play_pause'),
+                child: Text(isPaused ? '播放' : '暂停'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: CupertinoButton.filled(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                onPressed:
+                    _isSending ? null : () => _sendCommand('play_next_episode'),
+                child: const Text('下一话'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: CupertinoButton.filled(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            onPressed:
-                _isSending ? null : () => _sendCommand('toggle_play_pause'),
-            child: Text(isPaused ? '播放' : '暂停'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: CupertinoButton.filled(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            onPressed:
-                _isSending ? null : () => _sendCommand('play_next_episode'),
-            child: const Text('下一话'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: CupertinoButton(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            onPressed: _isSending ? null : () => _sendCommand('skip'),
-            child: const Text('跳过'),
-          ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                onPressed: _isSending ? null : () => _sendCommand('skip'),
+                child: const Text('跳过'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                onPressed: _isSending
+                    ? null
+                    : () => _sendCommand('toggle_playback_rate'),
+                child: Text(isBoosted ? '普通播放' : '倍速播放'),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -755,12 +782,18 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
     switch (type) {
       case 'bool':
         final value = param['value'] == true;
+        final toggle = PlatformInfo.isIOS26OrHigher()
+            ? AdaptiveSwitch(
+                value: value,
+                onChanged: _isSending ? null : (next) => _setParameter(key, next),
+              )
+            : CupertinoSwitch(
+                value: value,
+                onChanged: _isSending ? null : (next) => _setParameter(key, next),
+              );
         return _row(
           label: label,
-          trailing: CupertinoSwitch(
-            value: value,
-            onChanged: _isSending ? null : (next) => _setParameter(key, next),
-          ),
+          trailing: toggle,
         );
       case 'int':
       case 'double':
@@ -793,6 +826,58 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
 
     if (min != null && max != null && max > min) {
       final clamped = value.clamp(min, max);
+      final sliderActiveColor = CupertinoTheme.of(context).primaryColor;
+      final slider = PlatformInfo.isIOS26OrHigher()
+          ? AdaptiveSlider(
+              value: clamped,
+              min: min,
+              max: max,
+              divisions: isInteger ? (max - min).round() : null,
+              activeColor: sliderActiveColor,
+              onChanged: _isSending
+                  ? null
+                  : (next) {
+                      setState(() {
+                        _draftNumeric[key] = next;
+                      });
+                    },
+              onChangeEnd: _isSending
+                  ? null
+                  : (next) async {
+                      final output = isInteger
+                          ? next.round()
+                          : ((next / step).round() * step);
+                      setState(() {
+                        _draftNumeric.remove(key);
+                      });
+                      await _setParameter(key, output);
+                    },
+            )
+          : CupertinoSlider(
+              value: clamped,
+              min: min,
+              max: max,
+              divisions: isInteger ? (max - min).round() : null,
+              activeColor: sliderActiveColor,
+              onChanged: _isSending
+                  ? null
+                  : (next) {
+                      setState(() {
+                        _draftNumeric[key] = next;
+                      });
+                    },
+              onChangeEnd: _isSending
+                  ? null
+                  : (next) async {
+                      final output = isInteger
+                          ? next.round()
+                          : ((next / step).round() * step);
+                      setState(() {
+                        _draftNumeric.remove(key);
+                      });
+                      await _setParameter(key, output);
+                    },
+            );
       return Column(
         children: [
           _row(
@@ -800,30 +885,7 @@ class _RemoteMenuPaneSheetState extends State<_RemoteMenuPaneSheet> {
             subtitle:
                 isInteger ? '${clamped.round()}' : clamped.toStringAsFixed(2),
           ),
-          CupertinoSlider(
-            value: clamped,
-            min: min,
-            max: max,
-            divisions: isInteger ? (max - min).round() : null,
-            onChanged: _isSending
-                ? null
-                : (next) {
-                    setState(() {
-                      _draftNumeric[key] = next;
-                    });
-                  },
-            onChangeEnd: _isSending
-                ? null
-                : (next) async {
-                    final output = isInteger
-                        ? next.round()
-                        : ((next / step).round() * step);
-                    setState(() {
-                      _draftNumeric.remove(key);
-                    });
-                    await _setParameter(key, output);
-                  },
-          ),
+          slider,
           const SizedBox(height: 8),
         ],
       );
