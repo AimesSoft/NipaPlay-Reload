@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shelf/shelf.dart';
 
@@ -67,6 +68,7 @@ class RemoteControlAccessGuardService {
   final Map<String, DateTime> _approvedClients = {};
   final Map<String, DateTime> _deniedClients = {};
   final Map<String, Future<bool>> _pendingPrompts = {};
+  final Map<String, Map<String, dynamic>> _trustedDevices = {};
 
   Future<RemoteControlAccessResult> evaluate(
     Request request, {
@@ -74,6 +76,16 @@ class RemoteControlAccessGuardService {
   }) async {
     final identity = _resolveIdentity(request);
     final now = DateTime.now();
+
+    // 优先检查受信任设备
+    if (_trustedDevices.containsKey(identity.clientKey)) {
+      _approvedClients[identity.clientKey] = now;
+
+      return RemoteControlAccessResult(
+        status: RemoteControlAccessStatus.authorized,
+        identity: identity,
+      );
+    }
 
     final approved = _approvedClients[identity.clientKey];
     if (approved != null) {
@@ -122,12 +134,22 @@ class RemoteControlAccessGuardService {
       '[RemoteControlAuth] 请求授权: ${identity.displayName}, '
       'id=${identity.clientId ?? '-'}, platform=${identity.platform ?? '-'}',
     );
-    final promptFuture = _showApprovalDialog(identity).then((approved) {
+    final promptFuture = _showApprovalDialog(identity).then((result) async {
+      final approved = result['approved'] == true;
+      final trusted = result['trusted'] == true;
+
       if (approved) {
         final now = DateTime.now();
         _approvedClients[identity.clientKey] = now;
         _deniedClients.remove(identity.clientKey);
+
+        if (trusted) {
+          await _addTrustedDevice(identity);
+          debugPrint('[RemoteControlAuth] 用户已信任: ${identity.displayName}');
+        }
+
         debugPrint('[RemoteControlAuth] 用户已允许: ${identity.displayName}');
+
         return true;
       }
 
@@ -145,41 +167,100 @@ class RemoteControlAccessGuardService {
     );
   }
 
-  Future<bool> _showApprovalDialog(RemoteControlClientIdentity identity) async {
+  Future<void> _addTrustedDevice(RemoteControlClientIdentity identity) async {
+    final device = {
+      'clientKey': identity.clientKey,
+      'clientId': identity.clientId,
+      'clientName': identity.clientName,
+      'platform': identity.platform,
+      'remoteIp': identity.remoteIp,
+      'trustedAt': DateTime.now().toIso8601String(),
+    };
+
+    _trustedDevices[identity.clientKey] = device;
+    await RemoteControlSettings.addTrustedDevice(device);
+  }
+
+  Future<void> loadTrustedDevices() async {
+    final devices = await RemoteControlSettings.getTrustedDevices();
+    _trustedDevices.clear();
+    for (final device in devices) {
+      _trustedDevices[device['clientKey'] as String] = device;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getTrustedDevices() async {
+    return _trustedDevices.values.toList();
+  }
+
+  Future<void> removeTrustedDevice(String clientKey) async {
+    _trustedDevices.remove(clientKey);
+    await RemoteControlSettings.removeTrustedDevice(clientKey);
+  }
+
+  Future<Map<String, dynamic>> _showApprovalDialog(
+      RemoteControlClientIdentity identity) async {
     final navigator = globals.navigatorKey.currentState;
     final context = navigator?.overlay?.context ?? navigator?.context;
     if (context == null) {
       debugPrint('[RemoteControlAuth] 无法弹窗：navigator context 为空');
-      return false;
+      return {'approved': false, 'trusted': false};
     }
 
     try {
-      final result = await showDialog<bool>(
+      final result = await showDialog<Map<String, dynamic>>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) {
-          return AlertDialog.adaptive(
-            title: const Text('遥控连接请求'),
-            content: Text(
-              '${identity.displayName} 正在请求连接并遥控此设备，是否允许？',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('拒绝'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('允许'),
-              ),
-            ],
+          bool trustDevice = false;
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog.adaptive(
+                title: const Text('遥控连接请求'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${identity.displayName} 正在请求连接并遥控此设备，是否允许？',
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: trustDevice,
+                          onChanged: (value) {
+                            setState(() {
+                              trustDevice = value ?? false;
+                            });
+                          },
+                        ),
+                        const Text('信任此设备'),
+                      ],
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext)
+                        .pop({'approved': false, 'trusted': false}),
+                    child: const Text('拒绝'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext)
+                        .pop({'approved': true, 'trusted': trustDevice}),
+                    child: const Text('允许'),
+                  ),
+                ],
+              );
+            },
           );
         },
       );
-      return result == true;
+      return result ?? {'approved': false, 'trusted': false};
     } catch (e) {
       debugPrint('[RemoteControlAuth] 弹窗失败: $e');
-      return false;
+      return {'approved': false, 'trusted': false};
     }
   }
 

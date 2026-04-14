@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RemoteControlSettings {
@@ -9,13 +12,24 @@ class RemoteControlSettings {
   static const String matchedBaseUrlKey = 'remote_control_matched_base_url';
   static const String matchedHostnameKey = 'remote_control_matched_hostname';
   static const String clientIdKey = 'remote_control_client_id';
+  static const String trustedDevicesKey = 'remote_control_trusted_devices';
 
   static Future<bool> isReceiverEnabled() async {
+    // 在移动端（phone）禁用被控监听
+    if (globals.isPhone) {
+      return false;
+    }
+    
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(receiverEnabledKey) ?? true;
   }
 
   static Future<void> setReceiverEnabled(bool enabled) async {
+    // 在移动端（phone）不允许设置为启用状态
+    if (globals.isPhone) {
+      return;
+    }
+    
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(receiverEnabledKey, enabled);
   }
@@ -69,5 +83,47 @@ class RemoteControlSettings {
     final clientId = 'rc-$timestamp-$random';
     await prefs.setString(clientIdKey, clientId);
     return clientId;
+  }
+
+  static Future<List<Map<String, dynamic>>> getTrustedDevices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(trustedDevicesKey);
+    if (raw == null || raw.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> list = jsonDecode(raw);
+      return list.cast<Map<String, dynamic>>();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static Future<void> addTrustedDevice(Map<String, dynamic> device) async {
+    final devices = await getTrustedDevices();
+    final clientKey = device['clientKey'] as String;
+    final existingIndex = devices.indexWhere((d) => d['clientKey'] == clientKey);
+    
+    if (existingIndex >= 0) {
+      devices[existingIndex] = device;
+    } else {
+      devices.add(device);
+    }
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(trustedDevicesKey, jsonEncode(devices));
+  }
+
+  static Future<void> removeTrustedDevice(String clientKey) async {
+    final devices = await getTrustedDevices();
+    devices.removeWhere((d) => d['clientKey'] == clientKey);
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(trustedDevicesKey, jsonEncode(devices));
+  }
+
+  static Future<void> clearTrustedDevices() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(trustedDevicesKey);
   }
 }

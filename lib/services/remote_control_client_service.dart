@@ -276,9 +276,8 @@ class RemoteControlClientService {
         return false;
       }
 
-      final state = await fetchState(normalized);
-      if (state == null) return false;
-      final receiverEnabled = state['receiverEnabled'] == true;
+      // 检查info端点中的remoteControlReceiverEnabled字段
+      final receiverEnabled = infoJson['remoteControlReceiverEnabled'] == true;
       return receiverEnabled;
     } catch (_) {
       return false;
