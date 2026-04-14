@@ -99,17 +99,24 @@ class RemoteControlClientService {
     String baseUrl, {
     String? paneId,
     bool includeParameters = false,
+    bool requestAccess = false,
   }) async {
     final normalized = normalizeBaseUrl(baseUrl);
     try {
       final uri = Uri.parse('$normalized/api/remote/control/state').replace(
         queryParameters: <String, String>{
           if (includeParameters) 'includeParameters': '1',
+          if (requestAccess) 'requestAccess': '1',
           if (paneId != null && paneId.trim().isNotEmpty)
             'paneId': paneId.trim(),
         },
       );
-      final response = await http.get(uri).timeout(_requestTimeout);
+      final response = await http
+          .get(
+            uri,
+            headers: await _buildClientHeaders(),
+          )
+          .timeout(_requestTimeout);
       if (response.statusCode != 200) {
         return null;
       }
@@ -139,7 +146,9 @@ class RemoteControlClientService {
     final response = await http
         .post(
           Uri.parse('$normalized/api/remote/control/command'),
-          headers: const {'Content-Type': 'application/json'},
+          headers: await _buildClientHeaders(
+            includeJsonContentType: true,
+          ),
           body: json.encode(<String, dynamic>{
             'command': command,
             'args': args ?? const <String, dynamic>{},
@@ -211,6 +220,32 @@ class RemoteControlClientService {
       try {
         socket?.close();
       } catch (_) {}
+    }
+  }
+
+  static Future<Map<String, String>> _buildClientHeaders({
+    bool includeJsonContentType = false,
+  }) async {
+    final headers = <String, String>{};
+    if (includeJsonContentType) {
+      headers['Content-Type'] = 'application/json';
+    }
+    final clientId = await RemoteControlSettings.getOrCreateClientId();
+    headers['X-NipaPlay-Remote-Client-Id'] = clientId;
+    final clientName = _safeLocalHostname();
+    if (clientName.isNotEmpty) {
+      headers['X-NipaPlay-Remote-Client-Name'] = clientName;
+    }
+    headers['X-NipaPlay-Remote-Client-Platform'] = Platform.operatingSystem;
+    return headers;
+  }
+
+  static String _safeLocalHostname() {
+    try {
+      final hostname = Platform.localHostname.trim();
+      return hostname;
+    } catch (_) {
+      return '';
     }
   }
 
