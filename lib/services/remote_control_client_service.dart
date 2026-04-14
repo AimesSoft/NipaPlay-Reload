@@ -95,12 +95,21 @@ class RemoteControlClientService {
     return matched;
   }
 
-  static Future<Map<String, dynamic>?> fetchState(String baseUrl) async {
+  static Future<Map<String, dynamic>?> fetchState(
+    String baseUrl, {
+    String? paneId,
+    bool includeParameters = false,
+  }) async {
     final normalized = normalizeBaseUrl(baseUrl);
     try {
-      final response = await http
-          .get(Uri.parse('$normalized/api/remote/control/state'))
-          .timeout(_requestTimeout);
+      final uri = Uri.parse('$normalized/api/remote/control/state').replace(
+        queryParameters: <String, String>{
+          if (includeParameters) 'includeParameters': '1',
+          if (paneId != null && paneId.trim().isNotEmpty)
+            'paneId': paneId.trim(),
+        },
+      );
+      final response = await http.get(uri).timeout(_requestTimeout);
       if (response.statusCode != 200) {
         return null;
       }
