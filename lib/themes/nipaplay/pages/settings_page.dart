@@ -18,6 +18,7 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/danmaku_settings_page.da
 import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart'; // 导入外部调用设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
+import 'package:nipaplay/themes/nipaplay/pages/settings/remote_receiver_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
@@ -107,6 +108,7 @@ class _SettingsPageState extends State<SettingsPage>
   static const String _entryExternalPlayer = 'external_player';
   static const String _entryShortcuts = 'shortcuts';
   static const String _entryRemoteMediaLibrary = 'remote_media_library';
+  static const String _entryRemoteReceiver = 'remote_receiver';
   static const String _entryDeveloperOptions = 'developer_options';
   static const String _entryAbout = 'about';
   String? _selectedEntryId;
@@ -224,7 +226,7 @@ class _SettingsPageState extends State<SettingsPage>
           itemBuilder: (context, index) => _buildSettingTile(entries[index]),
           separatorBuilder: (context, index) => Divider(
             height: 1,
-            color: colorScheme.onSurface.withOpacity(0.08),
+            color: colorScheme.onSurface.withValues(alpha: 0.08),
           ),
         ),
       ),
@@ -337,6 +339,13 @@ class _SettingsPageState extends State<SettingsPage>
     }
 
     entries.addAll([
+      const _SettingEntry(
+        id: _entryRemoteReceiver,
+        title: '被遥控端',
+        icon: Ionicons.tv_outline,
+        pageTitle: '被遥控端',
+        page: RemoteReceiverPage(),
+      ),
       _SettingEntry(
         id: _entryRemoteMediaLibrary,
         title: l10n.remoteMediaLibrary,

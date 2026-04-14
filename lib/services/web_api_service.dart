@@ -15,6 +15,8 @@ import 'local_media_share_api.dart';
 import 'local_media_management_api.dart';
 import 'web_ui_proxy_api.dart';
 import 'network_media_settings_api.dart';
+import 'remote_control_api_service.dart';
+import 'remote_control_settings.dart';
 import 'package:path/path.dart' as p;
 
 class WebApiService {
@@ -27,6 +29,7 @@ class WebApiService {
   final NetworkMediaSettingsApi _networkMediaSettingsApi =
       NetworkMediaSettingsApi();
   final WebUiProxyApi _webUiProxyApi = WebUiProxyApi();
+  final RemoteControlApiService _remoteControlApi = RemoteControlApiService();
 
   WebApiService() {
     _router.get('/info', handleInfoRequest);
@@ -75,12 +78,14 @@ class WebApiService {
     _router.mount('/media/local/share/', _localMediaShareApi.router);
     _router.mount('/media/local/manage/', _localMediaManagementApi.router);
     _router.mount('/settings/network/', _networkMediaSettingsApi.router);
+    _router.mount('/remote/control/', _remoteControlApi.router);
   }
 
   Handler get handler => _router;
 
   Future<Response> handleInfoRequest(Request request) async {
     try {
+      final receiverEnabled = await RemoteControlSettings.isReceiverEnabled();
       return Response.ok(
         json.encode({
           'success': true,
@@ -90,7 +95,9 @@ class WebApiService {
           'features': {
             'share': true,
             'manage': true,
+            'remoteControl': true,
           },
+          'remoteControlReceiverEnabled': receiverEnabled,
         }),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
