@@ -26,7 +26,7 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 flutter_macos_podfile_setup
 
-MEDIA_KIT_MACOS_FRAMEWORKS = %w[
+DEFAULT_MEDIA_KIT_MACOS_FRAMEWORKS = %w[
   Ass
   Avcodec
   Avfilter
@@ -46,10 +46,39 @@ MEDIA_KIT_MACOS_FRAMEWORKS = %w[
   Uchardet
   Xml2
 ].freeze
+MEDIA_KIT_MACOS_FRAMEWORK_DISCOVERY_ROOT = File.expand_path(
+  File.join('..', 'Flutter', 'ephemeral', '.symlinks', 'plugins', 'media_kit_libs_macos_video', 'macos', 'Frameworks'),
+  __dir__
+)
+MEDIA_KIT_MACOS_FRAMEWORK_ROOT = '${PODS_ROOT}/../Flutter/ephemeral/.symlinks/plugins/media_kit_libs_macos_video/macos/Frameworks'
+
+def discover_media_kit_macos_frameworks
+  discovered_frameworks = Dir.glob(File.join(MEDIA_KIT_MACOS_FRAMEWORK_DISCOVERY_ROOT, '*.xcframework')).sort.filter_map do |xcframework|
+    slice = Dir.children(xcframework).find do |entry|
+      File.directory?(File.join(xcframework, entry)) && entry.start_with?('macos')
+    end
+    next if slice.nil?
+
+    {
+      name: File.basename(xcframework, '.xcframework'),
+      slice: slice,
+    }
+  end
+
+  return discovered_frameworks unless discovered_frameworks.empty?
+
+  DEFAULT_MEDIA_KIT_MACOS_FRAMEWORKS.map do |name|
+    {
+      name: name,
+      slice: 'macos-arm64_x86_64',
+    }
+  end
+end
+
+MEDIA_KIT_MACOS_FRAMEWORKS = discover_media_kit_macos_frameworks.freeze
 
 def patch_media_kit_macos_runner_support_files
   support_dir = File.join(__dir__, 'Pods', 'Target Support Files', 'Pods-Runner')
-  framework_root = '${PODS_ROOT}/../Flutter/ephemeral/.symlinks/plugins/media_kit_libs_macos_video/macos/Frameworks'
 
   %w[Debug Profile Release].each do |config|
     input_path = File.join(support_dir, "Pods-Runner-frameworks-#{config}-input-files.xcfilelist")
@@ -60,8 +89,10 @@ def patch_media_kit_macos_runner_support_files
     input_lines = File.readlines(input_path, chomp: true)
     output_lines = File.readlines(output_path, chomp: true)
 
-    MEDIA_KIT_MACOS_FRAMEWORKS.each do |name|
-      input_entry = "#{framework_root}/#{name}.xcframework/macos-arm64_x86_64/#{name}.framework/#{name}"
+    MEDIA_KIT_MACOS_FRAMEWORKS.each do |framework|
+      name = framework.fetch(:name)
+      slice = framework.fetch(:slice)
+      input_entry = "#{MEDIA_KIT_MACOS_FRAMEWORK_ROOT}/#{name}.xcframework/#{slice}/#{name}.framework/#{name}"
       output_entry = "${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/#{name}.framework"
 
       input_lines << input_entry unless input_lines.include?(input_entry)
@@ -76,8 +107,10 @@ def patch_media_kit_macos_runner_support_files
   return unless File.exist?(script_path)
 
   anchor = '  install_framework "${BUILT_PRODUCTS_DIR}/media_kit_video/media_kit_video.framework"'
-  injected_lines = MEDIA_KIT_MACOS_FRAMEWORKS.map do |name|
-    %(  install_framework "#{framework_root}/#{name}.xcframework/macos-arm64_x86_64/#{name}.framework")
+  injected_lines = MEDIA_KIT_MACOS_FRAMEWORKS.map do |framework|
+    name = framework.fetch(:name)
+    slice = framework.fetch(:slice)
+    %(  install_framework "#{MEDIA_KIT_MACOS_FRAMEWORK_ROOT}/#{name}.xcframework/#{slice}/#{name}.framework")
   end
 
   script_lines = File.readlines(script_path, chomp: true)
