@@ -419,41 +419,45 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                   top: 6.0,
                   bottom: 12.0,
                 ),
-                child: Row(
-                  children: [
-                    MouseRegion(
-                      cursor: _isHoveringBackButton
-                          ? SystemMouseCursors.click
-                          : SystemMouseCursors.basic,
-                      onEnter: (_) =>
-                          setState(() => _isHoveringBackButton = true),
-                      onExit: (_) =>
-                          setState(() => _isHoveringBackButton = false),
-                      child: BackButtonWidget(videoState: videoState),
-                    ),
-                    const SizedBox(width: 12.0),
-                    SendDanmakuButton(
-                      onPressed: () => _showSendDanmakuDialog(videoState),
-                    ),
-                    const SizedBox(width: 8.0),
-                    SkipButton(
-                      onPressed: () => videoState.skip(),
-                    ),
-                    const SizedBox(width: 12.0),
-                    MouseRegion(
-                      cursor: _isHoveringAnimeInfo
-                          ? SystemMouseCursors.click
-                          : SystemMouseCursors.basic,
-                      onEnter: (_) =>
-                          setState(() => _isHoveringAnimeInfo = true),
-                      onExit: (_) =>
-                          setState(() => _isHoveringAnimeInfo = false),
-                      child: AnimeInfoWidget(
-                        videoState: videoState,
-                        maxWidth: availableTitleWidth,
+                child: MouseRegion(
+                  onEnter: (_) => videoState.setControlsHovered(true),
+                  onExit: (_) => videoState.setControlsHovered(false),
+                  child: Row(
+                    children: [
+                      MouseRegion(
+                        cursor: _isHoveringBackButton
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
+                        onEnter: (_) =>
+                            setState(() => _isHoveringBackButton = true),
+                        onExit: (_) =>
+                            setState(() => _isHoveringBackButton = false),
+                        child: BackButtonWidget(videoState: videoState),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12.0),
+                      SendDanmakuButton(
+                        onPressed: () => _showSendDanmakuDialog(videoState),
+                      ),
+                      const SizedBox(width: 8.0),
+                      SkipButton(
+                        onPressed: () => videoState.skip(),
+                      ),
+                      const SizedBox(width: 12.0),
+                      MouseRegion(
+                        cursor: _isHoveringAnimeInfo
+                            ? SystemMouseCursors.click
+                            : SystemMouseCursors.basic,
+                        onEnter: (_) =>
+                            setState(() => _isHoveringAnimeInfo = true),
+                        onExit: (_) =>
+                            setState(() => _isHoveringAnimeInfo = false),
+                        child: AnimeInfoWidget(
+                          videoState: videoState,
+                          maxWidth: availableTitleWidth,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
