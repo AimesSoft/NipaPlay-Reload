@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/services/system_share_service.dart';
@@ -61,6 +62,100 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   VideoPlayerState? _videoPlayerStateInstance;
   String? _currentAnimeCoverUrl; // 当前番剧封面URL
   int? _lastAnimeId; // 上次获取封面的番剧ID，用于避免重复请求
+
+  bool _isRepeatableShortcut(LogicalKeyboardKey key) {
+    return key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+  }
+
+  bool _isTouchLikePointer(PointerDeviceKind? kind) {
+    if (kind == null) return true;
+    return kind == PointerDeviceKind.touch ||
+        kind == PointerDeviceKind.stylus ||
+        kind == PointerDeviceKind.invertedStylus;
+  }
+
+  bool _isShiftPressed() {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight) ||
+        pressed.contains(LogicalKeyboardKey.shift);
+  }
+
+  bool _isEditableTextFocused() {
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    if (focusedContext == null) return false;
+    return focusedContext.widget is EditableText;
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (globals.isDesktop) {
+      // 桌面端保留 hotkey_manager 逻辑，避免重复触发。
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (!videoState.hasVideo || _isEditableTextFocused()) {
+      return KeyEventResult.ignored;
+    }
+
+    final key = event.logicalKey;
+    if (event is KeyRepeatEvent && !_isRepeatableShortcut(key)) {
+      return KeyEventResult.ignored;
+    }
+
+    switch (key) {
+      case LogicalKeyboardKey.space:
+        videoState.togglePlayPause();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.numpadEnter:
+        unawaited(videoState.toggleFullscreen());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowLeft:
+        if (_isShiftPressed()) {
+          unawaited(videoState.playPreviousEpisode());
+        } else {
+          videoState.seekBackwardByStep();
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowRight:
+        if (_isShiftPressed()) {
+          unawaited(videoState.playNextEpisode());
+        } else {
+          videoState.seekForwardByStep();
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        videoState.increaseVolume();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowDown:
+        videoState.decreaseVolume();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyD:
+        videoState.toggleDanmakuVisible();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyS:
+        videoState.skip();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyC:
+        unawaited(videoState.showSendDanmakuDialog());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.escape:
+        if (videoState.isFullscreen) {
+          unawaited(videoState.toggleFullscreen());
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
 
   // 获取番剧封面URL
   Future<String?> _getAnimeCoverUrl(int? animeId) async {
@@ -238,6 +333,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   void _handleTap() {
     if (_isProcessingTap) return;
     if (_isHorizontalDragging) return;
+    _focusNode.requestFocus();
 
     _tapCount++;
     if (_tapCount == 1) {
@@ -350,6 +446,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     BuildContext context,
     DragStartDetails details,
   ) {
+    if (!globals.isMobilePlatform && !_isTouchLikePointer(details.kind)) {
+      return;
+    }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     if (videoState.hasVideo) {
       _isHorizontalDragging = true;
@@ -662,143 +761,150 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                   onLongPressEnd: globals.isMobilePlatform
                       ? (details) => _handleLongPressEnd(videoState)
                       : null,
-                  onHorizontalDragStart: globals.isMobilePlatform
+                  onHorizontalDragStart: videoState.hasVideo
                       ? (details) =>
                           _handleHorizontalDragStart(context, details)
                       : null,
-                  onHorizontalDragUpdate: globals.isMobilePlatform
+                  onHorizontalDragUpdate: videoState.hasVideo
                       ? (details) =>
                           _handleHorizontalDragUpdate(context, details)
                       : null,
-                  onHorizontalDragEnd: globals.isMobilePlatform
+                  onHorizontalDragEnd: videoState.hasVideo
                       ? (details) => _handleHorizontalDragEnd(context, details)
                       : null,
                   child: FocusScope(
                     node: FocusScopeNode(),
                     child: globals.isMobilePlatform
-                        ? RepaintBoundary(
-                            key: videoState.screenshotBoundaryKey,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Positioned.fill(
-                                  child: RepaintBoundary(
-                                    child: ColoredBox(
-                                      color: Colors.black,
-                                      child: Center(
-                                        child: AspectRatio(
-                                          aspectRatio: videoState.aspectRatio,
-                                          child: _buildVideoSurface(
-                                            videoState,
-                                            textureId,
+                        ? Focus(
+                            focusNode: _focusNode,
+                            autofocus: true,
+                            canRequestFocus: true,
+                            onKeyEvent: _handleKeyEvent,
+                            child: RepaintBoundary(
+                              key: videoState.screenshotBoundaryKey,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Positioned.fill(
+                                    child: RepaintBoundary(
+                                      child: ColoredBox(
+                                        color: Colors.black,
+                                        child: Center(
+                                          child: AspectRatio(
+                                            aspectRatio: videoState.aspectRatio,
+                                            child: _buildVideoSurface(
+                                              videoState,
+                                              textureId,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
 
-                                if (videoState.hasVideo &&
-                                    videoState.danmakuVisible)
-                                  Positioned.fill(
-                                    child: IgnorePointer(
-                                      ignoring: true,
+                                  if (videoState.hasVideo &&
+                                      videoState.danmakuVisible)
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        ignoring: true,
+                                        child: Consumer<VideoPlayerState>(
+                                          builder: (context, videoState, _) {
+                                            // 使用高频时间轴驱动弹幕帧率
+                                            return ValueListenableBuilder<
+                                                double>(
+                                              valueListenable:
+                                                  videoState.playbackTimeMs,
+                                              builder: (context, posMs, __) {
+                                                return DanmakuOverlay(
+                                                  key: ValueKey(
+                                                    'danmaku_${videoState.danmakuOverlayKey}',
+                                                  ),
+                                                  currentPosition: posMs,
+                                                  videoDuration: videoState
+                                                      .videoDuration
+                                                      .inMilliseconds
+                                                      .toDouble(),
+                                                  isPlaying:
+                                                      videoState.status ==
+                                                          PlayerStatus.playing,
+                                                  fontSize: getFontSize(
+                                                    videoState,
+                                                  ),
+                                                  isVisible:
+                                                      videoState.danmakuVisible,
+                                                  opacity: videoState
+                                                      .mappedDanmakuOpacity,
+                                                );
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+
+                                  if (videoState.hasVideo)
+                                    Positioned.fill(
                                       child: Consumer<VideoPlayerState>(
                                         builder: (context, videoState, _) {
-                                          // 使用高频时间轴驱动弹幕帧率
                                           return ValueListenableBuilder<double>(
                                             valueListenable:
                                                 videoState.playbackTimeMs,
                                             builder: (context, posMs, __) {
-                                              return DanmakuOverlay(
-                                                key: ValueKey(
-                                                  'danmaku_${videoState.danmakuOverlayKey}',
-                                                ),
-                                                currentPosition: posMs,
-                                                videoDuration: videoState
-                                                    .videoDuration
-                                                    .inMilliseconds
-                                                    .toDouble(),
-                                                isPlaying: videoState.status ==
-                                                    PlayerStatus.playing,
-                                                fontSize: getFontSize(
-                                                  videoState,
-                                                ),
-                                                isVisible:
-                                                    videoState.danmakuVisible,
-                                                opacity: videoState
-                                                    .mappedDanmakuOpacity,
+                                              return ExternalSubtitleOverlay(
+                                                currentPositionMs: posMs,
                                               );
                                             },
                                           );
                                         },
                                       ),
                                     ),
-                                  ),
 
-                                if (videoState.hasVideo)
-                                  Positioned.fill(
-                                    child: Consumer<VideoPlayerState>(
-                                      builder: (context, videoState, _) {
-                                        return ValueListenableBuilder<double>(
-                                          valueListenable:
-                                              videoState.playbackTimeMs,
-                                          builder: (context, posMs, __) {
-                                            return ExternalSubtitleOverlay(
-                                              currentPositionMs: posMs,
-                                            );
-                                          },
-                                        );
-                                      },
+                                  if (videoState.status ==
+                                          PlayerStatus.recognizing ||
+                                      videoState.status == PlayerStatus.loading)
+                                    Positioned.fill(
+                                      child: LoadingOverlay(
+                                        messages: videoState.statusMessages,
+                                        backgroundOpacity: 0.5,
+                                        highPriorityAnimation:
+                                            !videoState.isInFinalLoadingPhase,
+                                        animeTitle: videoState.animeTitle,
+                                        episodeTitle: videoState.episodeTitle,
+                                        fileName: videoState.currentVideoPath
+                                            ?.split('/')
+                                            .last,
+                                        coverImageUrl: _currentAnimeCoverUrl,
+                                      ),
                                     ),
-                                  ),
 
-                                if (videoState.status ==
-                                        PlayerStatus.recognizing ||
-                                    videoState.status == PlayerStatus.loading)
-                                  Positioned.fill(
-                                    child: LoadingOverlay(
-                                      messages: videoState.statusMessages,
-                                      backgroundOpacity: 0.5,
-                                      highPriorityAnimation:
-                                          !videoState.isInFinalLoadingPhase,
-                                      animeTitle: videoState.animeTitle,
-                                      episodeTitle: videoState.episodeTitle,
-                                      fileName: videoState.currentVideoPath
-                                          ?.split('/')
-                                          .last,
-                                      coverImageUrl: _currentAnimeCoverUrl,
+                                  if (videoState.hasVideo)
+                                    VerticalIndicator(videoState: videoState),
+
+                                  if (videoState.hasVideo)
+                                    const Positioned.fill(
+                                      child: SpeedBoostIndicator(),
                                     ),
-                                  ),
 
-                                if (videoState.hasVideo)
-                                  VerticalIndicator(videoState: videoState),
+                                  if (videoState.hasVideo)
+                                    const BrightnessGestureArea(),
 
-                                if (videoState.hasVideo)
-                                  const Positioned.fill(
-                                    child: SpeedBoostIndicator(),
-                                  ),
+                                  if (videoState.hasVideo)
+                                    const VolumeGestureArea(),
 
-                                if (globals.isMobilePlatform &&
-                                    videoState.hasVideo)
-                                  const BrightnessGestureArea(),
+                                  // 底部1像素白色进度条
+                                  const MinimalProgressBar(),
 
-                                if (globals.isMobilePlatform &&
-                                    videoState.hasVideo)
-                                  const VolumeGestureArea(),
-
-                                // 底部1像素白色进度条
-                                const MinimalProgressBar(),
-
-                                // 弹幕密度曲线
-                                const DanmakuDensityBar(),
-                              ],
+                                  // 弹幕密度曲线
+                                  const DanmakuDensityBar(),
+                                ],
+                              ),
                             ),
                           )
                         : Focus(
                             focusNode: _focusNode,
                             autofocus: true,
                             canRequestFocus: true,
+                            onKeyEvent: _handleKeyEvent,
                             child: RepaintBoundary(
                               key: videoState.screenshotBoundaryKey,
                               child: Stack(
