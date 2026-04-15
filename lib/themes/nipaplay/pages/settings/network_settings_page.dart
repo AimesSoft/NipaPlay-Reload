@@ -217,6 +217,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         horizontal: 16, vertical: 10),
                     fontSize: 13,
                     iconSize: 16,
+                    foregroundColor: colorScheme.onSurface,
+                    hoverForegroundColor: const Color(0xFFFF2E55),
                   ),
                 ),
               ],

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:ui';
 
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:provider/provider.dart';
+
+const Color _nipaAccentColor = Color(0xFFFF2E55);
 
 class BlurButton extends StatefulWidget {
   final IconData? icon;
@@ -57,13 +58,14 @@ class _BlurButtonState extends State<BlurButton> {
         ? 25.0
         : 0.0;
     final theme = Theme.of(context);
+    final useThemeStyle = blurValue <= 0;
     final borderRadius = widget.borderRadius ?? BorderRadius.circular(8);
     final baseForegroundColor = widget.foregroundColor ??
-        (widget.flatStyle
+        (widget.flatStyle || useThemeStyle
             ? theme.colorScheme.onSurface
             : Colors.white.withOpacity(0.8));
     final hoverForegroundColor = widget.hoverForegroundColor ??
-        (widget.flatStyle ? const Color(0xFFFF2E55) : Colors.white);
+        (widget.flatStyle || useThemeStyle ? _nipaAccentColor : Colors.white);
     final effectiveForegroundColor =
         _isHovered ? hoverForegroundColor : baseForegroundColor;
 
@@ -81,6 +83,7 @@ class _BlurButtonState extends State<BlurButton> {
       child: _buildButtonBody(
         blurValue: blurValue,
         borderRadius: borderRadius,
+        useThemeStyle: useThemeStyle,
         effectiveForegroundColor: effectiveForegroundColor,
       ),
     );
@@ -102,6 +105,7 @@ class _BlurButtonState extends State<BlurButton> {
   Widget _buildButtonBody({
     required double blurValue,
     required BorderRadius borderRadius,
+    required bool useThemeStyle,
     required Color effectiveForegroundColor,
   }) {
     final text = AnimatedDefaultTextStyle(
@@ -138,6 +142,9 @@ class _BlurButtonState extends State<BlurButton> {
       child: InkWell(
         onTap: widget.onTap,
         borderRadius: borderRadius,
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
         hoverColor: Colors.transparent,
         focusColor: Colors.transparent,
         child: Padding(
@@ -159,57 +166,39 @@ class _BlurButtonState extends State<BlurButton> {
       return SizedBox(width: widget.width, child: content);
     }
 
-    if (kIsWeb) {
-      return AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        width: widget.width,
-        decoration: BoxDecoration(
-          color: _isHovered
-              ? const Color(0xFF505050)
-              : const Color(0xFF383838),
-          borderRadius: borderRadius,
-          border: Border.all(
-            color: _isHovered
-                ? Colors.white.withOpacity(0.5)
-                : Colors.white.withOpacity(0.2),
-            width: _isHovered ? 1.0 : 0.5,
-          ),
-          boxShadow: _isHovered
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                  )
-                ]
-              : [],
-        ),
-        child: content,
-      );
-    }
-
     final container = AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
       width: widget.width,
       decoration: BoxDecoration(
-        color: _isHovered
-            ? Colors.white.withOpacity(0.4)
-            : Colors.white.withOpacity(0.18),
+        color: useThemeStyle
+            ? Colors.transparent
+            : (_isHovered
+                ? Colors.white.withOpacity(0.4)
+                : Colors.white.withOpacity(0.18)),
         borderRadius: borderRadius,
         border: Border.all(
-          color: _isHovered
-              ? Colors.white.withOpacity(0.7)
-              : Colors.white.withOpacity(0.25),
+          color: useThemeStyle
+              ? (_isHovered
+                  ? _nipaAccentColor.withValues(alpha: 0.80)
+                  : Theme.of(context)
+                      .colorScheme
+                      .outline
+                      .withValues(alpha: 0.35))
+              : (_isHovered
+                  ? Colors.white.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.25)),
           width: _isHovered ? 1.0 : 0.5,
         ),
         boxShadow: _isHovered
             ? [
                 BoxShadow(
-                  color: Colors.white.withOpacity(0.25),
-                  blurRadius: 10,
-                  spreadRadius: 1,
+                  color: useThemeStyle
+                      ? Colors.transparent
+                      : Colors.white.withOpacity(0.25),
+                  blurRadius: useThemeStyle ? 8 : 10,
+                  spreadRadius: useThemeStyle ? 0 : 1,
+                  offset: useThemeStyle ? const Offset(0, 2) : Offset.zero,
                 )
               ]
             : [],
