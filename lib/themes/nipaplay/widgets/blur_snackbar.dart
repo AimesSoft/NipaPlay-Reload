@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/main.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
@@ -13,6 +14,9 @@ class BlurSnackBar {
 
   static bool _shouldUseGlassBackground(BuildContext context) {
     if (kIsWeb) return false;
+    if (SettingsVisualScope.isBlurDisabled(context, listen: false)) {
+      return false;
+    }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
     final mainPageState = MainPageState.of(context);
     final isOnVideoPage = mainPageState?.globalTabController?.index == 1;

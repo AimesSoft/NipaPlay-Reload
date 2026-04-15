@@ -5,6 +5,7 @@ import 'package:nipaplay/services/jellyfin_episode_mapping_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 
 class JellyfinMappingManagementPage extends StatefulWidget {
   const JellyfinMappingManagementPage({super.key});
@@ -137,111 +138,116 @@ style: TextStyle(color: Colors.white)),
 
   @override
   Widget build(BuildContext context) {
+    final disableBlur = SettingsVisualScope.isBlurDisabled(context);
     return ListView(
       children: [
         // 映射统计信息
-        _buildStatisticsCard(),
+        _buildStatisticsCard(disableBlur),
         
         const SizedBox(height: 16),
         
         // 管理操作
-        _buildManagementCard(),
+        _buildManagementCard(disableBlur),
         
         const SizedBox(height: 16),
         
         // 说明信息
-        _buildHelpCard(),
+        _buildHelpCard(disableBlur),
       ],
     );
   }
 
-  Widget _buildStatisticsCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Ionicons.stats_chart_outline, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    '映射统计',
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              if (_isLoading)
-                const Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              else ...[
-                _buildStatItem('动画映射', _stats['animeCount'] ?? 0, Icons.tv),
-                const SizedBox(height: 8),
-                _buildStatItem('剧集映射', _stats['episodeCount'] ?? 0, Icons.video_library),
-                const SizedBox(height: 8),
-                _buildStatItem('已确认映射', _stats['confirmedCount'] ?? 0, Icons.verified),
-                const SizedBox(height: 8),
-                _buildStatItem('预测映射', _stats['predictedCount'] ?? 0, Icons.auto_awesome),
-                
-                // 显示最近映射活动
-                if (_stats['recentMappings'] != null && (_stats['recentMappings'] as List).isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  const Divider(color: Colors.white12),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '最近活动',
-                    locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...(_stats['recentMappings'] as List).take(3).map((mapping) => 
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '${mapping['jellyfin_series_name']} ↔ ${mapping['dandanplay_anime_title']}',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ],
-          ),
+  Widget _buildStatisticsCard(bool disableBlur) {
+    final card = Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 0.5,
         ),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Ionicons.stats_chart_outline, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text(
+                '映射统计',
+                locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          if (_isLoading)
+            const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
+          else ...[
+            _buildStatItem('动画映射', _stats['animeCount'] ?? 0, Icons.tv),
+            const SizedBox(height: 8),
+            _buildStatItem('剧集映射', _stats['episodeCount'] ?? 0, Icons.video_library),
+            const SizedBox(height: 8),
+            _buildStatItem('已确认映射', _stats['confirmedCount'] ?? 0, Icons.verified),
+            const SizedBox(height: 8),
+            _buildStatItem('预测映射', _stats['predictedCount'] ?? 0, Icons.auto_awesome),
+            
+            // 显示最近映射活动
+            if (_stats['recentMappings'] != null && (_stats['recentMappings'] as List).isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 8),
+              const Text(
+                '最近活动',
+                locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...(_stats['recentMappings'] as List).take(3).map((mapping) => 
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '${mapping['jellyfin_series_name']} ↔ ${mapping['dandanplay_anime_title']}',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: disableBlur
+          ? card
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+              child: card,
+            ),
     );
   }
 
@@ -268,162 +274,170 @@ style: TextStyle(
     );
   }
 
-  Widget _buildManagementCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Ionicons.settings_outline, color: Colors.white, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      '映射管理',
-                      locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              ListTile(
-                leading: const Icon(Ionicons.refresh_outline, color: Colors.white),
-                title: const Text(
-                  '重新加载统计',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text(
-                  '刷新映射统计信息',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-                ),
-                onTap: () {
-                  setState(() {
-                    _isLoading = true;
-                  });
-                  _loadMappingStats();
-                },
-              ),
-              
-              const Divider(color: Colors.white12, height: 1),
-              
-              ListTile(
-                leading: const Icon(Ionicons.analytics_outline, color: Colors.white),
-                title: const Text(
-                  '映射分析',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text(
-                  '查看映射准确性和使用情况',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-                ),
-                onTap: _showMappingAnalysis,
-              ),
-              
-              const Divider(color: Colors.white12, height: 1),
-              
-              ListTile(
-                leading: const Icon(Ionicons.trash_outline, color: Colors.red),
-                title: const Text(
-                  '清除所有映射',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text(
-                  '删除所有已建立的映射关系',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-                ),
-                onTap: _clearAllMappings,
-              ),
-            ],
-          ),
+  Widget _buildManagementCard(bool disableBlur) {
+    final card = Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 0.5,
         ),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Ionicons.settings_outline, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  '映射管理',
+                  locale:Locale("zh-Hans","zh"),
+style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          ListTile(
+            leading: const Icon(Ionicons.refresh_outline, color: Colors.white),
+            title: const Text(
+              '重新加载统计',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            ),
+            subtitle: const Text(
+              '刷新映射统计信息',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70),
+            ),
+            onTap: () {
+              setState(() {
+                _isLoading = true;
+              });
+              _loadMappingStats();
+            },
+          ),
+          
+          const Divider(color: Colors.white12, height: 1),
+          
+          ListTile(
+            leading: const Icon(Ionicons.analytics_outline, color: Colors.white),
+            title: const Text(
+              '映射分析',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            ),
+            subtitle: const Text(
+              '查看映射准确性和使用情况',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70),
+            ),
+            onTap: _showMappingAnalysis,
+          ),
+          
+          const Divider(color: Colors.white12, height: 1),
+          
+          ListTile(
+            leading: const Icon(Ionicons.trash_outline, color: Colors.red),
+            title: const Text(
+              '清除所有映射',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+            ),
+            subtitle: const Text(
+              '删除所有已建立的映射关系',
+              locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70),
+            ),
+            onTap: _clearAllMappings,
+          ),
+        ],
+      ),
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: disableBlur
+          ? card
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+              child: card,
+            ),
     );
   }
 
-  Widget _buildHelpCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHelpCard(bool disableBlur) {
+    final card = Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
             children: [
-              const Row(
-                children: [
-                  Icon(Ionicons.help_circle_outline, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    '关于智能映射',
-                    locale:Locale("zh-Hans","zh"),
+              Icon(Ionicons.help_circle_outline, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text(
+                '关于智能映射',
+                locale:Locale("zh-Hans","zh"),
 style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              const Text(
-                '智能映射系统自动记录Jellyfin剧集与DandanPlay弹幕的对应关系，实现以下功能：',
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-              const SizedBox(height: 12),
-              
-              _buildHelpItem('🎯', '自动匹配', '为新剧集自动匹配弹幕，无需重复选择'),
-              _buildHelpItem('⏭️', '集数导航', '支持Jellyfin剧集的上一话/下一话导航'),
-              _buildHelpItem('🧠', '智能预测', '基于已有映射预测新剧集的弹幕ID'),
-              _buildHelpItem('💾', '持久化存储', '映射关系永久保存，重启应用后仍然有效'),
-              
-              const SizedBox(height: 12),
-              
-              const Text(
-                '映射会在手动匹配弹幕时自动创建，无需手动配置。',
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70, fontSize: 12),
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 16),
+          
+          const Text(
+            '智能映射系统自动记录Jellyfin剧集与DandanPlay弹幕的对应关系，实现以下功能：',
+            locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          
+          _buildHelpItem('🎯', '自动匹配', '为新剧集自动匹配弹幕，无需重复选择'),
+          _buildHelpItem('⏭️', '集数导航', '支持Jellyfin剧集的上一话/下一话导航'),
+          _buildHelpItem('🧠', '智能预测', '基于已有映射预测新剧集的弹幕ID'),
+          _buildHelpItem('💾', '持久化存储', '映射关系永久保存，重启应用后仍然有效'),
+          
+          const SizedBox(height: 12),
+          
+          const Text(
+            '映射会在手动匹配弹幕时自动创建，无需手动配置。',
+            locale:Locale("zh-Hans","zh"),
+style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
       ),
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: disableBlur
+          ? card
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+              child: card,
+            ),
     );
   }
 

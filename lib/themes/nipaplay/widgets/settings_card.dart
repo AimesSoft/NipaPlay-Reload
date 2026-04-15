@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 
 /// 设置页面专用的毛玻璃卡片容器
 /// 
@@ -43,33 +44,46 @@ class SettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appearanceProvider = context.watch<AppearanceSettingsProvider>();
-    final isBlurEnabled = appearanceProvider.enableWidgetBlurEffect;
+    final blurDisabledInSettingsScope =
+        SettingsVisualScope.isBlurDisabled(context);
+    final isBlurEnabled = appearanceProvider.enableWidgetBlurEffect &&
+        !blurDisabledInSettingsScope;
     
     final effectiveBorderRadius = borderRadius ?? 12.0;
     final effectivePadding = padding ?? const EdgeInsets.all(16.0);
     final effectiveBackgroundOpacity = backgroundOpacity ?? 0.3;
     final effectiveBorderOpacity = borderOpacity ?? 0.2;
 
-    Widget cardContent = ClipRRect(
-      borderRadius: BorderRadius.circular(effectiveBorderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: isBlurEnabled ? 25.0 : 0.0,
-          sigmaY: isBlurEnabled ? 25.0 : 0.0,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(effectiveBorderRadius),
-            color: Theme.of(context).colorScheme.surface.withOpacity(effectiveBackgroundOpacity),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(effectiveBorderOpacity),
-              width: 0.5,
-            ),
-          ),
-          padding: effectivePadding,
-          child: child,
+    final cardBody = Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(effectiveBorderRadius),
+        color: Theme.of(context)
+            .colorScheme
+            .surface
+            .withOpacity(effectiveBackgroundOpacity),
+        border: Border.all(
+          color: Theme.of(context)
+              .colorScheme
+              .onSurface
+              .withOpacity(effectiveBorderOpacity),
+          width: 0.5,
         ),
       ),
+      padding: effectivePadding,
+      child: child,
+    );
+
+    Widget cardContent = ClipRRect(
+      borderRadius: BorderRadius.circular(effectiveBorderRadius),
+      child: isBlurEnabled
+          ? BackdropFilter(
+              filter: ImageFilter.blur(
+                sigmaX: 25.0,
+                sigmaY: 25.0,
+              ),
+              child: cardBody,
+            )
+          : cardBody,
     );
 
     // 如果有外边距，包装在Container中

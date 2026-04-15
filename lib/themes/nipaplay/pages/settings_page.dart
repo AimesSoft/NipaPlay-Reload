@@ -195,6 +195,7 @@ class _SettingsPageState extends State<SettingsPage>
                       videoState.shouldShowAppBar(),
                   builder: (context, shouldShowAppBar, child) {
                     return SettingsNoRippleTheme(
+                      disableBlurEffect: true,
                       child: CustomScaffold(
                         pages: pages,
                         tabPage: settingsTabLabels(),
@@ -215,6 +216,7 @@ class _SettingsPageState extends State<SettingsPage>
     final colorScheme = Theme.of(context).colorScheme;
     // ResponsiveContainer 会根据 isDesktop 决定是否显示 currentPage
     return SettingsNoRippleTheme(
+      disableBlurEffect: true,
       child: ResponsiveContainer(
         currentPage:
             currentPage ?? Container(), // 将当前页面状态传递给 ResponsiveContainer

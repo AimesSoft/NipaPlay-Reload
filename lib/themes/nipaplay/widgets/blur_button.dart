@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:ui';
 
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:provider/provider.dart';
 
 class BlurButton extends StatefulWidget {
@@ -49,7 +50,12 @@ class _BlurButtonState extends State<BlurButton> {
   @override
   Widget build(BuildContext context) {
     final appearanceSettings = context.watch<AppearanceSettingsProvider>();
-    final blurValue = appearanceSettings.enableWidgetBlurEffect ? 25.0 : 0.0;
+    final blurDisabledInSettingsScope =
+        SettingsVisualScope.isBlurDisabled(context);
+    final blurValue = (appearanceSettings.enableWidgetBlurEffect &&
+            !blurDisabledInSettingsScope)
+        ? 25.0
+        : 0.0;
     final theme = Theme.of(context);
     final borderRadius = widget.borderRadius ?? BorderRadius.circular(8);
     final baseForegroundColor = widget.foregroundColor ??
@@ -183,38 +189,42 @@ class _BlurButtonState extends State<BlurButton> {
       );
     }
 
+    final container = AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      width: widget.width,
+      decoration: BoxDecoration(
+        color: _isHovered
+            ? Colors.white.withOpacity(0.4)
+            : Colors.white.withOpacity(0.18),
+        borderRadius: borderRadius,
+        border: Border.all(
+          color: _isHovered
+              ? Colors.white.withOpacity(0.7)
+              : Colors.white.withOpacity(0.25),
+          width: _isHovered ? 1.0 : 0.5,
+        ),
+        boxShadow: _isHovered
+            ? [
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.25),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                )
+              ]
+            : [],
+      ),
+      child: content,
+    );
+
     return ClipRRect(
       borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          width: widget.width,
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? Colors.white.withOpacity(0.4)
-                : Colors.white.withOpacity(0.18),
-            borderRadius: borderRadius,
-            border: Border.all(
-              color: _isHovered
-                  ? Colors.white.withOpacity(0.7)
-                  : Colors.white.withOpacity(0.25),
-              width: _isHovered ? 1.0 : 0.5,
-            ),
-            boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.25),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    )
-                  ]
-                : [],
-          ),
-          child: content,
-        ),
-      ),
+      child: blurValue > 0
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
+              child: container,
+            )
+          : container,
     );
   }
 }
