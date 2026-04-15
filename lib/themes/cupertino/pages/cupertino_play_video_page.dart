@@ -36,6 +36,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_settings_menu.dart';
 import 'package:nipaplay/widgets/airplay_route_picker.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
+import 'package:nipaplay/widgets/macos_native_video_view.dart';
 import 'package:video_player/video_player.dart';
 
 class CupertinoPlayVideoPage extends StatefulWidget {
@@ -510,9 +511,17 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     }
     final textureId = videoState.player.textureId.value;
     final controller = kIsWeb ? videoState.player.videoPlayerController : null;
+    final nativeVideoView = videoState.player.prefersPlatformVideoSurface
+        ? MacOSNativeVideoView(
+            player: videoState.player,
+            debugLabel: videoState.currentVideoPath?.split('/').last,
+          )
+        : null;
     final hasVideo =
         videoState.hasVideo &&
-        (kIsWeb || (textureId != null && textureId >= 0));
+        (kIsWeb ||
+            videoState.player.prefersPlatformVideoSurface ||
+            (textureId != null && textureId >= 0));
     final progressValue = _isDragging
         ? (_dragProgress ?? videoState.progress)
         : videoState.progress;
@@ -591,9 +600,10 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                                 ? (controller == null
                                       ? const SizedBox.shrink()
                                       : VideoPlayer(controller))
-                                : (textureId == null
-                                      ? const SizedBox.shrink()
-                                      : Texture(textureId: textureId)),
+                                : (nativeVideoView ??
+                                    (textureId == null
+                                        ? const SizedBox.shrink()
+                                        : Texture(textureId: textureId))),
                           ),
                         )
                       : _buildPlaceholder(videoState),

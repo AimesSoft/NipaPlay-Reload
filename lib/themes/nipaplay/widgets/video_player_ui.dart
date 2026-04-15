@@ -10,6 +10,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
+import 'package:nipaplay/widgets/macos_native_video_view.dart';
 import 'package:provider/provider.dart';
 import 'brightness_gesture_area.dart';
 import 'volume_gesture_area.dart';
@@ -195,6 +196,12 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         return const SizedBox.shrink();
       }
       return VideoPlayer(controller);
+    }
+    if (videoState.player.prefersPlatformVideoSurface) {
+      return MacOSNativeVideoView(
+        player: videoState.player,
+        debugLabel: videoState.currentVideoPath?.split('/').last,
+      );
     }
     if (textureId == null || textureId < 0) {
       return const SizedBox.shrink();
@@ -701,6 +708,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final textureId = videoState.player.textureId.value;
+        final hasRenderableVideoSurface =
+            kIsWeb ||
+            videoState.player.prefersPlatformVideoSurface ||
+            (textureId != null && textureId >= 0);
 
         // 更新番剧封面URL（如果有番剧ID）
         _updateAnimeCoverUrl(videoState.animeId);
@@ -729,7 +740,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           return const SizedBox.shrink();
         }
 
-        if (kIsWeb || (textureId != null && textureId >= 0)) {
+        if (hasRenderableVideoSurface) {
           return MouseRegion(
             onHover: _handleMouseMove,
             onExit: _handleMouseExit,

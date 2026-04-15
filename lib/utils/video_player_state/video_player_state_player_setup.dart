@@ -323,7 +323,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // 检查播放器状态
         if (player.state == PlaybackState.playing ||
             player.state == PlaybackState.paused ||
-            (player.mediaInfo.duration > 0 && player.textureId.value != null)) {
+            (player.mediaInfo.duration > 0 &&
+                (player.prefersPlatformVideoSurface ||
+                    player.textureId.value != null))) {
           debugPrint(
               'VideoPlayerState: 播放器准备完成，等待时间: ${waitCount * waitInterval}ms');
           break;
@@ -344,7 +346,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       //debugPrint('5. 获取视频纹理...');
       // 获取视频纹理
-      final textureId = await player.updateTexture();
+      await player.updateTexture();
       //debugPrint('获取到纹理ID: $textureId');
 
       // !!!!! 在这里启动或重启UI更新定时器（已包含位置保存功能）!!!!!

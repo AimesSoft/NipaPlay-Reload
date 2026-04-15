@@ -141,6 +141,47 @@ class Player {
   // 直接播放控制方法
   Future<void> playDirectly() => _delegate.playDirectly();
   Future<void> pauseDirectly() => _delegate.pauseDirectly();
+
+  bool get prefersPlatformVideoSurface {
+    try {
+      final dyn = _delegate as dynamic;
+      final value = dyn.prefersPlatformVideoSurface;
+      if (value is bool) {
+        return value;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<void> attachPlatformVideoSurface({
+    required int viewHandle,
+    int? windowHandle,
+  }) async {
+    try {
+      final dyn = _delegate as dynamic;
+      final future = dyn.attachPlatformVideoSurface?.call(
+        viewHandle: viewHandle,
+        windowHandle: windowHandle,
+      );
+      if (future is Future) {
+        await future;
+      }
+    } catch (error) {
+      debugPrint('[Player] attachPlatformVideoSurface failed: $error');
+    }
+  }
+
+  Future<void> detachPlatformVideoSurface() async {
+    try {
+      final dyn = _delegate as dynamic;
+      final future = dyn.detachPlatformVideoSurface?.call();
+      if (future is Future) {
+        await future;
+      }
+    } catch (error) {
+      debugPrint('[Player] detachPlatformVideoSurface failed: $error');
+    }
+  }
   
   // 获取当前使用的播放器内核类型的名称
   String getPlayerKernelName() {

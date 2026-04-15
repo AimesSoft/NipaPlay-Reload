@@ -73,8 +73,44 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     return false;
   }
 
+  static bool _shouldUseMacOSNativeVideoSurface() {
+    if (!Platform.isMacOS) {
+      return false;
+    }
+    final env = Platform.environment['NIPAPLAY_ENABLE_MACOS_NATIVE_VIDEO'];
+    if (env == null) {
+      return false;
+    }
+    switch (env.toLowerCase()) {
+      case '1':
+      case 'true':
+      case 'yes':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static String _resolveMacOSNativeVideoVO() {
+    final env = Platform.environment['NIPAPLAY_MACOS_NATIVE_VIDEO_VO'];
+    if (env == null || env.trim().isEmpty) {
+      return 'gpu-next';
+    }
+    return env.trim();
+  }
+
+  static String _resolveMacOSNativeVideoWidTarget() {
+    final env = Platform.environment['NIPAPLAY_MACOS_NATIVE_VIDEO_WID_TARGET'];
+    switch (env?.trim().toLowerCase()) {
+      case 'window':
+        return 'window';
+      default:
+        return 'view';
+    }
+  }
+
   final Player _player;
-  late final VideoController _controller;
+  VideoController? _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   bool _textureIdListenerAttached = false;
@@ -112,9 +148,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   // 添加播放速度状态变量
   double _playbackRate = 1.0;
   final bool _enableHardwareAcceleration;
+  final bool _prefersPlatformVideoSurface;
+  int? _attachedPlatformViewHandle;
+  int? _attachedPlatformWindowHandle;
 
   MediaKitPlayerAdapter({int? bufferSize})
     : _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
+      _prefersPlatformVideoSurface = _shouldUseMacOSNativeVideoSurface(),
       _player = Player(
         configuration: PlayerConfiguration(
           libass: true,
@@ -129,16 +169,18 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         ),
       ) {
     _applyMpvLogLevelOverride();
-    _controller = VideoController(
-      _player,
-      configuration: VideoControllerConfiguration(
-        enableHardwareAcceleration: _enableHardwareAcceleration,
-      ),
-    );
+    if (!_prefersPlatformVideoSurface) {
+      _controller = VideoController(
+        _player,
+        configuration: VideoControllerConfiguration(
+          enableHardwareAcceleration: _enableHardwareAcceleration,
+        ),
+      );
+    }
     _initializeHardwareDecoding();
     _initializeCodecs();
     unawaited(_setupSubtitleFonts());
-    _controller.waitUntilFirstFrameRendered.then((_) {
+    _controller?.waitUntilFirstFrameRendered.then((_) {
       _updateTextureIdFromController();
     });
     _addEventListeners();
@@ -234,8 +276,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   void _updateTextureIdFromController() {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
     try {
-      final currentId = _controller.id.value;
+      final currentId = controller.id.value;
       if (_textureIdNotifier.value != currentId) {
         _textureIdNotifier.value = currentId;
         debugPrint('MediaKit: 纹理ID已更新: $currentId');
@@ -245,7 +291,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
       if (!_textureIdListenerAttached) {
         _textureIdListenerAttached = true;
-        _controller.id.addListener(_handleTextureIdChange);
+        controller.id.addListener(_handleTextureIdChange);
       }
     } catch (e) {
       debugPrint('获取纹理ID失败: $e');
@@ -254,7 +300,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   void _handleTextureIdChange() {
     if (_isDisposed) return;
-    final newId = _controller.id.value;
+    final newId = _controller?.id.value;
     if (newId != null && _textureIdNotifier.value != newId) {
       _textureIdNotifier.value = newId;
       debugPrint('MediaKit: 纹理ID已更新: $newId');
@@ -1247,6 +1293,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   Future<int?> updateTexture() async {
+    if (_prefersPlatformVideoSurface) {
+      return null;
+    }
     if (_textureIdNotifier.value == null) {
       _updateTextureIdFromController();
     }
@@ -1402,7 +1451,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   Future<void> prepare() async {
-    await updateTexture();
+    if (!_prefersPlatformVideoSurface) {
+      await updateTexture();
+    }
     if (!_isDisposed) {
       _printAllTracksInfo(_player.state.tracks);
     }
@@ -1423,14 +1474,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _ticker?.dispose();
     _trackSubscription?.cancel();
     _jellyfinRetryTimer?.cancel();
-    if (_textureIdListenerAttached) {
-      _controller.id.removeListener(_handleTextureIdChange);
+    if (_textureIdListenerAttached && _controller != null) {
+      _controller!.id.removeListener(_handleTextureIdChange);
     }
+    unawaited(detachPlatformVideoSurface());
     _player.dispose();
     _textureIdNotifier.dispose();
   }
 
-  @override
   GlobalKey get repaintBoundaryKey => _repaintBoundaryKey;
 
   @override
@@ -1538,9 +1589,80 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   @override
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {
     try {
-      await _controller.setSize(width: width, height: height);
+      await _controller?.setSize(width: width, height: height);
     } catch (e) {
       debugPrint('MediaKit: 调整视频纹理尺寸失败: $e');
+    }
+  }
+
+  bool get prefersPlatformVideoSurface => _prefersPlatformVideoSurface;
+
+  Future<void> attachPlatformVideoSurface({
+    required int viewHandle,
+    int? windowHandle,
+  }) async {
+    if (!_prefersPlatformVideoSurface || _isDisposed) {
+      return;
+    }
+
+    final widTarget = _resolveMacOSNativeVideoWidTarget();
+    final resolvedHandle = widTarget == 'window'
+        ? (windowHandle ?? viewHandle)
+        : (viewHandle > 0 ? viewHandle : (windowHandle ?? 0));
+    if (resolvedHandle <= 0) {
+      throw ArgumentError('No valid macOS native video handle available.');
+    }
+
+    final isSameBinding =
+        _attachedPlatformViewHandle == viewHandle &&
+        _attachedPlatformWindowHandle == windowHandle;
+    if (isSameBinding) {
+      return;
+    }
+
+    _attachedPlatformViewHandle = viewHandle;
+    _attachedPlatformWindowHandle = windowHandle;
+
+    try {
+      final dynamic platform = _player.platform;
+      if (platform == null) {
+        return;
+      }
+
+      await platform.setProperty?.call('vo', 'null');
+      await platform.setProperty?.call('wid', resolvedHandle.toString());
+      await platform.setProperty?.call('force-window', 'yes');
+      await platform.setProperty?.call('sub-use-margins', 'no');
+      await platform.setProperty?.call('sub-scale-with-window', 'yes');
+      await platform.setProperty?.call('vo', _resolveMacOSNativeVideoVO());
+
+      final currentPosition = _player.state.position;
+      if (currentPosition > Duration.zero) {
+        await _player.seek(currentPosition);
+      }
+    } catch (e) {
+      debugPrint('MediaKit: 绑定 macOS 原生视频面失败: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> detachPlatformVideoSurface() async {
+    if (!_prefersPlatformVideoSurface) {
+      return;
+    }
+
+    _attachedPlatformViewHandle = null;
+    _attachedPlatformWindowHandle = null;
+
+    try {
+      final dynamic platform = _player.platform;
+      if (platform == null) {
+        return;
+      }
+      await platform.setProperty?.call('vo', 'null');
+      await platform.setProperty?.call('wid', '0');
+    } catch (e) {
+      debugPrint('MediaKit: 解绑 macOS 原生视频面失败: $e');
     }
   }
 
