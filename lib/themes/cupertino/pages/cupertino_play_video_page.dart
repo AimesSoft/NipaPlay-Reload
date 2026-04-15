@@ -48,6 +48,7 @@ class CupertinoPlayVideoPage extends StatefulWidget {
 }
 
 class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
+  final FocusNode _focusNode = FocusNode();
   double? _dragProgress;
   bool _isDragging = false;
   bool _isHoveringAnimeInfo = false;
@@ -61,6 +62,103 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   OverlayEntry? _playbackInfoOverlay;
   OverlayEntry? _settingsOverlay;
   final GlobalKey _settingsButtonKey = GlobalKey();
+
+  bool _isRepeatableShortcut(LogicalKeyboardKey key) {
+    return key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown;
+  }
+
+  bool _isTouchLikePointer(PointerDeviceKind? kind) {
+    if (kind == null) return true;
+    return kind == PointerDeviceKind.touch ||
+        kind == PointerDeviceKind.stylus ||
+        kind == PointerDeviceKind.invertedStylus;
+  }
+
+  bool _isShiftPressed() {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight) ||
+        pressed.contains(LogicalKeyboardKey.shift);
+  }
+
+  bool _isEditableTextFocused() {
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    if (focusedContext == null) return false;
+    return focusedContext.widget is EditableText;
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (globals.isDesktop) {
+      // 桌面端保留 hotkey_manager 逻辑，避免重复触发。
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (_isEditableTextFocused()) {
+      return KeyEventResult.ignored;
+    }
+
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    if (!videoState.hasVideo) {
+      return KeyEventResult.ignored;
+    }
+
+    final key = event.logicalKey;
+    if (event is KeyRepeatEvent && !_isRepeatableShortcut(key)) {
+      return KeyEventResult.ignored;
+    }
+
+    switch (key) {
+      case LogicalKeyboardKey.space:
+        videoState.togglePlayPause();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.numpadEnter:
+        unawaited(videoState.toggleFullscreen());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowLeft:
+        if (_isShiftPressed()) {
+          unawaited(videoState.playPreviousEpisode());
+        } else {
+          videoState.seekBackwardByStep();
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowRight:
+        if (_isShiftPressed()) {
+          unawaited(videoState.playNextEpisode());
+        } else {
+          videoState.seekForwardByStep();
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowUp:
+        videoState.increaseVolume();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowDown:
+        videoState.decreaseVolume();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyD:
+        videoState.toggleDanmakuVisible();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyS:
+        videoState.skip();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyC:
+        unawaited(videoState.showSendDanmakuDialog());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.escape:
+        if (videoState.isFullscreen) {
+          unawaited(videoState.toggleFullscreen());
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
 
   bool _shouldDisableDialogDismiss(VideoPlayerState? videoState) {
     if (videoState == null) return false;
@@ -89,6 +187,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     _settingsOverlay?.remove();
     _settingsOverlay = null;
     _uiLockButtonTimer?.cancel();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -418,122 +517,131 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
         ? (_dragProgress ?? videoState.progress)
         : videoState.progress;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.deferToChild,
-      onTap: () {
-        if (!videoState.showControls) {
-          videoState.setShowControls(true);
-          videoState.resetHideControlsTimer();
-        } else {
-          videoState.toggleControls();
-        }
-      },
-      onSecondaryTapDown: globals.isDesktop
-          ? (details) {
-              if (!videoState.hasVideo) return;
-              _hidePlaybackInfoOverlay();
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      canRequestFocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        behavior: HitTestBehavior.deferToChild,
+        onTap: () {
+          _focusNode.requestFocus();
+          if (!videoState.showControls) {
+            videoState.setShowControls(true);
+            videoState.resetHideControlsTimer();
+          } else {
+            videoState.toggleControls();
+          }
+        },
+        onSecondaryTapDown: globals.isDesktop
+            ? (details) {
+                if (!videoState.hasVideo) return;
+                _hidePlaybackInfoOverlay();
 
-              _contextMenuController.showActionsMenu(
-                context: context,
-                globalPosition: details.globalPosition,
-                style: ContextMenuStyles.solidDark(),
-                actions: _buildContextMenuActions(videoState),
-              );
-            }
-          : null,
-      onDoubleTap: () {
-        if (videoState.hasVideo) {
-          videoState.togglePlayPause();
-        }
-      },
-      onTapDown: (_) {
-        if (videoState.showControls) {
-          videoState.resetHideControlsTimer();
-        }
-      },
-      onHorizontalDragStart: globals.isPhone && videoState.hasVideo
-          ? (_) {
-              videoState.startSeekDrag(context);
-            }
-          : null,
-      onHorizontalDragUpdate: globals.isPhone && videoState.hasVideo
-          ? (details) {
-              videoState.updateSeekDrag(details.delta.dx, context);
-            }
-          : null,
-      onHorizontalDragEnd: globals.isPhone && videoState.hasVideo
-          ? (_) {
-              videoState.endSeekDrag();
-            }
-          : null,
-      child: RepaintBoundary(
-        key: videoState.screenshotBoundaryKey,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned.fill(
-              child: Container(
-                color: CupertinoColors.black,
-                child: hasVideo
-                    ? Center(
-                        child: AspectRatio(
-                          aspectRatio: videoState.aspectRatio,
-                          child: kIsWeb
-                              ? (controller == null
-                                    ? const SizedBox.shrink()
-                                    : VideoPlayer(controller))
-                              : (textureId == null
-                                    ? const SizedBox.shrink()
-                                    : Texture(textureId: textureId)),
-                        ),
-                      )
-                    : _buildPlaceholder(videoState),
-              ),
-            ),
-            if (videoState.hasVideo && videoState.danmakuVisible)
+                _contextMenuController.showActionsMenu(
+                  context: context,
+                  globalPosition: details.globalPosition,
+                  style: ContextMenuStyles.solidDark(),
+                  actions: _buildContextMenuActions(videoState),
+                );
+              }
+            : null,
+        onDoubleTap: () {
+          if (videoState.hasVideo) {
+            videoState.togglePlayPause();
+          }
+        },
+        onTapDown: (_) {
+          if (videoState.showControls) {
+            videoState.resetHideControlsTimer();
+          }
+        },
+        onHorizontalDragStart: videoState.hasVideo
+            ? (details) {
+                if (!globals.isMobilePlatform &&
+                    !_isTouchLikePointer(details.kind)) {
+                  return;
+                }
+                videoState.startSeekDrag(context);
+              }
+            : null,
+        onHorizontalDragUpdate: videoState.hasVideo
+            ? (details) {
+                videoState.updateSeekDrag(details.delta.dx, context);
+              }
+            : null,
+        onHorizontalDragEnd: videoState.hasVideo
+            ? (_) {
+                videoState.endSeekDrag();
+              }
+            : null,
+        child: RepaintBoundary(
+          key: videoState.screenshotBoundaryKey,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
               Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: true,
-                  child: ValueListenableBuilder<double>(
-                    valueListenable: videoState.playbackTimeMs,
-                    builder: (context, posMs, __) {
-                      return DanmakuOverlay(
-                        key: ValueKey(
-                          'danmaku_${videoState.danmakuOverlayKey}',
-                        ),
-                        currentPosition: posMs,
-                        videoDuration: videoState.duration.inMilliseconds
-                            .toDouble(),
-                        isPlaying: videoState.status == PlayerStatus.playing,
-                        fontSize: videoState.actualDanmakuFontSize,
-                        isVisible: videoState.danmakuVisible,
-                        opacity: videoState.mappedDanmakuOpacity,
-                      );
-                    },
-                  ),
+                child: Container(
+                  color: CupertinoColors.black,
+                  child: hasVideo
+                      ? Center(
+                          child: AspectRatio(
+                            aspectRatio: videoState.aspectRatio,
+                            child: kIsWeb
+                                ? (controller == null
+                                      ? const SizedBox.shrink()
+                                      : VideoPlayer(controller))
+                                : (textureId == null
+                                      ? const SizedBox.shrink()
+                                      : Texture(textureId: textureId)),
+                          ),
+                        )
+                      : _buildPlaceholder(videoState),
                 ),
               ),
-            if (videoState.hasVideo)
-              Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: true,
-                  child: ValueListenableBuilder<double>(
-                    valueListenable: videoState.playbackTimeMs,
-                    builder: (context, posMs, __) {
-                      return ExternalSubtitleOverlay(currentPositionMs: posMs);
-                    },
+              if (videoState.hasVideo && videoState.danmakuVisible)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: videoState.playbackTimeMs,
+                      builder: (context, posMs, __) {
+                        return DanmakuOverlay(
+                          key: ValueKey(
+                            'danmaku_${videoState.danmakuOverlayKey}',
+                          ),
+                          currentPosition: posMs,
+                          videoDuration:
+                              videoState.duration.inMilliseconds.toDouble(),
+                          isPlaying: videoState.status == PlayerStatus.playing,
+                          fontSize: videoState.actualDanmakuFontSize,
+                          isVisible: videoState.danmakuVisible,
+                          opacity: videoState.mappedDanmakuOpacity,
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
-            const MinimalProgressBar(),
-            const DanmakuDensityBar(),
-            _buildTopBar(videoState),
-            if (hasVideo) _buildBottomControls(videoState, progressValue),
-            if (globals.isPhone && videoState.hasVideo)
-              const BrightnessGestureArea(),
-            if (globals.isPhone && videoState.hasVideo)
-              const VolumeGestureArea(),
-          ],
+              if (videoState.hasVideo)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: videoState.playbackTimeMs,
+                      builder: (context, posMs, __) {
+                        return ExternalSubtitleOverlay(currentPositionMs: posMs);
+                      },
+                    ),
+                  ),
+                ),
+              const MinimalProgressBar(),
+              const DanmakuDensityBar(),
+              _buildTopBar(videoState),
+              if (hasVideo) _buildBottomControls(videoState, progressValue),
+              if (videoState.hasVideo) const BrightnessGestureArea(),
+              if (videoState.hasVideo) const VolumeGestureArea(),
+            ],
+          ),
         ),
       ),
     );
@@ -1699,10 +1807,6 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     );
 
     final overlay = Overlay.of(buttonContext);
-    if (overlay == null) {
-      videoState.setControlsVisibilityLocked(false);
-      return;
-    }
     overlay.insert(_settingsOverlay!);
   }
 }

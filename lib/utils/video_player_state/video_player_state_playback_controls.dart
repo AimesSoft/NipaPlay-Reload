@@ -958,24 +958,29 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   static const double _volumeStep = 0.05; // 5% volume change per key press
 
   void increaseVolume({double? step}) {
-    if (globals.isMobilePlatform) return; // Only for PC
-
     try {
-      // Prioritize actual player volume, fallback to _currentVolume
-      double currentVolume = player.volume ?? _currentVolume;
-      double newVolume = (currentVolume + (step ?? _volumeStep)).clamp(
-        0.0,
-        1.0,
-      );
+      final double baseStep = step ?? _volumeStep;
+      final double currentVolume = _currentVolume;
+      final double newVolume = (currentVolume + baseStep).clamp(0.0, 1.0);
 
-      player.volume = newVolume;
-      unawaited(_setSystemVolume(newVolume));
       _currentVolume = newVolume;
-      // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
       _scheduleVolumePersistence(immediate: true);
       notifyListeners();
+
+      if (_useSystemVolume) {
+        _ensurePlayerVolumeMatchesPlatformPolicy();
+        _queueSystemVolumeUpdate(newVolume);
+      } else {
+        player.volume = newVolume;
+      }
+
+      if (globals.isDesktop) {
+        // 桌面端允许尽快同步系统音量，保持与既有行为一致。
+        unawaited(_setSystemVolume(newVolume));
+      }
+
       //debugPrint("Volume increased to: $_currentVolume via keyboard");
     } catch (e) {
       //debugPrint("Failed to increase volume via keyboard: $e");
@@ -983,24 +988,29 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void decreaseVolume({double? step}) {
-    if (globals.isMobilePlatform) return; // Only for PC
-
     try {
-      // Prioritize actual player volume, fallback to _currentVolume
-      double currentVolume = player.volume ?? _currentVolume;
-      double newVolume = (currentVolume - (step ?? _volumeStep)).clamp(
-        0.0,
-        1.0,
-      );
+      final double baseStep = step ?? _volumeStep;
+      final double currentVolume = _currentVolume;
+      final double newVolume = (currentVolume - baseStep).clamp(0.0, 1.0);
 
-      player.volume = newVolume;
-      unawaited(_setSystemVolume(newVolume));
       _currentVolume = newVolume;
-      // Keep _initialDragVolume in sync in case a touch/mouse drag starts later
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
       _scheduleVolumePersistence(immediate: true);
       notifyListeners();
+
+      if (_useSystemVolume) {
+        _ensurePlayerVolumeMatchesPlatformPolicy();
+        _queueSystemVolumeUpdate(newVolume);
+      } else {
+        player.volume = newVolume;
+      }
+
+      if (globals.isDesktop) {
+        // 桌面端允许尽快同步系统音量，保持与既有行为一致。
+        unawaited(_setSystemVolume(newVolume));
+      }
+
       //debugPrint("Volume decreased to: $_currentVolume via keyboard");
     } catch (e) {
       //debugPrint("Failed to decrease volume via keyboard: $e");
