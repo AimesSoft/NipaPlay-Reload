@@ -32,7 +32,6 @@ class _MacOSNativeVideoViewState extends State<MacOSNativeVideoView> {
   @override
   void dispose() {
     _retryTimer?.cancel();
-    widget.onPlatformViewIdChanged?.call(null);
     unawaited(widget.player.detachPlatformVideoSurface());
     super.dispose();
   }
