@@ -1,12 +1,15 @@
 // Export all necessary enums, data models, and the abstract interface
 export './player_enums.dart' show PlayerPlaybackState, PlayerMediaType;
 export './player_data_models.dart';
-export './abstract_player.dart' show AbstractPlayer; // Export only AbstractPlayer type
-export './player_factory.dart' show PlayerKernelType; // Export PlayerKernelType enum
+export './abstract_player.dart'
+    show AbstractPlayer; // Export only AbstractPlayer type
+export './player_factory.dart'
+    show PlayerKernelType; // Export PlayerKernelType enum
 
 import 'package:flutter/foundation.dart'; // For ValueListenable, used in AbstractPlayer
 import 'package:video_player/video_player.dart';
-import './abstract_player.dart' as core_player; // Alias for the true AbstractPlayer
+import './abstract_player.dart'
+    as core_player; // Alias for the true AbstractPlayer
 import './player_enums.dart' as core_enums; // Alias for our pure enums
 import './player_data_models.dart';
 import './player_factory.dart'; // Import PlayerFactory directly
@@ -14,7 +17,7 @@ import './mdk_player_adapter.dart'; // 导入具体适配器类
 import './video_player_adapter.dart'; // 导入具体适配器类
 import './media_kit_player_adapter.dart'; // 导入MediaKit适配器类
 
-/// MDK-compatible PlaybackState. 
+/// MDK-compatible PlaybackState.
 /// Code using the abstraction layer can use `PlaybackState.paused`.
 enum PlaybackState { stopped, paused, playing }
 
@@ -50,18 +53,29 @@ class Player {
 
   /// Gets the current playback state using MDK-compatible [PlaybackState] enum.
   PlaybackState get state {
-    switch (_delegate.state) { // _delegate.state is core_enums.PlayerPlaybackState
-      case core_enums.PlayerPlaybackState.stopped: return PlaybackState.stopped;
-      case core_enums.PlayerPlaybackState.paused: return PlaybackState.paused;
-      case core_enums.PlayerPlaybackState.playing: return PlaybackState.playing;
+    switch (_delegate.state) {
+      // _delegate.state is core_enums.PlayerPlaybackState
+      case core_enums.PlayerPlaybackState.stopped:
+        return PlaybackState.stopped;
+      case core_enums.PlayerPlaybackState.paused:
+        return PlaybackState.paused;
+      case core_enums.PlayerPlaybackState.playing:
+        return PlaybackState.playing;
     }
   }
+
   /// Sets the playback state using MDK-compatible [PlaybackState] enum.
-  set state(PlaybackState value) { 
+  set state(PlaybackState value) {
     switch (value) {
-      case PlaybackState.stopped: _delegate.state = core_enums.PlayerPlaybackState.stopped; break;
-      case PlaybackState.paused: _delegate.state = core_enums.PlayerPlaybackState.paused; break;
-      case PlaybackState.playing: _delegate.state = core_enums.PlayerPlaybackState.playing; break;
+      case PlaybackState.stopped:
+        _delegate.state = core_enums.PlayerPlaybackState.stopped;
+        break;
+      case PlaybackState.paused:
+        _delegate.state = core_enums.PlayerPlaybackState.paused;
+        break;
+      case PlaybackState.playing:
+        _delegate.state = core_enums.PlayerPlaybackState.playing;
+        break;
     }
   }
 
@@ -73,7 +87,8 @@ class Player {
   PlayerMediaInfo get mediaInfo => _delegate.mediaInfo;
 
   List<int> get activeSubtitleTracks => _delegate.activeSubtitleTracks;
-  set activeSubtitleTracks(List<int> value) => _delegate.activeSubtitleTracks = value;
+  set activeSubtitleTracks(List<int> value) =>
+      _delegate.activeSubtitleTracks = value;
 
   List<int> get activeAudioTracks => _delegate.activeAudioTracks;
   set activeAudioTracks(List<int> value) => _delegate.activeAudioTracks = value;
@@ -91,10 +106,18 @@ class Player {
   void setMedia(String path, MediaType type) {
     core_enums.PlayerMediaType coreType;
     switch (type) {
-      case MediaType.unknown: coreType = core_enums.PlayerMediaType.unknown; break;
-      case MediaType.video: coreType = core_enums.PlayerMediaType.video; break;
-      case MediaType.audio: coreType = core_enums.PlayerMediaType.audio; break;
-      case MediaType.subtitle: coreType = core_enums.PlayerMediaType.subtitle; break;
+      case MediaType.unknown:
+        coreType = core_enums.PlayerMediaType.unknown;
+        break;
+      case MediaType.video:
+        coreType = core_enums.PlayerMediaType.video;
+        break;
+      case MediaType.audio:
+        coreType = core_enums.PlayerMediaType.audio;
+        break;
+      case MediaType.subtitle:
+        coreType = core_enums.PlayerMediaType.subtitle;
+        break;
     }
     _delegate.setMedia(path, coreType);
   }
@@ -112,10 +135,18 @@ class Player {
   void setDecoders(MediaType type, List<String> decoders) {
     core_enums.PlayerMediaType coreType;
     switch (type) {
-      case MediaType.unknown: coreType = core_enums.PlayerMediaType.unknown; break;
-      case MediaType.video: coreType = core_enums.PlayerMediaType.video; break;
-      case MediaType.audio: coreType = core_enums.PlayerMediaType.audio; break;
-      case MediaType.subtitle: coreType = core_enums.PlayerMediaType.subtitle; break;
+      case MediaType.unknown:
+        coreType = core_enums.PlayerMediaType.unknown;
+        break;
+      case MediaType.video:
+        coreType = core_enums.PlayerMediaType.video;
+        break;
+      case MediaType.audio:
+        coreType = core_enums.PlayerMediaType.audio;
+        break;
+      case MediaType.subtitle:
+        coreType = core_enums.PlayerMediaType.subtitle;
+        break;
     }
     _delegate.setDecoders(coreType, decoders);
   }
@@ -123,21 +154,30 @@ class Player {
   List<String> getDecoders(MediaType type) {
     core_enums.PlayerMediaType coreType;
     switch (type) {
-      case MediaType.unknown: coreType = core_enums.PlayerMediaType.unknown; break;
-      case MediaType.video: coreType = core_enums.PlayerMediaType.video; break;
-      case MediaType.audio: coreType = core_enums.PlayerMediaType.audio; break;
-      case MediaType.subtitle: coreType = core_enums.PlayerMediaType.subtitle; break;
+      case MediaType.unknown:
+        coreType = core_enums.PlayerMediaType.unknown;
+        break;
+      case MediaType.video:
+        coreType = core_enums.PlayerMediaType.video;
+        break;
+      case MediaType.audio:
+        coreType = core_enums.PlayerMediaType.audio;
+        break;
+      case MediaType.subtitle:
+        coreType = core_enums.PlayerMediaType.subtitle;
+        break;
     }
     return _delegate.getDecoders(coreType);
   }
 
   String? getProperty(String key) => _delegate.getProperty(key);
-  
-  void setProperty(String key, String value) => _delegate.setProperty(key, value);
+
+  void setProperty(String key, String value) =>
+      _delegate.setProperty(key, value);
 
   Future<void> setVideoSurfaceSize({int? width, int? height}) =>
       _delegate.setVideoSurfaceSize(width: width, height: height);
-  
+
   // 直接播放控制方法
   Future<void> playDirectly() => _delegate.playDirectly();
   Future<void> pauseDirectly() => _delegate.pauseDirectly();
@@ -156,12 +196,14 @@ class Player {
   Future<void> attachPlatformVideoSurface({
     required int viewHandle,
     int? windowHandle,
+    int? platformViewId,
   }) async {
     try {
       final dyn = _delegate as dynamic;
       final future = dyn.attachPlatformVideoSurface?.call(
         viewHandle: viewHandle,
         windowHandle: windowHandle,
+        platformViewId: platformViewId,
       );
       if (future is Future) {
         await future;
@@ -171,10 +213,12 @@ class Player {
     }
   }
 
-  Future<void> detachPlatformVideoSurface() async {
+  Future<void> detachPlatformVideoSurface({int? platformViewId}) async {
     try {
       final dyn = _delegate as dynamic;
-      final future = dyn.detachPlatformVideoSurface?.call();
+      final future = dyn.detachPlatformVideoSurface?.call(
+        platformViewId: platformViewId,
+      );
       if (future is Future) {
         await future;
       }
@@ -182,7 +226,7 @@ class Player {
       debugPrint('[Player] detachPlatformVideoSurface failed: $error');
     }
   }
-  
+
   // 获取当前使用的播放器内核类型的名称
   String getPlayerKernelName() {
     if (_delegate is MdkPlayerAdapter) {
@@ -204,7 +248,7 @@ class Player {
     } catch (_) {}
     return null;
   }
-  
+
   // 添加setPlaybackRate方法实现
   void setPlaybackRate(double rate) => _delegate.setPlaybackRate(rate);
 
@@ -237,4 +281,4 @@ class Player {
 
 // Type aliases for full compatibility if VideoPlayerState uses these type names
 typedef MediaInfo = PlayerMediaInfo;
-typedef Frame = PlayerFrame; 
+typedef Frame = PlayerFrame;

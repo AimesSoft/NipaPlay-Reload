@@ -514,7 +514,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       final deltaTime = nowTime - _lastTickTime;
       _lastTickTime = nowTime;
       final bool shouldUiNotify =
-          (nowTime - _lastUiNotifyMs) >= _uiUpdateIntervalMs;
+          (nowTime - _lastUiNotifyMs) >= effectiveUiUpdateIntervalMs;
 
       // 更新弹幕控制器的时间戳
       if (danmakuController != null) {

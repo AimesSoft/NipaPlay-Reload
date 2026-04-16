@@ -1,13 +1,13 @@
-// widgets/custom_scaffold.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart'; // 导入背景图和模糊效果控件
-import 'package:provider/provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:provider/provider.dart';
 
 class CustomScaffold extends StatefulWidget {
   final List<Widget> pages;
@@ -16,13 +16,14 @@ class CustomScaffold extends StatefulWidget {
   final bool shouldShowAppBar;
   final TabController? tabController;
 
-  const CustomScaffold(
-      {super.key,
-      required this.pages,
-      required this.tabPage,
-      required this.pageIsHome,
-      required this.shouldShowAppBar,
-      this.tabController});
+  const CustomScaffold({
+    super.key,
+    required this.pages,
+    required this.tabPage,
+    required this.pageIsHome,
+    required this.shouldShowAppBar,
+    this.tabController,
+  });
 
   @override
   State<CustomScaffold> createState() => _CustomScaffoldState();
@@ -31,6 +32,14 @@ class CustomScaffold extends StatefulWidget {
 class _CustomScaffoldState extends State<CustomScaffold> {
   int? _lastTabIndex;
   String? _lastAppBarOverlayLogSignature;
+
+  bool get _macOSHdrTransparentUnderlayEnabled {
+    return !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] != '0' &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
+        Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+  }
 
   void _handlePageChangedBySwitchableView(int index) {
     if (widget.tabController != null && widget.tabController!.index != index) {
@@ -90,32 +99,43 @@ class _CustomScaffoldState extends State<CustomScaffold> {
   Widget build(BuildContext context) {
     if (widget.tabController == null) {
       return const Center(
-          child: Text("Error: TabController not provided to CustomScaffold"));
+        child: Text("Error: TabController not provided to CustomScaffold"),
+      );
     }
 
-    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final bool isDesktopOrTablet = globals.isDesktopOrTablet;
-    // 强制启用动画
     const enableAnimation = true;
 
     final currentIndex = widget.tabController!.index;
     final preloadIndices = widget.pageIsHome
-        ? List<int>.generate(widget.pages.length, (i) => i)
-            .where((i) => i != 1)
-            .toList()
+        ? List<int>.generate(
+            widget.pages.length,
+            (i) => i,
+          ).where((i) => i != 1).toList()
         : const <int>[];
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final bool hasVideo = context.select<VideoPlayerState, bool>(
       (videoState) => videoState.hasVideo,
     );
+    final bool hasNativeVideoSurface = context.select<VideoPlayerState, bool>(
+      (videoState) => videoState.player.prefersPlatformVideoSurface,
+    );
+    final Rect? videoUnderlayRect = context.select<VideoPlayerState, Rect?>(
+      (videoState) => videoState.macOSWindowHostedVideoRect,
+    );
+    final bool useVideoUnderlay =
+        _macOSHdrTransparentUnderlayEnabled &&
+        hasNativeVideoSurface &&
+        widget.pageIsHome &&
+        currentIndex == 1 &&
+        hasVideo;
     final bool showTabDivider =
         widget.pageIsHome && widget.tabController?.index == 1 && hasVideo;
     final Color tabDividerColor = isDarkMode ? Colors.white24 : Colors.black12;
     final appBarOverlayStyle = SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
-      // iOS 使用 statusBarBrightness 控制图标颜色，值与期望颜色相反
       statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
     );
     _logAppBarOverlayStyle(
@@ -123,75 +143,77 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       overlayStyle: appBarOverlayStyle,
     );
 
-    return BackgroundWithBlur(
-      child: Scaffold(
-        primary: false,
-        backgroundColor: Colors.transparent,
-        extendBodyBehindAppBar: false,
-        appBar: widget.shouldShowAppBar && widget.tabPage.isNotEmpty
-            ? AppBar(
-                toolbarHeight: !widget.pageIsHome && !isDesktopOrTablet
-                    ? 100
-                    : isDesktopOrTablet
-                        ? 20
-                        : 60,
-                leading: widget.pageIsHome
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Ionicons.chevron_back_outline),
-                        color: isDarkMode ? Colors.white : Colors.black,
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                      ),
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                systemOverlayStyle: appBarOverlayStyle,
-                bottom: _LogoTabBar(
-                  tabBar: TabBar(
-                    controller: widget.tabController,
-                    isScrollable: true,
-                    tabs: widget.tabPage,
-                    labelColor: const Color(0xFFFF2E55),
-                    unselectedLabelColor:
-                        isDarkMode ? Colors.white60 : Colors.black54,
-                    labelPadding: const EdgeInsets.only(bottom: 15.0),
-                    tabAlignment: TabAlignment.start,
-                    splashFactory: NoSplash.splashFactory, // 去除水波纹
-                    overlayColor:
-                        WidgetStateProperty.all(Colors.transparent), // 去除点击背景色
-                    // 仅在播放页正在播放时显示滑轨，用于分隔视频与Tab
-                    dividerColor:
-                        showTabDivider ? tabDividerColor : Colors.transparent,
-                    dividerHeight: 3.0,
-                    indicator: const _CustomTabIndicator(
-                      indicatorHeight: 3.0,
-                      indicatorColor: Color(0xFFFF2E55),
-                      radius: 30.0, // 使用大圆角形成药丸形状
+    final scaffold = Scaffold(
+      primary: false,
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: false,
+      appBar: widget.shouldShowAppBar && widget.tabPage.isNotEmpty
+          ? AppBar(
+              toolbarHeight: !widget.pageIsHome && !isDesktopOrTablet
+                  ? 100
+                  : isDesktopOrTablet
+                  ? 20
+                  : 60,
+              leading: widget.pageIsHome
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Ionicons.chevron_back_outline),
+                      color: isDarkMode ? Colors.white : Colors.black,
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
                     ),
-                    indicatorSize: TabBarIndicatorSize.label, // 与label宽度一致
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              systemOverlayStyle: appBarOverlayStyle,
+              bottom: _LogoTabBar(
+                tabBar: TabBar(
+                  controller: widget.tabController,
+                  isScrollable: true,
+                  tabs: widget.tabPage,
+                  labelColor: const Color(0xFFFF2E55),
+                  unselectedLabelColor: isDarkMode
+                      ? Colors.white60
+                      : Colors.black54,
+                  labelPadding: const EdgeInsets.only(bottom: 15.0),
+                  tabAlignment: TabAlignment.start,
+                  splashFactory: NoSplash.splashFactory,
+                  overlayColor: WidgetStateProperty.all(Colors.transparent),
+                  dividerColor: showTabDivider
+                      ? tabDividerColor
+                      : Colors.transparent,
+                  dividerHeight: 3.0,
+                  indicator: const _CustomTabIndicator(
+                    indicatorHeight: 3.0,
+                    indicatorColor: Color(0xFFFF2E55),
+                    radius: 30.0,
                   ),
+                  indicatorSize: TabBarIndicatorSize.label,
                 ),
-              )
-            : null,
-        body: TabControllerScope(
-          controller: widget.tabController!,
-          enabled: true,
-          child: SwitchableView(
-            enableAnimation: enableAnimation,
-            keepAlive: true,
-            preloadIndices: preloadIndices,
-            currentIndex: currentIndex,
-            physics: enableAnimation
-                ? const PageScrollPhysics()
-                : const NeverScrollableScrollPhysics(),
-            onPageChanged: _handlePageChangedBySwitchableView,
-            children: widget.pages
-                .map((page) => RepaintBoundary(child: page))
-                .toList(),
-          ),
+              ),
+            )
+          : null,
+      body: TabControllerScope(
+        controller: widget.tabController!,
+        enabled: true,
+        child: SwitchableView(
+          enableAnimation: enableAnimation,
+          keepAlive: true,
+          preloadIndices: preloadIndices,
+          currentIndex: currentIndex,
+          physics: const PageScrollPhysics(),
+          onPageChanged: _handlePageChangedBySwitchableView,
+          children: widget.pages
+              .map((page) => RepaintBoundary(child: page))
+              .toList(),
         ),
       ),
+    );
+
+    return BackgroundWithBlur(
+      transparentCutout: useVideoUnderlay ? videoUnderlayRect : null,
+      child: scaffold,
     );
   }
 
@@ -204,7 +226,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       overlayStyle.statusBarIconBrightness?.name ?? 'null',
       overlayStyle.statusBarBrightness?.name ?? 'null',
     ].join('|');
-    if (signature == _lastAppBarOverlayLogSignature) return;
+    if (signature == _lastAppBarOverlayLogSignature) {
+      return;
+    }
     _lastAppBarOverlayLogSignature = signature;
 
     debugPrint(
@@ -216,7 +240,6 @@ class _CustomScaffoldState extends State<CustomScaffold> {
   }
 }
 
-/// 提供TabController给子组件的作用域
 class TabControllerScope extends InheritedWidget {
   final TabController controller;
   final bool enabled;
@@ -229,8 +252,8 @@ class TabControllerScope extends InheritedWidget {
   });
 
   static TabController? of(BuildContext context) {
-    final TabControllerScope? scope =
-        context.dependOnInheritedWidgetOfExactType<TabControllerScope>();
+    final TabControllerScope? scope = context
+        .dependOnInheritedWidgetOfExactType<TabControllerScope>();
     return scope?.enabled == true ? scope?.controller : null;
   }
 
@@ -240,7 +263,6 @@ class TabControllerScope extends InheritedWidget {
   }
 }
 
-// 自定义Tab指示器
 class _CustomTabIndicator extends Decoration {
   final double indicatorHeight;
   final Color indicatorColor;
@@ -266,15 +288,15 @@ class _CustomPainter extends BoxPainter {
   @override
   void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
     assert(configuration.size != null);
-    // 将指示器绘制在TabBar的底部
-    final Rect rect = Offset(
+    final Rect rect =
+        Offset(
           offset.dx,
           (configuration.size!.height - decoration.indicatorHeight),
         ) &
         Size(configuration.size!.width, decoration.indicatorHeight);
-    final Paint paint = Paint();
-    paint.color = decoration.indicatorColor;
-    paint.style = PaintingStyle.fill;
+    final Paint paint = Paint()
+      ..color = decoration.indicatorColor
+      ..style = PaintingStyle.fill;
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
       paint,
@@ -292,7 +314,6 @@ class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 桌面端/平板不显示Logo（移至右上角），移动端与Web保持原有布局
     if (globals.isDesktopOrTablet) {
       return tabBar;
     }

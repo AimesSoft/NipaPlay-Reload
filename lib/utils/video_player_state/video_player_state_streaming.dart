@@ -1,6 +1,14 @@
 part of video_player_state;
 
 extension VideoPlayerStateStreaming on VideoPlayerState {
+  void _logMacOSHdrExitTrace(String message) {
+    if (!kIsWeb &&
+        Platform.isMacOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_EXIT_TRACE'] == '1') {
+      debugPrint('[HDRExit][VideoState] $message');
+    }
+  }
+
   bool hasJellyfinServerSubtitleSelection(String itemId) {
     return _jellyfinServerSubtitleSelections.containsKey(itemId);
   }
@@ -46,14 +54,15 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
   // 添加返回按钮处理
   Future<bool> handleBackButton() async {
     if (_isFullscreen) {
+      _logMacOSHdrExitTrace('handleBackButton fullscreen=true');
       await toggleFullscreen();
       return false; // 不退出应用
     } else {
-      // 在返回按钮点击时进行截图
-      _captureConditionalScreenshot("返回按钮时");
-
-      // 等待截图完成
-      await Future.delayed(const Duration(milliseconds: 200));
+      _logMacOSHdrExitTrace(
+        'handleBackButton start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
+      );
+      // 在允许播放器重置前完成截图，避免截图与 native surface 拆除并发。
+      await _captureConditionalScreenshot("返回按钮时");
 
       // 退出视频播放时触发自动云同步
       if (_currentVideoPath != null) {
@@ -65,19 +74,29 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
         }
       }
 
+      _logMacOSHdrExitTrace(
+        'handleBackButton done path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
+      );
       return true; // 允许返回
     }
   }
 
   // 条件性截图方法
   Future<void> _captureConditionalScreenshot(String triggerEvent) async {
-    if (_currentVideoPath == null || !hasVideo || _isCapturingFrame) return;
+    if (_currentVideoPath == null || !hasVideo || _isCapturingFrame) {
+      _logMacOSHdrExitTrace(
+        'capture skip trigger=$triggerEvent path=$_currentVideoPath hasVideo=$hasVideo isCapturing=$_isCapturingFrame playerState=${player.state}',
+      );
+      return;
+    }
 
     _isCapturingFrame = true;
+    _logMacOSHdrExitTrace(
+      'capture start trigger=$triggerEvent path=$_currentVideoPath status=$_status playerState=${player.state}',
+    );
     try {
       String? newThumbnailPath = await _captureVideoFrameWithoutPausing();
-      if (newThumbnailPath == null &&
-          player.state == PlaybackState.paused) {
+      if (newThumbnailPath == null && player.state == PlaybackState.paused) {
         newThumbnailPath = await captureVideoFrame();
       }
       if (newThumbnailPath != null) {
@@ -90,8 +109,14 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
         // 截图后检查解码器状态
         await _decoderManager.checkDecoderAfterScreenshot();
       }
+      _logMacOSHdrExitTrace(
+        'capture end trigger=$triggerEvent thumbnail=$newThumbnailPath status=$_status playerState=${player.state}',
+      );
     } catch (e) {
       debugPrint('条件截图失败($triggerEvent): $e');
+      _logMacOSHdrExitTrace(
+        'capture error trigger=$triggerEvent error=$e status=$_status playerState=${player.state}',
+      );
     } finally {
       _isCapturingFrame = false;
     }

@@ -20,12 +20,10 @@ class AppDelegate: FlutterAppDelegate {
 
   @objc override func applicationWillFinishLaunching(_ notification: Notification) {
     configureBundledMoltenVKIfAvailable()
-    super.applicationWillFinishLaunching(notification)
   }
   
   @objc override func applicationDidFinishLaunching(_ notification: Notification) {
     configureBundledMoltenVKIfAvailable()
-    super.applicationDidFinishLaunching(notification)
     print("[AppDelegate] 应用启动")
     
     // 延迟更新菜单项，确保应用完全初始化
@@ -344,7 +342,7 @@ class AppDelegate: FlutterAppDelegate {
   // 封装调用Flutter方法的逻辑
   private func invokeFlutterMethod(_ method: String, arguments: Any? = nil) {
     // 获取控制器和创建通道
-    guard let controller = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
+    guard let controller = self.mainFlutterWindow?.nipaplayFlutterViewController else {
       print("[AppDelegate] 错误: 无法获取Flutter控制器")
       showSimpleAlert(message: "应用尚未准备好，请稍后再试")
       return
@@ -461,7 +459,7 @@ class AppDelegate: FlutterAppDelegate {
   
   // 检查Flutter是否准备好
   private func isFlutterReady() -> Bool {
-    guard let _ = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
+    guard let _ = self.mainFlutterWindow?.nipaplayFlutterViewController else {
       return false
     }
     return true
@@ -471,7 +469,7 @@ class AppDelegate: FlutterAppDelegate {
   private func sendFileToFlutter(_ filename: String) {
     print("[AppDelegate] 发送文件到Flutter: \(filename)")
     
-    guard let controller = self.mainFlutterWindow?.contentViewController as? FlutterViewController else {
+    guard let controller = self.mainFlutterWindow?.nipaplayFlutterViewController else {
       print("[AppDelegate] 错误: 无法获取Flutter控制器")
       return
     }
