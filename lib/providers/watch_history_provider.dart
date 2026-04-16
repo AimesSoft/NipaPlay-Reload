@@ -161,6 +161,10 @@ class WatchHistoryProvider extends ChangeNotifier {
 
       // 检查是否为已知无效文件路径，如果是则跳过验证
       if (_knownInvalidPaths.contains(originalPath)) {
+        // 但如果是自定义媒体信息，即使路径无效也保留
+        if (item.animeId != null && item.animeId! < 0) {
+          validItems.add(item);
+        }
         continue; // 直接跳过已知无效的路径，不输出重复日志
       }
 
@@ -174,6 +178,19 @@ class WatchHistoryProvider extends ChangeNotifier {
       // 跳过HTTP/HTTPS流媒体URL的文件存在性验证
       if (originalPath.startsWith('http://') ||
           originalPath.startsWith('https://')) {
+        validItems.add(item);
+        continue;
+      }
+
+      // 跳过WebDAV和SMB路径的文件存在性验证
+      if (originalPath.startsWith('webdav://') ||
+          originalPath.startsWith('smb://')) {
+        validItems.add(item);
+        continue;
+      }
+
+      // 跳过自定义媒体信息的文件存在性验证（animeId为负数）
+      if (item.animeId != null && item.animeId! < 0) {
         validItems.add(item);
         continue;
       }
