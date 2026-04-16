@@ -12,7 +12,7 @@ class MediaServerSelectionSheet extends StatelessWidget {
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     return BlurDialog.show<String>(
       context: context,
-      title: '添加媒体库',
+      title: '添加媒体',
       backgroundColor: backgroundColor,
       contentWidget: const MediaServerSelectionSheet(),
     );
@@ -23,14 +23,16 @@ class MediaServerSelectionSheet extends StatelessWidget {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black87;
     final subTextColor = isDarkMode ? Colors.white70 : Colors.black54;
-    final borderColor =
-        isDarkMode ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12);
-    final cardColor = isDarkMode ? const Color(0xFF242424) : const Color(0xFFEDEDED);
+    final borderColor = isDarkMode
+        ? Colors.white.withOpacity(0.12)
+        : Colors.black.withOpacity(0.12);
+    final cardColor =
+        isDarkMode ? const Color(0xFF242424) : const Color(0xFFEDEDED);
     return LayoutBuilder(
       builder: (context, constraints) {
         const spacing = 12.0;
         final maxWidth = constraints.maxWidth;
-        final columnCount = maxWidth >= 520 ? 2 : 1;
+        final columnCount = maxWidth >= 420 ? 2 : 1;
         final itemWidth =
             (maxWidth - (columnCount - 1) * spacing) / columnCount;
 
@@ -50,12 +52,29 @@ class MediaServerSelectionSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildSectionTitle('本地媒体', textColor),
+              const SizedBox(height: 12),
+              buildGrid([
+                _buildServerOptionCard(
+                  icon: const Icon(Icons.folder_open_outlined,
+                      size: 22, color: Color(0xFFFFB74D)),
+                  title: '本地文件夹',
+                  subtitle: '添加本地媒体文件夹',
+                  accentColor: const Color(0xFFFFB74D),
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  borderColor: borderColor,
+                  cardColor: cardColor,
+                  onTap: () => Navigator.of(context).pop('local_folder'),
+                ),
+              ]),
+              const SizedBox(height: 20),
               _buildSectionTitle('网络媒体服务器', textColor),
               const SizedBox(height: 12),
               buildGrid([
                 _buildServerOptionCard(
-                  icon: _buildImageIcon('assets/nipaplay.png',
-                      const Color(0xFFB39DDB)),
+                  icon: _buildImageIcon(
+                      'assets/nipaplay.png', const Color(0xFFB39DDB)),
                   title: 'NipaPlay',
                   subtitle: '局域网媒体共享',
                   accentColor: const Color(0xFFB39DDB),
@@ -66,8 +85,8 @@ class MediaServerSelectionSheet extends StatelessWidget {
                   onTap: () => Navigator.of(context).pop('nipaplay'),
                 ),
                 _buildServerOptionCard(
-                  icon: _buildSvgIcon('assets/jellyfin.svg',
-                      Colors.lightBlueAccent),
+                  icon: _buildSvgIcon(
+                      'assets/jellyfin.svg', Colors.lightBlueAccent),
                   title: 'Jellyfin',
                   subtitle: '开源媒体服务器',
                   accentColor: Colors.lightBlueAccent,
@@ -90,8 +109,8 @@ class MediaServerSelectionSheet extends StatelessWidget {
                   onTap: () => Navigator.of(context).pop('dandanplay'),
                 ),
                 _buildServerOptionCard(
-                  icon: _buildSvgIcon(
-                      'assets/emby.svg', const Color(0xFF52B54B)),
+                  icon:
+                      _buildSvgIcon('assets/emby.svg', const Color(0xFF52B54B)),
                   title: 'Emby',
                   subtitle: '功能丰富的媒体服务器',
                   accentColor: const Color(0xFF52B54B),
