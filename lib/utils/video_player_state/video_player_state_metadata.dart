@@ -86,14 +86,23 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
     _setAutoDanmakuOffset(0.0);
 
     try {
+      // 对于自定义媒体（animeId为负数），禁用自动匹配弹幕和手动匹配弹幕
+      if (_animeId != null && _animeId! < 0) {
+        _danmakuList = [];
+        _danmakuTracks.clear();
+        _danmakuTrackEnabled.clear();
+        _setStatus(PlayerStatus.recognizing, message: '自定义媒体，跳过弹幕匹配');
+        return;
+      }
+
       final prefs = await SharedPreferences.getInstance();
-      final autoMatchEnabled =
+      final autoMatchEnabled = 
           prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true;
       if (!autoMatchEnabled) {
         _danmakuList = [];
         _danmakuTracks.clear();
         _danmakuTrackEnabled.clear();
-        final handled =
+        final handled = 
             await _tryManualMatchDanmaku(videoPath, initialFileName: null);
         if (!handled) {
           _setStatus(PlayerStatus.recognizing, message: '已关闭自动匹配弹幕，跳过弹幕');
