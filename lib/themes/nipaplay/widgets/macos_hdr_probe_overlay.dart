@@ -141,8 +141,8 @@ class _MacOSHdrProbeOverlayState extends State<MacOSHdrProbeOverlay> {
           ' · wantsEDR ${_readBool(videoLayer, 'wantsExtendedDynamicRangeContent')}'
           ' · opaque ${_readBool(videoLayer, 'isOpaque')}',
       'layer CS: ${_shorten(_readString(videoLayer, 'colorspace'))}',
-      'layer px: ${_readString(videoLayer, 'pixelFormat')}'
-          ' · ${_formatSize(_mapAt(videoLayer, 'drawableSize'))}',
+      'layer px: ${_readString(videoLayer, 'pixelFormat') ?? _readString(videoLayer, 'contentsFormat')}'
+          ' · ${_formatSize(_mapAt(videoLayer, 'drawableSize').isNotEmpty ? _mapAt(videoLayer, 'drawableSize') : _mapAt(videoLayer, 'bounds'))}',
       if (_readString(videoLayer, 'edrMetadata') case final metadata?)
         'layer meta: ${_shorten(metadata, maxLength: 96)}',
       'mpv: vo=${_readMpv('current-vo')}'

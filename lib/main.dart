@@ -99,6 +99,12 @@ const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 final GlobalKey<State<DefaultTabController>> tabControllerKey =
     GlobalKey<State<DefaultTabController>>();
 
+bool get _macosHdrVideoOnlyMode {
+  return !kIsWeb &&
+      Platform.isMacOS &&
+      Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1';
+}
+
 Alignment _resolveStartupWindowAlignment(
     DesktopStartupWindowPosition position) {
   switch (position) {
@@ -154,6 +160,14 @@ void main(List<String> args) async {
     final filePath = args.first;
     if (await File(filePath).exists()) {
       launchFilePath = filePath;
+    }
+  }
+  if (globals.isDesktop && launchFilePath == null) {
+    final envFilePath = Platform.environment['NIPAPLAY_AUTOPLAY_FILE'];
+    if (envFilePath != null &&
+        envFilePath.isNotEmpty &&
+        await File(envFilePath).exists()) {
+      launchFilePath = envFilePath;
     }
   }
 
@@ -1473,6 +1487,10 @@ class MainPageState extends State<MainPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_macosHdrVideoOnlyMode) {
+      return const PlayVideoPage();
+    }
+
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final mediaPadding = MediaQuery.of(context).padding;
     final bool isMac = !kIsWeb && Platform.isMacOS;

@@ -80,10 +80,7 @@ dependencies:
   media_kit_video:
     path: packages/media_kit_video
   media_kit_libs_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./libs/universal/media_kit_libs_video
+    path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
   qr_flutter: ^4.1.0  # 用于生成二维码
   flutter_svg: ^2.0.14  # 用于显示SVG图标
   flutter_markdown: ^0.7.1
@@ -228,37 +225,19 @@ dependency_overrides:
   media_kit_video:
     path: packages/media_kit_video
   media_kit_libs_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./libs/universal/media_kit_libs_video
+    path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
   adaptive_platform_ui:
     path: packages/adaptive_platform_ui
   media_kit_libs_linux:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./libs/linux/media_kit_libs_linux
+    path: third_party/media-kit-upstream/libs/linux/media_kit_libs_linux
   media_kit_libs_ios_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./libs/ios/media_kit_libs_ios_video
+    path: third_party/media-kit-upstream/libs/ios/media_kit_libs_ios_video
   media_kit_libs_android_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./libs/android/media_kit_libs_android_video
+    path: third_party/media-kit-upstream/libs/android/media_kit_libs_android_video
   media_kit_libs_windows_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./libs/windows/media_kit_libs_windows_video
+    path: third_party/media-kit-upstream/libs/windows/media_kit_libs_windows_video
   media_kit_libs_macos_video:
-    git:
-      url: https://github.com/Shinokawa/media-kit.git
-      ref: main
-      path: ./libs/macos/media_kit_libs_macos_video
+    path: third_party/media-kit-upstream/libs/macos/media_kit_libs_macos_video
   smb_connect:
     path: third_party/smb_connect
 

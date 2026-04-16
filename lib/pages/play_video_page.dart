@@ -41,6 +41,20 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _showUiLockButton = false;
   Timer? _uiLockButtonTimer;
 
+  bool get _isMacOSHdrVideoOnlyEnabled {
+    return !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1';
+  }
+
+  bool get _isMacOSHdrTransparentFlutterEnabled {
+    return !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] != '0' &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
+        Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -345,6 +359,16 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isMacOSHdrVideoOnlyEnabled) {
+      if (_isMacOSHdrTransparentFlutterEnabled) {
+        return const VideoPlayerWidget();
+      }
+      return const ColoredBox(
+        color: Colors.black,
+        child: VideoPlayerWidget(),
+      );
+    }
+
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         return WillPopScope(
@@ -352,7 +376,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            color: videoState.hasVideo ? Colors.black : Colors.transparent,
+            color: videoState.hasVideo && !_isMacOSHdrTransparentFlutterEnabled
+                ? Colors.black
+                : Colors.transparent,
             child: Scaffold(
               backgroundColor: Colors.transparent,
               body: Stack(

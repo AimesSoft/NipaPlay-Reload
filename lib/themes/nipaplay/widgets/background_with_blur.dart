@@ -1,15 +1,15 @@
+import 'dart:io' if (dart.library.io) 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
-import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_image_compositor.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
-import 'dart:io' if (dart.library.io) 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 
-// 导入 glassmorphism 插件
 String backgroundImageUrl = (globals.isDesktop || globals.isTablet)
     ? 'assets/images/main_image.png'
     : 'assets/images/main_image_mobile.png';
@@ -21,21 +21,23 @@ String backgroundImageUrl2 = (globals.isDesktop || globals.isTablet)
 const _themeTransitionDuration = Duration(milliseconds: 420);
 const _themeTransitionCurve = Curves.easeInOutCubic;
 
-class BackgroundWithBlur extends StatelessWidget {
-  final Widget child;
-
-  const BackgroundWithBlur({super.key, required this.child});
+class BackgroundBackdrop extends StatelessWidget {
+  const BackgroundBackdrop({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<SettingsProvider, ThemeNotifier,
-        ThemeBackgroundRevealProvider>(
+    return Consumer3<
+      SettingsProvider,
+      ThemeNotifier,
+      ThemeBackgroundRevealProvider
+    >(
       builder: (context, settingsProvider, themeNotifier, revealProvider, _) {
-        final Duration backgroundTransitionDuration =
-            revealProvider.isActive ? Duration.zero : _themeTransitionDuration;
+        final Duration backgroundTransitionDuration = revealProvider.isActive
+            ? Duration.zero
+            : _themeTransitionDuration;
         return Stack(
+          fit: StackFit.expand,
           children: [
-            // 背景图像
             Positioned.fill(
               child: _buildBackgroundImage(
                 context,
@@ -43,31 +45,28 @@ class BackgroundWithBlur extends StatelessWidget {
                 duration: backgroundTransitionDuration,
               ),
             ),
-            // 使用 GlassmorphicContainer 实现毛玻璃效果
             if (settingsProvider.isBlurEnabled)
               Positioned.fill(
                 child: GlassmorphicContainer(
-                  blur: settingsProvider.blurPower, // 从Provider获取模糊强度
+                  blur: settingsProvider.blurPower,
                   alignment: Alignment.center,
-                  borderRadius: 0, // 圆角半径
-                  border: 0, // 边框宽度
-                  padding: const EdgeInsets.all(20), // 内边距
+                  borderRadius: 0,
+                  border: 0,
+                  padding: const EdgeInsets.all(20),
                   height: double.infinity,
                   width: double.infinity,
                   linearGradient: LinearGradient(
-                    // 添加线性渐变
                     colors: [
-                      const Color.fromARGB(255, 0, 0, 0).withOpacity(0),
-                      const Color.fromARGB(255, 0, 0, 0).withOpacity(0),
+                      const Color.fromARGB(255, 0, 0, 0).withValues(alpha: 0),
+                      const Color.fromARGB(255, 0, 0, 0).withValues(alpha: 0),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderGradient: LinearGradient(
-                    // 添加边框渐变
                     colors: [
-                      const Color.fromARGB(255, 0, 0, 0).withOpacity(0.3),
-                      const Color.fromARGB(255, 0, 0, 0).withOpacity(0.1),
+                      const Color.fromARGB(255, 0, 0, 0).withValues(alpha: 0.3),
+                      const Color.fromARGB(255, 0, 0, 0).withValues(alpha: 0.1),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -84,7 +83,6 @@ class BackgroundWithBlur extends StatelessWidget {
                   reverse: revealProvider.reverse,
                 ),
               ),
-            child,
           ],
         );
       },
@@ -97,8 +95,9 @@ class BackgroundWithBlur extends StatelessWidget {
     required Duration duration,
   }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final baseColor =
-        isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+    final baseColor = isDarkMode
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF2F2F2);
 
     Widget buildComposite(Widget image) {
       return Stack(
@@ -128,27 +127,15 @@ class BackgroundWithBlur extends StatelessWidget {
         color: baseColor,
       );
     } else if (globals.backgroundImageMode == '看板娘') {
-      return buildComposite(
-        Image.asset(
-          backgroundImageUrl,
-          fit: BoxFit.cover,
-        ),
-      );
+      return buildComposite(Image.asset(backgroundImageUrl, fit: BoxFit.cover));
     } else if (globals.backgroundImageMode == '看板娘2') {
       return buildComposite(
-        Image.asset(
-          backgroundImageUrl2,
-          fit: BoxFit.cover,
-        ),
+        Image.asset(backgroundImageUrl2, fit: BoxFit.cover),
       );
     } else if (globals.backgroundImageMode == '自定义') {
       if (kIsWeb) {
-        // Web平台不支持本地文件，回退到默认图片
         return buildComposite(
-          Image.asset(
-            backgroundImageUrl,
-            fit: BoxFit.cover,
-          ),
+          Image.asset(backgroundImageUrl, fit: BoxFit.cover),
         );
       }
       final file = File(globals.customBackgroundPath);
@@ -158,27 +145,45 @@ class BackgroundWithBlur extends StatelessWidget {
             file,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              return Image.asset(
-                backgroundImageUrl,
-                fit: BoxFit.cover,
-              );
+              return Image.asset(backgroundImageUrl, fit: BoxFit.cover);
             },
           ),
         );
       } else {
         return buildComposite(
-          Image.asset(
-            backgroundImageUrl,
-            fit: BoxFit.cover,
-          ),
+          Image.asset(backgroundImageUrl, fit: BoxFit.cover),
         );
       }
     }
-    return buildComposite(
-      Image.asset(
-        backgroundImageUrl,
-        fit: BoxFit.cover,
-      ),
+    return buildComposite(Image.asset(backgroundImageUrl, fit: BoxFit.cover));
+  }
+}
+
+class BackgroundWithBlur extends StatelessWidget {
+  final Widget child;
+  final Rect? transparentCutout;
+
+  const BackgroundWithBlur({
+    super.key,
+    required this.child,
+    this.transparentCutout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final background = transparentCutout == null
+        ? const BackgroundBackdrop()
+        : ClipPath(
+            clipper: _TransparentCutoutClipper(cutout: transparentCutout!),
+            child: const BackgroundBackdrop(),
+          );
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(child: background),
+        child,
+      ],
     );
   }
 }
@@ -238,9 +243,9 @@ class _BackgroundRevealOverlayState extends State<_BackgroundRevealOverlay>
     if (!mounted) {
       return;
     }
-    context
-        .read<ThemeBackgroundRevealProvider>()
-        .markAnimationCompleted(widget.epoch);
+    context.read<ThemeBackgroundRevealProvider>().markAnimationCompleted(
+      widget.epoch,
+    );
   }
 
   @override
@@ -329,8 +334,12 @@ class _BackgroundRevealPainter extends CustomPainter {
     final topRight = (origin - Offset(size.width, 0)).distance;
     final bottomLeft = (origin - Offset(0, size.height)).distance;
     final bottomRight = (origin - Offset(size.width, size.height)).distance;
-    return [topLeft, topRight, bottomLeft, bottomRight]
-        .reduce((a, b) => a > b ? a : b);
+    return [
+      topLeft,
+      topRight,
+      bottomLeft,
+      bottomRight,
+    ].reduce((a, b) => a > b ? a : b);
   }
 
   @override
@@ -339,5 +348,28 @@ class _BackgroundRevealPainter extends CustomPainter {
         oldDelegate.radius != radius ||
         oldDelegate.color != color ||
         oldDelegate.reverse != reverse;
+  }
+}
+
+class _TransparentCutoutClipper extends CustomClipper<Path> {
+  const _TransparentCutoutClipper({required this.cutout});
+
+  final Rect cutout;
+
+  @override
+  Path getClip(Size size) {
+    final bounds = Offset.zero & size;
+    final effectiveCutout = cutout.intersect(bounds);
+    final path = Path()..fillType = PathFillType.evenOdd;
+    path.addRect(bounds);
+    if (!effectiveCutout.isEmpty) {
+      path.addRect(effectiveCutout);
+    }
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant _TransparentCutoutClipper oldClipper) {
+    return oldClipper.cutout != cutout;
   }
 }

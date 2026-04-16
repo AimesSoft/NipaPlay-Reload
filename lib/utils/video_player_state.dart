@@ -245,6 +245,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       'instant_hide_player_ui_enabled';
   bool _instantHidePlayerUiEnabled = false; // 默认关闭（桌面端）
   bool _isFullscreen = false;
+  Rect? _macOSWindowHostedVideoRect;
   double _progress = 0.0;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
@@ -642,9 +643,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _dragSeekStartPosition = Duration.zero;
   double _accumulatedDragDx = 0.0;
   Timer?
-      _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
+  _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
   OverlayEntry?
-      _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
+  _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
   Duration _dragSeekTargetPosition =
       Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
@@ -758,9 +759,44 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   // Getters
+  Rect? get macOSWindowHostedVideoRect => _macOSWindowHostedVideoRect;
   PlayerStatus get status => _status;
   List<String> get statusMessages => _statusMessages;
   bool get showControls => _showControls;
+  bool get usesMacOSNativePlatformVideoSurface =>
+      !kIsWeb && Platform.isMacOS && player.prefersPlatformVideoSurface;
+
+  int get effectiveUiUpdateIntervalMs {
+    if (!usesMacOSNativePlatformVideoSurface) {
+      return _uiUpdateIntervalMs;
+    }
+    if (!_showControls && !_isSeeking) {
+      return 1000;
+    }
+    return 250;
+  }
+
+  void setMacOSWindowHostedVideoRect(Rect? rect) {
+    final normalizedRect = rect == null || rect.isEmpty
+        ? null
+        : Rect.fromLTWH(rect.left, rect.top, rect.width, rect.height);
+    if (_rectsMatch(_macOSWindowHostedVideoRect, normalizedRect)) {
+      return;
+    }
+    _macOSWindowHostedVideoRect = normalizedRect;
+    notifyListeners();
+  }
+
+  bool _rectsMatch(Rect? a, Rect? b) {
+    if (a == null || b == null) {
+      return a == b;
+    }
+    return (a.left - b.left).abs() < 0.01 &&
+        (a.top - b.top).abs() < 0.01 &&
+        (a.width - b.width).abs() < 0.01 &&
+        (a.height - b.height).abs() < 0.01;
+  }
+
   bool get isDisposed => _isDisposed;
   bool get showRightMenu => _showRightMenu;
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
@@ -882,7 +918,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         return directValue;
       }
 
-      final labeledFractionMatch = RegExp(
+      final labeledFractionMatch =
+          RegExp(
             r'([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
           ).firstMatch(trimmed) ??
           RegExp(
@@ -890,8 +927,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           ).firstMatch(trimmed);
       if (labeledFractionMatch != null) {
         final numerator = double.tryParse(labeledFractionMatch.group(1) ?? '');
-        final denominator =
-            double.tryParse(labeledFractionMatch.group(2) ?? '');
+        final denominator = double.tryParse(
+          labeledFractionMatch.group(2) ?? '',
+        );
         if (numerator != null &&
             denominator != null &&
             numerator.isFinite &&
@@ -904,7 +942,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
 
-      final labeledMatch = RegExp(
+      final labeledMatch =
+          RegExp(
             r'([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
           ).firstMatch(trimmed) ??
           RegExp(
@@ -948,7 +987,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (videoEntries is List) {
       for (final entry in videoEntries) {
         final mapEntry = toStringKeyedMap(entry);
-        final parsed = _parseSeekStepFrameRateValue(mapEntry['fps']) ??
+        final parsed =
+            _parseSeekStepFrameRateValue(mapEntry['fps']) ??
             _parseSeekStepFrameRateValue(mapEntry['frameRate']) ??
             _parseSeekStepFrameRateValue(mapEntry['frame_rate']) ??
             _parseSeekStepFrameRateValue(mapEntry['raw']);
@@ -1077,10 +1117,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       formatSeekStepLabel(seekStepSeconds, preferFrameLabel: true);
 
   String get seekStepSummaryLabel => formatSeekStepLabel(
-        seekStepSeconds,
-        preferFrameLabel: true,
-        includeFrameApproximation: true,
-      );
+    seekStepSeconds,
+    preferFrameLabel: true,
+    includeFrameApproximation: true,
+  );
 
   double get subtitleDelaySliderMinSeconds {
     final limit = subtitleDelayCustomLimitSeconds;
@@ -1264,11 +1304,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
-    PlayerRemoteControlBridge.instance.detach(this);
-    // 在销毁前进行一次截图
-    if (hasVideo) {
-      _captureConditionalScreenshot("销毁前");
-    }
 
     // Jellyfin同步：如果是Jellyfin流媒体，停止同步
     if (_currentVideoPath != null &&

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
@@ -19,6 +20,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static int? _cachedMacosMajor;
   static const int _defaultBufferSize = 32 * 1024 * 1024;
   static const String _hdrValidationFlag = 'NIPAPLAY_MACOS_HDR_VALIDATE';
+  static const MethodChannel _macOSNativeVideoChannel =
+      MethodChannel('nipaplay/macos_native_video');
 
   static void setMpvLogLevelNone() {
     _disableMpvLogs = true;
@@ -164,24 +167,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     return major == null || major >= 14;
   }
 
-  static String _resolveMacOSNativeVideoVO() {
-    final env = Platform.environment['NIPAPLAY_MACOS_NATIVE_VIDEO_VO'];
-    if (env == null || env.trim().isEmpty) {
-      return 'gpu-next';
-    }
-    return env.trim();
-  }
-
-  static String _resolveMacOSNativeVideoWidTarget() {
-    final env = Platform.environment['NIPAPLAY_MACOS_NATIVE_VIDEO_WID_TARGET'];
-    switch (env?.trim().toLowerCase()) {
-      case 'window':
-        return 'window';
-      default:
-        return 'view';
-    }
-  }
-
   final Player _player;
   VideoController? _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
@@ -223,8 +208,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   final bool _mpvDiagnosticsEnabled;
   final bool _enableHardwareAcceleration;
   final bool _prefersPlatformVideoSurface;
+  static const int _windowHostedPlatformSurfaceId = -1;
+  int? _attachedPlatformViewId;
   int? _attachedPlatformViewHandle;
   int? _attachedPlatformWindowHandle;
+  Media? _pendingPlatformMedia;
 
   MediaKitPlayerAdapter({int? bufferSize})
       : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
@@ -294,7 +282,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (_envString('NIPAPLAY_MPV_LOG_FILE') case final logFile?)
         'log-file': logFile,
       'msg-level': _envString('NIPAPLAY_MPV_MSG_LEVEL') ?? defaultMsgLevel,
-      if (Platform.isMacOS && _envFlagEnabled(_hdrValidationFlag)) ...{
+      if (Platform.isMacOS &&
+          !_prefersPlatformVideoSurface &&
+          _envFlagEnabled(_hdrValidationFlag)) ...{
         'gpu-api': _envString('NIPAPLAY_MPV_GPU_API') ?? 'vulkan',
         'gpu-context': _envString('NIPAPLAY_MPV_GPU_CONTEXT') ?? 'macvk',
         'target-colorspace-hint':
@@ -316,15 +306,22 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
 
-    final options = <String, String>{
-      'gpu-api': _envString('NIPAPLAY_MPV_GPU_API') ?? 'vulkan',
-      'gpu-context': _envString('NIPAPLAY_MPV_GPU_CONTEXT') ?? 'macvk',
-      'target-colorspace-hint':
-          _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT') ?? 'yes',
-      'target-colorspace-hint-mode':
-          _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT_MODE') ?? 'source',
-      'hdr-compute-peak': _envString('NIPAPLAY_MPV_HDR_COMPUTE_PEAK') ?? 'auto',
-    };
+    final options = _prefersPlatformVideoSurface
+        ? <String, String>{
+            'hdr-compute-peak':
+                _envString('NIPAPLAY_MPV_HDR_COMPUTE_PEAK') ?? 'auto',
+          }
+        : <String, String>{
+            'gpu-api': _envString('NIPAPLAY_MPV_GPU_API') ?? 'vulkan',
+            'gpu-context': _envString('NIPAPLAY_MPV_GPU_CONTEXT') ?? 'macvk',
+            'target-colorspace-hint':
+                _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT') ?? 'yes',
+            'target-colorspace-hint-mode':
+                _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT_MODE') ??
+                    'source',
+            'hdr-compute-peak':
+                _envString('NIPAPLAY_MPV_HDR_COMPUTE_PEAK') ?? 'auto',
+          };
 
     for (final entry in options.entries) {
       _setMpvPropertyOption(entry.key, entry.value,
@@ -337,9 +334,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
 
-    _setMpvPropertyOption('vo', 'null', log: _mpvDiagnosticsEnabled);
+    _setMpvPropertyOption('vo', 'libmpv', log: _mpvDiagnosticsEnabled);
     _setMpvPropertyOption('wid', '0', log: _mpvDiagnosticsEnabled);
     _setMpvPropertyOption('force-window', 'no', log: _mpvDiagnosticsEnabled);
+    _setMpvPropertyOption('gpu-hwdec-interop', 'auto',
+        log: _mpvDiagnosticsEnabled);
   }
 
   void _setMpvPropertyOption(
@@ -1502,30 +1501,25 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     final preparedMedia = _prepareNetworkMediaIfNeeded(path);
 
+    final media = Media(
+      preparedMedia.url,
+      extras: mediaOptions,
+      httpHeaders: preparedMedia.httpHeaders,
+    );
+
     //debugPrint('MediaKitAdapter: 打开媒体 (MAIN VIDEO/AUDIO): $path');
     if (!_isDisposed) {
-      _player.open(
-        Media(
-          preparedMedia.url,
-          extras: mediaOptions,
-          httpHeaders: preparedMedia.httpHeaders,
-        ),
-        play: false,
-      );
-    }
-
-    if (_mpvDiagnosticsEnabled &&
-        Platform.isMacOS &&
-        _envFlagEnabled(_hdrValidationFlag)) {
-      unawaited(_dumpMacOSHdrDiagnostics('media-opened'));
-      Future.delayed(
-        const Duration(milliseconds: 1500),
-        () => unawaited(_dumpMacOSHdrDiagnostics('media-opened+1500ms')),
-      );
-      Future.delayed(
-        const Duration(milliseconds: 4000),
-        () => unawaited(_dumpMacOSHdrDiagnostics('media-opened+4000ms')),
-      );
+      if (_prefersPlatformVideoSurface && _attachedPlatformViewId == null) {
+        _pendingPlatformMedia = media;
+        if (_mpvDiagnosticsEnabled) {
+          debugPrint(
+            'MediaKit HDR诊断: defer media open until macOS native video surface attaches',
+          );
+        }
+      } else {
+        _pendingPlatformMedia = null;
+        _openMainMedia(media);
+      }
     }
 
     // 设置mpv底层video-aspect属性，确保保持原始宽高比
@@ -1562,6 +1556,33 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         //debugPrint('MediaKitAdapter: setMedia (MAIN VIDEO/AUDIO) - Delayed block executed. Initial track info printed.');
       }
     });
+  }
+
+  void _openMainMedia(Media media) {
+    if (_isDisposed) {
+      return;
+    }
+
+    unawaited(_player.open(media, play: false));
+    _scheduleMacOSHdrDiagnostics();
+  }
+
+  void _scheduleMacOSHdrDiagnostics() {
+    if (!_mpvDiagnosticsEnabled ||
+        !Platform.isMacOS ||
+        !_envFlagEnabled(_hdrValidationFlag)) {
+      return;
+    }
+
+    unawaited(_dumpMacOSHdrDiagnostics('media-opened'));
+    Future.delayed(
+      const Duration(milliseconds: 1500),
+      () => unawaited(_dumpMacOSHdrDiagnostics('media-opened+1500ms')),
+    );
+    Future.delayed(
+      const Duration(milliseconds: 4000),
+      () => unawaited(_dumpMacOSHdrDiagnostics('media-opened+4000ms')),
+    );
   }
 
   _PreparedNetworkMedia _prepareNetworkMediaIfNeeded(String originalPath) {
@@ -1832,25 +1853,25 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   Future<void> attachPlatformVideoSurface({
     required int viewHandle,
     int? windowHandle,
+    int? platformViewId,
   }) async {
     if (!_prefersPlatformVideoSurface || _isDisposed) {
       return;
     }
 
-    final widTarget = _resolveMacOSNativeVideoWidTarget();
-    final resolvedHandle = widTarget == 'window'
-        ? (windowHandle ?? viewHandle)
-        : (viewHandle > 0 ? viewHandle : (windowHandle ?? 0));
-    if (resolvedHandle <= 0) {
-      throw ArgumentError('No valid macOS native video handle available.');
-    }
+    final resolvedPlatformViewId =
+        (platformViewId != null && platformViewId >= 0)
+            ? platformViewId
+            : _windowHostedPlatformSurfaceId;
 
-    final isSameBinding = _attachedPlatformViewHandle == viewHandle &&
+    final isSameBinding = _attachedPlatformViewId == resolvedPlatformViewId &&
+        _attachedPlatformViewHandle == viewHandle &&
         _attachedPlatformWindowHandle == windowHandle;
     if (isSameBinding) {
       return;
     }
 
+    _attachedPlatformViewId = resolvedPlatformViewId;
     _attachedPlatformViewHandle = viewHandle;
     _attachedPlatformWindowHandle = windowHandle;
 
@@ -1859,19 +1880,45 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (platform == null) {
         return;
       }
-      final forceWindow = widTarget == 'window' ? 'yes' : 'no';
+      final dynamic handleFuture = platform.handle;
+      final int playerHandle = handleFuture is Future
+          ? await handleFuture as int
+          : (handleFuture is int ? handleFuture : 0);
+      if (playerHandle <= 0) {
+        throw StateError('No valid libmpv player handle available.');
+      }
 
-      await platform.setProperty?.call('vo', 'null');
-      await platform.setProperty?.call('wid', resolvedHandle.toString());
-      await platform.setProperty?.call('force-window', forceWindow);
+      await platform.setProperty?.call('vo', 'libmpv');
+      await platform.setProperty?.call('wid', '0');
+      await platform.setProperty?.call('force-window', 'no');
+      await platform.setProperty?.call('gpu-hwdec-interop', 'auto');
       await platform.setProperty?.call('sub-use-margins', 'no');
       await platform.setProperty?.call('sub-scale-with-window', 'yes');
-      await platform.setProperty?.call('vo', _resolveMacOSNativeVideoVO());
+      await _macOSNativeVideoChannel.invokeMethod<void>(
+        'attachPlayer',
+        <String, dynamic>{
+          'viewId': resolvedPlatformViewId,
+          'playerHandle': playerHandle,
+        },
+      );
+      final pendingMedia = _pendingPlatformMedia;
+      if (pendingMedia != null) {
+        _pendingPlatformMedia = null;
+        _openMainMedia(pendingMedia);
+      }
 
       if (_mpvDiagnosticsEnabled) {
         debugPrint(
           'MediaKit HDR诊断: attach macOS native video surface '
-          'target=$widTarget wid=$resolvedHandle force-window=$forceWindow',
+          'viewId=$resolvedPlatformViewId playerHandle=$playerHandle '
+          'renderer=libmpv-opengl',
+        );
+      }
+      if (Platform.isMacOS &&
+          _envFlagEnabled('NIPAPLAY_MACOS_HDR_EXIT_TRACE')) {
+        debugPrint(
+          '[HDRExit][Adapter] attachPlatformVideoSurface '
+          'viewId=$resolvedPlatformViewId handle=$playerHandle',
         );
       }
 
@@ -1890,20 +1937,38 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
   }
 
-  Future<void> detachPlatformVideoSurface() async {
+  Future<void> detachPlatformVideoSurface({int? platformViewId}) async {
     if (!_prefersPlatformVideoSurface) {
       return;
     }
 
+    if (platformViewId != null &&
+        _attachedPlatformViewId != null &&
+        platformViewId != _attachedPlatformViewId) {
+      return;
+    }
+
+    final viewId = _attachedPlatformViewId;
+    _attachedPlatformViewId = null;
     _attachedPlatformViewHandle = null;
     _attachedPlatformWindowHandle = null;
+    if (Platform.isMacOS && _envFlagEnabled('NIPAPLAY_MACOS_HDR_EXIT_TRACE')) {
+      debugPrint(
+          '[HDRExit][Adapter] detachPlatformVideoSurface viewId=$viewId requested=$platformViewId');
+    }
 
     try {
+      if (viewId != null) {
+        await _macOSNativeVideoChannel.invokeMethod<void>(
+          'detachPlayer',
+          <String, dynamic>{'viewId': viewId},
+        );
+      }
       final dynamic platform = _player.platform;
       if (platform == null) {
         return;
       }
-      await platform.setProperty?.call('vo', 'null');
+      await platform.setProperty?.call('vo', 'libmpv');
       await platform.setProperty?.call('wid', '0');
       await platform.setProperty?.call('force-window', 'no');
     } catch (e) {

@@ -30,6 +30,13 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   String _mdkVersion = "未知"; // 添加MDK版本号
   String _playerKernelType = "未知"; // 添加播放器内核类型
   String _danmakuKernelType = "未知"; // 添加弹幕内核类型
+
+  bool get _isMacOSNativeVideoActive {
+    if (kIsWeb || !Platform.isMacOS) {
+      return false;
+    }
+    return Platform.environment['NIPAPLAY_ENABLE_MACOS_NATIVE_VIDEO'] == '1';
+  }
   
   @override
   void initState() {
@@ -74,20 +81,30 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   
   /// 开始定期更新资源信息
   void _startUpdating() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+
+    void refreshMetrics() {
+      if (!mounted) return;
+      setState(() {
+        _cpuUsage = SystemResourceMonitor().cpuUsage;
+        _memoryUsageMB = SystemResourceMonitor().memoryUsageMB;
+        _fps = SystemResourceMonitor().fps;
+        _activeDecoder = SystemResourceMonitor().activeDecoder;
+        _mdkVersion = SystemResourceMonitor().mdkVersion;
+        _playerKernelType = SystemResourceMonitor().playerKernelType;
+        _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
+      });
+    }
+
+    if (_isMacOSNativeVideoActive) {
+      refreshMetrics();
+      return;
+    }
+
     // 每0.5秒刷新一次UI
     _refreshTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (mounted) {
-        setState(() {
-          // 从SystemResourceMonitor获取最新数据
-          _cpuUsage = SystemResourceMonitor().cpuUsage;
-          _memoryUsageMB = SystemResourceMonitor().memoryUsageMB;
-          _fps = SystemResourceMonitor().fps;
-          _activeDecoder = SystemResourceMonitor().activeDecoder;
-          _mdkVersion = SystemResourceMonitor().mdkVersion;
-          _playerKernelType = SystemResourceMonitor().playerKernelType;
-          _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
-        });
-      }
+      refreshMetrics();
     });
   }
   
@@ -297,4 +314,4 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
       },
     );
   }
-} 
+}
