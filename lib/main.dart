@@ -48,9 +48,11 @@ import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'themes/nipaplay/pages/settings/account_page.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
 import 'themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
 
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -660,6 +662,9 @@ void main(List<String> args) async {
           ChangeNotifierProvider(create: (_) => SharedRemoteLibraryProvider()),
           ChangeNotifierProvider(create: (_) => JellyfinTranscodeProvider()),
           ChangeNotifierProvider(create: (_) => EmbyTranscodeProvider()),
+          ChangeNotifierProvider(
+            create: (_) => ThemeBackgroundRevealProvider(),
+          ),
           ChangeNotifierProvider.value(value: debugLogService),
           ChangeNotifierProvider.value(value: ServiceProvider.jellyfinProvider),
           ChangeNotifierProvider.value(value: ServiceProvider.embyProvider),
@@ -1068,10 +1073,11 @@ class MainPage extends StatefulWidget {
 }
 
 class MainPageState extends State<MainPage>
-    with SingleTickerProviderStateMixin, WindowListener {
+    with TickerProviderStateMixin, WindowListener {
   bool isMaximized = false;
   TabController? globalTabController;
   bool _showSplash = true;
+  bool _isThemeRevealRunning = false;
 
   // 用于热键管理
   bool _hotkeysAreRegistered = false;
@@ -1350,6 +1356,93 @@ class MainPageState extends State<MainPage>
     await windowManager.close();
   }
 
+  ThemeMode _nextThemeMode() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    return isDarkMode ? ThemeMode.light : ThemeMode.dark;
+  }
+
+  double _calculateMaxRevealRadius(Size size, Offset origin) {
+    final topLeft = (origin - Offset.zero).distance;
+    final topRight = (origin - Offset(size.width, 0)).distance;
+    final bottomLeft = (origin - Offset(0, size.height)).distance;
+    final bottomRight = (origin - Offset(size.width, size.height)).distance;
+    return math.max(
+      math.max(topLeft, topRight),
+      math.max(bottomLeft, bottomRight),
+    );
+  }
+
+  Future<void> _handleThemeToggleFromButton(Offset globalOrigin) async {
+    if (_isThemeRevealRunning) {
+      return;
+    }
+    _isThemeRevealRunning = true;
+
+    final nextThemeMode = _nextThemeMode();
+
+    try {
+      final revealBox = context.findRenderObject();
+      if (revealBox is! RenderBox || !revealBox.hasSize) {
+        context.read<ThemeNotifier>().themeMode = nextThemeMode;
+        return;
+      }
+
+      final localOrigin = revealBox.globalToLocal(globalOrigin);
+      final maxRadius = _calculateMaxRevealRadius(revealBox.size, localOrigin);
+      final currentBrightness = Theme.of(context).brightness;
+      final isDarkToLight = currentBrightness == Brightness.dark;
+      final sourceColor = currentBrightness == Brightness.dark
+          ? const Color(0xFF1E1E1E)
+          : const Color(0xFFF2F2F2);
+      final targetColor = currentBrightness == Brightness.dark
+          ? const Color(0xFFF2F2F2)
+          : const Color(0xFF1E1E1E);
+      final revealProvider = context.read<ThemeBackgroundRevealProvider>();
+
+      final started = revealProvider.startReveal(
+        origin: localOrigin,
+        maxRadius: maxRadius,
+        color: isDarkToLight ? targetColor : sourceColor,
+        reverse: isDarkToLight,
+      );
+      if (!started) {
+        return;
+      }
+      final revealEpoch = revealProvider.epoch;
+      final halfDuration = Duration(
+        milliseconds:
+            (ThemeBackgroundRevealProvider.duration.inMilliseconds / 2).round(),
+      );
+
+      if (isDarkToLight) {
+        unawaited(Future<void>.delayed(halfDuration, () {
+          if (!mounted) {
+            return;
+          }
+          context.read<ThemeNotifier>().themeMode = nextThemeMode;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            revealProvider.markThemeUpdated(revealEpoch);
+          });
+        }));
+      } else {
+        context.read<ThemeNotifier>().themeMode = nextThemeMode;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          revealProvider.markThemeUpdated(revealEpoch);
+        });
+      }
+    } catch (e) {
+      debugPrint('[ThemeReveal] 切换动画失败: $e');
+      if (!mounted) {
+        return;
+      }
+      if (context.read<ThemeNotifier>().themeMode != nextThemeMode) {
+        context.read<ThemeNotifier>().themeMode = nextThemeMode;
+      }
+    } finally {
+      _isThemeRevealRunning = false;
+    }
+  }
+
   // WindowListener回调
   @override
   void onWindowMaximize() {
@@ -1388,7 +1481,7 @@ class MainPageState extends State<MainPage>
         isDesktop ? baseTopPadding : baseTopPadding + mediaPadding.top;
     final double rightPadding =
         isDesktop ? baseRightPadding : baseRightPadding + mediaPadding.right;
-    return Stack(
+    final content = Stack(
       children: [
         // 使用 Selector 只监听需要的状态
         Selector<VideoPlayerState, bool>(
@@ -1460,7 +1553,9 @@ class MainPageState extends State<MainPage>
                   SizedBox(
                     height: kWindowCaptionHeight,
                     child: Center(
-                      child: _ThemeToggleButton(),
+                      child: _ThemeToggleButton(
+                        onToggleFromOrigin: _handleThemeToggleFromButton,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1492,6 +1587,8 @@ class MainPageState extends State<MainPage>
         ),
       ],
     );
+
+    return content;
   }
 }
 
@@ -1505,6 +1602,10 @@ class _SettingsEntryButton extends StatefulWidget {
 }
 
 class _ThemeToggleButton extends StatefulWidget {
+  final Future<void> Function(Offset globalOrigin)? onToggleFromOrigin;
+
+  const _ThemeToggleButton({this.onToggleFromOrigin});
+
   @override
   State<_ThemeToggleButton> createState() => _ThemeToggleButtonState();
 }
@@ -1523,6 +1624,17 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
   }
 
   void _toggleTheme() {
+    final onToggleFromOrigin = widget.onToggleFromOrigin;
+    if (onToggleFromOrigin != null) {
+      final renderObject = context.findRenderObject();
+      if (renderObject is RenderBox && renderObject.hasSize) {
+        final origin =
+            renderObject.localToGlobal(renderObject.size.center(Offset.zero));
+        unawaited(onToggleFromOrigin(origin));
+        return;
+      }
+    }
+
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     context.read<ThemeNotifier>().themeMode =
         isDarkMode ? ThemeMode.light : ThemeMode.dark;

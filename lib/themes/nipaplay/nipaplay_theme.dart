@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'package:nipaplay/themes/theme_ids.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/ui_scale_wrapper.dart';
@@ -30,33 +31,41 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
         );
 
   static Widget _buildApp(ThemeBuildContext context) {
-    return MaterialApp(
-      title: 'NipaPlay',
-      debugShowCheckedModeBanner: false,
-      color: Colors.transparent,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: context.themeNotifier.themeMode,
-      themeAnimationDuration: const Duration(milliseconds: 420),
-      themeAnimationCurve: Curves.easeInOutCubic,
-      locale: context.locale,
-      localizationsDelegates: [
-        ...context.localizationsDelegates,
-        ...fluent.FluentLocalizations.localizationsDelegates,
-      ],
-      supportedLocales: context.supportedLocales,
-      navigatorKey: context.navigatorKey,
-      home: context.materialHomeBuilder(),
-      builder: (buildContext, appChild) {
-        final uiScale = buildContext.select<AppearanceSettingsProvider, double>(
-          (provider) => provider.uiScale,
-        );
-        final overlayChild = context.overlayBuilder(
-          appChild ?? const SizedBox.shrink(),
-        );
-        return UiScaleWrapper(
-          scale: uiScale,
-          child: overlayChild,
+    return Consumer<ThemeBackgroundRevealProvider>(
+      builder: (buildContext, revealProvider, _) {
+        final themeAnimationDuration = revealProvider.isActive
+            ? Duration.zero
+            : const Duration(milliseconds: 420);
+        return MaterialApp(
+          title: 'NipaPlay',
+          debugShowCheckedModeBanner: false,
+          color: Colors.transparent,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: context.themeNotifier.themeMode,
+          themeAnimationDuration: themeAnimationDuration,
+          themeAnimationCurve: Curves.easeInOutCubic,
+          locale: context.locale,
+          localizationsDelegates: [
+            ...context.localizationsDelegates,
+            ...fluent.FluentLocalizations.localizationsDelegates,
+          ],
+          supportedLocales: context.supportedLocales,
+          navigatorKey: context.navigatorKey,
+          home: context.materialHomeBuilder(),
+          builder: (buildContext, appChild) {
+            final uiScale =
+                buildContext.select<AppearanceSettingsProvider, double>(
+              (provider) => provider.uiScale,
+            );
+            final overlayChild = context.overlayBuilder(
+              appChild ?? const SizedBox.shrink(),
+            );
+            return UiScaleWrapper(
+              scale: uiScale,
+              child: overlayChild,
+            );
+          },
         );
       },
     );

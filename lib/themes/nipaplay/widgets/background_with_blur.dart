@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
+import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_image_compositor.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -27,13 +28,20 @@ class BackgroundWithBlur extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<SettingsProvider, ThemeNotifier>(
-      builder: (context, settingsProvider, themeNotifier, _) {
+    return Consumer3<SettingsProvider, ThemeNotifier,
+        ThemeBackgroundRevealProvider>(
+      builder: (context, settingsProvider, themeNotifier, revealProvider, _) {
+        final Duration backgroundTransitionDuration =
+            revealProvider.isActive ? Duration.zero : _themeTransitionDuration;
         return Stack(
           children: [
             // 背景图像
             Positioned.fill(
-              child: _buildBackgroundImage(context, themeNotifier),
+              child: _buildBackgroundImage(
+                context,
+                themeNotifier,
+                duration: backgroundTransitionDuration,
+              ),
             ),
             // 使用 GlassmorphicContainer 实现毛玻璃效果
             if (settingsProvider.isBlurEnabled)
@@ -66,6 +74,16 @@ class BackgroundWithBlur extends StatelessWidget {
                   ),
                 ),
               ),
+            if (revealProvider.isActive)
+              Positioned.fill(
+                child: _BackgroundRevealOverlay(
+                  epoch: revealProvider.epoch,
+                  origin: revealProvider.origin,
+                  maxRadius: revealProvider.maxRadius,
+                  color: revealProvider.color,
+                  reverse: revealProvider.reverse,
+                ),
+              ),
             child,
           ],
         );
@@ -74,7 +92,10 @@ class BackgroundWithBlur extends StatelessWidget {
   }
 
   Widget _buildBackgroundImage(
-      BuildContext context, ThemeNotifier themeNotifier) {
+    BuildContext context,
+    ThemeNotifier themeNotifier, {
+    required Duration duration,
+  }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final baseColor =
         isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
@@ -84,7 +105,7 @@ class BackgroundWithBlur extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           AnimatedContainer(
-            duration: _themeTransitionDuration,
+            duration: duration,
             curve: _themeTransitionCurve,
             color: baseColor,
           ),
@@ -93,7 +114,7 @@ class BackgroundWithBlur extends StatelessWidget {
             overlayColor: baseColor,
             renderMode: themeNotifier.backgroundImageRenderMode,
             overlayOpacity: themeNotifier.backgroundImageOverlayOpacity,
-            duration: _themeTransitionDuration,
+            duration: duration,
             curve: _themeTransitionCurve,
           ),
         ],
@@ -102,7 +123,7 @@ class BackgroundWithBlur extends StatelessWidget {
 
     if (globals.backgroundImageMode == '关闭') {
       return AnimatedContainer(
-        duration: _themeTransitionDuration,
+        duration: duration,
         curve: _themeTransitionCurve,
         color: baseColor,
       );
@@ -159,5 +180,164 @@ class BackgroundWithBlur extends StatelessWidget {
         fit: BoxFit.cover,
       ),
     );
+  }
+}
+
+class _BackgroundRevealOverlay extends StatefulWidget {
+  final int epoch;
+  final Offset origin;
+  final double maxRadius;
+  final Color color;
+  final bool reverse;
+
+  const _BackgroundRevealOverlay({
+    required this.epoch,
+    required this.origin,
+    required this.maxRadius,
+    required this.color,
+    required this.reverse,
+  });
+
+  @override
+  State<_BackgroundRevealOverlay> createState() =>
+      _BackgroundRevealOverlayState();
+}
+
+class _BackgroundRevealOverlayState extends State<_BackgroundRevealOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: ThemeBackgroundRevealProvider.duration,
+  )..forward();
+  late final Animation<double> _animation = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void didUpdateWidget(covariant _BackgroundRevealOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.epoch != widget.epoch) {
+      _controller
+        ..stop()
+        ..value = 0
+        ..forward();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addStatusListener(_handleStatusChanged);
+  }
+
+  void _handleStatusChanged(AnimationStatus status) {
+    if (status != AnimationStatus.completed) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    context
+        .read<ThemeBackgroundRevealProvider>()
+        .markAnimationCompleted(widget.epoch);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeStatusListener(_handleStatusChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, _) {
+          return CustomPaint(
+            painter: _BackgroundRevealPainter(
+              origin: widget.origin,
+              radius: widget.maxRadius * _animation.value,
+              color: widget.color,
+              reverse: widget.reverse,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BackgroundRevealPainter extends CustomPainter {
+  final Offset origin;
+  final double radius;
+  final Color color;
+  final bool reverse;
+
+  const _BackgroundRevealPainter({
+    required this.origin,
+    required this.radius,
+    required this.color,
+    required this.reverse,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final maxRadius = _computeMaxRadius(size);
+    if (reverse) {
+      canvas.saveLayer(rect, Paint());
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill,
+      );
+      final holeRadius = (maxRadius - radius).clamp(0.0, maxRadius);
+      canvas.drawCircle(
+        origin,
+        holeRadius,
+        Paint()
+          ..blendMode = BlendMode.clear
+          ..isAntiAlias = true,
+      );
+      canvas.restore();
+      return;
+    }
+
+    canvas.saveLayer(rect, Paint());
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawCircle(
+      origin,
+      radius,
+      Paint()
+        ..blendMode = BlendMode.clear
+        ..isAntiAlias = true,
+    );
+    canvas.restore();
+  }
+
+  double _computeMaxRadius(Size size) {
+    final topLeft = (origin - Offset.zero).distance;
+    final topRight = (origin - Offset(size.width, 0)).distance;
+    final bottomLeft = (origin - Offset(0, size.height)).distance;
+    final bottomRight = (origin - Offset(size.width, size.height)).distance;
+    return [topLeft, topRight, bottomLeft, bottomRight]
+        .reduce((a, b) => a > b ? a : b);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BackgroundRevealPainter oldDelegate) {
+    return oldDelegate.origin != origin ||
+        oldDelegate.radius != radius ||
+        oldDelegate.color != color ||
+        oldDelegate.reverse != reverse;
   }
 }
