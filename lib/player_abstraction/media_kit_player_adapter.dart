@@ -248,6 +248,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _applyMpvLogLevelOverride();
     _applyMacOSHdrOutputOptions();
     _applyMpvDiagnosticOptions();
+    _bootstrapMacOSPlatformVideoSurface();
     if (!_prefersPlatformVideoSurface) {
       _controller = VideoController(
         _player,
@@ -329,6 +330,16 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       _setMpvPropertyOption(entry.key, entry.value,
           log: _mpvDiagnosticsEnabled);
     }
+  }
+
+  void _bootstrapMacOSPlatformVideoSurface() {
+    if (!_prefersPlatformVideoSurface) {
+      return;
+    }
+
+    _setMpvPropertyOption('vo', 'null', log: _mpvDiagnosticsEnabled);
+    _setMpvPropertyOption('wid', '0', log: _mpvDiagnosticsEnabled);
+    _setMpvPropertyOption('force-window', 'no', log: _mpvDiagnosticsEnabled);
   }
 
   void _setMpvPropertyOption(
@@ -1848,13 +1859,21 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (platform == null) {
         return;
       }
+      final forceWindow = widTarget == 'window' ? 'yes' : 'no';
 
       await platform.setProperty?.call('vo', 'null');
       await platform.setProperty?.call('wid', resolvedHandle.toString());
-      await platform.setProperty?.call('force-window', 'yes');
+      await platform.setProperty?.call('force-window', forceWindow);
       await platform.setProperty?.call('sub-use-margins', 'no');
       await platform.setProperty?.call('sub-scale-with-window', 'yes');
       await platform.setProperty?.call('vo', _resolveMacOSNativeVideoVO());
+
+      if (_mpvDiagnosticsEnabled) {
+        debugPrint(
+          'MediaKit HDR诊断: attach macOS native video surface '
+          'target=$widTarget wid=$resolvedHandle force-window=$forceWindow',
+        );
+      }
 
       final currentPosition = _player.state.position;
       if (currentPosition > Duration.zero) {
@@ -1886,6 +1905,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
       await platform.setProperty?.call('vo', 'null');
       await platform.setProperty?.call('wid', '0');
+      await platform.setProperty?.call('force-window', 'no');
     } catch (e) {
       debugPrint('MediaKit: 解绑 macOS 原生视频面失败: $e');
     }
