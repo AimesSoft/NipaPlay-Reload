@@ -41,6 +41,10 @@ class VideoPlayerUI extends StatefulWidget {
 
 class _VideoPlayerUIState extends State<VideoPlayerUI>
     with WidgetsBindingObserver {
+  static const bool _macosHdrProbeEnabled = bool.fromEnvironment(
+    'NIPAPLAY_MACOS_HDR_PROBE',
+    defaultValue: false,
+  );
   final FocusNode _focusNode = FocusNode();
   final bool _isIndicatorHovered = false;
   Timer? _doubleTapTimer;
@@ -222,6 +226,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   bool _shouldShowMacOSHdrProbe(VideoPlayerState videoState) {
     return !kIsWeb &&
         kDebugMode &&
+        _macosHdrProbeEnabled &&
         defaultTargetPlatform == TargetPlatform.macOS &&
         videoState.hasVideo &&
         videoState.player.prefersPlatformVideoSurface &&

@@ -34,8 +34,12 @@ class _MacOSHdrProbeOverlayState extends State<MacOSHdrProbeOverlay> {
   @override
   void initState() {
     super.initState();
-    _refresh();
-    _refreshTimer = Timer.periodic(_refreshInterval, (_) => _refresh());
+    _refreshNativeDiagnostics();
+    unawaited(_loadMpvSnapshot());
+    _refreshTimer = Timer.periodic(
+      _refreshInterval,
+      (_) => _refreshNativeDiagnostics(),
+    );
   }
 
   @override
@@ -43,7 +47,8 @@ class _MacOSHdrProbeOverlayState extends State<MacOSHdrProbeOverlay> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.platformViewId != widget.platformViewId ||
         oldWidget.player != widget.player) {
-      _refresh();
+      _refreshNativeDiagnostics();
+      unawaited(_loadMpvSnapshot());
     }
   }
 
@@ -53,7 +58,7 @@ class _MacOSHdrProbeOverlayState extends State<MacOSHdrProbeOverlay> {
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refreshNativeDiagnostics() async {
     if (!mounted ||
         _isRefreshing ||
         kIsWeb ||
@@ -63,22 +68,11 @@ class _MacOSHdrProbeOverlayState extends State<MacOSHdrProbeOverlay> {
 
     _isRefreshing = true;
     try {
-      final results = await Future.wait<Object?>([
-        _channel.invokeMapMethod<String, dynamic>(
-          'getViewDiagnostics',
-          <String, dynamic>{'viewId': widget.platformViewId},
-        ),
-        widget.player.getDetailedMediaInfoAsync(),
-      ]);
-
       final native = Map<String, dynamic>.from(
-        (results[0] as Map<dynamic, dynamic>? ?? const <dynamic, dynamic>{}),
-      );
-      final detailed = Map<String, dynamic>.from(
-        (results[1] as Map<dynamic, dynamic>? ?? const <dynamic, dynamic>{}),
-      );
-      final mpvProperties = Map<String, dynamic>.from(
-        (detailed['mpvProperties'] as Map<dynamic, dynamic>? ??
+        (await _channel.invokeMapMethod<String, dynamic>(
+              'getViewDiagnostics',
+              <String, dynamic>{'viewId': widget.platformViewId},
+            ) ??
             const <dynamic, dynamic>{}),
       );
 
@@ -89,7 +83,6 @@ class _MacOSHdrProbeOverlayState extends State<MacOSHdrProbeOverlay> {
       setState(() {
         _error = null;
         _nativeDiagnostics = native;
-        _mpvProperties = mpvProperties;
       });
     } catch (error) {
       if (!mounted) {
@@ -100,6 +93,33 @@ class _MacOSHdrProbeOverlayState extends State<MacOSHdrProbeOverlay> {
       });
     } finally {
       _isRefreshing = false;
+    }
+  }
+
+  Future<void> _loadMpvSnapshot() async {
+    if (!mounted) {
+      return;
+    }
+
+    try {
+      final detailed = await widget.player.getDetailedMediaInfoAsync();
+      final mpvProperties = Map<String, dynamic>.from(
+        (detailed['mpvProperties'] as Map<dynamic, dynamic>? ??
+            const <dynamic, dynamic>{}),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mpvProperties = mpvProperties;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = error.toString();
+      });
     }
   }
 

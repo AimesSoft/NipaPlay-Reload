@@ -274,8 +274,6 @@ final class MacOSNativeVideoPlatformView: NSView {
                 "isHidden": isHidden,
                 "subviewCount": subviews.count,
                 "layerClass": layer.map { NSStringFromClass(type(of: $0)) } ?? "nil",
-                "layerTree": describeLayerTree(startingAt: layer),
-                "subviewTree": describeViewTree(startingAt: self),
             ],
             "window": [
                 "title": hostWindow?.title ?? "",
@@ -321,40 +319,6 @@ final class MacOSNativeVideoPlatformView: NSView {
             }
         }
         return nil
-    }
-
-    private func describeViewTree(startingAt rootView: NSView, depth: Int = 0, maxDepth: Int = 3) -> [String] {
-        guard depth <= maxDepth else {
-            return []
-        }
-
-        var result: [String] = [
-            "\(String(repeating: "  ", count: depth))\(NSStringFromClass(type(of: rootView)))",
-        ]
-        guard depth < maxDepth else {
-            return result
-        }
-        for subview in rootView.subviews.prefix(8) {
-            result.append(contentsOf: describeViewTree(startingAt: subview, depth: depth + 1, maxDepth: maxDepth))
-        }
-        return result
-    }
-
-    private func describeLayerTree(startingAt rootLayer: CALayer?, depth: Int = 0, maxDepth: Int = 3) -> [String] {
-        guard let rootLayer, depth <= maxDepth else {
-            return []
-        }
-
-        var result: [String] = [
-            "\(String(repeating: "  ", count: depth))\(NSStringFromClass(type(of: rootLayer)))",
-        ]
-        guard depth < maxDepth else {
-            return result
-        }
-        for sublayer in (rootLayer.sublayers ?? []).prefix(8) {
-            result.append(contentsOf: describeLayerTree(startingAt: sublayer, depth: depth + 1, maxDepth: maxDepth))
-        }
-        return result
     }
 
     private func dictionary(for screen: NSScreen?) -> [String: Any] {
@@ -404,10 +368,10 @@ final class MacOSNativeVideoPlatformView: NSView {
             "framebufferOnly": metalLayer.framebufferOnly,
             "colorspace": describe(colorSpace: metalLayer.colorspace),
             "wantsExtendedDynamicRangeContent":
-                boolValue(metalLayer.value(forKey: "wantsExtendedDynamicRangeContent")) ?? false,
+                boolValue(optionalValue(forKey: "wantsExtendedDynamicRangeContent", on: metalLayer)) ?? false,
         ]
 
-        if let edrMetadata = metalLayer.value(forKey: "edrMetadata") {
+        if let edrMetadata = optionalValue(forKey: "edrMetadata", on: metalLayer) {
             result["edrMetadata"] = String(describing: edrMetadata)
         }
 
@@ -455,6 +419,14 @@ final class MacOSNativeVideoPlatformView: NSView {
             return number.boolValue
         }
         return nil
+    }
+
+    private func optionalValue(forKey key: String, on object: NSObject) -> Any? {
+        let selector = NSSelectorFromString(key)
+        guard object.responds(to: selector) else {
+            return nil
+        }
+        return object.value(forKey: key)
     }
 }
 
