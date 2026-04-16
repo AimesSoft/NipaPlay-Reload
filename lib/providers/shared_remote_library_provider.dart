@@ -51,11 +51,11 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   bool _isInitializing = true;
   bool _autoRefreshPaused = false;
   DateTime? _lastRefreshFailureAt;
-  
+
   List<SharedRemoteScannedFolder> _scannedFolders = [];
   List<WebDAVConnection> _webdavConnections = [];
   List<SMBConnection> _smbConnections = [];
-  
+
   SharedRemoteScanStatus? _scanStatus;
   bool _isManagementLoading = false;
   String? _managementErrorMessage;
@@ -70,17 +70,22 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       return null;
     }
   }
-  List<SharedRemoteAnimeSummary> get animeSummaries => List.unmodifiable(_animeSummaries);
+
+  List<SharedRemoteAnimeSummary> get animeSummaries =>
+      List.unmodifiable(_animeSummaries);
   bool get isLoading => _isLoading;
   bool get isInitializing => _isInitializing;
   String? get errorMessage => _errorMessage;
-  bool get hasActiveHost => _activeHostId != null && _hosts.any((h) => h.id == _activeHostId);
+  bool get hasActiveHost =>
+      _activeHostId != null && _hosts.any((h) => h.id == _activeHostId);
   bool get hasReachableActiveHost => activeHost?.isOnline == true;
-  
-  List<SharedRemoteScannedFolder> get scannedFolders => List.unmodifiable(_scannedFolders);
-  List<WebDAVConnection> get webdavConnections => List.unmodifiable(_webdavConnections);
+
+  List<SharedRemoteScannedFolder> get scannedFolders =>
+      List.unmodifiable(_scannedFolders);
+  List<WebDAVConnection> get webdavConnections =>
+      List.unmodifiable(_webdavConnections);
   List<SMBConnection> get smbConnections => List.unmodifiable(_smbConnections);
-  
+
   SharedRemoteScanStatus? get scanStatus => _scanStatus;
   bool get isManagementLoading => _isManagementLoading;
   String? get managementErrorMessage => _managementErrorMessage;
@@ -103,9 +108,11 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
       // Web Remote Auto-Discovery
       if (kIsWeb) {
-        final candidate = await WebRemoteAccessService.resolveCandidateBaseUrl();
+        final candidate =
+            await WebRemoteAccessService.resolveCandidateBaseUrl();
         if (candidate != null) {
-          final existingIndex = _hosts.indexWhere((h) => h.baseUrl == candidate);
+          final existingIndex =
+              _hosts.indexWhere((h) => h.baseUrl == candidate);
           if (existingIndex == -1) {
             final id = 'web-origin-${candidate.hashCode}';
             final host = SharedRemoteHost(
@@ -153,7 +160,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   }) async {
     final normalizedUrl = _normalizeBaseUrl(baseUrl);
     final id = DateTime.now().millisecondsSinceEpoch.toString();
-    final host = SharedRemoteHost(id: id, displayName: displayName, baseUrl: normalizedUrl);
+    final host = SharedRemoteHost(
+        id: id, displayName: displayName, baseUrl: normalizedUrl);
     _hosts.add(host);
     _activeHostId = id;
     await _persistHosts();
@@ -219,24 +227,30 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       debugPrint('📡 [共享媒体] 开始请求: $uri');
       debugPrint('📡 [共享媒体] 主机信息: ${host.displayName} (${host.baseUrl})');
 
-      final response = await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
+      final response =
+          await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
 
       debugPrint('📡 [共享媒体] 响应状态码: ${response.statusCode}');
 
       if (response.statusCode != 200) {
-        debugPrint('❌ [共享媒体] HTTP错误: ${response.statusCode}, body: ${response.body}');
+        debugPrint(
+            '❌ [共享媒体] HTTP错误: ${response.statusCode}, body: ${response.body}');
         throw Exception('HTTP ${response.statusCode}');
       }
 
-      final payload = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-      final items = (payload['items'] ?? payload['data'] ?? []) as List<dynamic>;
+      final payload =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final items =
+          (payload['items'] ?? payload['data'] ?? []) as List<dynamic>;
 
       debugPrint('✅ [共享媒体] 成功获取 ${items.length} 个番剧');
 
       _animeSummaries = items
-          .map((item) => SharedRemoteAnimeSummary.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              SharedRemoteAnimeSummary.fromJson(item as Map<String, dynamic>))
           .toList();
-      _animeSummaries.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+      _animeSummaries
+          .sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
       _episodeCache.clear();
       _updateHostStatus(host.id, isOnline: true, lastError: null);
       _autoRefreshPaused = false;
@@ -251,8 +265,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
 
       String friendlyError;
-      if (e.toString().contains('SocketException') || e.toString().contains('Connection')) {
-        if (e.toString().contains('No route to host') || e.toString().contains('errno = 65')) {
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection')) {
+        if (e.toString().contains('No route to host') ||
+            e.toString().contains('errno = 65')) {
           friendlyError = '无法连接到主机 ${host.baseUrl}\n错误详情: $e';
           debugPrint('🔍 [共享媒体诊断] 网络路由问题，可能原因：');
           debugPrint('  1. 设备不在同一局域网');
@@ -263,7 +279,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           debugPrint('🔍 [共享媒体诊断] 端口拒绝连接，可能原因：');
           debugPrint('  1. 远程访问服务未启动');
           debugPrint('  2. 端口号错误');
-        } else if (e.toString().contains('timed out') || e.toString().contains('TimeoutException')) {
+        } else if (e.toString().contains('timed out') ||
+            e.toString().contains('TimeoutException')) {
           friendlyError = '连接超时，请检查网络连接或主机是否在线';
           debugPrint('🔍 [共享媒体诊断] 连接超时，可能原因：');
           debugPrint('  1. 网络延迟过高');
@@ -292,7 +309,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<List<SharedRemoteEpisode>> loadAnimeEpisodes(int animeId, {bool force = false}) async {
+  Future<List<SharedRemoteEpisode>> loadAnimeEpisodes(int animeId,
+      {bool force = false}) async {
     if (!force && _episodeCache.containsKey(animeId)) {
       return _episodeCache[animeId]!;
     }
@@ -303,10 +321,12 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
 
     try {
-      final uri = Uri.parse('${host.baseUrl}/api/media/local/share/animes/$animeId');
+      final uri =
+          Uri.parse('${host.baseUrl}/api/media/local/share/animes/$animeId');
       debugPrint('📡 [剧集加载] 请求: $uri');
 
-      final response = await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
+      final response =
+          await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
 
       debugPrint('📡 [剧集加载] 响应状态码: ${response.statusCode}');
 
@@ -315,10 +335,14 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
         throw Exception('HTTP ${response.statusCode}');
       }
 
-      final payload = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-      final episodes = (payload['data']?['episodes'] ?? payload['episodes'] ?? []) as List<dynamic>;
+      final payload =
+          json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final episodes = (payload['data']?['episodes'] ??
+          payload['episodes'] ??
+          []) as List<dynamic>;
       final episodeList = episodes
-          .map((episode) => SharedRemoteEpisode.fromJson(episode as Map<String, dynamic>))
+          .map((episode) =>
+              SharedRemoteEpisode.fromJson(episode as Map<String, dynamic>))
           .toList();
 
       debugPrint('✅ [剧集加载] 成功获取 ${episodeList.length} 集');
@@ -328,14 +352,16 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       // 如果返回包含 anime 信息，但 summary 还没更新，则更新一下卡片显示
       final data = payload['data']?['anime'] ?? payload['anime'];
       if (data is Map<String, dynamic>) {
-        final summaryIndex = _animeSummaries.indexWhere((element) => element.animeId == animeId);
+        final summaryIndex =
+            _animeSummaries.indexWhere((element) => element.animeId == animeId);
         if (summaryIndex != -1 && data['lastWatchTime'] != null) {
           final updatedSummary = SharedRemoteAnimeSummary.fromJson({
             'animeId': animeId,
             'name': data['name'] ?? _animeSummaries[summaryIndex].name,
             'nameCn': data['nameCn'] ?? _animeSummaries[summaryIndex].nameCn,
             'summary': data['summary'] ?? _animeSummaries[summaryIndex].summary,
-            'imageUrl': data['imageUrl'] ?? _animeSummaries[summaryIndex].imageUrl,
+            'imageUrl':
+                data['imageUrl'] ?? _animeSummaries[summaryIndex].imageUrl,
             'lastWatchTime': data['lastWatchTime'],
             'episodeCount': data['episodeCount'] ?? episodeList.length,
             'hasMissingFiles': data['hasMissingFiles'] ?? false,
@@ -351,12 +377,15 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       debugPrint('❌ [剧集加载] 错误类型: ${e.runtimeType}');
       debugPrint('❌ [剧集加载] 堆栈:\n$stackTrace');
 
-      if (e.toString().contains('SocketException') || e.toString().contains('Connection')) {
-        if (e.toString().contains('No route to host') || e.toString().contains('errno = 65')) {
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Connection')) {
+        if (e.toString().contains('No route to host') ||
+            e.toString().contains('errno = 65')) {
           throw Exception('无法连接到主机，请检查网络连接\n详情: $e');
         } else if (e.toString().contains('Connection refused')) {
           throw Exception('连接被拒绝，主机服务可能未启动\n详情: $e');
-        } else if (e.toString().contains('timed out') || e.toString().contains('TimeoutException')) {
+        } else if (e.toString().contains('timed out') ||
+            e.toString().contains('TimeoutException')) {
           throw Exception('连接超时，请检查网络或主机状态\n详情: $e');
         }
       }
@@ -364,7 +393,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<http.Response> _sendGetRequest(Uri uri, {Duration timeout = const Duration(seconds: 10)}) async {
+  Future<http.Response> _sendGetRequest(Uri uri,
+      {Duration timeout = const Duration(seconds: 10)}) async {
     final sanitizedUri = _sanitizeUri(uri);
     final headers = <String, String>{
       'Accept': 'application/json',
@@ -378,9 +408,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     final client = _createClient(uri);
     try {
-      return await client
-          .get(sanitizedUri, headers: headers)
-          .timeout(timeout, onTimeout: () {
+      return await client.get(sanitizedUri, headers: headers).timeout(timeout,
+          onTimeout: () {
         throw TimeoutException('请求超时');
       });
     } finally {
@@ -409,10 +438,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     try {
       return await client
           .post(
-            sanitizedUri,
-            headers: headers,
-            body: json.encode(jsonBody ?? const <String, dynamic>{}),
-          )
+        sanitizedUri,
+        headers: headers,
+        body: json.encode(jsonBody ?? const <String, dynamic>{}),
+      )
           .timeout(timeout, onTimeout: () {
         throw TimeoutException('请求超时');
       });
@@ -678,8 +707,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     try {
       final foldersUri =
           Uri.parse('${host.baseUrl}/api/media/local/manage/folders');
-      final response =
-          await _sendGetRequest(foldersUri, timeout: const Duration(seconds: 10));
+      final response = await _sendGetRequest(foldersUri,
+          timeout: const Duration(seconds: 10));
 
       if (response.statusCode == HttpStatus.notFound) {
         _scannedFolders = [];
@@ -703,13 +732,12 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           payload is Map<String, dynamic> ? payload : <String, dynamic>{};
       final bool success = payloadMap['success'] as bool? ?? true;
       if (!success) {
-        _managementErrorMessage =
-            payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = payloadMap['message'] as String? ?? '远程端返回失败';
         return;
       }
 
       final data = payloadMap['data'];
-      
+
       // Parse Folders
       final foldersRaw = data is Map<String, dynamic>
           ? data['folders']
@@ -807,8 +835,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           payload is Map<String, dynamic> ? payload : <String, dynamic>{};
       final bool success = payloadMap['success'] as bool? ?? true;
       if (!success) {
-        _managementErrorMessage =
-            payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = payloadMap['message'] as String? ?? '远程端返回失败';
         return;
       }
 
@@ -837,7 +864,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<List<SharedRemoteFileEntry>> browseRemoteDirectory(String directoryPath) async {
+  Future<List<SharedRemoteFileEntry>> browseRemoteDirectory(
+      String directoryPath) async {
     final host = activeHost;
     if (host == null) {
       throw Exception('未选择远程主机');
@@ -851,7 +879,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     try {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/browse')
           .replace(queryParameters: {'path': sanitizedPath});
-      final response = await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
+      final response =
+          await _sendGetRequest(uri, timeout: const Duration(seconds: 10));
 
       if (response.statusCode == HttpStatus.notFound) {
         String? apiMessage;
@@ -866,8 +895,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           apiMessage = null;
         }
 
-        final message =
-            apiMessage != null && apiMessage.trim().isNotEmpty ? apiMessage : _managementUnsupportedMessage;
+        final message = apiMessage != null && apiMessage.trim().isNotEmpty
+            ? apiMessage
+            : _managementUnsupportedMessage;
         _managementErrorMessage = message;
         notifyListeners();
         throw Exception(message);
@@ -958,8 +988,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
 
     try {
-      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/list')
-          .replace(queryParameters: {'name': sanitizedName, 'path': path});
+      final uri =
+          Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/list')
+              .replace(queryParameters: {'name': sanitizedName, 'path': path});
       final response =
           await _sendGetRequest(uri, timeout: const Duration(seconds: 15));
 
@@ -1135,7 +1166,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
 
     try {
-      final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/scan');
+      final uri =
+          Uri.parse('${host.baseUrl}/api/media/local/manage/webdav/scan');
       final response = await _sendPostRequest(
         uri,
         jsonBody: {'name': sanitizedName, 'path': path},
@@ -1174,9 +1206,14 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
 
       return {
-        'total': readInt(data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
-        'matched': readInt(data is Map<String, dynamic> ? data['matched'] : payloadMap['matched']),
-        'failed': readInt(data is Map<String, dynamic> ? data['failed'] : payloadMap['failed']),
+        'total': readInt(
+            data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
+        'matched': readInt(data is Map<String, dynamic>
+            ? data['matched']
+            : payloadMap['matched']),
+        'failed': readInt(data is Map<String, dynamic>
+            ? data['failed']
+            : payloadMap['failed']),
       };
     } catch (e) {
       _managementErrorMessage = _buildManagementFriendlyError(e, host);
@@ -1393,9 +1430,14 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
 
       return {
-        'total': readInt(data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
-        'matched': readInt(data is Map<String, dynamic> ? data['matched'] : payloadMap['matched']),
-        'failed': readInt(data is Map<String, dynamic> ? data['failed'] : payloadMap['failed']),
+        'total': readInt(
+            data is Map<String, dynamic> ? data['total'] : payloadMap['total']),
+        'matched': readInt(data is Map<String, dynamic>
+            ? data['matched']
+            : payloadMap['matched']),
+        'failed': readInt(data is Map<String, dynamic>
+            ? data['failed']
+            : payloadMap['failed']),
       };
     } catch (e) {
       _managementErrorMessage = _buildManagementFriendlyError(e, host);
@@ -1420,9 +1462,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     if (entry.isDirectory) {
       return false;
     }
-    final candidate = entry.name.trim().isNotEmpty
-        ? entry.name.trim()
-        : entry.path.trim();
+    final candidate =
+        entry.name.trim().isNotEmpty ? entry.name.trim() : entry.path.trim();
     return isRemoteFilePathPlayable(candidate);
   }
 
@@ -1485,8 +1526,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           payload is Map<String, dynamic> ? payload : <String, dynamic>{};
       final bool success = payloadMap['success'] as bool? ?? false;
       if (!success) {
-        _managementErrorMessage =
-            payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = payloadMap['message'] as String? ?? '远程端返回失败';
         return;
       }
 
@@ -1562,8 +1602,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           payload is Map<String, dynamic> ? payload : <String, dynamic>{};
       final bool success = payloadMap['success'] as bool? ?? false;
       if (!success) {
-        _managementErrorMessage =
-            payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = payloadMap['message'] as String? ?? '远程端返回失败';
         return;
       }
 
@@ -1597,7 +1636,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> rescanRemoteAll({bool skipPreviouslyMatchedUnwatched = true}) async {
+  Future<void> rescanRemoteAll(
+      {bool skipPreviouslyMatchedUnwatched = true}) async {
     final host = activeHost;
     if (host == null) {
       _managementErrorMessage = '未选择远程主机';
@@ -1635,8 +1675,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
           payload is Map<String, dynamic> ? payload : <String, dynamic>{};
       final bool success = payloadMap['success'] as bool? ?? false;
       if (!success) {
-        _managementErrorMessage =
-            payloadMap['message'] as String? ?? '远程端返回失败';
+        _managementErrorMessage = payloadMap['message'] as String? ?? '远程端返回失败';
         return;
       }
 
@@ -1652,24 +1691,55 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     }
   }
 
+  Future<int> cleanupMissingRemoteFolders() async {
+    final host = activeHost;
+    if (host == null) {
+      _managementErrorMessage = '未选择远程主机';
+      notifyListeners();
+      return 0;
+    }
+
+    final missingPaths = _scannedFolders
+        .where((folder) => !folder.exists && folder.path.trim().isNotEmpty)
+        .map((folder) => folder.path.trim())
+        .toList();
+    if (missingPaths.isEmpty) {
+      _managementErrorMessage = null;
+      notifyListeners();
+      return 0;
+    }
+
+    int removedCount = 0;
+    for (final path in missingPaths) {
+      await removeRemoteFolder(path);
+      if (_managementErrorMessage != null &&
+          _managementErrorMessage!.isNotEmpty) {
+        break;
+      }
+      removedCount++;
+    }
+    return removedCount;
+  }
+
   // --- WebDAV Methods ---
 
   Future<void> addWebDAVConnection(WebDAVConnection connection) async {
     final host = activeHost;
     if (host == null) return;
-    
+
     _isManagementLoading = true;
     notifyListeners();
-    
+
     try {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/webdav');
-      final response = await _sendPostRequest(uri, jsonBody: connection.toJson());
-      
+      final response =
+          await _sendPostRequest(uri, jsonBody: connection.toJson());
+
       if (response.statusCode != 200) {
         final body = json.decode(utf8.decode(response.bodyBytes));
         throw Exception(body['message'] ?? 'Failed to add WebDAV');
       }
-      
+
       await refreshManagement(userInitiated: true);
     } catch (e) {
       _managementErrorMessage = e.toString();
@@ -1716,7 +1786,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     try {
       final uri = Uri.parse('${host.baseUrl}/api/media/local/manage/smb');
-      final response = await _sendPostRequest(uri, jsonBody: connection.toJson());
+      final response =
+          await _sendPostRequest(uri, jsonBody: connection.toJson());
 
       if (response.statusCode != 200) {
         final body = json.decode(utf8.decode(response.bodyBytes));
@@ -1765,13 +1836,15 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     final message = e.toString();
     if (message.contains('SocketException') || message.contains('Connection')) {
-      if (message.contains('No route to host') || message.contains('errno = 65')) {
+      if (message.contains('No route to host') ||
+          message.contains('errno = 65')) {
         return '无法连接到主机 ${host.baseUrl}\n错误详情: $e';
       }
       if (message.contains('Connection refused')) {
         return '连接被拒绝，请确认主机已开启远程访问服务';
       }
-      if (message.contains('timed out') || message.contains('TimeoutException')) {
+      if (message.contains('timed out') ||
+          message.contains('TimeoutException')) {
         return '连接超时，请检查网络连接或主机是否在线';
       }
       return '网络连接失败: $e';

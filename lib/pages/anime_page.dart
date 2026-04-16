@@ -30,6 +30,7 @@ import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
@@ -59,9 +60,10 @@ class _AnimePageState extends State<AnimePage>
   final bool _loadingVideo = false;
   final List<String> _loadingMessages = ['正在初始化播放器...'];
   VideoPlayerState? _videoPlayerState;
-  final ScrollController _mainPageScrollController = ScrollController(); // Used for NestedScrollView
+  final ScrollController _mainPageScrollController =
+      ScrollController(); // Used for NestedScrollView
   final ScrollController _watchHistoryListScrollController = ScrollController();
-  
+
   // 仅保留当前标签页索引用于初始化_MediaLibraryTabs
   final int _currentTabIndex = 0;
 
@@ -118,10 +120,11 @@ class _AnimePageState extends State<AnimePage>
     debugPrint('[AnimePage] _onWatchHistoryItemTap: Received item: $item');
 
     // 检查是否为网络URL或流媒体协议URL
-    final isNetworkUrl = item.filePath.startsWith('http://') || item.filePath.startsWith('https://');
+    final isNetworkUrl = item.filePath.startsWith('http://') ||
+        item.filePath.startsWith('https://');
     final isJellyfinProtocol = item.filePath.startsWith('jellyfin://');
     final isEmbyProtocol = item.filePath.startsWith('emby://');
-    
+
     bool fileExists = false;
     String filePath = item.filePath;
     PlaybackSession? playbackSession;
@@ -146,7 +149,7 @@ class _AnimePageState extends State<AnimePage>
           return;
         }
       }
-      
+
       if (isEmbyProtocol) {
         try {
           final embyId = item.filePath.replaceFirst('emby://', '');
@@ -172,10 +175,10 @@ class _AnimePageState extends State<AnimePage>
         final videoFile = File(item.filePath);
         fileExists = videoFile.existsSync();
         if (!fileExists && Platform.isIOS) {
-          String altPath = filePath.startsWith('/private') 
-              ? filePath.replaceFirst('/private', '') 
+          String altPath = filePath.startsWith('/private')
+              ? filePath.replaceFirst('/private', '')
               : '/private$filePath';
-          
+
           final File altFile = File(altPath);
           if (altFile.existsSync()) {
             filePath = altPath;
@@ -185,7 +188,7 @@ class _AnimePageState extends State<AnimePage>
         }
       }
     }
-    
+
     if (!fileExists) {
       BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(item.filePath)}');
       return;
@@ -230,9 +233,9 @@ class _AnimePageState extends State<AnimePage>
               children: [
                 NestedScrollView(
                   controller: _mainPageScrollController,
-                  headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-                    return <Widget>[
-                    ];
+                  headerSliverBuilder:
+                      (BuildContext context, bool innerBoxIsScrolled) {
+                    return <Widget>[];
                   },
                   body: Builder(
                     builder: (context) {
@@ -278,7 +281,8 @@ class _MediaLibraryTabs extends StatefulWidget {
   State<_MediaLibraryTabs> createState() => _MediaLibraryTabsState();
 }
 
-class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProviderStateMixin {
+class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
+    with TickerProviderStateMixin {
   late TabController _tabController;
   int _currentIndex = 0;
   bool _isJellyfinConnected = false;
@@ -298,7 +302,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
   bool get _showLocalTabs => !kIsWeb;
   bool get _showSharedRemoteTabs => _hasSharedRemoteHosts || kIsWeb;
-  
+
   // 动态计算标签页数量
   int get _tabCount {
     int count = _showLocalTabs ? 2 : 0; // 基础标签: 本地媒体库, 本地库管理
@@ -319,36 +323,37 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     _currentIndex = widget.initialIndex;
     _checkConnectionStates();
     _tabController = TabController(
-      length: _tabCount, 
-      vsync: this, 
-      initialIndex: _currentIndex
-    );
+        length: _tabCount, vsync: this, initialIndex: _currentIndex);
     _tabController.addListener(_handleTabChange);
-    
+
     // 监听子标签切换通知
     _setupSubTabListener();
     if (!kIsWeb) {
       _initLocalConnectionStates();
     }
-    
+
     // 立即检查是否有待处理的子标签切换请求
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPendingSubTabChange();
     });
-    
+
     print('_MediaLibraryTabs创建TabController：动态长度${_tabController.length}');
   }
 
   void _checkConnectionStates() {
-    final jellyfinProvider = Provider.of<JellyfinProvider>(context, listen: false);
+    final jellyfinProvider =
+        Provider.of<JellyfinProvider>(context, listen: false);
     final embyProvider = Provider.of<EmbyProvider>(context, listen: false);
-    final sharedProvider = Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
-    final dandanProvider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+    final sharedProvider =
+        Provider.of<SharedRemoteLibraryProvider>(context, listen: false);
+    final dandanProvider =
+        Provider.of<DandanplayRemoteProvider>(context, listen: false);
     _isJellyfinConnected = jellyfinProvider.isConnected;
     _isEmbyConnected = embyProvider.isConnected;
     _hasSharedRemoteHosts = sharedProvider.hasReachableActiveHost;
     _isDandanConnected = dandanProvider.isConnected;
-    print('_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected, Dandan: $_isDandanConnected');
+    print(
+        '_MediaLibraryTabs: 连接状态检查 - Jellyfin: $_isJellyfinConnected, Emby: $_isEmbyConnected, Dandan: $_isDandanConnected');
   }
 
   Future<void> _initLocalConnectionStates() async {
@@ -430,7 +435,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
 
   void _setupSubTabListener() {
     try {
-      _tabChangeNotifierRef = Provider.of<TabChangeNotifier>(context, listen: false);
+      _tabChangeNotifierRef =
+          Provider.of<TabChangeNotifier>(context, listen: false);
       _tabChangeNotifierRef?.addListener(_onSubTabChangeRequested);
       debugPrint('[_MediaLibraryTabs] 已设置子标签切换监听器');
     } catch (e) {
@@ -441,19 +447,20 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   void _onSubTabChangeRequested() {
     try {
       final subTabIndex = _tabChangeNotifierRef?.targetMediaLibrarySubTabIndex;
-      
+
       if (subTabIndex != null && subTabIndex != _currentIndex) {
         debugPrint('[_MediaLibraryTabs] 接收到子标签切换请求: $subTabIndex');
-        
+
         // 确保索引在有效范围内
         if (subTabIndex >= 0 && subTabIndex < _tabCount) {
           _tabController.animateTo(subTabIndex);
           debugPrint('[_MediaLibraryTabs] 已切换到子标签: $subTabIndex');
-          
+
           // 清除切换请求
           _tabChangeNotifierRef?.clearSubTabIndex();
         } else {
-          debugPrint('[_MediaLibraryTabs] 子标签索引超出范围: $subTabIndex (最大: ${_tabCount - 1})');
+          debugPrint(
+              '[_MediaLibraryTabs] 子标签索引超出范围: $subTabIndex (最大: ${_tabCount - 1})');
         }
       }
     } catch (e) {
@@ -464,19 +471,20 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   void _checkPendingSubTabChange() {
     try {
       final subTabIndex = _tabChangeNotifierRef?.targetMediaLibrarySubTabIndex;
-      
+
       if (subTabIndex != null && subTabIndex != _currentIndex) {
         debugPrint('[_MediaLibraryTabs] 发现待处理的子标签切换请求: $subTabIndex');
-        
+
         // 确保索引在有效范围内
         if (subTabIndex >= 0 && subTabIndex < _tabCount) {
           _tabController.animateTo(subTabIndex);
           debugPrint('[_MediaLibraryTabs] 执行待处理的子标签切换: $subTabIndex');
-          
+
           // 清除切换请求
           _tabChangeNotifierRef?.clearSubTabIndex();
         } else {
-          debugPrint('[_MediaLibraryTabs] 待处理子标签索引超出范围: $subTabIndex (最大: ${_tabCount - 1})');
+          debugPrint(
+              '[_MediaLibraryTabs] 待处理子标签索引超出范围: $subTabIndex (最大: ${_tabCount - 1})');
         }
       } else {
         debugPrint('[_MediaLibraryTabs] 无待处理的子标签切换请求');
@@ -490,7 +498,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   void dispose() {
     //debugPrint('[CPU-泄漏排查] _MediaLibraryTabsState dispose 被调用');
     _tabController.removeListener(_handleTabChange);
-    
+
     // 移除子标签切换监听器，使用缓存的引用避免访问已销毁的context
     try {
       _tabChangeNotifierRef?.removeListener(_onSubTabChangeRequested);
@@ -499,7 +507,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     } catch (e) {
       debugPrint('[_MediaLibraryTabs] 移除子标签切换监听器失败: $e');
     }
-    
+
     _tabController.dispose();
     super.dispose();
   }
@@ -507,7 +515,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   void _handleTabChange() {
     //debugPrint('[CPU-泄漏排查] TabController索引变化: ${_tabController.index}，indexIsChanging: ${_tabController.indexIsChanging}');
     if (!_tabController.indexIsChanging) return;
-    
+
     if (_currentIndex != _tabController.index) {
       setState(() {
         _currentIndex = _tabController.index;
@@ -523,6 +531,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     }
 
     switch (result) {
+      case 'local_folder':
+        await _addLocalFolder();
+        break;
       case 'jellyfin':
         await _showJellyfinServerDialog();
         break;
@@ -542,6 +553,36 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         await _showDandanplayServerDialog();
         break;
     }
+  }
+
+  Future<void> _addLocalFolder() async {
+    if (kIsWeb) {
+      if (mounted) {
+        BlurSnackBar.show(context, 'Web 端暂不支持添加本地文件夹');
+      }
+      return;
+    }
+
+    final scanService = Provider.of<ScanService>(context, listen: false);
+    if (scanService.isScanning) {
+      if (mounted) {
+        BlurSnackBar.show(context, '已有扫描任务在进行中，请稍后。');
+      }
+      return;
+    }
+
+    final selectedDirectory = await FilePickerService().pickDirectory();
+    if (selectedDirectory == null || selectedDirectory.trim().isEmpty) {
+      return;
+    }
+
+    await scanService.startDirectoryScan(
+      selectedDirectory,
+      skipPreviouslyMatchedUnwatched: false,
+    );
+
+    if (!mounted) return;
+    BlurSnackBar.show(context, '已开始扫描：${path.basename(selectedDirectory)}');
   }
 
   Future<void> _showJellyfinServerDialog() async {
@@ -616,7 +657,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   }
 
   Future<void> _showDandanplayServerDialog() async {
-    final provider = Provider.of<DandanplayRemoteProvider>(context, listen: false);
+    final provider =
+        Provider.of<DandanplayRemoteProvider>(context, listen: false);
     if (!provider.isInitialized) {
       await provider.initialize();
     }
@@ -636,9 +678,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         LoginField(
           key: 'token',
           label: 'API密钥 (可选)',
-          hint: provider.tokenRequired
-              ? '服务器已启用 API 验证'
-              : '若服务器开启验证请填写',
+          hint: provider.tokenRequired ? '服务器已启用 API 验证' : '若服务器开启验证请填写',
           isPassword: true,
           required: false,
         ),
@@ -736,11 +776,10 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.cloud_outlined,
-                    size: 18, color: displayColor),
+                Icon(Icons.cloud_outlined, size: 18, color: displayColor),
                 const SizedBox(width: 6),
                 Text(
-                  '添加媒体服务器',
+                  '添加媒体',
                   locale: const Locale("zh-Hans", "zh"),
                   style: TextStyle(
                     color: displayColor,
@@ -760,9 +799,13 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
   Widget build(BuildContext context) {
     final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context);
     final enableAnimation = appearanceSettings.enablePageAnimation;
-    
-    return Consumer5<JellyfinProvider, EmbyProvider, SharedRemoteLibraryProvider,
-        DandanplayRemoteProvider, WatchHistoryProvider>(
+
+    return Consumer5<
+        JellyfinProvider,
+        EmbyProvider,
+        SharedRemoteLibraryProvider,
+        DandanplayRemoteProvider,
+        WatchHistoryProvider>(
       builder: (context, jellyfinProvider, embyProvider, sharedProvider,
           dandanProvider, watchHistoryProvider, child) {
         _maybeBootstrapRemoteManagement(sharedProvider);
@@ -792,9 +835,9 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 MediaLibrarySourceType.smb,
               )
             : _hasSMBLibrary;
-        
+
         // 检查连接状态是否改变
-        if (_isJellyfinConnected != currentJellyfinConnectionState || 
+        if (_isJellyfinConnected != currentJellyfinConnectionState ||
             _isEmbyConnected != currentEmbyConnectionState ||
             _hasSharedRemoteHosts != currentSharedState ||
             _isDandanConnected != currentDandanState ||
@@ -802,7 +845,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             _hasSMBConnections != currentHasSmb ||
             _hasWebDAVLibrary != currentHasWebdavLibrary ||
             _hasSMBLibrary != currentHasSmbLibrary) {
-          print('_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState, Dandan: $_isDandanConnected -> $currentDandanState');
+          print(
+              '_MediaLibraryTabs: 连接状态发生变化 - Jellyfin: $_isJellyfinConnected -> $currentJellyfinConnectionState, Emby: $_isEmbyConnected -> $currentEmbyConnectionState, Shared: $_hasSharedRemoteHosts -> $currentSharedState, Dandan: $_isDandanConnected -> $currentDandanState');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               _updateTabController(
@@ -818,7 +862,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             }
           });
         }
-        
+
         // 动态生成标签页内容
         final List<Widget> pageChildren = [];
 
@@ -826,7 +870,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           pageChildren.addAll([
             RepaintBoundary(
               child: MediaLibraryPage(
-                key: ValueKey('mediaLibrary_local_${widget.mediaLibraryVersion}'),
+                key: ValueKey(
+                    'mediaLibrary_local_${widget.mediaLibraryVersion}'),
                 onPlayEpisode: widget.onPlayEpisode,
                 onSourcesUpdated: _refreshLocalConnectionStates,
                 sourceType: MediaLibrarySourceType.local,
@@ -846,7 +891,8 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
           pageChildren.add(
             RepaintBoundary(
               child: MediaLibraryPage(
-                key: ValueKey('mediaLibrary_webdav_${widget.mediaLibraryVersion}'),
+                key: ValueKey(
+                    'mediaLibrary_webdav_${widget.mediaLibraryVersion}'),
                 onPlayEpisode: widget.onPlayEpisode,
                 sourceType: MediaLibrarySourceType.webdav,
               ),
@@ -1046,8 +1092,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
             child: HoverZoomTab(
               text: "共享库管理",
               fontSize: 18,
-              icon: Icon(Icons.settings_suggest_outlined,
-                  size: 18),
+              icon: Icon(Icons.settings_suggest_outlined, size: 18),
             ),
           ));
         }
@@ -1179,10 +1224,11 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
                 // 内容区域 - 确保占用剩余所有空间
                 Expanded(
                   child: SwitchableView(
-                    enableAnimation: false, // 🔥 CPU优化：强制禁用媒体库内部动画，避免TabBarView同时渲染所有页面
+                    enableAnimation:
+                        false, // 🔥 CPU优化：强制禁用媒体库内部动画，避免TabBarView同时渲染所有页面
                     currentIndex: _currentIndex,
                     controller: _tabController,
-                    physics: enableAnimation 
+                    physics: enableAnimation
                         ? const PageScrollPhysics()
                         : const NeverScrollableScrollPhysics(),
                     onPageChanged: (index) {
@@ -1204,7 +1250,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
       },
     );
   }
-  
+
   void _updateTabController(
     bool isJellyfinConnected,
     bool isEmbyConnected,
@@ -1225,7 +1271,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
         _hasSMBLibrary == hasSmbLibrary) {
       return;
     }
-    
+
     final oldIndex = _currentIndex;
     _isJellyfinConnected = isJellyfinConnected;
     _isEmbyConnected = isEmbyConnected;
@@ -1235,31 +1281,30 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs> with TickerProvide
     _hasSMBConnections = hasSmbConnections;
     _hasWebDAVLibrary = hasWebdavLibrary;
     _hasSMBLibrary = hasSmbLibrary;
-    
+
     // 创建新的TabController
     final newController = TabController(
-      length: _tabCount, 
-      vsync: this, 
-      initialIndex: oldIndex >= _tabCount ? 0 : oldIndex
-    );
-    
+        length: _tabCount,
+        vsync: this,
+        initialIndex: oldIndex >= _tabCount ? 0 : oldIndex);
+
     // 移除旧监听器并释放资源
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
-    
+
     // 更新到新的控制器
     _tabController = newController;
     _tabController.addListener(_handleTabChange);
-    
+
     // 调整当前索引
     if (_currentIndex >= _tabCount) {
       _currentIndex = 0;
     }
-    
+
     setState(() {
       // 触发重建以使用新的TabController
     });
-    
+
     print('TabController已更新：新长度=$_tabCount, 当前索引=$_currentIndex');
   }
 }
@@ -1275,13 +1320,14 @@ class _MouseDragScrollWrapper extends StatefulWidget {
   });
 
   @override
-  State<_MouseDragScrollWrapper> createState() => _MouseDragScrollWrapperState();
+  State<_MouseDragScrollWrapper> createState() =>
+      _MouseDragScrollWrapperState();
 }
 
 class _MouseDragScrollWrapperState extends State<_MouseDragScrollWrapper> {
   bool _isDragging = false;
   double _lastPanPosition = 0.0;
-  
+
   @override
   Widget build(BuildContext context) {
     return Listener(

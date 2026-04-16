@@ -26,6 +26,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/horizontal_anime_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'dart:ui' as ui;
 import 'package:nipaplay/services/web_remote_access_service.dart';
@@ -529,6 +530,17 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
     await _syncLibrary(MediaLibrarySourceType.smb);
   }
 
+  Widget _buildSyncActionButton({
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return SearchBarActionButton(
+      icon: Icons.sync,
+      tooltip: _isSyncing ? '同步中…' : tooltip,
+      onPressed: _isSyncing ? null : onPressed,
+    );
+  }
+
   Future<void> _showJellyfinServerDialog() async {
     await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
   }
@@ -919,68 +931,23 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
           },
           trailingActions: widget.sourceType == MediaLibrarySourceType.local
               ? [
-                  IconButton(
+                  _buildSyncActionButton(
                     tooltip: '同步本地媒体库',
-                    onPressed: _isSyncing ? null : _syncLocalLibrary,
-                    icon: _isSyncing
-                        ? SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  Theme.of(context).colorScheme.onSurface),
-                            ),
-                          )
-                        : Icon(
-                            Icons.sync,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+                    onPressed: _syncLocalLibrary,
                   ),
                 ]
               : widget.sourceType == MediaLibrarySourceType.webdav
                   ? [
-                      IconButton(
+                      _buildSyncActionButton(
                         tooltip: '同步WebDAV媒体库',
-                        onPressed: _isSyncing ? null : _syncWebDavLibrary,
-                        icon: _isSyncing
-                            ? SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Theme.of(context).colorScheme.onSurface),
-                                ),
-                              )
-                            : Icon(
-                                Icons.sync,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
+                        onPressed: _syncWebDavLibrary,
                       ),
                     ]
                   : widget.sourceType == MediaLibrarySourceType.smb
                       ? [
-                          IconButton(
+                          _buildSyncActionButton(
                             tooltip: '同步SMB媒体库',
-                            onPressed: _isSyncing ? null : _syncSmbLibrary,
-                            icon: _isSyncing
-                                ? SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          Theme.of(context)
-                                              .colorScheme
-                                              .onSurface),
-                                    ),
-                                  )
-                                : Icon(
-                                    Icons.sync,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,
-                                  ),
+                            onPressed: _syncSmbLibrary,
                           ),
                         ]
                       : null,
