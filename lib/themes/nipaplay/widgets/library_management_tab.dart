@@ -36,6 +36,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 
 enum LibraryManagementSection { local, webdav, smb }
 
@@ -949,6 +950,19 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // 自定义媒体信息按钮
+                    SearchBarActionButton(
+                      icon: Icons.info_outline,
+                      color: iconColor,
+                      onPressed: () async {
+                        // 显示自定义媒体信息对话框
+                        final result = await CustomMediaInfoDialog.show(
+                          context,
+                          p.dirname(entity.path),
+                          initialVideoPath: entity.path,
+                        );
+                      },
+                    ),
                     // 手动匹配弹幕按钮
                     SearchBarActionButton(
                       icon: Icons.subtitles,
@@ -1016,21 +1030,48 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     final Color subtitleColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
 
-    return ListTile(
-      leading: Icon(Icons.playlist_add_check, color: iconColor),
-      title: Text(
-        '批量匹配弹幕（本文件夹）',
-        locale: const Locale("zh-Hans", "zh"),
-        style: TextStyle(color: titleColor),
-      ),
-      subtitle: Text(
-        '对齐左侧文件顺序与右侧剧集顺序，一键匹配 ${candidateFiles.length} 个文件',
-        locale: const Locale("zh-Hans", "zh"),
-        style: TextStyle(color: subtitleColor, fontSize: 12),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
+    return Column(
+      children: [
+        ListTile(
+          leading: Icon(Icons.playlist_add_check, color: iconColor),
+          title: Text(
+            '批量匹配弹幕（本文件夹）',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(color: titleColor),
+          ),
+          subtitle: Text(
+            '对齐左侧文件顺序与右侧剧集顺序，一键匹配 ${candidateFiles.length} 个文件',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(color: subtitleColor, fontSize: 12),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
+        ),
+        ListTile(
+          leading: Icon(Icons.info_outline, color: iconColor),
+          title: Text(
+            '自定义媒体信息（实验性）',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(color: titleColor),
+          ),
+          subtitle: Text(
+            '自定义媒体信息，并将当前文件夹添加到媒体库中',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(color: subtitleColor, fontSize: 12),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () async {
+            final result =
+                await CustomMediaInfoDialog.show(context, folderPath);
+            if (result != null) {
+              // 处理返回结果
+              print('Custom media info result: $result');
+            }
+          },
+        ),
+      ],
     );
   }
 
@@ -2331,6 +2372,90 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     );
   }
 
+  Widget _buildCustomMediaInfoActionForWebDAV(
+    WebDAVConnection connection,
+    String folderPath,
+    double indent, {
+    required bool isDark,
+    required Color titleColor,
+    required Color subtitleColor,
+    required Color iconColor,
+  }) {
+    final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
+        ? connection.name
+        : p.basename(folderPath);
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+      leading: Icon(Icons.info_outline, color: iconColor, size: 18),
+      title: Text(
+        '自定义媒体信息（实验性）',
+        locale: const Locale('zh-Hans', 'zh'),
+        style: TextStyle(color: titleColor, fontSize: 13),
+      ),
+      subtitle: Text(
+        '自定义媒体信息，并将当前文件夹添加到媒体库中',
+        locale: const Locale('zh-Hans', 'zh'),
+        style: TextStyle(color: subtitleColor, fontSize: 12),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () async {
+        final folderKey = '${connection.name}:$folderPath';
+        // 构建一个唯一标识符作为folderPath参数
+        final uniqueFolderPath = 'webdav://${connection.name}${folderPath}';
+        final result =
+            await CustomMediaInfoDialog.show(context, uniqueFolderPath);
+        if (result != null) {
+          // 处理返回结果
+          print('Custom media info result for WebDAV: $result');
+        }
+      },
+    );
+  }
+
+  Widget _buildCustomMediaInfoActionForSMB(
+    SMBConnection connection,
+    String folderPath,
+    double indent, {
+    required bool isDark,
+    required Color titleColor,
+    required Color subtitleColor,
+    required Color iconColor,
+  }) {
+    final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
+        ? connection.name
+        : p.basename(folderPath);
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+      leading: Icon(Icons.info_outline, color: iconColor, size: 18),
+      title: Text(
+        '自定义媒体信息（实验性）',
+        locale: const Locale('zh-Hans', 'zh'),
+        style: TextStyle(color: titleColor, fontSize: 13),
+      ),
+      subtitle: Text(
+        '自定义媒体信息，并将当前文件夹添加到媒体库中',
+        locale: const Locale('zh-Hans', 'zh'),
+        style: TextStyle(color: subtitleColor, fontSize: 12),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () async {
+        final folderKey = '${connection.name}:$folderPath';
+        // 构建一个唯一标识符作为folderPath参数
+        final uniqueFolderPath = 'smb://${connection.name}${folderPath}';
+        final result =
+            await CustomMediaInfoDialog.show(context, uniqueFolderPath);
+        if (result != null) {
+          // 处理返回结果
+          print('Custom media info result for SMB: $result');
+        }
+      },
+    );
+  }
+
   // 显示手动匹配弹幕对话框
   Future<void> _showManualDanmakuMatchDialog(
       String filePath, String fileName, WatchHistoryItem? historyItem) async {
@@ -3019,8 +3144,20 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             iconColor: iconColor,
           )
         : null;
+    final customMediaInfoWidget = videoFilesInFolder.length >= 2
+        ? _buildCustomMediaInfoActionForWebDAV(
+            connection,
+            path,
+            indent,
+            isDark: isDark,
+            titleColor: textColor,
+            subtitleColor: secondaryTextColor,
+            iconColor: iconColor,
+          )
+        : null;
     return [
       if (batchActionWidget != null) batchActionWidget,
+      if (customMediaInfoWidget != null) customMediaInfoWidget,
       ...contents.map((file) {
         if (file.isDirectory) {
           final folderKey = '${connection.name}:${file.path}';
@@ -3116,15 +3253,35 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                       )
                     : null,
                 trailing: canPlay
-                    ? SearchBarActionButton(
-                        icon: Icons.subtitles,
-                        color: iconColor,
-                        tooltip: '手动匹配弹幕',
-                        onPressed: () => _showManualDanmakuMatchDialog(
-                          fileUrl!,
-                          file.name,
-                          snapshot.data,
-                        ),
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 自定义媒体信息按钮
+                          SearchBarActionButton(
+                            icon: Icons.info_outline,
+                            color: iconColor,
+                            tooltip: '自定义媒体信息',
+                            onPressed: () async {
+                              // 显示自定义媒体信息对话框
+                              final result = await CustomMediaInfoDialog.show(
+                                context,
+                                p.dirname(fileUrl!),
+                                initialVideoPath: fileUrl!,
+                              );
+                            },
+                          ),
+                          // 手动匹配弹幕按钮
+                          SearchBarActionButton(
+                            icon: Icons.subtitles,
+                            color: iconColor,
+                            tooltip: '手动匹配弹幕',
+                            onPressed: () => _showManualDanmakuMatchDialog(
+                              fileUrl!,
+                              file.name,
+                              snapshot.data,
+                            ),
+                          ),
+                        ],
                       )
                     : null,
                 onTap: canPlay ? () => _playWebDAVFile(connection, file) : null,
@@ -3171,7 +3328,27 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       ];
     }
 
-    return contents.map((file) {
+    final videoFilesInFolder = contents
+        .where((f) => !f.isDirectory && SMBService.instance.isVideoFile(f.name))
+        .toList();
+
+    final customMediaInfoWidget = videoFilesInFolder.length >= 2
+        ? _buildCustomMediaInfoActionForSMB(
+            connection,
+            path,
+            indent,
+            isDark: isDark,
+            titleColor: textColor,
+            subtitleColor: secondaryTextColor,
+            iconColor: iconColor,
+          )
+        : null;
+
+    final widgets = <Widget>[];
+    if (customMediaInfoWidget != null) {
+      widgets.add(customMediaInfoWidget);
+    }
+    widgets.addAll(contents.map((file) {
       if (file.isDirectory) {
         final folderKey = '${connection.name}:${file.path}';
         final expanded = _expandedSMBFolders.contains(folderKey);
@@ -3264,10 +3441,33 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                     )
                   : null,
               trailing: canPlay
-                  ? SearchBarActionButton(
-                      icon: Icons.play_circle_outline,
-                      tooltip: '播放',
-                      onPressed: () => _playSMBFile(connection, file),
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 自定义媒体信息按钮
+                        SearchBarActionButton(
+                          icon: Icons.info_outline,
+                          color: iconColor,
+                          tooltip: '自定义媒体信息',
+                          onPressed: () async {
+                            // 构建SMB文件URL
+                            final fileUrl = SMBProxyService.instance
+                                .buildStreamUrl(connection, file.path);
+                            // 显示自定义媒体信息对话框
+                            final result = await CustomMediaInfoDialog.show(
+                              context,
+                              p.dirname(file.path),
+                              initialVideoPath: fileUrl,
+                            );
+                          },
+                        ),
+                        // 播放按钮
+                        SearchBarActionButton(
+                          icon: Icons.play_circle_outline,
+                          tooltip: '播放',
+                          onPressed: () => _playSMBFile(connection, file),
+                        ),
+                      ],
                     )
                   : null,
               onTap: canPlay ? () => _playSMBFile(connection, file) : null,
@@ -3275,7 +3475,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           },
         );
       }
-    }).toList();
+    }).toList());
+    return widgets;
   }
 
   // 加载WebDAV文件夹内容
