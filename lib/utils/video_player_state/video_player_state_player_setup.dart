@@ -18,11 +18,13 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     if (shouldResetManualDanmakuOffset) {
       setManualDanmakuOffset(0.0);
     }
-    if (_status == PlayerStatus.loading ||
-        _status == PlayerStatus.recognizing) {
-      _setStatus(PlayerStatus.idle,
-          message: "取消了之前的加载任务", clearPreviousMessages: true);
-    }
+    // if (_status == PlayerStatus.loading ||
+    //     _status == PlayerStatus.recognizing) {
+    //   _setStatus(PlayerStatus.idle,
+    //       message: "取消了之前的加载任务", clearPreviousMessages: true);
+    // }
+    // notice: 后面会进入loading状态，此函数用意也是初始化，在函数开头将状态修改到idle不妥
+
     _clearPreviousVideoState(); // 清理旧状态
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     _initialHistoryItem = historyItem;
@@ -250,7 +252,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 加载保存的token
       await DandanplayService.loadToken();
 
-      _setStatus(PlayerStatus.loading, message: '正在初始化播放器...');
+      // _setStatus(PlayerStatus.loading, message: '正在初始化播放器...');
+      // notice: 往上10行已经有进入loading状态了，这里再更改信息不妥
+
       _error = null;
 
       //debugPrint('2. 重置播放器状态...');
@@ -286,7 +290,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       _progress = 0.0;
       _bufferedPositionMs = 0;
       _error = null;
-      _setStatus(PlayerStatus.idle);
+      // _setStatus(PlayerStatus.idle);
+      // notice: 前面已经进入初始化状态，后面也是接着初始化，这里应该没有必要修改状态回idle
 
       //debugPrint('3. 设置媒体源...');
       // 设置媒体源 - 如果提供了播放会话URL则使用它，否则使用videoPath
@@ -543,13 +548,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       //debugPrint('9. 检查播放器实际状态...');
       // 检查播放器实际状态
-      if (player.state == PlaybackState.playing) {
-        _setStatus(PlayerStatus.playing, message: '正在播放');
-      } else {
-        // 如果播放器没有真正开始播放，设置为暂停状态
-        player.state = PlaybackState.paused;
-        _setStatus(PlayerStatus.paused, message: '已暂停');
-      }
+      // if (player.state == PlaybackState.playing) {
+      //   _setStatus(PlayerStatus.playing, message: '正在播放');
+      // } else {
+      //   // 如果播放器没有真正开始播放，设置为暂停状态
+      //   player.state = PlaybackState.paused;
+      //   _setStatus(PlayerStatus.paused, message: '已暂停');
+      // }
+      // notice: 前面还在初始化状态，后面会进入ready状态，在此时修改状态到play/pause不妥
 
       // 对于非流媒体，在获取播放位置后初始化观看记录
       if (!isJellyfinStream && !isEmbyStream) {
