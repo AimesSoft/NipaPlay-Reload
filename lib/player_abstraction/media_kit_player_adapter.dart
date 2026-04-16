@@ -60,6 +60,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         _envString('NIPAPLAY_MPV_LOG_LEVEL') != null;
   }
 
+  static bool _shouldUseMacOSHdrOutputPath() {
+    return Platform.isMacOS &&
+        !_envFlagEnabled('NIPAPLAY_DISABLE_MACOS_HDR') &&
+        (_envFlagEnabled(_hdrValidationFlag) ||
+            _shouldUseMacOSNativeVideoSurface());
+  }
+
   static MPVLogLevel _resolveMpvLogLevel() {
     switch (_envString('NIPAPLAY_MPV_LOG_LEVEL')?.toLowerCase()) {
       case 'trace':
@@ -88,7 +95,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (env != null) {
       return env;
     }
-    if (Platform.isMacOS && _envFlagEnabled(_hdrValidationFlag)) {
+    if (_shouldUseMacOSHdrOutputPath()) {
       return 'videotoolbox,auto';
     }
     return null;
@@ -147,18 +154,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (!Platform.isMacOS) {
       return false;
     }
-    final env = Platform.environment['NIPAPLAY_ENABLE_MACOS_NATIVE_VIDEO'];
-    if (env == null) {
+    if (_envFlagEnabled('NIPAPLAY_DISABLE_MACOS_NATIVE_VIDEO')) {
       return false;
     }
-    switch (env.toLowerCase()) {
-      case '1':
-      case 'true':
-      case 'yes':
-        return true;
-      default:
-        return false;
+    if (_envFlagEnabled('NIPAPLAY_ENABLE_MACOS_NATIVE_VIDEO')) {
+      return true;
     }
+    final major = _resolveMacosMajorVersion();
+    return major == null || major >= 14;
   }
 
   static String _resolveMacOSNativeVideoVO() {
@@ -243,6 +246,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           ),
         ) {
     _applyMpvLogLevelOverride();
+    _applyMacOSHdrOutputOptions();
     _applyMpvDiagnosticOptions();
     if (!_prefersPlatformVideoSurface) {
       _controller = VideoController(
@@ -302,18 +306,47 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     };
 
     for (final entry in options.entries) {
-      _setMpvPropertyForDiagnostics(entry.key, entry.value);
+      _setMpvPropertyOption(entry.key, entry.value, log: true);
     }
   }
 
-  void _setMpvPropertyForDiagnostics(String name, String value) {
+  void _applyMacOSHdrOutputOptions() {
+    if (!_shouldUseMacOSHdrOutputPath()) {
+      return;
+    }
+
+    final options = <String, String>{
+      'gpu-api': _envString('NIPAPLAY_MPV_GPU_API') ?? 'vulkan',
+      'gpu-context': _envString('NIPAPLAY_MPV_GPU_CONTEXT') ?? 'macvk',
+      'target-colorspace-hint':
+          _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT') ?? 'yes',
+      'target-colorspace-hint-mode':
+          _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT_MODE') ?? 'source',
+      'hdr-compute-peak': _envString('NIPAPLAY_MPV_HDR_COMPUTE_PEAK') ?? 'auto',
+    };
+
+    for (final entry in options.entries) {
+      _setMpvPropertyOption(entry.key, entry.value,
+          log: _mpvDiagnosticsEnabled);
+    }
+  }
+
+  void _setMpvPropertyOption(
+    String name,
+    String value, {
+    bool log = false,
+  }) {
     _properties[name] = value;
     try {
       final dynamic platform = _player.platform;
       platform?.setProperty?.call(name, value);
-      debugPrint('MediaKit HDR诊断: mpv $name=$value');
+      if (log) {
+        debugPrint('MediaKit HDR诊断: mpv $name=$value');
+      }
     } catch (e) {
-      debugPrint('MediaKit HDR诊断: 设置 mpv $name 失败: $e');
+      if (log) {
+        debugPrint('MediaKit HDR诊断: 设置 mpv $name 失败: $e');
+      }
     }
   }
 
@@ -1678,20 +1711,6 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   String? getProperty(String name) {
-    try {
-      final dynamic platform = _player.platform;
-      if (platform != null && platform.getProperty != null) {
-        final dynamic value = platform.getProperty(name);
-        if (value is String) {
-          return value;
-        }
-        if (value != null && value is! Future) {
-          return value.toString();
-        }
-      }
-    } catch (_) {
-      // 忽略异常，回退到缓存值
-    }
     return _properties[name];
   }
 
@@ -2060,16 +2079,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       final dynamic platform = _player.platform;
       if (platform != null) {
         dynamic _gp(String name) {
-          try {
-            final v = platform.getProperty?.call(name);
-            if (v is Future) {
-              // 避免阻塞UI，同步接口不await，直接返回占位
-              return null;
-            }
-            return v;
-          } catch (_) {
-            return null;
-          }
+          // Keep this synchronous method side-effect free. Calling mpv's async
+          // get-property API without awaiting can fill the mpv event queue.
+          return _properties[name];
         }
 
         final mpv = <String, dynamic>{
