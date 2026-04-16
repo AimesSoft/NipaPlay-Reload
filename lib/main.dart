@@ -265,7 +265,9 @@ void main(List<String> args) async {
       rethrow;
     }
   }
-  MediaKitPlayerAdapter.setMpvLogLevelNone();
+  if (MediaKitPlayerAdapter.shouldUseDefaultQuietMpvLogs()) {
+    MediaKitPlayerAdapter.setMpvLogLevelNone();
+  }
 
   // 添加全局异常捕获
   FlutterError.onError = (FlutterErrorDetails details) {

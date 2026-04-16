@@ -1,4 +1,5 @@
 import Cocoa
+import Darwin
 import FlutterMacOS
 import UniformTypeIdentifiers
 
@@ -14,14 +15,78 @@ class AppDelegate: FlutterAppDelegate {
   
   // 连接到xib中定义的导航菜单 - 使用不同名称避免与基类冲突
   @IBOutlet weak var playerMenu: NSMenu!
+
+  private var didConfigureBundledMoltenVK = false
+
+  @objc override func applicationWillFinishLaunching(_ notification: Notification) {
+    configureBundledMoltenVKIfAvailable()
+    super.applicationWillFinishLaunching(notification)
+  }
   
   @objc override func applicationDidFinishLaunching(_ notification: Notification) {
+    configureBundledMoltenVKIfAvailable()
     super.applicationDidFinishLaunching(notification)
     print("[AppDelegate] 应用启动")
     
     // 延迟更新菜单项，确保应用完全初始化
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
       self.updateMenuItems()
+    }
+  }
+
+  private func configureBundledMoltenVKIfAvailable() {
+    guard !didConfigureBundledMoltenVK else {
+      return
+    }
+    didConfigureBundledMoltenVK = true
+
+    let environment = ProcessInfo.processInfo.environment
+    if environment["VK_ICD_FILENAMES"] != nil || environment["VK_DRIVER_FILES"] != nil {
+      print("[AppDelegate] Vulkan ICD 已由环境变量配置，跳过 bundled MoltenVK")
+      return
+    }
+
+    guard let frameworksPath = Bundle.main.privateFrameworksPath else {
+      return
+    }
+
+    let fileManager = FileManager.default
+    let moltenVKFrameworkURL = URL(fileURLWithPath: frameworksPath)
+      .appendingPathComponent("MoltenVK.framework", isDirectory: true)
+    let libraryCandidates = [
+      moltenVKFrameworkURL.appendingPathComponent("MoltenVK"),
+      moltenVKFrameworkURL.appendingPathComponent("Versions/A/MoltenVK"),
+    ]
+
+    guard let moltenVKLibraryURL = libraryCandidates.first(where: { fileManager.fileExists(atPath: $0.path) }) else {
+      return
+    }
+
+    do {
+      let baseURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+        ?? fileManager.temporaryDirectory
+      let icdDirectoryURL = baseURL
+        .appendingPathComponent("vulkan", isDirectory: true)
+        .appendingPathComponent("icd.d", isDirectory: true)
+      try fileManager.createDirectory(at: icdDirectoryURL, withIntermediateDirectories: true)
+
+      let icdURL = icdDirectoryURL.appendingPathComponent("MoltenVK_icd.json")
+      let icd: [String: Any] = [
+        "file_format_version": "1.0.0",
+        "ICD": [
+          "library_path": moltenVKLibraryURL.path,
+          "api_version": "1.3.0",
+          "is_portability_driver": true,
+        ],
+      ]
+      let data = try JSONSerialization.data(withJSONObject: icd, options: [.prettyPrinted, .sortedKeys])
+      try data.write(to: icdURL, options: [.atomic])
+
+      setenv("VK_ICD_FILENAMES", icdURL.path, 0)
+      setenv("VK_DRIVER_FILES", icdURL.path, 0)
+      print("[AppDelegate] 已配置 bundled MoltenVK ICD: \(icdURL.path)")
+    } catch {
+      print("[AppDelegate] 配置 bundled MoltenVK ICD 失败: \(error)")
     }
   }
   
