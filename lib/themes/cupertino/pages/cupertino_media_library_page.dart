@@ -2479,6 +2479,7 @@ class _CupertinoLibraryManagementSheetState
   String _remoteScrapeMessage = '';
   int _remoteScrapeLastProcessed = -1;
   int _remoteScrapeTotal = 0;
+  bool _cleaningMissingFolders = false;
 
   @override
   void initState() {
@@ -2756,6 +2757,7 @@ class _CupertinoLibraryManagementSheetState
   }
 
   Widget _buildActionButtons(BuildContext context, ScanService scanService) {
+    final canCleanLocal = !scanService.isScanning && !_cleaningMissingFolders;
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -2776,6 +2778,14 @@ class _CupertinoLibraryManagementSheetState
           onPressed: scanService.isScanning
               ? null
               : () => _handleSmartRefresh(scanService),
+        ),
+        _buildActionButton(
+          context,
+          label: _cleaningMissingFolders ? '清理中…' : '清理不存在文件夹',
+          icon: CupertinoIcons.delete_solid,
+          onPressed: canCleanLocal
+              ? () => _handleCleanupMissingLocalFolders(scanService)
+              : null,
         ),
         _buildActionButton(
           context,
@@ -5708,6 +5718,27 @@ class _CupertinoLibraryManagementSheetState
     await watchHistory.refresh();
     _showSnack('已同步本地媒体库');
   }
+
+  Future<void> _handleCleanupMissingLocalFolders(
+      ScanService scanService) async {
+    if (_cleaningMissingFolders) {
+      return;
+    }
+    setState(() => _cleaningMissingFolders = true);
+    try {
+      final removedCount = await scanService.cleanupMissingScannedFolders();
+      if (!mounted) return;
+      if (removedCount > 0) {
+        _showSnack('已清理 $removedCount 个不存在的文件夹');
+      } else {
+        _showSnack('没有需要清理的不存在文件夹');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _cleaningMissingFolders = false);
+      }
+    }
+  }
 }
 
 /// 媒体库内容组件
@@ -6019,6 +6050,7 @@ class _SharedRemoteLibraryManagementContentState
   double _scrollOffset = 0.0;
   Timer? _pollTimer;
   bool _pollRequestInFlight = false;
+  bool _cleaningMissingFolders = false;
   final Map<String, List<SharedRemoteFileEntry>> _expandedRemoteDirectories =
       {};
   final Set<String> _loadingRemoteDirectories = {};
@@ -6511,6 +6543,7 @@ class _SharedRemoteLibraryManagementContentState
   ) {
     final busy =
         provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+    final canClean = !busy && !_cleaningMissingFolders;
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -6527,6 +6560,14 @@ class _SharedRemoteLibraryManagementContentState
           label: '智能刷新',
           icon: CupertinoIcons.refresh,
           onPressed: busy ? null : () => _handleRescanAll(provider),
+        ),
+        _buildActionButton(
+          context,
+          label: _cleaningMissingFolders ? '清理中…' : '清理不存在文件夹',
+          icon: CupertinoIcons.delete_solid,
+          onPressed: canClean
+              ? () => _handleCleanupMissingRemoteFolders(provider)
+              : null,
         ),
         _buildActionButton(
           context,
@@ -7175,5 +7216,37 @@ class _SharedRemoteLibraryManagementContentState
       message: '已移除文件夹',
       type: AdaptiveSnackBarType.success,
     );
+  }
+
+  Future<void> _handleCleanupMissingRemoteFolders(
+    SharedRemoteLibraryProvider provider,
+  ) async {
+    if (_cleaningMissingFolders) {
+      return;
+    }
+    setState(() => _cleaningMissingFolders = true);
+    try {
+      final removedCount = await provider.cleanupMissingRemoteFolders();
+      if (!mounted) return;
+      final error = provider.managementErrorMessage;
+      if (error != null && error.isNotEmpty) {
+        AdaptiveSnackBar.show(
+          context,
+          message: error,
+          type: AdaptiveSnackBarType.error,
+        );
+        return;
+      }
+      AdaptiveSnackBar.show(
+        context,
+        message:
+            removedCount > 0 ? '已清理 $removedCount 个不存在的文件夹' : '没有需要清理的不存在文件夹',
+        type: AdaptiveSnackBarType.success,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _cleaningMissingFolders = false);
+      }
+    }
   }
 }

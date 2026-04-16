@@ -34,7 +34,8 @@ class SharedRemoteLibraryView extends StatefulWidget {
   final SharedRemoteViewMode mode;
 
   @override
-  State<SharedRemoteLibraryView> createState() => _SharedRemoteLibraryViewState();
+  State<SharedRemoteLibraryView> createState() =>
+      _SharedRemoteLibraryViewState();
 }
 
 class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
@@ -47,7 +48,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   String? _managementLoadedHostId;
   Timer? _scanStatusTimer;
   bool _scanStatusRequestInFlight = false;
-  final Map<String, List<SharedRemoteFileEntry>> _expandedRemoteDirectories = {};
+  final Map<String, List<SharedRemoteFileEntry>> _expandedRemoteDirectories =
+      {};
   final Set<String> _loadingRemoteDirectories = {};
 
   @override
@@ -90,34 +92,41 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         } else {
           animeSummaries = provider.animeSummaries.where((anime) {
             return (anime.nameCn ?? '').toLowerCase().contains(query) ||
-                   anime.name.toLowerCase().contains(query);
+                anime.name.toLowerCase().contains(query);
           }).toList();
 
           scannedFolders = provider.scannedFolders.where((folder) {
             return folder.name.toLowerCase().contains(query) ||
-                   folder.path.toLowerCase().contains(query);
+                folder.path.toLowerCase().contains(query);
           }).toList();
         }
 
         // 排序逻辑
         if (widget.mode == SharedRemoteViewMode.mediaLibrary) {
           if (_currentSort == LocalLibrarySortType.name) {
-            animeSummaries.sort((a, b) => (a.nameCn ?? a.name).toLowerCase().compareTo((b.nameCn ?? b.name).toLowerCase()));
+            animeSummaries.sort((a, b) => (a.nameCn ?? a.name)
+                .toLowerCase()
+                .compareTo((b.nameCn ?? b.name).toLowerCase()));
           } else if (_currentSort == LocalLibrarySortType.dateAdded) {
-            animeSummaries.sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
+            animeSummaries
+                .sort((a, b) => b.lastWatchTime.compareTo(a.lastWatchTime));
           }
         } else {
           // 管理模式下按名称或路径(作为dateAdded的降级)排序
           if (_currentSort == LocalLibrarySortType.name) {
-            scannedFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            scannedFolders.sort(
+                (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
           } else {
-            scannedFolders.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+            scannedFolders.sort(
+                (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
           }
         }
 
         final hasHosts = provider.hosts.isNotEmpty;
-        final isManagement = widget.mode == SharedRemoteViewMode.libraryManagement;
-        final managementBusy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+        final isManagement =
+            widget.mode == SharedRemoteViewMode.libraryManagement;
+        final managementBusy = provider.isManagementLoading ||
+            provider.scanStatus?.isScanning == true;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,17 +159,46 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 ),
                 if (isManagement) ...[
                   _buildActionIcon(
+                    icon: Ionicons.trash_outline,
+                    tooltip: '清理不存在文件夹',
+                    onPressed: managementBusy
+                        ? null
+                        : () async {
+                            final removedCount =
+                                await provider.cleanupMissingRemoteFolders();
+                            if (!mounted) return;
+                            final error = provider.managementErrorMessage;
+                            if (error != null && error.isNotEmpty) {
+                              BlurSnackBar.show(context, error);
+                              return;
+                            }
+                            if (removedCount > 0) {
+                              BlurSnackBar.show(
+                                context,
+                                '已清理 $removedCount 个不存在的文件夹',
+                              );
+                            } else {
+                              BlurSnackBar.show(context, '没有需要清理的不存在文件夹');
+                            }
+                          },
+                  ),
+                  _buildActionIcon(
                     icon: Ionicons.add_circle_outline,
                     tooltip: '添加文件夹',
-                    onPressed: managementBusy ? null : () => _openAddFolderDialog(context, provider),
+                    onPressed: managementBusy
+                        ? null
+                        : () => _openAddFolderDialog(context, provider),
                   ),
                   _buildActionIcon(
                     icon: Ionicons.flash_outline,
                     tooltip: '智能刷新',
-                    onPressed: managementBusy ? null : () async {
-                      await provider.rescanRemoteAll(skipPreviouslyMatchedUnwatched: true);
-                      _startScanStatusPolling();
-                    },
+                    onPressed: managementBusy
+                        ? null
+                        : () async {
+                            await provider.rescanRemoteAll(
+                                skipPreviouslyMatchedUnwatched: true);
+                            _startScanStatusPolling();
+                          },
                   ),
                 ],
                 _buildActionIcon(
@@ -184,7 +222,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
               ),
             Expanded(
               child: isManagement
-                  ? _buildManagementBody(context, provider, hasHosts, scannedFolders)
+                  ? _buildManagementBody(
+                      context, provider, hasHosts, scannedFolders)
                   : _buildMediaBody(
                       context,
                       provider,
@@ -206,7 +245,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(status?.message ?? '正在扫描...', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(status?.message ?? '正在扫描...',
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
           const SizedBox(height: 4),
           LinearProgressIndicator(
             value: progress,
@@ -237,7 +277,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     bool hasHosts,
   ) {
     if (provider.isInitializing) {
-      return const Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(
+          child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!hasHosts) {
@@ -245,7 +286,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (provider.isLoading && animeSummaries.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(
+          child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (animeSummaries.isEmpty) {
@@ -277,7 +319,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             final anime = animeSummaries[index];
             return HorizontalAnimeCard(
               key: ValueKey('shared_${anime.animeId}'),
-              title: anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
+              title:
+                  anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
               imageUrl: anime.imageUrl ?? '',
               source: provider.activeHost?.displayName,
               rating: null,
@@ -310,7 +353,10 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       _managementLoadedHostId = hostId;
       provider.refreshManagement(userInitiated: true).then((_) {
         if (!mounted) return;
-        if (context.read<SharedRemoteLibraryProvider>().scanStatus?.isScanning ==
+        if (context
+                .read<SharedRemoteLibraryProvider>()
+                .scanStatus
+                ?.isScanning ==
             true) {
           _startScanStatusPolling();
         }
@@ -323,7 +369,10 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         provider.managementErrorMessage == null) {
       provider.refreshManagement(userInitiated: true).then((_) {
         if (!mounted) return;
-        if (context.read<SharedRemoteLibraryProvider>().scanStatus?.isScanning ==
+        if (context
+                .read<SharedRemoteLibraryProvider>()
+                .scanStatus
+                ?.isScanning ==
             true) {
           _startScanStatusPolling();
         }
@@ -423,14 +472,15 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
 
-    final entries = List<SharedRemoteFileEntry>.from(_expandedRemoteDirectories[directoryPath] ?? const []);
-    
+    final entries = List<SharedRemoteFileEntry>.from(
+        _expandedRemoteDirectories[directoryPath] ?? const []);
+
     // 对子条目进行排序
     entries.sort((a, b) {
       // 文件夹永远在前面
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
-      
+
       if (_currentSort == LocalLibrarySortType.name) {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       } else {
@@ -477,7 +527,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           ),
         );
         if (expanded) {
-          widgets.addAll(_buildRemoteDirectoryChildren(context, provider, entryPath, depth + 1));
+          widgets.addAll(_buildRemoteDirectoryChildren(
+              context, provider, entryPath, depth + 1));
         }
         continue;
       }
@@ -525,19 +576,24 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     try {
-      final streamUrl = provider.buildRemoteFileStreamUri(entry.path).toString();
+      final streamUrl =
+          provider.buildRemoteFileStreamUri(entry.path).toString();
       final fallbackTitle = entry.name.isNotEmpty
           ? p.basenameWithoutExtension(entry.name)
           : p.basenameWithoutExtension(entry.path);
       final resolvedAnimeName = (entry.animeName?.trim().isNotEmpty == true)
           ? entry.animeName!.trim()
-          : (fallbackTitle.isNotEmpty ? fallbackTitle : p.basenameWithoutExtension(entry.path));
+          : (fallbackTitle.isNotEmpty
+              ? fallbackTitle
+              : p.basenameWithoutExtension(entry.path));
       final resolvedEpisodeTitle = entry.episodeTitle?.trim();
 
       final item = WatchHistoryItem(
         filePath: streamUrl,
         animeName: resolvedAnimeName,
-        episodeTitle: resolvedEpisodeTitle?.isNotEmpty == true ? resolvedEpisodeTitle : null,
+        episodeTitle: resolvedEpisodeTitle?.isNotEmpty == true
+            ? resolvedEpisodeTitle
+            : null,
         animeId: entry.animeId,
         episodeId: entry.episodeId,
         watchProgress: 0.0,
@@ -551,7 +607,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
   }
 
-  Widget? _buildRemoteFileSubtitle(BuildContext context, SharedRemoteFileEntry entry) {
+  Widget? _buildRemoteFileSubtitle(
+      BuildContext context, SharedRemoteFileEntry entry) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color secondaryTextColor = isDark ? Colors.white54 : Colors.black54;
 
@@ -601,18 +658,21 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         ),
         child: Row(
           children: [
-            const Icon(Ionicons.warning_outline, color: Colors.orangeAccent, size: 18),
+            const Icon(Ionicons.warning_outline,
+                color: Colors.orangeAccent, size: 18),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 message,
                 locale: const Locale('zh', 'CN'),
-                style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                style:
+                    const TextStyle(color: Colors.orangeAccent, fontSize: 13),
               ),
             ),
             IconButton(
               onPressed: onClose,
-              icon: const Icon(Ionicons.close_outline, color: Colors.orangeAccent, size: 16),
+              icon: const Icon(Ionicons.close_outline,
+                  color: Colors.orangeAccent, size: 16),
             ),
           ],
         ),
@@ -627,15 +687,19 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     List<SharedRemoteScannedFolder> folders,
   ) {
     if (provider.isInitializing) {
-      return const Center(child: CircularProgressIndicator(color: _accentColor));
+      return const Center(
+          child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!hasHosts) {
       return _buildEmptyHostsPlaceholder(context);
     }
 
-    if (provider.isManagementLoading && folders.isEmpty && provider.scanStatus == null) {
-      return const Center(child: CircularProgressIndicator(color: _accentColor));
+    if (provider.isManagementLoading &&
+        folders.isEmpty &&
+        provider.scanStatus == null) {
+      return const Center(
+          child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (!provider.hasActiveHost) {
@@ -646,7 +710,9 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       );
     }
 
-    if (provider.managementErrorMessage != null && folders.isEmpty && provider.scanStatus == null) {
+    if (provider.managementErrorMessage != null &&
+        folders.isEmpty &&
+        provider.scanStatus == null) {
       return _buildEmptyManagementPlaceholder(
         context,
         title: '库管理不可用',
@@ -680,7 +746,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color iconColor = isDark ? Colors.white70 : Colors.black54;
 
-    final busy = provider.isManagementLoading || provider.scanStatus?.isScanning == true;
+    final busy =
+        provider.isManagementLoading || provider.scanStatus?.isScanning == true;
     final statusColor = folder.exists ? iconColor : Colors.orangeAccent;
     final title = folder.name.isNotEmpty ? folder.name : folder.path;
     final folderPath = folder.path;
@@ -698,7 +765,9 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         child: ExpansionTile(
           key: PageStorageKey<String>(folderPath),
           leading: Icon(
-            folder.exists ? Icons.folder_open_outlined : Ionicons.warning_outline,
+            folder.exists
+                ? Icons.folder_open_outlined
+                : Ionicons.warning_outline,
             color: statusColor,
           ),
           iconColor: iconColor,
@@ -734,7 +803,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 tooltip: '移除',
                 padding: const EdgeInsets.symmetric(horizontal: 6.0),
                 constraints: const BoxConstraints(),
-                onPressed: busy ? null : () => provider.removeRemoteFolder(folderPath),
+                onPressed:
+                    busy ? null : () => provider.removeRemoteFolder(folderPath),
                 icon: const Icon(
                   Icons.delete_outline,
                   color: Colors.redAccent,
@@ -767,7 +837,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                   child: SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: _accentColor),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: _accentColor),
                   ),
                 ),
             ],
@@ -800,17 +871,17 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     );
   }
 
-  Widget _buildEmptyLibraryPlaceholder(BuildContext context, SharedRemoteHost? host) {
+  Widget _buildEmptyLibraryPlaceholder(
+      BuildContext context, SharedRemoteHost? host) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Ionicons.folder_open_outline, color: Colors.white38, size: 48),
+          const Icon(Ionicons.folder_open_outline,
+              color: Colors.white38, size: 48),
           const SizedBox(height: 12),
           Text(
-            host == null
-                ? '请选择一个共享客户端'
-                : '该客户端尚未扫描任何番剧',
+            host == null ? '请选择一个共享客户端' : '该客户端尚未扫描任何番剧',
             locale: const Locale('zh', 'CN'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white60),
@@ -871,8 +942,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         context,
         anime.animeId,
         sharedSummary: anime,
-        sharedEpisodeLoader: () => provider.loadAnimeEpisodes(anime.animeId,
-            force: true),
+        sharedEpisodeLoader: () =>
+            provider.loadAnimeEpisodes(anime.animeId, force: true),
         sharedEpisodeBuilder: (episode) => provider.buildPlayableItem(
           anime: anime,
           episode: episode,

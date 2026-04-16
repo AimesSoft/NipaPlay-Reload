@@ -1668,6 +1668,22 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       case LibraryManagementSection.webdav:
         return [
           _buildActionIcon(
+            icon: Icons.folder_delete_outlined,
+            tooltip: '清理不存在文件夹',
+            onPressed: isScanning
+                ? null
+                : () async {
+                    final removedCount =
+                        await scanService.cleanupMissingScannedFolders();
+                    if (!mounted) return;
+                    if (removedCount > 0) {
+                      BlurSnackBar.show(context, '已清理 $removedCount 个不存在的文件夹');
+                    } else {
+                      BlurSnackBar.show(context, '没有需要清理的不存在文件夹');
+                    }
+                  },
+          ),
+          _buildActionIcon(
             icon: Icons.cloud_outlined,
             tooltip: '添加WebDAV服务器',
             onPressed: isScanning ? null : () => _showWebDAVConnectionDialog(),
@@ -1675,6 +1691,22 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         ];
       case LibraryManagementSection.smb:
         return [
+          _buildActionIcon(
+            icon: Icons.folder_delete_outlined,
+            tooltip: '清理不存在文件夹',
+            onPressed: isScanning
+                ? null
+                : () async {
+                    final removedCount =
+                        await scanService.cleanupMissingScannedFolders();
+                    if (!mounted) return;
+                    if (removedCount > 0) {
+                      BlurSnackBar.show(context, '已清理 $removedCount 个不存在的文件夹');
+                    } else {
+                      BlurSnackBar.show(context, '没有需要清理的不存在文件夹');
+                    }
+                  },
+          ),
           _buildActionIcon(
             icon: Icons.lan_outlined,
             tooltip: '添加SMB服务器',
@@ -1765,6 +1797,22 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                     }
                   },
           ),
+          _buildActionIcon(
+            icon: Icons.folder_delete_outlined,
+            tooltip: '清理不存在文件夹',
+            onPressed: isScanning
+                ? null
+                : () async {
+                    final removedCount =
+                        await scanService.cleanupMissingScannedFolders();
+                    if (!mounted) return;
+                    if (removedCount > 0) {
+                      BlurSnackBar.show(context, '已清理 $removedCount 个不存在的文件夹');
+                    } else {
+                      BlurSnackBar.show(context, '没有需要清理的不存在文件夹');
+                    }
+                  },
+          ),
         ];
     }
   }
@@ -1774,6 +1822,29 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       case LibraryManagementSection.webdav:
         return [
           _buildActionIcon(
+            icon: Icons.folder_delete_outlined,
+            tooltip: '清理不存在文件夹',
+            onPressed: isBusy
+                ? null
+                : () async {
+                    final provider =
+                        context.read<SharedRemoteLibraryProvider>();
+                    final removedCount =
+                        await provider.cleanupMissingRemoteFolders();
+                    if (!mounted) return;
+                    final error = provider.managementErrorMessage;
+                    if (error != null && error.isNotEmpty) {
+                      BlurSnackBar.show(context, error);
+                      return;
+                    }
+                    if (removedCount > 0) {
+                      BlurSnackBar.show(context, '已清理 $removedCount 个不存在的文件夹');
+                    } else {
+                      BlurSnackBar.show(context, '没有需要清理的不存在文件夹');
+                    }
+                  },
+          ),
+          _buildActionIcon(
             icon: Icons.cloud_outlined,
             tooltip: '添加WebDAV服务器',
             onPressed: isBusy ? null : () => _showWebDAVConnectionDialog(),
@@ -1782,6 +1853,29 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       case LibraryManagementSection.smb:
         return [
           _buildActionIcon(
+            icon: Icons.folder_delete_outlined,
+            tooltip: '清理不存在文件夹',
+            onPressed: isBusy
+                ? null
+                : () async {
+                    final provider =
+                        context.read<SharedRemoteLibraryProvider>();
+                    final removedCount =
+                        await provider.cleanupMissingRemoteFolders();
+                    if (!mounted) return;
+                    final error = provider.managementErrorMessage;
+                    if (error != null && error.isNotEmpty) {
+                      BlurSnackBar.show(context, error);
+                      return;
+                    }
+                    if (removedCount > 0) {
+                      BlurSnackBar.show(context, '已清理 $removedCount 个不存在的文件夹');
+                    } else {
+                      BlurSnackBar.show(context, '没有需要清理的不存在文件夹');
+                    }
+                  },
+          ),
+          _buildActionIcon(
             icon: Icons.lan_outlined,
             tooltip: '添加SMB服务器',
             onPressed: isBusy ? null : () => _showSMBConnectionDialog(),
@@ -1789,7 +1883,31 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         ];
       case LibraryManagementSection.local:
       default:
-        return const [];
+        return [
+          _buildActionIcon(
+            icon: Icons.folder_delete_outlined,
+            tooltip: '清理不存在文件夹',
+            onPressed: isBusy
+                ? null
+                : () async {
+                    final provider =
+                        context.read<SharedRemoteLibraryProvider>();
+                    final removedCount =
+                        await provider.cleanupMissingRemoteFolders();
+                    if (!mounted) return;
+                    final error = provider.managementErrorMessage;
+                    if (error != null && error.isNotEmpty) {
+                      BlurSnackBar.show(context, error);
+                      return;
+                    }
+                    if (removedCount > 0) {
+                      BlurSnackBar.show(context, '已清理 $removedCount 个不存在的文件夹');
+                    } else {
+                      BlurSnackBar.show(context, '没有需要清理的不存在文件夹');
+                    }
+                  },
+          ),
+        ];
     }
   }
 
