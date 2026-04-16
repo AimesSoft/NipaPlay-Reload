@@ -10,10 +10,12 @@ class MacOSNativeVideoView extends StatefulWidget {
     super.key,
     required this.player,
     this.debugLabel,
+    this.onPlatformViewIdChanged,
   });
 
   final Player player;
   final String? debugLabel;
+  final ValueChanged<int?>? onPlatformViewIdChanged;
 
   @override
   State<MacOSNativeVideoView> createState() => _MacOSNativeVideoViewState();
@@ -30,18 +32,22 @@ class _MacOSNativeVideoViewState extends State<MacOSNativeVideoView> {
   @override
   void dispose() {
     _retryTimer?.cancel();
+    widget.onPlatformViewIdChanged?.call(null);
     unawaited(widget.player.detachPlatformVideoSurface());
     super.dispose();
   }
 
   void _handlePlatformViewCreated(int viewId) {
     _platformViewId = viewId;
+    widget.onPlatformViewIdChanged?.call(viewId);
     unawaited(_bindPlatformVideoSurface());
   }
 
   Future<void> _bindPlatformVideoSurface() async {
     final viewId = _platformViewId;
-    if (!mounted || viewId == null || !widget.player.prefersPlatformVideoSurface) {
+    if (!mounted ||
+        viewId == null ||
+        !widget.player.prefersPlatformVideoSurface) {
       return;
     }
 

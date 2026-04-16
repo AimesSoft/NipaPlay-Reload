@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import QuartzCore
 import desktop_multi_window
 
 class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
@@ -140,31 +141,46 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "getViewHandles":
-            guard let args = call.arguments as? [String: Any] else {
-                result(FlutterError(code: "INVALID_ARGUMENTS", message: "Arguments are required", details: nil))
-                return
-            }
-            let viewId: Int64?
-            if let value = args["viewId"] as? Int64 {
-                viewId = value
-            } else if let value = args["viewId"] as? NSNumber {
-                viewId = value.int64Value
-            } else {
-                viewId = nil
-            }
-
-            guard let resolvedViewId = viewId else {
-                result(FlutterError(code: "INVALID_VIEW_ID", message: "viewId is required", details: nil))
-                return
-            }
-            guard let view = views[resolvedViewId]?.view else {
-                result(FlutterError(code: "VIEW_NOT_FOUND", message: "No macOS native video view for id \(resolvedViewId)", details: nil))
+            guard let view = resolveView(from: call.arguments, result: result) else {
                 return
             }
             result(view.currentHandles())
+        case "getViewDiagnostics":
+            guard let view = resolveView(from: call.arguments, result: result) else {
+                return
+            }
+            result(view.currentDiagnostics())
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    private func resolveView(from arguments: Any?, result: @escaping FlutterResult) -> MacOSNativeVideoPlatformView? {
+        guard let args = arguments as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Arguments are required", details: nil))
+            return nil
+        }
+
+        let viewId: Int64?
+        if let value = args["viewId"] as? Int64 {
+            viewId = value
+        } else if let value = args["viewId"] as? NSNumber {
+            viewId = value.int64Value
+        } else {
+            viewId = nil
+        }
+
+        guard let resolvedViewId = viewId else {
+            result(FlutterError(code: "INVALID_VIEW_ID", message: "viewId is required", details: nil))
+            return nil
+        }
+
+        guard let view = views[resolvedViewId]?.view else {
+            result(FlutterError(code: "VIEW_NOT_FOUND", message: "No macOS native video view for id \(resolvedViewId)", details: nil))
+            return nil
+        }
+
+        return view
     }
 }
 
@@ -239,6 +255,206 @@ final class MacOSNativeVideoPlatformView: NSView {
             "windowHandle": windowHandle,
             "viewId": viewId,
         ]
+    }
+
+    func currentDiagnostics() -> [String: Any] {
+        let hostWindow = window
+        let targetScreen = hostWindow?.screen
+        let videoLayer = findBestVideoLayer()
+        let windowBackingScaleFactor = hostWindow?.backingScaleFactor ?? 0.0
+        let windowIsVisible = hostWindow?.isVisible ?? false
+        let windowFrame = hostWindow.map { dictionary(for: $0.frame) } ?? [:]
+
+        return [
+            "viewId": viewId,
+            "hostView": [
+                "className": NSStringFromClass(type(of: self)),
+                "frame": dictionary(for: frame),
+                "bounds": dictionary(for: bounds),
+                "isHidden": isHidden,
+                "subviewCount": subviews.count,
+                "layerClass": layer.map { NSStringFromClass(type(of: $0)) } ?? "nil",
+                "layerTree": describeLayerTree(startingAt: layer),
+                "subviewTree": describeViewTree(startingAt: self),
+            ],
+            "window": [
+                "title": hostWindow?.title ?? "",
+                "windowNumber": hostWindow?.windowNumber ?? 0,
+                "backingScaleFactor": windowBackingScaleFactor,
+                "isVisible": windowIsVisible,
+                "frame": windowFrame,
+            ],
+            "screen": dictionary(for: targetScreen),
+            "videoLayer": dictionary(for: videoLayer),
+        ]
+    }
+
+    private func findBestVideoLayer() -> CAMetalLayer? {
+        if let layer = findMetalLayer(in: self) {
+            return layer
+        }
+        return nil
+    }
+
+    private func findMetalLayer(in view: NSView) -> CAMetalLayer? {
+        if let layer = findMetalLayer(in: view.layer) {
+            return layer
+        }
+        for subview in view.subviews {
+            if let layer = findMetalLayer(in: subview) {
+                return layer
+            }
+        }
+        return nil
+    }
+
+    private func findMetalLayer(in layer: CALayer?) -> CAMetalLayer? {
+        guard let layer else {
+            return nil
+        }
+        if let metalLayer = layer as? CAMetalLayer {
+            return metalLayer
+        }
+        for sublayer in layer.sublayers ?? [] {
+            if let metalLayer = findMetalLayer(in: sublayer) {
+                return metalLayer
+            }
+        }
+        return nil
+    }
+
+    private func describeViewTree(startingAt rootView: NSView, depth: Int = 0, maxDepth: Int = 3) -> [String] {
+        guard depth <= maxDepth else {
+            return []
+        }
+
+        var result: [String] = [
+            "\(String(repeating: "  ", count: depth))\(NSStringFromClass(type(of: rootView)))",
+        ]
+        guard depth < maxDepth else {
+            return result
+        }
+        for subview in rootView.subviews.prefix(8) {
+            result.append(contentsOf: describeViewTree(startingAt: subview, depth: depth + 1, maxDepth: maxDepth))
+        }
+        return result
+    }
+
+    private func describeLayerTree(startingAt rootLayer: CALayer?, depth: Int = 0, maxDepth: Int = 3) -> [String] {
+        guard let rootLayer, depth <= maxDepth else {
+            return []
+        }
+
+        var result: [String] = [
+            "\(String(repeating: "  ", count: depth))\(NSStringFromClass(type(of: rootLayer)))",
+        ]
+        guard depth < maxDepth else {
+            return result
+        }
+        for sublayer in (rootLayer.sublayers ?? []).prefix(8) {
+            result.append(contentsOf: describeLayerTree(startingAt: sublayer, depth: depth + 1, maxDepth: maxDepth))
+        }
+        return result
+    }
+
+    private func dictionary(for screen: NSScreen?) -> [String: Any] {
+        guard let screen else {
+            return [
+                "present": false,
+            ]
+        }
+
+        var result: [String: Any] = [
+            "present": true,
+            "localizedName": screen.localizedName,
+            "frame": dictionary(for: screen.frame),
+            "visibleFrame": dictionary(for: screen.visibleFrame),
+            "backingScaleFactor": screen.backingScaleFactor,
+            "colorSpace": describe(colorSpace: screen.colorSpace),
+        ]
+
+        if #available(macOS 10.15, *) {
+            result["maximumExtendedDynamicRangeColorComponentValue"] =
+                screen.maximumExtendedDynamicRangeColorComponentValue
+            result["maximumPotentialExtendedDynamicRangeColorComponentValue"] =
+                screen.maximumPotentialExtendedDynamicRangeColorComponentValue
+            result["maximumReferenceExtendedDynamicRangeColorComponentValue"] =
+                screen.maximumReferenceExtendedDynamicRangeColorComponentValue
+        }
+
+        return result
+    }
+
+    private func dictionary(for metalLayer: CAMetalLayer?) -> [String: Any] {
+        guard let metalLayer else {
+            return [
+                "present": false,
+            ]
+        }
+
+        var result: [String: Any] = [
+            "present": true,
+            "className": NSStringFromClass(type(of: metalLayer)),
+            "frame": dictionary(for: metalLayer.frame),
+            "bounds": dictionary(for: metalLayer.bounds),
+            "drawableSize": dictionary(for: metalLayer.drawableSize),
+            "contentsScale": metalLayer.contentsScale,
+            "isOpaque": metalLayer.isOpaque,
+            "pixelFormat": String(describing: metalLayer.pixelFormat),
+            "framebufferOnly": metalLayer.framebufferOnly,
+            "colorspace": describe(colorSpace: metalLayer.colorspace),
+            "wantsExtendedDynamicRangeContent":
+                boolValue(metalLayer.value(forKey: "wantsExtendedDynamicRangeContent")) ?? false,
+        ]
+
+        if let edrMetadata = metalLayer.value(forKey: "edrMetadata") {
+            result["edrMetadata"] = String(describing: edrMetadata)
+        }
+
+        return result
+    }
+
+    private func dictionary(for rect: CGRect) -> [String: Any] {
+        [
+            "x": rect.origin.x,
+            "y": rect.origin.y,
+            "width": rect.size.width,
+            "height": rect.size.height,
+        ]
+    }
+
+    private func dictionary(for size: CGSize) -> [String: Any] {
+        [
+            "width": size.width,
+            "height": size.height,
+        ]
+    }
+
+    private func describe(colorSpace: NSColorSpace?) -> String {
+        guard let colorSpace else {
+            return "nil"
+        }
+        return colorSpace.localizedName ?? String(describing: colorSpace)
+    }
+
+    private func describe(colorSpace: CGColorSpace?) -> String {
+        guard let colorSpace else {
+            return "nil"
+        }
+        if let name = colorSpace.name as String? {
+            return name
+        }
+        return String(describing: colorSpace)
+    }
+
+    private func boolValue(_ value: Any?) -> Bool? {
+        if let value = value as? Bool {
+            return value
+        }
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        return nil
     }
 }
 

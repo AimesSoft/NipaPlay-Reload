@@ -23,6 +23,7 @@ import 'danmaku_density_bar.dart';
 import 'speed_boost_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'loading_overlay.dart';
+import 'macos_hdr_probe_overlay.dart';
 import 'vertical_indicator.dart';
 import 'video_upload_ui.dart';
 import 'playback_info_menu.dart';
@@ -63,6 +64,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   VideoPlayerState? _videoPlayerStateInstance;
   String? _currentAnimeCoverUrl; // 当前番剧封面URL
   int? _lastAnimeId; // 上次获取封面的番剧ID，用于避免重复请求
+  int? _macosNativeVideoViewId;
 
   bool _isRepeatableShortcut(LogicalKeyboardKey key) {
     return key == LogicalKeyboardKey.arrowLeft ||
@@ -201,12 +203,29 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       return MacOSNativeVideoView(
         player: videoState.player,
         debugLabel: videoState.currentVideoPath?.split('/').last,
+        onPlatformViewIdChanged: (viewId) {
+          if (!mounted || _macosNativeVideoViewId == viewId) {
+            return;
+          }
+          setState(() {
+            _macosNativeVideoViewId = viewId;
+          });
+        },
       );
     }
     if (textureId == null || textureId < 0) {
       return const SizedBox.shrink();
     }
     return Texture(textureId: textureId, filterQuality: FilterQuality.medium);
+  }
+
+  bool _shouldShowMacOSHdrProbe(VideoPlayerState videoState) {
+    return !kIsWeb &&
+        kDebugMode &&
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        videoState.hasVideo &&
+        videoState.player.prefersPlatformVideoSurface &&
+        _macosNativeVideoViewId != null;
   }
 
   @override
@@ -708,8 +727,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final textureId = videoState.player.textureId.value;
-        final hasRenderableVideoSurface =
-            kIsWeb ||
+        final hasRenderableVideoSurface = kIsWeb ||
             videoState.player.prefersPlatformVideoSurface ||
             (textureId != null && textureId >= 0);
 
@@ -1019,6 +1037,15 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                   if (videoState.hasVideo)
                                     const Positioned.fill(
                                       child: SpeedBoostIndicator(),
+                                    ),
+
+                                  if (_shouldShowMacOSHdrProbe(videoState))
+                                    Positioned.fill(
+                                      child: MacOSHdrProbeOverlay(
+                                        player: videoState.player,
+                                        platformViewId:
+                                            _macosNativeVideoViewId!,
+                                      ),
                                     ),
 
                                   // 右边缘悬浮菜单（仅桌面版）
