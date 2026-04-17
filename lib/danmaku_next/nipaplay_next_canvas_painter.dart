@@ -40,7 +40,10 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     for (final item in items) {
       final content = item.content;
       final adjustedFontSize = fontSize * content.fontSizeMultiplier;
-      final strokeColor = _getStrokeColor(content.color);
+      final strokeColor = _getStrokeColor(
+        textColor: content.color,
+        text: content.text,
+      );
       final shadowConfig = _resolveShadowStyle(adjustedFontSize);
       final strokeWidth = _resolveStrokeWidth(adjustedFontSize);
       final uniformOutlineRadius =
@@ -155,7 +158,7 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       text: content.text,
       countText: content.countText,
       fontSize: fontSize,
-      color: color.value,
+      color: color.toARGB32(),
       variant: variant,
       effectValue: effectValue,
       fontFamily: fontFamily,
@@ -291,12 +294,31 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     );
   }
 
-  Color _getStrokeColor(Color textColor) {
-    final luminance = (0.299 * textColor.red +
-            0.587 * textColor.green +
-            0.114 * textColor.blue) /
-        255;
-    return luminance < 0.2 ? Colors.white : Colors.black;
+  Color _getStrokeColor({
+    required Color textColor,
+    required String text,
+  }) {
+    // Emoji glyph outlines look incorrect when adaptive stroke color picks white.
+    // Force black outline for messages containing emoji to keep visual consistency.
+    if (_containsEmoji(text)) {
+      return Colors.black;
+    }
+    return textColor.computeLuminance() < 0.2 ? Colors.white : Colors.black;
+  }
+
+  bool _containsEmoji(String text) {
+    for (final rune in text.runes) {
+      if (_isEmojiRune(rune)) return true;
+    }
+    return false;
+  }
+
+  bool _isEmojiRune(int rune) {
+    return (rune >= 0x1F000 && rune <= 0x1FAFF) ||
+        (rune >= 0x2600 && rune <= 0x27BF) ||
+        (rune >= 0xFE00 && rune <= 0xFE0F) ||
+        rune == 0x200D ||
+        rune == 0x20E3;
   }
 
   @override
