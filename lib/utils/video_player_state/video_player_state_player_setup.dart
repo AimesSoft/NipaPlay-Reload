@@ -546,7 +546,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         player.seek(position: 0);
       }
 
-      //debugPrint('9. 检查播放器实际状态...');
+      // debugPrint('9. 检查播放器实际状态...');
       // 检查播放器实际状态
       // if (player.state == PlaybackState.playing) {
       //   _setStatus(PlayerStatus.playing, message: '正在播放');
@@ -670,6 +670,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           // debugPrint('VideoPlayerState: Resuming playback (player was not auto-playing), calling play().'); // <--- REMOVED PRINT
           play(); // Call our central play method
         }
+      }
+
+      if (!isFullscreen && autoFullscreenEnabled) {
+        await toggleFullscreen();
       }
 
       // 尝试自动检测和加载字幕

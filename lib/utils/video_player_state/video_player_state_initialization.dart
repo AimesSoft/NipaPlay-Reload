@@ -33,6 +33,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     _focusNode.requestFocus();
     await _loadLastVideo();
     await _loadVideoEnhancementSettingsEarly();
+    await _loadAutoFullScreenEnabled();
     await _loadMinimalProgressBarSettings(); // 加载最小化进度条设置
     await _loadPrecacheBufferSize(); // 加载播放预缓存大小
     await _loadPrecacheBufferDuration(); // 加载播放预缓存时长

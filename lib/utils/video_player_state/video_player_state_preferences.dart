@@ -2075,4 +2075,42 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _screenshotSaveDirectory = resolvedPath;
     notifyListeners();
   }
+
+  Future<void> _loadAutoFullScreenEnabled() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bool stored = _readCompatibleBool(
+        prefs,
+        _autoFullscreenEnabledKey,
+        defaultValue: false,
+      );
+      _autoFullscreenEnabled = stored;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 读取 AutoFullscreen 设置失败: $e');
+      _autoFullscreenEnabled = false;
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setAutoFullscreenEnabled(bool value) async {
+    if (_autoFullscreenEnabled == value) {
+      return;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await _persistBoolWithRetry(
+        prefs,
+        _autoFullscreenEnabledKey,
+        value,
+        settingName: '自动全屏',
+      );
+      _autoFullscreenEnabled = value;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 保存 AutoFullscreen 设置失败: $e');
+    }
+
+    notifyListeners();
+  }
 }
