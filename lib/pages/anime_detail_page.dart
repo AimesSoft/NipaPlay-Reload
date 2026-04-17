@@ -2623,47 +2623,47 @@ class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
     final Color iconColor = _isHovered ? baseColor : baseColor;
     final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
 
-    return GestureDetector(
-      onTap: widget.isToggling ? null : widget.onTap,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: MouseRegion(
-          cursor: widget.isToggling
-              ? SystemMouseCursors.basic
-              : SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _isHovered = true),
-          onExit: (_) => setState(() => _isHovered = false),
-          child: GestureDetector(
-            onTapDown: (_) => setState(() => _isPressed = true),
-            onTapUp: (_) => setState(() => _isPressed = false),
-            onTapCancel: () => setState(() => _isPressed = false),
-            child: AnimatedScale(
-              scale: scale,
-              duration: const Duration(milliseconds: 120),
-              child: Tooltip(
-                message: widget.isFavorited ? '已收藏' : '收藏',
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: Center(
-                    child: widget.isToggling
-                        ? SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(baseColor),
-                            ),
-                          )
-                        : Icon(
-                            widget.isFavorited
-                                ? Ionicons.heart
-                                : Ionicons.heart_outline,
-                            size: 16,
-                            color: iconColor,
+    return ScaleTransition(
+      scale: _scaleAnimation,
+      child: MouseRegion(
+        cursor: widget.isToggling
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.isToggling ? null : widget.onTap,
+          onTapDown:
+              widget.isToggling ? null : (_) => setState(() => _isPressed = true),
+          onTapUp:
+              widget.isToggling ? null : (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: Tooltip(
+              message: widget.isFavorited ? '已收藏' : '收藏',
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: Center(
+                  child: widget.isToggling
+                      ? SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(baseColor),
                           ),
-                  ),
+                        )
+                      : Icon(
+                          widget.isFavorited
+                              ? Ionicons.heart
+                              : Ionicons.heart_outline,
+                          size: 16,
+                          color: iconColor,
+                        ),
                 ),
               ),
             ),
