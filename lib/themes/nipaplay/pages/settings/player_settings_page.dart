@@ -729,6 +729,26 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             },
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              // notice: 不清楚移动端是否需要该功能，选项暂时只向桌面端开放
+              return SettingsItem.toggle(
+                title: '自动全屏',
+                subtitle: '在加载视频后自动全屏',
+                icon: Icons.fullscreen_rounded,
+                value: videoState.autoFullscreenEnabled,
+                onChanged: (bool value) async {
+                  await videoState.setAutoFullscreenEnabled(value);
+                  if (!context.mounted) return;
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启自动全屏' : '已关闭自动全屏',
+                  );
+                },
+              );
+            },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ],
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {

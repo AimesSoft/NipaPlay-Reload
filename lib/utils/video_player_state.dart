@@ -595,6 +595,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double? _pendingSystemVolume;
   bool _isDrainingSystemVolumeQueue = false;
 
+  // 播放自动全屏
+  final String _autoFullscreenEnabledKey = 'auto_fullscreen_enable';
+  bool _autoFullscreenEnabled = false;
+
   bool get _useSystemVolume => globals.isMobilePlatform && !kIsWeb;
 
   void _queueSystemVolumeUpdate(double volume) {
@@ -818,6 +822,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   bool get hasSubtitleDelayDurationLimit => _duration.inMilliseconds > 0;
+  bool get autoFullscreenEnabled => _autoFullscreenEnabled;
 
   double _resolveSubtitleDelaySecondsForCurrentVideo(double value) {
     final limit = subtitleDelayCustomLimitSeconds;
