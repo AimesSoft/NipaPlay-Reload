@@ -187,9 +187,8 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
     final dialogWidth = screenSize.width >= 760
         ? 620.0
         : globals.DialogSizes.getDialogWidth(screenSize.width);
-    final maxHeightFactor = (globals.isPhone && screenSize.shortestSide < 600)
-        ? 0.9
-        : 0.85;
+    final maxHeightFactor =
+        (globals.isPhone && screenSize.shortestSide < 600) ? 0.9 : 0.85;
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
     return TextSelectionTheme(
@@ -199,32 +198,38 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
         maxHeightFactor: maxHeightFactor,
         onClose: () => Navigator.of(context).maybePop(),
         backgroundColor: _surfaceColor,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 16),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildRatingSection(),
-                      const SizedBox(height: 18),
-                      _buildCollectionSection(),
-                      const SizedBox(height: 18),
-                      _buildEpisodeStatusSection(),
-                      const SizedBox(height: 18),
-                      _buildCommentInput(),
-                    ],
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _dismissKeyboard,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildRatingSection(),
+                        const SizedBox(height: 18),
+                        _buildCollectionSection(),
+                        const SizedBox(height: 18),
+                        _buildEpisodeStatusSection(),
+                        const SizedBox(height: 18),
+                        _buildCommentInput(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              _buildActionButtons(),
-            ],
+                const SizedBox(height: 16),
+                _buildActionButtons(),
+              ],
+            ),
           ),
         ),
       ),
@@ -498,6 +503,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
                 enabled: !_isSubmitting,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onTapOutside: (_) => _dismissKeyboard(),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: _textColor, fontSize: 14),
                 decoration: InputDecoration(
@@ -589,6 +595,13 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
     });
   }
 
+  void _dismissKeyboard() {
+    final focusScope = FocusScope.of(context);
+    if (!focusScope.hasPrimaryFocus) {
+      focusScope.unfocus();
+    }
+  }
+
   Widget _buildCommentInput() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,6 +620,7 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
           minLines: 3,
           maxLines: 4,
           maxLength: 200,
+          onTapOutside: (_) => _dismissKeyboard(),
           style: TextStyle(color: _textColor, fontSize: 13, height: 1.4),
           cursorColor: _accentColor,
           decoration: InputDecoration(
@@ -634,8 +648,9 @@ class _BangumiCollectionDialogState extends State<BangumiCollectionDialog> {
       children: [
         if (_selectedRating > 0)
           TextButton(
-            onPressed:
-                _isSubmitting ? null : () => setState(() => _selectedRating = 0),
+            onPressed: _isSubmitting
+                ? null
+                : () => setState(() => _selectedRating = 0),
             style: _textButtonStyle(baseColor: _accentColor),
             child: const Text('清除评分'),
           ),
