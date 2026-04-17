@@ -137,10 +137,10 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   }
 
   Widget _buildMacCloseButton(BuildContext context) {
-    final bool prominent = globals.isTablet;
     final onClose = _resolveCloseHandler(context);
-    final double hitSize = prominent ? 36 : 28;
-    final double buttonSize = prominent ? 20 : 14;
+    final bool isTablet = globals.isTablet;
+    final double hitSize = isTablet ? 36 : 28;
+    final double buttonSize = isTablet ? 20 : 14;
     return Tooltip(
       message: '关闭',
       child: GestureDetector(
@@ -154,32 +154,16 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
               width: buttonSize,
               height: buttonSize,
               decoration: BoxDecoration(
-                color: prominent
-                    ? const Color(0xFFFF4D4F)
-                    : const Color(0xFFFF5F57),
+                color: const Color(0xFFFF5F57),
                 borderRadius: BorderRadius.circular(buttonSize / 2),
-                border: prominent
-                    ? Border.all(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        width: 1,
-                      )
-                    : null,
                 boxShadow: [
                   BoxShadow(
-                    color:
-                        Colors.black.withValues(alpha: prominent ? 0.3 : 0.2),
-                    blurRadius: prominent ? 6 : 2,
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: isTablet ? 4 : 2,
                     offset: const Offset(0, 1),
                   ),
                 ],
               ),
-              child: prominent
-                  ? const Icon(
-                      fluent.FluentIcons.chrome_close,
-                      size: 12,
-                      color: Colors.white,
-                    )
-                  : null,
             ),
           ),
         ),
@@ -190,43 +174,22 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
   Widget _buildFluentCloseButton(BuildContext context) {
     final onClose = _resolveCloseHandler(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bool prominent = globals.isTablet;
+    final bool isTablet = globals.isTablet;
+    final double hitSize = isTablet ? 36 : 28;
+    final double iconSize = isTablet ? 18 : 14;
     return Tooltip(
       message: '关闭',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onClose,
         child: SizedBox(
-          width: prominent ? 36 : 28,
-          height: prominent ? 36 : 28,
+          width: hitSize,
+          height: hitSize,
           child: Center(
-            child: Container(
-              width: prominent ? 30 : 28,
-              height: prominent ? 30 : 28,
-              decoration: prominent
-                  ? BoxDecoration(
-                      color: const Color(0xFFFF4D4F),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.65),
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.28),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    )
-                  : null,
-              child: Icon(
-                fluent.FluentIcons.chrome_close,
-                size: prominent ? 18 : 14,
-                color: prominent
-                    ? Colors.white
-                    : (isDark ? Colors.white : Colors.black87),
-              ),
+            child: Icon(
+              fluent.FluentIcons.chrome_close,
+              size: iconSize,
+              color: isDark ? Colors.white : Colors.black87,
             ),
           ),
         ),
