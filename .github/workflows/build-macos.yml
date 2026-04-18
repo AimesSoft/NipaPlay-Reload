@@ -52,10 +52,10 @@ jobs:
           submodules: recursive
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@v22
 
       - name: Restore Nix build cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+        uses: DeterminateSystems/magic-nix-cache-action@v13
 
       - name: Build macOS libmpv xcframeworks from source
         id: build-libmpv

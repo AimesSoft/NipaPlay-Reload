@@ -98,6 +98,8 @@ class NativePlayer extends PlatformPlayer {
       await stop(notify: false, synchronized: false);
 
       disposed = true;
+      _isClosing = true;
+      _completePendingAsyncRequests();
 
       await super.dispose();
 
@@ -1384,6 +1386,11 @@ class NativePlayer extends PlatformPlayer {
   }
 
   Future<void> _handler(Pointer<generated.mpv_event> event) async {
+    if (event.ref.event_id == generated.mpv_event_id.MPV_EVENT_SHUTDOWN) {
+      _isClosing = true;
+      _completePendingAsyncRequests();
+    }
+
     if (event.ref.event_id ==
         generated.mpv_event_id.MPV_EVENT_PROPERTY_CHANGE) {
       final prop = event.ref.data.cast<generated.mpv_event_property>();
@@ -2572,12 +2579,42 @@ class NativePlayer extends PlatformPlayer {
     }
   }
 
+  bool _isClosing = false;
   int _asyncRequestNumber = 0;
   final Map<int, Completer<String>> _getPropertyRequests = {};
   final Map<int, Completer<int>> _setPropertyRequests = {};
   final Map<int, Completer<int>> _commandRequests = {};
 
+  void _completePendingAsyncRequests({
+    String propertyValue = '',
+    int status = generated.mpv_error.MPV_ERROR_UNINITIALIZED,
+  }) {
+    for (final completer in _getPropertyRequests.values) {
+      if (!completer.isCompleted) {
+        completer.complete(propertyValue);
+      }
+    }
+    _getPropertyRequests.clear();
+
+    for (final completer in _setPropertyRequests.values) {
+      if (!completer.isCompleted) {
+        completer.complete(status);
+      }
+    }
+    _setPropertyRequests.clear();
+
+    for (final completer in _commandRequests.values) {
+      if (!completer.isCompleted) {
+        completer.complete(status);
+      }
+    }
+    _commandRequests.clear();
+  }
+
   Future<String> _getPropertyString(String name) async {
+    if (_isClosing || disposed) {
+      return '';
+    }
     final requestNumber = _asyncRequestNumber++;
     final completer = _getPropertyRequests[requestNumber] = Completer<String>();
     final namePtr = name.toNativeUtf8();
@@ -2597,33 +2634,40 @@ class NativePlayer extends PlatformPlayer {
   }
 
   Future<void> _setProperty(String name, int format, Pointer<Void> data) async {
+    if (_isClosing || disposed) {
+      return;
+    }
     final requestNumber = _asyncRequestNumber++;
     final completer = _setPropertyRequests[requestNumber] = Completer<int>();
     final namePtr = name.toNativeUtf8();
-    if (configuration.async) {
-      final immediate = mpv.mpv_set_property_async(
-        ctx,
-        requestNumber,
-        namePtr.cast(),
-        format,
-        data,
-      );
-      final text = '_setProperty($name, $format)';
-      if (immediate < 0) {
-        // Sending failed.
-        _logError(immediate, text);
-        return;
+    try {
+      if (configuration.async) {
+        final immediate = mpv.mpv_set_property_async(
+          ctx,
+          requestNumber,
+          namePtr.cast(),
+          format,
+          data,
+        );
+        final text = '_setProperty($name, $format)';
+        if (immediate < 0) {
+          // Sending failed.
+          _setPropertyRequests.remove(requestNumber);
+          _logError(immediate, text);
+          return;
+        }
+        _logError(await completer.future, text);
+      } else {
+        mpv.mpv_set_property(
+          ctx,
+          namePtr.cast(),
+          format,
+          data,
+        );
       }
-      _logError(await completer.future, text);
-    } else {
-      mpv.mpv_set_property(
-        ctx,
-        namePtr.cast(),
-        format,
-        data,
-      );
+    } finally {
+      calloc.free(namePtr);
     }
-    calloc.free(namePtr);
   }
 
   Future<void> _setPropertyFlag(String name, bool value) async {
@@ -2671,29 +2715,35 @@ class NativePlayer extends PlatformPlayer {
   }
 
   Future<void> _command(List<String> args) async {
+    if (_isClosing || disposed) {
+      return;
+    }
     final pointers = args.map<Pointer<Utf8>>((e) => e.toNativeUtf8()).toList();
     final arr = calloc<Pointer<Utf8>>(128);
     for (int i = 0; i < args.length; i++) {
       (arr + i).value = pointers[i];
     }
 
-    if (configuration.async) {
-      final requestNumber = _asyncRequestNumber++;
-      final completer = _commandRequests[requestNumber] = Completer<int>();
-      final immediate = mpv.mpv_command_async(ctx, requestNumber, arr.cast());
-      final text = '_command(${args.join(', ')})';
-      if (immediate < 0) {
-        // Sending failed.
-        _logError(immediate, text);
-        return;
+    try {
+      if (configuration.async) {
+        final requestNumber = _asyncRequestNumber++;
+        final completer = _commandRequests[requestNumber] = Completer<int>();
+        final immediate = mpv.mpv_command_async(ctx, requestNumber, arr.cast());
+        final text = '_command(${args.join(', ')})';
+        if (immediate < 0) {
+          // Sending failed.
+          _commandRequests.remove(requestNumber);
+          _logError(immediate, text);
+          return;
+        }
+        _logError(await completer.future, text);
+      } else {
+        mpv.mpv_command(ctx, arr.cast());
       }
-      _logError(await completer.future, text);
-    } else {
-      mpv.mpv_command(ctx, arr.cast());
+    } finally {
+      calloc.free(arr);
+      pointers.forEach(calloc.free);
     }
-
-    calloc.free(arr);
-    pointers.forEach(calloc.free);
   }
 
   String _sanitizeUri(String uri) {

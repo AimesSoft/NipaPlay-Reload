@@ -18,6 +18,7 @@ import './player_data_models.dart';
 class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
+  static bool _macOSNativeVideoPreference = false;
   static const int _defaultBufferSize = 32 * 1024 * 1024;
   static const String _hdrValidationFlag = 'NIPAPLAY_MACOS_HDR_VALIDATE';
   static const MethodChannel _macOSNativeVideoChannel =
@@ -29,6 +30,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   static bool shouldUseDefaultQuietMpvLogs() {
     return !_shouldEnableMpvDiagnostics();
+  }
+
+  static void setMacOSNativeVideoPreference(bool enabled) {
+    _macOSNativeVideoPreference = enabled;
   }
 
   static bool _envFlagEnabled(String name) {
@@ -163,8 +168,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (_envFlagEnabled('NIPAPLAY_ENABLE_MACOS_NATIVE_VIDEO')) {
       return true;
     }
-    final major = _resolveMacosMajorVersion();
-    return major == null || major >= 14;
+    if (_envFlagEnabled(_hdrValidationFlag)) {
+      return true;
+    }
+    return _macOSNativeVideoPreference;
   }
 
   final Player _player;

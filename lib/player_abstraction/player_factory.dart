@@ -1,4 +1,6 @@
-import 'package:fvp/mdk.dart' if (dart.library.html) 'package:nipaplay/utils/mock_mdk.dart' as mdk; // MDK import is isolated here
+import 'package:fvp/mdk.dart'
+    if (dart.library.html) 'package:nipaplay/utils/mock_mdk.dart'
+    as mdk; // MDK import is isolated here
 import './abstract_player.dart';
 import './mdk_player_adapter.dart';
 import './video_player_adapter.dart'; // 导入新的适配器
@@ -20,17 +22,22 @@ enum PlayerKernelType {
 class PlayerFactory {
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static const String _precacheBufferSizeKey = 'player_precache_buffer_size_mb';
+  static const String _macOSNativeVideoEnabledKey =
+      'macos_native_video_enabled';
   static const int defaultPrecacheBufferSizeMb = 32;
   static const int minPrecacheBufferSizeMb = 4;
   static const int maxPrecacheBufferSizeMb = 512;
   static PlayerKernelType? _cachedKernelType;
   static int _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
+  static bool _cachedMacOSNativeVideoEnabled = false;
   static bool _hasLoadedSettings = false;
 
   // 添加一个StreamController来广播内核切换事件
-  static final StreamController<PlayerKernelType> _kernelChangeController = StreamController<PlayerKernelType>.broadcast();
-  static Stream<PlayerKernelType> get onKernelChanged => _kernelChangeController.stream;
-  
+  static final StreamController<PlayerKernelType> _kernelChangeController =
+      StreamController<PlayerKernelType>.broadcast();
+  static Stream<PlayerKernelType> get onKernelChanged =>
+      _kernelChangeController.stream;
+
   // 初始化方法，在应用启动时调用
   static Future<void> initialize() async {
     if (kIsWeb) {
@@ -44,8 +51,11 @@ class PlayerFactory {
       final prefs = await SharedPreferences.getInstance();
       final kernelTypeIndex = prefs.getInt(_playerKernelTypeKey);
       final bufferSizeMb = prefs.getInt(_precacheBufferSizeKey);
-      
-      if (kernelTypeIndex != null && kernelTypeIndex < PlayerKernelType.values.length) {
+      final macOSNativeVideoEnabled =
+          prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
+
+      if (kernelTypeIndex != null &&
+          kernelTypeIndex < PlayerKernelType.values.length) {
         _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
       } else {
         _cachedKernelType = PlayerKernelType.mdk;
@@ -55,37 +65,54 @@ class PlayerFactory {
       _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(
         bufferSizeMb ?? defaultPrecacheBufferSizeMb,
       );
-      
+      _cachedMacOSNativeVideoEnabled = macOSNativeVideoEnabled;
+      MediaKitPlayerAdapter.setMacOSNativeVideoPreference(
+        _cachedMacOSNativeVideoEnabled,
+      );
+
       _hasLoadedSettings = true;
     } catch (e) {
       debugPrint('[PlayerFactory] 初始化读取设置出错: $e');
       _cachedKernelType = PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
+      _cachedMacOSNativeVideoEnabled = false;
+      MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
     }
   }
-  
+
   // 同步加载设置
   static void _loadSettingsSync() {
     try {
       // 这里没有真正同步，仅使用默认值，确保后续异步加载会更新缓存值
       _cachedKernelType = PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
+      _cachedMacOSNativeVideoEnabled = false;
+      MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
-      
+
       // 异步加载正确设置并更新缓存
       SharedPreferences.getInstance().then((prefs) {
         final kernelTypeIndex = prefs.getInt(_playerKernelTypeKey);
         final bufferSizeMb = prefs.getInt(_precacheBufferSizeKey);
-        if (kernelTypeIndex != null && kernelTypeIndex < PlayerKernelType.values.length) {
+        final macOSNativeVideoEnabled =
+            prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
+        if (kernelTypeIndex != null &&
+            kernelTypeIndex < PlayerKernelType.values.length) {
           _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
-          debugPrint('[PlayerFactory] 异步更新内核设置: ${_cachedKernelType.toString()}');
+          debugPrint(
+              '[PlayerFactory] 异步更新内核设置: ${_cachedKernelType.toString()}');
         }
         if (bufferSizeMb != null) {
-          _cachedPrecacheBufferSizeMb = _clampPrecacheBufferSizeMb(bufferSizeMb);
+          _cachedPrecacheBufferSizeMb =
+              _clampPrecacheBufferSizeMb(bufferSizeMb);
         }
+        _cachedMacOSNativeVideoEnabled = macOSNativeVideoEnabled;
+        MediaKitPlayerAdapter.setMacOSNativeVideoPreference(
+          _cachedMacOSNativeVideoEnabled,
+        );
       });
-      
+
       debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
     } catch (e) {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
@@ -93,7 +120,7 @@ class PlayerFactory {
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
     }
   }
-  
+
   // 获取当前内核设置
   static PlayerKernelType getKernelType() {
     if (!_hasLoadedSettings) {
@@ -115,6 +142,13 @@ class PlayerFactory {
     return _cachedPrecacheBufferSizeMb;
   }
 
+  static bool getMacOSNativeVideoEnabled() {
+    if (!_hasLoadedSettings) {
+      _loadSettingsSync();
+    }
+    return _cachedMacOSNativeVideoEnabled;
+  }
+
   static int getPrecacheBufferSizeBytes() {
     return getPrecacheBufferSizeMb() * 1024 * 1024;
   }
@@ -129,7 +163,23 @@ class PlayerFactory {
       debugPrint('[PlayerFactory] 保存预缓存大小设置出错: $e');
     }
   }
-  
+
+  static Future<void> saveMacOSNativeVideoEnabled(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_macOSNativeVideoEnabledKey, enabled);
+      final previous = _cachedMacOSNativeVideoEnabled;
+      _cachedMacOSNativeVideoEnabled = enabled;
+      MediaKitPlayerAdapter.setMacOSNativeVideoPreference(enabled);
+      if (previous != enabled &&
+          (_cachedKernelType ?? getKernelType()) == PlayerKernelType.mediaKit) {
+        _kernelChangeController.add(PlayerKernelType.mediaKit);
+      }
+    } catch (e) {
+      debugPrint('[PlayerFactory] 保存 macOS 原生视频设置出错: $e');
+    }
+  }
+
   // 创建播放器实例
   AbstractPlayer createPlayer({PlayerKernelType? kernelType}) {
     // 如果是Web平台，强制使用VideoPlayer
@@ -137,10 +187,10 @@ class PlayerFactory {
       debugPrint('[PlayerFactory] Web平台，强制创建 Video Player 播放器');
       return VideoPlayerAdapter();
     }
-    
+
     // 如果没有指定内核类型，从缓存或设置中读取
     kernelType ??= getKernelType();
-    
+
     switch (kernelType) {
       case PlayerKernelType.mdk:
         debugPrint('[PlayerFactory] 创建 MDK 播放器');
@@ -163,7 +213,7 @@ class PlayerFactory {
         );
     }
   }
-  
+
   // 保存内核设置
   static Future<void> saveKernelType(PlayerKernelType type) async {
     if (kIsWeb) {
@@ -175,7 +225,7 @@ class PlayerFactory {
       await prefs.setInt(_playerKernelTypeKey, type.index);
       _cachedKernelType = type;
       debugPrint('[PlayerFactory] 保存内核设置: ${type.toString()}');
-      
+
       // 更新系统资源监视器的播放器内核类型
       String kernelTypeName;
       switch (type) {
@@ -191,10 +241,10 @@ class PlayerFactory {
         default:
           kernelTypeName = "未知";
       }
-      
+
       // 设置显示名称
       SystemResourceMonitor().setPlayerKernelType(kernelTypeName);
-      
+
       // 确保完整更新监视器显示 - 调用更新方法
       SystemResourceMonitor().updatePlayerKernelType();
 
@@ -204,4 +254,4 @@ class PlayerFactory {
       debugPrint('[PlayerFactory] 保存内核设置出错: $e');
     }
   }
-} 
+}

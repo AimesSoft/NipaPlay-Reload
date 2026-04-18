@@ -644,9 +644,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Duration _dragSeekStartPosition = Duration.zero;
   double _accumulatedDragDx = 0.0;
   Timer?
-  _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
+      _seekIndicatorTimer; // For showing a temporary seek UI (not implemented yet)
   OverlayEntry?
-  _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
+      _seekOverlayEntry; // For a temporary seek UI (not implemented yet)
   Duration _dragSeekTargetPosition =
       Duration.zero; // To show target position during drag
   bool _isSeekIndicatorVisible = false; // <<< ADDED THIS LINE
@@ -919,8 +919,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         return directValue;
       }
 
-      final labeledFractionMatch =
-          RegExp(
+      final labeledFractionMatch = RegExp(
             r'([0-9]+(?:\.[0-9]+)?)\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
           ).firstMatch(trimmed) ??
           RegExp(
@@ -943,8 +942,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
         }
       }
 
-      final labeledMatch =
-          RegExp(
+      final labeledMatch = RegExp(
             r'([0-9]+(?:\.[0-9]+)?)\s*(?:fps|frames?\s*(?:/|per)\s*second|frame\s*rate|framerate)',
           ).firstMatch(trimmed) ??
           RegExp(
@@ -988,8 +986,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     if (videoEntries is List) {
       for (final entry in videoEntries) {
         final mapEntry = toStringKeyedMap(entry);
-        final parsed =
-            _parseSeekStepFrameRateValue(mapEntry['fps']) ??
+        final parsed = _parseSeekStepFrameRateValue(mapEntry['fps']) ??
             _parseSeekStepFrameRateValue(mapEntry['frameRate']) ??
             _parseSeekStepFrameRateValue(mapEntry['frame_rate']) ??
             _parseSeekStepFrameRateValue(mapEntry['raw']);
@@ -1118,10 +1115,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       formatSeekStepLabel(seekStepSeconds, preferFrameLabel: true);
 
   String get seekStepSummaryLabel => formatSeekStepLabel(
-    seekStepSeconds,
-    preferFrameLabel: true,
-    includeFrameApproximation: true,
-  );
+        seekStepSeconds,
+        preferFrameLabel: true,
+        includeFrameApproximation: true,
+      );
 
   double get subtitleDelaySliderMinSeconds {
     final limit = subtitleDelayCustomLimitSeconds;
@@ -1305,6 +1302,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   @override
   void dispose() {
     _isDisposed = true;
+    PlayerRemoteControlBridge.instance.detach(this);
 
     // Jellyfin同步：如果是Jellyfin流媒体，停止同步
     if (_currentVideoPath != null &&

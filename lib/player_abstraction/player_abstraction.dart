@@ -200,7 +200,7 @@ class Player {
   }) async {
     try {
       final dyn = _delegate as dynamic;
-      final future = dyn.attachPlatformVideoSurface?.call(
+      final future = dyn.attachPlatformVideoSurface(
         viewHandle: viewHandle,
         windowHandle: windowHandle,
         platformViewId: platformViewId,
@@ -208,22 +208,32 @@ class Player {
       if (future is Future) {
         await future;
       }
+    } on NoSuchMethodError {
+      throw UnsupportedError(
+        'Delegate does not support attachPlatformVideoSurface.',
+      );
     } catch (error) {
       debugPrint('[Player] attachPlatformVideoSurface failed: $error');
+      rethrow;
     }
   }
 
   Future<void> detachPlatformVideoSurface({int? platformViewId}) async {
     try {
       final dyn = _delegate as dynamic;
-      final future = dyn.detachPlatformVideoSurface?.call(
+      final future = dyn.detachPlatformVideoSurface(
         platformViewId: platformViewId,
       );
       if (future is Future) {
         await future;
       }
+    } on NoSuchMethodError {
+      throw UnsupportedError(
+        'Delegate does not support detachPlatformVideoSurface.',
+      );
     } catch (error) {
       debugPrint('[Player] detachPlatformVideoSurface failed: $error');
+      rethrow;
     }
   }
 

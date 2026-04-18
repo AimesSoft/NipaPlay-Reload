@@ -46,6 +46,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   String _playerCoreName = "MDK";
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
+  bool _macOSNativeVideoEnabled = false;
 
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
@@ -89,6 +90,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _loadDecoderSettings();
     _loadPlayerKernelSettings();
     _loadDanmakuRenderEngineSettings();
+    _loadMacOSNativeVideoSettings();
 
     if (!_spoilerAiControllersInitialized) {
       _spoilerAiApiFormatDraft = playerState.spoilerAiApiFormat;
@@ -112,6 +114,14 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     setState(() {
       _selectedKernelType = PlayerFactory.getKernelType();
       _updatePlayerCoreName();
+    });
+  }
+
+  Future<void> _loadMacOSNativeVideoSettings() async {
+    final enabled = PlayerFactory.getMacOSNativeVideoEnabled();
+    if (!mounted) return;
+    setState(() {
+      _macOSNativeVideoEnabled = enabled;
     });
   }
 
@@ -144,6 +154,18 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       _selectedKernelType = kernelType;
       _updatePlayerCoreName();
     });
+  }
+
+  Future<void> _saveMacOSNativeVideoSetting(bool enabled) async {
+    await PlayerFactory.saveMacOSNativeVideoEnabled(enabled);
+    if (!mounted) return;
+    setState(() {
+      _macOSNativeVideoEnabled = enabled;
+    });
+    BlurSnackBar.show(
+      context,
+      enabled ? '已开启实验性 HDR 原生视频输出' : '已切回 Flutter 纹理视频输出',
+    );
   }
 
   void _showRestartDialog() {
@@ -500,6 +522,20 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                   );
                 },
               );
+            },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
+        if (!kIsWeb &&
+            Platform.isMacOS &&
+            _selectedKernelType == PlayerKernelType.mediaKit) ...[
+          SettingsItem.toggle(
+            title: '实验性 HDR 原生视频输出',
+            subtitle: '开启后使用 macOS 原生视频层；关闭后回退到 Flutter 纹理路径',
+            icon: Ionicons.color_filter_outline,
+            value: _macOSNativeVideoEnabled,
+            onChanged: (bool value) async {
+              await _saveMacOSNativeVideoSetting(value);
             },
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
