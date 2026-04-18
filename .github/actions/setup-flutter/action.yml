@@ -97,6 +97,14 @@ runs:
       shell: bash
       run: |
         flutter config --no-enable-swift-package-manager
+
+    - name: Sync vendored submodules
+      shell: bash
+      run: |
+        if [ -f .gitmodules ]; then
+          git submodule sync --recursive
+          git submodule update --init --recursive
+        fi
     
     - name: Get app version
       id: get_version

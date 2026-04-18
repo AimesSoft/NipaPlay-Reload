@@ -30,6 +30,7 @@ jobs:
         with:
           token: ${{ github.token }}
           fetch-depth: 0
+          submodules: recursive
 
       - name: Cache iOS Pods
         uses: actions/cache@v3

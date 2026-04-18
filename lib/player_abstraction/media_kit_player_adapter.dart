@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart'; // 导入TickerProvider
 import 'package:nipaplay/utils/subtitle_font_loader.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
@@ -17,10 +18,97 @@ import './player_data_models.dart';
 class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
+  static bool _macOSNativeVideoPreference = false;
   static const int _defaultBufferSize = 32 * 1024 * 1024;
+  static const String _hdrValidationFlag = 'NIPAPLAY_MACOS_HDR_VALIDATE';
+  static const MethodChannel _macOSNativeVideoChannel =
+      MethodChannel('nipaplay/macos_native_video');
 
   static void setMpvLogLevelNone() {
     _disableMpvLogs = true;
+  }
+
+  static bool shouldUseDefaultQuietMpvLogs() {
+    return !_shouldEnableMpvDiagnostics();
+  }
+
+  static void setMacOSNativeVideoPreference(bool enabled) {
+    _macOSNativeVideoPreference = enabled;
+  }
+
+  static bool _envFlagEnabled(String name) {
+    final value = Platform.environment[name];
+    if (value == null) {
+      return false;
+    }
+    switch (value.trim().toLowerCase()) {
+      case '1':
+      case 'true':
+      case 'yes':
+      case 'on':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static String? _envString(String name) {
+    final value = Platform.environment[name]?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static bool _shouldEnableMpvDiagnostics() {
+    return _envFlagEnabled('NIPAPLAY_ENABLE_MPV_LOGS') ||
+        _envFlagEnabled(_hdrValidationFlag) ||
+        _envString('NIPAPLAY_MPV_LOG_FILE') != null ||
+        _envString('NIPAPLAY_MPV_MSG_LEVEL') != null ||
+        _envString('NIPAPLAY_MPV_LOG_LEVEL') != null;
+  }
+
+  static bool _shouldUseMacOSHdrOutputPath() {
+    return Platform.isMacOS &&
+        !_envFlagEnabled('NIPAPLAY_DISABLE_MACOS_HDR') &&
+        (_envFlagEnabled(_hdrValidationFlag) ||
+            _shouldUseMacOSNativeVideoSurface());
+  }
+
+  static MPVLogLevel _resolveMpvLogLevel() {
+    switch (_envString('NIPAPLAY_MPV_LOG_LEVEL')?.toLowerCase()) {
+      case 'trace':
+        return MPVLogLevel.trace;
+      case 'debug':
+        return MPVLogLevel.debug;
+      case 'v':
+      case 'verbose':
+        return MPVLogLevel.v;
+      case 'info':
+        return MPVLogLevel.info;
+      case 'warn':
+      case 'warning':
+        return MPVLogLevel.warn;
+      case 'error':
+        return MPVLogLevel.error;
+      default:
+        return _shouldEnableMpvDiagnostics()
+            ? MPVLogLevel.debug
+            : MPVLogLevel.debug;
+    }
+  }
+
+  static String? _resolveHardwareDecodingOverride({
+    bool allowAutomaticMacOSHdrOverride = true,
+  }) {
+    final env = _envString('NIPAPLAY_MPV_HWDEC');
+    if (env != null) {
+      return env;
+    }
+    if (allowAutomaticMacOSHdrOverride && _shouldUseMacOSHdrOutputPath()) {
+      return 'videotoolbox,auto';
+    }
+    return null;
   }
 
   static int? _resolveMacosMajorVersion() {
@@ -31,8 +119,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return null;
     }
     final version = Platform.operatingSystemVersion;
-    final versionMatch =
-        RegExp(r'Version\s+(\d+)').firstMatch(version) ??
+    final versionMatch = RegExp(r'Version\s+(\d+)').firstMatch(version) ??
         RegExp(r'macOS\s+(\d+)').firstMatch(version);
     if (versionMatch != null) {
       _cachedMacosMajor = int.tryParse(versionMatch.group(1)!);
@@ -73,8 +160,24 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     return false;
   }
 
+  static bool _shouldUseMacOSNativeVideoSurface() {
+    if (!Platform.isMacOS) {
+      return false;
+    }
+    if (_envFlagEnabled('NIPAPLAY_DISABLE_MACOS_NATIVE_VIDEO')) {
+      return false;
+    }
+    if (_envFlagEnabled('NIPAPLAY_ENABLE_MACOS_NATIVE_VIDEO')) {
+      return true;
+    }
+    if (_envFlagEnabled(_hdrValidationFlag)) {
+      return true;
+    }
+    return _macOSNativeVideoPreference;
+  }
+
   final Player _player;
-  late final VideoController _controller;
+  VideoController? _controller;
   final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   bool _textureIdListenerAttached = false;
@@ -111,34 +214,52 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   // 添加播放速度状态变量
   double _playbackRate = 1.0;
+  final bool _mpvDiagnosticsEnabled;
   final bool _enableHardwareAcceleration;
+  final bool _prefersPlatformVideoSurface;
+  static const int _windowHostedPlatformSurfaceId = -1;
+  int? _attachedPlatformViewId;
+  int? _attachedPlatformViewHandle;
+  int? _attachedPlatformWindowHandle;
+  Future<void>? _platformVideoSurfaceDetachFuture;
+  int _platformVideoSurfaceBindingGeneration = 0;
+  Media? _pendingPlatformMedia;
 
   MediaKitPlayerAdapter({int? bufferSize})
-    : _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
-      _player = Player(
-        configuration: PlayerConfiguration(
-          libass: true,
-          libassAndroidFont: defaultTargetPlatform == TargetPlatform.android
-              ? 'assets/subfont.ttf'
-              : null,
-          libassAndroidFontName: defaultTargetPlatform == TargetPlatform.android
-              ? 'Droid Sans Fallback'
-              : null,
-          bufferSize: bufferSize ?? _defaultBufferSize,
-          logLevel: _disableMpvLogs ? MPVLogLevel.error : MPVLogLevel.debug,
-        ),
-      ) {
+      : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
+        _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
+        _prefersPlatformVideoSurface = _shouldUseMacOSNativeVideoSurface(),
+        _player = Player(
+          configuration: PlayerConfiguration(
+            libass: true,
+            libassAndroidFont: defaultTargetPlatform == TargetPlatform.android
+                ? 'assets/subfont.ttf'
+                : null,
+            libassAndroidFontName:
+                defaultTargetPlatform == TargetPlatform.android
+                    ? 'Droid Sans Fallback'
+                    : null,
+            bufferSize: bufferSize ?? _defaultBufferSize,
+            logLevel:
+                _disableMpvLogs ? MPVLogLevel.error : _resolveMpvLogLevel(),
+          ),
+        ) {
     _applyMpvLogLevelOverride();
-    _controller = VideoController(
-      _player,
-      configuration: VideoControllerConfiguration(
-        enableHardwareAcceleration: _enableHardwareAcceleration,
-      ),
-    );
+    _applyMacOSHdrOutputOptions();
+    _applyMpvDiagnosticOptions();
+    _bootstrapMacOSPlatformVideoSurface();
+    if (!_prefersPlatformVideoSurface) {
+      _controller = VideoController(
+        _player,
+        configuration: VideoControllerConfiguration(
+          enableHardwareAcceleration: _enableHardwareAcceleration,
+        ),
+      );
+    }
     _initializeHardwareDecoding();
     _initializeCodecs();
     unawaited(_setupSubtitleFonts());
-    _controller.waitUntilFirstFrameRendered.then((_) {
+    _controller?.waitUntilFirstFrameRendered.then((_) {
       _updateTextureIdFromController();
     });
     _addEventListeners();
@@ -159,10 +280,111 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
   }
 
+  void _applyMpvDiagnosticOptions() {
+    if (!_mpvDiagnosticsEnabled) {
+      return;
+    }
+
+    final defaultMsgLevel = _envFlagEnabled(_hdrValidationFlag)
+        ? 'all=warn,cplayer=debug,vd=debug,vf=v,vo=debug,vo/gpu-next=v,gpu=v,mac=v,cocoacb=v,ffmpeg=warn,ffmpeg/demuxer=warn,lavf=warn,demux=warn,file=warn,playlist=warn'
+        : 'all=debug';
+
+    final options = <String, String>{
+      if (_envString('NIPAPLAY_MPV_LOG_FILE') case final logFile?)
+        'log-file': logFile,
+      'msg-level': _envString('NIPAPLAY_MPV_MSG_LEVEL') ?? defaultMsgLevel,
+      if (Platform.isMacOS &&
+          !_prefersPlatformVideoSurface &&
+          _envFlagEnabled(_hdrValidationFlag)) ...{
+        'gpu-api': _envString('NIPAPLAY_MPV_GPU_API') ?? 'vulkan',
+        'gpu-context': _envString('NIPAPLAY_MPV_GPU_CONTEXT') ?? 'macvk',
+        'target-colorspace-hint':
+            _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT') ?? 'yes',
+        'target-colorspace-hint-mode':
+            _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT_MODE') ?? 'source',
+        'hdr-compute-peak':
+            _envString('NIPAPLAY_MPV_HDR_COMPUTE_PEAK') ?? 'auto',
+      },
+    };
+
+    for (final entry in options.entries) {
+      _setMpvPropertyOption(entry.key, entry.value, log: true);
+    }
+  }
+
+  void _applyMacOSHdrOutputOptions() {
+    if (!_shouldUseMacOSHdrOutputPath()) {
+      return;
+    }
+
+    final options = _prefersPlatformVideoSurface
+        ? <String, String>{
+            'hdr-compute-peak':
+                _envString('NIPAPLAY_MPV_HDR_COMPUTE_PEAK') ?? 'auto',
+          }
+        : <String, String>{
+            'gpu-api': _envString('NIPAPLAY_MPV_GPU_API') ?? 'vulkan',
+            'gpu-context': _envString('NIPAPLAY_MPV_GPU_CONTEXT') ?? 'macvk',
+            'target-colorspace-hint':
+                _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT') ?? 'yes',
+            'target-colorspace-hint-mode':
+                _envString('NIPAPLAY_MPV_TARGET_COLORSPACE_HINT_MODE') ??
+                    'source',
+            'hdr-compute-peak':
+                _envString('NIPAPLAY_MPV_HDR_COMPUTE_PEAK') ?? 'auto',
+          };
+
+    for (final entry in options.entries) {
+      _setMpvPropertyOption(entry.key, entry.value,
+          log: _mpvDiagnosticsEnabled);
+    }
+  }
+
+  void _bootstrapMacOSPlatformVideoSurface() {
+    if (!_prefersPlatformVideoSurface) {
+      return;
+    }
+
+    _setMpvPropertyOption('vo', 'libmpv', log: _mpvDiagnosticsEnabled);
+    _setMpvPropertyOption('wid', '0', log: _mpvDiagnosticsEnabled);
+    _setMpvPropertyOption('force-window', 'no', log: _mpvDiagnosticsEnabled);
+    _setMpvPropertyOption('gpu-hwdec-interop', 'auto',
+        log: _mpvDiagnosticsEnabled);
+  }
+
+  void _setMpvPropertyOption(
+    String name,
+    String value, {
+    bool log = false,
+  }) {
+    _properties[name] = value;
+    try {
+      final dynamic platform = _player.platform;
+      platform?.setProperty?.call(name, value);
+      if (log) {
+        debugPrint('MediaKit HDR诊断: mpv $name=$value');
+      }
+    } catch (e) {
+      if (log) {
+        debugPrint('MediaKit HDR诊断: 设置 mpv $name 失败: $e');
+      }
+    }
+  }
+
   void _initializeHardwareDecoding() {
     try {
+      final hwdecOverride = _resolveHardwareDecodingOverride(
+        allowAutomaticMacOSHdrOverride: _enableHardwareAcceleration,
+      );
+      if (hwdecOverride != null) {
+        (_player.platform as dynamic)?.setProperty('hwdec', hwdecOverride);
+        _properties['hwdec'] = hwdecOverride;
+        debugPrint('MediaKit HDR诊断: mpv hwdec=$hwdecOverride');
+        return;
+      }
       if (!_enableHardwareAcceleration) {
         (_player.platform as dynamic)?.setProperty('hwdec', 'no');
+        _properties['hwdec'] = 'no';
         debugPrint('MediaKit: macOS < 14 或被禁用，硬件加速已关闭');
         return;
       }
@@ -234,8 +456,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   void _updateTextureIdFromController() {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
     try {
-      final currentId = _controller.id.value;
+      final currentId = controller.id.value;
       if (_textureIdNotifier.value != currentId) {
         _textureIdNotifier.value = currentId;
         debugPrint('MediaKit: 纹理ID已更新: $currentId');
@@ -245,7 +471,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
       if (!_textureIdListenerAttached) {
         _textureIdListenerAttached = true;
-        _controller.id.addListener(_handleTextureIdChange);
+        controller.id.addListener(_handleTextureIdChange);
       }
     } catch (e) {
       debugPrint('获取纹理ID失败: $e');
@@ -254,7 +480,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   void _handleTextureIdChange() {
     if (_isDisposed) return;
-    final newId = _controller.id.value;
+    final newId = _controller?.id.value;
     if (newId != null && _textureIdNotifier.value != newId) {
       _textureIdNotifier.value = newId;
       debugPrint('MediaKit: 纹理ID已更新: $newId');
@@ -266,8 +492,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       _state = playing
           ? PlayerPlaybackState.playing
           : (_player.state.position.inMilliseconds > 0
-                ? PlayerPlaybackState.paused
-                : PlayerPlaybackState.stopped);
+              ? PlayerPlaybackState.paused
+              : PlayerPlaybackState.stopped);
       if (playing) {
         _lastActualPosition = _player.state.position;
         _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
@@ -345,7 +571,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     });
 
     _player.stream.log.listen((log) {
-      //debugPrint('MediaKit日志: [${log.prefix}] ${log.text}');
+      if (_mpvDiagnosticsEnabled) {
+        debugPrint('MediaKit MPV日志: [${log.level}/${log.prefix}] ${log.text}');
+      }
     });
   }
 
@@ -442,9 +670,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       );
       return;
     }
-    final embeddedSubtitleTracks = realIncomingSubtitleTracks
-        .where((track) => !track.isExternal)
-        .toList();
+    final embeddedSubtitleTracks =
+        realIncomingSubtitleTracks.where((track) => !track.isExternal).toList();
 
     List<PlayerVideoStreamInfo>? videoStreams;
     if (realVideoTracks.isNotEmpty) {
@@ -922,14 +1149,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         for (int i = 0; i < _mediaInfo.subtitle!.length; i++) {
           final subInfo = _mediaInfo.subtitle![i];
           // Use original title and language from metadata for more reliable matching against keywords
-          final titleLower = (subInfo.metadata['title'] ?? subInfo.title ?? '')
-              .toLowerCase();
+          final titleLower =
+              (subInfo.metadata['title'] ?? subInfo.title ?? '').toLowerCase();
           final langLower =
               (subInfo.metadata['language'] ?? subInfo.language ?? '')
                   .toLowerCase();
 
-          bool isSimplified =
-              titleLower.contains('simplified') ||
+          bool isSimplified = titleLower.contains('simplified') ||
               titleLower.contains('简体') ||
               langLower.contains('zh-hans') ||
               langLower.contains('zh-cn') ||
@@ -937,8 +1163,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               titleLower.contains('scjp') ||
               langLower.contains('scjp');
 
-          bool isTraditional =
-              titleLower.contains('traditional') ||
+          bool isTraditional = titleLower.contains('traditional') ||
               titleLower.contains('繁体') ||
               langLower.contains('zh-hant') ||
               langLower.contains('zh-tw') ||
@@ -1238,8 +1463,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     final hasNoDuration = _mediaInfo.duration <= 0;
     final hasNoPosition = _player.state.position.inMilliseconds <= 0;
-    final hasNoError =
-        _mediaInfo.specificErrorMessage == null ||
+    final hasNoError = _mediaInfo.specificErrorMessage == null ||
         _mediaInfo.specificErrorMessage!.isEmpty;
 
     return hasNoDuration && hasNoPosition && hasNoError;
@@ -1247,6 +1471,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   Future<int?> updateTexture() async {
+    if (_prefersPlatformVideoSurface) {
+      return null;
+    }
     if (_textureIdNotifier.value == null) {
       _updateTextureIdFromController();
     }
@@ -1288,16 +1515,25 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     final preparedMedia = _prepareNetworkMediaIfNeeded(path);
 
+    final media = Media(
+      preparedMedia.url,
+      extras: mediaOptions,
+      httpHeaders: preparedMedia.httpHeaders,
+    );
+
     //debugPrint('MediaKitAdapter: 打开媒体 (MAIN VIDEO/AUDIO): $path');
     if (!_isDisposed) {
-      _player.open(
-        Media(
-          preparedMedia.url,
-          extras: mediaOptions,
-          httpHeaders: preparedMedia.httpHeaders,
-        ),
-        play: false,
-      );
+      if (_prefersPlatformVideoSurface && _attachedPlatformViewId == null) {
+        _pendingPlatformMedia = media;
+        if (_mpvDiagnosticsEnabled) {
+          debugPrint(
+            'MediaKit HDR诊断: defer media open until macOS native video surface attaches',
+          );
+        }
+      } else {
+        _pendingPlatformMedia = null;
+        _openMainMedia(media);
+      }
     }
 
     // 设置mpv底层video-aspect属性，确保保持原始宽高比
@@ -1334,6 +1570,33 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         //debugPrint('MediaKitAdapter: setMedia (MAIN VIDEO/AUDIO) - Delayed block executed. Initial track info printed.');
       }
     });
+  }
+
+  void _openMainMedia(Media media) {
+    if (_isDisposed) {
+      return;
+    }
+
+    unawaited(_player.open(media, play: false));
+    _scheduleMacOSHdrDiagnostics();
+  }
+
+  void _scheduleMacOSHdrDiagnostics() {
+    if (!_mpvDiagnosticsEnabled ||
+        !Platform.isMacOS ||
+        !_envFlagEnabled(_hdrValidationFlag)) {
+      return;
+    }
+
+    unawaited(_dumpMacOSHdrDiagnostics('media-opened'));
+    Future.delayed(
+      const Duration(milliseconds: 1500),
+      () => unawaited(_dumpMacOSHdrDiagnostics('media-opened+1500ms')),
+    );
+    Future.delayed(
+      const Duration(milliseconds: 4000),
+      () => unawaited(_dumpMacOSHdrDiagnostics('media-opened+4000ms')),
+    );
   }
 
   _PreparedNetworkMedia _prepareNetworkMediaIfNeeded(String originalPath) {
@@ -1402,7 +1665,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   Future<void> prepare() async {
-    await updateTexture();
+    if (!_prefersPlatformVideoSurface) {
+      await updateTexture();
+    }
     if (!_isDisposed) {
       _printAllTracksInfo(_player.state.tracks);
     }
@@ -1419,18 +1684,34 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   void dispose() {
+    if (_isDisposed) {
+      return;
+    }
     _isDisposed = true;
     _ticker?.dispose();
     _trackSubscription?.cancel();
     _jellyfinRetryTimer?.cancel();
-    if (_textureIdListenerAttached) {
-      _controller.id.removeListener(_handleTextureIdChange);
+    if (_textureIdListenerAttached && _controller != null) {
+      _controller!.id.removeListener(_handleTextureIdChange);
     }
-    _player.dispose();
+    void disposePlayerCore() {
+      try {
+        _player.dispose();
+      } catch (e) {
+        debugPrint('MediaKit: 销毁播放器失败: $e');
+      }
+    }
+
+    if (_prefersPlatformVideoSurface) {
+      unawaited(
+        detachPlatformVideoSurface().whenComplete(disposePlayerCore),
+      );
+    } else {
+      disposePlayerCore();
+    }
     _textureIdNotifier.dispose();
   }
 
-  @override
   GlobalKey get repaintBoundaryKey => _repaintBoundaryKey;
 
   @override
@@ -1492,27 +1773,23 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   String? getProperty(String name) {
-    try {
-      final dynamic platform = _player.platform;
-      if (platform != null && platform.getProperty != null) {
-        final dynamic value = platform.getProperty(name);
-        if (value is String) {
-          return value;
-        }
-        if (value != null && value is! Future) {
-          return value.toString();
-        }
-      }
-    } catch (_) {
-      // 忽略异常，回退到缓存值
-    }
     return _properties[name];
   }
 
   @override
   void setProperty(String name, String value) {
     var resolvedValue = value;
-    if (!_enableHardwareAcceleration && name == 'hwdec' && value != 'no') {
+    final diagnosticHwdecOverride = _mpvDiagnosticsEnabled && name == 'hwdec'
+        ? _resolveHardwareDecodingOverride()
+        : null;
+    if (diagnosticHwdecOverride != null && value != diagnosticHwdecOverride) {
+      resolvedValue = diagnosticHwdecOverride;
+      debugPrint(
+        'MediaKit HDR诊断: 忽略外部 hwdec=$value，保持 $diagnosticHwdecOverride',
+      );
+    } else if (!_enableHardwareAcceleration &&
+        name == 'hwdec' &&
+        value != 'no') {
       resolvedValue = 'no';
       debugPrint('MediaKit: 硬件加速已禁用，强制设置 hwdec=no');
     }
@@ -1523,6 +1800,63 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     } catch (e) {
       debugPrint('MediaKit: 设置属性$name 失败: $e');
     }
+  }
+
+  Future<String?> _getMpvPropertyForDiagnostics(String name) async {
+    try {
+      final dynamic platform = _player.platform;
+      if (platform == null || platform.getProperty == null) {
+        return null;
+      }
+      dynamic value = platform.getProperty(name);
+      if (value is Future) {
+        value = await value;
+      }
+      if (value == null) {
+        return null;
+      }
+      return value.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _dumpMacOSHdrDiagnostics(String phase) async {
+    if (!_mpvDiagnosticsEnabled ||
+        !Platform.isMacOS ||
+        !_envFlagEnabled(_hdrValidationFlag) ||
+        _isDisposed) {
+      return;
+    }
+
+    const properties = <String>[
+      'vo-configured',
+      'current-vo',
+      'gpu-api',
+      'gpu-context',
+      'hwdec',
+      'hwdec-current',
+      'video-codec',
+      'video-format',
+      'video-params',
+      'video-out-params',
+      'target-colorspace-hint',
+      'target-colorspace-hint-mode',
+      'target-prim',
+      'target-trc',
+      'target-peak',
+      'tone-mapping',
+      'hdr-compute-peak',
+    ];
+
+    final buffer = StringBuffer('MediaKit HDR诊断[$phase]');
+    for (final property in properties) {
+      final value = await _getMpvPropertyForDiagnostics(property);
+      if (value != null && value.isNotEmpty) {
+        buffer.write('\n  $property=$value');
+      }
+    }
+    debugPrint(buffer.toString());
   }
 
   @override
@@ -1538,9 +1872,173 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   @override
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {
     try {
-      await _controller.setSize(width: width, height: height);
+      await _controller?.setSize(width: width, height: height);
     } catch (e) {
       debugPrint('MediaKit: 调整视频纹理尺寸失败: $e');
+    }
+  }
+
+  bool get prefersPlatformVideoSurface => _prefersPlatformVideoSurface;
+
+  Future<void> attachPlatformVideoSurface({
+    required int viewHandle,
+    int? windowHandle,
+    int? platformViewId,
+  }) async {
+    if (!_prefersPlatformVideoSurface || _isDisposed) {
+      return;
+    }
+
+    final pendingDetach = _platformVideoSurfaceDetachFuture;
+    if (pendingDetach != null) {
+      await pendingDetach;
+      if (_isDisposed) {
+        return;
+      }
+    }
+
+    final resolvedPlatformViewId =
+        (platformViewId != null && platformViewId >= 0)
+            ? platformViewId
+            : _windowHostedPlatformSurfaceId;
+
+    final isSameBinding = _attachedPlatformViewId == resolvedPlatformViewId &&
+        _attachedPlatformViewHandle == viewHandle &&
+        _attachedPlatformWindowHandle == windowHandle;
+    if (isSameBinding) {
+      return;
+    }
+
+    _attachedPlatformViewId = resolvedPlatformViewId;
+    _attachedPlatformViewHandle = viewHandle;
+    _attachedPlatformWindowHandle = windowHandle;
+    final bindingGeneration = ++_platformVideoSurfaceBindingGeneration;
+
+    try {
+      final dynamic platform = _player.platform;
+      if (platform == null) {
+        return;
+      }
+      final dynamic handleFuture = platform.handle;
+      final int playerHandle = handleFuture is Future
+          ? await handleFuture as int
+          : (handleFuture is int ? handleFuture : 0);
+      if (playerHandle <= 0) {
+        throw StateError('No valid libmpv player handle available.');
+      }
+
+      await platform.setProperty?.call('vo', 'libmpv');
+      await platform.setProperty?.call('wid', '0');
+      await platform.setProperty?.call('force-window', 'no');
+      await platform.setProperty?.call('gpu-hwdec-interop', 'auto');
+      await platform.setProperty?.call('sub-use-margins', 'no');
+      await platform.setProperty?.call('sub-scale-with-window', 'yes');
+      await _macOSNativeVideoChannel.invokeMethod<void>(
+        'attachPlayer',
+        <String, dynamic>{
+          'viewId': resolvedPlatformViewId,
+          'playerHandle': playerHandle,
+        },
+      );
+      if (_isDisposed ||
+          bindingGeneration != _platformVideoSurfaceBindingGeneration) {
+        return;
+      }
+      final pendingMedia = _pendingPlatformMedia;
+      if (pendingMedia != null) {
+        _pendingPlatformMedia = null;
+        _openMainMedia(pendingMedia);
+      }
+
+      if (_mpvDiagnosticsEnabled) {
+        debugPrint(
+          'MediaKit HDR诊断: attach macOS native video surface '
+          'viewId=$resolvedPlatformViewId playerHandle=$playerHandle '
+          'renderer=libmpv-opengl',
+        );
+      }
+      if (Platform.isMacOS &&
+          _envFlagEnabled('NIPAPLAY_MACOS_HDR_EXIT_TRACE')) {
+        debugPrint(
+          '[HDRExit][Adapter] attachPlatformVideoSurface '
+          'viewId=$resolvedPlatformViewId handle=$playerHandle',
+        );
+      }
+
+      final currentPosition = _player.state.position;
+      if (currentPosition > Duration.zero) {
+        await _player.seek(currentPosition);
+      }
+      unawaited(_dumpMacOSHdrDiagnostics('surface-attached'));
+      Future.delayed(
+        const Duration(milliseconds: 1500),
+        () => unawaited(_dumpMacOSHdrDiagnostics('surface-attached+1500ms')),
+      );
+    } catch (e) {
+      if (bindingGeneration == _platformVideoSurfaceBindingGeneration) {
+        _attachedPlatformViewId = null;
+        _attachedPlatformViewHandle = null;
+        _attachedPlatformWindowHandle = null;
+        _platformVideoSurfaceBindingGeneration += 1;
+      }
+      debugPrint('MediaKit: 绑定 macOS 原生视频面失败: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> detachPlatformVideoSurface({int? platformViewId}) async {
+    if (!_prefersPlatformVideoSurface) {
+      return;
+    }
+
+    if (platformViewId != null &&
+        _attachedPlatformViewId != null &&
+        platformViewId != _attachedPlatformViewId) {
+      return;
+    }
+
+    final viewId = _attachedPlatformViewId;
+    _attachedPlatformViewId = null;
+    _attachedPlatformViewHandle = null;
+    _attachedPlatformWindowHandle = null;
+    _platformVideoSurfaceBindingGeneration += 1;
+    if (Platform.isMacOS && _envFlagEnabled('NIPAPLAY_MACOS_HDR_EXIT_TRACE')) {
+      debugPrint(
+          '[HDRExit][Adapter] detachPlatformVideoSurface viewId=$viewId requested=$platformViewId');
+    }
+
+    if (viewId == null && _platformVideoSurfaceDetachFuture != null) {
+      await _platformVideoSurfaceDetachFuture;
+      return;
+    }
+
+    final detachFuture = () async {
+      try {
+        if (viewId != null) {
+          await _macOSNativeVideoChannel.invokeMethod<void>(
+            'detachPlayer',
+            <String, dynamic>{'viewId': viewId},
+          );
+        }
+        final dynamic platform = _player.platform;
+        if (platform == null) {
+          return;
+        }
+        await platform.setProperty?.call('vo', 'libmpv');
+        await platform.setProperty?.call('wid', '0');
+        await platform.setProperty?.call('force-window', 'no');
+      } catch (e) {
+        debugPrint('MediaKit: 解绑 macOS 原生视频面失败: $e');
+      }
+    }();
+
+    _platformVideoSurfaceDetachFuture = detachFuture;
+    try {
+      await detachFuture;
+    } finally {
+      if (identical(_platformVideoSurfaceDetachFuture, detachFuture)) {
+        _platformVideoSurfaceDetachFuture = null;
+      }
     }
   }
 
@@ -1707,8 +2205,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         _lastPositionTimestamp = now;
       }
       final delta = now - _lastPositionTimestamp;
-      _interpolatedPosition =
-          _lastActualPosition +
+      _interpolatedPosition = _lastActualPosition +
           Duration(milliseconds: (delta * _player.state.rate).toInt());
 
       if (_player.state.duration > Duration.zero &&
@@ -1733,16 +2230,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       final dynamic platform = _player.platform;
       if (platform != null) {
         dynamic _gp(String name) {
-          try {
-            final v = platform.getProperty?.call(name);
-            if (v is Future) {
-              // 避免阻塞UI，同步接口不await，直接返回占位
-              return null;
-            }
-            return v;
-          } catch (_) {
-            return null;
-          }
+          // Keep this synchronous method side-effect free. Calling mpv's async
+          // get-property API without awaiting can fill the mpv event queue.
+          return _properties[name];
         }
 
         final mpv = <String, dynamic>{
@@ -1760,7 +2250,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'hwdec-current': _gp('hwdec-current'),
           'hwdec-active': _gp('hwdec-active'),
           'current-vo': _gp('current-vo'),
+          'vo-configured': _gp('vo-configured'),
+          'gpu-api': _gp('gpu-api'),
+          'gpu-context': _gp('gpu-context'),
           // video params
+          'video-format': _gp('video-format'),
           'video-params/colormatrix': _gp('video-params/colormatrix'),
           'video-params/colorprimaries': _gp('video-params/colorprimaries'),
           'video-params/transfer': _gp('video-params/transfer'),
@@ -1784,6 +2278,22 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'dheight': _gp('dheight'),
           'video-out-params/w': _gp('video-out-params/w'),
           'video-out-params/h': _gp('video-out-params/h'),
+          'video-out-params/colorprimaries': _gp(
+            'video-out-params/colorprimaries',
+          ),
+          'video-out-params/transfer': _gp('video-out-params/transfer'),
+          'video-out-params/pixelformat': _gp(
+            'video-out-params/pixelformat',
+          ),
+          'target-colorspace-hint': _gp('target-colorspace-hint'),
+          'target-colorspace-hint-mode': _gp(
+            'target-colorspace-hint-mode',
+          ),
+          'target-prim': _gp('target-prim'),
+          'target-trc': _gp('target-trc'),
+          'target-peak': _gp('target-peak'),
+          'tone-mapping': _gp('tone-mapping'),
+          'hdr-compute-peak': _gp('hdr-compute-peak'),
           'vid': _gp('vid'),
           'aid': _gp('aid'),
           'sid': _gp('sid'),
@@ -1887,6 +2397,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'hwdec-current': await _gp('hwdec-current'),
           'hwdec-active': await _gp('hwdec-active'),
           'current-vo': await _gp('current-vo'),
+          'vo-configured': await _gp('vo-configured'),
+          'gpu-api': await _gp('gpu-api'),
+          'gpu-context': await _gp('gpu-context'),
+          'video-format': await _gp('video-format'),
           'video-params/colormatrix': await _gp('video-params/colormatrix'),
           'video-params/colorprimaries': await _gp(
             'video-params/colorprimaries',
@@ -1911,6 +2425,24 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'dheight': await _gp('dheight'),
           'video-out-params/w': await _gp('video-out-params/w'),
           'video-out-params/h': await _gp('video-out-params/h'),
+          'video-out-params/colorprimaries': await _gp(
+            'video-out-params/colorprimaries',
+          ),
+          'video-out-params/transfer': await _gp(
+            'video-out-params/transfer',
+          ),
+          'video-out-params/pixelformat': await _gp(
+            'video-out-params/pixelformat',
+          ),
+          'target-colorspace-hint': await _gp('target-colorspace-hint'),
+          'target-colorspace-hint-mode': await _gp(
+            'target-colorspace-hint-mode',
+          ),
+          'target-prim': await _gp('target-prim'),
+          'target-trc': await _gp('target-trc'),
+          'target-peak': await _gp('target-peak'),
+          'tone-mapping': await _gp('tone-mapping'),
+          'hdr-compute-peak': await _gp('hdr-compute-peak'),
           'vid': await _gp('vid'),
           'aid': await _gp('aid'),
           'sid': await _gp('sid'),
@@ -2092,11 +2624,11 @@ String _getNormalizedLanguageHelper(String input) {
       // We should combine them if originalTitle isn't already reflecting the language.
       if (finalLanguage != '未知' &&
           !originalTitle.toLowerCase().contains(
-            finalLanguage.toLowerCase().substring(
-              0,
-              finalLanguage.length > 2 ? 2 : 1,
-            ),
-          )) {
+                finalLanguage.toLowerCase().substring(
+                      0,
+                      finalLanguage.length > 2 ? 2 : 1,
+                    ),
+              )) {
         // Avoids "简体中文 (简体中文 Commentary)" if originalTitle was "简体中文 Commentary"
         // Check if originalTitle already contains the language (or part of it)
         bool titleAlreadyHasLang = false;

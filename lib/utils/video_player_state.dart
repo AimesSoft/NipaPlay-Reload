@@ -29,6 +29,7 @@ import 'package:nipaplay/services/manual_danmaku_matcher.dart';
 import 'package:nipaplay/services/auto_sync_service.dart'; // 导入自动云同步服务
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
+import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
@@ -245,6 +246,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       'instant_hide_player_ui_enabled';
   bool _instantHidePlayerUiEnabled = false; // 默认关闭（桌面端）
   bool _isFullscreen = false;
+  Rect? _macOSWindowHostedVideoRect;
   double _progress = 0.0;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
@@ -758,9 +760,44 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   // Getters
+  Rect? get macOSWindowHostedVideoRect => _macOSWindowHostedVideoRect;
   PlayerStatus get status => _status;
   List<String> get statusMessages => _statusMessages;
   bool get showControls => _showControls;
+  bool get usesMacOSNativePlatformVideoSurface =>
+      !kIsWeb && Platform.isMacOS && player.prefersPlatformVideoSurface;
+
+  int get effectiveUiUpdateIntervalMs {
+    if (!usesMacOSNativePlatformVideoSurface) {
+      return _uiUpdateIntervalMs;
+    }
+    if (!_showControls && !_isSeeking) {
+      return 1000;
+    }
+    return 250;
+  }
+
+  void setMacOSWindowHostedVideoRect(Rect? rect) {
+    final normalizedRect = rect == null || rect.isEmpty
+        ? null
+        : Rect.fromLTWH(rect.left, rect.top, rect.width, rect.height);
+    if (_rectsMatch(_macOSWindowHostedVideoRect, normalizedRect)) {
+      return;
+    }
+    _macOSWindowHostedVideoRect = normalizedRect;
+    notifyListeners();
+  }
+
+  bool _rectsMatch(Rect? a, Rect? b) {
+    if (a == null || b == null) {
+      return a == b;
+    }
+    return (a.left - b.left).abs() < 0.01 &&
+        (a.top - b.top).abs() < 0.01 &&
+        (a.width - b.width).abs() < 0.01 &&
+        (a.height - b.height).abs() < 0.01;
+  }
+
   bool get isDisposed => _isDisposed;
   bool get showRightMenu => _showRightMenu;
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
@@ -890,8 +927,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
           ).firstMatch(trimmed);
       if (labeledFractionMatch != null) {
         final numerator = double.tryParse(labeledFractionMatch.group(1) ?? '');
-        final denominator =
-            double.tryParse(labeledFractionMatch.group(2) ?? '');
+        final denominator = double.tryParse(
+          labeledFractionMatch.group(2) ?? '',
+        );
         if (numerator != null &&
             denominator != null &&
             numerator.isFinite &&
@@ -1265,10 +1303,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void dispose() {
     _isDisposed = true;
     PlayerRemoteControlBridge.instance.detach(this);
-    // 在销毁前进行一次截图
-    if (hasVideo) {
-      _captureConditionalScreenshot("销毁前");
-    }
 
     // Jellyfin同步：如果是Jellyfin流媒体，停止同步
     if (_currentVideoPath != null &&

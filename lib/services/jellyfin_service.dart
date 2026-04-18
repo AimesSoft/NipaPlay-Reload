@@ -1634,15 +1634,18 @@ class JellyfinService extends MediaServerServiceBase
       final subtitleUrl =
           '$_serverUrl/Videos/$itemId/$mediaSourceId/Subtitles/$subtitleIndex/Stream.$format?api_key=$_accessToken';
 
-      debugPrint('JellyfinService: 下载字幕文件: $subtitleUrl');
+      debugPrint(
+        'JellyfinService: 下载字幕文件: ${Uri.parse(subtitleUrl).replace(queryParameters: const <String, String>{})}',
+      );
 
       // 下载字幕文件
-      final subtitleResponse =
-          await http.get(WebRemoteAccessService.proxyUri(Uri.parse(subtitleUrl)));
+      final subtitleResponse = await http
+          .get(WebRemoteAccessService.proxyUri(Uri.parse(subtitleUrl)));
 
       if (subtitleResponse.statusCode == 200) {
         // 保存到临时文件
         final tempDir = await getTemporaryDirectory();
+        await tempDir.create(recursive: true);
         final fileName = 'jellyfin_subtitle_${itemId}_$subtitleIndex.$format';
         final filePath = '${tempDir.path}/$fileName';
 

@@ -30,53 +30,30 @@ abstract class NativeLibrary {
   /// This method discovers & loads the libmpv shared library. It is generally present with the name `libmpv-2.dll` on Windows & `libmpv.so` on GNU/Linux.
   /// The [libmpv] parameter can be used to manually specify the path to the libmpv shared library.
   static void ensureInitialized({String? libmpv}) {
-    // Attempt to load [libmpv] argument.
+    final candidates = <String>[];
+
     if (libmpv != null) {
-      DynamicLibrary.open(libmpv);
-      _resolved = libmpv;
-      return;
+      candidates.add(libmpv);
     }
-    // Attempt to load [LIBMPV_LIBRARY_PATH] environment variable.
+
     try {
       final env = Platform.environment['LIBMPV_LIBRARY_PATH'];
-      if (env != null) {
-        DynamicLibrary.open(env);
-        _resolved = env;
-        return;
+      if (env != null && env.isNotEmpty) {
+        candidates.add(env);
       }
     } catch (_) {}
-    // Attempt to load default names.
-    final names = {
-      'windows': [
-        'libmpv-2.dll',
-        'mpv-2.dll',
-        'mpv-1.dll',
-      ],
-      'linux': [
-        'libmpv.so',
-        'libmpv.so.2',
-        'libmpv.so.1',
-      ],
-      'macos': [
-        'Mpv.framework/Mpv',
-      ],
-      'ios': [
-        'Mpv.framework/Mpv',
-      ],
-      'android': [
-        'libmpv.so',
-      ],
-    }[Platform.operatingSystem];
+
+    final names = _defaultCandidatesForCurrentPlatform();
     if (names != null) {
-      // Try to load the dynamic library from the system using [DynamicLibrary.open].
-      for (final name in names) {
+      candidates.addAll(names);
+      for (final candidate in _dedupeCandidates(candidates)) {
         try {
-          DynamicLibrary.open(name);
-          _resolved = name;
+          DynamicLibrary.open(candidate);
+          _resolved = candidate;
           return;
         } catch (_) {}
       }
-      // If the dynamic library is not loaded, throw an [Exception].
+
       if (_resolved == null) {
         throw Exception(
           {
@@ -98,6 +75,76 @@ abstract class NativeLibrary {
         'Unsupported operating system: ${Platform.operatingSystem}',
       );
     }
+  }
+
+  static List<String>? _defaultCandidatesForCurrentPlatform() {
+    switch (Platform.operatingSystem) {
+      case 'windows':
+        return const [
+          'libmpv-2.dll',
+          'mpv-2.dll',
+          'mpv-1.dll',
+        ];
+      case 'linux':
+        return const [
+          'libmpv.so',
+          'libmpv.so.2',
+          'libmpv.so.1',
+        ];
+      case 'macos':
+        return _darwinFrameworkCandidates(
+          versionsPath: 'Frameworks/Mpv.framework/Versions/A/Mpv',
+          shortPath: 'Frameworks/Mpv.framework/Mpv',
+        );
+      case 'ios':
+        return _darwinFrameworkCandidates(
+          versionsPath: 'Frameworks/Mpv.framework/Versions/A/Mpv',
+          shortPath: 'Frameworks/Mpv.framework/Mpv',
+          bundleParentLevels: 0,
+        );
+      case 'android':
+        return const [
+          'libmpv.so',
+        ];
+      default:
+        return null;
+    }
+  }
+
+  static List<String> _darwinFrameworkCandidates({
+    required String versionsPath,
+    required String shortPath,
+    int bundleParentLevels = 1,
+  }) {
+    final executable = File(Platform.resolvedExecutable);
+    Directory bundleRoot = executable.parent;
+    for (int i = 0; i < bundleParentLevels; i++) {
+      bundleRoot = bundleRoot.parent;
+    }
+
+    final bundleVersionsPath =
+        bundleRoot.uri.resolve(versionsPath).toFilePath();
+    final bundleShortPath = bundleRoot.uri.resolve(shortPath).toFilePath();
+
+    return _dedupeCandidates([
+      bundleVersionsPath,
+      bundleShortPath,
+      'Mpv.framework/Versions/A/Mpv',
+      'Mpv.framework/Mpv',
+    ]);
+  }
+
+  static List<String> _dedupeCandidates(List<String> values) {
+    final result = <String>[];
+    final seen = <String>{};
+    for (final value in values) {
+      final candidate = value.trim();
+      if (candidate.isEmpty || !seen.add(candidate)) {
+        continue;
+      }
+      result.add(candidate);
+    }
+    return result;
   }
 
   /// The resolved libmpv dynamic library.

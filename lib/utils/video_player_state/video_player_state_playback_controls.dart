@@ -20,6 +20,14 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     );
   }
 
+  void _logMacOSHdrResetTrace(String message) {
+    if (!kIsWeb &&
+        Platform.isMacOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_EXIT_TRACE'] == '1') {
+      debugPrint('[HDRExit][Reset] $message');
+    }
+  }
+
   // 切换菜单栏显示/隐藏状态（仅用于平板设备）
   void toggleAppBarVisibility() async {
     if (isTablet) {
@@ -52,6 +60,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   Future<void> resetPlayer() async {
     try {
       _isResetting = true; // 设置重置标志
+      _logMacOSHdrResetTrace(
+        'resetPlayer start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
+      );
 
       // 在停止播放前保存最后的观看记录
       if (_currentVideoPath != null) {
@@ -115,11 +126,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       // 先停止播放
       if (player.state != PlaybackState.stopped) {
+        _logMacOSHdrResetTrace('set player.state=stopped');
         player.state = PlaybackState.stopped;
       }
 
       // 等待一小段时间确保播放器完全停止
       await Future.delayed(const Duration(milliseconds: 100));
+      _logMacOSHdrResetTrace(
+        'after stop delay path=$_currentVideoPath status=$_status playerState=${player.state}',
+      );
 
       // 释放纹理，确保资源被正确释放
       if (player.textureId.value != null) {
@@ -134,6 +149,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 重置状态
       await _clearTimelinePreviewFiles();
       _currentVideoPath = null;
+      _macOSWindowHostedVideoRect = null;
       _danmakuOverlayKey = 'idle'; // 重置弹幕覆盖层key
       _position = Duration.zero;
       _duration = Duration.zero;
@@ -170,6 +186,9 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       _setStatus(PlayerStatus.idle);
+      _logMacOSHdrResetTrace(
+        'status set idle path=$_currentVideoPath status=$_status playerState=${player.state}',
+      );
 
       // 使用屏幕方向管理器重置屏幕方向
       if (globals.isMobilePlatform) {
@@ -185,11 +204,18 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       notifyListeners();
+      _logMacOSHdrResetTrace(
+        'resetPlayer notifyListeners path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
+      );
     } catch (e) {
+      _logMacOSHdrResetTrace('resetPlayer error error=$e');
       //debugPrint('重置播放器时出错: $e');
       rethrow;
     } finally {
       _isResetting = false; // 清除重置标志
+      _logMacOSHdrResetTrace(
+        'resetPlayer finally path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
+      );
     }
   }
 
@@ -361,7 +387,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
   void pause() {
     if (_status == PlayerStatus.playing) {
-      final bool isWindowsMediaKit = !kIsWeb &&
+      final bool isWindowsMediaKit =
+          !kIsWeb &&
           Platform.isWindows &&
           player.getPlayerKernelName() == 'Media Kit';
       if (isWindowsMediaKit) {
@@ -372,15 +399,18 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
-      player.pauseDirectly().then((_) {
-        //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
-        _setStatus(PlayerStatus.paused, message: '已暂停');
-      }).catchError((e) {
-        debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
-        // 尝试使用传统方法
-        player.state = PlaybackState.paused;
-        _setStatus(PlayerStatus.paused, message: '已暂停');
-      });
+      player
+          .pauseDirectly()
+          .then((_) {
+            //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
+            _setStatus(PlayerStatus.paused, message: '已暂停');
+          })
+          .catchError((e) {
+            debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
+            // 尝试使用传统方法
+            player.state = PlaybackState.paused;
+            _setStatus(PlayerStatus.paused, message: '已暂停');
+          });
 
       // Jellyfin同步：如果是Jellyfin流媒体，报告暂停状态
       if (_currentVideoPath != null &&
@@ -426,7 +456,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     debugPrint(
       '[VideoPlayerState] play() called. hasVideo: $hasVideo, _status: $_status, currentMedia: ${player.media}',
     );
-    final bool isWindowsMediaKit = !kIsWeb &&
+    final bool isWindowsMediaKit =
+        !kIsWeb &&
         Platform.isWindows &&
         player.getPlayerKernelName() == 'Media Kit';
     if (isWindowsMediaKit) {
@@ -440,22 +471,25 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
       _lastPlaybackStartMs = DateTime.now().millisecondsSinceEpoch;
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
-      player.playDirectly().then((_) {
-        //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
-        // 设置状态
-        _setStatus(PlayerStatus.playing, message: '开始播放');
+      player
+          .playDirectly()
+          .then((_) {
+            //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
+            // 设置状态
+            _setStatus(PlayerStatus.playing, message: '开始播放');
 
-        // 播放开始时提交观看记录到弹弹play
-        _submitWatchHistoryToDandanplay();
-      }).catchError((e) {
-        debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
-        // 尝试使用传统方法
-        player.state = PlaybackState.playing;
-        _setStatus(PlayerStatus.playing, message: '开始播放');
+            // 播放开始时提交观看记录到弹弹play
+            _submitWatchHistoryToDandanplay();
+          })
+          .catchError((e) {
+            debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
+            // 尝试使用传统方法
+            player.state = PlaybackState.playing;
+            _setStatus(PlayerStatus.playing, message: '开始播放');
 
-        // 播放开始时提交观看记录到弹弹play
-        _submitWatchHistoryToDandanplay();
-      });
+            // 播放开始时提交观看记录到弹弹play
+            _submitWatchHistoryToDandanplay();
+          });
 
       // <<< ADDED DEBUG LOG >>>
       debugPrint(

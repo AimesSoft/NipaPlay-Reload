@@ -1,0 +1,12 @@
+[submodule "third_party/media-kit-upstream"]
+	path = third_party/media-kit-upstream
+	url = https://github.com/AimesSoft/media-kit.git
+[submodule "third_party/libmpv-darwin-build"]
+	path = third_party/libmpv-darwin-build
+	url = https://github.com/AimesSoft/libmpv-darwin-build.git
+[submodule "third_party/mpv"]
+	path = third_party/mpv
+	url = https://github.com/AimesSoft/mpv.git
+[submodule "third_party/libplacebo"]
+	path = third_party/libplacebo
+	url = https://github.com/AimesSoft/libplacebo.git
