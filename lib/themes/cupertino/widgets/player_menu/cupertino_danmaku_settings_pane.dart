@@ -442,7 +442,7 @@ class _CupertinoDanmakuSettingsPaneState
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(word),
+              Text(_getDisplayText(word)),
               const SizedBox(width: 6),
               GestureDetector(
                 onTap: () => widget.videoState.removeDanmakuBlockWord(word),
@@ -456,5 +456,20 @@ class _CupertinoDanmakuSettingsPaneState
         );
       }).toList(),
     );
+  }
+
+  bool _isRegexRule(String word) {
+    if (!word.contains('/')) return false;
+    final parts = word.split('/');
+    return parts.length >= 3 && parts.first.isNotEmpty && parts.last.isEmpty;
+  }
+
+  String _getDisplayText(String word) {
+    if (_isRegexRule(word)) {
+      final firstSlash = word.indexOf('/');
+      final name = word.substring(0, firstSlash);
+      return '规则：$name';
+    }
+    return word;
   }
 }

@@ -470,6 +470,22 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     await prefs.setString(_danmakuBlockWordsKey, blockWordsJson);
   }
 
+  // 检查是否是正则表达式规则格式: 规则名称/表达式/
+  bool _isRegexRule(String word) {
+    if (!word.contains('/')) return false;
+    final parts = word.split('/');
+    return parts.length >= 3 && parts.first.isNotEmpty && parts.last.isEmpty;
+  }
+
+  // 解析正则表达式规则，返回 (规则名称, 正则表达式)
+  (String, String)? _parseRegexRule(String word) {
+    if (!_isRegexRule(word)) return null;
+    final firstSlash = word.indexOf('/');
+    final name = word.substring(0, firstSlash);
+    final pattern = word.substring(firstSlash + 1, word.length - 1);
+    return (name, pattern);
+  }
+
   // 检查弹幕是否应该被屏蔽
   bool shouldBlockDanmaku(Map<String, dynamic> danmaku) {
     final String type = danmaku['type']?.toString() ?? '';
@@ -488,8 +504,23 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     }
 
     for (final word in _danmakuBlockWords) {
-      if (content.contains(word)) {
-        return true;
+      if (_isRegexRule(word)) {
+        final parsed = _parseRegexRule(word);
+        if (parsed != null) {
+          final (_, pattern) = parsed;
+          try {
+            final regex = RegExp(pattern);
+            if (regex.hasMatch(content)) {
+              return true;
+            }
+          } catch (e) {
+            debugPrint('正则表达式规则无效: $pattern, 错误: $e');
+          }
+        }
+      } else {
+        if (content.contains(word)) {
+          return true;
+        }
       }
     }
     return false;
