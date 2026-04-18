@@ -108,6 +108,8 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
 private let macOSWindowHostedVideoSurfaceId: Int64 = -1
 private let macOSHdrExitTraceEnabled =
     ProcessInfo.processInfo.environment["NIPAPLAY_MACOS_HDR_EXIT_TRACE"] == "1"
+private let macOSNativeVideoDebugLabelsEnabled =
+    ProcessInfo.processInfo.environment["NIPAPLAY_MACOS_NATIVE_VIDEO_DEBUG_LABELS"] == "1"
 
 private func macOSHdrExitTrace(_ message: String) {
     guard macOSHdrExitTraceEnabled else {
@@ -227,7 +229,7 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
             return
         }
 
-        toolTip = debugLabel
+        toolTip = macOSNativeVideoDebugLabelsEnabled ? debugLabel : nil
         let shouldShow = visible &&
             (frame?.width ?? 0) > 0 &&
             (frame?.height ?? 0) > 0
@@ -798,7 +800,8 @@ final class MacOSNativeVideoPlatformView: NSView, MacOSNativeVideoSurfaceHost {
         layerContentsRedrawPolicy = .duringViewResize
         autoresizingMask = [.width, .height]
 
-        if let params = args as? [String: Any],
+        if macOSNativeVideoDebugLabelsEnabled,
+           let params = args as? [String: Any],
            let debugLabel = params["debugLabel"] as? String,
            !debugLabel.isEmpty {
             let label = NSTextField(labelWithString: debugLabel)

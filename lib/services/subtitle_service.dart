@@ -193,6 +193,54 @@ class SubtitleService {
     }
   }
 
+  /// 批量添加外部字幕，并可指定当前激活的字幕路径
+  Future<bool> addExternalSubtitles(
+    String videoPath,
+    List<Map<String, dynamic>> subtitleInfos, {
+    String? activePath,
+  }) async {
+    try {
+      final subtitles = await loadExternalSubtitles(videoPath);
+
+      if (activePath != null) {
+        for (final subtitle in subtitles) {
+          subtitle['isActive'] = false;
+        }
+      }
+
+      for (final subtitleInfo in subtitleInfos) {
+        final normalizedInfo = Map<String, dynamic>.from(subtitleInfo);
+        if (activePath != null) {
+          normalizedInfo['isActive'] = normalizedInfo['path'] == activePath;
+        }
+
+        final existingIndex =
+            subtitles.indexWhere((s) => s['path'] == normalizedInfo['path']);
+        if (existingIndex >= 0) {
+          subtitles[existingIndex] = {
+            ...subtitles[existingIndex],
+            ...normalizedInfo,
+          };
+        } else {
+          subtitles.add(normalizedInfo);
+        }
+      }
+
+      await _saveExternalSubtitles(videoPath, subtitles);
+
+      if (activePath != null) {
+        final activeIndex =
+            subtitles.indexWhere((s) => s['path'] == activePath);
+        await saveLastActiveSubtitleIndex(videoPath, activeIndex);
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('批量添加外部字幕失败: $e');
+      return false;
+    }
+  }
+
   /// 移除外部字幕
   Future<bool> removeExternalSubtitle(String videoPath, int index) async {
     try {

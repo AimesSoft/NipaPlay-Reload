@@ -147,83 +147,31 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
   /// 加载Jellyfin外挂字幕
   Future<void> _loadJellyfinExternalSubtitles(String videoPath) async {
     try {
-      // 从jellyfin://协议URL中提取itemId
       final itemId = videoPath.replaceFirst('jellyfin://', '');
       debugPrint('[Jellyfin字幕] 开始加载外挂字幕，itemId: $itemId');
-
-      // 获取字幕轨道信息
       final subtitleTracks =
           await JellyfinService.instance.getSubtitleTracks(itemId);
-
       if (subtitleTracks.isEmpty) {
         debugPrint('[Jellyfin字幕] 未找到字幕轨道');
         return;
       }
-
-      // 查找外挂字幕轨道
-      final externalSubtitles =
-          subtitleTracks.where((track) => track['type'] == 'external').toList();
-
+      final externalSubtitles = subtitleTracks
+          .where((track) => track['type'] == 'external')
+          .map((track) => Map<String, dynamic>.from(track))
+          .toList();
       if (externalSubtitles.isEmpty) {
         debugPrint('[Jellyfin字幕] 未找到外挂字幕轨道');
         return;
       }
-
-      debugPrint('[Jellyfin字幕] 找到 ${externalSubtitles.length} 个外挂字幕轨道');
-
-      // 优先选择中文字幕
-      Map<String, dynamic>? preferredSubtitle;
-
-      // 首先查找简体中文
-      preferredSubtitle = externalSubtitles.firstWhere(
-        (track) {
-          final title = track['title']?.toLowerCase() ?? '';
-          final language = track['language']?.toLowerCase() ?? '';
-          return language.contains('chi') ||
-              title.contains('简体') ||
-              title.contains('中文') ||
-              title.contains('sc') || // 支持scjp格式
-              title.contains('tc') || // 支持tcjp格式
-              title.startsWith('scjp') || // 精确匹配scjp开头
-              title.startsWith('tcjp'); // 精确匹配tcjp开头
-        },
-        orElse: () => externalSubtitles.first,
+      await _loadStreamingExternalSubtitles(
+        videoPath: videoPath,
+        sourceLabel: 'Jellyfin字幕',
+        itemId: itemId,
+        externalSubtitles: externalSubtitles,
+        subtitleDownloader: (subtitleIndex, subtitleCodec) => JellyfinService
+            .instance
+            .downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec),
       );
-
-      // 如果没有中文，选择默认字幕或第一个
-      preferredSubtitle ??= externalSubtitles.firstWhere(
-        (track) => track['isDefault'] == true,
-        orElse: () => externalSubtitles.first,
-      );
-
-      final subtitleIndex = preferredSubtitle['index'];
-      final subtitleCodec = preferredSubtitle['codec'];
-      final subtitleTitle = preferredSubtitle['title'];
-
-      debugPrint(
-          '[Jellyfin字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
-
-      // 下载字幕文件
-      final subtitleFilePath = await JellyfinService.instance
-          .downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec);
-
-      if (subtitleFilePath != null) {
-        debugPrint('[Jellyfin字幕] 字幕文件下载成功: $subtitleFilePath');
-
-        // 等待播放器完全初始化
-        // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
-        // 在网络或设备性能较差时可能导致字幕加载失败。
-        // 后续应重构为监听播放器的 isInitialized 状态。
-        await Future.delayed(const Duration(milliseconds: 1000));
-
-        // 加载外挂字幕
-        _subtitleManager.setExternalSubtitle(subtitleFilePath,
-            isManualSetting: false);
-
-        debugPrint('[Jellyfin字幕] 外挂字幕加载完成');
-      } else {
-        debugPrint('[Jellyfin字幕] 字幕文件下载失败');
-      }
     } catch (e) {
       debugPrint('[Jellyfin字幕] 加载外挂字幕时出错: $e');
     }
@@ -232,74 +180,192 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
   /// 加载Emby外挂字幕
   Future<void> _loadEmbyExternalSubtitles(String videoPath) async {
     try {
-      // 从emby://协议URL中提取itemId
       final itemId = videoPath.replaceFirst('emby://', '');
       debugPrint('[Emby字幕] 开始加载外挂字幕，itemId: $itemId');
-      // 获取字幕轨道信息
       final subtitleTracks =
           await EmbyService.instance.getSubtitleTracks(itemId);
       if (subtitleTracks.isEmpty) {
         debugPrint('[Emby字幕] 未找到字幕轨道');
         return;
       }
-      // 查找外挂字幕轨道
-      final externalSubtitles =
-          subtitleTracks.where((track) => track['type'] == 'external').toList();
+      final externalSubtitles = subtitleTracks
+          .where((track) => track['type'] == 'external')
+          .map((track) => Map<String, dynamic>.from(track))
+          .toList();
       if (externalSubtitles.isEmpty) {
         debugPrint('[Emby字幕] 未找到外挂字幕轨道');
         return;
       }
-      debugPrint('[Emby字幕] 找到 ${externalSubtitles.length} 个外挂字幕轨道');
-      // 优先选择中文字幕
-      Map<String, dynamic>? preferredSubtitle;
-      // 首先查找简体中文
-      preferredSubtitle = externalSubtitles.firstWhere(
-        (track) {
-          final title = track['title']?.toLowerCase() ?? '';
-          final language = track['language']?.toLowerCase() ?? '';
-          return language.contains('chi') ||
-              title.contains('简体') ||
-              title.contains('中文') ||
-              title.contains('sc') || // 支持scjp格式
-              title.contains('tc') || // 支持tcjp格式
-              title.startsWith('scjp') || // 精确匹配scjp开头
-              title.startsWith('tcjp'); // 精确匹配tcjp开头
-        },
-        orElse: () => externalSubtitles.first,
+      await _loadStreamingExternalSubtitles(
+        videoPath: videoPath,
+        sourceLabel: 'Emby字幕',
+        itemId: itemId,
+        externalSubtitles: externalSubtitles,
+        subtitleDownloader: (subtitleIndex, subtitleCodec) => EmbyService
+            .instance
+            .downloadSubtitleFile(itemId, subtitleIndex, subtitleCodec),
       );
-      // 如果没有中文，选择默认字幕或第一个
-      preferredSubtitle ??= externalSubtitles.firstWhere(
-        (track) => track['isDefault'] == true,
-        orElse: () => externalSubtitles.first,
-      );
-      final subtitleIndex = preferredSubtitle['index'];
-      final subtitleCodec = preferredSubtitle['codec'];
-      final subtitleTitle = preferredSubtitle['title'];
-      debugPrint(
-          '[Emby字幕] 选择字幕轨道: $subtitleTitle (索引: $subtitleIndex, 格式: $subtitleCodec)');
-      // 下载字幕文件
-      final subtitleFilePath = await EmbyService.instance.downloadSubtitleFile(
-        itemId,
-        subtitleIndex,
-        subtitleCodec,
-      );
-      if (subtitleFilePath != null) {
-        debugPrint('[Emby字幕] 字幕文件下载成功: $subtitleFilePath');
-        // 等待播放器完全初始化
-        // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
-        // 在网络或设备性能较差时可能导致字幕加载失败。
-        // 后续应重构为监听播放器的 isInitialized 状态。
-        await Future.delayed(const Duration(milliseconds: 1000));
-        // 加载外挂字幕
-        _subtitleManager.setExternalSubtitle(subtitleFilePath,
-            isManualSetting: false);
-        debugPrint('[Emby字幕] 外挂字幕加载完成');
-      } else {
-        debugPrint('[Emby字幕] 字幕文件下载失败');
-      }
     } catch (e) {
       debugPrint('[Emby字幕] 加载外挂字幕时出错: $e');
     }
+  }
+
+  Future<void> _loadStreamingExternalSubtitles({
+    required String videoPath,
+    required String sourceLabel,
+    required String itemId,
+    required List<Map<String, dynamic>> externalSubtitles,
+    required Future<String?> Function(int subtitleIndex, String subtitleCodec)
+        subtitleDownloader,
+  }) async {
+    debugPrint('[$sourceLabel] 找到 ${externalSubtitles.length} 个外挂字幕轨道');
+
+    final preferredSubtitle =
+        _selectPreferredStreamingSubtitle(externalSubtitles);
+    final preferredIndex = preferredSubtitle['index'];
+    final preferredCodec = preferredSubtitle['codec']?.toString();
+    final preferredTitle = preferredSubtitle['title'];
+    debugPrint(
+      '[$sourceLabel] 优先字幕轨道: $preferredTitle (索引: $preferredIndex, 格式: $preferredCodec)',
+    );
+
+    final downloadedSubtitles = <Map<String, dynamic>>[];
+    String? activeSubtitlePath;
+
+    for (final track in externalSubtitles) {
+      final subtitleIndex = track['index'];
+      final subtitleCodec = track['codec']?.toString().trim();
+      if (subtitleIndex is! int ||
+          subtitleCodec == null ||
+          subtitleCodec.isEmpty) {
+        debugPrint('[$sourceLabel] 跳过无效字幕轨道: $track');
+        continue;
+      }
+
+      final subtitleFilePath =
+          await subtitleDownloader(subtitleIndex, subtitleCodec);
+      if (subtitleFilePath == null || subtitleFilePath.isEmpty) {
+        debugPrint(
+          '[$sourceLabel] 字幕轨道下载失败: ${track['title']} (索引: $subtitleIndex, 格式: $subtitleCodec)',
+        );
+        continue;
+      }
+
+      final subtitleInfo = <String, dynamic>{
+        'path': subtitleFilePath,
+        'name': _buildStreamingSubtitleName(track, subtitleFilePath),
+        'type':
+            p.extension(subtitleFilePath).replaceFirst('.', '').toLowerCase(),
+        'addTime': DateTime.now().millisecondsSinceEpoch,
+        'isActive': false,
+        'remoteSource': sourceLabel,
+        'serverSubtitleIndex': subtitleIndex,
+        'language': track['language'],
+        'title': track['title'],
+        'isDefault': track['isDefault'] == true,
+        'isForced': track['isForced'] == true,
+      };
+      downloadedSubtitles.add(subtitleInfo);
+
+      if (subtitleIndex == preferredIndex &&
+          subtitleCodec == preferredCodec &&
+          activeSubtitlePath == null) {
+        activeSubtitlePath = subtitleFilePath;
+      }
+    }
+
+    if (downloadedSubtitles.isEmpty) {
+      debugPrint('[$sourceLabel] 所有外挂字幕下载均失败，itemId: $itemId');
+      return;
+    }
+
+    activeSubtitlePath ??= downloadedSubtitles.first['path'] as String?;
+
+    final saveSucceeded = await SubtitleService().addExternalSubtitles(
+      videoPath,
+      downloadedSubtitles,
+      activePath: activeSubtitlePath,
+    );
+    if (!saveSucceeded) {
+      debugPrint('[$sourceLabel] 外挂字幕缓存列表保存失败');
+    }
+
+    if (activeSubtitlePath == null || activeSubtitlePath.isEmpty) {
+      debugPrint('[$sourceLabel] 未找到可激活的外挂字幕');
+      return;
+    }
+
+    // TODO: [技术债] 此处使用固定延迟等待播放器初始化，非常不可靠。
+    // 在网络或设备性能较差时可能导致字幕加载失败。
+    // 后续应重构为监听播放器的 isInitialized 状态。
+    await Future.delayed(const Duration(milliseconds: 1000));
+    _subtitleManager.setExternalSubtitle(
+      activeSubtitlePath,
+      isManualSetting: false,
+    );
+    debugPrint(
+      '[$sourceLabel] 外挂字幕加载完成，已缓存 ${downloadedSubtitles.length} 条供切换',
+    );
+  }
+
+  Map<String, dynamic> _selectPreferredStreamingSubtitle(
+    List<Map<String, dynamic>> externalSubtitles,
+  ) {
+    for (final track in externalSubtitles) {
+      if (_isPreferredChineseStreamingSubtitle(track)) {
+        return track;
+      }
+    }
+    for (final track in externalSubtitles) {
+      if (track['isDefault'] == true) {
+        return track;
+      }
+    }
+    return externalSubtitles.first;
+  }
+
+  bool _isPreferredChineseStreamingSubtitle(Map<String, dynamic> track) {
+    final title = track['title']?.toString().toLowerCase() ?? '';
+    final language = track['language']?.toString().toLowerCase() ?? '';
+    return language.contains('chi') ||
+        language.contains('zh') ||
+        title.contains('简体') ||
+        title.contains('繁体') ||
+        title.contains('中文') ||
+        title.contains('sc') ||
+        title.contains('tc') ||
+        title.startsWith('scjp') ||
+        title.startsWith('tcjp');
+  }
+
+  String _buildStreamingSubtitleName(
+    Map<String, dynamic> track,
+    String subtitleFilePath,
+  ) {
+    final display = track['display']?.toString().trim() ?? '';
+    if (display.isNotEmpty) {
+      return display;
+    }
+
+    final title = track['title']?.toString().trim() ?? '';
+    final language = track['language']?.toString().trim() ?? '';
+    final codec = track['codec']?.toString().trim().toUpperCase() ?? '';
+
+    final parts = <String>[];
+    if (title.isNotEmpty) {
+      parts.add(title);
+    }
+    if (language.isNotEmpty && language.toLowerCase() != title.toLowerCase()) {
+      parts.add(language);
+    }
+    if (codec.isNotEmpty) {
+      parts.add(codec);
+    }
+
+    if (parts.isNotEmpty) {
+      return parts.join(' · ');
+    }
+    return p.basename(subtitleFilePath);
   }
 
   // 检查是否是流媒体视频并使用现有的IDs直接加载弹幕
