@@ -236,6 +236,23 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
         '${twoDigits(time.second)}';
   }
 
+  // 检查是否是正则表达式规则格式: 规则名称/表达式/
+  bool _isRegexRule(String word) {
+    if (!word.contains('/')) return false;
+    final parts = word.split('/');
+    return parts.length >= 3 && parts.first.isNotEmpty && parts.last.isEmpty;
+  }
+
+  // 获取屏蔽词的显示文本
+  String _getDisplayText(String word) {
+    if (_isRegexRule(word)) {
+      final firstSlash = word.indexOf('/');
+      final name = word.substring(0, firstSlash);
+      return '规则：$name';
+    }
+    return word;
+  }
+
   // 构建屏蔽词展示UI
   Widget _buildBlockWordsList() {
     return Consumer<VideoPlayerState>(
@@ -276,7 +293,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          word,
+                          _getDisplayText(word),
                           style: const TextStyle(
                               color: Colors.white, fontSize: 12),
                         ),
@@ -743,7 +760,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                         child: BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                           child: Container(
-                            height: 40, // 设置固定高度
+                            height: 80, // 设置固定高度
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
@@ -761,8 +778,10 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                                 style: const TextStyle(
                                     color: Colors.white, fontSize: 13),
                                 textAlignVertical: TextAlignVertical.center,
+                                maxLines: 3,
                                 decoration: InputDecoration(
-                                  hintText: '输入要屏蔽的关键词',
+                                  hintText:
+                                      '输入要屏蔽的关键词\n（支持正则，以"规则名称/表达式/"形式输入）',
                                   hintStyle: TextStyle(
                                       color: Colors.white.withOpacity(0.5),
                                       fontSize: 13),
@@ -800,7 +819,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                         ),
                       const SizedBox(height: 8),
                       _buildBlockWordsList(),
-                      const SettingsHintText('包含屏蔽词的弹幕将被过滤不显示'),
+                      const SettingsHintText('包含屏蔽词或被正则表达式命中的弹幕将被过滤'),
                     ],
                   );
                 }),
