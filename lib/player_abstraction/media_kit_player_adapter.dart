@@ -98,12 +98,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
   }
 
-  static String? _resolveHardwareDecodingOverride() {
+  static String? _resolveHardwareDecodingOverride({
+    bool allowAutomaticMacOSHdrOverride = true,
+  }) {
     final env = _envString('NIPAPLAY_MPV_HWDEC');
     if (env != null) {
       return env;
     }
-    if (_shouldUseMacOSHdrOutputPath()) {
+    if (allowAutomaticMacOSHdrOverride && _shouldUseMacOSHdrOutputPath()) {
       return 'videotoolbox,auto';
     }
     return null;
@@ -371,7 +373,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   void _initializeHardwareDecoding() {
     try {
-      final hwdecOverride = _resolveHardwareDecodingOverride();
+      final hwdecOverride = _resolveHardwareDecodingOverride(
+        allowAutomaticMacOSHdrOverride: _enableHardwareAcceleration,
+      );
       if (hwdecOverride != null) {
         (_player.platform as dynamic)?.setProperty('hwdec', hwdecOverride);
         _properties['hwdec'] = hwdecOverride;
@@ -380,6 +384,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
       if (!_enableHardwareAcceleration) {
         (_player.platform as dynamic)?.setProperty('hwdec', 'no');
+        _properties['hwdec'] = 'no';
         debugPrint('MediaKit: macOS < 14 或被禁用，硬件加速已关闭');
         return;
       }
