@@ -212,6 +212,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   int? _attachedPlatformViewId;
   int? _attachedPlatformViewHandle;
   int? _attachedPlatformWindowHandle;
+  Future<void>? _platformVideoSurfaceDetachFuture;
+  int _platformVideoSurfaceBindingGeneration = 0;
   Media? _pendingPlatformMedia;
 
   MediaKitPlayerAdapter({int? bufferSize})
@@ -1670,6 +1672,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   void dispose() {
+    if (_isDisposed) {
+      return;
+    }
     _isDisposed = true;
     _ticker?.dispose();
     _trackSubscription?.cancel();
@@ -1677,8 +1682,21 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (_textureIdListenerAttached && _controller != null) {
       _controller!.id.removeListener(_handleTextureIdChange);
     }
-    unawaited(detachPlatformVideoSurface());
-    _player.dispose();
+    void disposePlayerCore() {
+      try {
+        _player.dispose();
+      } catch (e) {
+        debugPrint('MediaKit: 销毁播放器失败: $e');
+      }
+    }
+
+    if (_prefersPlatformVideoSurface) {
+      unawaited(
+        detachPlatformVideoSurface().whenComplete(disposePlayerCore),
+      );
+    } else {
+      disposePlayerCore();
+    }
     _textureIdNotifier.dispose();
   }
 
@@ -1859,6 +1877,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
 
+    final pendingDetach = _platformVideoSurfaceDetachFuture;
+    if (pendingDetach != null) {
+      await pendingDetach;
+      if (_isDisposed) {
+        return;
+      }
+    }
+
     final resolvedPlatformViewId =
         (platformViewId != null && platformViewId >= 0)
             ? platformViewId
@@ -1874,6 +1900,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _attachedPlatformViewId = resolvedPlatformViewId;
     _attachedPlatformViewHandle = viewHandle;
     _attachedPlatformWindowHandle = windowHandle;
+    final bindingGeneration = ++_platformVideoSurfaceBindingGeneration;
 
     try {
       final dynamic platform = _player.platform;
@@ -1901,6 +1928,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           'playerHandle': playerHandle,
         },
       );
+      if (_isDisposed ||
+          bindingGeneration != _platformVideoSurfaceBindingGeneration) {
+        return;
+      }
       final pendingMedia = _pendingPlatformMedia;
       if (pendingMedia != null) {
         _pendingPlatformMedia = null;
@@ -1932,6 +1963,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         () => unawaited(_dumpMacOSHdrDiagnostics('surface-attached+1500ms')),
       );
     } catch (e) {
+      if (bindingGeneration == _platformVideoSurfaceBindingGeneration) {
+        _attachedPlatformViewId = null;
+        _attachedPlatformViewHandle = null;
+        _attachedPlatformWindowHandle = null;
+        _platformVideoSurfaceBindingGeneration += 1;
+      }
       debugPrint('MediaKit: 绑定 macOS 原生视频面失败: $e');
       rethrow;
     }
@@ -1952,27 +1989,44 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _attachedPlatformViewId = null;
     _attachedPlatformViewHandle = null;
     _attachedPlatformWindowHandle = null;
+    _platformVideoSurfaceBindingGeneration += 1;
     if (Platform.isMacOS && _envFlagEnabled('NIPAPLAY_MACOS_HDR_EXIT_TRACE')) {
       debugPrint(
           '[HDRExit][Adapter] detachPlatformVideoSurface viewId=$viewId requested=$platformViewId');
     }
 
+    if (viewId == null && _platformVideoSurfaceDetachFuture != null) {
+      await _platformVideoSurfaceDetachFuture;
+      return;
+    }
+
+    final detachFuture = () async {
+      try {
+        if (viewId != null) {
+          await _macOSNativeVideoChannel.invokeMethod<void>(
+            'detachPlayer',
+            <String, dynamic>{'viewId': viewId},
+          );
+        }
+        final dynamic platform = _player.platform;
+        if (platform == null) {
+          return;
+        }
+        await platform.setProperty?.call('vo', 'libmpv');
+        await platform.setProperty?.call('wid', '0');
+        await platform.setProperty?.call('force-window', 'no');
+      } catch (e) {
+        debugPrint('MediaKit: 解绑 macOS 原生视频面失败: $e');
+      }
+    }();
+
+    _platformVideoSurfaceDetachFuture = detachFuture;
     try {
-      if (viewId != null) {
-        await _macOSNativeVideoChannel.invokeMethod<void>(
-          'detachPlayer',
-          <String, dynamic>{'viewId': viewId},
-        );
+      await detachFuture;
+    } finally {
+      if (identical(_platformVideoSurfaceDetachFuture, detachFuture)) {
+        _platformVideoSurfaceDetachFuture = null;
       }
-      final dynamic platform = _player.platform;
-      if (platform == null) {
-        return;
-      }
-      await platform.setProperty?.call('vo', 'libmpv');
-      await platform.setProperty?.call('wid', '0');
-      await platform.setProperty?.call('force-window', 'no');
-    } catch (e) {
-      debugPrint('MediaKit: 解绑 macOS 原生视频面失败: $e');
     }
   }
 

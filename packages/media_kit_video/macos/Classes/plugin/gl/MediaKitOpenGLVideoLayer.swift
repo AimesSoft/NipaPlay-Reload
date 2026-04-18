@@ -174,7 +174,7 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
     self.ownsRenderingResources = false
     self.renderUpdateCallbackBox = oldLayer.renderUpdateCallbackBox
     self.displayLinkCallbackBox = oldLayer.displayLinkCallbackBox
-    self.renderContext = oldLayer.renderContext
+    self.renderContext = nil
     self.fbo = oldLayer.fbo
     self.bufferDepth = oldLayer.bufferDepth
     self.pendingRenderUpdateFlags = oldLayer.pendingRenderUpdateFlags
@@ -188,6 +188,7 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
     super.init(layer: layer)
     contentsFormat = oldLayer.contentsFormat
     colorspace = oldLayer.colorspace
+    isInvalidated = true
     if #available(macOS 10.15, *) {
       wantsExtendedDynamicRangeContent = oldLayer.wantsExtendedDynamicRangeContent
     }
@@ -209,14 +210,21 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
 
   public func invalidate() {
     guard ownsRenderingResources else {
+      displayLock.lock()
       isInvalidated = true
+      displayLock.unlock()
       return
     }
+
+    displayLock.lock()
     guard !isInvalidated else {
+      displayLock.unlock()
       return
     }
     macOSHdrExitTrace("layer invalidate start renderContextPresent=\(renderContext != nil)")
     isInvalidated = true
+    displayLock.unlock()
+
     renderUpdateCallbackBox.invalidate()
     displayLinkCallbackBox.invalidate()
     MediaKitOpenGLVideoLayerCallbackRetainer.shared.retainTemporarily(
@@ -230,14 +238,14 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
     defer {
       displayLock.unlock()
     }
-    CGLLockContext(cglContext)
-    CGLSetCurrentContext(cglContext)
-    defer {
-      OpenGLHelpers.checkError("MediaKitOpenGLVideoLayer.invalidate")
-      CGLSetCurrentContext(nil)
-      CGLUnlockContext(cglContext)
-    }
     if let renderContext {
+      CGLLockContext(cglContext)
+      CGLSetCurrentContext(cglContext)
+      defer {
+        OpenGLHelpers.checkError("MediaKitOpenGLVideoLayer.invalidate")
+        CGLSetCurrentContext(nil)
+        CGLUnlockContext(cglContext)
+      }
       mpv_render_context_set_update_callback(renderContext, nil, nil)
       mpv_render_context_free(renderContext)
       self.renderContext = nil
@@ -271,7 +279,12 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
     forLayerTime t: CFTimeInterval,
     displayTime ts: UnsafePointer<CVTimeStamp>?
   ) -> Bool {
-    guard !isInvalidated else {
+    displayLock.lock()
+    defer {
+      displayLock.unlock()
+    }
+
+    guard ownsRenderingResources, !isInvalidated else {
       return false
     }
     guard needsRender || forceRender, let renderContext else {
@@ -292,7 +305,12 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
     forLayerTime t: CFTimeInterval,
     displayTime ts: UnsafePointer<CVTimeStamp>?
   ) {
-    guard !isInvalidated else {
+    displayLock.lock()
+    defer {
+      displayLock.unlock()
+    }
+
+    guard ownsRenderingResources, !isInvalidated else {
       return
     }
 
@@ -352,17 +370,31 @@ public final class MediaKitOpenGLVideoLayer: CAOpenGLLayer {
   }
 
   override public func copyCGLPixelFormat(forDisplayMask mask: UInt32) -> CGLPixelFormatObj {
+    CGLRetainPixelFormat(cglPixelFormat)
     return cglPixelFormat
   }
 
   override public func copyCGLContext(forPixelFormat pf: CGLPixelFormatObj) -> CGLContextObj {
+    CGLRetainContext(cglContext)
     return cglContext
+  }
+
+  override public func releaseCGLPixelFormat(_ pf: CGLPixelFormatObj) {
+    CGLReleasePixelFormat(pf)
+  }
+
+  override public func releaseCGLContext(_ ctx: CGLContextObj) {
+    CGLReleaseContext(ctx)
   }
 
   override public func display() {
     displayLock.lock()
     defer {
       displayLock.unlock()
+    }
+
+    guard ownsRenderingResources, !isInvalidated else {
+      return
     }
 
     let isUpdate = needsRender
