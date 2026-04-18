@@ -1,0 +1,36 @@
+{
+    "fvp": {
+        "manifest": {
+            "sources": [
+                {
+                    "type": "archive",
+                    "url": "https://github.com/wang-bin/mdk-sdk/releases/download/v0.33.1/mdk-sdk-linux.tar.xz",
+                    "sha256": "e29c47f59cad9c003204844fef67fae2304e041490e8c6341e97640b2d641478",
+                    "dest": "$PUB_DEV/linux/mdk-sdk"
+                }
+            ]
+        }
+    },
+    "media_kit_libs_linux": {
+        "manifest": {
+            "sources": [
+                {
+                    "type": "file",
+                    "only-arches": ["x86_64"],
+                    "url": "https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz",
+                    "sha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb",
+                    "dest": "$APP/build/linux/x64/release",
+                    "dest-filename": "mimalloc-2.1.2.tar.gz"
+                },
+                {
+                    "type": "file",
+                    "only-arches": ["aarch64"],
+                    "url": "https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz",
+                    "sha256": "2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb",
+                    "dest": "$APP/build/linux/arm64/release",
+                    "dest-filename": "mimalloc-2.1.2.tar.gz"
+                }
+            ]
+        }
+    }
+}

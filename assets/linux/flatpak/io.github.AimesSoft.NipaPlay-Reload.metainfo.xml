@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.AimesSoft.NipaPlay-Reload</id>
+
+  <name>NipaPlay Reload</name>
+  <summary>A modern cross-platform danmaku video player</summary>
+  <summary xml:lang="zh_CN">一款现代化的跨平台弹幕视频播放器</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <developer id="io.github.AimesSoft">
+    <name>MCDFsteve</name>
+  </developer>
+
+  <url type="homepage">https://github.com/AimesSoft/NipaPlay-Reload</url>
+  <url type="bugtracker">https://github.com/AimesSoft/NipaPlay-Reload/issues</url>
+  <url type="vcs-browser">https://github.com/AimesSoft/NipaPlay-Reload</url>
+  <url type="donation">https://ko-fi.com/MCDFSteve</url>
+
+  <description>
+    <p>
+      NipaPlay Reload is a modern cross-platform media player built with Flutter,
+      supporting Windows, macOS, Linux, Android and iOS. It features an integrated
+      danmaku (bullet comment) system for an enhanced anime watching experience.
+    </p>
+    <p xml:lang="zh_CN">
+      NipaPlay Reload 是一款功能丰富的媒体播放器，使用 Flutter 构建，
+      支持 Windows、macOS、Linux、Android 和 iOS 五大操作系统。
+      它集成了弹幕系统，为用户提供沉浸式的追番体验。
+    </p>
+    <ul>
+      <li>Danmaku (bullet comment) system with automatic online comment matching</li>
+      <li>Media library integration with Emby, Jellyfin, SMB, and WebDAV</li>
+      <li>Bangumi tracking: sync watch progress and browse seasonal anime schedules</li>
+      <li>Modern glassmorphism UI with automatic dark mode support</li>
+      <li>Hardware-accelerated video playback powered by MPV/FFmpeg</li>
+      <li>Multiple video format support including MP4, MKV, AVI, WebM and more</li>
+    </ul>
+    <ul xml:lang="zh_CN">
+      <li>弹幕系统：自动匹配网络弹幕，支持弹弹play</li>
+      <li>媒体库集成：支持 Emby、Jellyfin、SMB、WebDAV</li>
+      <li>番剧管理：同步 Bangumi 观看进度，查看新番时间表</li>
+      <li>现代毛玻璃风格 UI，支持自动黑夜模式</li>
+      <li>硬件加速视频播放，基于 MPV/FFmpeg</li>
+      <li>支持多种视频格式：MP4、MKV、AVI、WebM 等</li>
+    </ul>
+  </description>
+
+  <icon type="stock">io.github.AimesSoft.NipaPlay-Reload</icon>
+
+  <launchable type="desktop-id">io.github.AimesSoft.NipaPlay-Reload.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/AimesSoft/NipaPlay-Reload/main/others/%E4%B8%BB%E7%95%8C%E9%9D%A2.png</image>
+      <caption>Main interface</caption>
+      <caption xml:lang="zh_CN">主界面</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/AimesSoft/NipaPlay-Reload/main/others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2.png</image>
+      <caption>Video playback interface</caption>
+      <caption xml:lang="zh_CN">播放界面</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/AimesSoft/NipaPlay-Reload/main/others/%E6%92%AD%E6%94%BE%E7%95%8C%E9%9D%A2-UI%E5%B1%95%E7%A4%BA.png</image>
+      <caption>Player UI showcase</caption>
+      <caption xml:lang="zh_CN">播放器用户界面展示</caption>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="1.10.0" date="2025-04-01">
+      <description>
+        <p>Initial Flathub release of NipaPlay Reload.</p>
+        <p xml:lang="zh_CN">NipaPlay Reload 首次发布到 Flathub。</p>
+      </description>
+    </release>
+  </releases>
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <content_rating type="oars-1.1" />
+
+  <branding>
+    <color type="primary" scheme_preference="light">#8B5CF6</color>
+    <color type="primary" scheme_preference="dark">#6D28D9</color>
+  </branding>
+</component>

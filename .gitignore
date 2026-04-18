@@ -46,3 +46,16 @@ docs/error.txt
 /packages/nipaplay_smb2/android/.cxx
 /packages/nipaplay_smb2/android/.cxx
 /packages/nipaplay_smb2/android/.cxx/Debug/6r64695b
+
+# Flatpak build artifacts
+.flatpak-builder/
+build-dir/
+builddir/
+build/
+repo/
+*.tar.gz
+*.src.rpm
+*.spec
+flatpak-build-log*.txt
+flatpak-build.log
+session.json

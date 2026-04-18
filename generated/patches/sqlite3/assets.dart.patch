@@ -1,0 +1,11 @@
+--- a/lib/src/hook/assets.dart	2025-11-30 17:58:52.000000000 +0100
++++ b/lib/src/hook/assets.dart	2025-12-21 15:44:43.447916289 +0100
+@@ -101,7 +101,7 @@
+   /// this library.
+   ///
+   /// There's a test asserting that this is unique for all valid values.
+-  String get dirname => 'download-${hashCode.toRadixString(16)}';
++  String get dirname => 'download-static';
+ 
+   @override
+   int get hashCode => Object.hash(

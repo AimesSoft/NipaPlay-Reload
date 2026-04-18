@@ -1,0 +1,32 @@
+[
+  {
+    "type": "file",
+    "path": "assets/linux/flatpak/io.github.AimesSoft.NipaPlay-Reload.desktop",
+    "dest": "assets/linux/flatpak"
+  },
+  {
+    "type": "file",
+    "path": "assets/linux/flatpak/io.github.AimesSoft.NipaPlay-Reload.metainfo.xml",
+    "dest": "assets/linux/flatpak"
+  },
+  {
+    "type": "file",
+    "path": "assets/linux/flatpak/hicolor/64x64/apps/io.github.AimesSoft.NipaPlay-Reload.png",
+    "dest": "assets/linux/flatpak/hicolor/64x64/apps"
+  },
+  {
+    "type": "file",
+    "path": "assets/linux/flatpak/hicolor/128x128/apps/io.github.AimesSoft.NipaPlay-Reload.png",
+    "dest": "assets/linux/flatpak/hicolor/128x128/apps"
+  },
+  {
+    "type": "file",
+    "path": "assets/linux/flatpak/hicolor/256x256/apps/io.github.AimesSoft.NipaPlay-Reload.png",
+    "dest": "assets/linux/flatpak/hicolor/256x256/apps"
+  },
+  {
+    "type": "file",
+    "path": "assets/linux/flatpak/hicolor/512x512/apps/io.github.AimesSoft.NipaPlay-Reload.png",
+    "dest": "assets/linux/flatpak/hicolor/512x512/apps"
+  }
+]
