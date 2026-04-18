@@ -19,6 +19,22 @@ void _logMacOSHdrExitTrace(String message) {
   }
 }
 
+Duration _nativeVideoAttachRetryDelay(int attempt) {
+  if (attempt <= 0) {
+    return const Duration(milliseconds: 150);
+  }
+  if (attempt == 1) {
+    return const Duration(milliseconds: 300);
+  }
+  if (attempt == 2) {
+    return const Duration(milliseconds: 600);
+  }
+  if (attempt == 3) {
+    return const Duration(milliseconds: 1200);
+  }
+  return const Duration(seconds: 2);
+}
+
 class MacOSNativeVideoView extends StatefulWidget {
   const MacOSNativeVideoView({
     super.key,
@@ -99,13 +115,15 @@ class _MacOSNativeVideoViewState extends State<MacOSNativeVideoView>
   }
 
   void _scheduleRetry() {
-    if (_isBound || !mounted || _bindAttempts >= 20) {
+    if (_isBound || !mounted) {
       return;
     }
+    final attempt = _bindAttempts;
     _bindAttempts += 1;
+    final delay = _nativeVideoAttachRetryDelay(attempt);
     _retryTimer?.cancel();
     _retryTimer = Timer(
-      const Duration(milliseconds: 150),
+      delay,
       () => unawaited(_bindPlatformVideoSurface()),
     );
   }
@@ -275,13 +293,15 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
   }
 
   void _scheduleRetry() {
-    if (_isBound || !mounted || _bindAttempts >= 20) {
+    if (_isBound || !mounted) {
       return;
     }
+    final attempt = _bindAttempts;
     _bindAttempts += 1;
+    final delay = _nativeVideoAttachRetryDelay(attempt);
     _retryTimer?.cancel();
     _retryTimer = Timer(
-      const Duration(milliseconds: 150),
+      delay,
       () => unawaited(_attachOverlaySurface()),
     );
   }
