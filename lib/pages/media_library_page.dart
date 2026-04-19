@@ -1029,9 +1029,17 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
                           displayImage = detailData.imageUrl;
                         }
 
+                        // 标题：优先使用详情数据中的名称（支持多语言）
+                        String displayTitle = nameToDisplay;
+                        if (detailData.name.isNotEmpty) {
+                          displayTitle = detailData.name;
+                        } else if (detailData.nameCn.isNotEmpty) {
+                          displayTitle = detailData.nameCn;
+                        }
+
                         final card = HorizontalAnimeCard(
                           imageUrl: displayImage,
-                          title: nameToDisplay,
+                          title: displayTitle,
                           rating: detailData.rating,
                           source: AnimeCard.getSourceFromFilePath(
                               historyItem.filePath),
@@ -1066,12 +1074,22 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
                               displayImage = detail.imageUrl;
                             }
 
+                            // 标题：优先使用详情数据中的名称（支持多语言）
+                            String displayTitle = nameToDisplay;
+                            if (detail != null) {
+                              if (detail.name.isNotEmpty) {
+                                displayTitle = detail.name;
+                              } else if (detail.nameCn.isNotEmpty) {
+                                displayTitle = detail.nameCn;
+                              }
+                            }
+
                             // 评分
                             double? displayRating = detail?.rating;
 
                             return HorizontalAnimeCard(
                               imageUrl: displayImage,
-                              title: nameToDisplay,
+                              title: displayTitle,
                               rating: displayRating,
                               source: AnimeCard.getSourceFromFilePath(
                                   historyItem.filePath),
