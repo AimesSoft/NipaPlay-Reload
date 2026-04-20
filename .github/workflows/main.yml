@@ -96,8 +96,21 @@ jobs:
         id: ai_changelog
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_API_URL: ${{ vars.RELEASE_AI_API_URL }}
+          AI_MODEL: ${{ vars.RELEASE_AI_MODEL || 'gemini-3-flash-preview' }}
+          AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
         run: |
           set -euo pipefail
+
+          if [ -z "${AI_API_URL}" ]; then
+            echo "RELEASE_AI_API_URL repository variable is required."
+            exit 1
+          fi
+
+          if [ -z "${AI_API_TOKEN}" ]; then
+            echo "RELEASE_AI_TOKEN secret is required."
+            exit 1
+          fi
 
           # Install jq to parse JSON response
           sudo apt-get install -y jq
@@ -114,8 +127,6 @@ jobs:
 
           # Get commit history since the last tag
           MAX_COMMITS=200
-          MAX_PR_BODY_CHARS=1200
-          MAX_PROMPT_CHARS=45000
           COMMITS_JSON=$(git log "$COMMIT_RANGE" --pretty=format:'%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1e' -n "$MAX_COMMITS" | jq -Rs '
             split("\u001e")
             | map(select(length > 0))
@@ -193,13 +204,13 @@ jobs:
                     title: $pr.title,
                     url: $pr.html_url,
                     author: $pr.user.login,
-                    body: (($pr.body // "") | .[0:($max_body_chars | tonumber)]),
+                    body: ($pr.body // ""),
                     base: $pr.base.ref,
                     merged_at: $pr.merged_at,
                     commits: [$commit]
                   }
                 end
-            ' --arg max_body_chars "$MAX_PR_BODY_CHARS")
+            ')
           done < <(echo "$COMMITS_JSON" | jq -c '.[]')
 
           PR_GROUPS_ARRAY=$(echo "$PR_GROUPS_JSON" | jq '[.[]] | sort_by(.number)')
@@ -231,44 +242,29 @@ jobs:
           echo "Found $(echo "$CHANGELOG_CONTEXT" | jq '.pr_groups | length') PR group(s), $(echo "$CHANGELOG_CONTEXT" | jq '.direct_commits | length') direct commit(s), and $(echo "$CHANGELOG_CONTEXT" | jq '.contributors | length') contributor(s) for changelog generation."
 
           # Build prompt separately to avoid jq escaping issues
-          PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 GitHub PR 分组信息，为我生成一份精美的中文更新日志。请优先根据 PR 标题和 PR 正文总结，每个 PR 只总结一次，不要把同一个 PR 里的多个 commit 拆成多条更新。请在日志中标注对应 PR 编号和链接；PR 下的 commits 仅用于确认范围和补充细节。如果 direct_commits 不为空，再把这些未关联 PR 的 commit 作为独立更新列出并标注 commit hash。不要生成 Contributors 或贡献者小节，工作流会自动追加。不需要使用代码框包裹。请确保排版优雅，重点突出，精准整理，按不同板块罗列，包含新内容、已有功能改动、bug 修复。以下是结构化变更信息："
-          PROMPT_CONTEXT=$(echo "$CHANGELOG_CONTEXT" | jq -c '.')
-          if [ "${#PROMPT_CONTEXT}" -gt "$MAX_PROMPT_CHARS" ]; then
-            echo "Changelog context is ${#PROMPT_CONTEXT} characters; trimming PR bodies and commit lists for AI request."
-            PROMPT_CONTEXT=$(echo "$CHANGELOG_CONTEXT" | jq -c '
-              .pr_groups |= map(
-                .body = (.body[0:300])
-                | .commits = (.commits | map({short_sha, subject}) | .[0:20])
-              )
-              | .direct_commits |= (map({short_sha, subject, author_login}) | .[0:80])
-            ')
-          fi
-
-          if [ "${#PROMPT_CONTEXT}" -gt "$MAX_PROMPT_CHARS" ]; then
-            echo "Changelog context is still ${#PROMPT_CONTEXT} characters; sending compact title-only context."
-            PROMPT_CONTEXT=$(echo "$CHANGELOG_CONTEXT" | jq -c '
-              {
-                latest_tag,
-                commit_range,
-                contributors,
-                pr_groups: (.pr_groups | map({number, title, url, author, merged_at})),
-                direct_commits: (.direct_commits | map({short_sha, subject, author_login}) | .[0:80])
-              }
-            ')
-          fi
-
-          PROMPT="${PROMPT}"$'\n'"$PROMPT_CONTEXT"$'\n'"请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话，不要使用emoji。"
+          RELEASE_PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 GitHub PR 分组信息，为我生成一份精美的中文更新日志。请优先根据 PR 标题和 PR 正文总结，每个 PR 只总结一次，不要把同一个 PR 里的多个 commit 拆成多条更新。请在日志中标注对应 PR 编号和链接；PR 下的 commits 仅用于确认范围和补充细节。如果 direct_commits 不为空，再把这些未关联 PR 的 commit 作为独立更新列出并标注 commit hash。不要生成 Contributors 或贡献者小节，工作流会自动追加。不需要使用代码框包裹。请确保排版优雅，重点突出，精准整理，按不同板块罗列，包含新内容、已有功能改动、bug 修复。以下是结构化变更信息："
+          RELEASE_PROMPT="${RELEASE_PROMPT}"$'\n'"$(echo "$CHANGELOG_CONTEXT" | jq '.')"$'\n'"请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话，不要使用emoji。"
 
           # Create the JSON payload using jq
           JSON_PAYLOAD=$(jq -n \
-            --arg model "gpt-5" \
-            --argjson temp 0.5 \
-            --arg prompt "$PROMPT" \
-            '{model: $model, temperature: $temp, messages: [{role: "user", content: $prompt}]}')
+            --arg model "$AI_MODEL" \
+            --arg prompt "$RELEASE_PROMPT" \
+            '{
+              model: $model,
+              temperature: 0.5,
+              stream: false,
+              messages: [
+                {
+                  role: "user",
+                  content: $prompt
+                }
+              ]
+            }')
 
           # Call the AI API and save the response
           echo "Sending request to AI for changelog summary..."
-          AI_RESPONSE=$(curl -fsS -X POST https://ffmpeg.dfsteve.top/git.php \
+          AI_RESPONSE=$(curl -fsS --retry 2 --max-time 180 -X POST "$AI_API_URL" \
+            -H "Authorization: Bearer ${AI_API_TOKEN}" \
             -H "Content-Type: application/json; charset=utf-8" \
             -d "$JSON_PAYLOAD")
 
