@@ -112,6 +112,9 @@ jobs:
             exit 1
           fi
 
+          echo "Using AI endpoint host: $(echo "$AI_API_URL" | sed -E 's#^([^:]+://[^/]+).*$#\1#')"
+          echo "Using AI model: ${AI_MODEL}"
+
           # Install jq to parse JSON response
           sudo apt-get install -y jq
 
