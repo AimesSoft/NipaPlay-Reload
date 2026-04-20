@@ -153,12 +153,13 @@ jobs:
           PR_GROUPS_JSON='{}'
           DIRECT_COMMITS_JSON='[]'
 
-          add_direct_commit() {
+          enrich_commit_author() {
             local commit_json="$1"
             local sha
             local short_sha
             local commit_response
             local author_login
+            local author_url
 
             sha=$(echo "$commit_json" | jq -r '.sha' | tr -d '\r\n')
             short_sha=$(echo "$commit_json" | jq -r '.short_sha' | tr -d '\r\n')
@@ -169,17 +170,27 @@ jobs:
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${sha}"); then
               author_login=$(echo "$commit_response" | jq -r '.author.login // empty')
+              author_url=$(echo "$commit_response" | jq -r '.author.html_url // empty')
               if [ -n "$author_login" ]; then
-                commit_json=$(echo "$commit_json" | jq --arg author_login "$author_login" '. + {author_login: $author_login}')
+                commit_json=$(echo "$commit_json" | jq \
+                  --arg author_login "$author_login" \
+                  --arg author_url "$author_url" \
+                  '. + {author_login: $author_login, author_url: $author_url}')
               fi
             else
-              echo "Warning: Failed to query author for direct commit ${short_sha}."
+              echo "Warning: Failed to query author for commit ${short_sha}."
             fi
 
+            echo "$commit_json"
+          }
+
+          add_direct_commit() {
+            local commit_json="$1"
             DIRECT_COMMITS_JSON=$(echo "$DIRECT_COMMITS_JSON" | jq --argjson commit "$commit_json" '. + [$commit]')
           }
 
           while IFS= read -r COMMIT; do
+            COMMIT=$(enrich_commit_author "$COMMIT")
             SHA=$(echo "$COMMIT" | jq -r '.sha' | tr -d '\r\n')
             SHORT_SHA=$(echo "$COMMIT" | jq -r '.short_sha' | tr -d '\r\n')
 
@@ -213,6 +224,7 @@ jobs:
                     title: $pr.title,
                     url: $pr.html_url,
                     author: $pr.user.login,
+                    merged_by: ($pr.merged_by.login // null),
                     body: ($pr.body // ""),
                     base: $pr.base.ref,
                     merged_at: $pr.merged_at,
@@ -228,6 +240,8 @@ jobs:
             --argjson direct_commits "$DIRECT_COMMITS_JSON" \
             '[
               $prs[].author,
+              $prs[].merged_by,
+              $prs[].commits[]?.author_login,
               $direct_commits[].author_login
             ]
             | map(select(. != null and . != ""))
@@ -251,7 +265,7 @@ jobs:
           echo "Found $(echo "$CHANGELOG_CONTEXT" | jq '.pr_groups | length') PR group(s), $(echo "$CHANGELOG_CONTEXT" | jq '.direct_commits | length') direct commit(s), and $(echo "$CHANGELOG_CONTEXT" | jq '.contributors | length') contributor(s) for changelog generation."
 
           # Build prompt separately to avoid jq escaping issues
-          RELEASE_PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 GitHub PR 分组信息，为我生成一份精美的中文更新日志。请优先根据 PR 标题和 PR 正文总结，每个 PR 只总结一次，不要把同一个 PR 里的多个 commit 拆成多条更新。请在日志中标注对应 PR 编号和链接；PR 下的 commits 仅用于确认范围和补充细节。如果 direct_commits 不为空，再把这些未关联 PR 的 commit 作为独立更新列出并标注 commit hash。不要生成 Contributors 或贡献者小节，工作流会自动追加。不需要使用代码框包裹。请确保排版优雅，重点突出，精准整理，按不同板块罗列，包含新内容、已有功能改动、bug 修复。以下是结构化变更信息："
+          RELEASE_PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 GitHub PR 分组信息，为我生成一份精美的中文更新日志。请优先根据 PR 标题和 PR 正文总结，每个 PR 只总结一次，不要把同一个 PR 里的多个 commit 拆成多条更新。请在日志中标注对应 PR 编号和链接；PR 下的 commits 仅用于确认范围和补充细节。如果 direct_commits 不为空，再把这些未关联 PR 的 commit 作为独立更新列出并标注 commit hash。请把面向用户的新功能、体验改进和 bug 修复放在前面；CI、构建、发布流程、依赖维护、版本号 bump 等内部维护内容请放在“维护与发布流程”一类的小节中简短概括，不要抢占主要篇幅；不要单独把纯版本号 bump 当成用户更新。不要生成 Contributors 或贡献者小节，工作流会自动追加。不需要使用代码框包裹。请确保排版优雅，重点突出，精准整理，按不同板块罗列，包含新内容、已有功能改动、bug 修复。以下是结构化变更信息："
           RELEASE_PROMPT="${RELEASE_PROMPT}"$'\n'"$(echo "$CHANGELOG_CONTEXT" | jq '.')"$'\n'"请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话，不要使用emoji。"
 
           # Create the JSON payload using jq
