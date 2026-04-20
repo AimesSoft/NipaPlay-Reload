@@ -37,6 +37,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          AI_API_URL=$(printf '%s' "$AI_API_URL" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+          AI_MODEL=$(printf '%s' "$AI_MODEL" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+          AI_API_TOKEN=$(printf '%s' "$AI_API_TOKEN" | tr -d '\r\n')
+
           if [ -z "${AI_API_URL}" ]; then
             echo "RELEASE_AI_API_URL repository variable is required."
             exit 1
