@@ -177,7 +177,34 @@ jobs:
             ')
           done < <(echo "$COMMITS_JSON" | jq -c '.[]')
 
-          PR_GROUPS_ARRAY=$(echo "$PR_GROUPS_JSON" | jq '[.[]] | sort_by(.number)')
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          PR_GROUPS_ARRAY=$(echo "$PR_GROUPS_JSON" | jq --arg repo_url "$REPO_URL" '
+            [
+              .[] as $pr
+              | ([
+                  $pr.title,
+                  $pr.body
+                ] + ($pr.commits | map(.subject // ""))
+                | map(. // "")
+                | join("\n")
+                | [scan("#[0-9]+")]
+                | unique
+                | map(select(. != ("#" + ($pr.number | tostring))))
+                | map({number: (.[1:] | tonumber), ref: ., url: ($repo_url + "/issues/" + .[1:])})
+              ) as $issue_refs
+              | $pr + {issue_refs: $issue_refs}
+            ]
+            | sort_by(.number)')
+          DIRECT_COMMITS_JSON=$(echo "$DIRECT_COMMITS_JSON" | jq --arg repo_url "$REPO_URL" '
+            map(
+              . as $commit
+              | ($commit.subject // ""
+                | [scan("#[0-9]+")]
+                | unique
+                | map({number: (.[1:] | tonumber), ref: ., url: ($repo_url + "/issues/" + .[1:])})
+              ) as $issue_refs
+              | $commit + {issue_refs: $issue_refs}
+            )')
           CONTRIBUTORS_JSON=$(jq -n \
             --argjson prs "$PR_GROUPS_ARRAY" \
             --argjson direct_commits "$DIRECT_COMMITS_JSON" \
@@ -205,7 +232,7 @@ jobs:
 
           echo "Found $(echo "$CHANGELOG_CONTEXT" | jq '.pr_groups | length') PR group(s), $(echo "$CHANGELOG_CONTEXT" | jq '.direct_commits | length') direct commit(s), and $(echo "$CHANGELOG_CONTEXT" | jq '.contributors | length') contributor(s) for release notes preview."
 
-          RELEASE_PROMPT="你是一个 NipaPlay 发布小助手。NipaPlay 是一个跨平台弹幕视频播放器，重点包括本地/流媒体播放、番剧媒体库、弹幕、字幕、多平台桌面与移动端体验。请根据以下自上次发布以来的 GitHub PR 分组信息，生成面向普通用户的中文 Markdown 更新日志。请以 PR 为发布单元进行总结，每个 PR 最多作为一个主要条目出现；PR 下的 commits 仅用于理解实现范围、验证细节和识别贡献者，不要把同一个 PR 内部的 commit 拆成多个独立更新。尤其不要把 PR 开发过程中修复该 PR 自己引入的问题、重构过程中的中间修正、测试/验证脚本、临时 CI 修复，单独写成面向用户的 Bug 修复；只有当 PR 标题、PR 正文或整体变更明确表明它修复了已发布版本中用户可见的问题时，才放入“Bug 修复”。如果某个 PR 同时包含新功能和为了该功能完成的内部修复，请把这些内部修复合并到该 PR 的说明中，不要另列。请在标题后用 Markdown 链接标注 PR，例如：**功能名称** ([#123](https://...))，不要再额外输出“查看详情”或裸 URL。direct_commits 仅代表未关联 PR 的提交；只有对用户可见时才列出，否则放入“维护与发布流程”简短概括。请把面向用户的新功能、体验改进和 bug 修复放在前面；CI、构建、发布流程、依赖维护、版本号 bump 等内部维护内容请放在“维护与发布流程”小节中简短概括，不要抢占主要篇幅；不要单独把纯版本号 bump 当成用户更新。不要生成 Contributors 或贡献者小节，工作流会自动追加。不需要使用代码框包裹，不要使用 emoji。以下是结构化变更信息："
+          RELEASE_PROMPT="你是一个 NipaPlay 发布小助手。NipaPlay 是一个跨平台弹幕视频播放器，重点包括本地/流媒体播放、番剧媒体库、弹幕、字幕、多平台桌面与移动端体验。请根据以下自上次发布以来的 GitHub PR 分组信息，生成面向普通用户的中文 Markdown 更新日志。请以 PR 为发布单元进行总结，每个 PR 最多作为一个主要条目出现；PR 下的 commits 仅用于理解实现范围、验证细节和识别贡献者，不要把同一个 PR 内部的 commit 拆成多个独立更新。尤其不要把 PR 开发过程中修复该 PR 自己引入的问题、重构过程中的中间修正、测试/验证脚本、临时 CI 修复，单独写成面向用户的 Bug 修复；只有当 PR 标题、PR 正文或整体变更明确表明它修复了已发布版本中用户可见的问题时，才放入“Bug 修复”。如果某个 PR 同时包含新功能和为了该功能完成的内部修复，请把这些内部修复合并到该 PR 的说明中，不要另列。请在标题后用 Markdown 链接标注 PR，例如：**功能名称** ([#123](https://...))，不要再额外输出“查看详情”或裸 URL。输入中的 issue_refs 是从 PR 标题、PR 正文和 commit subject 中预先解析出的相关 Issue 引用；如果某个条目有 issue_refs，请在该条目末尾自然标注相关 Issue，例如：关联：[#395](https://...)。不要臆造 issue，不要把当前 PR 编号重复当作 issue。direct_commits 仅代表未关联 PR 的提交；只有对用户可见时才列出，否则放入“维护与发布流程”简短概括。请把面向用户的新功能、体验改进和 bug 修复放在前面；CI、构建、发布流程、依赖维护、版本号 bump 等内部维护内容请放在“维护与发布流程”小节中简短概括，不要抢占主要篇幅；不要单独把纯版本号 bump 当成用户更新。不要生成 Contributors 或贡献者小节，工作流会自动追加。不需要使用代码框包裹，不要使用 emoji。以下是结构化变更信息："
           RELEASE_PROMPT="${RELEASE_PROMPT}"$'\n'"$(echo "$CHANGELOG_CONTEXT" | jq '.')"$'\n'"请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话，不要使用emoji。"
 
           JSON_PAYLOAD=$(jq -n \
