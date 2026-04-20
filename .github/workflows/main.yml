@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 # If previous workflow is still running, we push again, we will cancel the previous workflow
 concurrency:
@@ -93,8 +94,23 @@ jobs:
 
       - name: Generate Changelog with AI
         id: ai_changelog
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_API_URL: ${{ vars.RELEASE_AI_API_URL }}
+          AI_MODEL: ${{ vars.RELEASE_AI_MODEL || 'gemini-3-flash-preview' }}
+          AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
         run: |
           set -euo pipefail
+
+          if [ -z "${AI_API_URL}" ]; then
+            echo "RELEASE_AI_API_URL repository variable is required."
+            exit 1
+          fi
+
+          if [ -z "${AI_API_TOKEN}" ]; then
+            echo "RELEASE_AI_TOKEN secret is required."
+            exit 1
+          fi
 
           # Install jq to parse JSON response
           sudo apt-get install -y jq
@@ -111,31 +127,159 @@ jobs:
 
           # Get commit history since the last tag
           MAX_COMMITS=200
-          COMMIT_HISTORY=$(git log $COMMIT_RANGE --pretty=format:'- %s (%h)' -n $MAX_COMMITS)
-          if [ -z "$COMMIT_HISTORY" ]; then
+          COMMITS_JSON=$(git log "$COMMIT_RANGE" --pretty=format:'%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1e' -n "$MAX_COMMITS" | jq -Rs '
+            split("\u001e")
+            | map(select(length > 0))
+            | map(split("\u001f") | {sha: .[0], short_sha: .[1], subject: .[2], author_name: .[3], author_email: .[4]})
+          ')
+          if [ "$(echo "$COMMITS_JSON" | jq 'length')" -eq 0 ]; then
             echo "No new commits since last tag. Using latest commit message as changelog."
-            COMMIT_HISTORY=$(git log -1 --pretty=format:'- %s (%h)')
+            COMMITS_JSON=$(git log -1 --pretty=format:'%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1e' | jq -Rs '
+              split("\u001e")
+              | map(select(length > 0))
+              | map(split("\u001f") | {sha: .[0], short_sha: .[1], subject: .[2], author_name: .[3], author_email: .[4]})
+            ')
           fi
 
+          PR_GROUPS_JSON='{}'
+          DIRECT_COMMITS_JSON='[]'
+
+          add_direct_commit() {
+            local commit_json="$1"
+            local sha
+            local short_sha
+            local commit_response
+            local author_login
+
+            sha=$(echo "$commit_json" | jq -r '.sha')
+            short_sha=$(echo "$commit_json" | jq -r '.short_sha')
+
+            if commit_response=$(curl -fsS \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${sha}"); then
+              author_login=$(echo "$commit_response" | jq -r '.author.login // empty')
+              if [ -n "$author_login" ]; then
+                commit_json=$(echo "$commit_json" | jq --arg author_login "$author_login" '. + {author_login: $author_login}')
+              fi
+            else
+              echo "Warning: Failed to query author for direct commit ${short_sha}."
+            fi
+
+            DIRECT_COMMITS_JSON=$(echo "$DIRECT_COMMITS_JSON" | jq --argjson commit "$commit_json" '. + [$commit]')
+          }
+
+          while IFS= read -r COMMIT; do
+            SHA=$(echo "$COMMIT" | jq -r '.sha')
+            SHORT_SHA=$(echo "$COMMIT" | jq -r '.short_sha')
+
+            if ! PRS_JSON=$(curl -fsS \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls"); then
+              echo "Warning: Failed to query PRs for commit ${SHORT_SHA}. Treating it as a direct commit."
+              add_direct_commit "$COMMIT"
+              continue
+            fi
+
+            PR_JSON=$(echo "$PRS_JSON" | jq -c --arg branch "${GITHUB_REF_NAME}" '
+              map(select(.base.ref == $branch)) as $matching
+              | if ($matching | length) > 0 then $matching[0] else .[0] end
+            ')
+
+            if [ -z "$PR_JSON" ] || [ "$PR_JSON" = "null" ]; then
+              add_direct_commit "$COMMIT"
+              continue
+            fi
+
+            PR_GROUPS_JSON=$(echo "$PR_GROUPS_JSON" | jq --argjson pr "$PR_JSON" --argjson commit "$COMMIT" '
+              ($pr.number | tostring) as $number
+              | if has($number) then
+                  .[$number].commits += [$commit]
+                else
+                  .[$number] = {
+                    number: $pr.number,
+                    title: $pr.title,
+                    url: $pr.html_url,
+                    author: $pr.user.login,
+                    body: ($pr.body // ""),
+                    base: $pr.base.ref,
+                    merged_at: $pr.merged_at,
+                    commits: [$commit]
+                  }
+                end
+            ')
+          done < <(echo "$COMMITS_JSON" | jq -c '.[]')
+
+          PR_GROUPS_ARRAY=$(echo "$PR_GROUPS_JSON" | jq '[.[]] | sort_by(.number)')
+          CONTRIBUTORS_JSON=$(jq -n \
+            --argjson prs "$PR_GROUPS_ARRAY" \
+            --argjson direct_commits "$DIRECT_COMMITS_JSON" \
+            '[
+              $prs[].author,
+              $direct_commits[].author_login
+            ]
+            | map(select(. != null and . != ""))
+            | map(select(test("\\[bot\\]$") | not))
+            | unique')
+
+          CHANGELOG_CONTEXT=$(jq -n \
+            --arg latest_tag "$LATEST_TAG" \
+            --arg commit_range "$COMMIT_RANGE" \
+            --argjson prs "$PR_GROUPS_ARRAY" \
+            --argjson direct_commits "$DIRECT_COMMITS_JSON" \
+            --argjson contributors "$CONTRIBUTORS_JSON" \
+            '{
+              latest_tag: $latest_tag,
+              commit_range: $commit_range,
+              pr_groups: $prs,
+              direct_commits: $direct_commits,
+              contributors: $contributors
+            }')
+
+          echo "Found $(echo "$CHANGELOG_CONTEXT" | jq '.pr_groups | length') PR group(s), $(echo "$CHANGELOG_CONTEXT" | jq '.direct_commits | length') direct commit(s), and $(echo "$CHANGELOG_CONTEXT" | jq '.contributors | length') contributor(s) for changelog generation."
+
           # Build prompt separately to avoid jq escaping issues
-          PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 git commit 记录，为我生成一份精美的中文更新日志。请在日志中清晰地标注每次更新分别来自哪一次 commit (使用 commit hash)，如果 commit 信息中提到了 PR (#<number>) 或 Issue (#<number>)，也请一并展示。不需要使用代码框包裹。请确保排版优雅，重点突出，精准整理，优雅氛围不同板块罗列，包含新内容，已有功能改动，bug修复。以下是 commit 记录："
-          PROMPT="${PROMPT}"$'\n'"$COMMIT_HISTORY"$'\n'"请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话，不要使用emoji。"
+          RELEASE_PROMPT="你是一个版本发布小助手。请根据以下自上次发布以来的 GitHub PR 分组信息，为我生成一份精美的中文更新日志。请优先根据 PR 标题和 PR 正文总结，每个 PR 只总结一次，不要把同一个 PR 里的多个 commit 拆成多条更新。请在日志中标注对应 PR 编号和链接；PR 下的 commits 仅用于确认范围和补充细节。如果 direct_commits 不为空，再把这些未关联 PR 的 commit 作为独立更新列出并标注 commit hash。不要生成 Contributors 或贡献者小节，工作流会自动追加。不需要使用代码框包裹。请确保排版优雅，重点突出，精准整理，按不同板块罗列，包含新内容、已有功能改动、bug 修复。以下是结构化变更信息："
+          RELEASE_PROMPT="${RELEASE_PROMPT}"$'\n'"$(echo "$CHANGELOG_CONTEXT" | jq '.')"$'\n'"请直接返回 Markdown 格式的更新日志内容，不要包含其他额外的话，不要使用emoji。"
 
           # Create the JSON payload using jq
           JSON_PAYLOAD=$(jq -n \
-            --arg model "gpt-5" \
-            --argjson temp 0.5 \
-            --arg prompt "$PROMPT" \
-            '{model: $model, temperature: $temp, messages: [{role: "user", content: $prompt}]}')
+            --arg model "$AI_MODEL" \
+            --arg prompt "$RELEASE_PROMPT" \
+            '{
+              model: $model,
+              temperature: 0.5,
+              stream: false,
+              messages: [
+                {
+                  role: "user",
+                  content: $prompt
+                }
+              ]
+            }')
 
           # Call the AI API and save the response
           echo "Sending request to AI for changelog summary..."
-          AI_RESPONSE=$(curl -fsS -X POST https://ffmpeg.dfsteve.top/git.php \
+          AI_RESPONSE=$(curl -fsS --retry 2 --max-time 180 -X POST "$AI_API_URL" \
+            -H "Authorization: Bearer ${AI_API_TOKEN}" \
             -H "Content-Type: application/json; charset=utf-8" \
             -d "$JSON_PAYLOAD")
 
           # Extract the content and write to a file.
           echo "$AI_RESPONSE" | jq -er '.choices[0].message.content' > release_notes.md
+
+          CONTRIBUTORS_LINE=$(echo "$CHANGELOG_CONTEXT" | jq -r '.contributors | map("@" + .) | join(", ")')
+          if [ -n "$CONTRIBUTORS_LINE" ]; then
+            {
+              echo ""
+              echo "## Contributors"
+              echo ""
+              echo "$CONTRIBUTORS_LINE"
+            } >> release_notes.md
+          fi
           
           echo "--- Generated Release Notes ---"
           cat release_notes.md
