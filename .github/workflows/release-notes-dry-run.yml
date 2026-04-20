@@ -79,6 +79,7 @@ jobs:
           MAX_COMMITS="${{ inputs.max_commits }}"
           COMMITS_JSON=$(git log "$COMMIT_RANGE" --pretty=format:'%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1e' -n "$MAX_COMMITS" | jq -Rs '
             split("\u001e")
+            | map(gsub("^[\\r\\n]+|[\\r\\n]+$"; ""))
             | map(select(length > 0))
             | map(split("\u001f") | {sha: .[0], short_sha: .[1], subject: .[2], author_name: .[3], author_email: .[4]})
           ')
@@ -86,6 +87,7 @@ jobs:
             echo "No new commits since the selected base. Using latest commit message as changelog."
             COMMITS_JSON=$(git log -1 --pretty=format:'%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1e' | jq -Rs '
               split("\u001e")
+              | map(gsub("^[\\r\\n]+|[\\r\\n]+$"; ""))
               | map(select(length > 0))
               | map(split("\u001f") | {sha: .[0], short_sha: .[1], subject: .[2], author_name: .[3], author_email: .[4]})
             ')
@@ -101,8 +103,8 @@ jobs:
             local commit_response
             local author_login
 
-            sha=$(echo "$commit_json" | jq -r '.sha')
-            short_sha=$(echo "$commit_json" | jq -r '.short_sha')
+            sha=$(echo "$commit_json" | jq -r '.sha' | tr -d '\r\n')
+            short_sha=$(echo "$commit_json" | jq -r '.short_sha' | tr -d '\r\n')
 
             if commit_response=$(curl -fsS \
               -H "Accept: application/vnd.github+json" \
@@ -121,8 +123,8 @@ jobs:
           }
 
           while IFS= read -r COMMIT; do
-            SHA=$(echo "$COMMIT" | jq -r '.sha')
-            SHORT_SHA=$(echo "$COMMIT" | jq -r '.short_sha')
+            SHA=$(echo "$COMMIT" | jq -r '.sha' | tr -d '\r\n')
+            SHORT_SHA=$(echo "$COMMIT" | jq -r '.short_sha' | tr -d '\r\n')
 
             if ! PRS_JSON=$(curl -fsS \
               -H "Accept: application/vnd.github+json" \
