@@ -22,6 +22,7 @@ jobs:
     name: Generate Release Notes Preview
     runs-on: ubuntu-latest
     env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       AI_API_URL: ${{ vars.RELEASE_AI_API_URL }}
       AI_MODEL: ${{ vars.RELEASE_AI_MODEL || 'gemini-3-flash-preview' }}
       AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
@@ -45,6 +46,9 @@ jobs:
             echo "RELEASE_AI_TOKEN secret is required."
             exit 1
           fi
+
+          echo "Using AI endpoint host: $(echo "$AI_API_URL" | sed -E 's#^([^:]+://[^/]+).*$#\1#')"
+          echo "Using AI model: ${AI_MODEL}"
 
           if ! [[ "${{ inputs.max_commits }}" =~ ^[0-9]+$ ]]; then
             echo "max_commits must be a positive integer."
