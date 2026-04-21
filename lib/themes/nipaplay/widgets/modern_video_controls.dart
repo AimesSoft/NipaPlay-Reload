@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 import 'package:nipaplay/utils/shortcut_tooltip_manager.dart'; // 添加新的快捷键提示管理器
@@ -59,6 +60,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
   bool _isNextEpisodeHovered = false;
   bool _isPipPressed = false;
   bool _isPipHovered = false;
+  bool _isDanmakuPressed = false;
+  bool _isDanmakuHovered = false;
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -586,6 +589,31 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                         DesktopPipWindowService
                                             .isFeatureEnabled)
                                       const SizedBox(width: 12),
+
+                                    // 弹幕开关按钮
+                                    _buildControlButton(
+                                      icon: SvgPicture.asset(
+                                        videoState.danmakuVisible
+                                            ? 'assets/danmaku-fill.svg'
+                                            : 'assets/danmaku-off-fill.svg',
+                                        key: ValueKey<bool>(
+                                            videoState.danmakuVisible),
+                                        width: globals.isPhone ? 32 : 24,
+                                        height: globals.isPhone ? 32 : 24,
+                                      ),
+                                      onTap: () =>
+                                          videoState.toggleDanmakuVisible(),
+                                      isPressed: _isDanmakuPressed,
+                                      isHovered: _isDanmakuHovered,
+                                      onHover: (value) => setState(
+                                          () => _isDanmakuHovered = value),
+                                      onPressed: (value) => setState(
+                                          () => _isDanmakuPressed = value),
+                                      tooltip: '弹幕',
+                                      useAnimatedSwitcher: true,
+                                    ),
+
+                                    const SizedBox(width: 8),
 
                                     // 播放列表按钮（独立于设置菜单）
                                     Builder(
