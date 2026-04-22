@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'typing_text.dart';
 
@@ -22,12 +23,12 @@ class LoadingOverlay extends StatefulWidget {
   final double fontSize;
   final bool isBold;
   final bool highPriorityAnimation;
-  
+
   // 新增：媒体信息参数
   final String? animeTitle;
   final String? episodeTitle;
   final String? fileName;
-  final String? coverImageUrl;
+  final int? animeId;
 
   const LoadingOverlay({
     super.key,
@@ -47,17 +48,19 @@ class LoadingOverlay extends StatefulWidget {
     this.animeTitle,
     this.episodeTitle,
     this.fileName,
-    this.coverImageUrl,
+    this.animeId,
   });
 
   @override
   State<LoadingOverlay> createState() => _LoadingOverlayState();
 }
 
-class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProviderStateMixin {
+class _LoadingOverlayState extends State<LoadingOverlay>
+    with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   late AnimationController _cursorController;
   late Animation<double> _cursorAnimation;
+  String? _coverImageUrl;
 
   // 滚动到底部的通用方法
   void _scrollToBottom() {
@@ -82,8 +85,10 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 500), // 闪烁频率
     )..repeat(reverse: true); // 重复执行并反向（产生闪烁效果）
-    
-    _cursorAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_cursorController);
+
+    _cursorAnimation =
+        Tween<double>(begin: 0.0, end: 1.0).animate(_cursorController);
+    _updateAnimeCoverUrl();
   }
 
   @override
@@ -107,6 +112,10 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
         }
       });
     }
+    if (oldWidget.animeId != widget.animeId) {
+      _coverImageUrl = null; // 清空前URL 避免显示上一部视频的封面
+      _updateAnimeCoverUrl();
+    }
   }
 
   @override
@@ -122,26 +131,31 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
     final colorScheme = theme.colorScheme;
     final bool isDark = theme.brightness == Brightness.dark;
     final bool hasCoverImage =
-        widget.coverImageUrl != null && widget.coverImageUrl!.isNotEmpty;
+        _coverImageUrl != null && _coverImageUrl!.isNotEmpty;
 
     // 计算比例尺寸时考虑屏幕大小，修复clamp参数顺序问题
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    
+
     // 手机使用较小的宽度，平板和桌面使用较大的宽度
-    final targetWidth = globals.isPhone && !globals.isTablet 
+    final targetWidth = globals.isPhone && !globals.isTablet
         ? math.min(screenWidth * 0.9, 400.0) // 手机上较小宽度
-        : math.min(screenWidth * 0.9, (widget.width * 2.5).clamp(300.0, 800.0)); // 平板/桌面较大宽度
-    
+        : math.min(screenWidth * 0.9,
+            (widget.width * 2.5).clamp(300.0, 800.0)); // 平板/桌面较大宽度
+
     final effectiveWidth = math.max(300.0, targetWidth);
-    final effectiveHeight = math.max(200.0, math.min(screenHeight * 0.5, widget.height ?? 300));
+    final effectiveHeight =
+        math.max(200.0, math.min(screenHeight * 0.5, widget.height ?? 300));
 
     final Color fallbackBackgroundColor =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     final Color effectiveBackgroundColor =
-        widget.backgroundColor == Colors.black ? fallbackBackgroundColor : widget.backgroundColor;
-    final Color effectiveTextColor =
-        widget.textColor == Colors.white ? (isDark ? Colors.white : Colors.black87) : widget.textColor;
+        widget.backgroundColor == Colors.black
+            ? fallbackBackgroundColor
+            : widget.backgroundColor;
+    final Color effectiveTextColor = widget.textColor == Colors.white
+        ? (isDark ? Colors.white : Colors.black87)
+        : widget.textColor;
     final Color baseSurface = Color.lerp(
       colorScheme.surface,
       colorScheme.onSurface,
@@ -152,8 +166,9 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
         colorScheme.onSurface.withOpacity(isDark ? 0.2 : 0.12);
     final Color cardShadowColor =
         Colors.black.withOpacity(isDark ? 0.45 : 0.16);
-    final Color cursorColor = effectiveTextColor.withOpacity(widget.textOpacity);
-    
+    final Color cursorColor =
+        effectiveTextColor.withOpacity(widget.textOpacity);
+
     // 获取文本样式
     final textStyle = TextStyle(
       color: effectiveTextColor.withOpacity(widget.textOpacity),
@@ -161,21 +176,21 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
       fontWeight: widget.isBold ? FontWeight.w600 : FontWeight.normal,
       letterSpacing: 0.5,
     );
-    
+
     final titleStyle = TextStyle(
       color: effectiveTextColor.withOpacity(widget.textOpacity * 0.9),
       fontSize: widget.fontSize + 2,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.3,
     );
-    
+
     final subtitleStyle = TextStyle(
       color: effectiveTextColor.withOpacity(widget.textOpacity * 0.8),
       fontSize: widget.fontSize - 2,
       fontWeight: FontWeight.w500,
       letterSpacing: 0.2,
     );
-    
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -191,7 +206,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                   child: Opacity(
                     opacity: isDark ? 0.25 : 0.35,
                     child: CachedNetworkImageWidget(
-                      imageUrl: widget.coverImageUrl!,
+                      imageUrl: _coverImageUrl!,
                       fit: BoxFit.cover,
                       shouldCompress: false,
                       loadMode: CachedImageLoadMode.hybrid,
@@ -219,7 +234,8 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
           )
         else
           Container(
-            color: effectiveBackgroundColor.withOpacity(widget.backgroundOpacity),
+            color:
+                effectiveBackgroundColor.withOpacity(widget.backgroundOpacity),
           ),
         // 加载界面
         Center(
@@ -246,8 +262,9 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
               ),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
-                child: globals.isPhone && !globals.isTablet 
-                    ? Column( // 手机上使用上下双行布局
+                child: globals.isPhone && !globals.isTablet
+                    ? Column(
+                        // 手机上使用上下双行布局
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -283,7 +300,8 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                           ),
                         ],
                       )
-                    : Row( // 平板和桌面保持双栏布局
+                    : Row(
+                        // 平板和桌面保持双栏布局
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // 左侧：媒体信息区域 (1/3 宽度)
@@ -298,7 +316,8 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
                           // 分隔线
                           Container(
                             width: 1,
-                            margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                            margin:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
@@ -373,11 +392,11 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
         borderRadius: BorderRadius.circular(8),
         color: accentColor.withOpacity(0.1),
       ),
-      child: widget.coverImageUrl != null
+      child: _coverImageUrl != null
           ? ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.network(
-                widget.coverImageUrl!,
+                _coverImageUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
@@ -419,7 +438,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
               overflow: TextOverflow.ellipsis,
             ),
           ),
-        
+
         // 集数标题
         if (widget.episodeTitle != null && widget.episodeTitle!.isNotEmpty)
           Padding(
@@ -431,10 +450,11 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
               overflow: TextOverflow.ellipsis,
             ),
           ),
-        
+
         // 文件名（如果没有动画名时显示）
-        if ((widget.animeTitle == null || widget.animeTitle!.isEmpty) && 
-            widget.fileName != null && widget.fileName!.isNotEmpty)
+        if ((widget.animeTitle == null || widget.animeTitle!.isEmpty) &&
+            widget.fileName != null &&
+            widget.fileName!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(
@@ -458,7 +478,7 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
       behavior: ScrollConfiguration.of(context).copyWith(
         scrollbars: false,
       ),
-      child: widget.messages.isEmpty 
+      child: widget.messages.isEmpty
           ? Center(
               child: Text(
                 '正在加载...',
@@ -510,6 +530,30 @@ class _LoadingOverlayState extends State<LoadingOverlay> with SingleTickerProvid
               },
             ),
     );
+  }
+
+  // 获取番剧封面URL
+  Future<String?> _getAnimeCoverUrl(int? animeId) async {
+    if (animeId == null) return null;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      const prefsKeyPrefix = 'media_library_image_url_';
+      return prefs.getString('$prefsKeyPrefix$animeId');
+    } catch (e) {
+      debugPrint('获取番剧封面失败: $e');
+      return null;
+    }
+  }
+
+  Future<void> _updateAnimeCoverUrl() async {
+    final animeId = widget.animeId;
+    final url = await _getAnimeCoverUrl(animeId);
+    if (mounted && widget.animeId == animeId && _coverImageUrl != url) {
+      setState(() {
+        _coverImageUrl = url;
+      });
+    }
   }
 }
 
@@ -586,20 +630,20 @@ class _TypingTextCursorState extends State<TypingTextCursor> {
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
-    
+
     return Stack(
       children: [
-                 Positioned(
-           left: textPainter.width,
-           bottom: 5, // 绝对贴于底部
-           child: FadeTransition(
-             opacity: widget.cursorAnimation,
-             child: Container(
-               width: 10, // 光标宽度
-               height: 3, // 光标高度（下划线厚度）
-               color: widget.cursorColor,
-             ),
-           ),
+        Positioned(
+          left: textPainter.width,
+          bottom: 5, // 绝对贴于底部
+          child: FadeTransition(
+            opacity: widget.cursorAnimation,
+            child: Container(
+              width: 10, // 光标宽度
+              height: 3, // 光标高度（下划线厚度）
+              color: widget.cursorColor,
+            ),
+          ),
         ),
       ],
     );
