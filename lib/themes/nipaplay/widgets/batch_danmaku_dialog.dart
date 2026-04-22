@@ -861,7 +861,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     );
   }
 
-  Widget _buildFilesPanel() {
+  Widget _buildFilesPanel(BuildContext context) {
+    final windowHeight = MediaQuery.of(context).size.height;
+    final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -873,55 +876,58 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           ),
         ),
         const SizedBox(height: 8),
-        Expanded(
-          child: Container(
-            decoration: _panelDecoration(),
-            child: ReorderableListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _files.length,
-              buildDefaultDragHandles: false,
-              proxyDecorator: (child, index, animation) {
-                final item = _files[index];
-                return Material(
-                  color: Colors.transparent,
-                  elevation: 8,
-                  shadowColor: Colors.black26,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: _buildFileListItem(
-                      item,
-                      index,
-                      isDragging: true,
-                      showBottomDivider: false,
-                    ),
+        Container(
+          height: panelHeight,
+          decoration: _panelDecoration(),
+          child: ReorderableListView.builder(
+            shrinkWrap: true,
+            padding: const EdgeInsets.all(12),
+            itemCount: _files.length,
+            buildDefaultDragHandles: false,
+            proxyDecorator: (child, index, animation) {
+              final item = _files[index];
+              return Material(
+                color: Colors.transparent,
+                elevation: 8,
+                shadowColor: Colors.black26,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: _buildFileListItem(
+                    item,
+                    index,
+                    isDragging: true,
+                    showBottomDivider: false,
                   ),
-                );
-              },
-              onReorder: (oldIndex, newIndex) {
-                setState(() {
-                  if (newIndex > oldIndex) newIndex -= 1;
-                  final item = _files.removeAt(oldIndex);
-                  _files.insert(newIndex, item);
-                });
-              },
-              itemBuilder: (context, index) {
-                final item = _files[index];
-                final showBottomDivider = index != _files.length - 1;
-                return _buildFileListItem(
-                  item,
-                  index,
-                  isDragging: false,
-                  showBottomDivider: showBottomDivider,
-                );
-              },
-            ),
+                ),
+              );
+            },
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (newIndex > oldIndex) newIndex -= 1;
+                final item = _files.removeAt(oldIndex);
+                _files.insert(newIndex, item);
+              });
+            },
+            itemBuilder: (context, index) {
+              final item = _files[index];
+              final showBottomDivider = index != _files.length - 1;
+              return _buildFileListItem(
+                item,
+                index,
+                isDragging: false,
+                showBottomDivider: showBottomDivider,
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildAnimeSearchResultsPanel() {
+  Widget _buildAnimeSearchResultsPanel(BuildContext context) {
+    final windowHeight = MediaQuery.of(context).size.height;
+    final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
+
     final bool isError = _searchMessage.contains('出错');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -932,40 +938,42 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           _buildStatusBanner(_searchMessage, isError: isError),
         ],
         const SizedBox(height: 8),
-        Expanded(
-          child: Container(
-            decoration: _panelDecoration(),
-            child: _isSearching
-                ? Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+        Container(
+          height: panelHeight,
+          decoration: _panelDecoration(),
+          child: _isSearching
+              ? Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                  ),
+                )
+              : _searchResults.isEmpty
+                  ? _buildEmptyState('暂无搜索结果')
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _searchResults.length,
+                      itemBuilder: (context, index) {
+                        final anime = _searchResults[index];
+                        final showBottomDivider =
+                            index != _searchResults.length - 1;
+                        return _buildSearchResultItem(
+                          anime,
+                          index,
+                          showBottomDivider: showBottomDivider,
+                        );
+                      },
                     ),
-                  )
-                : _searchResults.isEmpty
-                    ? _buildEmptyState('暂无搜索结果')
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        primary: false,
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final anime = _searchResults[index];
-                          final showBottomDivider =
-                              index != _searchResults.length - 1;
-                          return _buildSearchResultItem(
-                            anime,
-                            index,
-                            showBottomDivider: showBottomDivider,
-                          );
-                        },
-                      ),
-          ),
         ),
       ],
     );
   }
 
-  Widget _buildEpisodesPanel() {
+  Widget _buildEpisodesPanel(BuildContext context) {
+    final windowHeight = MediaQuery.of(context).size.height;
+    final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
+
     final selectedEpisodesCount = _selectedEpisodesInOrder.length;
     final mismatch =
         _selectedFileCount != selectedEpisodesCount && _selectedAnime != null;
@@ -984,6 +992,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
       panelContent = _buildEmptyState('暂无剧集');
     } else {
       panelContent = ReorderableListView.builder(
+        shrinkWrap: true,
         padding: const EdgeInsets.all(12),
         itemCount: _episodes.length,
         buildDefaultDragHandles: false,
@@ -1044,8 +1053,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           _buildStatusBanner(_episodesMessage, isError: isError),
           const SizedBox(height: 8),
         ],
-        Expanded(
-          child: Container(decoration: _panelDecoration(), child: panelContent),
+        Container(
+          height: panelHeight,
+          decoration: _panelDecoration(),
+          child: panelContent,
         ),
         if (mismatch)
           Padding(
@@ -1076,7 +1087,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           maxHeightFactor: (globals.isPhone &&
                   MediaQuery.of(context).size.shortestSide < 600)
               ? 0.9
-              : 0.85,
+              : 0.9,
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
           child: SingleChildScrollView(
@@ -1089,35 +1100,32 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                 const SizedBox(height: 16),
                 _buildSearchBar(),
                 const SizedBox(height: 12),
-                Container(
-                  height: 500,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWideLayout = constraints.maxWidth >= 820;
-                      final rightPanel = _selectedAnime == null
-                          ? _buildAnimeSearchResultsPanel()
-                          : _buildEpisodesPanel();
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWideLayout = constraints.maxWidth >= 820;
+                    final rightPanel = _selectedAnime == null
+                        ? _buildAnimeSearchResultsPanel(context)
+                        : _buildEpisodesPanel(context);
 
-                      if (isWideLayout) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: _buildFilesPanel()),
-                            const SizedBox(width: 16),
-                            Expanded(child: rightPanel),
-                          ],
-                        );
-                      }
-
-                      return Column(
+                    if (isWideLayout) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _buildFilesPanel()),
-                          const SizedBox(height: 12),
+                          Expanded(child: _buildFilesPanel(context)),
+                          const SizedBox(width: 16),
                           Expanded(child: rightPanel),
                         ],
                       );
-                    },
-                  ),
+                    }
+
+                    return Column(
+                      children: [
+                        _buildFilesPanel(context),
+                        const SizedBox(height: 12),
+                        rightPanel,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
