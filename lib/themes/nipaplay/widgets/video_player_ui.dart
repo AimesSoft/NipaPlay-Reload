@@ -22,7 +22,6 @@ import 'right_edge_hover_menu.dart';
 import 'minimal_progress_bar.dart';
 import 'danmaku_density_bar.dart';
 import 'speed_boost_indicator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'loading_overlay.dart';
 import 'macos_hdr_probe_overlay.dart';
 import 'vertical_indicator.dart';
@@ -71,8 +70,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
 
   // <<< ADDED: Hold a reference to VideoPlayerState for managing the callback
   VideoPlayerState? _videoPlayerStateInstance;
-  String? _currentAnimeCoverUrl; // 当前番剧封面URL
-  int? _lastAnimeId; // 上次获取封面的番剧ID，用于避免重复请求
   int? _macosNativeVideoViewId;
 
   bool _isRepeatableShortcut(LogicalKeyboardKey key) {
@@ -179,33 +176,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         defaultTargetPlatform == TargetPlatform.macOS &&
         Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
         Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
-  }
-
-  // 获取番剧封面URL
-  Future<String?> _getAnimeCoverUrl(int? animeId) async {
-    if (animeId == null) return null;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      const prefsKeyPrefix = 'media_library_image_url_';
-      return prefs.getString('$prefsKeyPrefix$animeId');
-    } catch (e) {
-      debugPrint('获取番剧封面失败: $e');
-      return null;
-    }
-  }
-
-  // 更新封面URL（如果番剧ID变化）
-  void _updateAnimeCoverUrl(int? animeId) async {
-    if (animeId != _lastAnimeId) {
-      _lastAnimeId = animeId;
-      final coverUrl = await _getAnimeCoverUrl(animeId);
-      if (mounted && coverUrl != _currentAnimeCoverUrl) {
-        setState(() {
-          _currentAnimeCoverUrl = coverUrl;
-        });
-      }
-    }
   }
 
   double getFontSize(VideoPlayerState videoState) {
@@ -319,8 +289,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           context,
           listen: false,
         );
-        _videoPlayerStateInstance
-            ?.onSeriousPlaybackErrorAndShouldPop = () async {
+        _videoPlayerStateInstance?.onSeriousPlaybackErrorAndShouldPop =
+            () async {
           if (mounted && _videoPlayerStateInstance != null) {
             // 获取当前的错误信息用于显示
             final String errorMessage =
@@ -419,8 +389,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   void _resetMouseHideTimer() {
     _mouseMoveTimer?.cancel();
     if (!globals.isMobilePlatform) {
-      final videoState =
-          _videoPlayerStateInstance ??
+      final videoState = _videoPlayerStateInstance ??
           Provider.of<VideoPlayerState>(context, listen: false);
       final hideDelay = videoState.instantHidePlayerUiEnabled
           ? _instantMouseHideDelay
@@ -806,13 +775,9 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
         final textureId = videoState.player.textureId.value;
-        final hasRenderableVideoSurface =
-            kIsWeb ||
+        final hasRenderableVideoSurface = kIsWeb ||
             videoState.player.prefersPlatformVideoSurface ||
             (textureId != null && textureId >= 0);
-
-        // 更新番剧封面URL（如果有番剧ID）
-        _updateAnimeCoverUrl(videoState.animeId);
 
         final shouldKeepNativeSurface = _shouldKeepMacOSNativeVideoSurface(
           videoState,
@@ -832,7 +797,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                   animeTitle: videoState.animeTitle,
                   episodeTitle: videoState.episodeTitle,
                   fileName: videoState.currentVideoPath?.split('/').last,
-                  coverImageUrl: _currentAnimeCoverUrl,
+                  animeId: videoState.animeId,
                 ),
             ],
           );
@@ -882,11 +847,11 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                       : null,
                   onHorizontalDragStart: videoState.hasVideo
                       ? (details) =>
-                            _handleHorizontalDragStart(context, details)
+                          _handleHorizontalDragStart(context, details)
                       : null,
                   onHorizontalDragUpdate: videoState.hasVideo
                       ? (details) =>
-                            _handleHorizontalDragUpdate(context, details)
+                          _handleHorizontalDragUpdate(context, details)
                       : null,
                   onHorizontalDragEnd: videoState.hasVideo
                       ? (details) => _handleHorizontalDragEnd(context, details)
@@ -928,8 +893,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                                     .videoDuration
                                                     .inMilliseconds
                                                     .toDouble(),
-                                                isPlaying:
-                                                    videoState.status ==
+                                                isPlaying: videoState.status ==
                                                     PlayerStatus.playing,
                                                 fontSize: getFontSize(
                                                   videoState,
@@ -975,7 +939,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                       fileName: videoState.currentVideoPath
                                           ?.split('/')
                                           .last,
-                                      coverImageUrl: _currentAnimeCoverUrl,
+                                      animeId: videoState.animeId,
                                     ),
                                   ),
                                 if (videoState.hasVideo)
@@ -1020,8 +984,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           builder: (context, videoState, _) {
                                             // 使用高频时间轴驱动弹幕帧率
                                             return ValueListenableBuilder<
-                                              double
-                                            >(
+                                                double>(
                                               valueListenable:
                                                   videoState.playbackTimeMs,
                                               builder: (context, posMs, __) {
@@ -1036,7 +999,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                                       .toDouble(),
                                                   isPlaying:
                                                       videoState.status ==
-                                                      PlayerStatus.playing,
+                                                          PlayerStatus.playing,
                                                   fontSize: getFontSize(
                                                     videoState,
                                                   ),
@@ -1081,7 +1044,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         fileName: videoState.currentVideoPath
                                             ?.split('/')
                                             .last,
-                                        coverImageUrl: _currentAnimeCoverUrl,
+                                        animeId: videoState.animeId,
                                       ),
                                     ),
                                   if (videoState.hasVideo)

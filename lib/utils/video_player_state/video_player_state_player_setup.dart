@@ -141,8 +141,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           !videoPath.startsWith('blob:')) {
         final existingUrl = filePickerService.getWebObjectUrl(videoPath);
         if (existingUrl == null || existingUrl.isEmpty) {
-          final mimeType =
-              filePickerService.getWebMimeType(videoPath) ??
+          final mimeType = filePickerService.getWebMimeType(videoPath) ??
               filePickerService.resolveWebMimeType(fileName: videoPath);
           filePickerService.registerWebObjectUrl(
             videoPath,
@@ -152,8 +151,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
 
-      final webMimeType =
-          filePickerService.getWebMimeType(videoPath) ??
+      final webMimeType = filePickerService.getWebMimeType(videoPath) ??
           filePickerService.resolveWebMimeType(fileName: videoPath);
       if (webMimeType != null &&
           webMimeType.isNotEmpty &&
@@ -307,7 +305,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         _setStatus(PlayerStatus.loading, message: '正在初始化播放器...');
         await Future.delayed(const Duration(milliseconds: 150));
       } else {
-        _setStatus(PlayerStatus.idle);
+        // _setStatus(PlayerStatus.idle);
+        // notice:
       }
 
       //debugPrint('3. 设置媒体源...');
@@ -322,9 +321,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 针对Jellyfin流媒体，给予更长的初始化时间
       final bool isJellyfinStreaming =
           videoPath.contains('jellyfin://') || videoPath.contains('emby://');
-      final int initializationTimeout = isJellyfinStreaming
-          ? 30000
-          : 15000; // Jellyfin: 30秒, 其他: 15秒
+      final int initializationTimeout =
+          isJellyfinStreaming ? 30000 : 15000; // Jellyfin: 30秒, 其他: 15秒
 
       debugPrint(
         'VideoPlayerState: 播放器初始化超时设置: ${initializationTimeout}ms (${isJellyfinStreaming ? 'Jellyfin流媒体' : '本地文件'})',
@@ -758,8 +756,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       //debugPrint('初始化视频播放器时出错: $e');
       if (kIsWeb) {
         final errorText = e.toString();
-        final bool isUnsupportedFormat =
-            e is PlatformException &&
+        final bool isUnsupportedFormat = e is PlatformException &&
                 (e.code == 'MEDIA_ERR_SRC_NOT_SUPPORTED' ||
                     e.message?.contains('MEDIA_ERR_SRC_NOT_SUPPORTED') ==
                         true ||
@@ -831,8 +828,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       );
       final sharedEpisodeHistories =
           await SharedRemoteHistoryHelper.loadHistoriesBySharedEpisodeId(
-            sharedEpisodeId,
-          );
+        sharedEpisodeId,
+      );
 
       WatchHistoryItem? existingHistory =
           await WatchHistoryManager.getHistoryItem(path);
@@ -874,22 +871,22 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         if (isJellyfinStream || isEmbyStream || isSharedRemoteStream) {
           final animeNameCandidate =
               SharedRemoteHistoryHelper.firstNonEmptyString([
-                SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
-                SharedRemoteHistoryHelper.normalizeHistoryName(
-                  _initialHistoryItem?.animeName,
-                ),
-                SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
-              ]);
+            SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
+            SharedRemoteHistoryHelper.normalizeHistoryName(
+              _initialHistoryItem?.animeName,
+            ),
+            SharedRemoteHistoryHelper.normalizeHistoryName(finalAnimeName),
+          ]);
           if (animeNameCandidate != null) {
             finalAnimeName = animeNameCandidate;
           }
 
           final episodeTitleCandidate =
               SharedRemoteHistoryHelper.firstNonEmptyString([
-                _episodeTitle,
-                _initialHistoryItem?.episodeTitle,
-                finalEpisodeTitle,
-              ]);
+            _episodeTitle,
+            _initialHistoryItem?.episodeTitle,
+            finalEpisodeTitle,
+          ]);
           if (episodeTitleCandidate != null) {
             finalEpisodeTitle = episodeTitleCandidate;
           }
@@ -907,20 +904,17 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           filePath: path,
           animeName: finalAnimeName,
           episodeTitle: finalEpisodeTitle,
-          episodeId:
-              _episodeId ??
+          episodeId: _episodeId ??
               existingHistory.episodeId ??
               _initialHistoryItem?.episodeId,
-          animeId:
-              _animeId ??
+          animeId: _animeId ??
               existingHistory.animeId ??
               _initialHistoryItem?.animeId,
           watchProgress: existingHistory.watchProgress,
           lastPosition: existingHistory.lastPosition,
           duration: existingHistory.duration,
           lastWatchTime: DateTime.now(),
-          thumbnailPath:
-              existingHistory.thumbnailPath ??
+          thumbnailPath: existingHistory.thumbnailPath ??
               _initialHistoryItem?.thumbnailPath,
           isFromScan: existingHistory.isFromScan,
         );
@@ -1007,8 +1001,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           .replaceAll(RegExp(r'[_\.-]'), ' ')
           .trim();
 
-      final initialAnimeName =
-          SharedRemoteHistoryHelper.firstNonEmptyString([
+      final initialAnimeName = SharedRemoteHistoryHelper.firstNonEmptyString([
             SharedRemoteHistoryHelper.normalizeHistoryName(_animeTitle),
             SharedRemoteHistoryHelper.normalizeHistoryName(
               _initialHistoryItem?.animeName,
