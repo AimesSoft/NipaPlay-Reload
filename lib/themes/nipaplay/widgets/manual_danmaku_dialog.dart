@@ -145,21 +145,24 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
 
     try {
       final results = await _searchAnime(keyword);
-      
+
       // 检查是否需要转换为繁体中文（不使用context，避免异步间隙问题）
-      final isTraditional = await ChineseConverter.isTraditionalChineseEnvironment(null);
+      final isTraditional =
+          await ChineseConverter.isTraditionalChineseEnvironment(null);
       if (isTraditional) {
         // 转换搜索结果
         for (var result in results) {
           if (result.containsKey('animeTitle')) {
-            result['animeTitle'] = ChineseConverter.convert(result['animeTitle']);
+            result['animeTitle'] =
+                ChineseConverter.convert(result['animeTitle']);
           }
           if (result.containsKey('typeDescription')) {
-            result['typeDescription'] = ChineseConverter.convert(result['typeDescription']);
+            result['typeDescription'] =
+                ChineseConverter.convert(result['typeDescription']);
           }
         }
       }
-      
+
       setState(() {
         _isSearching = false;
         _currentMatches = results;
@@ -292,19 +295,22 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           final bangumi = data['bangumi'];
 
           if (bangumi['episodes'] != null && bangumi['episodes'] is List) {
-            final episodes = List<Map<String, dynamic>>.from(bangumi['episodes']);
-            
+            final episodes =
+                List<Map<String, dynamic>>.from(bangumi['episodes']);
+
             // 检查是否需要转换为繁体中文（不使用context，避免异步间隙问题）
-            final isTraditional = await ChineseConverter.isTraditionalChineseEnvironment(null);
+            final isTraditional =
+                await ChineseConverter.isTraditionalChineseEnvironment(null);
             if (isTraditional) {
               // 转换剧集标题
               for (var episode in episodes) {
                 if (episode.containsKey('episodeTitle')) {
-                  episode['episodeTitle'] = ChineseConverter.convert(episode['episodeTitle']);
+                  episode['episodeTitle'] =
+                      ChineseConverter.convert(episode['episodeTitle']);
                 }
               }
             }
-            
+
             setState(() {
               _currentEpisodes = episodes;
               _episodesMessage = episodes.isEmpty ? '该动画暂无剧集信息' : '';
@@ -669,7 +675,10 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     );
   }
 
-  Widget _buildResultsPanel() {
+  Widget _buildResultsPanel(BuildContext context) {
+    final windowHeight = MediaQuery.of(context).size.height;
+    final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
+
     final bool isError = _searchMessage.contains('出错');
 
     return Column(
@@ -681,33 +690,32 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           _buildStatusBanner(_searchMessage, isError: isError),
         ],
         const SizedBox(height: 8),
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: _panelColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _borderColor),
-            ),
-            child: _isSearching
-                ? Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
-                    ),
-                  )
-                : _currentMatches.isEmpty
-                    ? _buildEmptyState('暂无搜索结果')
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _currentMatches.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final match = _currentMatches[index];
-                          return _buildAnimeItem(match);
-                        },
-                      ),
+        Container(
+          height: panelHeight,
+          decoration: BoxDecoration(
+            color: _panelColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _borderColor),
           ),
-        ),
+          child: _isSearching
+              ? Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                  ),
+                )
+              : _currentMatches.isEmpty
+                  ? _buildEmptyState('暂无搜索结果')
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _currentMatches.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final match = _currentMatches[index];
+                        return _buildAnimeItem(match);
+                      },
+                    ),
+        )
       ],
     );
   }
@@ -752,10 +760,12 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     );
   }
 
-  Widget _buildEpisodesPanel() {
+  Widget _buildEpisodesPanel(BuildContext context) {
+    final windowHeight = MediaQuery.of(context).size.height;
+    final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
+
     final bool isError =
         _episodesMessage.contains('出错') || _episodesMessage.contains('失败');
-    final hintText = _selectedEpisode == null ? '请选择一个剧集来匹配弹幕' : '已选择剧集，可确认匹配';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,48 +776,37 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           _buildStatusBanner(_episodesMessage, isError: isError),
         ],
         const SizedBox(height: 8),
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: _panelColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _borderColor),
-            ),
-            child: _isLoadingEpisodes
-                ? Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+        Container(
+          height: panelHeight,
+          decoration: BoxDecoration(
+            color: _panelColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _borderColor),
+          ),
+          child: _isLoadingEpisodes
+              ? Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                  ),
+                )
+              : _currentEpisodes.isEmpty
+                  ? _buildEmptyState('暂无剧集')
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _currentEpisodes.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final episode = _currentEpisodes[index];
+                        return _buildEpisodeItem(episode);
+                      },
                     ),
-                  )
-                : _currentEpisodes.isEmpty
-                    ? _buildEmptyState('暂无剧集')
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _currentEpisodes.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final episode = _currentEpisodes[index];
-                          return _buildEpisodeItem(episode);
-                        },
-                      ),
-          ),
-        ),
-        if (_currentEpisodes.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            hintText,
-            style: TextStyle(
-              color: _selectedEpisode == null ? _subTextColor : _accentColor,
-              fontSize: 12,
-            ),
-          ),
-        ],
+        )
       ],
     );
   }
 
-  Widget _buildEpisodesContent(bool isWideLayout) {
+  Widget _buildEpisodesContent(bool isWideLayout, BuildContext context) {
     if (isWideLayout) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -817,7 +816,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             child: _buildSelectedAnimePanel(),
           ),
           const SizedBox(width: 16),
-          Expanded(child: _buildEpisodesPanel()),
+          _buildEpisodesPanel(context),
         ],
       );
     }
@@ -826,7 +825,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
       children: [
         _buildSelectedAnimePanel(),
         const SizedBox(height: 12),
-        Expanded(child: _buildEpisodesPanel()),
+        _buildEpisodesPanel(context),
       ],
     );
   }
@@ -870,7 +869,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
         data: _selectionTheme,
         child: NipaplayWindowScaffold(
           maxWidth: dialogWidth,
-          maxHeightFactor: maxHeightFactor,
+          maxHeightFactor: 0.9,
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
           child: SingleChildScrollView(
@@ -885,16 +884,13 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                   _buildSearchBar(),
                   const SizedBox(height: 12),
                 ],
-                Container(
-                  height: 400,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWideLayout = constraints.maxWidth >= 720;
-                      return _showEpisodesView
-                          ? _buildEpisodesContent(isWideLayout)
-                          : _buildResultsPanel();
-                    },
-                  ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWideLayout = constraints.maxWidth >= 720;
+                    return _showEpisodesView
+                        ? _buildEpisodesContent(isWideLayout, context)
+                        : _buildResultsPanel(context);
+                  },
                 ),
                 if (_showEpisodesView) ...[
                   const SizedBox(height: 12),

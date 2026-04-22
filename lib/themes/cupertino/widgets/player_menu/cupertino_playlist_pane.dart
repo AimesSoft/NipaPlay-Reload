@@ -338,9 +338,31 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       throw Exception('无法识别WebDAV连接');
     }
 
-    final parentDir = _normalizeRemoteDirectoryPath(
-      p.posix.dirname(resolved.relativePath),
-    );
+    final connectionUri = Uri.parse(resolved.connection.url);
+    final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
+    final normalizedBasePath = basePath.endsWith('/') ? basePath : '$basePath/';
+    final filePath = resolved.relativePath.startsWith('/')
+        ? resolved.relativePath
+        : '/${resolved.relativePath}';
+
+    String parentDir;
+    if (filePath.length > normalizedBasePath.length &&
+        filePath.startsWith(normalizedBasePath)) {
+      parentDir = filePath.substring(normalizedBasePath.length);
+      final lastSlashIndex = parentDir.lastIndexOf('/');
+      if (lastSlashIndex > 0) {
+        parentDir = parentDir.substring(0, lastSlashIndex);
+      } else if (lastSlashIndex == 0) {
+        parentDir = '/';
+      } else {
+        parentDir = '/';
+      }
+    } else {
+      parentDir = p.posix.dirname(resolved.relativePath);
+    }
+
+    parentDir = _normalizeRemoteDirectoryPath(parentDir);
+
     final entries = await WebDAVService.instance.listDirectory(
       resolved.connection,
       parentDir,

@@ -559,7 +559,23 @@ class RemoteSubtitleService {
     resolved ??= _tryResolveWebDavFromUrl(videoUrl);
     if (resolved == null) return const [];
 
-    final directory = _posixDirname(resolved.relativePath);
+    // 计算相对于连接基础URL的路径
+    final connectionUri = Uri.parse(resolved.connection.url);
+    final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
+    final normalizedBasePath = basePath.endsWith('/') ? basePath : '$basePath/';
+    final filePath = resolved.relativePath.startsWith('/')
+        ? resolved.relativePath
+        : '/${resolved.relativePath}';
+
+    String directory;
+    if (filePath.length > normalizedBasePath.length &&
+        filePath.startsWith(normalizedBasePath)) {
+      directory = filePath.substring(normalizedBasePath.length);
+      directory = _posixDirname(directory);
+    } else {
+      directory = _posixDirname(resolved.relativePath);
+    }
+
     final entries = await WebDAVService.instance
         .listDirectoryAll(resolved.connection, directory);
 
