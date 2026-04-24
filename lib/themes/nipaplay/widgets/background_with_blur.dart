@@ -1,3 +1,5 @@
+import 'dart:io' if (dart.library.io) 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:glassmorphism/glassmorphism.dart';
@@ -5,7 +7,6 @@ import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_image_compositor.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
-import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 
@@ -25,11 +26,15 @@ class BackgroundBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<SettingsProvider, ThemeNotifier,
-        ThemeBackgroundRevealProvider>(
+    return Consumer3<
+      SettingsProvider,
+      ThemeNotifier,
+      ThemeBackgroundRevealProvider
+    >(
       builder: (context, settingsProvider, themeNotifier, revealProvider, _) {
-        final Duration backgroundTransitionDuration =
-            revealProvider.isActive ? Duration.zero : _themeTransitionDuration;
+        final Duration backgroundTransitionDuration = revealProvider.isActive
+            ? Duration.zero
+            : _themeTransitionDuration;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -90,8 +95,9 @@ class BackgroundBackdrop extends StatelessWidget {
     required Duration duration,
   }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final baseColor =
-        isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
+    final baseColor = isDarkMode
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF2F2F2);
 
     Widget buildComposite(Widget image) {
       return Stack(
@@ -238,8 +244,8 @@ class _BackgroundRevealOverlayState extends State<_BackgroundRevealOverlay>
       return;
     }
     context.read<ThemeBackgroundRevealProvider>().markAnimationCompleted(
-          widget.epoch,
-        );
+      widget.epoch,
+    );
   }
 
   @override
