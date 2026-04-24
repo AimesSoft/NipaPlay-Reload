@@ -1,0 +1,84 @@
+diff --git a/nix/packages/mk-out-libs/default.nix b/nix/packages/mk-out-libs/default.nix
+index 4846937..7ca7562 100644
+--- a/nix/packages/mk-out-libs/default.nix
++++ b/nix/packages/mk-out-libs/default.nix
+@@ -33,6 +33,17 @@ if arch != archs.universal then
+   let
+     xctoolchainOtool = callPackage ../../utils/xctoolchain/otool.nix { };
+     xctoolchainInstallNameTool = callPackage ../../utils/xctoolchain/install-name-tool.nix { };
++    targetRuntimePkgs =
++      if arch == archs.amd64 then
++        import ../../utils/default/pkgs.nix {
++          system = "x86_64-darwin";
++        }
++      else if arch == archs.arm64 then
++        import ../../utils/default/pkgs.nix {
++          system = "aarch64-darwin";
++        }
++      else
++        pkgs;
+ 
+     mpv = callPackage ../mk-pkg-mpv/default.nix { };
+     ffmpeg = callPackage ../mk-pkg-ffmpeg/default.nix { };
+@@ -53,10 +64,10 @@ if arch != archs.universal then
+     buildProfile = import ../../utils/default/build-profile.nix;
+     oses = import ../../utils/constants/oses.nix;
+     moltenvk =
+-      if builtins.hasAttr "moltenvk" pkgs then
+-        builtins.getAttr "moltenvk" pkgs
+-      else if builtins.hasAttr "MoltenVK" pkgs then
+-        builtins.getAttr "MoltenVK" pkgs
++      if builtins.hasAttr "moltenvk" targetRuntimePkgs then
++        builtins.getAttr "moltenvk" targetRuntimePkgs
++      else if builtins.hasAttr "MoltenVK" targetRuntimePkgs then
++        builtins.getAttr "MoltenVK" targetRuntimePkgs
+       else
+         null;
+     includeMoltenVK =
+diff --git a/nix/packages/mk-pkg-mpv/default.nix b/nix/packages/mk-pkg-mpv/default.nix
+index 4a65ee5..07ebf6b 100644
+--- a/nix/packages/mk-pkg-mpv/default.nix
++++ b/nix/packages/mk-pkg-mpv/default.nix
+@@ -31,14 +31,25 @@ let
+   uchardet = callPackage ../mk-pkg-uchardet/default.nix { };
+   libass = callPackage ../mk-pkg-libass/default.nix { };
+   pythonForBuild = pkgs.python3.withPackages (ps: [ ps.jinja2 ]);
++  targetRuntimePkgs =
++    if arch == "amd64" then
++      import ../../utils/default/pkgs.nix {
++        system = "x86_64-darwin";
++      }
++    else if arch == "arm64" then
++      import ../../utils/default/pkgs.nix {
++        system = "aarch64-darwin";
++      }
++    else
++      pkgs;
+   shaderc =
+-    if builtins.hasAttr "shaderc" pkgs then
+-      builtins.getAttr "shaderc" pkgs
++    if builtins.hasAttr "shaderc" targetRuntimePkgs then
++      builtins.getAttr "shaderc" targetRuntimePkgs
+     else
+       null;
+   vulkanLoader =
+-    if builtins.hasAttr "vulkan-loader" pkgs then
+-      builtins.getAttr "vulkan-loader" pkgs
++    if builtins.hasAttr "vulkan-loader" targetRuntimePkgs then
++      builtins.getAttr "vulkan-loader" targetRuntimePkgs
+     else
+       null;
+   isMacOSHdrProfile =
+diff --git a/nix/utils/default/pkgs.nix b/nix/utils/default/pkgs.nix
+index bfee66b..593c724 100644
+--- a/nix/utils/default/pkgs.nix
++++ b/nix/utils/default/pkgs.nix
+@@ -1,3 +1,8 @@
++{
++  system ? builtins.currentSystem,
++}:
++
+ import <nixpkgs> {
++  inherit system;
+   overlays = import ./overlays.nix;
+ }
