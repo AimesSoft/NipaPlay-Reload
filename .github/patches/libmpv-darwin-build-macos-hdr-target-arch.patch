@@ -21,6 +21,21 @@ diff --git a/nix/packages/mk-out-libs/default.nix b/nix/packages/mk-out-libs/def
  
      mpv = callPackage ../mk-pkg-mpv/default.nix { };
      ffmpeg = callPackage ../mk-pkg-ffmpeg/default.nix { };
+@@ -53,10 +66,10 @@
+     buildProfile = import ../../utils/default/build-profile.nix;
+     oses = import ../../utils/constants/oses.nix;
+     moltenvk =
+-      if builtins.hasAttr "moltenvk" pkgs then
+-        builtins.getAttr "moltenvk" pkgs
+-      else if builtins.hasAttr "MoltenVK" pkgs then
+-        builtins.getAttr "MoltenVK" pkgs
++      if builtins.hasAttr "moltenvk" targetRuntimePkgs then
++        builtins.getAttr "moltenvk" targetRuntimePkgs
++      else if builtins.hasAttr "MoltenVK" targetRuntimePkgs then
++        builtins.getAttr "MoltenVK" targetRuntimePkgs
+       else
+         null;
+     includeMoltenVK =
 diff --git a/nix/packages/mk-pkg-mpv/default.nix b/nix/packages/mk-pkg-mpv/default.nix
 --- a/nix/packages/mk-pkg-mpv/default.nix
 +++ b/nix/packages/mk-pkg-mpv/default.nix
