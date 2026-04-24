@@ -85,10 +85,18 @@ jobs:
           pushd third_party/libmpv-darwin-build
           nix build --impure -L .#mk-out-archive-xcframeworks-macos-universal-video-full
 
-          ARCHIVE_PATH="$(readlink result)"
-          if [[ "${ARCHIVE_PATH}" != /* ]]; then
-            ARCHIVE_PATH="$(pwd)/${ARCHIVE_PATH}"
+          RESULT_PATH="$(readlink result)"
+          if [[ "${RESULT_PATH}" != /* ]]; then
+            RESULT_PATH="$(pwd)/${RESULT_PATH}"
           fi
+
+          ARCHIVE_PATH="$(find "${RESULT_PATH}" -type f -name '*.tar.gz' | head -n 1)"
+          if [[ -z "${ARCHIVE_PATH}" ]]; then
+            echo "Failed to locate xcframework archive under ${RESULT_PATH}" >&2
+            find "${RESULT_PATH}" -maxdepth 3 -print >&2 || true
+            exit 1
+          fi
+
           popd
 
           ARCHIVE_SHA256="$(shasum -a 256 "${ARCHIVE_PATH}" | awk '{print $1}')"
