@@ -53,6 +53,9 @@ jobs:
     name: Build macOS
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/build-macos.yml
     secrets:
       MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
