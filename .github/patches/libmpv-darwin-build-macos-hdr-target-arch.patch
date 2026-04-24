@@ -1,8 +1,7 @@
 diff --git a/nix/packages/mk-out-libs/default.nix b/nix/packages/mk-out-libs/default.nix
-index 4846937..7ca7562 100644
 --- a/nix/packages/mk-out-libs/default.nix
 +++ b/nix/packages/mk-out-libs/default.nix
-@@ -33,6 +33,17 @@ if arch != archs.universal then
+@@ -33,6 +33,19 @@
    let
      xctoolchainOtool = callPackage ../../utils/xctoolchain/otool.nix { };
      xctoolchainInstallNameTool = callPackage ../../utils/xctoolchain/install-name-tool.nix { };
@@ -22,26 +21,10 @@ index 4846937..7ca7562 100644
  
      mpv = callPackage ../mk-pkg-mpv/default.nix { };
      ffmpeg = callPackage ../mk-pkg-ffmpeg/default.nix { };
-@@ -53,10 +64,10 @@ if arch != archs.universal then
-     buildProfile = import ../../utils/default/build-profile.nix;
-     oses = import ../../utils/constants/oses.nix;
-     moltenvk =
--      if builtins.hasAttr "moltenvk" pkgs then
--        builtins.getAttr "moltenvk" pkgs
--      else if builtins.hasAttr "MoltenVK" pkgs then
--        builtins.getAttr "MoltenVK" pkgs
-+      if builtins.hasAttr "moltenvk" targetRuntimePkgs then
-+        builtins.getAttr "moltenvk" targetRuntimePkgs
-+      else if builtins.hasAttr "MoltenVK" targetRuntimePkgs then
-+        builtins.getAttr "MoltenVK" targetRuntimePkgs
-       else
-         null;
-     includeMoltenVK =
 diff --git a/nix/packages/mk-pkg-mpv/default.nix b/nix/packages/mk-pkg-mpv/default.nix
-index 4a65ee5..07ebf6b 100644
 --- a/nix/packages/mk-pkg-mpv/default.nix
 +++ b/nix/packages/mk-pkg-mpv/default.nix
-@@ -31,14 +31,25 @@ let
+@@ -31,14 +31,27 @@
    uchardet = callPackage ../mk-pkg-uchardet/default.nix { };
    libass = callPackage ../mk-pkg-libass/default.nix { };
    pythonForBuild = pkgs.python3.withPackages (ps: [ ps.jinja2 ]);
