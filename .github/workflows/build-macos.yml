@@ -118,6 +118,7 @@ jobs:
           set -euo pipefail
 
           MACOS_LIBS_DIR="third_party/media-kit-upstream/libs/macos/media_kit_libs_macos_video/macos"
+          mkdir -p "${MACOS_LIBS_DIR}/Frameworks"
           find "${MACOS_LIBS_DIR}/Frameworks" -maxdepth 1 -type d -name '*.xcframework' -exec rm -rf {} +
           rm -rf "${MACOS_LIBS_DIR}/Frameworks/.symlinks"
           rm -rf "${MACOS_LIBS_DIR}/.cache"
