@@ -54,8 +54,19 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Restore Nix build cache
-        uses: DeterminateSystems/magic-nix-cache-action@v13
+      - name: Patch libmpv-darwin-build for target-arch HDR deps
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PATCH_FILE="$GITHUB_WORKSPACE/.github/patches/libmpv-darwin-build-macos-hdr-target-arch.patch"
+          TARGET_FILE="third_party/libmpv-darwin-build/nix/packages/mk-out-libs/default.nix"
+
+          if grep -q 'targetRuntimePkgs' "$TARGET_FILE"; then
+            echo "libmpv-darwin-build patch already present; skipping."
+          else
+            git -C third_party/libmpv-darwin-build apply "$PATCH_FILE"
+          fi
 
       - name: Build macOS libmpv xcframeworks from source
         id: build-libmpv
