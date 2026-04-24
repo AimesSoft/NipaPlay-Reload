@@ -233,8 +233,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           : <Map<String, dynamic>>[];
 
       // 对搜索结果进行简繁转换
-      final isTraditional =
-          await ChineseConverter.isTraditionalChineseEnvironment(context);
+      final isTraditional = await ChineseConverter.isTraditionalChineseEnvironment(context);
       if (isTraditional) {
         // 对每个搜索结果进行转换
         for (var anime in results) {
