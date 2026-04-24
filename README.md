@@ -9,7 +9,7 @@
 <img src="https://count.getloli.com/get/@nipaplay?theme=moebooru" alt="访问统计" />
 
 <br>
-
+ 
 ![GitHub release](https://img.shields.io/github/v/release/aimessoft/nipaplay-reload?style=flat-square&color=blue)
 ![GitHub downloads](https://img.shields.io/github/downloads/aimessoft/nipaplay-reload/total?style=flat-square&color=green)
 ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
