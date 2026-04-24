@@ -63,12 +63,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          XCODE_APP_PATH="$(dirname "$(dirname "$(xcode-select -p)")")"
+          echo "Using Xcode at: ${XCODE_APP_PATH}"
+
           export LIBMPV_DARWIN_BUILD_PROFILE=macos-hdr
           export LIBMPV_DARWIN_MPV_SRC="$GITHUB_WORKSPACE/third_party/mpv"
           export LIBMPV_DARWIN_LIBPLACEBO_SRC="$GITHUB_WORKSPACE/third_party/libplacebo"
+          export LIBMPV_DARWIN_XCODE_APP="${XCODE_APP_PATH}"
 
           pushd third_party/libmpv-darwin-build
-          nix build -L .#mk-out-archive-xcframeworks-macos-universal-video-full
+          nix build --impure -L .#mk-out-archive-xcframeworks-macos-universal-video-full
 
           ARCHIVE_PATH="$(readlink result)"
           if [[ "${ARCHIVE_PATH}" != /* ]]; then
@@ -82,6 +86,7 @@ jobs:
             echo "LIBMPV_DARWIN_BUILD_PROFILE=macos-hdr"
             echo "LIBMPV_DARWIN_MPV_SRC=$GITHUB_WORKSPACE/third_party/mpv"
             echo "LIBMPV_DARWIN_LIBPLACEBO_SRC=$GITHUB_WORKSPACE/third_party/libplacebo"
+            echo "LIBMPV_DARWIN_XCODE_APP=${XCODE_APP_PATH}"
             echo "LIBMPV_DARWIN_XCFRAMEWORKS_ARCHIVE=${ARCHIVE_PATH}"
           } >> "$GITHUB_ENV"
 
