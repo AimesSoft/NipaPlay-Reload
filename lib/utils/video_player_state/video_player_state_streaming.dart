@@ -141,7 +141,7 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
     }
 
     // 通知监听器
-    notifyListeners();
+    _notifyListeners();
   }
 
   /// 加载Jellyfin外挂字幕

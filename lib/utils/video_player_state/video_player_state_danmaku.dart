@@ -226,7 +226,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _danmakuList.clear();
       danmakuController?.clearDanmaku();
       if (canContinue()) {
-        notifyListeners();
+        _notifyListeners();
       } else {
         return;
       }
@@ -252,7 +252,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         // 设置最终加载阶段标志，减少动画性能消耗
         _isInFinalLoadingPhase = true;
         if (canContinue()) {
-          notifyListeners();
+          _notifyListeners();
         } else {
           return;
         }
@@ -285,7 +285,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         // await _prebuildGPUDanmakuCharsetIfNeeded();
 
         if (canContinue()) {
-          notifyListeners();
+          _notifyListeners();
         }
         return;
       }
@@ -297,7 +297,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 设置最终加载阶段标志，减少动画性能消耗
       _isInFinalLoadingPhase = true;
       if (canContinue()) {
-        notifyListeners();
+        _notifyListeners();
       } else {
         return;
       }
@@ -346,7 +346,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         _setStatus(PlayerStatus.playing,
             message: '弹幕加载完成 (${danmakuData['count']}条)');
         if (canContinue()) {
-          notifyListeners();
+          _notifyListeners();
         }
       } else {
         debugPrint('网络返回的弹幕数据无效');
@@ -443,7 +443,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         } else {
           _addStatusMessage('已自动加载本地弹幕 (${comments.length}条)');
         }
-        notifyListeners();
+        _notifyListeners();
       }
     } catch (e, st) {
       if (!canContinue()) return;
@@ -494,7 +494,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';
 
     debugPrint('弹幕轨道合并及过滤完成，显示${_danmakuList.length}条，总计${mergedList.length}条');
-    notifyListeners(); // 确保通知UI更新
+    _notifyListeners(); // 确保通知UI更新
   }
 
   List<Map<String, dynamic>> collectDanmakuForExport({
@@ -956,7 +956,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     if (_danmakuTracks.containsKey(trackId)) {
       _danmakuTrackEnabled[trackId] = enabled;
       _updateMergedDanmakuList();
-      notifyListeners();
+      _notifyListeners();
       debugPrint('弹幕轨道 $trackId ${enabled ? "启用" : "禁用"}');
     }
   }
@@ -972,7 +972,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _danmakuTracks.remove(trackId);
       _danmakuTrackEnabled.remove(trackId);
       _updateMergedDanmakuList();
-      notifyListeners();
+      _notifyListeners();
       debugPrint('删除弹幕轨道: $trackId');
     }
   }
@@ -980,7 +980,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   // 在设置视频时长时更新状态
   void setVideoDuration(Duration duration) {
     _videoDuration = duration;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 更新观看记录
@@ -1262,7 +1262,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         final timeB = (b['time'] as double?) ?? 0.0;
         return timeA.compareTo(timeB);
       });
-      notifyListeners();
+      _notifyListeners();
       debugPrint('已添加新弹幕到列表: ${danmaku['content']}');
     }
   }
@@ -1415,6 +1415,6 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     _applyTimelineDanmakuTrackForCurrentVideo();
     _updateMergedDanmakuList();
-    notifyListeners();
+    _notifyListeners();
   }
 }

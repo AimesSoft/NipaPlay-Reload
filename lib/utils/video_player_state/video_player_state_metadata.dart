@@ -4,7 +4,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
   // 添加setter方法以支持手动匹配后立即更新标题
   void setAnimeTitle(String? title) {
     _animeTitle = title;
-    notifyListeners();
+    _notifyListeners();
 
     // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
     _updateHistoryWithNewTitles();
@@ -12,7 +12,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
   void setEpisodeTitle(String? title) {
     _episodeTitle = title;
-    notifyListeners();
+    _notifyListeners();
 
     // 立即更新历史记录，确保历史记录卡片显示正确的动画名称
     _updateHistoryWithNewTitles();
@@ -96,13 +96,13 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final autoMatchEnabled = 
+      final autoMatchEnabled =
           prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true;
       if (!autoMatchEnabled) {
         _danmakuList = [];
         _danmakuTracks.clear();
         _danmakuTrackEnabled.clear();
-        final handled = 
+        final handled =
             await _tryManualMatchDanmaku(videoPath, initialFileName: null);
         if (!handled) {
           _setStatus(PlayerStatus.recognizing, message: '已关闭自动匹配弹幕，跳过弹幕');
@@ -159,7 +159,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
                   // 设置最终加载阶段标志，减少动画性能消耗
                   _isInFinalLoadingPhase = true;
-                  notifyListeners();
+                  _notifyListeners();
 
                   _danmakuList = await compute(
                     parseDanmakuListInBackground,
@@ -185,7 +185,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                   };
                   _danmakuTrackEnabled['dandanplay'] = true;
 
-                  notifyListeners();
+                  _notifyListeners();
                   _setStatus(PlayerStatus.recognizing,
                       message: '从缓存加载弹幕完成 (${_danmakuList.length}条)');
                   return; // Return early after loading from cache
@@ -202,7 +202,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
 
                 // 设置最终加载阶段标志，减少动画性能消耗
                 _isInFinalLoadingPhase = true;
-                notifyListeners();
+                _notifyListeners();
 
                 _setStatus(PlayerStatus.recognizing, message: '正在解析网络弹幕...');
                 if (danmakuData['comments'] != null &&
@@ -237,7 +237,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                   _danmakuTrackEnabled.clear();
                 }
 
-                notifyListeners();
+                _notifyListeners();
                 _setStatus(PlayerStatus.recognizing,
                     message: '弹幕加载完成 (${_danmakuList.length}条)');
 
@@ -313,9 +313,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
         initialVideoTitle: initialKeyword,
       );
 
-      if (result != null &&
-          !_isDisposed &&
-          _currentVideoPath == videoPath) {
+      if (result != null && !_isDisposed && _currentVideoPath == videoPath) {
         final episodeIdStr = result['episodeId']?.toString() ?? '';
         final animeIdStr = result['animeId']?.toString() ?? '';
 
@@ -445,7 +443,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       // 直接设置状态和消息，但不改变PlayerStatus本身
       _setStatus(_status, message: message);
 
-      notifyListeners();
+      _notifyListeners();
 
       // 创建更新后的观看记录
       final updatedHistory = WatchHistoryItem(
@@ -584,7 +582,8 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
         // 尝试刷新已显示的缩略图
         _triggerImageCacheRefresh(thumbnailPath);
 
-        if (SharedRemoteHistoryHelper.isSharedRemoteStreamPath(_currentVideoPath!)) {
+        if (SharedRemoteHistoryHelper.isSharedRemoteStreamPath(
+            _currentVideoPath!)) {
           unawaited(
             SharedRemotePlaybackSyncService.instance.syncThumbnail(
               videoUrl: _currentVideoPath!,

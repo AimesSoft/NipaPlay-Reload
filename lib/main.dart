@@ -1311,7 +1311,8 @@ class MainPageState extends State<MainPage>
     _tabChangeNotifier?.addListener(_onTabChangeRequested);
 
     // 添加VideoPlayerState监听
-    final newVideoPlayerState = Provider.of<VideoPlayerState>(context);
+    final newVideoPlayerState =
+        Provider.of<VideoPlayerState>(context, listen: false);
     if (newVideoPlayerState != _videoPlayerState) {
       _videoPlayerState?.removeListener(_manageHotkeys);
       _videoPlayerState = newVideoPlayerState;

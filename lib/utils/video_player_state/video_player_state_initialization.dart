@@ -122,7 +122,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       //debugPrint("Failed to get initial screen brightness: $e");
       // Keep default _currentBrightness if error occurs
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   // Load initial system volume (placeholder)
@@ -157,7 +157,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       _currentVolume = 0.5; // Fallback
       _initialDragVolume = _currentVolume;
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   void startBrightnessDrag() {
@@ -190,7 +190,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       // 更新 _initialDragBrightness 为当前成功设置的亮度，以确保下次拖拽的起点是连贯的
       _initialDragBrightness = newBrightness;
       _showBrightnessIndicator();
-      notifyListeners();
+      _notifyListeners();
       ////debugPrint("[VideoPlayerState] Brightness updated. Current: $_currentBrightness, InitialDrag: $_initialDragBrightness");
     } catch (e) {
       //debugPrint("Failed to set screen brightness: $e");
@@ -256,13 +256,13 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       Overlay.of(_context!).insert(_brightnessOverlayEntry!);
     }
 
-    notifyListeners();
+    _notifyListeners();
 
     _brightnessIndicatorTimer?.cancel();
     _brightnessIndicatorTimer = Timer(const Duration(seconds: 2), () {
       _hideBrightnessIndicator();
     });
-    // The final notifyListeners() from the original method is already covered above.
+    // The final _notifyListeners() from the original method is already covered above.
   }
 
   void _hideBrightnessIndicator() {
@@ -271,7 +271,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     if (_isBrightnessIndicatorVisible) {
       _isBrightnessIndicatorVisible = false;
-      notifyListeners();
+      _notifyListeners();
 
       Future.delayed(const Duration(milliseconds: 150), () {
         if (_brightnessOverlayEntry != null) {
@@ -338,7 +338,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       );
       Overlay.of(_context!).insert(_volumeOverlayEntry!);
     }
-    notifyListeners();
+    _notifyListeners();
 
     _volumeIndicatorTimer?.cancel();
     _volumeIndicatorTimer = Timer(const Duration(seconds: 2), () {
@@ -352,7 +352,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     if (_isVolumeIndicatorVisible) {
       _isVolumeIndicatorVisible = false;
-      notifyListeners();
+      _notifyListeners();
 
       Future.delayed(const Duration(milliseconds: 150), () {
         if (_volumeOverlayEntry != null) {

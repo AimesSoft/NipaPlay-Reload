@@ -233,6 +233,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player player; // 改为 late 修饰，使用 Player.create() 方法创建
   BuildContext? _context;
   bool _isDisposed = false;
+
+  void _notifyListeners() {
+    notifyListeners();
+  }
+
   StreamSubscription? _playerKernelChangeSubscription; // 播放器内核切换事件订阅
   StreamSubscription? _danmakuKernelChangeSubscription; // 弹幕内核切换事件订阅
   PlayerStatus _status = PlayerStatus.idle;
