@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'dart:ui';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -128,8 +129,10 @@ class _TooltipBubbleState extends State<TooltipBubble> {
 
     // 增加额外的宽度，确保组合键能够完整显示
     final String lowerText = widget.text.toLowerCase();
-    if (lowerText.contains('(') && lowerText.contains(')')) {
-      // 如果文本包含括号（通常是快捷键），增加额外宽度
+    if (Platform.isWindows &&
+        lowerText.contains('(') &&
+        lowerText.contains(')')) {
+      // 只在 Windows 端，如果文本包含括号（通常是快捷键），增加额外宽度
       return textPainter.width + widget.padding * 2 + 20;
     } else if (lowerText.contains('shift') ||
         lowerText.contains('ctrl') ||
