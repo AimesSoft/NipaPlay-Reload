@@ -39,22 +39,20 @@ jobs:
       - name: Run flutter analyze
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib
 
-      # Tests are temporarily disabled so this workflow stays focused on a
-      # single analysis pass for the main app code.
-      # - name: Detect root test files
-      #   id: detect_tests
-      #   shell: bash
-      #   run: |
-      #     if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
-      #       echo "has_tests=true" >> "$GITHUB_OUTPUT"
-      #     else
-      #       echo "has_tests=false" >> "$GITHUB_OUTPUT"
-      #     fi
-      #
-      # - name: Run flutter test
-      #   if: steps.detect_tests.outputs.has_tests == 'true'
-      #   run: flutter test --no-pub --reporter expanded
-      #
-      # - name: Skip flutter test
-      #   if: steps.detect_tests.outputs.has_tests != 'true'
-      #   run: echo "No root-level *_test.dart files found. Skipping flutter test."
+      - name: Detect root test files
+        id: detect_tests
+        shell: bash
+        run: |
+          if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run flutter test
+        if: steps.detect_tests.outputs.has_tests == 'true'
+        run: flutter test --no-pub --reporter expanded
+
+      - name: Skip flutter test
+        if: steps.detect_tests.outputs.has_tests != 'true'
+        run: echo "No root-level *_test.dart files found. Skipping flutter test."
