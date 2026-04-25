@@ -613,7 +613,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
 
             if (shouldUiNotify) {
               _lastUiNotifyMs = nowTime;
-              notifyListeners();
+              _notifyListeners();
             }
           } else {
             // 错误处理逻辑（原来在10秒定时器中）
@@ -743,7 +743,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           }
           if (shouldUiNotify) {
             _lastUiNotifyMs = nowTime;
-            notifyListeners();
+            _notifyListeners();
           }
         }
       }

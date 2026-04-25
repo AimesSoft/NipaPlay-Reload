@@ -788,6 +788,7 @@ class HotkeyService extends ChangeNotifier {
       await hotKeyManager.unregisterAll();
     }
     _registeredHotkeys.clear();
+    super.dispose();
   }
 }
 

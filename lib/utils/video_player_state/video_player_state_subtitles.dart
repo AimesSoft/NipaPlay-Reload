@@ -91,7 +91,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
       }
     }
 
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置当前外部字幕路径
@@ -104,13 +104,13 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   void setExternalSubtitle(String path, {bool isManualSetting = false}) {
     _subtitleManager.setExternalSubtitle(path,
         isManualSetting: isManualSetting);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 桥接方法：预加载字幕文件
@@ -172,7 +172,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   Future<void> _loadBlockTopDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
     _blockTopDanmaku = prefs.getBool(_blockTopDanmakuKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置顶部弹幕屏蔽
@@ -189,7 +189,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   Future<void> _loadBlockBottomDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
     _blockBottomDanmaku = prefs.getBool(_blockBottomDanmakuKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置底部弹幕屏蔽
@@ -206,7 +206,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   Future<void> _loadBlockScrollDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
     _blockScrollDanmaku = prefs.getBool(_blockScrollDanmakuKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置滚动弹幕屏蔽
@@ -234,7 +234,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     } else {
       _danmakuBlockWords = [];
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   String _normalizeSpoilerMatchText(String text) {
@@ -247,7 +247,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     _spoilerPreventionEnabled =
         prefs.getBool(_spoilerPreventionEnabledKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSpoilerPreventionEnabled(bool enabled) async {
@@ -331,7 +331,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
       _spoilerPreventionEnabled = false;
       await prefs.setBool(_spoilerPreventionEnabledKey, false);
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> updateSpoilerAiSettings({
@@ -414,7 +414,7 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
       }
     }
 
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSpoilerAiUseCustomKey(bool enabled) async {

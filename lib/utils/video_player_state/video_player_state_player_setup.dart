@@ -62,19 +62,19 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     if (isNetworkUrl) {
       debugPrint('检测到流媒体URL: $videoPath');
       _statusMessages.add('正在准备流媒体播放...');
-      notifyListeners();
+      _notifyListeners();
     } else if (isJellyfinStream) {
       final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
       debugPrint(
         '检测到Jellyfin流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl',
       );
       _statusMessages.add('正在准备Jellyfin流媒体播放...');
-      notifyListeners();
+      _notifyListeners();
     } else if (isEmbyStream) {
       final infoUrl = playbackSession?.streamUrl ?? actualPlayUrl;
       debugPrint('检测到Emby流媒体: videoPath=$videoPath, actualPlayUrl=$infoUrl');
       _statusMessages.add('正在准备Emby流媒体播放...');
-      notifyListeners();
+      _notifyListeners();
     }
 
     if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
@@ -400,7 +400,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
                   debugPrint(
                     'VideoPlayerState: 从snapshot设置视频宽高比: $_aspectRatio (${frame.width}x${frame.height})',
                   );
-                  notifyListeners(); // 通知UI更新
+                  _notifyListeners(); // 通知UI更新
                 }
               });
             } catch (e) {
@@ -648,7 +648,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // 设置进入最终加载阶段，以优化动画性能
       _isInFinalLoadingPhase = true;
-      notifyListeners();
+      _notifyListeners();
 
       //debugPrint('11. 设置准备就绪状态...');
       // 设置状态为准备就绪

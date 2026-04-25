@@ -15,7 +15,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
       final resolved = stored ?? false;
       if (_timelinePreviewEnabled != resolved) {
         _timelinePreviewEnabled = resolved;
-        notifyListeners();
+        _notifyListeners();
       } else {
         _timelinePreviewEnabled = resolved;
       }
@@ -40,7 +40,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     } else if (_currentVideoPath != null) {
       unawaited(_setupTimelinePreviewForVideo(_currentVideoPath!));
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   void _resetTimelinePreviewState() {
@@ -60,7 +60,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
     if (!_isTimelinePreviewKernelSupported()) {
       _timelinePreviewSupported = false;
-      notifyListeners();
+      _notifyListeners();
       return;
     }
 
@@ -71,7 +71,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     if (session != _timelinePreviewSessionId) return;
     _timelinePreviewSupported = supported;
     if (!supported) {
-      notifyListeners();
+      _notifyListeners();
       return;
     }
 
@@ -81,7 +81,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     if (session != _timelinePreviewSessionId) return;
     _timelinePreviewDirectory = dir.path;
     _hydrateTimelinePreviewCache(dir);
-    notifyListeners();
+    _notifyListeners();
 
     unawaited(_prefetchInitialTimelineThumbnails(session));
     unawaited(_backgroundFillTimelineThumbnails(session));
@@ -130,9 +130,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     }
     final totalMs = _duration.inMilliseconds;
     final clamped = time.inMilliseconds.clamp(0, totalMs - 1);
-    final interval = _timelinePreviewIntervalMs <= 0
-        ? 15000
-        : _timelinePreviewIntervalMs;
+    final interval =
+        _timelinePreviewIntervalMs <= 0 ? 15000 : _timelinePreviewIntervalMs;
     return (clamped ~/ interval) * interval;
   }
 
@@ -214,8 +213,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
     _disposeTimelinePreviewPlayer();
 
-    final previewPlayer =
-        PlayerFactory().createPlayer(kernelType: kernel);
+    final previewPlayer = PlayerFactory().createPlayer(kernelType: kernel);
     try {
       previewPlayer.volume = 0;
       previewPlayer.setMedia(source, PlayerMediaType.video);
@@ -260,8 +258,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
   Future<T> _withTimelinePreviewSerial<T>(Future<T> Function() task) {
     final next = _timelinePreviewSerialTask.then((_) => task());
-    _timelinePreviewSerialTask =
-        next.then((_) => null, onError: (_) => null);
+    _timelinePreviewSerialTask = next.then((_) => null, onError: (_) => null);
     return next;
   }
 
@@ -288,9 +285,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
         if (codec.width > 0 && codec.height > 0) {
           final aspect = codec.width / codec.height;
           targetWidth = (targetHeight * aspect).round();
-          targetWidth = targetWidth
-              .clamp(1, _timelinePreviewDefaultWidth * 3)
-              .toInt();
+          targetWidth =
+              targetWidth.clamp(1, _timelinePreviewDefaultWidth * 3).toInt();
         }
       }
 
@@ -363,8 +359,7 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
 
   img.Image? _decodeTimelineRawFrame(PlayerFrame frame) {
     final width = frame.width > 0 ? frame.width : _timelinePreviewDefaultWidth;
-    final height =
-        frame.height > 0 ? frame.height : _timelinePreviewMaxHeight;
+    final height = frame.height > 0 ? frame.height : _timelinePreviewMaxHeight;
     final bytes = frame.bytes;
     if (width <= 0 || height <= 0 || bytes.isEmpty) return null;
 
@@ -433,7 +428,8 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
   }
 
   img.ChannelOrder _resolveTimelinePreviewChannelOrder() {
-    final kernel = _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
+    final kernel =
+        _timelinePreviewPlayerKernel ?? PlayerFactory.getKernelType();
     if (kernel == PlayerKernelType.mediaKit) {
       return img.ChannelOrder.bgra;
     }
@@ -472,17 +468,15 @@ extension VideoPlayerStateTimelinePreview on VideoPlayerState {
     }
 
     final total = _duration.inMilliseconds;
-    final interval = _timelinePreviewIntervalMs <= 0
-        ? 15000
-        : _timelinePreviewIntervalMs;
+    final interval =
+        _timelinePreviewIntervalMs <= 0 ? 15000 : _timelinePreviewIntervalMs;
     const int maxThumbnails = 80;
     int generated = 0;
 
     for (int bucket = 0;
         bucket <= total && generated < maxThumbnails;
         bucket += interval) {
-      if (session != _timelinePreviewSessionId ||
-          !isTimelinePreviewAvailable) {
+      if (session != _timelinePreviewSessionId || !isTimelinePreviewAvailable) {
         return;
       }
       if (_timelinePreviewCache.containsKey(bucket)) {

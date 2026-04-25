@@ -9,7 +9,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
     // 添加错误消息
     _statusMessages = ['播放出错，正在尝试恢复...'];
-    notifyListeners();
+    _notifyListeners();
 
     // 尝试恢复播放
     _tryRecoverFromError();
@@ -57,7 +57,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         prefs.getInt(_minimalProgressBarColorKey) ?? 0xFFFF7274;
     _showDanmakuDensityChart =
         prefs.getBool(_showDanmakuDensityChartKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadPlaybackEndAction() async {
@@ -70,7 +70,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       action == PlaybackEndAction.autoNext,
     );
     if (changed) {
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -87,7 +87,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (action != PlaybackEndAction.autoNext) {
       AutoNextEpisodeService.instance.cancelAutoNext();
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadAutoNextCountdownSeconds() async {
@@ -104,7 +104,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _autoNextCountdownSeconds = resolved;
     AutoNextEpisodeService.instance.updateCountdownDuration(resolved);
     if (changed) {
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -122,7 +122,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     await prefs.setInt(_autoNextCountdownSecondsKey, resolved);
     _autoNextCountdownSeconds = resolved;
     AutoNextEpisodeService.instance.updateCountdownDuration(resolved);
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadPauseOnBackgroundSetting() async {
@@ -131,7 +131,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final bool resolvedValue = storedValue ?? globals.isMobilePlatform;
     if (_pauseOnBackground != resolvedValue) {
       _pauseOnBackground = resolvedValue;
-      notifyListeners();
+      _notifyListeners();
     } else {
       _pauseOnBackground = resolvedValue;
     }
@@ -144,7 +144,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_pauseOnBackgroundKey, enabled);
     _pauseOnBackground = enabled;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadDesktopHoverSettingsMenuEnabled() async {
@@ -153,7 +153,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         prefs.getBool(_desktopHoverSettingsMenuEnabledKey) ?? false;
     if (_desktopHoverSettingsMenuEnabled != resolved) {
       _desktopHoverSettingsMenuEnabled = resolved;
-      notifyListeners();
+      _notifyListeners();
     } else {
       _desktopHoverSettingsMenuEnabled = resolved;
     }
@@ -169,7 +169,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (!enabled) {
       setShowRightMenu(false);
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadInstantHidePlayerUiEnabled() async {
@@ -177,7 +177,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final resolved = prefs.getBool(_instantHidePlayerUiEnabledKey) ?? false;
     if (_instantHidePlayerUiEnabled != resolved) {
       _instantHidePlayerUiEnabled = resolved;
-      notifyListeners();
+      _notifyListeners();
     } else {
       _instantHidePlayerUiEnabled = resolved;
     }
@@ -190,7 +190,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_instantHidePlayerUiEnabledKey, enabled);
     _instantHidePlayerUiEnabled = enabled;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 保存最小化进度条启用状态
@@ -198,7 +198,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _minimalProgressBarEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_minimalProgressBarEnabledKey, enabled);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 保存最小化进度条颜色
@@ -206,7 +206,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _minimalProgressBarColor = color;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_minimalProgressBarColorKey, color);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置弹幕密度图显示状态
@@ -214,14 +214,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _showDanmakuDensityChart = show;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_showDanmakuDensityChartKey, show);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 加载弹幕不透明度
   Future<void> _loadDanmakuOpacity() async {
     final prefs = await SharedPreferences.getInstance();
     _danmakuOpacity = prefs.getDouble(_danmakuOpacityKey) ?? 1.0;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 保存弹幕不透明度
@@ -229,7 +229,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuOpacity = opacity;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_danmakuOpacityKey, opacity);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 获取映射后的弹幕不透明度
@@ -242,7 +242,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadDanmakuVisible() async {
     final prefs = await SharedPreferences.getInstance();
     _danmakuVisible = prefs.getBool(_danmakuVisibleKey) ?? true;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void setDanmakuVisible(bool visible) async {
@@ -250,7 +250,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _danmakuVisible = visible;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_danmakuVisibleKey, visible);
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -262,7 +262,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadMergeDanmaku() async {
     final prefs = await SharedPreferences.getInstance();
     _mergeDanmaku = prefs.getBool(_mergeDanmakuKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置弹幕合并
@@ -271,7 +271,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _mergeDanmaku = merge;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_mergeDanmakuKey, merge);
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -284,7 +284,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadDanmakuStacking() async {
     final prefs = await SharedPreferences.getInstance();
     _danmakuStacking = prefs.getBool(_danmakuStackingKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 加载弹幕随机染色设置
@@ -292,7 +292,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     _danmakuRandomColorEnabled =
         prefs.getBool(_danmakuRandomColorEnabledKey) ?? false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 加载时间轴告知弹幕轨道开关
@@ -300,7 +300,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     _isTimelineDanmakuEnabled =
         prefs.getBool(_timelineDanmakuEnabledKey) ?? true;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadHardwareDecoderSetting() async {
@@ -311,7 +311,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _useHardwareDecoder = resolved;
     await applyHardwareDecoderPreference();
     if (changed) {
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -321,7 +321,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _danmakuStacking = stacking;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_danmakuStackingKey, stacking);
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -346,13 +346,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _statusMessages.clear(); // 清除之前的状态消息
     _setStatus(PlayerStatus.loading, message: message);
     // 确保状态变更立即生效
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 更新解码器设置，代理到解码器管理器
   void updateDecoders(List<String> decoders) {
     _decoderManager.updateDecoders(decoders);
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setHardwareDecoderEnabled(bool enabled) async {
@@ -363,7 +363,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_useHardwareDecoderKey, enabled);
     await applyHardwareDecoderPreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   String _resolveMpvHwdecValue() {
@@ -397,7 +397,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     ); // 默认1倍速
     _speedBoostRate = prefs.getDouble(_speedBoostRateKey) ?? 2.0; // 默认2倍速
     _normalPlaybackRate = 1.0; // 始终重置为1.0
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadPrecacheBufferSize() async {
@@ -412,7 +412,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
             )
             .toInt();
     _precacheBufferSizeMb = resolved;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadPrecacheBufferDuration() async {
@@ -421,7 +421,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final resolved =
         (storedValue ?? _precacheBufferDurationSeconds).clamp(1, 120).toInt();
     _precacheBufferDurationSeconds = resolved;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setPrecacheBufferSizeMb(int value) async {
@@ -436,7 +436,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
     _precacheBufferSizeMb = resolved;
     await PlayerFactory.savePrecacheBufferSizeMb(resolved);
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setPrecacheBufferDurationSeconds(int value) async {
@@ -448,7 +448,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_precacheBufferDurationSecondsKey, resolved);
     await applyPrecacheBufferSettings();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> applyPrecacheBufferSettings() async {
@@ -478,7 +478,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       player.setPlaybackRate(resolved);
       debugPrint('设置播放速度: ${resolved}x');
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置长按倍速播放的倍率
@@ -486,7 +486,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _speedBoostRate = rate;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_speedBoostRateKey, rate);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 开始倍速播放（长按开始）
@@ -501,7 +501,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     player.setPlaybackRate(_speedBoostRate);
     debugPrint('开始长按倍速播放: ${_speedBoostRate}x (之前: ${_normalPlaybackRate}x)');
 
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 结束倍速播放（长按结束）
@@ -513,7 +513,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     player.setPlaybackRate(_normalPlaybackRate);
     debugPrint('结束长按倍速播放，恢复到: ${_normalPlaybackRate}x');
 
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 切换播放速度按钮功能
@@ -557,7 +557,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         );
       }
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 保存快进快退时间设置
@@ -565,14 +565,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _seekStepSeconds = clampSeekStepToCurrentVideoDuration(seconds);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_seekStepSecondsKey, _seekStepSeconds);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 加载跳过时间设置
   Future<void> _loadSkipSeconds() async {
     final prefs = await SharedPreferences.getInstance();
     _skipSeconds = prefs.getInt(_skipSecondsKey) ?? 90; // 默认90秒
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 保存跳过时间设置
@@ -580,7 +580,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _skipSeconds = seconds;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_skipSecondsKey, seconds);
-    notifyListeners();
+    _notifyListeners();
   }
 
   bool _readCompatibleBool(
@@ -676,7 +676,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     );
     if (_doubleResolutionPlaybackEnabled != resolved) {
       _doubleResolutionPlaybackEnabled = resolved;
-      notifyListeners();
+      _notifyListeners();
     } else {
       _doubleResolutionPlaybackEnabled = resolved;
     }
@@ -701,7 +701,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (!hasVideo) {
       await applyAnime4KProfileToCurrentPlayer();
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadAnime4KProfile() async {
@@ -723,7 +723,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
 
     await applyAnime4KProfileToCurrentPlayer();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setAnime4KProfile(Anime4KProfile profile) async {
@@ -751,7 +751,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (!hasVideo) {
       await applyAnime4KProfileToCurrentPlayer();
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadCrtProfile() async {
@@ -773,7 +773,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
 
     await applyAnime4KProfileToCurrentPlayer();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setCrtProfile(CrtProfile profile) async {
@@ -796,7 +796,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
 
     await applyAnime4KProfileToCurrentPlayer();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> applyAnime4KProfileToCurrentPlayer() async {
@@ -1184,7 +1184,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadDanmakuFontSize() async {
     final prefs = await SharedPreferences.getInstance();
     _danmakuFontSize = prefs.getDouble(_danmakuFontSizeKey) ?? 0.0;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置弹幕字体大小
@@ -1193,7 +1193,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _danmakuFontSize = fontSize;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_danmakuFontSizeKey, fontSize);
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -1340,7 +1340,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
 
     if (changed) {
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -1354,7 +1354,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_danmakuFontFilePathKey, '');
     await prefs.setString(_danmakuFontFamilyKey, normalized);
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<bool> importDanmakuFontFile(String sourcePath) async {
@@ -1379,7 +1379,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_danmakuFontFilePathKey, persistedPath);
     await prefs.setString(_danmakuFontFamilyKey, runtimeFamily);
-    notifyListeners();
+    _notifyListeners();
     return true;
   }
 
@@ -1392,7 +1392,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_danmakuFontFilePathKey, '');
     await prefs.setString(_danmakuFontFamilyKey, '');
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setDanmakuOutlineStyle(DanmakuOutlineStyle style) async {
@@ -1402,7 +1402,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuOutlineStyle = style;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_danmakuOutlineStyleKey, style.index);
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setDanmakuShadowStyle(DanmakuShadowStyle style) async {
@@ -1412,7 +1412,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuShadowStyle = style;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_danmakuShadowStyleKey, style.index);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 获取实际使用的弹幕字体大小
@@ -1557,7 +1557,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
             VideoPlayerState.defaultSubtitleOverrideMode.index)
         .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleScale(double scale) async {
@@ -1569,7 +1569,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleScaleKey, resolved);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleDelaySeconds(double seconds) async {
@@ -1580,7 +1580,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleDelayKey, seconds);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitlePosition(double position) async {
@@ -1592,7 +1592,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitlePositionKey, resolved);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleAlignX(SubtitleAlignX align) async {
@@ -1601,7 +1601,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleAlignXKey, align.index);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleAlignY(SubtitleAlignY align) async {
@@ -1610,7 +1610,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleAlignYKey, align.index);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleMarginX(double value) async {
@@ -1619,7 +1619,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleMarginXKey, value);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleMarginY(double value) async {
@@ -1628,7 +1628,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleMarginYKey, value);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleOpacity(double value) async {
@@ -1638,7 +1638,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleOpacityKey, resolved);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleBorderSize(double value) async {
@@ -1648,7 +1648,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleBorderSizeKey, resolved);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleShadowOffset(double value) async {
@@ -1658,7 +1658,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleShadowOffsetKey, resolved);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleBold(bool value) async {
@@ -1667,7 +1667,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_subtitleBoldKey, value);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleItalic(bool value) async {
@@ -1676,7 +1676,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_subtitleItalicKey, value);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleColor(Color color) async {
@@ -1685,7 +1685,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleColorKey, color.value);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleBorderColor(Color color) async {
@@ -1694,7 +1694,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleBorderColorKey, color.value);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleShadowColor(Color color) async {
@@ -1703,7 +1703,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleShadowColorKey, color.value);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleFontName(String name) async {
@@ -1713,7 +1713,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_subtitleFontNameKey, trimmed);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setSubtitleFontDir(String dir) async {
@@ -1722,7 +1722,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_subtitleFontDirKey, dir);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> importSubtitleFontFile(String sourcePath) async {
@@ -1740,7 +1740,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
       await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
       await applySubtitleStylePreference();
-      notifyListeners();
+      _notifyListeners();
     } catch (e) {
       debugPrint('[VideoPlayerState] 导入字幕字体失败: $e');
     }
@@ -1752,7 +1752,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_subtitleOverrideModeKey, mode.index);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> resetSubtitleSettings() async {
@@ -1796,7 +1796,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
     await prefs.setInt(_subtitleOverrideModeKey, _subtitleOverrideMode.index);
     await applySubtitleStylePreference();
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> applySubtitleStylePreference() async {
@@ -1860,7 +1860,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   Future<void> _loadDanmakuDisplayArea() async {
     final prefs = await SharedPreferences.getInstance();
     _danmakuDisplayArea = prefs.getDouble(_danmakuDisplayAreaKey) ?? 1.0;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 设置弹幕轨道显示区域
@@ -1869,7 +1869,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _danmakuDisplayArea = area;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_danmakuDisplayAreaKey, area);
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -1887,7 +1887,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getDouble(_danmakuSpeedMultiplierKey);
     _danmakuSpeedMultiplier = _normalizeDanmakuSpeed(stored ?? 1.0);
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadRememberDanmakuOffset() async {
@@ -1895,7 +1895,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final resolved = prefs.getBool(_rememberDanmakuOffsetKey) ?? false;
     if (_rememberDanmakuOffset != resolved) {
       _rememberDanmakuOffset = resolved;
-      notifyListeners();
+      _notifyListeners();
     } else {
       _rememberDanmakuOffset = resolved;
     }
@@ -1908,7 +1908,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_rememberDanmakuOffsetKey, remember);
     _rememberDanmakuOffset = remember;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setDanmakuSpeedMultiplier(double multiplier) async {
@@ -1919,7 +1919,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuSpeedMultiplier = normalized;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_danmakuSpeedMultiplierKey, normalized);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 获取弹幕轨道间距倍数（基于字体大小计算）
@@ -1968,7 +1968,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getInt(_screenshotSaveTargetKey);
       _screenshotSaveTarget = ScreenshotSaveTargetDisplay.fromPrefs(stored);
-      notifyListeners();
+      _notifyListeners();
     } catch (e) {
       debugPrint('加载截图默认保存位置失败: $e');
     }
@@ -1984,7 +1984,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     } catch (e) {
       debugPrint('保存截图默认保存位置失败: $e');
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<Directory> _getDefaultScreenshotSaveDirectory() async {
@@ -2033,7 +2033,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       }
 
       _screenshotSaveDirectory = resolved;
-      notifyListeners();
+      _notifyListeners();
     } catch (e) {
       debugPrint('加载截图保存位置失败: $e');
     }
@@ -2049,7 +2049,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await prefs.remove(_screenshotSaveDirectoryKey);
       final defaultDir = await _getDefaultScreenshotSaveDirectory();
       _screenshotSaveDirectory = defaultDir.path;
-      notifyListeners();
+      _notifyListeners();
       return;
     }
 
@@ -2073,7 +2073,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
     await prefs.setString(_screenshotSaveDirectoryKey, resolvedPath);
     _screenshotSaveDirectory = resolvedPath;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> _loadAutoFullScreenEnabled() async {
@@ -2090,7 +2090,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _autoFullscreenEnabled = false;
     }
 
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> setAutoFullscreenEnabled(bool value) async {
@@ -2111,6 +2111,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       debugPrint('[VideoPlayerState] 保存 AutoFullscreen 设置失败: $e');
     }
 
-    notifyListeners();
+    _notifyListeners();
   }
 }
