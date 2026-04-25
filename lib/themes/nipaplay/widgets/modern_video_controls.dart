@@ -613,8 +613,8 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           .formatActionWithShortcut(
                                               'toggle_danmaku',
                                               videoState.danmakuVisible
-                                                  ? '关闭弹幕'
-                                                  : '开启弹幕'),
+                                                  ? '隐藏弹幕'
+                                                  : '显示弹幕'),
                                       useAnimatedSwitcher: true,
                                     ),
 
