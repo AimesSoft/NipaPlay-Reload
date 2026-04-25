@@ -53,7 +53,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
       await _restoreSystemUiOverlayStyleIfNeeded();
 
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -203,7 +203,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         //debugPrint("Error disabling wakelock: $e");
       }
 
-      notifyListeners();
+      _notifyListeners();
       _logMacOSHdrResetTrace(
         'resetPlayer notifyListeners path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
@@ -265,7 +265,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       // 延迟通知UI刷新，给足够时间处理状态变更
       Future.microtask(() {
-        notifyListeners();
+        _notifyListeners();
       });
     }
 
@@ -299,7 +299,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 在播放开始后一小段时间重置最终加载阶段标志
       Future.delayed(const Duration(milliseconds: 200), () {
         _isInFinalLoadingPhase = false;
-        notifyListeners();
+        _notifyListeners();
       });
     } else {
       // Disable for any other status (paused, error, idle, disposed, ready, loading, recognizing)
@@ -317,7 +317,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       });
     }
 
-    notifyListeners();
+    _notifyListeners();
   }
 
   void togglePlayPause() {
@@ -380,7 +380,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _progress = 0.0;
       _bufferedPositionMs = 0;
       _playbackTimeMs.value = 0;
-      notifyListeners();
+      _notifyListeners();
       player.seek(position: 0);
       if (_status != PlayerStatus.playing) {
         play();
@@ -676,7 +676,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       if (_duration.inMilliseconds > 0) {
         _progress = clampedPosition.inMilliseconds / _duration.inMilliseconds;
       }
-      notifyListeners();
+      _notifyListeners();
 
       // 更新播放器位置
       player.seek(position: clampedPosition.inMilliseconds);
@@ -788,12 +788,12 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     } else {
       _autoHideTimer?.cancel();
     }
-    notifyListeners();
+    _notifyListeners();
   }
 
   void setShowRightMenu(bool value) {
     _showRightMenu = value;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void setControlsVisibilityLocked(bool value) {
@@ -835,7 +835,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       });
     }
 
-    notifyListeners();
+    _notifyListeners();
   }
 
   void _showHoverSettingsMenu() {
@@ -859,7 +859,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _hoverSettingsMenuOverlay?.remove();
     _hoverSettingsMenuOverlay = null;
     _isRightEdgeHovered = false;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Widget _buildHoverSettingsMenu(BuildContext context) {
@@ -902,7 +902,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         }
       }
 
-      notifyListeners();
+      _notifyListeners();
     } finally {
       _isFullscreenTransitioning = false;
     }
@@ -924,19 +924,19 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   // 更新状态消息的方法
   void _updateStatusMessages(List<String> messages) {
     _statusMessages = messages;
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 添加单个状态消息的方法
   void _addStatusMessage(String message) {
     _statusMessages.add(message);
-    notifyListeners();
+    _notifyListeners();
   }
 
   // 清除所有状态消息的方法
   void _clearStatusMessages() {
     _statusMessages.clear();
-    notifyListeners();
+    _notifyListeners();
   }
 
   // Volume Drag Methods
@@ -966,7 +966,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _initialDragVolume = newVolume;
     _showVolumeIndicator();
     _scheduleVolumePersistence();
-    notifyListeners();
+    _notifyListeners();
 
     try {
       if (_useSystemVolume) {
@@ -1000,7 +1000,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
       _scheduleVolumePersistence(immediate: true);
-      notifyListeners();
+      _notifyListeners();
 
       if (_useSystemVolume) {
         _ensurePlayerVolumeMatchesPlatformPolicy();
@@ -1030,7 +1030,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _initialDragVolume = newVolume;
       _showVolumeIndicator();
       _scheduleVolumePersistence(immediate: true);
-      notifyListeners();
+      _notifyListeners();
 
       if (_useSystemVolume) {
         _ensurePlayerVolumeMatchesPlatformPolicy();
@@ -1060,7 +1060,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _dragSeekTargetPosition = _position;
     _showSeekIndicator(); // <<< CALL ADDED
     //debugPrint("Seek drag started. Start position: $_dragSeekStartPosition");
-    notifyListeners();
+    _notifyListeners();
   }
 
   void updateSeekDrag(double deltaDx, BuildContext context) {
@@ -1088,7 +1088,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     // TODO: Update seek indicator UI with _dragSeekTargetPosition
     // For now, just print.
     // //debugPrint("Seek drag update. Target: $_dragSeekTargetPosition, DeltaDx: $deltaDx, AccumulatedDx: $_accumulatedDragDx");
-    notifyListeners(); // To update UI displaying _dragSeekTargetPosition
+    _notifyListeners(); // To update UI displaying _dragSeekTargetPosition
   }
 
   void endSeekDrag() {
@@ -1100,7 +1100,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _accumulatedDragDx = 0.0;
     _hideSeekIndicator(); // <<< CALL ADDED
     //debugPrint("Seek drag ended. Seeking to: $_dragSeekTargetPosition");
-    notifyListeners();
+    _notifyListeners();
   }
 
   // Seek Indicator Overlay Methods
@@ -1137,7 +1137,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       );
       Overlay.of(_context!).insert(_seekOverlayEntry!);
     }
-    notifyListeners(); // To trigger opacity animation in SeekIndicator
+    _notifyListeners(); // To trigger opacity animation in SeekIndicator
 
     // Optional: Timer to auto-hide if drag ends abruptly or no more updates
     _seekIndicatorTimer?.cancel();
@@ -1152,7 +1152,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
     if (_isSeekIndicatorVisible) {
       _isSeekIndicatorVisible = false;
-      notifyListeners(); // Trigger fade-out animation
+      _notifyListeners(); // Trigger fade-out animation
 
       // Wait for fade-out animation to complete before removing
       Future.delayed(const Duration(milliseconds: 200), () {
