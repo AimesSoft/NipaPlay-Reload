@@ -609,7 +609,9 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                           () => _isDanmakuHovered = value),
                                       onPressed: (value) => setState(
                                           () => _isDanmakuPressed = value),
-                                      tooltip: '弹幕',
+                                      tooltip: videoState.danmakuVisible
+                                          ? '关闭弹幕(D)'
+                                          : '开启弹幕(D)',
                                       useAnimatedSwitcher: true,
                                     ),
 
