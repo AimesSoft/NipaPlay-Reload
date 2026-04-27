@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
-import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_scaffold_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/platform_utils.dart';
@@ -221,9 +221,11 @@ class _CustomScaffoldState extends State<CustomScaffold> {
         controller: widget.tabController!,
         enabled: true,
         child: useLargeScreenLayout
-            ? _buildLargeScreenLayout(
+            ? NipaplayLargeScreenScaffoldLayout(
                 currentIndex: currentIndex,
                 isDarkMode: isDarkMode,
+                tabPage: widget.tabPage,
+                tabController: widget.tabController!,
                 content: switchableContent,
               )
             : switchableContent,
@@ -234,98 +236,6 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       transparentCutout: useVideoUnderlay ? videoUnderlayRect : null,
       child: scaffold,
     );
-  }
-
-  Widget _buildLargeScreenLayout({
-    required int currentIndex,
-    required bool isDarkMode,
-    required Widget content,
-  }) {
-    const Color activeColor = Color(0xFFFF2E55);
-    final Color inactiveColor = isDarkMode ? Colors.white60 : Colors.black54;
-    final mediaPadding = MediaQuery.of(context).padding;
-    final double topInset = globals.isDesktop ? 50 : mediaPadding.top + 14;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        NipaplaySidePanel(
-          isDarkMode: isDarkMode,
-          child: ListView.builder(
-            padding: EdgeInsets.zero,
-            itemCount: widget.tabPage.length,
-            itemBuilder: (context, index) {
-              final bool isSelected = currentIndex == index;
-              final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-              final Color itemColor = isSelected
-                  ? Colors.white
-                  : (isDarkMode ? Colors.white60 : Colors.black54);
-              return NipaplaySidePanelItem(
-                isSelected: isSelected,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
-                onTap: () {
-                  if (widget.tabController!.index != index) {
-                    widget.tabController!.animateTo(index);
-                  }
-                },
-                child: _buildSidePanelTabContent(
-                  _stripOuterTabPadding(widget.tabPage[index]),
-                  itemColor: itemColor,
-                ),
-              );
-            },
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              14,
-              topInset,
-              14,
-              14 + mediaPadding.bottom,
-            ),
-            child: content,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _stripOuterTabPadding(Widget tabWidget) {
-    if (tabWidget is Padding && tabWidget.child != null) {
-      return tabWidget.child!;
-    }
-    return tabWidget;
-  }
-
-  Widget _buildSidePanelTabContent(
-    Widget tabWidget, {
-    required Color itemColor,
-  }) {
-    if (tabWidget is HoverZoomTab) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (tabWidget.icon != null) ...[
-            IconTheme(
-              data: IconThemeData(color: itemColor),
-              child: tabWidget.icon!,
-            ),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            tabWidget.text,
-            style: TextStyle(
-              color: itemColor,
-              fontSize: tabWidget.fontSize,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      );
-    }
-    return tabWidget;
   }
 
   void _logAppBarOverlayStyle({
@@ -347,127 +257,6 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       'isDark=$isDarkMode, '
       'icon=${overlayStyle.statusBarIconBrightness?.name}, '
       'ios=${overlayStyle.statusBarBrightness?.name}',
-    );
-  }
-}
-
-class NipaplaySidePanel extends StatelessWidget {
-  const NipaplaySidePanel({
-    super.key,
-    required this.isDarkMode,
-    required this.child,
-    this.width = 220,
-  });
-
-  final bool isDarkMode;
-  final Widget child;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        border: Border(
-          right: BorderSide(
-            color: isDarkMode ? Colors.white12 : Colors.black12,
-            width: 1,
-          ),
-        ),
-      ),
-      child: child,
-    );
-  }
-}
-
-class NipaplaySidePanelItem extends StatefulWidget {
-  const NipaplaySidePanelItem({
-    super.key,
-    required this.isSelected,
-    required this.activeColor,
-    required this.inactiveColor,
-    required this.onTap,
-    required this.child,
-  });
-
-  final bool isSelected;
-  final Color activeColor;
-  final Color inactiveColor;
-  final VoidCallback onTap;
-  final Widget child;
-
-  @override
-  State<NipaplaySidePanelItem> createState() => _NipaplaySidePanelItemState();
-}
-
-class _NipaplaySidePanelItemState extends State<NipaplaySidePanelItem> {
-  bool _isHovered = false;
-  bool _isPressed = false;
-
-  void _setHovered(bool value) {
-    if (_isHovered == value) return;
-    setState(() {
-      _isHovered = value;
-    });
-  }
-
-  void _setPressed(bool value) {
-    if (_isPressed == value) return;
-    setState(() {
-      _isPressed = value;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isInteractiveActive = _isHovered || _isPressed;
-    final bool isActive = widget.isSelected || isInteractiveActive;
-    final Color itemColor = isActive ? Colors.white : widget.inactiveColor;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.zero,
-        splashFactory: NoSplash.splashFactory,
-        overlayColor: WidgetStateProperty.all(Colors.transparent),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        onTap: widget.onTap,
-        onHover: _setHovered,
-        onHighlightChanged: _setPressed,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
-          ),
-          decoration: BoxDecoration(
-            color: isActive
-                ? widget.activeColor
-                : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: isActive
-                    ? widget.activeColor
-                    : Colors.transparent,
-                width: 3,
-              ),
-            ),
-          ),
-          child: DefaultTextStyle.merge(
-            style: TextStyle(color: itemColor),
-            child: IconTheme.merge(
-              data: IconThemeData(color: itemColor),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: widget.child,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
