@@ -15,6 +15,7 @@ class CustomScaffold extends StatefulWidget {
   final bool pageIsHome;
   final bool shouldShowAppBar;
   final TabController? tabController;
+  final bool useLargeScreenLayout;
 
   const CustomScaffold({
     super.key,
@@ -23,6 +24,7 @@ class CustomScaffold extends StatefulWidget {
     required this.pageIsHome,
     required this.shouldShowAppBar,
     this.tabController,
+    this.useLargeScreenLayout = false,
   });
 
   @override
@@ -104,6 +106,12 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     }
 
     final bool isDesktopOrTablet = globals.isDesktopOrTablet;
+    final bool useLargeScreenLayout =
+        widget.useLargeScreenLayout &&
+        widget.pageIsHome &&
+        isDesktopOrTablet &&
+        widget.shouldShowAppBar &&
+        widget.tabPage.isNotEmpty;
     const enableAnimation = true;
 
     final currentIndex = widget.tabController!.index;
@@ -143,11 +151,25 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       overlayStyle: appBarOverlayStyle,
     );
 
+    final switchableContent = SwitchableView(
+      enableAnimation: enableAnimation,
+      keepAlive: true,
+      preloadIndices: preloadIndices,
+      currentIndex: currentIndex,
+      physics: const PageScrollPhysics(),
+      onPageChanged: _handlePageChangedBySwitchableView,
+      children: widget.pages
+          .map((page) => RepaintBoundary(child: page))
+          .toList(),
+    );
+
     final scaffold = Scaffold(
       primary: false,
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: false,
-      appBar: widget.shouldShowAppBar && widget.tabPage.isNotEmpty
+      appBar: widget.shouldShowAppBar &&
+              widget.tabPage.isNotEmpty &&
+              !useLargeScreenLayout
           ? AppBar(
               toolbarHeight: !widget.pageIsHome && !isDesktopOrTablet
                   ? 100
@@ -197,17 +219,13 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       body: TabControllerScope(
         controller: widget.tabController!,
         enabled: true,
-        child: SwitchableView(
-          enableAnimation: enableAnimation,
-          keepAlive: true,
-          preloadIndices: preloadIndices,
-          currentIndex: currentIndex,
-          physics: const PageScrollPhysics(),
-          onPageChanged: _handlePageChangedBySwitchableView,
-          children: widget.pages
-              .map((page) => RepaintBoundary(child: page))
-              .toList(),
-        ),
+        child: useLargeScreenLayout
+            ? _buildLargeScreenLayout(
+                currentIndex: currentIndex,
+                isDarkMode: isDarkMode,
+                content: switchableContent,
+              )
+            : switchableContent,
       ),
     );
 
@@ -215,6 +233,61 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       transparentCutout: useVideoUnderlay ? videoUnderlayRect : null,
       child: scaffold,
     );
+  }
+
+  Widget _buildLargeScreenLayout({
+    required int currentIndex,
+    required bool isDarkMode,
+    required Widget content,
+  }) {
+    const Color activeColor = Color(0xFFFF2E55);
+    final Color inactiveColor = isDarkMode ? Colors.white60 : Colors.black54;
+    final mediaPadding = MediaQuery.of(context).padding;
+    final double topInset = globals.isDesktop ? 50 : mediaPadding.top + 14;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NipaplaySidePanel(
+          isDarkMode: isDarkMode,
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            itemCount: widget.tabPage.length,
+            itemBuilder: (context, index) {
+              return NipaplaySidePanelItem(
+                isSelected: currentIndex == index,
+                activeColor: activeColor,
+                inactiveColor: inactiveColor,
+                onTap: () {
+                  if (widget.tabController!.index != index) {
+                    widget.tabController!.animateTo(index);
+                  }
+                },
+                child: _stripOuterTabPadding(widget.tabPage[index]),
+              );
+            },
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              14,
+              topInset,
+              14,
+              14 + mediaPadding.bottom,
+            ),
+            child: content,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stripOuterTabPadding(Widget tabWidget) {
+    if (tabWidget is Padding && tabWidget.child != null) {
+      return tabWidget.child!;
+    }
+    return tabWidget;
   }
 
   void _logAppBarOverlayStyle({
@@ -236,6 +309,127 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       'isDark=$isDarkMode, '
       'icon=${overlayStyle.statusBarIconBrightness?.name}, '
       'ios=${overlayStyle.statusBarBrightness?.name}',
+    );
+  }
+}
+
+class NipaplaySidePanel extends StatelessWidget {
+  const NipaplaySidePanel({
+    super.key,
+    required this.isDarkMode,
+    required this.child,
+    this.width = 220,
+  });
+
+  final bool isDarkMode;
+  final Widget child;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(
+            color: isDarkMode ? Colors.white12 : Colors.black12,
+            width: 1,
+          ),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class NipaplaySidePanelItem extends StatefulWidget {
+  const NipaplaySidePanelItem({
+    super.key,
+    required this.isSelected,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.onTap,
+    required this.child,
+  });
+
+  final bool isSelected;
+  final Color activeColor;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<NipaplaySidePanelItem> createState() => _NipaplaySidePanelItemState();
+}
+
+class _NipaplaySidePanelItemState extends State<NipaplaySidePanelItem> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) return;
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  void _setPressed(bool value) {
+    if (_isPressed == value) return;
+    setState(() {
+      _isPressed = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isInteractiveActive = _isHovered || _isPressed;
+    final bool isActive = widget.isSelected || isInteractiveActive;
+    final Color itemColor = isActive ? Colors.white : widget.inactiveColor;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.zero,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        onTap: widget.onTap,
+        onHover: _setHovered,
+        onHighlightChanged: _setPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+          decoration: BoxDecoration(
+            color: isActive
+                ? widget.activeColor
+                : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: isActive
+                    ? widget.activeColor
+                    : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: DefaultTextStyle.merge(
+            style: TextStyle(color: itemColor),
+            child: IconTheme.merge(
+              data: IconThemeData(color: itemColor),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -307,7 +501,7 @@ class _CustomPainter extends BoxPainter {
 class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
   final TabBar tabBar;
 
-  const _LogoTabBar({super.key, required this.tabBar});
+  const _LogoTabBar({required this.tabBar});
 
   @override
   Size get preferredSize => tabBar.preferredSize;

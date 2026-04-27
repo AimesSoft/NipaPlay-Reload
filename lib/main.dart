@@ -1090,10 +1090,15 @@ class MainPage extends StatefulWidget {
 
 class MainPageState extends State<MainPage>
     with TickerProviderStateMixin, WindowListener {
+  static const double kWindowCaptionHeight = 28;
+  static const String _largeScreenLayoutPrefKey =
+      'nipaplay_use_large_screen_layout';
+
   bool isMaximized = false;
   TabController? globalTabController;
   bool _showSplash = true;
   bool _isThemeRevealRunning = false;
+  bool _useLargeScreenLayout = false;
 
   // 用于热键管理
   bool _hotkeysAreRegistered = false;
@@ -1200,6 +1205,7 @@ class MainPageState extends State<MainPage>
   Future<void> _initializeController() async {
     final prefs = await SharedPreferences.getInstance();
     _defaultPageIndex = prefs.getInt('default_page_index') ?? 0;
+    _useLargeScreenLayout = prefs.getBool(_largeScreenLayoutPrefKey) ?? false;
 
     // 强制启用页面滑动动画
     // ... (注释省略)
@@ -1373,6 +1379,19 @@ class MainPageState extends State<MainPage>
     await windowManager.close();
   }
 
+  Future<void> _toggleLargeScreenLayout() async {
+    final nextValue = !_useLargeScreenLayout;
+    setState(() {
+      _useLargeScreenLayout = nextValue;
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_largeScreenLayoutPrefKey, nextValue);
+    } catch (e) {
+      debugPrint('[MainPageState] 保存大屏幕模式设置失败: $e');
+    }
+  }
+
   ThemeMode _nextThemeMode() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return isDarkMode ? ThemeMode.light : ThemeMode.dark;
@@ -1496,6 +1515,9 @@ class MainPageState extends State<MainPage>
     final mediaPadding = MediaQuery.of(context).padding;
     final bool isMac = !kIsWeb && Platform.isMacOS;
     final bool isDesktop = globals.isDesktop;
+    final bool canUseLargeScreenLayout = globals.isDesktopOrTablet;
+    final bool isLargeScreenLayoutActive =
+        canUseLargeScreenLayout && _useLargeScreenLayout;
     final double baseTopPadding = isMac ? 10 : 4;
     final double baseRightPadding = isMac ? 20 : 10;
     final double topPadding =
@@ -1514,6 +1536,7 @@ class MainPageState extends State<MainPage>
               pageIsHome: true,
               shouldShowAppBar: shouldShowAppBar,
               tabController: globalTabController,
+              useLargeScreenLayout: isLargeScreenLayoutActive,
             );
           },
         ),
@@ -1549,63 +1572,199 @@ class MainPageState extends State<MainPage>
             if (!globals.isDesktopOrTablet || !shouldShowAppBar) {
               return const SizedBox.shrink();
             }
-            return Positioned(
-              top: topPadding,
-              right: rightPadding,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SystemResourceDisplay(),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: kWindowCaptionHeight,
-                    child: Center(
-                      child: Image.asset(
-                        'assets/logo2.png',
-                        height: 24,
-                        fit: BoxFit.contain,
-                        color: isDarkMode ? Colors.white : Colors.black,
-                        colorBlendMode: BlendMode.srcIn,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: kWindowCaptionHeight,
-                    child: Center(
-                      child: _ThemeToggleButton(
-                        onToggleFromOrigin: _handleThemeToggleFromButton,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: kWindowCaptionHeight,
-                    child: Center(
-                      child: _SettingsEntryButton(
-                        onPressed: () => SettingsPage.showWindow(context),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
-                    SizedBox(
-                      height: kWindowCaptionHeight,
-                      child: Center(
-                        child: WindowControlButtons(
-                          isMaximized: isMaximized,
-                          onMinimize: _minimizeWindow,
-                          onMaximizeRestore: _toggleWindowSize,
-                          onClose: _closeWindow,
+            final String themeActionLabel = isDarkMode
+                ? context.l10n.toggleToLightMode
+                : context.l10n.toggleToDarkMode;
+            final IconData themeActionIcon = isDarkMode
+                ? Icons.nightlight_rounded
+                : Icons.light_mode_rounded;
+
+            final actionButtonsInLargeLayout = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                NipaplaySidePanel(
+                  isDarkMode: isDarkMode,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      NipaplaySidePanelItem(
+                        isSelected: true,
+                        activeColor: const Color(0xFFFF2E55),
+                        inactiveColor:
+                            isDarkMode ? Colors.white60 : Colors.black54,
+                        onTap: _toggleLargeScreenLayout,
+                        child: Row(
+                          children: const [
+                            Icon(Icons.view_day_rounded, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '退出大屏幕模式',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      NipaplaySidePanelItem(
+                        isSelected: false,
+                        activeColor: const Color(0xFFFF2E55),
+                        inactiveColor:
+                            isDarkMode ? Colors.white60 : Colors.black54,
+                        onTap: () {
+                          context.read<ThemeNotifier>().themeMode =
+                              _nextThemeMode();
+                        },
+                        child: Row(
+                          children: [
+                            Icon(themeActionIcon, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                themeActionLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      NipaplaySidePanelItem(
+                        isSelected: false,
+                        activeColor: const Color(0xFFFF2E55),
+                        inactiveColor:
+                            isDarkMode ? Colors.white60 : Colors.black54,
+                        onTap: () => SettingsPage.showWindow(context),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.settings_rounded, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                context.l10n.settingsLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+            final actionButtonsInNormalLayout = Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: kWindowCaptionHeight,
+                  child: Center(
+                    child: Image.asset(
+                      'assets/logo2.png',
+                      height: 24,
+                      fit: BoxFit.contain,
+                      color: isDarkMode ? Colors.white : Colors.black,
+                      colorBlendMode: BlendMode.srcIn,
                     ),
-                ],
-              ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: kWindowCaptionHeight,
+                  child: Center(
+                    child: _LargeScreenLayoutToggleButton(
+                      isActive: isLargeScreenLayoutActive,
+                      onPressed: _toggleLargeScreenLayout,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: kWindowCaptionHeight,
+                  child: Center(
+                    child: _ThemeToggleButton(
+                      onToggleFromOrigin: _handleThemeToggleFromButton,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: kWindowCaptionHeight,
+                  child: Center(
+                    child: _SettingsEntryButton(
+                      onPressed: () => SettingsPage.showWindow(context),
+                    ),
+                  ),
+                ),
+              ],
+            );
+            return Positioned(
+              top: isLargeScreenLayoutActive ? null : topPadding,
+              left: isLargeScreenLayoutActive ? 0 : null,
+              right: isLargeScreenLayoutActive ? null : rightPadding,
+              bottom: isLargeScreenLayoutActive
+                  ? 0
+                  : null,
+              child: isLargeScreenLayoutActive
+                  ? actionButtonsInLargeLayout
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SystemResourceDisplay(),
+                        const SizedBox(width: 8),
+                        actionButtonsInNormalLayout,
+                        const SizedBox(width: 8),
+                        if (!kIsWeb && (Platform.isWindows || Platform.isLinux))
+                          SizedBox(
+                            height: kWindowCaptionHeight,
+                            child: Center(
+                              child: WindowControlButtons(
+                                isMaximized: isMaximized,
+                                onMinimize: _minimizeWindow,
+                                onMaximizeRestore: _toggleWindowSize,
+                                onClose: _closeWindow,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
             );
           },
         ),
+        if (isLargeScreenLayoutActive &&
+            !kIsWeb &&
+            (Platform.isWindows || Platform.isLinux))
+          Positioned(
+            top: topPadding,
+            right: rightPadding,
+            child: SizedBox(
+              height: kWindowCaptionHeight,
+              child: Center(
+                child: WindowControlButtons(
+                  isMaximized: isMaximized,
+                  onMinimize: _minimizeWindow,
+                  onMaximizeRestore: _toggleWindowSize,
+                  onClose: _closeWindow,
+                ),
+              ),
+            ),
+          ),
       ],
     );
 
@@ -1620,6 +1779,20 @@ class _SettingsEntryButton extends StatefulWidget {
 
   @override
   State<_SettingsEntryButton> createState() => _SettingsEntryButtonState();
+}
+
+class _LargeScreenLayoutToggleButton extends StatefulWidget {
+  const _LargeScreenLayoutToggleButton({
+    required this.isActive,
+    required this.onPressed,
+  });
+
+  final bool isActive;
+  final VoidCallback onPressed;
+
+  @override
+  State<_LargeScreenLayoutToggleButton> createState() =>
+      _LargeScreenLayoutToggleButtonState();
 }
 
 class _ThemeToggleButton extends StatefulWidget {
@@ -1711,6 +1884,57 @@ class _ThemeToggleButtonState extends State<_ThemeToggleButton> {
                 size: 22,
                 color: iconColor,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LargeScreenLayoutToggleButtonState
+    extends State<_LargeScreenLayoutToggleButton> {
+  bool _isHovered = false;
+  bool _isPressed = false;
+
+  void _setHovered(bool value) {
+    if (_isHovered == value) {
+      return;
+    }
+    setState(() {
+      _isHovered = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final bool isActive = widget.isActive;
+    final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
+    final Color iconColor = isActive
+        ? const Color(0xFFFF2E55)
+        : (_isHovered
+            ? const Color(0xFFFF2E55)
+            : (isDarkMode ? Colors.white : Colors.black87));
+    final icon = isActive ? Icons.view_day_rounded : Icons.view_sidebar_rounded;
+
+    return Tooltip(
+      message: isActive ? '退出大屏幕模式' : '大屏幕模式',
+      child: MouseRegion(
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 120),
+            child: Icon(
+              icon,
+              size: 22,
+              color: iconColor,
             ),
           ),
         ),
