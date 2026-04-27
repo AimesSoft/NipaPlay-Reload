@@ -1560,6 +1560,9 @@ class MainPageState extends State<MainPage>
               shouldShowAppBar: shouldShowAppBar,
               tabController: globalTabController,
               useLargeScreenLayout: isLargeScreenLayoutActive,
+              onToggleLargeScreen: _toggleLargeScreenLayout,
+              onToggleThemeFromOrigin: _handleThemeToggleFromButton,
+              onOpenSettings: () => SettingsPage.showWindow(context),
             );
           },
         ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
@@ -50,25 +49,13 @@ class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
         : null;
 
     if (isLargeScreenLayoutActive) {
-      return Stack(
-        children: [
-          Positioned(
-            left: 0,
-            bottom: 0,
-            child: _LargeModeActionPanel(
-              isDarkMode: isDarkMode,
-              onToggleLargeScreen: onToggleLargeScreen,
-              onToggleThemeFromOrigin: onToggleThemeFromOrigin,
-              onOpenSettings: onOpenSettings,
-            ),
-          ),
-          if (windowButtons != null)
-            Positioned(
-              top: topPadding,
-              right: rightPadding,
-              child: windowButtons,
-            ),
-        ],
+      if (windowButtons == null) {
+        return const SizedBox.shrink();
+      }
+      return Positioned(
+        top: topPadding,
+        right: rightPadding,
+        child: windowButtons,
       );
     }
 
@@ -92,111 +79,6 @@ class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
             const SizedBox(width: 8),
             windowButtons,
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _LargeModeActionPanel extends StatelessWidget {
-  const _LargeModeActionPanel({
-    required this.isDarkMode,
-    required this.onToggleLargeScreen,
-    required this.onToggleThemeFromOrigin,
-    required this.onOpenSettings,
-  });
-
-  final bool isDarkMode;
-  final VoidCallback onToggleLargeScreen;
-  final Future<void> Function(Offset globalOrigin)? onToggleThemeFromOrigin;
-  final VoidCallback onOpenSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    final String themeActionLabel = isDarkMode
-        ? context.l10n.toggleToLightMode
-        : context.l10n.toggleToDarkMode;
-    final IconData themeActionIcon = isDarkMode
-        ? Icons.nightlight_rounded
-        : Icons.light_mode_rounded;
-
-    return NipaplayLargeScreenSidePanel(
-      isDarkMode: isDarkMode,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          NipaplayLargeScreenSidePanelItem(
-            isSelected: false,
-            activeColor: const Color(0xFFFF2E55),
-            inactiveColor: isDarkMode ? Colors.white60 : Colors.black54,
-            onTap: onToggleLargeScreen,
-            child: Row(
-              children: const [
-                Icon(Icons.view_day_rounded, size: 20),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '退出大屏幕模式',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          NipaplayLargeScreenSidePanelItem(
-            isSelected: false,
-            activeColor: const Color(0xFFFF2E55),
-            inactiveColor: isDarkMode ? Colors.white60 : Colors.black54,
-            onTap: () => _toggleTheme(
-              context,
-              onToggleFromOrigin: onToggleThemeFromOrigin,
-            ),
-            child: Row(
-              children: [
-                Icon(themeActionIcon, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    themeActionLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          NipaplayLargeScreenSidePanelItem(
-            isSelected: false,
-            activeColor: const Color(0xFFFF2E55),
-            inactiveColor: isDarkMode ? Colors.white60 : Colors.black54,
-            onTap: onOpenSettings,
-            child: Row(
-              children: [
-                const Icon(Icons.settings_rounded, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    context.l10n.settingsLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
