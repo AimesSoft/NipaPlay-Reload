@@ -111,7 +111,6 @@ class _CustomScaffoldState extends State<CustomScaffold> {
         widget.useLargeScreenLayout &&
         widget.pageIsHome &&
         isDesktopOrTablet &&
-        widget.shouldShowAppBar &&
         widget.tabPage.isNotEmpty;
     const enableAnimation = true;
 

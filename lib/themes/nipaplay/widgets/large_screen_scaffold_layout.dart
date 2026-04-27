@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nipaplay/pages/tab_labels.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_tab_panel.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 
 class NipaplayLargeScreenScaffoldLayout extends StatelessWidget {
@@ -21,43 +20,12 @@ class NipaplayLargeScreenScaffoldLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color activeColor = Color(0xFFFF2E55);
-    final Color inactiveColor = isDarkMode ? Colors.white60 : Colors.black54;
     final mediaPadding = MediaQuery.of(context).padding;
     final double topInset = globals.isDesktop ? 50 : mediaPadding.top + 14;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        NipaplayLargeScreenSidePanel(
-          isDarkMode: isDarkMode,
-          child: ListView.builder(
-            padding: EdgeInsets.zero,
-            itemCount: tabPage.length,
-            itemBuilder: (context, index) {
-              final bool isSelected = currentIndex == index;
-              final Color itemColor = isSelected
-                  ? Colors.white
-                  : (isDarkMode ? Colors.white60 : Colors.black54);
-
-              return NipaplayLargeScreenSidePanelItem(
-                isSelected: isSelected,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
-                onTap: () {
-                  if (tabController.index != index) {
-                    tabController.animateTo(index);
-                  }
-                },
-                child: _buildSidePanelTabContent(
-                  _stripOuterTabPadding(tabPage[index]),
-                  itemColor: itemColor,
-                ),
-              );
-            },
-          ),
-        ),
-        Expanded(
+        Positioned.fill(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               14,
@@ -68,43 +36,18 @@ class NipaplayLargeScreenScaffoldLayout extends StatelessWidget {
             child: content,
           ),
         ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: NipaplayLargeScreenTabPanel(
+            currentIndex: currentIndex,
+            isDarkMode: isDarkMode,
+            tabPage: tabPage,
+            tabController: tabController,
+          ),
+        ),
       ],
     );
-  }
-
-  Widget _stripOuterTabPadding(Widget tabWidget) {
-    if (tabWidget is Padding && tabWidget.child != null) {
-      return tabWidget.child!;
-    }
-    return tabWidget;
-  }
-
-  Widget _buildSidePanelTabContent(
-    Widget tabWidget, {
-    required Color itemColor,
-  }) {
-    if (tabWidget is HoverZoomTab) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (tabWidget.icon != null) ...[
-            IconTheme(
-              data: IconThemeData(color: itemColor),
-              child: tabWidget.icon!,
-            ),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            tabWidget.text,
-            style: TextStyle(
-              color: itemColor,
-              fontSize: tabWidget.fontSize,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      );
-    }
-    return tabWidget;
   }
 }

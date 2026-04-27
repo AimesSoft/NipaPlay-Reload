@@ -1238,6 +1238,10 @@ class MainPageState extends State<MainPage>
       if (globals.isDesktop) {
         _initializeHotkeys();
       }
+
+      if (_useLargeScreenLayout) {
+        unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
+      }
     });
   }
 
@@ -1383,6 +1387,24 @@ class MainPageState extends State<MainPage>
     } catch (e) {
       debugPrint('[MainPageState] 保存大屏幕模式设置失败: $e');
     }
+
+    await _syncDesktopFullScreenWithLargeScreenMode(nextValue);
+  }
+
+  Future<void> _syncDesktopFullScreenWithLargeScreenMode(
+      bool shouldUseFullScreen) async {
+    if (!globals.isDesktop || kIsWeb) {
+      return;
+    }
+
+    try {
+      final isFullScreen = await windowManager.isFullScreen();
+      if (isFullScreen != shouldUseFullScreen) {
+        await windowManager.setFullScreen(shouldUseFullScreen);
+      }
+    } catch (e) {
+      debugPrint('[MainPageState] 切换大屏幕模式全屏状态失败: $e');
+    }
   }
 
   ThemeMode _nextThemeMode() {
@@ -1494,8 +1516,16 @@ class MainPageState extends State<MainPage>
 
   @override
   void onWindowEvent(String eventName) {
-    // 监听所有窗口事件，可以在这里添加日志
-    // print('窗口事件: $eventName');
+    if (eventName == 'leave-full-screen' && _useLargeScreenLayout) {
+      unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
+    }
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    if (_useLargeScreenLayout) {
+      unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
+    }
   }
 
   @override
@@ -1562,7 +1592,10 @@ class MainPageState extends State<MainPage>
         Selector<VideoPlayerState, bool>(
           selector: (context, videoState) => videoState.shouldShowAppBar(),
           builder: (context, shouldShowAppBar, child) {
-            if (!globals.isDesktopOrTablet || !shouldShowAppBar) {
+            if (!globals.isDesktopOrTablet) {
+              return const SizedBox.shrink();
+            }
+            if (!isLargeScreenLayoutActive && !shouldShowAppBar) {
               return const SizedBox.shrink();
             }
             return NipaplayLargeScreenModeActionsOverlay(
