@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_tab_panel.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_top_status_overlay.dart';
 
 class NipaplayLargeScreenScaffoldLayout extends StatefulWidget {
   const NipaplayLargeScreenScaffoldLayout({
@@ -54,7 +54,6 @@ class _NipaplayLargeScreenScaffoldLayoutState
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.of(context).padding;
-    final double topInset = globals.isDesktop ? 50 : mediaPadding.top + 14;
 
     return Stack(
       children: [
@@ -62,11 +61,15 @@ class _NipaplayLargeScreenScaffoldLayoutState
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               14,
-              topInset,
+              0,
               14,
               14 + mediaPadding.bottom,
             ),
-            child: widget.content,
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              child: widget.content,
+            ),
           ),
         ),
         if (_isTabPanelVisible)
@@ -104,6 +107,14 @@ class _NipaplayLargeScreenScaffoldLayoutState
               onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
               onOpenSettings: widget.onOpenSettings,
             ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: NipaplayLargeScreenTopStatusOverlay(
+            isDarkMode: widget.isDarkMode,
           ),
         ),
         Positioned(
