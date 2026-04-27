@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -254,8 +255,13 @@ class _CustomScaffoldState extends State<CustomScaffold> {
             padding: EdgeInsets.zero,
             itemCount: widget.tabPage.length,
             itemBuilder: (context, index) {
+              final bool isSelected = currentIndex == index;
+              final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+              final Color itemColor = isSelected
+                  ? Colors.white
+                  : (isDarkMode ? Colors.white60 : Colors.black54);
               return NipaplaySidePanelItem(
-                isSelected: currentIndex == index,
+                isSelected: isSelected,
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
                 onTap: () {
@@ -263,7 +269,10 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                     widget.tabController!.animateTo(index);
                   }
                 },
-                child: _stripOuterTabPadding(widget.tabPage[index]),
+                child: _buildSidePanelTabContent(
+                  _stripOuterTabPadding(widget.tabPage[index]),
+                  itemColor: itemColor,
+                ),
               );
             },
           ),
@@ -286,6 +295,35 @@ class _CustomScaffoldState extends State<CustomScaffold> {
   Widget _stripOuterTabPadding(Widget tabWidget) {
     if (tabWidget is Padding && tabWidget.child != null) {
       return tabWidget.child!;
+    }
+    return tabWidget;
+  }
+
+  Widget _buildSidePanelTabContent(
+    Widget tabWidget, {
+    required Color itemColor,
+  }) {
+    if (tabWidget is HoverZoomTab) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (tabWidget.icon != null) ...[
+            IconTheme(
+              data: IconThemeData(color: itemColor),
+              child: tabWidget.icon!,
+            ),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            tabWidget.text,
+            style: TextStyle(
+              color: itemColor,
+              fontSize: tabWidget.fontSize,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      );
     }
     return tabWidget;
   }

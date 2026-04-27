@@ -1588,7 +1588,7 @@ class MainPageState extends State<MainPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       NipaplaySidePanelItem(
-                        isSelected: true,
+                        isSelected: false,
                         activeColor: const Color(0xFFFF2E55),
                         inactiveColor:
                             isDarkMode ? Colors.white60 : Colors.black54,
