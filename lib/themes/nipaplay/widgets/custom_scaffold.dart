@@ -17,6 +17,9 @@ class CustomScaffold extends StatefulWidget {
   final bool shouldShowAppBar;
   final TabController? tabController;
   final bool useLargeScreenLayout;
+  final VoidCallback? onToggleLargeScreen;
+  final Future<void> Function(Offset globalOrigin)? onToggleThemeFromOrigin;
+  final VoidCallback? onOpenSettings;
 
   const CustomScaffold({
     super.key,
@@ -26,6 +29,9 @@ class CustomScaffold extends StatefulWidget {
     required this.shouldShowAppBar,
     this.tabController,
     this.useLargeScreenLayout = false,
+    this.onToggleLargeScreen,
+    this.onToggleThemeFromOrigin,
+    this.onOpenSettings,
   });
 
   @override
@@ -226,6 +232,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                 tabPage: widget.tabPage,
                 tabController: widget.tabController!,
                 content: switchableContent,
+                onToggleLargeScreen: widget.onToggleLargeScreen,
+                onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
+                onOpenSettings: widget.onOpenSettings,
               )
             : switchableContent,
       ),
