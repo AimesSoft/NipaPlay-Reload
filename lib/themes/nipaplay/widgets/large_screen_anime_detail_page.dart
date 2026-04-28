@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -18,7 +19,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_top_status_overlay.dart';
 
-const double _kLargeScreenDetailPanelRadius = 14;
 const double _kLargeScreenEpisodeCardWidth = 250;
 const double _kLargeScreenEpisodeCardGap = 10;
 const double _kLargeScreenEpisodeRailHeight = 172;
@@ -135,6 +135,14 @@ class _NipaplayLargeScreenAnimeDetailPageState
       return max;
     }
     return value;
+  }
+
+  String _coverImageUrl(BangumiAnime anime) {
+    String imageUrl = widget.sharedSummary?.imageUrl ?? anime.imageUrl;
+    if (kIsWeb) {
+      imageUrl = WebRemoteAccessService.imageProxyUrl(imageUrl) ?? imageUrl;
+    }
+    return imageUrl;
   }
 
   String _plainSummary(String? raw) {
@@ -701,10 +709,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
     final secondary = isDarkMode ? Colors.white70 : Colors.black54;
     final muted = isDarkMode ? Colors.white60 : Colors.black54;
 
-    String imageUrl = widget.sharedSummary?.imageUrl ?? anime.imageUrl;
-    if (kIsWeb) {
-      imageUrl = WebRemoteAccessService.imageProxyUrl(imageUrl) ?? imageUrl;
-    }
+    final imageUrl = _coverImageUrl(anime);
 
     final summary = _plainSummary(
       widget.sharedSummary?.summary?.isNotEmpty == true
@@ -1174,6 +1179,9 @@ class _NipaplayLargeScreenAnimeDetailPageState
     final Color dividerColor = isDark ? Colors.white12 : Colors.black12;
     final mediaPadding = MediaQuery.of(context).padding;
 
+    final anime = _anime;
+    final coverImageUrl = anime == null ? '' : _coverImageUrl(anime);
+
     final body = _isLoading
         ? const Center(child: CircularProgressIndicator())
         : (_error != null
@@ -1214,20 +1222,52 @@ class _NipaplayLargeScreenAnimeDetailPageState
               Positioned.fill(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
-                    14,
+                    0,
                     kNipaplayLargeScreenBottomHintHeight,
-                    14,
+                    0,
                     kNipaplayLargeScreenBottomHintHeight + mediaPadding.bottom,
                   ),
                   child: Container(
                     decoration: BoxDecoration(
                       color: surfaceColor,
-                      borderRadius:
-                          BorderRadius.circular(_kLargeScreenDetailPanelRadius),
                       border: Border.all(color: dividerColor, width: 1),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: body,
+                    child: Stack(
+                      children: [
+                        if (coverImageUrl.isNotEmpty)
+                          Positioned.fill(
+                            child: ImageFiltered(
+                              imageFilter:
+                                  ui.ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                              child: Opacity(
+                                opacity: isDark ? 0.25 : 0.35,
+                                child: CachedNetworkImageWidget(
+                                  imageUrl: coverImageUrl,
+                                  fit: BoxFit.cover,
+                                  shouldCompress: false,
+                                  loadMode: CachedImageLoadMode.hybrid,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  surfaceColor.withValues(alpha: 0.12),
+                                  surfaceColor.withValues(alpha: 0.42),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned.fill(child: body),
+                      ],
+                    ),
                   ),
                 ),
               ),
