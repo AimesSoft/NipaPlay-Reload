@@ -1,7 +1,8 @@
 part of dashboard_home_page;
 
 extension DashboardHomePageImageHelpers on _DashboardHomePageState {
-  Future<String?> _getHighQualityImage(int animeId, BangumiAnime animeDetail) async {
+  Future<String?> _getHighQualityImage(
+      int animeId, BangumiAnime animeDetail) async {
     try {
       // 优先尝试本地缓存中的 bangumiId/bangumiUrl，避免再请求弹弹play
       try {
@@ -14,13 +15,17 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           final bangumi = data['bangumi'] as Map<String, dynamic>?;
           String? cachedBangumiId;
           // 1) 直接字段
-          if (bangumi != null && bangumi['bangumiId'] != null && bangumi['bangumiId'].toString().isNotEmpty) {
+          if (bangumi != null &&
+              bangumi['bangumiId'] != null &&
+              bangumi['bangumiId'].toString().isNotEmpty) {
             cachedBangumiId = bangumi['bangumiId'].toString();
           }
           // 2) 从 bangumiUrl 解析
           if (cachedBangumiId == null) {
-            final String? bangumiUrl = (bangumi?['bangumiUrl'] as String?) ?? (animeData?['bangumiUrl'] as String?);
-            if (bangumiUrl != null && bangumiUrl.contains('bangumi.tv/subject/')) {
+            final String? bangumiUrl = (bangumi?['bangumiUrl'] as String?) ??
+                (animeData?['bangumiUrl'] as String?);
+            if (bangumiUrl != null &&
+                bangumiUrl.contains('bangumi.tv/subject/')) {
               final RegExp regex = RegExp(r'bangumi\.tv/subject/(\d+)');
               final match = regex.firstMatch(bangumiUrl);
               if (match != null) {
@@ -29,7 +34,8 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
             }
           }
           if (cachedBangumiId != null && cachedBangumiId.isNotEmpty) {
-            final bangumiImageUrl = await _getBangumiHighQualityImage(cachedBangumiId);
+            final bangumiImageUrl =
+                await _getBangumiHighQualityImage(cachedBangumiId);
             if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
               return bangumiImageUrl;
             }
@@ -39,7 +45,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
 
       // 首先尝试从弹弹play获取bangumi ID
       String? bangumiId = await _getBangumiIdFromDandanplay(animeId);
-      
+
       if (bangumiId != null && bangumiId.isNotEmpty) {
         // 如果获取到bangumi ID，尝试从Bangumi API获取高清图片
         final bangumiImageUrl = await _getBangumiHighQualityImage(bangumiId);
@@ -47,28 +53,29 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           return bangumiImageUrl;
         }
       }
-      
+
       // 如果Bangumi API失败，回退到弹弹play的图片
       if (animeDetail.imageUrl.isNotEmpty) {
         return animeDetail.imageUrl;
       }
-      
+
       return null;
     } catch (_) {
       // 出错时回退到弹弹play的图片
       return animeDetail.imageUrl;
     }
   }
-  
+
   // 从弹弹play API获取bangumi ID
   Future<String?> _getBangumiIdFromDandanplay(int animeId) async {
     try {
       // 使用弹弹play的番剧详情API获取bangumi ID
-      final Map<String, dynamic> result = await DandanplayService.getBangumiDetails(animeId);
-      
+      final Map<String, dynamic> result =
+          await DandanplayService.getBangumiDetails(animeId);
+
       if (result['success'] == true && result['bangumi'] != null) {
         final bangumi = result['bangumi'] as Map<String, dynamic>;
-        
+
         // 检查是否有bangumiUrl，从中提取ID
         final String? bangumiUrl = bangumi['bangumiUrl'] as String?;
         if (bangumiUrl != null && bangumiUrl.contains('bangumi.tv/subject/')) {
@@ -80,7 +87,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
             return bangumiId;
           }
         }
-        
+
         // 也检查是否直接有bangumiId字段
         final dynamic directBangumiId = bangumi['bangumiId'];
         if (directBangumiId != null) {
@@ -90,28 +97,28 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           }
         }
       }
-      
+
       return null;
     } catch (_) {
       return null;
     }
   }
-  
+
   // 从Bangumi API获取高清图片
   Future<String?> _getBangumiHighQualityImage(String bangumiId) async {
     try {
       // 使用Bangumi API的图片接口获取large尺寸的图片
       // GET /v0/subjects/{subject_id}/image?type=large
-      final String imageApiUrl = 'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large';
-      
-      
+      final String imageApiUrl =
+          'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large';
+
       final response = await http.head(
         WebRemoteAccessService.proxyUri(Uri.parse(imageApiUrl)),
         headers: {
           'User-Agent': 'NipaPlay/1.0',
         },
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 302) {
         // Bangumi API返回302重定向到实际图片URL
         final String? location = response.headers['location'];
@@ -122,7 +129,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         // 有些情况下可能直接返回200
         return imageApiUrl;
       }
-      
+
       return null;
     } catch (_) {
       return null;
@@ -135,51 +142,57 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     List<RecommendedItem> currentItems,
     List<int> indices,
   ) async {
-    
     if (candidates.isEmpty || currentItems.isEmpty || indices.isEmpty) {
       return;
     }
-    
+
     // 为每个候选项目升级图片
     final upgradeFutures = <Future<void>>[];
-    
-    for (int i = 0; i < candidates.length && i < currentItems.length && i < indices.length; i++) {
+
+    for (int i = 0;
+        i < candidates.length && i < currentItems.length && i < indices.length;
+        i++) {
       final candidate = candidates[i];
       final currentItem = currentItems[i];
       final targetIndex = indices[i];
-      upgradeFutures.add(_upgradeItemToHighQuality(candidate, currentItem, targetIndex));
+      upgradeFutures
+          .add(_upgradeItemToHighQuality(candidate, currentItem, targetIndex));
     }
-    
+
     // 异步处理所有升级，不阻塞UI
     unawaited(Future.wait(upgradeFutures, eagerError: false));
   }
-  
+
   // 升级单个项目为高清图片
-  Future<void> _upgradeItemToHighQuality(dynamic candidate, RecommendedItem currentItem, int index) async {
+  Future<void> _upgradeItemToHighQuality(
+      dynamic candidate, RecommendedItem currentItem, int index) async {
     try {
       RecommendedItem? upgradedItem;
-      
+
       if (candidate is JellyfinMediaItem) {
         // Jellyfin项目 - 获取高清图片和详细信息
         final jellyfinService = JellyfinService.instance;
-        
+
         // 并行获取背景图片、Logo图片和详细信息
         final results = await Future.wait([
-          _tryGetJellyfinImage(jellyfinService, candidate.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
-          _tryGetJellyfinImage(jellyfinService, candidate.id, ['Logo', 'Thumb']),
+          _tryGetJellyfinImage(jellyfinService, candidate.id,
+              ['Backdrop', 'Primary', 'Art', 'Banner']),
+          _tryGetJellyfinImage(
+              jellyfinService, candidate.id, ['Logo', 'Thumb']),
           _getJellyfinItemSubtitle(jellyfinService, candidate),
         ]);
-        
+
         final backdropCandidate = results[0] as MapEntry<String, String>?;
         final logoCandidate = results[1] as MapEntry<String, String>?;
         final subtitle = results[2] as String?;
         final backdropUrl = backdropCandidate?.value;
         final logoUrl = logoCandidate?.value;
-        final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+        final normalizedBackdropUrl =
+            _normalizeRecommendationImageUrl(backdropUrl);
         final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
-        
+
         // 如果获取到了更好的图片或信息，创建升级版本
-        if (normalizedBackdropUrl != currentItem.backgroundImageUrl || 
+        if (normalizedBackdropUrl != currentItem.backgroundImageUrl ||
             normalizedLogoUrl != currentItem.logoImageUrl ||
             subtitle != currentItem.subtitle) {
           upgradedItem = currentItem.copyWith(
@@ -188,31 +201,33 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
             logoImageUrl: normalizedLogoUrl,
             isLowRes: normalizedBackdropUrl == null
                 ? currentItem.isLowRes
-                : _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
+                : _shouldBlurLowResCover(
+                    imageType: backdropCandidate?.key, imageUrl: backdropUrl),
           );
         }
-        
       } else if (candidate is EmbyMediaItem) {
         // Emby项目 - 获取高清图片和详细信息
         final embyService = EmbyService.instance;
-        
+
         // 并行获取背景图片、Logo图片和详细信息
         final results = await Future.wait([
-          _tryGetEmbyImage(embyService, candidate.id, ['Backdrop', 'Primary', 'Art', 'Banner']),
+          _tryGetEmbyImage(embyService, candidate.id,
+              ['Backdrop', 'Primary', 'Art', 'Banner']),
           _tryGetEmbyImage(embyService, candidate.id, ['Logo', 'Thumb']),
           _getEmbyItemSubtitle(embyService, candidate),
         ]);
-        
+
         final backdropCandidate = results[0] as MapEntry<String, String>?;
         final logoCandidate = results[1] as MapEntry<String, String>?;
         final subtitle = results[2] as String?;
         final backdropUrl = backdropCandidate?.value;
         final logoUrl = logoCandidate?.value;
-        final normalizedBackdropUrl = _normalizeRecommendationImageUrl(backdropUrl);
+        final normalizedBackdropUrl =
+            _normalizeRecommendationImageUrl(backdropUrl);
         final normalizedLogoUrl = _normalizeRecommendationImageUrl(logoUrl);
-        
+
         // 如果获取到了更好的图片或信息，创建升级版本
-        if (normalizedBackdropUrl != currentItem.backgroundImageUrl || 
+        if (normalizedBackdropUrl != currentItem.backgroundImageUrl ||
             normalizedLogoUrl != currentItem.logoImageUrl ||
             subtitle != currentItem.subtitle) {
           upgradedItem = currentItem.copyWith(
@@ -221,15 +236,15 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
             logoImageUrl: normalizedLogoUrl,
             isLowRes: normalizedBackdropUrl == null
                 ? currentItem.isLowRes
-                : _shouldBlurLowResCover(imageType: backdropCandidate?.key, imageUrl: backdropUrl),
+                : _shouldBlurLowResCover(
+                    imageType: backdropCandidate?.key, imageUrl: backdropUrl),
           );
         }
-        
       } else if (candidate is WatchHistoryItem) {
         // 本地媒体库项目 - 获取高清图片和详细信息
         String? highQualityImageUrl;
         String? detailedSubtitle;
-        
+
         if (_isValidAnimeId(candidate.animeId)) {
           final animeId = candidate.animeId!;
           try {
@@ -238,7 +253,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
             final persisted = prefs.getString(
                 '${_DashboardHomePageState._localPrefsKeyPrefix}$animeId');
 
-            final persistedLooksHQ = persisted != null && persisted.isNotEmpty && _looksHighQualityUrl(persisted);
+            final persistedLooksHQ = persisted != null &&
+                persisted.isNotEmpty &&
+                _looksHighQualityUrl(persisted);
 
             if (persistedLooksHQ) {
               highQualityImageUrl = persisted;
@@ -254,14 +271,17 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
                       .replaceAll('<br />', ' ')
                       .replaceAll('```', '')
                   : null;
-              
+
               // 获取高清图片
               debugPrint('[Bangumi] 拉取高清封面(本地): animeId=$animeId');
-              highQualityImageUrl = await _getHighQualityImage(animeId, animeDetail);
-              debugPrint('[Bangumi] 高清封面结果(本地): animeId=$animeId url=$highQualityImageUrl');
+              highQualityImageUrl =
+                  await _getHighQualityImage(animeId, animeDetail);
+              debugPrint(
+                  '[Bangumi] 高清封面结果(本地): animeId=$animeId url=$highQualityImageUrl');
 
               // 将获取到的高清图持久化，避免后续重复请求
-              if (highQualityImageUrl != null && highQualityImageUrl.isNotEmpty) {
+              if (highQualityImageUrl != null &&
+                  highQualityImageUrl.isNotEmpty) {
                 _localImageCache[animeId] = highQualityImageUrl;
                 try {
                   await prefs.setString(
@@ -273,10 +293,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
                 highQualityImageUrl = persisted;
               }
             }
-          } catch (_) {
-          }
+          } catch (_) {}
         }
-        
+
         // 如果获取到了更好的图片或信息，创建升级版本
         final normalizedHighQualityUrl =
             _normalizeRecommendationImageUrl(highQualityImageUrl);
@@ -285,9 +304,10 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
           upgradedItem = currentItem.copyWith(
             subtitle: detailedSubtitle,
             backgroundImageUrl: normalizedHighQualityUrl,
-            isLowRes: normalizedHighQualityUrl != null && highQualityImageUrl != null
-                ? !_looksHighQualityUrl(highQualityImageUrl)
-                : currentItem.isLowRes,
+            isLowRes:
+                normalizedHighQualityUrl != null && highQualityImageUrl != null
+                    ? !_looksHighQualityUrl(highQualityImageUrl)
+                    : currentItem.isLowRes,
           );
         }
       } else if (candidate is DandanplayRemoteAnimeGroup) {
@@ -295,13 +315,16 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         if (_isValidAnimeId(candidate.animeId)) {
           final animeId = candidate.animeId!;
           try {
-            debugPrint('[Dandan封面] 尝试升级: animeId=$animeId current=${currentItem.backgroundImageUrl}');
+            debugPrint(
+                '[Dandan封面] 尝试升级: animeId=$animeId current=${currentItem.backgroundImageUrl}');
             final prefs = await SharedPreferences.getInstance();
             final persisted = prefs.getString(
                 '${_DashboardHomePageState._localPrefsKeyPrefix}$animeId');
-            
+
             String? hqUrl;
-            if (persisted != null && persisted.isNotEmpty && _looksHighQualityUrl(persisted)) {
+            if (persisted != null &&
+                persisted.isNotEmpty &&
+                _looksHighQualityUrl(persisted)) {
               debugPrint('[Dandan封面] 命中持久化高清: animeId=$animeId url=$persisted');
               hqUrl = persisted;
             } else {
@@ -310,9 +333,10 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
               final detail = await bangumiService.getAnimeDetails(animeId);
               debugPrint('[Bangumi] 拉取高清封面(弹弹play): animeId=$animeId');
               hqUrl = await _getHighQualityImage(animeId, detail);
-              debugPrint('[Bangumi] 高清封面结果(弹弹play): animeId=$animeId url=$hqUrl');
+              debugPrint(
+                  '[Bangumi] 高清封面结果(弹弹play): animeId=$animeId url=$hqUrl');
               debugPrint('[Dandan封面] Bangumi高清结果: animeId=$animeId url=$hqUrl');
-              
+
               if (hqUrl != null && hqUrl.isNotEmpty) {
                 try {
                   await prefs.setString(
@@ -321,23 +345,25 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
                 } catch (_) {}
               }
             }
-            
+
             final normalizedHqUrl = _normalizeRecommendationImageUrl(hqUrl);
             if (normalizedHqUrl != null &&
                 normalizedHqUrl != currentItem.backgroundImageUrl) {
-              debugPrint('[Dandan封面] 升级生效: animeId=$animeId url=$normalizedHqUrl');
+              debugPrint(
+                  '[Dandan封面] 升级生效: animeId=$animeId url=$normalizedHqUrl');
               upgradedItem = currentItem.copyWith(
                 backgroundImageUrl: normalizedHqUrl,
-                isLowRes: hqUrl != null ? !_looksHighQualityUrl(hqUrl) : currentItem.isLowRes,
+                isLowRes: hqUrl != null
+                    ? !_looksHighQualityUrl(hqUrl)
+                    : currentItem.isLowRes,
               );
             } else {
               debugPrint('[Dandan封面] 无需升级: animeId=$animeId');
             }
-          } catch (_) {
-          }
+          } catch (_) {}
         }
       }
-      
+
       // 如果有升级版本，更新UI
       if (upgradedItem != null && mounted) {
         setState(() {
@@ -345,13 +371,10 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
             _recommendedItems[index] = upgradedItem!;
           }
         });
-        
+
         // CachedNetworkImageWidget 会自动处理图片预加载和缓存
-        
       }
-      
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   // 经验性判断一个图片URL是否"看起来"是高清图
@@ -360,7 +383,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     if (lower.contains('/api/v1/image/')) {
       return false;
     }
-    if (lower.contains('bgm.tv') || lower.contains('type=large') || lower.contains('original')) {
+    if (lower.contains('bgm.tv') ||
+        lower.contains('type=large') ||
+        lower.contains('original')) {
       return true;
     }
     if (lower.contains('medium') || lower.contains('small')) {
@@ -398,13 +423,16 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     if (lower.contains('/api/v1/image/')) {
       return false;
     }
-    if (lower.contains('bgm.tv') || lower.contains('type=large') || lower.contains('original')) {
+    if (lower.contains('bgm.tv') ||
+        lower.contains('type=large') ||
+        lower.contains('original')) {
       return true;
     }
     if (lower.contains('medium') || lower.contains('small')) {
       return false;
     }
-    final widthMatch = RegExp(r'[?&](?:width|maxwidth)=(\d+)').firstMatch(lower);
+    final widthMatch =
+        RegExp(r'[?&](?:width|maxwidth)=(\d+)').firstMatch(lower);
     if (widthMatch != null) {
       final w = int.tryParse(widthMatch.group(1)!);
       if (w != null && w >= 1000) return true;
@@ -423,13 +451,13 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     for (final imageType in imageTypes) {
       try {
         final url = imageType == 'Backdrop'
-            ? service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95)
+            ? service.getImageUrl(itemId,
+                type: imageType, width: 1920, height: 1080, quality: 95)
             : service.getImageUrl(itemId, type: imageType);
         if (url.isNotEmpty) {
           candidates.add(MapEntry(imageType, url));
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
 
     if (candidates.isEmpty) {
@@ -461,13 +489,13 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     for (final imageType in imageTypes) {
       try {
         final url = imageType == 'Backdrop'
-            ? service.getImageUrl(itemId, type: imageType, width: 1920, height: 1080, quality: 95)
+            ? service.getImageUrl(itemId,
+                type: imageType, width: 1920, height: 1080, quality: 95)
             : service.getImageUrl(itemId, type: imageType);
         if (url.isNotEmpty) {
           candidates.add(MapEntry(imageType, url));
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
 
     if (candidates.isEmpty) {
@@ -496,13 +524,15 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
       final response = await http
           .head(WebRemoteAccessService.proxyUri(Uri.parse(url)))
           .timeout(
-        const Duration(seconds: 2),
-        onTimeout: () => throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
-      );
+            const Duration(seconds: 2),
+            onTimeout: () =>
+                throw TimeoutException('图片验证超时', const Duration(seconds: 2)),
+          );
 
       if (response.statusCode != 200) return false;
       final contentType = response.headers['content-type'];
-      if (contentType == null || !contentType.startsWith('image/')) return false;
+      if (contentType == null || !contentType.startsWith('image/'))
+        return false;
 
       final contentLength = response.headers['content-length'];
       if (contentLength != null) {
@@ -516,46 +546,55 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   }
 
   // 辅助方法：获取Jellyfin项目简介
-  Future<String> _getJellyfinItemSubtitle(JellyfinService service, JellyfinMediaItem item) async {
+  Future<String> _getJellyfinItemSubtitle(
+      JellyfinService service, JellyfinMediaItem item) async {
     try {
       final detail = await service.getMediaItemDetails(item.id);
-      return detail.overview?.isNotEmpty == true ? detail.overview!
-          .replaceAll('<br>', ' ')
-          .replaceAll('<br/>', ' ')
-          .replaceAll('<br />', ' ') : '暂无简介信息';
+      return detail.overview?.isNotEmpty == true
+          ? detail.overview!
+              .replaceAll('<br>', ' ')
+              .replaceAll('<br/>', ' ')
+              .replaceAll('<br />', ' ')
+          : '暂无简介信息';
     } catch (_) {
-      return item.overview?.isNotEmpty == true ? item.overview!
-          .replaceAll('<br>', ' ')
-          .replaceAll('<br/>', ' ')
-          .replaceAll('<br />', ' ') : '暂无简介信息';
+      return item.overview?.isNotEmpty == true
+          ? item.overview!
+              .replaceAll('<br>', ' ')
+              .replaceAll('<br/>', ' ')
+              .replaceAll('<br />', ' ')
+          : '暂无简介信息';
     }
   }
 
   // 辅助方法：获取Emby项目简介
-  Future<String> _getEmbyItemSubtitle(EmbyService service, EmbyMediaItem item) async {
+  Future<String> _getEmbyItemSubtitle(
+      EmbyService service, EmbyMediaItem item) async {
     try {
       final detail = await service.getMediaItemDetails(item.id);
-      return detail.overview?.isNotEmpty == true ? detail.overview!
-          .replaceAll('<br>', ' ')
-          .replaceAll('<br/>', ' ')
-          .replaceAll('<br />', ' ') : '暂无简介信息';
+      return detail.overview?.isNotEmpty == true
+          ? detail.overview!
+              .replaceAll('<br>', ' ')
+              .replaceAll('<br/>', ' ')
+              .replaceAll('<br />', ' ')
+          : '暂无简介信息';
     } catch (_) {
-      return item.overview?.isNotEmpty == true ? item.overview!
-          .replaceAll('<br>', ' ')
-          .replaceAll('<br/>', ' ')
-          .replaceAll('<br />', ' ') : '暂无简介信息';
+      return item.overview?.isNotEmpty == true
+          ? item.overview!
+              .replaceAll('<br>', ' ')
+              .replaceAll('<br/>', ' ')
+              .replaceAll('<br />', ' ')
+          : '暂无简介信息';
     }
   }
 
-
-  
   // 构建滚动按钮
   Widget _buildScrollButtons(ScrollController controller, double itemWidth) {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, child) {
         // 如果没有绑定或内容不足以滚动，直接不显示整个区域
-        if (!controller.hasClients || controller.position.maxScrollExtent <= 0) {
+        if (!controller.hasClients ||
+            controller.position.maxScrollExtent <= 0) {
           return const SizedBox.shrink();
         }
 
@@ -596,7 +635,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
       },
     );
   }
-  
+
   // 构建单个滚动按钮
   Widget _buildScrollButton({
     required IconData icon,
@@ -606,46 +645,52 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   }) {
     return Tooltip(
       message: message,
-      child: _HoverScaleButton(
-        enabled: enabled,
-        onTap: onTap,
-        child: Icon(
-          icon,
-          size: 24, // 与标题字体大小一致
+      child: NipaplayLargeScreenFocusableAction(
+        onActivate: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(8),
+        padding: const EdgeInsets.all(4),
+        child: _HoverScaleButton(
+          enabled: enabled,
+          onTap: onTap,
+          child: Icon(
+            icon,
+            size: 24, // 与标题字体大小一致
+          ),
         ),
       ),
     );
   }
-  
+
   // 滚动到上一页
   void _scrollToPrevious(ScrollController controller, double itemWidth) {
     final screenWidth = MediaQuery.of(context).size.width;
     final visibleWidth = screenWidth - 32; // 减去左右边距
     final itemsPerPage = (visibleWidth / itemWidth).floor();
     final scrollDistance = itemsPerPage * itemWidth;
-    
+
     final targetOffset = math.max(0.0, controller.offset - scrollDistance);
-    
+
     controller.animateTo(
       targetOffset,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
   }
-  
+
   // 滚动到下一页
   void _scrollToNext(ScrollController controller, double itemWidth) {
     final screenWidth = MediaQuery.of(context).size.width;
     final visibleWidth = screenWidth - 32; // 减去左右边距
     final itemsPerPage = (visibleWidth / itemWidth).floor();
     final scrollDistance = itemsPerPage * itemWidth;
-    
+
     final targetOffset = controller.offset + scrollDistance;
     final maxScrollExtent = controller.position.maxScrollExtent;
-    
+
     // 如果目标位置超过了最大滚动范围，就滚动到最大位置
-    final finalTargetOffset = targetOffset > maxScrollExtent ? maxScrollExtent : targetOffset;
-    
+    final finalTargetOffset =
+        targetOffset > maxScrollExtent ? maxScrollExtent : targetOffset;
+
     controller.animateTo(
       finalTargetOffset,
       duration: const Duration(milliseconds: 300),

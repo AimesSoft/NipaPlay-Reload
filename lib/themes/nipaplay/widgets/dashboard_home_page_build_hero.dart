@@ -40,7 +40,9 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
     }
 
     // 确保至少有7个项目用于布局
-    final items = _recommendedItems.length >= 7 ? _recommendedItems.take(7).toList() : _recommendedItems;
+    final items = _recommendedItems.length >= 7
+        ? _recommendedItems.take(7).toList()
+        : _recommendedItems;
     if (items.length < 7) {
       // 如果不足7个，填充占位符
       while (items.length < 7) {
@@ -111,15 +113,17 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   flex: 1,
                   child: Column(
                     children: [
-                      Expanded(child: _buildSmallRecommendationCard(items[5], 5)),
+                      Expanded(
+                          child: _buildSmallRecommendationCard(items[5], 5)),
                       const SizedBox(height: 8),
-                      Expanded(child: _buildSmallRecommendationCard(items[6], 6)),
+                      Expanded(
+                          child: _buildSmallRecommendationCard(items[6], 6)),
                     ],
                   ),
                 ),
               ],
             ),
-          
+
           // 页面指示器
           _buildPageIndicator(fullWidth: isPhone, count: pageCount),
         ],
@@ -127,9 +131,11 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
     );
   }
 
-  Widget _buildMainHeroBannerItem(RecommendedItem item, {bool compact = false}) {
-    return GestureDetector(
-      onTap: () => _onRecommendedItemTap(item),
+  Widget _buildMainHeroBannerItem(RecommendedItem item,
+      {bool compact = false}) {
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: () => _onRecommendedItemTap(item),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         key: ValueKey('hero_banner_${item.id}_${item.source.name}'), // 添加唯一key
         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -141,20 +147,25 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
           fit: StackFit.expand,
           children: [
             // 背景图 - 使用高效缓存组件
-            if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
+            if (item.backgroundImageUrl != null &&
+                item.backgroundImageUrl!.isNotEmpty)
               Stack(
                 fit: StackFit.expand,
                 children: [
                   Container(color: Colors.white),
                   CachedNetworkImageWidget(
-                    key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
+                    key: ValueKey(
+                        'hero_img_${item.id}_${item.backgroundImageUrl}'),
                     imageUrl: item.backgroundImageUrl!,
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
                     delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
-                    blurIfLowRes: item.source != RecommendedItemSource.dandanplay,
-                    forceBlur: item.source != RecommendedItemSource.dandanplay ? item.isLowRes : false,
+                    blurIfLowRes:
+                        item.source != RecommendedItemSource.dandanplay,
+                    forceBlur: item.source != RecommendedItemSource.dandanplay
+                        ? item.isLowRes
+                        : false,
                     lowResBlurSigma: 40,
                     lowResMinScale: 0.8,
                     errorBuilder: (context, error) => Container(
@@ -174,7 +185,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                       : Colors.black12,
                 ),
               ),
-            
+
             // 遮罩层
             Container(
               decoration: BoxDecoration(
@@ -188,7 +199,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                 ),
               ),
             ),
-            
+
             // 右上角评分
             if (item.rating != null)
               Positioned(
@@ -197,9 +208,20 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
+                    filter: ImageFilter.blur(
+                        sigmaX: context
+                                .watch<AppearanceSettingsProvider>()
+                                .enableWidgetBlurEffect
+                            ? 25
+                            : 0,
+                        sigmaY: context
+                                .watch<AppearanceSettingsProvider>()
+                                .enableWidgetBlurEffect
+                            ? 25
+                            : 0),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
@@ -231,7 +253,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   ),
                 ),
               ),
-            
+
             // 左下角Logo - 使用高效缓存组件
             if (item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty)
               Positioned(
@@ -241,10 +263,11 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   child: Container(
                     constraints: BoxConstraints(
                       maxWidth: compact ? 120 : 200, // 手机端更小
-                      maxHeight: compact ? 50 : 80,  // 手机端更小
+                      maxHeight: compact ? 50 : 80, // 手机端更小
                     ),
                     child: CachedNetworkImageWidget(
-                      key: ValueKey('hero_logo_${item.id}_${item.logoImageUrl}'),
+                      key:
+                          ValueKey('hero_logo_${item.id}_${item.logoImageUrl}'),
                       imageUrl: item.logoImageUrl!,
                       delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                       fit: BoxFit.contain,
@@ -260,7 +283,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   child: Container(
                     constraints: BoxConstraints(
                       maxWidth: compact ? 120 : 200, // 手机端更小
-                      maxHeight: compact ? 50 : 80,  // 手机端更小
+                      maxHeight: compact ? 50 : 80, // 手机端更小
                     ),
                     child: Image.network(
                       item.logoImageUrl!,
@@ -282,11 +305,13 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   ),
                 ),
               ),
-            
+
             // 左侧中间位置的标题和简介
             Positioned(
               left: 16,
-              right: compact ? 16 : MediaQuery.of(context).size.width * 0.3, // 手机上不预留右侧空间
+              right: compact
+                  ? 16
+                  : MediaQuery.of(context).size.width * 0.3, // 手机上不预留右侧空间
               top: 0,
               bottom: 0,
               child: Align(
@@ -322,15 +347,18 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                         ),
                       ],
                     ),
-                    
+
                     // 桌面端显示间距和简介，手机端不显示
                     if (!compact) ...[
                       const SizedBox(height: 12),
-                      
+
                       // 剧情简介（只在桌面端显示）
                       if (item.subtitle.isNotEmpty)
                         Text(
-                          item.subtitle.replaceAll('<br>', ' ').replaceAll('<br/>', ' ').replaceAll('<br />', ' '),
+                          item.subtitle
+                              .replaceAll('<br>', ' ')
+                              .replaceAll('<br/>', ' ')
+                              .replaceAll('<br />', ' '),
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
@@ -356,10 +384,12 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
   }
 
   Widget _buildSmallRecommendationCard(RecommendedItem item, int index) {
-    return GestureDetector(
-      onTap: () => _onRecommendedItemTap(item),
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: () => _onRecommendedItemTap(item),
+      borderRadius: BorderRadius.circular(4),
       child: Container(
-        key: ValueKey('small_card_${item.id}_${item.source.name}_$index'), // 添加唯一key包含索引
+        key: ValueKey(
+            'small_card_${item.id}_${item.source.name}_$index'), // 添加唯一key包含索引
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
@@ -369,26 +399,32 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
           fit: StackFit.expand,
           children: [
             // 背景图 - 使用高效缓存组件
-            if (item.backgroundImageUrl != null && item.backgroundImageUrl!.isNotEmpty)
+            if (item.backgroundImageUrl != null &&
+                item.backgroundImageUrl!.isNotEmpty)
               Stack(
                 fit: StackFit.expand,
                 children: [
                   Container(color: Colors.white),
                   CachedNetworkImageWidget(
-                    key: ValueKey('small_img_${item.id}_${item.backgroundImageUrl}_$index'),
+                    key: ValueKey(
+                        'small_img_${item.id}_${item.backgroundImageUrl}_$index'),
                     imageUrl: item.backgroundImageUrl!,
                     fit: BoxFit.cover,
                     delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
                     width: double.infinity,
                     height: double.infinity,
-                    blurIfLowRes: item.source != RecommendedItemSource.dandanplay,
-                    forceBlur: item.source != RecommendedItemSource.dandanplay ? item.isLowRes : false,
+                    blurIfLowRes:
+                        item.source != RecommendedItemSource.dandanplay,
+                    forceBlur: item.source != RecommendedItemSource.dandanplay
+                        ? item.isLowRes
+                        : false,
                     lowResBlurSigma: 40,
                     lowResMinScale: 0.8,
                     errorBuilder: (context, error) => Container(
                       color: Colors.white10,
                       child: const Center(
-                        child: Icon(Icons.broken_image, color: Colors.white30, size: 16),
+                        child: Icon(Icons.broken_image,
+                            color: Colors.white30, size: 16),
                       ),
                     ),
                   ),
@@ -402,7 +438,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                       : Colors.black12,
                 ),
               ),
-            
+
             // 遮罩层
             Container(
               decoration: BoxDecoration(
@@ -416,7 +452,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                 ),
               ),
             ),
-            
+
             // 右上角评分
             if (item.rating != null)
               Positioned(
@@ -425,9 +461,20 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0, sigmaY: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 25 : 0),
+                    filter: ImageFilter.blur(
+                        sigmaX: context
+                                .watch<AppearanceSettingsProvider>()
+                                .enableWidgetBlurEffect
+                            ? 25
+                            : 0,
+                        sigmaY: context
+                                .watch<AppearanceSettingsProvider>()
+                                .enableWidgetBlurEffect
+                            ? 25
+                            : 0),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
@@ -459,7 +506,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   ),
                 ),
               ),
-            
+
             // 左下角小Logo（如果有的话）
             // Logo图片 - 使用高效缓存组件
             if (item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty)
@@ -472,7 +519,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     maxHeight: 45,
                   ),
                   child: CachedNetworkImageWidget(
-                    key: ValueKey('small_logo_${item.id}_${item.logoImageUrl}_$index'),
+                    key: ValueKey(
+                        'small_logo_${item.id}_${item.logoImageUrl}_$index'),
                     imageUrl: item.logoImageUrl!,
                     fit: BoxFit.contain,
                     delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
@@ -507,12 +555,12 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   ),
                 ),
               ),
-            
+
             // 右下角标题（总是显示，不论是否有Logo）
             Positioned(
               right: 8,
               bottom: item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty
-                ? 66
+                  ? 66
                   : 8,
               left: item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty
                   ? 8

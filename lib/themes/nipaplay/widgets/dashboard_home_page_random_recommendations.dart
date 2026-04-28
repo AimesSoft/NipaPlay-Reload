@@ -71,7 +71,8 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
         final batch = tags.sublist(start, math.min(start + 5, tags.length));
         final futures = batch.map((tag) async {
           try {
-            final result = await SearchService.instance.searchAnimeByTags([tag]);
+            final result =
+                await SearchService.instance.searchAnimeByTags([tag]);
             return _RandomTagSearchResult(tag, result.animes);
           } catch (e) {
             debugPrint('随机推荐标签搜索失败: $tag, error: $e');
@@ -107,7 +108,8 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
 
           if (selected != null) {
             usedAnimeIds.add(selected.animeId);
-            items.add(RandomRecommendationItem(tag: entry.tag, anime: selected));
+            items
+                .add(RandomRecommendationItem(tag: entry.tag, anime: selected));
           }
 
           if (items.length >= 5) break;
@@ -172,9 +174,10 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: context.watch<AppearanceSettingsProvider>().showAnimeCardSummary
-              ? HorizontalAnimeCard.detailedListHeight
-              : HorizontalAnimeCard.compactListHeight,
+          height:
+              context.watch<AppearanceSettingsProvider>().showAnimeCardSummary
+                  ? HorizontalAnimeCard.detailedListHeight
+                  : HorizontalAnimeCard.compactListHeight,
           child: ListView.builder(
             controller: scrollController,
             scrollDirection: Axis.horizontal,
@@ -215,14 +218,18 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
       height: showSummary
           ? HorizontalAnimeCard.detailedCardHeight
           : HorizontalAnimeCard.compactCardHeight,
-      child: HorizontalAnimeCard(
-        key: ValueKey('random_${anime.animeId}_${item.tag.hashCode}'),
-        title: anime.animeTitle,
-        imageUrl: anime.imageUrl ?? '',
-        onTap: () => ThemedAnimeDetail.show(context, anime.animeId),
-        source: sourceLabel,
-        rating: anime.rating > 0 ? anime.rating : null,
-        summary: summary,
+      child: NipaplayLargeScreenFocusableAction(
+        onActivate: () => ThemedAnimeDetail.show(context, anime.animeId),
+        borderRadius: BorderRadius.circular(4),
+        child: HorizontalAnimeCard(
+          key: ValueKey('random_${anime.animeId}_${item.tag.hashCode}'),
+          title: anime.animeTitle,
+          imageUrl: anime.imageUrl ?? '',
+          onTap: () => ThemedAnimeDetail.show(context, anime.animeId),
+          source: sourceLabel,
+          rating: anime.rating > 0 ? anime.rating : null,
+          summary: summary,
+        ),
       ),
     );
   }
