@@ -1286,6 +1286,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
                 child: NipaplayLargeScreenBottomHintOverlay(
                   isDarkMode: isDark,
                   onToggleMenu: () => Navigator.of(context).maybePop(),
+                  menuLabel: '返回',
                 ),
               ),
             ],

@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_settings_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_tab_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_top_status_overlay.dart';
 
@@ -38,8 +39,13 @@ class _NipaplayLargeScreenScaffoldLayoutState
   late final FocusNode _inputFocusNode;
   late final ValueNotifier<NipaplayLargeScreenTabPanelCommand?>
       _tabPanelCommand;
+  late final ValueNotifier<NipaplayLargeScreenSettingsPanelCommand?>
+      _settingsPanelCommand;
   bool _isTabPanelVisible = false;
+  bool _isSettingsPanelVisible = false;
   int _focusedMenuIndex = 0;
+  int _focusedSettingsIndex = 0;
+  int _settingsEntryCount = 0;
 
   int get _menuItemCount {
     final int actionCount = [
@@ -55,6 +61,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
     super.initState();
     _inputFocusNode = FocusNode(debugLabel: 'nipaplay_large_screen_input');
     _tabPanelCommand = ValueNotifier<NipaplayLargeScreenTabPanelCommand?>(null);
+    _settingsPanelCommand =
+        ValueNotifier<NipaplayLargeScreenSettingsPanelCommand?>(null);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -65,6 +73,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
 
   @override
   void dispose() {
+    _settingsPanelCommand.dispose();
     _tabPanelCommand.dispose();
     _inputFocusNode.dispose();
     super.dispose();
@@ -84,6 +93,9 @@ class _NipaplayLargeScreenScaffoldLayoutState
   }
 
   void _toggleTabPanel() {
+    if (_isSettingsPanelVisible) {
+      _closeSettingsPanel();
+    }
     setState(() {
       final bool nextVisible = !_isTabPanelVisible;
       _isTabPanelVisible = nextVisible;
@@ -108,11 +120,45 @@ class _NipaplayLargeScreenScaffoldLayoutState
     _ensureContentFocus();
   }
 
+  void _toggleSettingsPanel() {
+    if (_isTabPanelVisible) {
+      _closeTabPanel();
+    }
+    setState(() {
+      _isSettingsPanelVisible = !_isSettingsPanelVisible;
+      if (_isSettingsPanelVisible) {
+        _focusedSettingsIndex = _clampSettingsIndex(_focusedSettingsIndex);
+      }
+    });
+    if (_isSettingsPanelVisible) {
+      _inputFocusNode.requestFocus();
+    } else {
+      _ensureContentFocus();
+    }
+  }
+
+  void _closeSettingsPanel() {
+    if (!_isSettingsPanelVisible) {
+      return;
+    }
+    setState(() {
+      _isSettingsPanelVisible = false;
+    });
+    _ensureContentFocus();
+  }
+
   int _clampMenuIndex(int index) {
     if (_menuItemCount <= 0) {
       return 0;
     }
     return index.clamp(0, _menuItemCount - 1);
+  }
+
+  int _clampSettingsIndex(int index) {
+    if (_settingsEntryCount <= 0) {
+      return 0;
+    }
+    return index.clamp(0, _settingsEntryCount - 1);
   }
 
   void _moveMenuFocus(int delta) {
@@ -138,6 +184,12 @@ class _NipaplayLargeScreenScaffoldLayoutState
     // Activation is delegated to the panel to keep input logic decoupled from UI/actions.
     _tabPanelCommand.value = null;
     _tabPanelCommand.value = NipaplayLargeScreenTabPanelCommand.activateFocused;
+  }
+
+  void _dispatchSettingsPanelCommand(
+      NipaplayLargeScreenSettingsPanelCommand command) {
+    _settingsPanelCommand.value = null;
+    _settingsPanelCommand.value = command;
   }
 
   void _jumpContentScrollBoundary(TraversalDirection direction) {
@@ -208,6 +260,39 @@ class _NipaplayLargeScreenScaffoldLayoutState
       return KeyEventResult.ignored;
     }
 
+    if (_isSettingsPanelVisible) {
+      switch (command) {
+        case NipaplayLargeScreenInputCommand.toggleMenu:
+          _closeSettingsPanel();
+          return KeyEventResult.handled;
+        case NipaplayLargeScreenInputCommand.navigateUp:
+          _dispatchSettingsPanelCommand(
+            NipaplayLargeScreenSettingsPanelCommand.navigateUp,
+          );
+          return KeyEventResult.handled;
+        case NipaplayLargeScreenInputCommand.navigateDown:
+          _dispatchSettingsPanelCommand(
+            NipaplayLargeScreenSettingsPanelCommand.navigateDown,
+          );
+          return KeyEventResult.handled;
+        case NipaplayLargeScreenInputCommand.navigateLeft:
+          _dispatchSettingsPanelCommand(
+            NipaplayLargeScreenSettingsPanelCommand.navigateLeft,
+          );
+          return KeyEventResult.handled;
+        case NipaplayLargeScreenInputCommand.navigateRight:
+          _dispatchSettingsPanelCommand(
+            NipaplayLargeScreenSettingsPanelCommand.navigateRight,
+          );
+          return KeyEventResult.handled;
+        case NipaplayLargeScreenInputCommand.activate:
+          _dispatchSettingsPanelCommand(
+            NipaplayLargeScreenSettingsPanelCommand.activateFocused,
+          );
+          return KeyEventResult.handled;
+      }
+    }
+
     switch (command) {
       case NipaplayLargeScreenInputCommand.toggleMenu:
         _toggleTabPanel();
@@ -256,6 +341,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.of(context).padding;
+    final bool showPanelBackdrop = _isTabPanelVisible || _isSettingsPanelVisible;
 
     return Focus(
       focusNode: _inputFocusNode,
@@ -279,11 +365,17 @@ class _NipaplayLargeScreenScaffoldLayoutState
               ),
             ),
           ),
-          if (_isTabPanelVisible)
+          if (showPanelBackdrop)
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
-                onTap: _closeTabPanel,
+                onTap: () {
+                  if (_isSettingsPanelVisible) {
+                    _closeSettingsPanel();
+                    return;
+                  }
+                  _closeTabPanel();
+                },
                 child: ClipRect(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
@@ -322,7 +414,46 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 onTabActivated: _closeTabPanel,
                 onToggleLargeScreen: widget.onToggleLargeScreen,
                 onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
-                onOpenSettings: widget.onOpenSettings,
+                onOpenSettings: _toggleSettingsPanel,
+              ),
+            ),
+          ),
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            right: _isSettingsPanelVisible
+                ? 0
+                : -kNipaplayLargeScreenSettingsPanelWidth,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              ignoring: !_isSettingsPanelVisible,
+              child: SizedBox(
+                width: kNipaplayLargeScreenSettingsPanelWidth,
+                child: NipaplayLargeScreenSettingsPanel(
+                  isDarkMode: widget.isDarkMode,
+                  focusedIndex: _focusedSettingsIndex,
+                  commandNotifier: _settingsPanelCommand,
+                  onFocusedIndexChanged: (index) {
+                    if (_focusedSettingsIndex == index) {
+                      return;
+                    }
+                    setState(() {
+                      _focusedSettingsIndex = _clampSettingsIndex(index);
+                    });
+                  },
+                  onEntryCountChanged: (count) {
+                    if (_settingsEntryCount == count) {
+                      return;
+                    }
+                    setState(() {
+                      _settingsEntryCount = count;
+                      _focusedSettingsIndex =
+                          _clampSettingsIndex(_focusedSettingsIndex);
+                    });
+                  },
+                  onRequestClose: _closeSettingsPanel,
+                ),
               ),
             ),
           ),
@@ -341,6 +472,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
             child: NipaplayLargeScreenBottomHintOverlay(
               isDarkMode: widget.isDarkMode,
               onToggleMenu: _toggleTabPanel,
+              onOpenSettings: _toggleSettingsPanel,
             ),
           ),
         ],

@@ -328,6 +328,10 @@ class SettingsItem extends StatelessWidget {
     switch (type) {
       case SettingsItemType.dropdown:
         final bool alignDropdownToTop = _hasDropdownDescriptions();
+        final List<DropdownMenuItemData> items =
+            dropdownItems ?? const <DropdownMenuItemData>[];
+        final bool canCycleSelection =
+            enabled && items.isNotEmpty && onDropdownChanged != null;
         return ListTile(
           titleAlignment:
               alignDropdownToTop ? ListTileTitleAlignment.top : null,
@@ -356,6 +360,15 @@ class SettingsItem extends StatelessWidget {
                     onItemSelected: onDropdownChanged!,
                   ),
                 )
+              : null,
+          onTap: canCycleSelection
+              ? () async {
+                  final currentIndex = items.indexWhere((item) => item.isSelected);
+                  final nextIndex = currentIndex < 0
+                      ? 0
+                      : ((currentIndex + 1) % items.length);
+                  await onDropdownChanged!(items[nextIndex].value);
+                }
               : null,
           enabled: enabled,
         );
@@ -433,6 +446,15 @@ class SettingsItem extends StatelessWidget {
           enabled: enabled,
         );
       case SettingsItemType.slider:
+        final double min = sliderMin ?? 0;
+        final double max = sliderMax ?? 1;
+        final double current = sliderValue ?? min;
+        final int? divisions = sliderDivisions;
+        final double step = (divisions != null && divisions > 0)
+            ? ((max - min) / divisions)
+            : ((max - min) / 20);
+        final bool canAdjustByEnter =
+            enabled && onSliderChanged != null && max > min && step > 0;
         return Column(
           children: [
             ListTile(
@@ -471,6 +493,15 @@ class SettingsItem extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              onTap: canAdjustByEnter
+                  ? () {
+                      double next = current + step;
+                      if (next > max) {
+                        next = min;
+                      }
+                      onSliderChanged!(next.clamp(min, max));
+                    }
+                  : null,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -483,9 +514,9 @@ class SettingsItem extends StatelessWidget {
                   }),
                 ),
                 child: fluent.Slider(
-                  value: sliderValue ?? 0,
-                  min: sliderMin ?? 0,
-                  max: sliderMax ?? 1,
+                  value: current,
+                  min: min,
+                  max: max,
                   divisions: sliderDivisions,
                   onChanged: enabled ? onSliderChanged : null,
                   label: sliderLabelFormatter?.call(sliderValue ?? 0),
