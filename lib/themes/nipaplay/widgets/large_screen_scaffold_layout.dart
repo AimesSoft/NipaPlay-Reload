@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_input_controls.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_tab_panel.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_top_status_overlay.dart';
 
@@ -34,12 +35,63 @@ class NipaplayLargeScreenScaffoldLayout extends StatefulWidget {
 
 class _NipaplayLargeScreenScaffoldLayoutState
     extends State<NipaplayLargeScreenScaffoldLayout> {
+  late final FocusNode _inputFocusNode;
+  late final ValueNotifier<NipaplayLargeScreenTabPanelCommand?>
+      _tabPanelCommand;
   bool _isTabPanelVisible = false;
+  int _focusedMenuIndex = 0;
+
+  int get _menuItemCount {
+    final int actionCount = [
+      widget.onToggleLargeScreen,
+      widget.onToggleThemeFromOrigin,
+      widget.onOpenSettings,
+    ].where((callback) => callback != null).length;
+    return widget.tabPage.length + actionCount;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _inputFocusNode = FocusNode(debugLabel: 'nipaplay_large_screen_input');
+    _tabPanelCommand = ValueNotifier<NipaplayLargeScreenTabPanelCommand?>(null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _inputFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabPanelCommand.dispose();
+    _inputFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant NipaplayLargeScreenScaffoldLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_menuItemCount == 0) {
+      _focusedMenuIndex = 0;
+      return;
+    }
+    final int maxIndex = _menuItemCount - 1;
+    if (_focusedMenuIndex > maxIndex || _focusedMenuIndex < 0) {
+      _focusedMenuIndex = _focusedMenuIndex.clamp(0, maxIndex);
+    }
+  }
 
   void _toggleTabPanel() {
     setState(() {
-      _isTabPanelVisible = !_isTabPanelVisible;
+      final bool nextVisible = !_isTabPanelVisible;
+      _isTabPanelVisible = nextVisible;
+      if (nextVisible) {
+        _focusedMenuIndex = _clampMenuIndex(widget.currentIndex);
+      }
     });
+    _inputFocusNode.requestFocus();
   }
 
   void _closeTabPanel() {
@@ -49,84 +101,164 @@ class _NipaplayLargeScreenScaffoldLayoutState
     setState(() {
       _isTabPanelVisible = false;
     });
+    _inputFocusNode.requestFocus();
+  }
+
+  int _clampMenuIndex(int index) {
+    if (_menuItemCount <= 0) {
+      return 0;
+    }
+    return index.clamp(0, _menuItemCount - 1);
+  }
+
+  void _moveMenuFocus(int delta) {
+    if (!_isTabPanelVisible) {
+      return;
+    }
+    final int count = _menuItemCount;
+    if (count <= 0) {
+      return;
+    }
+    setState(() {
+      _focusedMenuIndex = (_focusedMenuIndex + delta) % count;
+      if (_focusedMenuIndex < 0) {
+        _focusedMenuIndex += count;
+      }
+    });
+  }
+
+  void _activateFocusedMenuItem() {
+    if (!_isTabPanelVisible) {
+      return;
+    }
+    // Activation is delegated to the panel to keep input logic decoupled from UI/actions.
+    _tabPanelCommand.value = null;
+    _tabPanelCommand.value = NipaplayLargeScreenTabPanelCommand.activateFocused;
+  }
+
+  KeyEventResult _handleInputKeyEvent(FocusNode node, KeyEvent event) {
+    final command = NipaplayLargeScreenInputControls.fromKeyEvent(event);
+    if (command == null) {
+      return KeyEventResult.ignored;
+    }
+
+    switch (command) {
+      case NipaplayLargeScreenInputCommand.toggleMenu:
+        _toggleTabPanel();
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.navigateUp:
+        if (!_isTabPanelVisible) {
+          return KeyEventResult.ignored;
+        }
+        _moveMenuFocus(-1);
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.navigateDown:
+        if (!_isTabPanelVisible) {
+          return KeyEventResult.ignored;
+        }
+        _moveMenuFocus(1);
+        return KeyEventResult.handled;
+      case NipaplayLargeScreenInputCommand.activate:
+        if (!_isTabPanelVisible) {
+          return KeyEventResult.ignored;
+        }
+        _activateFocusedMenuItem();
+        return KeyEventResult.handled;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final mediaPadding = MediaQuery.of(context).padding;
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              14,
-              0,
-              14,
-              14 + mediaPadding.bottom,
-            ),
-            child: MediaQuery.removePadding(
-              context: context,
-              removeTop: true,
-              child: widget.content,
+    return Focus(
+      focusNode: _inputFocusNode,
+      autofocus: true,
+      canRequestFocus: true,
+      onKeyEvent: _handleInputKeyEvent,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                14,
+                0,
+                14,
+                14 + mediaPadding.bottom,
+              ),
+              child: MediaQuery.removePadding(
+                context: context,
+                removeTop: true,
+                child: widget.content,
+              ),
             ),
           ),
-        ),
-        if (_isTabPanelVisible)
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _closeTabPanel,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-                  child: ColoredBox(
-                    color: widget.isDarkMode
-                        ? Colors.black.withValues(alpha: 0.16)
-                        : Colors.white.withValues(alpha: 0.08),
+          if (_isTabPanelVisible)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _closeTabPanel,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                    child: ColoredBox(
+                      color: widget.isDarkMode
+                          ? Colors.black.withValues(alpha: 0.16)
+                          : Colors.white.withValues(alpha: 0.08),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeOutCubic,
-          left: _isTabPanelVisible ? 0 : -kNipaplayLargeScreenTabPanelWidth,
-          top: 0,
-          bottom: 0,
-          child: IgnorePointer(
-            ignoring: !_isTabPanelVisible,
-            child: NipaplayLargeScreenTabPanel(
-              currentIndex: widget.currentIndex,
-              isDarkMode: widget.isDarkMode,
-              tabPage: widget.tabPage,
-              tabController: widget.tabController,
-              onTabActivated: _closeTabPanel,
-              onToggleLargeScreen: widget.onToggleLargeScreen,
-              onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
-              onOpenSettings: widget.onOpenSettings,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            left: _isTabPanelVisible ? 0 : -kNipaplayLargeScreenTabPanelWidth,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              ignoring: !_isTabPanelVisible,
+              child: NipaplayLargeScreenTabPanel(
+                currentIndex: widget.currentIndex,
+                isDarkMode: widget.isDarkMode,
+                tabPage: widget.tabPage,
+                tabController: widget.tabController,
+                focusedIndex: _focusedMenuIndex,
+                commandNotifier: _tabPanelCommand,
+                onFocusedIndexChanged: (index) {
+                  if (_focusedMenuIndex == index) {
+                    return;
+                  }
+                  setState(() {
+                    _focusedMenuIndex = index;
+                  });
+                },
+                onTabActivated: _closeTabPanel,
+                onToggleLargeScreen: widget.onToggleLargeScreen,
+                onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
+                onOpenSettings: widget.onOpenSettings,
+              ),
             ),
           ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          child: NipaplayLargeScreenTopStatusOverlay(
-            isDarkMode: widget.isDarkMode,
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: NipaplayLargeScreenTopStatusOverlay(
+              isDarkMode: widget.isDarkMode,
+            ),
           ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: NipaplayLargeScreenBottomHintOverlay(
-            isDarkMode: widget.isDarkMode,
-            onToggleMenu: _toggleTabPanel,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: NipaplayLargeScreenBottomHintOverlay(
+              isDarkMode: widget.isDarkMode,
+              onToggleMenu: _toggleTabPanel,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
