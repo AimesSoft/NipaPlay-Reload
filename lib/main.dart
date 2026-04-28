@@ -14,6 +14,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_actions.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -1547,78 +1548,81 @@ class MainPageState extends State<MainPage>
         isDesktop ? baseTopPadding : baseTopPadding + mediaPadding.top;
     final double rightPadding =
         isDesktop ? baseRightPadding : baseRightPadding + mediaPadding.right;
-    final content = Stack(
-      children: [
-        // 使用 Selector 只监听需要的状态
-        Selector<VideoPlayerState, bool>(
-          selector: (context, videoState) => videoState.shouldShowAppBar(),
-          builder: (context, shouldShowAppBar, child) {
-            return CustomScaffold(
-              pages: widget.pages,
-              tabPage: createTabLabels(context),
-              pageIsHome: true,
-              shouldShowAppBar: shouldShowAppBar,
-              tabController: globalTabController,
-              useLargeScreenLayout: isLargeScreenLayoutActive,
-              onToggleLargeScreen: _toggleLargeScreenLayout,
-              onToggleThemeFromOrigin: _handleThemeToggleFromButton,
-              onOpenSettings: () => SettingsPage.showWindow(context),
-            );
-          },
-        ),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 500),
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          child: _showSplash
-              ? const SplashScreen(key: ValueKey('splash'))
-              : const SizedBox.shrink(key: ValueKey('no_splash')),
-        ),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: SizedBox(
-            height: 40,
-            child: GestureDetector(
-              onDoubleTap: _toggleWindowSize,
-              onPanStart: (details) async {
-                if (globals.isDesktop) {
-                  await windowManager.startDragging();
-                }
-              },
+    final content = NipaplayLargeScreenModeScope(
+      isActive: isLargeScreenLayoutActive,
+      child: Stack(
+        children: [
+          // 使用 Selector 只监听需要的状态
+          Selector<VideoPlayerState, bool>(
+            selector: (context, videoState) => videoState.shouldShowAppBar(),
+            builder: (context, shouldShowAppBar, child) {
+              return CustomScaffold(
+                pages: widget.pages,
+                tabPage: createTabLabels(context),
+                pageIsHome: true,
+                shouldShowAppBar: shouldShowAppBar,
+                tabController: globalTabController,
+                useLargeScreenLayout: isLargeScreenLayoutActive,
+                onToggleLargeScreen: _toggleLargeScreenLayout,
+                onToggleThemeFromOrigin: _handleThemeToggleFromButton,
+                onOpenSettings: () => SettingsPage.showWindow(context),
+              );
+            },
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            transitionBuilder: (Widget child, Animation<double> animation) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            child: _showSplash
+                ? const SplashScreen(key: ValueKey('splash'))
+                : const SizedBox.shrink(key: ValueKey('no_splash')),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SizedBox(
+              height: 40,
+              child: GestureDetector(
+                onDoubleTap: _toggleWindowSize,
+                onPanStart: (details) async {
+                  if (globals.isDesktop) {
+                    await windowManager.startDragging();
+                  }
+                },
+              ),
             ),
           ),
-        ),
-        // 使用 Selector 只监听需要的状态
-        Selector<VideoPlayerState, bool>(
-          selector: (context, videoState) => videoState.shouldShowAppBar(),
-          builder: (context, shouldShowAppBar, child) {
-            if (!globals.isDesktopOrTablet) {
-              return const SizedBox.shrink();
-            }
-            if (!isLargeScreenLayoutActive && !shouldShowAppBar) {
-              return const SizedBox.shrink();
-            }
-            return NipaplayLargeScreenModeActionsOverlay(
-              isDarkMode: isDarkMode,
-              isLargeScreenLayoutActive: isLargeScreenLayoutActive,
-              topPadding: topPadding,
-              rightPadding: rightPadding,
-              showWindowsButtons:
-                  !kIsWeb && (Platform.isWindows || Platform.isLinux),
-              isMaximized: isMaximized,
-              onToggleLargeScreen: _toggleLargeScreenLayout,
-              onToggleThemeFromOrigin: _handleThemeToggleFromButton,
-              onOpenSettings: () => SettingsPage.showWindow(context),
-              onMinimize: _minimizeWindow,
-              onMaximizeRestore: _toggleWindowSize,
-              onClose: _closeWindow,
-            );
-          },
-        ),
-      ],
+          // 使用 Selector 只监听需要的状态
+          Selector<VideoPlayerState, bool>(
+            selector: (context, videoState) => videoState.shouldShowAppBar(),
+            builder: (context, shouldShowAppBar, child) {
+              if (!globals.isDesktopOrTablet) {
+                return const SizedBox.shrink();
+              }
+              if (!isLargeScreenLayoutActive && !shouldShowAppBar) {
+                return const SizedBox.shrink();
+              }
+              return NipaplayLargeScreenModeActionsOverlay(
+                isDarkMode: isDarkMode,
+                isLargeScreenLayoutActive: isLargeScreenLayoutActive,
+                topPadding: topPadding,
+                rightPadding: rightPadding,
+                showWindowsButtons:
+                    !kIsWeb && (Platform.isWindows || Platform.isLinux),
+                isMaximized: isMaximized,
+                onToggleLargeScreen: _toggleLargeScreenLayout,
+                onToggleThemeFromOrigin: _handleThemeToggleFromButton,
+                onOpenSettings: () => SettingsPage.showWindow(context),
+                onMinimize: _minimizeWindow,
+                onMaximizeRestore: _toggleWindowSize,
+                onClose: _closeWindow,
+              );
+            },
+          ),
+        ],
+      ),
     );
 
     return content;
