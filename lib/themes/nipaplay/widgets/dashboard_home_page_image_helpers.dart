@@ -643,20 +643,22 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     required String message,
     bool enabled = true,
   }) {
+    final resolvedOnTap = enabled ? onTap : null;
+    final button = _HoverScaleButton(
+      enabled: enabled,
+      onTap: _isLargeScreenModeActive ? null : resolvedOnTap,
+      child: Icon(
+        icon,
+        size: 24, // 与标题字体大小一致
+      ),
+    );
     return Tooltip(
       message: message,
-      child: NipaplayLargeScreenFocusableAction(
-        onActivate: enabled ? onTap : null,
+      child: _wrapLargeScreenFocusable(
+        child: button,
+        onActivate: resolvedOnTap,
         borderRadius: BorderRadius.circular(8),
         padding: const EdgeInsets.all(4),
-        child: _HoverScaleButton(
-          enabled: enabled,
-          onTap: onTap,
-          child: Icon(
-            icon,
-            size: 24, // 与标题字体大小一致
-          ),
-        ),
       ),
     );
   }

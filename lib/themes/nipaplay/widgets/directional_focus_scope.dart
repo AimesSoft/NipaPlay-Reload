@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+typedef NipaplayFocusBoundaryCallback = void Function(
+    TraversalDirection direction);
+
 class NipaplayDirectionalFocusScope extends StatelessWidget {
   const NipaplayDirectionalFocusScope({
     super.key,
     required this.child,
+    this.onBoundaryReached,
   });
 
   final Widget child;
+  final NipaplayFocusBoundaryCallback? onBoundaryReached;
 
   @override
   Widget build(BuildContext context) {
@@ -27,10 +32,16 @@ class NipaplayDirectionalFocusScope extends StatelessWidget {
           DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(
             onInvoke: (intent) {
               final primaryFocus = FocusManager.instance.primaryFocus;
+              bool moved = false;
               if (primaryFocus != null) {
-                primaryFocus.focusInDirection(intent.direction);
+                moved = primaryFocus.focusInDirection(intent.direction);
               } else {
-                FocusScope.of(context).nextFocus();
+                moved = FocusScope.of(context).nextFocus();
+              }
+              if (!moved &&
+                  (intent.direction == TraversalDirection.up ||
+                      intent.direction == TraversalDirection.down)) {
+                onBoundaryReached?.call(intent.direction);
               }
               return null;
             },

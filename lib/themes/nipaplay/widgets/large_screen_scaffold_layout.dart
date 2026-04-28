@@ -140,13 +140,42 @@ class _NipaplayLargeScreenScaffoldLayoutState
     _tabPanelCommand.value = NipaplayLargeScreenTabPanelCommand.activateFocused;
   }
 
+  void _jumpContentScrollBoundary(TraversalDirection direction) {
+    if (direction != TraversalDirection.up &&
+        direction != TraversalDirection.down) {
+      return;
+    }
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    final scrollController =
+        PrimaryScrollController.maybeOf(focusContext ?? context);
+    if (scrollController == null || !scrollController.hasClients) {
+      return;
+    }
+    final target = direction == TraversalDirection.up
+        ? scrollController.position.minScrollExtent
+        : scrollController.position.maxScrollExtent;
+    scrollController.jumpTo(target);
+  }
+
   bool _moveContentFocus(TraversalDirection direction) {
     final focusScope = FocusScope.of(context);
     final focusedChild = focusScope.focusedChild;
     if (focusedChild == null || focusedChild == _inputFocusNode) {
-      return focusScope.nextFocus();
+      final moved = focusScope.nextFocus();
+      if (!moved &&
+          (direction == TraversalDirection.up ||
+              direction == TraversalDirection.down)) {
+        _jumpContentScrollBoundary(direction);
+      }
+      return moved;
     }
-    return focusedChild.focusInDirection(direction);
+    final moved = focusedChild.focusInDirection(direction);
+    if (!moved &&
+        (direction == TraversalDirection.up ||
+            direction == TraversalDirection.down)) {
+      _jumpContentScrollBoundary(direction);
+    }
+    return moved;
   }
 
   bool _activateContentFocus() {
@@ -241,7 +270,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 14,
                 kNipaplayLargeScreenBottomHintHeight,
                 14,
-                14 + mediaPadding.bottom,
+                kNipaplayLargeScreenBottomHintHeight + mediaPadding.bottom,
               ),
               child: MediaQuery.removePadding(
                 context: context,

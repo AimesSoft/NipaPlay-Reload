@@ -211,26 +211,31 @@ extension DashboardHomePageRandomRecommendations on _DashboardHomePageState {
     final showSummary =
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
 
-    return SizedBox(
+    final onTap = () => ThemedAnimeDetail.show(context, anime.animeId);
+    final card = SizedBox(
       width: showSummary
           ? HorizontalAnimeCard.detailedCardWidth
           : HorizontalAnimeCard.compactCardWidth,
       height: showSummary
           ? HorizontalAnimeCard.detailedCardHeight
           : HorizontalAnimeCard.compactCardHeight,
-      child: NipaplayLargeScreenFocusableAction(
-        onActivate: () => ThemedAnimeDetail.show(context, anime.animeId),
-        borderRadius: BorderRadius.circular(4),
-        child: HorizontalAnimeCard(
-          key: ValueKey('random_${anime.animeId}_${item.tag.hashCode}'),
-          title: anime.animeTitle,
-          imageUrl: anime.imageUrl ?? '',
-          onTap: () => ThemedAnimeDetail.show(context, anime.animeId),
-          source: sourceLabel,
-          rating: anime.rating > 0 ? anime.rating : null,
-          summary: summary,
-        ),
+      child: HorizontalAnimeCard(
+        key: ValueKey('random_${anime.animeId}_${item.tag.hashCode}'),
+        title: anime.animeTitle,
+        imageUrl: anime.imageUrl ?? '',
+        onTap: onTap,
+        source: sourceLabel,
+        rating: anime.rating > 0 ? anime.rating : null,
+        summary: summary,
       ),
+    );
+    if (!_isLargeScreenModeActive) {
+      return card;
+    }
+    return _wrapLargeScreenFocusable(
+      child: card,
+      onActivate: onTap,
+      borderRadius: BorderRadius.circular(4),
     );
   }
 

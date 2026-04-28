@@ -52,13 +52,14 @@ import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
-import 'package:nipaplay/main.dart'; // 用于MainPageState
+import 'package:nipaplay/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
 
 part '../themes/nipaplay/widgets/dashboard_home_page_data_loading.dart';
@@ -78,6 +79,27 @@ class DashboardHomePage extends StatefulWidget {
 
 class _DashboardHomePageState extends State<DashboardHomePage>
     with AutomaticKeepAliveClientMixin {
+  bool get _isLargeScreenModeActive {
+    return NipaplayLargeScreenHomeScope.isActive(context);
+  }
+
+  Widget _wrapLargeScreenFocusable({
+    required Widget child,
+    required VoidCallback? onActivate,
+    BorderRadius borderRadius = BorderRadius.zero,
+    EdgeInsetsGeometry? padding,
+  }) {
+    if (!_isLargeScreenModeActive) {
+      return child;
+    }
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: onActivate,
+      borderRadius: borderRadius,
+      padding: padding,
+      child: child,
+    );
+  }
+
   // 持有Provider实例引用，确保在dispose中能正确移除监听器
   JellyfinProvider? _jellyfinProviderRef;
   EmbyProvider? _embyProviderRef;
@@ -961,18 +983,24 @@ class _DashboardHomePageState extends State<DashboardHomePage>
           return SingleChildScrollView(
             controller: _mainScrollController,
             physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 大海报推荐区域
-                _buildHeroBanner(isPhone: isPhone),
+            child: PrimaryScrollController(
+              controller: _mainScrollController,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 大海报推荐区域
+                  _buildHeroBanner(isPhone: isPhone),
 
-                SizedBox(height: isPhone ? 16 : 32),
-                ...configuredSections,
+                  SizedBox(height: isPhone ? 16 : 32),
+                  ...configuredSections,
 
-                // 底部间距
-                SizedBox(height: isPhone ? 30 : 50),
-              ],
+                  // 底部间距（大屏幕模式额外预留40px，避免被底部overlay遮挡）
+                  SizedBox(
+                    height: (isPhone ? 30 : 50) +
+                        (_isLargeScreenModeActive ? 40 : 0),
+                  ),
+                ],
+              ),
             ),
           );
         },
