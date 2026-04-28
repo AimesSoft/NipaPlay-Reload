@@ -24,6 +24,7 @@ class NipaplayLargeScreenFocusableAction extends StatefulWidget {
     super.key,
     required this.child,
     this.onActivate,
+    this.focusNode,
     this.autofocus = false,
     this.borderRadius = BorderRadius.zero,
     this.padding,
@@ -32,6 +33,7 @@ class NipaplayLargeScreenFocusableAction extends StatefulWidget {
 
   final Widget child;
   final VoidCallback? onActivate;
+  final FocusNode? focusNode;
   final bool autofocus;
   final BorderRadius borderRadius;
   final EdgeInsetsGeometry? padding;
@@ -59,6 +61,7 @@ class _NipaplayLargeScreenFocusableActionState
         isDarkMode ? style.contentColorDark : style.contentColorLight;
 
     return FocusableActionDetector(
+      focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       onShowFocusHighlight: (value) {
         if (_isFocused == value) return;

@@ -30,10 +30,14 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_source_utils.dart';
-import 'package:meta/meta.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_shell.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_anime_detail_page.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_focusable_action.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 
 enum _EpisodeCleanupAction {
@@ -48,6 +52,7 @@ class AnimeDetailPage extends StatefulWidget {
   final PlayableItem Function(SharedRemoteEpisode episode)?
       sharedEpisodeBuilder;
   final String? sharedSourceLabel;
+  final bool renderInWindowScaffold;
 
   const AnimeDetailPage({
     super.key,
@@ -56,6 +61,7 @@ class AnimeDetailPage extends StatefulWidget {
     this.sharedEpisodeLoader,
     this.sharedEpisodeBuilder,
     this.sharedSourceLabel,
+    this.renderInWindowScaffold = true,
   });
 
   @override
@@ -77,6 +83,22 @@ class AnimeDetailPage extends StatefulWidget {
     PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
     String? sharedSourceLabel,
   }) {
+    if (NipaplayLargeScreenModeScope.isActiveOf(context)) {
+      return Navigator.of(context).push<WatchHistoryItem>(
+        NipaplayLargeScreenWindowPageRoute<WatchHistoryItem>(
+          enableAnimation: true,
+          dismissible: false,
+          builder: (_) => NipaplayLargeScreenAnimeDetailPage(
+                animeId: animeId,
+                sharedSummary: sharedSummary,
+                sharedEpisodeLoader: sharedEpisodeLoader,
+                sharedEpisodeBuilder: sharedEpisodeBuilder,
+                sharedSourceLabel: sharedSourceLabel,
+              ),
+        ),
+      );
+    }
+
     // 获取外观设置Provider
     final appearanceSettings =
         Provider.of<AppearanceSettingsProvider>(context, listen: false);
@@ -122,6 +144,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   int? _hoveredEpisodeTileId;
   int? _hoveredWatchToggleEpisodeId;
   bool _isBangumiRatingButtonHovered = false;
+  final FocusNode _largeScreenDetailsFocusNode = FocusNode(
+    debugLabel: 'large_screen_anime_detail_content_focus',
+  );
 
   // 弹弹play观看状态相关
   /// 存储弹弹play的观看状态
@@ -180,6 +205,30 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     4: '搁置',
     5: '抛弃',
   };
+
+  bool get _isLargeScreenModeActive {
+    return NipaplayLargeScreenHomeScope.isActive(context) ||
+        NipaplayLargeScreenModeScope.isActiveOf(context);
+  }
+
+  Widget _wrapLargeScreenFocusable({
+    required Widget child,
+    required VoidCallback? onActivate,
+    BorderRadius borderRadius = BorderRadius.zero,
+    EdgeInsetsGeometry? padding,
+    bool autofocus = false,
+  }) {
+    if (!_isLargeScreenModeActive) {
+      return child;
+    }
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: onActivate,
+      borderRadius: borderRadius,
+      padding: padding,
+      autofocus: autofocus,
+      child: child,
+    );
+  }
 
   @override
   void initState() {
@@ -278,6 +327,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         .removeListener(_onBangumiLoginStatusChanged);
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
+    _largeScreenDetailsFocusNode.dispose();
     super.dispose();
   }
 
@@ -619,22 +669,78 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     }
   }
 
-  String _formatDate(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) return '';
-    try {
-      // 移除 T00:00:00 部分
-      dateStr = dateStr.replaceAll(RegExp(r'T\d{2}:\d{2}:\d{2}'), '');
-
-      final parts = dateStr.split('-');
-      if (parts.length >= 3) return '${parts[0]}年${parts[1]}月${parts[2]}日';
-      return dateStr;
-    } catch (e) {
-      return dateStr ?? '';
-    }
-  }
-
   String _collectionTypeLabel(int type) {
     return _collectionTypeLabels[type] ?? '未收藏';
+  }
+
+  Future<void> _playEpisodeFromHistoryOrShared({
+    required BangumiAnime anime,
+    required EpisodeData episode,
+    required WatchHistoryItem? historyItem,
+    required ConnectionState historyState,
+    required bool sharedPlayableAvailable,
+    required PlayableItem? sharedPlayable,
+  }) async {
+    if (sharedPlayableAvailable && sharedPlayable != null) {
+      await PlaybackService().play(sharedPlayable);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
+    if (historyState == ConnectionState.done &&
+        historyItem != null &&
+        historyItem.filePath.isNotEmpty) {
+      final filePath = historyItem.filePath;
+      final lowerPath = filePath.toLowerCase();
+      final bool isRemoteSource = historyItem.isDandanplayRemote ||
+          lowerPath.startsWith('http://') ||
+          lowerPath.startsWith('https://') ||
+          lowerPath.startsWith('jellyfin://') ||
+          lowerPath.startsWith('emby://') ||
+          MediaSourceUtils.isWebDavPath(filePath) ||
+          MediaSourceUtils.isSmbPath(filePath);
+
+      if (isRemoteSource) {
+        final playableItem = PlayableItem(
+          videoPath: filePath,
+          title: anime.nameCn,
+          subtitle: episode.title,
+          animeId: anime.id,
+          episodeId: episode.id,
+          historyItem: historyItem,
+        );
+        await PlaybackService().play(playableItem);
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+
+      final file = File(filePath);
+      if (await file.exists()) {
+        final playableItem = PlayableItem(
+          videoPath: filePath,
+          title: anime.nameCn,
+          subtitle: episode.title,
+          animeId: anime.id,
+          episodeId: episode.id,
+          historyItem: historyItem,
+        );
+        await PlaybackService().play(playableItem);
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      } else if (mounted) {
+        BlurSnackBar.show(context, '文件已不存在于: ${historyItem.filePath}');
+      }
+      return;
+    }
+
+    if (mounted) {
+      BlurSnackBar.show(context, '媒体库中找不到此剧集的视频文件');
+    }
   }
 
   int _getTotalEpisodeCount(BangumiAnime anime) {
@@ -1162,7 +1268,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                             : textColor.withOpacity(0.9))
                         : textColor.withOpacity(0.45);
 
-                    return MouseRegion(
+                    final button = MouseRegion(
                       cursor: enableBangumiHover
                           ? SystemMouseCursors.click
                           : SystemMouseCursors.basic,
@@ -1223,6 +1329,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           ),
                         ),
                       ),
+                    );
+                    return _wrapLargeScreenFocusable(
+                      child: button,
+                      onActivate:
+                          isBangumiActionEnabled ? _showRatingDialog : null,
+                      borderRadius: BorderRadius.circular(6),
                     );
                   },
                 ),
@@ -1404,14 +1516,18 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('标签:', style: sectionTitleStyle),
-                IconButton(
-                  onPressed: () => _openTagSearch(),
-                  icon: Icon(
-                    Ionicons.search,
-                    color: secondaryTextColor,
+                _wrapLargeScreenFocusable(
+                  onActivate: _openTagSearch,
+                  borderRadius: BorderRadius.circular(6),
+                  child: IconButton(
+                    onPressed: _isLargeScreenModeActive ? null : _openTagSearch,
+                    icon: Icon(
+                      Ionicons.search,
+                      color: secondaryTextColor,
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(),
                   ),
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
@@ -1423,6 +1539,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     .map((tag) => _HoverableTag(
                           tag: tag,
                           onTap: () => _searchByTag(tag),
+                          isLargeScreenMode: _isLargeScreenModeActive,
                         ))
                     .toList())
           ],
@@ -1554,51 +1671,59 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               else
                 const SizedBox.shrink(),
               const Spacer(),
-              MouseRegion(
-                cursor: _isCleaningEpisodeHistory
-                    ? SystemMouseCursors.basic
-                    : SystemMouseCursors.click,
-                onEnter: _isCleaningEpisodeHistory
+              _wrapLargeScreenFocusable(
+                onActivate: _isCleaningEpisodeHistory
                     ? null
-                    : (_) => setState(() => _isCleanupButtonHovered = true),
-                onExit: _isCleaningEpisodeHistory
-                    ? null
-                    : (_) => setState(() => _isCleanupButtonHovered = false),
-                child: GestureDetector(
-                  onTap: _isCleaningEpisodeHistory
+                    : () => _showEpisodeListCleanupDialog(anime),
+                borderRadius: BorderRadius.circular(6),
+                child: MouseRegion(
+                  cursor: _isCleaningEpisodeHistory
+                      ? SystemMouseCursors.basic
+                      : SystemMouseCursors.click,
+                  onEnter: _isCleaningEpisodeHistory
                       ? null
-                      : () => _showEpisodeListCleanupDialog(anime),
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedScale(
-                    scale: _isCleanupButtonHovered ? 1.1 : 1.0,
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    child: AnimatedDefaultTextStyle(
+                      : (_) => setState(() => _isCleanupButtonHovered = true),
+                  onExit: _isCleaningEpisodeHistory
+                      ? null
+                      : (_) => setState(() => _isCleanupButtonHovered = false),
+                  child: GestureDetector(
+                    onTap: _isLargeScreenModeActive
+                        ? null
+                        : (_isCleaningEpisodeHistory
+                            ? null
+                            : () => _showEpisodeListCleanupDialog(anime)),
+                    behavior: HitTestBehavior.opaque,
+                    child: AnimatedScale(
+                      scale: _isCleanupButtonHovered ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
-                      style: TextStyle(
-                        color: cleanupButtonColor,
-                        fontSize: 12,
-                      ),
-                      child: IconTheme(
-                        data: IconThemeData(
+                      curve: Curves.easeOutCubic,
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 180),
+                        style: TextStyle(
                           color: cleanupButtonColor,
-                          size: 16,
+                          fontSize: 12,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
+                        child: IconTheme(
+                          data: IconThemeData(
+                            color: cleanupButtonColor,
+                            size: 16,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Ionicons.trash_outline),
-                              const SizedBox(width: 4),
-                              Text(
-                                _isCleaningEpisodeHistory ? '处理中' : '清理记录',
-                                locale: const Locale('zh-Hans', 'zh'),
-                              ),
-                            ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Ionicons.trash_outline),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _isCleaningEpisodeHistory ? '处理中' : '清理记录',
+                                  locale: const Locale('zh-Hans', 'zh'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1606,47 +1731,57 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   ),
                 ),
               ),
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                onEnter: (_) => setState(() => _isSortButtonHovered = true),
-                onExit: (_) => setState(() => _isSortButtonHovered = false),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isEpisodeListReversed = !_isEpisodeListReversed;
-                    });
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedScale(
-                    scale: _isSortButtonHovered ? 1.1 : 1.0,
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    child: AnimatedDefaultTextStyle(
+              _wrapLargeScreenFocusable(
+                onActivate: () {
+                  setState(() {
+                    _isEpisodeListReversed = !_isEpisodeListReversed;
+                  });
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => setState(() => _isSortButtonHovered = true),
+                  onExit: (_) => setState(() => _isSortButtonHovered = false),
+                  child: GestureDetector(
+                    onTap: _isLargeScreenModeActive
+                        ? null
+                        : () {
+                            setState(() {
+                              _isEpisodeListReversed = !_isEpisodeListReversed;
+                            });
+                          },
+                    behavior: HitTestBehavior.opaque,
+                    child: AnimatedScale(
+                      scale: _isSortButtonHovered ? 1.1 : 1.0,
                       duration: const Duration(milliseconds: 180),
-                      style: TextStyle(
-                        color: sortButtonColor,
-                        fontSize: 12,
-                      ),
-                      child: IconTheme(
-                        data: IconThemeData(
+                      curve: Curves.easeOutCubic,
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 180),
+                        style: TextStyle(
                           color: sortButtonColor,
-                          size: 16,
+                          fontSize: 12,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
+                        child: IconTheme(
+                          data: IconThemeData(
+                            color: sortButtonColor,
+                            size: 16,
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Ionicons.swap_vertical_outline),
-                              const SizedBox(width: 4),
-                              Text(
-                                _isEpisodeListReversed ? '倒序' : '正序',
-                                locale: const Locale('zh-Hans', 'zh'),
-                              ),
-                            ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Ionicons.swap_vertical_outline),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _isEpisodeListReversed ? '倒序' : '正序',
+                                  locale: const Locale('zh-Hans', 'zh'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1753,7 +1888,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       }
                     }
 
-                    return MouseRegion(
+                    final tile = MouseRegion(
                       cursor: enableEpisodeHover
                           ? SystemMouseCursors.click
                           : SystemMouseCursors.basic,
@@ -1851,6 +1986,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                       !isEpisodeWatched &&
                                       _hoveredWatchToggleEpisodeId ==
                                           episode.id,
+                                  isLargeScreenMode: _isLargeScreenModeActive,
                                   onHoverChanged: (value) {
                                     if (!mounted || isEpisodeWatched) return;
                                     setState(() {
@@ -1888,63 +2024,33 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                 ),
                             ],
                           ),
-                          onTap: () async {
-                            if (sharedPlayableAvailable) {
-                              await PlaybackService().play(sharedPlayable!);
-                              if (mounted) Navigator.pop(context);
-                              return;
-                            }
-
-                            if (historySnapshot.connectionState ==
-                                    ConnectionState.done &&
-                                historyItem != null &&
-                                historyItem.filePath.isNotEmpty) {
-                              final filePath = historyItem.filePath;
-                              final lowerPath = filePath.toLowerCase();
-                              final bool isRemoteSource =
-                                  historyItem.isDandanplayRemote ||
-                                      lowerPath.startsWith('http://') ||
-                                      lowerPath.startsWith('https://') ||
-                                      lowerPath.startsWith('jellyfin://') ||
-                                      lowerPath.startsWith('emby://') ||
-                                      MediaSourceUtils.isWebDavPath(filePath) ||
-                                      MediaSourceUtils.isSmbPath(filePath);
-
-                              if (isRemoteSource) {
-                                final playableItem = PlayableItem(
-                                  videoPath: filePath,
-                                  title: anime.nameCn,
-                                  subtitle: episode.title,
-                                  animeId: anime.id,
-                                  episodeId: episode.id,
-                                  historyItem: historyItem,
-                                );
-                                await PlaybackService().play(playableItem);
-                                if (mounted) Navigator.pop(context);
-                              } else {
-                                final file = File(filePath);
-                                if (await file.exists()) {
-                                  final playableItem = PlayableItem(
-                                    videoPath: filePath,
-                                    title: anime.nameCn,
-                                    subtitle: episode.title,
-                                    animeId: anime.id,
-                                    episodeId: episode.id,
+                          onTap: _isLargeScreenModeActive
+                              ? null
+                              : () => _playEpisodeFromHistoryOrShared(
+                                    anime: anime,
+                                    episode: episode,
                                     historyItem: historyItem,
-                                  );
-                                  await PlaybackService().play(playableItem);
-                                  if (mounted) Navigator.pop(context);
-                                } else {
-                                  BlurSnackBar.show(context,
-                                      '文件已不存在于: ${historyItem.filePath}');
-                                }
-                              }
-                            } else {
-                              BlurSnackBar.show(context, '媒体库中找不到此剧集的视频文件');
-                            }
-                          },
+                                    historyState:
+                                        historySnapshot.connectionState,
+                                    sharedPlayableAvailable:
+                                        sharedPlayableAvailable,
+                                    sharedPlayable: sharedPlayable,
+                                  ),
                         ),
                       ),
+                    );
+                    return _wrapLargeScreenFocusable(
+                      child: tile,
+                      onActivate: () => _playEpisodeFromHistoryOrShared(
+                        anime: anime,
+                        episode: episode,
+                        historyItem: historyItem,
+                        historyState: historySnapshot.connectionState,
+                        sharedPlayableAvailable: sharedPlayableAvailable,
+                        sharedPlayable: sharedPlayable,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                      autofocus: index == 0,
                     );
                   },
                 );
@@ -1956,7 +2062,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent({Widget? inlineHeaderAction}) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
@@ -2023,6 +2129,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       title: displayTitle,
       subtitle: displaySubTitle,
       sourceLabel: _sharedSourceLabel,
+      headerActions:
+          inlineHeaderAction == null ? null : <Widget>[inlineHeaderAction],
       onClose: () => Navigator.of(context).pop(),
       tabController: _tabController,
       showTabs: !isDesktopOrTablet,
@@ -2051,6 +2159,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   Widget build(BuildContext context) {
+    if (_isLargeScreenModeActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!_largeScreenDetailsFocusNode.hasFocus) {
+          _largeScreenDetailsFocusNode.requestFocus();
+        }
+      });
+    }
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Widget? topRightAction = DandanplayService.isLoggedIn
@@ -2059,15 +2176,28 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             isToggling: _isTogglingFavorite,
             onTap: _toggleFavorite,
             secondaryTextColor: secondaryTextColor,
+            isLargeScreenMode: _isLargeScreenModeActive,
           )
         : null;
+    final Widget? inlineHeaderAction =
+        widget.renderInWindowScaffold ? null : topRightAction;
+
+    final content = Focus(
+      focusNode: _largeScreenDetailsFocusNode,
+      canRequestFocus: _isLargeScreenModeActive,
+      child: _buildContent(inlineHeaderAction: inlineHeaderAction),
+    );
+
+    if (!widget.renderInWindowScaffold) {
+      return content;
+    }
 
     return NipaplayWindowScaffold(
       backgroundImageUrl: _getPosterUrl(),
       blurBackground: true, // Bangumi通常返回的是竖向封面，开启模糊以提升质感
       onClose: () => Navigator.of(context).pop(),
       topRightAction: topRightAction,
-      child: _buildContent(),
+      child: content,
     );
   }
 
@@ -2444,10 +2574,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 class _HoverableTag extends StatefulWidget {
   final String tag;
   final VoidCallback onTap;
+  final bool isLargeScreenMode;
 
   const _HoverableTag({
     required this.tag,
     required this.onTap,
+    required this.isLargeScreenMode,
   });
 
   @override
@@ -2509,9 +2641,17 @@ class _HoverableTagState extends State<_HoverableTag> {
       );
     }
 
-    return GestureDetector(
-      onTap: widget.onTap,
+    final tappable = GestureDetector(
+      onTap: widget.isLargeScreenMode ? null : widget.onTap,
       child: chip,
+    );
+    if (!widget.isLargeScreenMode) {
+      return tappable;
+    }
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: widget.onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: tappable,
     );
   }
 }
@@ -2523,6 +2663,7 @@ class _EpisodeWatchToggleButton extends StatelessWidget {
   final Color idleColor;
   final VoidCallback? onTap;
   final ValueChanged<bool>? onHoverChanged;
+  final bool isLargeScreenMode;
 
   const _EpisodeWatchToggleButton({
     required this.isEnabled,
@@ -2531,18 +2672,19 @@ class _EpisodeWatchToggleButton extends StatelessWidget {
     required this.idleColor,
     required this.onTap,
     required this.onHoverChanged,
+    required this.isLargeScreenMode,
   });
 
   @override
   Widget build(BuildContext context) {
     final Color displayColor = isHovered ? const Color(0xFFFF2E55) : idleColor;
 
-    return MouseRegion(
+    final button = MouseRegion(
       cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: isEnabled ? (_) => onHoverChanged?.call(true) : null,
       onExit: isEnabled ? (_) => onHoverChanged?.call(false) : null,
       child: GestureDetector(
-        onTap: onTap,
+        onTap: isLargeScreenMode ? null : onTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedScale(
           scale: isHovered ? 1.1 : 1.0,
@@ -2562,6 +2704,14 @@ class _EpisodeWatchToggleButton extends StatelessWidget {
         ),
       ),
     );
+    if (!isLargeScreenMode) {
+      return button;
+    }
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: button,
+    );
   }
 }
 
@@ -2570,12 +2720,14 @@ class _WindowFavoriteButton extends StatefulWidget {
   final bool isToggling;
   final VoidCallback onTap;
   final Color secondaryTextColor;
+  final bool isLargeScreenMode;
 
   const _WindowFavoriteButton({
     required this.isFavorited,
     required this.isToggling,
     required this.onTap,
     required this.secondaryTextColor,
+    required this.isLargeScreenMode,
   });
 
   @override
@@ -2623,7 +2775,7 @@ class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
     final Color iconColor = _isHovered ? baseColor : baseColor;
     final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
 
-    return ScaleTransition(
+    final button = ScaleTransition(
       scale: _scaleAnimation,
       child: MouseRegion(
         cursor: widget.isToggling
@@ -2632,11 +2784,15 @@ class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
         onEnter: (_) => setState(() => _isHovered = true),
         onExit: (_) => setState(() => _isHovered = false),
         child: GestureDetector(
-          onTap: widget.isToggling ? null : widget.onTap,
-          onTapDown:
-              widget.isToggling ? null : (_) => setState(() => _isPressed = true),
-          onTapUp:
-              widget.isToggling ? null : (_) => setState(() => _isPressed = false),
+          onTap: (widget.isToggling || widget.isLargeScreenMode)
+              ? null
+              : widget.onTap,
+          onTapDown: widget.isToggling
+              ? null
+              : (_) => setState(() => _isPressed = true),
+          onTapUp: widget.isToggling
+              ? null
+              : (_) => setState(() => _isPressed = false),
           onTapCancel: () => setState(() => _isPressed = false),
           behavior: HitTestBehavior.opaque,
           child: AnimatedScale(
@@ -2654,7 +2810,8 @@ class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
                           height: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(baseColor),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(baseColor),
                           ),
                         )
                       : Icon(
@@ -2670,6 +2827,14 @@ class _WindowFavoriteButtonState extends State<_WindowFavoriteButton>
           ),
         ),
       ),
+    );
+    if (!widget.isLargeScreenMode) {
+      return button;
+    }
+    return NipaplayLargeScreenFocusableAction(
+      onActivate: widget.isToggling ? null : widget.onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: button,
     );
   }
 }

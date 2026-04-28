@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
@@ -411,6 +413,18 @@ class NipaplayWindow {
     bool barrierDismissible = true,
     Color barrierColor = Colors.transparent,
   }) {
+    final bool useLargeScreenSubPage =
+        NipaplayLargeScreenModeScope.isActiveOf(context);
+    if (useLargeScreenSubPage) {
+      return Navigator.of(context).push<T>(
+        NipaplayLargeScreenWindowPageRoute<T>(
+          builder: (_) => child,
+          enableAnimation: enableAnimation,
+          dismissible: barrierDismissible,
+        ),
+      );
+    }
+
     return showGeneralDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
