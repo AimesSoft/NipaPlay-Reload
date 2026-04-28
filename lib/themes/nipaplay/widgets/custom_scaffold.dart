@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_scaffold_layout.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_page.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/platform_utils.dart';
@@ -113,8 +114,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     }
 
     final bool isDesktopOrTablet = globals.isDesktopOrTablet;
-    final bool useLargeScreenLayout =
-        widget.useLargeScreenLayout &&
+    final bool useLargeScreenLayout = widget.useLargeScreenLayout &&
         widget.pageIsHome &&
         isDesktopOrTablet &&
         widget.tabPage.isNotEmpty;
@@ -138,8 +138,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     final Rect? videoUnderlayRect = context.select<VideoPlayerState, Rect?>(
       (videoState) => videoState.macOSWindowHostedVideoRect,
     );
-    final bool useVideoUnderlay =
-        _macOSHdrTransparentUnderlayEnabled &&
+    final bool useVideoUnderlay = _macOSHdrTransparentUnderlayEnabled &&
         hasNativeVideoSurface &&
         widget.pageIsHome &&
         currentIndex == 1 &&
@@ -164,9 +163,16 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       currentIndex: currentIndex,
       physics: const PageScrollPhysics(),
       onPageChanged: _handlePageChangedBySwitchableView,
-      children: widget.pages
-          .map((page) => RepaintBoundary(child: page))
-          .toList(),
+      children: widget.pages.asMap().entries.map((entry) {
+        final index = entry.key;
+        final page = entry.value;
+        final bool useLargeScreenHomePage =
+            useLargeScreenLayout && widget.pageIsHome && index == 0;
+        if (useLargeScreenHomePage) {
+          return const RepaintBoundary(child: NipaplayLargeScreenHomePage());
+        }
+        return RepaintBoundary(child: page);
+      }).toList(),
     );
 
     final scaffold = Scaffold(
@@ -180,8 +186,8 @@ class _CustomScaffoldState extends State<CustomScaffold> {
               toolbarHeight: !widget.pageIsHome && !isDesktopOrTablet
                   ? 100
                   : isDesktopOrTablet
-                  ? 20
-                  : 60,
+                      ? 20
+                      : 60,
               leading: widget.pageIsHome
                   ? null
                   : IconButton(
@@ -201,16 +207,14 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                   isScrollable: true,
                   tabs: widget.tabPage,
                   labelColor: const Color(0xFFFF2E55),
-                  unselectedLabelColor: isDarkMode
-                      ? Colors.white60
-                      : Colors.black54,
+                  unselectedLabelColor:
+                      isDarkMode ? Colors.white60 : Colors.black54,
                   labelPadding: const EdgeInsets.only(bottom: 15.0),
                   tabAlignment: TabAlignment.start,
                   splashFactory: NoSplash.splashFactory,
                   overlayColor: WidgetStateProperty.all(Colors.transparent),
-                  dividerColor: showTabDivider
-                      ? tabDividerColor
-                      : Colors.transparent,
+                  dividerColor:
+                      showTabDivider ? tabDividerColor : Colors.transparent,
                   dividerHeight: 3.0,
                   indicator: const _CustomTabIndicator(
                     indicatorHeight: 3.0,
@@ -281,8 +285,8 @@ class TabControllerScope extends InheritedWidget {
   });
 
   static TabController? of(BuildContext context) {
-    final TabControllerScope? scope = context
-        .dependOnInheritedWidgetOfExactType<TabControllerScope>();
+    final TabControllerScope? scope =
+        context.dependOnInheritedWidgetOfExactType<TabControllerScope>();
     return scope?.enabled == true ? scope?.controller : null;
   }
 
@@ -317,8 +321,7 @@ class _CustomPainter extends BoxPainter {
   @override
   void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
     assert(configuration.size != null);
-    final Rect rect =
-        Offset(
+    final Rect rect = Offset(
           offset.dx,
           (configuration.size!.height - decoration.indicatorHeight),
         ) &

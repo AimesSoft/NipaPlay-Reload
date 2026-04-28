@@ -214,8 +214,9 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
   Widget _buildContinueWatchingCard(WatchHistoryItem item,
       {bool compact = false}) {
-    return GestureDetector(
-      onTap: _isHistoryAutoMatching ? null : () => _onWatchHistoryItemTap(item),
+    return NipaplayLargeScreenFocusableAction(
+      onActivate:
+          _isHistoryAutoMatching ? null : () => _onWatchHistoryItemTap(item),
       child: SizedBox(
         key: ValueKey(
             'continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
@@ -320,11 +321,16 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
   Widget _buildWatchHistoryButton() {
     return Tooltip(
       message: '观看记录',
-      child: _HoverScaleButton(
-        onTap: _showWatchHistoryDialog,
-        child: const Icon(
-          Icons.history_rounded,
-          size: 24,
+      child: NipaplayLargeScreenFocusableAction(
+        onActivate: _showWatchHistoryDialog,
+        borderRadius: BorderRadius.circular(8),
+        padding: const EdgeInsets.all(4),
+        child: const _HoverScaleButton(
+          onTap: null,
+          child: Icon(
+            Icons.history_rounded,
+            size: 24,
+          ),
         ),
       ),
     );
@@ -340,11 +346,16 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
   Widget _buildContinueWatchingRefreshButton() {
     return Tooltip(
       message: '刷新继续播放',
-      child: _HoverScaleButton(
-        onTap: _onContinueWatchingRefreshPressed,
-        child: const Icon(
-          Icons.refresh_rounded,
-          size: 24,
+      child: NipaplayLargeScreenFocusableAction(
+        onActivate: _onContinueWatchingRefreshPressed,
+        borderRadius: BorderRadius.circular(8),
+        padding: const EdgeInsets.all(4),
+        child: const _HoverScaleButton(
+          onTap: null,
+          child: Icon(
+            Icons.refresh_rounded,
+            size: 24,
+          ),
         ),
       ),
     );
@@ -612,18 +623,22 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         : HorizontalAnimeCard.compactCardHeight;
 
     Widget buildCard(String? summary, {String? progress}) {
-      return SizedBox(
-        width: cardWidth,
-        height: cardHeight,
-        child: HorizontalAnimeCard(
-          key: ValueKey(uniqueId),
-          title: name,
-          imageUrl: imageUrl,
-          onTap: () => onItemTap(item),
-          source: sourceLabel,
-          rating: rating,
-          summary: summary,
-          progress: progress ?? _getWatchProgressForDashboard(item),
+      return NipaplayLargeScreenFocusableAction(
+        onActivate: () => onItemTap(item),
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
+          width: cardWidth,
+          height: cardHeight,
+          child: HorizontalAnimeCard(
+            key: ValueKey(uniqueId),
+            title: name,
+            imageUrl: imageUrl,
+            onTap: () => onItemTap(item),
+            source: sourceLabel,
+            rating: rating,
+            summary: summary,
+            progress: progress ?? _getWatchProgressForDashboard(item),
+          ),
         ),
       );
     }

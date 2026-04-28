@@ -4,6 +4,8 @@ enum NipaplayLargeScreenInputCommand {
   toggleMenu,
   navigateUp,
   navigateDown,
+  navigateLeft,
+  navigateRight,
   activate,
 }
 
@@ -31,6 +33,14 @@ class NipaplayLargeScreenInputControls {
     LogicalKeyboardKey.gameButtonA,
   };
 
+  static final Set<LogicalKeyboardKey> _navigateLeftKeys = {
+    LogicalKeyboardKey.arrowLeft,
+  };
+
+  static final Set<LogicalKeyboardKey> _navigateRightKeys = {
+    LogicalKeyboardKey.arrowRight,
+  };
+
   static NipaplayLargeScreenInputCommand? fromKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return null;
@@ -45,6 +55,12 @@ class NipaplayLargeScreenInputControls {
     }
     if (_navigateDownKeys.contains(key)) {
       return NipaplayLargeScreenInputCommand.navigateDown;
+    }
+    if (_navigateLeftKeys.contains(key)) {
+      return NipaplayLargeScreenInputCommand.navigateLeft;
+    }
+    if (_navigateRightKeys.contains(key)) {
+      return NipaplayLargeScreenInputCommand.navigateRight;
     }
     if (_activateKeys.contains(key)) {
       return NipaplayLargeScreenInputCommand.activate;

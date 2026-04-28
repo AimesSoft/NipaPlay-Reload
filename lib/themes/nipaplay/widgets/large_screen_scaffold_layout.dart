@@ -91,7 +91,11 @@ class _NipaplayLargeScreenScaffoldLayoutState
         _focusedMenuIndex = _clampMenuIndex(widget.currentIndex);
       }
     });
-    _inputFocusNode.requestFocus();
+    if (_isTabPanelVisible) {
+      _inputFocusNode.requestFocus();
+    } else {
+      _ensureContentFocus();
+    }
   }
 
   void _closeTabPanel() {
@@ -101,7 +105,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     setState(() {
       _isTabPanelVisible = false;
     });
-    _inputFocusNode.requestFocus();
+    _ensureContentFocus();
   }
 
   int _clampMenuIndex(int index) {
@@ -136,6 +140,39 @@ class _NipaplayLargeScreenScaffoldLayoutState
     _tabPanelCommand.value = NipaplayLargeScreenTabPanelCommand.activateFocused;
   }
 
+  bool _moveContentFocus(TraversalDirection direction) {
+    final focusScope = FocusScope.of(context);
+    final focusedChild = focusScope.focusedChild;
+    if (focusedChild == null || focusedChild == _inputFocusNode) {
+      return focusScope.nextFocus();
+    }
+    return focusedChild.focusInDirection(direction);
+  }
+
+  bool _activateContentFocus() {
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused == null || focused == _inputFocusNode) {
+      return false;
+    }
+    final nodeContext = focused.context;
+    if (nodeContext == null) {
+      return false;
+    }
+    return Actions.maybeInvoke<ActivateIntent>(
+          nodeContext,
+          const ActivateIntent(),
+        ) !=
+        null;
+  }
+
+  void _ensureContentFocus() {
+    final focusScope = FocusScope.of(context);
+    if (focusScope.focusedChild == null ||
+        focusScope.focusedChild == _inputFocusNode) {
+      focusScope.nextFocus();
+    }
+  }
+
   KeyEventResult _handleInputKeyEvent(FocusNode node, KeyEvent event) {
     final command = NipaplayLargeScreenInputControls.fromKeyEvent(event);
     if (command == null) {
@@ -147,23 +184,43 @@ class _NipaplayLargeScreenScaffoldLayoutState
         _toggleTabPanel();
         return KeyEventResult.handled;
       case NipaplayLargeScreenInputCommand.navigateUp:
-        if (!_isTabPanelVisible) {
-          return KeyEventResult.ignored;
+        if (_isTabPanelVisible) {
+          _moveMenuFocus(-1);
+          return KeyEventResult.handled;
         }
-        _moveMenuFocus(-1);
-        return KeyEventResult.handled;
+        return _moveContentFocus(TraversalDirection.up)
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
       case NipaplayLargeScreenInputCommand.navigateDown:
-        if (!_isTabPanelVisible) {
-          return KeyEventResult.ignored;
+        if (_isTabPanelVisible) {
+          _moveMenuFocus(1);
+          return KeyEventResult.handled;
         }
-        _moveMenuFocus(1);
-        return KeyEventResult.handled;
+        return _moveContentFocus(TraversalDirection.down)
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
+      case NipaplayLargeScreenInputCommand.navigateLeft:
+        if (_isTabPanelVisible) {
+          return KeyEventResult.handled;
+        }
+        return _moveContentFocus(TraversalDirection.left)
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
+      case NipaplayLargeScreenInputCommand.navigateRight:
+        if (_isTabPanelVisible) {
+          return KeyEventResult.handled;
+        }
+        return _moveContentFocus(TraversalDirection.right)
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
       case NipaplayLargeScreenInputCommand.activate:
-        if (!_isTabPanelVisible) {
-          return KeyEventResult.ignored;
+        if (_isTabPanelVisible) {
+          _activateFocusedMenuItem();
+          return KeyEventResult.handled;
         }
-        _activateFocusedMenuItem();
-        return KeyEventResult.handled;
+        return _activateContentFocus()
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
     }
   }
 
