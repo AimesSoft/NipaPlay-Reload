@@ -135,7 +135,9 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
       {bool compact = false}) {
     final card = Container(
       key: ValueKey('hero_banner_${item.id}_${item.source.name}'), // 添加唯一key
-      margin: const EdgeInsets.symmetric(horizontal: 4),
+      margin: _isLargeScreenModeActive
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
       ),
@@ -151,7 +153,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
               children: [
                 Container(color: Colors.white),
                 CachedNetworkImageWidget(
-                  key: ValueKey('hero_img_${item.id}_${item.backgroundImageUrl}'),
+                  key: ValueKey(
+                      'hero_img_${item.id}_${item.backgroundImageUrl}'),
                   imageUrl: item.backgroundImageUrl!,
                   fit: BoxFit.cover,
                   width: double.infinity,
@@ -393,7 +396,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
 
   Widget _buildSmallRecommendationCard(RecommendedItem item, int index) {
     final card = Container(
-      key: ValueKey('small_card_${item.id}_${item.source.name}_$index'), // 添加唯一key包含索引
+      key: ValueKey(
+          'small_card_${item.id}_${item.source.name}_$index'), // 添加唯一key包含索引
       margin: const EdgeInsets.symmetric(horizontal: 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(4),
@@ -426,8 +430,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   errorBuilder: (context, error) => Container(
                     color: Colors.white10,
                     child: const Center(
-                      child:
-                          Icon(Icons.broken_image, color: Colors.white30, size: 16),
+                      child: Icon(Icons.broken_image,
+                          color: Colors.white30, size: 16),
                     ),
                   ),
                 ),
@@ -522,8 +526,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   maxHeight: 45,
                 ),
                 child: CachedNetworkImageWidget(
-                  key:
-                      ValueKey('small_logo_${item.id}_${item.logoImageUrl}_$index'),
+                  key: ValueKey(
+                      'small_logo_${item.id}_${item.logoImageUrl}_$index'),
                   imageUrl: item.logoImageUrl!,
                   fit: BoxFit.contain,
                   delayLoad: _shouldDelayImageLoad(), // 根据推荐内容来源决定是否延迟
@@ -562,9 +566,12 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
           // 右下角标题（总是显示，不论是否有Logo）
           Positioned(
             right: 8,
-            bottom:
-                item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty ? 66 : 8,
-            left: item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty ? 8 : 8,
+            bottom: item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty
+                ? 66
+                : 8,
+            left: item.logoImageUrl != null && item.logoImageUrl!.isNotEmpty
+                ? 8
+                : 8,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
