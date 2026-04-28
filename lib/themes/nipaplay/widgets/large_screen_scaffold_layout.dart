@@ -182,7 +182,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 14,
-                0,
+                kNipaplayLargeScreenBottomHintHeight,
                 14,
                 14 + mediaPadding.bottom,
               ),
