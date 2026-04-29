@@ -197,12 +197,14 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
   Timer? _frameTimer;
   int _bindAttempts = 0;
   bool _isBound = false;
+  late final int _surfaceGeneration;
   String? _lastFrameSignature;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _surfaceGeneration = identityHashCode(this);
     widget.onPlatformViewIdChanged?.call(_windowHostedPlatformSurfaceId);
     _startFrameTimer();
     _scheduleAttach();
@@ -242,11 +244,6 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     );
     widget.onPlatformViewIdChanged?.call(null);
     unawaited(_hideOverlayFrame());
-    unawaited(
-      widget.player.detachPlatformVideoSurface(
-        platformViewId: _windowHostedPlatformSurfaceId,
-      ),
-    );
     super.dispose();
   }
 
@@ -367,6 +364,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         'setOverlayFrame',
         <String, dynamic>{
           'viewId': _windowHostedPlatformSurfaceId,
+          'generation': _surfaceGeneration,
           'x': rect.left,
           'y': rect.top,
           'width': rect.width,
@@ -391,6 +389,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
         'setOverlayFrame',
         <String, dynamic>{
           'viewId': _windowHostedPlatformSurfaceId,
+          'generation': _surfaceGeneration,
           'x': 0.0,
           'y': 0.0,
           'width': 0.0,
