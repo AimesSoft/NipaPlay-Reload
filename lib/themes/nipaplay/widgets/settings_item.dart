@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 
 const Color _fluentAccentColor = Color(0xFFFF2E55);
 
@@ -513,7 +514,7 @@ class SettingsItem extends StatelessWidget {
                     'default': _fluentAccentColor,
                   }),
                 ),
-                child: fluent.Slider(
+                child: NipaplayLargeScreenEditableSlider(
                   value: current,
                   min: min,
                   max: max,

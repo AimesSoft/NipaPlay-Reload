@@ -9,6 +9,7 @@ import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -464,7 +465,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                             'default': _fluentAccentColor,
                           }),
                         ),
-                        child: fluent.Slider(
+                        child: NipaplayLargeScreenEditableSlider(
                           min: 0.0,
                           max: 2.0,
                           divisions: 40,

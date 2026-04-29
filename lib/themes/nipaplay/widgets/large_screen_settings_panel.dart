@@ -1,16 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/providers/app_language_provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
-import 'package:nipaplay/services/update_service.dart';
+import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/settings_entries.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
-import 'package:nipaplay/utils/network_settings.dart';
-import 'package:nipaplay/utils/theme_notifier.dart';
-import 'package:provider/provider.dart';
 
 const double kNipaplayLargeScreenSettingsPanelWidth = 900;
 const double _kNipaplayLargeScreenSettingsMenuWidth = 230;
@@ -53,27 +47,53 @@ class _NipaplayLargeScreenSettingsPanelState
   late List<NipaplaySettingEntry> _entries;
   int _selectedIndex = 0;
   bool _isContentFocused = false;
-  int _contentCursor = 0;
-
-  String _currentServer = NetworkSettings.defaultServer;
-  bool _isServerLoading = true;
+  final FocusScopeNode _contentFocusScope = FocusScopeNode(
+    debugLabel: 'nipaplay_large_screen_settings_content',
+  );
+  OnKeyEventCallback? _earlyKeyHandler;
 
   @override
   void initState() {
     super.initState();
     _entries = const <NipaplaySettingEntry>[];
-    _loadNetworkSettings();
+    _earlyKeyHandler = _handleEarlyKeyEvent;
+    FocusManager.instance.addEarlyKeyEventHandler(_earlyKeyHandler!);
   }
 
-  Future<void> _loadNetworkSettings() async {
-    final server = await NetworkSettings.getDandanplayServer();
-    if (!mounted) {
-      return;
+  @override
+  void dispose() {
+    if (_earlyKeyHandler != null) {
+      FocusManager.instance.removeEarlyKeyEventHandler(_earlyKeyHandler!);
+      _earlyKeyHandler = null;
     }
-    setState(() {
-      _currentServer = server;
-      _isServerLoading = false;
-    });
+    _contentFocusScope.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleEarlyKeyEvent(KeyEvent event) {
+    if (!_isContentFocused) {
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
+      return KeyEventResult.ignored;
+    }
+    if (NipaplayLargeScreenEditableSlider.isAnyEditing) {
+      return KeyEventResult.ignored;
+    }
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _moveContentVerticalFocus(reverse: true);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _moveContentVerticalFocus(reverse: false);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -110,29 +130,17 @@ class _NipaplayLargeScreenSettingsPanelState
       });
     }
 
-    final contentItems = _buildCurrentContentItems(context);
-    if (_contentCursor >= contentItems.length) {
-      _contentCursor = contentItems.isEmpty ? 0 : contentItems.length - 1;
-    }
-
     return ColoredBox(
       color: panelBackgroundColor,
       child: _NipaplayLargeScreenSettingsPanelCommandHost(
         commandNotifier: widget.commandNotifier,
-        onNavigateUp: () => _handleNavigateUp(contentItems.length),
-        onNavigateDown: () => _handleNavigateDown(contentItems.length),
+        onNavigateUp: _handleNavigateUp,
+        onNavigateDown: _handleNavigateDown,
         onNavigateLeft: _handleNavigateLeft,
         onNavigateRight: _handleNavigateRight,
         onActivateFocused: () async {
           if (_isContentFocused) {
-            if (contentItems.isEmpty) {
-              return;
-            }
-            await contentItems[_contentCursor].onActivate();
-            if (!mounted) {
-              return;
-            }
-            setState(() {});
+            _activateContentFocus();
             return;
           }
           _selectIndex(normalizedFocusedIndex);
@@ -157,7 +165,8 @@ class _NipaplayLargeScreenSettingsPanelState
                       final bool isSelectedByFocus =
                           !_isContentFocused && index == normalizedFocusedIndex;
                       final bool isSelectedByPage = index == _selectedIndex;
-                      final bool isActive = isSelectedByFocus || isSelectedByPage;
+                      final bool isActive =
+                          isSelectedByFocus || isSelectedByPage;
                       final Color itemColor =
                           isActive ? Colors.white : inactiveColor;
                       return NipaplayLargeScreenSidePanelItem(
@@ -240,28 +249,13 @@ class _NipaplayLargeScreenSettingsPanelState
                           widget.isDarkMode ? Colors.white12 : Colors.black12,
                     ),
                     Expanded(
-                      child: contentItems.isEmpty
-                          ? Center(
-                              child: Text(
-                                '该设置项暂未提供大屏幕键盘交互版本',
-                                style: TextStyle(
-                                  color: widget.isDarkMode
-                                      ? Colors.white70
-                                      : Colors.black54,
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: contentItems.length,
-                              itemBuilder: (context, index) {
-                                return _buildContentItemCard(
-                                  item: contentItems[index],
-                                  isSelected:
-                                      _isContentFocused && index == _contentCursor,
-                                );
-                              },
-                            ),
+                      child: FocusScope(
+                        node: _contentFocusScope,
+                        child: KeyedSubtree(
+                          key: ValueKey<String>(_entries[_selectedIndex].id),
+                          child: _entries[_selectedIndex].page,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -269,66 +263,6 @@ class _NipaplayLargeScreenSettingsPanelState
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildContentItemCard({
-    required _LargeScreenSettingsContentItem item,
-    required bool isSelected,
-  }) {
-    final Color titleColor = widget.isDarkMode ? Colors.white : Colors.black87;
-    final Color subtitleColor =
-        widget.isDarkMode ? Colors.white70 : Colors.black54;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? _kNipaplayLargeScreenActiveColor
-            : (widget.isDarkMode
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.04)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : titleColor,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (item.subtitle != null && item.subtitle!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    item.subtitle!,
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : subtitleColor,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            item.valueText,
-            style: TextStyle(
-              color: isSelected ? Colors.white : titleColor,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -343,7 +277,6 @@ class _NipaplayLargeScreenSettingsPanelState
     }
     setState(() {
       _selectedIndex = clamped;
-      _contentCursor = 0;
     });
   }
 
@@ -353,43 +286,40 @@ class _NipaplayLargeScreenSettingsPanelState
     }
     setState(() {
       _isContentFocused = value;
-      if (!_isContentFocused) {
-        _contentCursor = 0;
-      }
     });
+
+    if (value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _ensureContentFocus();
+      });
+    }
   }
 
-  void _handleNavigateUp(int contentItemCount) {
+  void _handleNavigateUp() {
     if (_isContentFocused) {
-      if (contentItemCount <= 0) {
-        return;
-      }
-      setState(() {
-        _contentCursor = (_contentCursor - 1) % contentItemCount;
-        if (_contentCursor < 0) {
-          _contentCursor += contentItemCount;
-        }
-      });
+      _moveContentVerticalFocus(reverse: true);
       return;
     }
     widget.onFocusedIndexChanged?.call(widget.focusedIndex - 1);
   }
 
-  void _handleNavigateDown(int contentItemCount) {
+  void _handleNavigateDown() {
     if (_isContentFocused) {
-      if (contentItemCount <= 0) {
-        return;
-      }
-      setState(() {
-        _contentCursor = (_contentCursor + 1) % contentItemCount;
-      });
+      _moveContentVerticalFocus(reverse: false);
       return;
     }
     widget.onFocusedIndexChanged?.call(widget.focusedIndex + 1);
   }
 
   void _handleNavigateLeft() {
-    if (_isContentFocused) {
+    if (!_isContentFocused) {
+      return;
+    }
+    final moved = _moveContentFocus(TraversalDirection.left);
+    if (!moved) {
       _setContentFocused(false);
     }
   }
@@ -397,218 +327,131 @@ class _NipaplayLargeScreenSettingsPanelState
   void _handleNavigateRight() {
     if (!_isContentFocused) {
       _setContentFocused(true);
+      return;
     }
+    _moveContentFocus(TraversalDirection.right);
   }
 
-  List<_LargeScreenSettingsContentItem> _buildCurrentContentItems(
-      BuildContext context) {
-    final selectedEntryId = _entries[_selectedIndex].id;
-    switch (selectedEntryId) {
-      case NipaplaySettingEntryIds.appearance:
-        return _buildAppearanceContentItems(context);
-      case NipaplaySettingEntryIds.language:
-        return _buildLanguageContentItems(context);
-      case NipaplaySettingEntryIds.general:
-        return _buildGeneralContentItems(context);
-      case NipaplaySettingEntryIds.network:
-        return _buildNetworkContentItems(context);
-      default:
-        return const <_LargeScreenSettingsContentItem>[];
+  bool _moveContentFocus(TraversalDirection direction) {
+    final previousPrimaryFocus = FocusManager.instance.primaryFocus;
+    if (!_isFocusInsideContentScope(previousPrimaryFocus)) {
+      _ensureContentFocus();
     }
+    final fallbackFocus =
+        _contentFocusScope.focusedChild ?? FocusManager.instance.primaryFocus;
+
+    final focusedChild = _contentFocusScope.focusedChild;
+    if (focusedChild == null) {
+      final moved = _contentFocusScope.focusInDirection(direction);
+      if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
+        _restoreContentFocus(fallbackFocus);
+        return false;
+      }
+      if (!moved &&
+          (direction == TraversalDirection.up ||
+              direction == TraversalDirection.down)) {
+        _jumpContentScrollBoundary(direction);
+      }
+      return moved;
+    }
+
+    final moved = focusedChild.focusInDirection(direction);
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
+      _restoreContentFocus(fallbackFocus);
+      return false;
+    }
+    if (!moved &&
+        (direction == TraversalDirection.up ||
+            direction == TraversalDirection.down)) {
+      _jumpContentScrollBoundary(direction);
+    }
+    return moved;
   }
 
-  List<_LargeScreenSettingsContentItem> _buildAppearanceContentItems(
-      BuildContext context) {
-    final themeNotifier = context.read<ThemeNotifier>();
-    final appearanceSettings = context.watch<AppearanceSettingsProvider>();
-    final settingsProvider = context.watch<SettingsProvider>();
+  bool _moveContentVerticalFocus({required bool reverse}) {
+    final previousPrimaryFocus = FocusManager.instance.primaryFocus;
+    if (!_isFocusInsideContentScope(previousPrimaryFocus)) {
+      _ensureContentFocus();
+    }
+    final fallbackFocus =
+        _contentFocusScope.focusedChild ?? FocusManager.instance.primaryFocus;
 
-    final themeText = switch (themeNotifier.themeMode) {
-      ThemeMode.light => '日间模式',
-      ThemeMode.dark => '夜间模式',
-      ThemeMode.system => '跟随系统',
-    };
+    final moved = reverse
+        ? _contentFocusScope.previousFocus()
+        : _contentFocusScope.nextFocus();
 
-    return [
-      _LargeScreenSettingsContentItem(
-        title: '主题模式',
-        subtitle: '回车切换: 日间 -> 夜间 -> 跟随系统',
-        valueText: themeText,
-        onActivate: () async {
-          final current = themeNotifier.themeMode;
-          final next = switch (current) {
-            ThemeMode.light => ThemeMode.dark,
-            ThemeMode.dark => ThemeMode.system,
-            ThemeMode.system => ThemeMode.light,
-          };
-          themeNotifier.themeMode = next;
-        },
-      ),
-      _LargeScreenSettingsContentItem(
-        title: '控件毛玻璃效果',
-        subtitle: '回车开关',
-        valueText: appearanceSettings.enableWidgetBlurEffect ? '开启' : '关闭',
-        onActivate: () => appearanceSettings
-            .setEnableWidgetBlurEffect(!appearanceSettings.enableWidgetBlurEffect),
-      ),
-      _LargeScreenSettingsContentItem(
-        title: '番剧卡片显示介绍',
-        subtitle: '回车开关',
-        valueText: appearanceSettings.showAnimeCardSummary ? '开启' : '关闭',
-        onActivate: () => appearanceSettings
-            .setShowAnimeCardSummary(!appearanceSettings.showAnimeCardSummary),
-      ),
-      _LargeScreenSettingsContentItem(
-        title: '界面缩放',
-        subtitle: '回车步进 +0.05，超过最大值回到最小值',
-        valueText: appearanceSettings.uiScale.toStringAsFixed(2),
-        onActivate: () {
-          final current = appearanceSettings.uiScale;
-          const step = AppearanceSettingsProvider.uiScaleStep;
-          const min = AppearanceSettingsProvider.uiScaleMin;
-          const max = AppearanceSettingsProvider.uiScaleMax;
-          var next = current + step;
-          if (next > max + 0.0001) {
-            next = min;
-          }
-          return appearanceSettings.setUiScale(next.clamp(min, max));
-        },
-      ),
-      _LargeScreenSettingsContentItem(
-        title: '全局背景模糊',
-        subtitle: '回车在 0 / 10 之间切换',
-        valueText: settingsProvider.blurPower.toStringAsFixed(0),
-        onActivate: () async {
-          final bool enabled = settingsProvider.isBlurEnabled;
-          await settingsProvider.setBlurPower(enabled ? 0 : 10);
-        },
-      ),
-    ];
+    if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
+      _restoreContentFocus(fallbackFocus);
+      return false;
+    }
+
+    if (!moved) {
+      _jumpContentScrollBoundary(
+        reverse ? TraversalDirection.up : TraversalDirection.down,
+      );
+    }
+    return moved;
   }
 
-  List<_LargeScreenSettingsContentItem> _buildLanguageContentItems(
-      BuildContext context) {
-    final provider = context.watch<AppLanguageProvider>();
-
-    final modeText = switch (provider.mode) {
-      AppLanguageMode.auto => '自动',
-      AppLanguageMode.simplifiedChinese => '简体中文',
-      AppLanguageMode.traditionalChinese => '繁体中文',
-    };
-
-    return [
-      _LargeScreenSettingsContentItem(
-        title: '应用语言',
-        subtitle: '回车切换: 自动 -> 简体 -> 繁体',
-        valueText: modeText,
-        onActivate: () async {
-          final next = switch (provider.mode) {
-            AppLanguageMode.auto => AppLanguageMode.simplifiedChinese,
-            AppLanguageMode.simplifiedChinese =>
-              AppLanguageMode.traditionalChinese,
-            AppLanguageMode.traditionalChinese => AppLanguageMode.auto,
-          };
-          await context.read<AppLanguageProvider>().setMode(next);
-        },
-      ),
-    ];
+  bool _isFocusInsideContentScope(FocusNode? node) {
+    if (node == null) {
+      return false;
+    }
+    if (identical(node, _contentFocusScope)) {
+      return true;
+    }
+    return node.ancestors
+        .any((ancestor) => identical(ancestor, _contentFocusScope));
   }
 
-  List<_LargeScreenSettingsContentItem> _buildGeneralContentItems(
-      BuildContext context) {
-    final l10n = context.l10n;
-    final settingsProvider = context.watch<SettingsProvider>();
-
-    return [
-      _LargeScreenSettingsContentItem(
-        title: l10n.aboutAutoCheckUpdates,
-        subtitle: '回车开关',
-        valueText: '动态读取',
-        onActivate: () async {
-          final enabled = await UpdateService.isAutoCheckEnabled();
-          await UpdateService.setAutoCheckEnabled(!enabled);
-          if (!mounted) {
-            return;
-          }
-          setState(() {});
-        },
-      ),
-      _LargeScreenSettingsContentItem(
-        title: '弹幕转简体',
-        subtitle: '回车开关',
-        valueText: settingsProvider.danmakuConvertToSimplified ? '开启' : '关闭',
-        onActivate: () => context.read<SettingsProvider>().setDanmakuConvertToSimplified(
-            !context.read<SettingsProvider>().danmakuConvertToSimplified),
-      ),
-      _LargeScreenSettingsContentItem(
-        title: '自动匹配弹幕(哈希失败)',
-        subtitle: '回车开关',
-        valueText:
-            settingsProvider.autoMatchDanmakuFirstSearchResultOnHashFail
-                ? '开启'
-                : '关闭',
-        onActivate: () => context
-            .read<SettingsProvider>()
-            .setAutoMatchDanmakuFirstSearchResultOnHashFail(
-                !context
-                    .read<SettingsProvider>()
-                    .autoMatchDanmakuFirstSearchResultOnHashFail),
-      ),
-      _LargeScreenSettingsContentItem(
-        title: '播放时自动匹配弹幕',
-        subtitle: '回车开关',
-        valueText: settingsProvider.autoMatchDanmakuOnPlay ? '开启' : '关闭',
-        onActivate: () => context.read<SettingsProvider>().setAutoMatchDanmakuOnPlay(
-            !context.read<SettingsProvider>().autoMatchDanmakuOnPlay),
-      ),
-    ];
+  void _restoreContentFocus(FocusNode? fallbackFocus) {
+    if (fallbackFocus != null &&
+        _isFocusInsideContentScope(fallbackFocus) &&
+        fallbackFocus.canRequestFocus &&
+        fallbackFocus.context != null) {
+      fallbackFocus.requestFocus();
+      return;
+    }
+    _ensureContentFocus();
   }
 
-  List<_LargeScreenSettingsContentItem> _buildNetworkContentItems(
-      BuildContext context) {
-    final l10n = context.l10n;
-    final serverText = _isServerLoading
-        ? '加载中'
-        : (_currentServer == NetworkSettings.primaryServer
-            ? l10n.primaryServer
-            : (_currentServer == NetworkSettings.backupServer
-                ? l10n.backupServer
-                : _currentServer));
-
-    return [
-      _LargeScreenSettingsContentItem(
-        title: l10n.dandanplayServer,
-        subtitle: '回车切换主服务器 / 备用服务器',
-        valueText: serverText,
-        onActivate: () async {
-          final next = _currentServer == NetworkSettings.primaryServer
-              ? NetworkSettings.backupServer
-              : NetworkSettings.primaryServer;
-          await NetworkSettings.setDandanplayServer(next);
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _currentServer = next;
-          });
-        },
-      ),
-    ];
+  void _jumpContentScrollBoundary(TraversalDirection direction) {
+    if (direction != TraversalDirection.up &&
+        direction != TraversalDirection.down) {
+      return;
+    }
+    final focusContext = _contentFocusScope.focusedChild?.context;
+    final scrollController =
+        PrimaryScrollController.maybeOf(focusContext ?? context);
+    if (scrollController == null || !scrollController.hasClients) {
+      return;
+    }
+    final target = direction == TraversalDirection.up
+        ? scrollController.position.minScrollExtent
+        : scrollController.position.maxScrollExtent;
+    scrollController.jumpTo(target);
   }
-}
 
-class _LargeScreenSettingsContentItem {
-  const _LargeScreenSettingsContentItem({
-    required this.title,
-    required this.valueText,
-    required this.onActivate,
-    this.subtitle,
-  });
+  void _ensureContentFocus() {
+    if (_contentFocusScope.focusedChild != null) {
+      return;
+    }
+    _contentFocusScope.requestFocus();
+    _contentFocusScope.nextFocus();
+  }
 
-  final String title;
-  final String? subtitle;
-  final String valueText;
-  final Future<void> Function() onActivate;
+  void _activateContentFocus() {
+    final focused = _contentFocusScope.focusedChild;
+    if (focused == null) {
+      _ensureContentFocus();
+      return;
+    }
+    final nodeContext = focused.context;
+    if (nodeContext == null) {
+      return;
+    }
+    Actions.maybeInvoke<ActivateIntent>(nodeContext, const ActivateIntent());
+  }
 }
 
 class _NipaplayLargeScreenSettingsPanelCommandHost extends StatefulWidget {
