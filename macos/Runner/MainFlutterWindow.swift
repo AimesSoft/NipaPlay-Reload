@@ -157,6 +157,7 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
 
     private var videoRenderer: MediaKitOpenGLVideoRenderer?
     private var attachedPlayerHandle: Int64?
+    private var overlayFrameGeneration: Int64?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -222,10 +223,30 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
     }
 
     func updateOverlayFrame(_ frame: CGRect?, visible: Bool, debugLabel: String?) {
+        updateOverlayFrame(frame, visible: visible, debugLabel: debugLabel, generation: nil)
+    }
+
+    func updateOverlayFrame(_ frame: CGRect?, visible: Bool, debugLabel: String?, generation: Int64?) {
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
-                self?.updateOverlayFrame(frame, visible: visible, debugLabel: debugLabel)
+                self?.updateOverlayFrame(
+                    frame,
+                    visible: visible,
+                    debugLabel: debugLabel,
+                    generation: generation
+                )
             }
+            return
+        }
+
+        if visible {
+            overlayFrameGeneration = generation
+        } else if let generation,
+                  let overlayFrameGeneration,
+                  generation != overlayFrameGeneration {
+            macOSHdrExitTrace(
+                "overlayView ignore stale hide generation=\(generation) active=\(overlayFrameGeneration) label=\(debugLabel ?? "")"
+            )
             return
         }
 
@@ -581,11 +602,21 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
             if !visible {
                 macOSHdrExitTrace("plugin setOverlayFrame hide viewId=\(host.platformViewId)")
             }
-            host.updateOverlayFrame(
-                frame,
-                visible: visible,
-                debugLabel: args["debugLabel"] as? String
-            )
+            let generation = int64Value(args["generation"])
+            if let overlayHost = host as? MacOSWindowNativeVideoOverlayView {
+                overlayHost.updateOverlayFrame(
+                    frame,
+                    visible: visible,
+                    debugLabel: args["debugLabel"] as? String,
+                    generation: generation
+                )
+            } else {
+                host.updateOverlayFrame(
+                    frame,
+                    visible: visible,
+                    debugLabel: args["debugLabel"] as? String
+                )
+            }
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
