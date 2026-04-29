@@ -9,6 +9,7 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/developer_options_page.d
 import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/general_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/language_page.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/labs_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart';
@@ -35,6 +36,7 @@ class NipaplaySettingEntryIds {
   static const String remoteAccess = 'remote_access';
   static const String remoteMediaLibrary = 'remote_media_library';
   static const String developerOptions = 'developer_options';
+  static const String labs = 'labs';
   static const String about = 'about';
 }
 
@@ -173,6 +175,13 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
       icon: Ionicons.code_slash_outline,
       pageTitle: l10n.developerOptions,
       page: const DeveloperOptionsPage(),
+    ),
+    const NipaplaySettingEntry(
+      id: NipaplaySettingEntryIds.labs,
+      title: '实验室',
+      icon: Ionicons.flask_outline,
+      pageTitle: '实验室',
+      page: LabsPage(),
     ),
     NipaplaySettingEntry(
       id: NipaplaySettingEntryIds.about,

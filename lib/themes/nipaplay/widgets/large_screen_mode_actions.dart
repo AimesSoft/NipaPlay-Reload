@@ -16,7 +16,7 @@ class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
     required this.rightPadding,
     required this.showWindowsButtons,
     required this.isMaximized,
-    required this.onToggleLargeScreen,
+    this.onToggleLargeScreen,
     required this.onToggleThemeFromOrigin,
     required this.onOpenSettings,
     required this.onMinimize,
@@ -30,7 +30,7 @@ class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
   final double rightPadding;
   final bool showWindowsButtons;
   final bool isMaximized;
-  final VoidCallback onToggleLargeScreen;
+  final VoidCallback? onToggleLargeScreen;
   final Future<void> Function(Offset globalOrigin)? onToggleThemeFromOrigin;
   final VoidCallback onOpenSettings;
   final VoidCallback onMinimize;
@@ -153,14 +153,14 @@ class _NormalModeActionButtons extends StatelessWidget {
   const _NormalModeActionButtons({
     required this.isDarkMode,
     required this.isLargeScreenLayoutActive,
-    required this.onToggleLargeScreen,
+    this.onToggleLargeScreen,
     required this.onToggleThemeFromOrigin,
     required this.onOpenSettings,
   });
 
   final bool isDarkMode;
   final bool isLargeScreenLayoutActive;
-  final VoidCallback onToggleLargeScreen;
+  final VoidCallback? onToggleLargeScreen;
   final Future<void> Function(Offset globalOrigin)? onToggleThemeFromOrigin;
   final VoidCallback onOpenSettings;
 
@@ -183,16 +183,18 @@ class _NormalModeActionButtons extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        SizedBox(
-          height: kNipaplayWindowCaptionHeight,
-          child: Center(
-            child: LargeScreenModeToggleIconButton(
-              isActive: isLargeScreenLayoutActive,
-              onPressed: onToggleLargeScreen,
+        if (onToggleLargeScreen != null) ...[
+          SizedBox(
+            height: kNipaplayWindowCaptionHeight,
+            child: Center(
+              child: LargeScreenModeToggleIconButton(
+                isActive: isLargeScreenLayoutActive,
+                onPressed: onToggleLargeScreen!,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
+          const SizedBox(width: 8),
+        ],
         SizedBox(
           height: kNipaplayWindowCaptionHeight,
           child: Center(
@@ -370,7 +372,8 @@ void _toggleTheme(
   if (onToggleFromOrigin != null) {
     final renderObject = context.findRenderObject();
     if (renderObject is RenderBox && renderObject.hasSize) {
-      final origin = renderObject.localToGlobal(renderObject.size.center(Offset.zero));
+      final origin =
+          renderObject.localToGlobal(renderObject.size.center(Offset.zero));
       onToggleFromOrigin(origin);
       return;
     }

@@ -44,6 +44,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'themes/nipaplay/pages/settings/account_page.dart';
 import 'dart:async';
@@ -672,6 +673,7 @@ void main(List<String> args) async {
           ChangeNotifierProvider.value(value: ServiceProvider.scanService),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
           ChangeNotifierProvider(create: (_) => HomeSectionsSettingsProvider()),
           ChangeNotifierProvider(create: (_) => UIThemeProvider()),
           ChangeNotifierProvider(create: (_) => SharedRemoteLibraryProvider()),
@@ -1240,7 +1242,7 @@ class MainPageState extends State<MainPage>
         _initializeHotkeys();
       }
 
-      if (_useLargeScreenLayout) {
+      if (_useLargeScreenLayout && _isLabsLargeScreenModeEnabled()) {
         unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
       }
     });
@@ -1379,6 +1381,10 @@ class MainPageState extends State<MainPage>
   }
 
   Future<void> _toggleLargeScreenLayout() async {
+    final labsSettings = context.read<LabsSettingsProvider>();
+    if (!labsSettings.enableLargeScreenMode && !_useLargeScreenLayout) {
+      return;
+    }
     final nextValue = !_useLargeScreenLayout;
     setState(() {
       _useLargeScreenLayout = nextValue;
@@ -1406,6 +1412,13 @@ class MainPageState extends State<MainPage>
     } catch (e) {
       debugPrint('[MainPageState] 切换大屏幕模式全屏状态失败: $e');
     }
+  }
+
+  bool _isLabsLargeScreenModeEnabled() {
+    if (!mounted) {
+      return false;
+    }
+    return context.read<LabsSettingsProvider>().enableLargeScreenMode;
   }
 
   ThemeMode _nextThemeMode() {
@@ -1517,14 +1530,16 @@ class MainPageState extends State<MainPage>
 
   @override
   void onWindowEvent(String eventName) {
-    if (eventName == 'leave-full-screen' && _useLargeScreenLayout) {
+    if (eventName == 'leave-full-screen' &&
+        _useLargeScreenLayout &&
+        _isLabsLargeScreenModeEnabled()) {
       unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
     }
   }
 
   @override
   void onWindowLeaveFullScreen() {
-    if (_useLargeScreenLayout) {
+    if (_useLargeScreenLayout && _isLabsLargeScreenModeEnabled()) {
       unawaited(_syncDesktopFullScreenWithLargeScreenMode(true));
     }
   }
@@ -1540,8 +1555,12 @@ class MainPageState extends State<MainPage>
     final bool isMac = !kIsWeb && Platform.isMacOS;
     final bool isDesktop = globals.isDesktop;
     final bool canUseLargeScreenLayout = globals.isDesktopOrTablet;
-    final bool isLargeScreenLayoutActive =
-        canUseLargeScreenLayout && _useLargeScreenLayout;
+    final bool labsEnableLargeScreenMode =
+        context.watch<LabsSettingsProvider>().enableLargeScreenMode;
+    final bool allowLargeScreenControls = labsEnableLargeScreenMode;
+    final bool isLargeScreenLayoutActive = canUseLargeScreenLayout &&
+        allowLargeScreenControls &&
+        _useLargeScreenLayout;
     final double baseTopPadding = isMac ? 10 : 4;
     final double baseRightPadding = isMac ? 20 : 10;
     final double topPadding =
@@ -1563,7 +1582,8 @@ class MainPageState extends State<MainPage>
                 shouldShowAppBar: shouldShowAppBar,
                 tabController: globalTabController,
                 useLargeScreenLayout: isLargeScreenLayoutActive,
-                onToggleLargeScreen: _toggleLargeScreenLayout,
+                onToggleLargeScreen:
+                    allowLargeScreenControls ? _toggleLargeScreenLayout : null,
                 onToggleThemeFromOrigin: _handleThemeToggleFromButton,
                 onOpenSettings: () => SettingsPage.showWindow(context),
               );
@@ -1612,7 +1632,8 @@ class MainPageState extends State<MainPage>
                 showWindowsButtons:
                     !kIsWeb && (Platform.isWindows || Platform.isLinux),
                 isMaximized: isMaximized,
-                onToggleLargeScreen: _toggleLargeScreenLayout,
+                onToggleLargeScreen:
+                    allowLargeScreenControls ? _toggleLargeScreenLayout : null,
                 onToggleThemeFromOrigin: _handleThemeToggleFromButton,
                 onOpenSettings: () => SettingsPage.showWindow(context),
                 onMinimize: _minimizeWindow,

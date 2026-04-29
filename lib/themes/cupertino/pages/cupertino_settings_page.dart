@@ -3,6 +3,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 
 import 'settings/sections/cupertino_settings_general_section.dart';
 import 'settings/sections/cupertino_settings_about_section.dart';
+import 'settings/sections/cupertino_settings_labs_section.dart';
 
 class CupertinoSettingsPage extends StatefulWidget {
   const CupertinoSettingsPage({super.key});
@@ -59,6 +60,8 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: const [
                       CupertinoSettingsGeneralSection(),
+                      SizedBox(height: 24),
+                      CupertinoSettingsLabsSection(),
                       SizedBox(height: 24),
                       CupertinoSettingsAboutSection(),
                     ],
