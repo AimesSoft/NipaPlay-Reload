@@ -40,6 +40,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   bool _isUiLocked = false;
   bool _showUiLockButton = false;
   Timer? _uiLockButtonTimer;
+  bool _isExiting = false;
 
   bool get _isMacOSHdrVideoOnlyEnabled {
     return !kIsWeb &&
@@ -69,7 +70,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   // 处理系统返回键事件
   Future<bool> _handleWillPop() async {
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    return await videoState.handleBackButton();
+    final shouldExit = await videoState.handleBackButton();
+    if (shouldExit) {
+      setState(() => _isExiting = true);
+      unawaited(videoState.resetPlayer().catchError((e) {
+        debugPrint('退出重置失败: $e');
+      }));
+    }
+    return shouldExit;
   }
 
   void _handleSideSwipeDragStart(DragStartDetails details) {
@@ -374,7 +382,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         return WillPopScope(
           onWillPop: _handleWillPop,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
+            duration: _isExiting
+                ? Duration.zero
+                : const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             color: videoState.hasVideo && !_isMacOSHdrTransparentFlutterEnabled
                 ? Colors.black

@@ -130,21 +130,12 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         player.state = PlaybackState.stopped;
       }
 
-      // 等待一小段时间确保播放器完全停止
-      await Future.delayed(const Duration(milliseconds: 100));
-      _logMacOSHdrResetTrace(
-        'after stop delay path=$_currentVideoPath status=$_status playerState=${player.state}',
-      );
-
       // 释放纹理，确保资源被正确释放
       if (player.textureId.value != null) {
         // Keep the null check for reading
         _disposeTextureResources();
         // player.textureId.value = null; // COMMENTED OUT
       }
-
-      // 等待一小段时间确保纹理完全释放
-      await Future.delayed(const Duration(milliseconds: 200));
 
       // 重置状态
       await _clearTimelinePreviewFiles();
