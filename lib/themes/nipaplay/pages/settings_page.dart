@@ -1,34 +1,18 @@
-// settings_page.dart
 import 'package:flutter/material.dart';
-import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/theme_mode_page.dart'; // 导入 ThemeModePage
-import 'package:nipaplay/themes/nipaplay/pages/settings/general_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/developer_options_page.dart'; // 导入开发者选项页面
-import 'package:nipaplay/utils/theme_notifier.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/about_page.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/settings_entries.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/responsive_container.dart'; // 导入响应式容器
-import 'package:nipaplay/themes/nipaplay/pages/settings/about_page.dart'; // 导入 AboutPage
-import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
-import 'package:nipaplay/utils/globals.dart'
-    as globals; // 导入包含 isDesktop 的全局变量文件
-import 'package:nipaplay/pages/shortcuts_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart'; // 导入播放器设置页面
-import 'package:nipaplay/themes/nipaplay/pages/settings/danmaku_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart'; // 导入外部调用设置页面
-import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart'; // 导入远程媒体库设置页面
-import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart'; // 导入远程访问设置页面
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/responsive_container.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
-import 'package:nipaplay/themes/nipaplay/pages/settings/language_page.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
-  static const String entryRemoteAccess = 'remote_access';
+  static const String entryRemoteAccess = NipaplaySettingEntryIds.remoteAccess;
   final String? initialEntryId;
 
   const SettingsPage({super.key, this.initialEntryId});
@@ -85,42 +69,24 @@ class SettingsPage extends StatefulWidget {
   }
 
   @override
-  // ignore: library_private_types_in_public_api
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage>
     with SingleTickerProviderStateMixin {
-  // currentPage 状态现在用于桌面端的右侧面板
-  // 也可以考虑给它一个初始值，这样桌面端一进来右侧不是空的
-  Widget? currentPage; // 初始可以为 null
+  Widget? currentPage;
   late TabController _tabController;
   static const Color _selectedColor = Color(0xFFFF2E55);
-  static const String _entryAppearance = 'appearance';
-  static const String _entryLanguage = 'language';
-  static const String _entryGeneral = 'general';
-  static const String _entryStorage = 'storage';
-  static const String _entryNetwork = 'network';
-  static const String _entryBackupRestore = 'backup_restore';
-  static const String _entryPlayer = 'player';
-  static const String _entryDanmaku = 'danmaku';
-  static const String _entryExternalPlayer = 'external_player';
-  static const String _entryShortcuts = 'shortcuts';
-  static const String _entryRemoteMediaLibrary = 'remote_media_library';
-  static const String _entryDeveloperOptions = 'developer_options';
-  static const String _entryAbout = 'about';
   String? _selectedEntryId;
 
   @override
   void initState() {
     super.initState();
-    // 初始化TabController
     _tabController = TabController(length: 1, vsync: this);
 
-    // 可以在这里为桌面端和平板设备设置一个默认显示的页面
     if (globals.isDesktop || globals.isTablet) {
-      currentPage = const AboutPage(); // 例如默认显示 AboutPage
-      _selectedEntryId = _entryAbout;
+      currentPage = const AboutPage();
+      _selectedEntryId = NipaplaySettingEntryIds.about;
     }
 
     _applyInitialEntry();
@@ -149,7 +115,7 @@ class _SettingsPageState extends State<SettingsPage>
     }
   }
 
-  _SettingEntry? _findEntryById(String entryId) {
+  NipaplaySettingEntry? _findEntryById(String entryId) {
     final entries = _buildSettingEntries(context);
     for (final entry in entries) {
       if (entry.id == entryId) {
@@ -159,25 +125,26 @@ class _SettingsPageState extends State<SettingsPage>
     return null;
   }
 
-  // 封装导航或更新状态的逻辑
   void _handleItemTap(String entryId, Widget pageToShow, String title) {
     List<Widget> settingsTabLabels() {
       final colorScheme = Theme.of(context).colorScheme;
       return [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(title,
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface)),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+            ),
+          ),
         ),
       ];
     }
 
     final List<Widget> pages = [pageToShow];
     if (globals.isDesktop || globals.isTablet) {
-      // 桌面端和平板设备：更新状态，改变右侧面板内容
       setState(() {
         currentPage = pageToShow;
         _selectedEntryId = entryId;
@@ -186,26 +153,25 @@ class _SettingsPageState extends State<SettingsPage>
       setState(() {
         _selectedEntryId = entryId;
       });
-      // 移动端：导航到新页面
       Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (context) => Selector<VideoPlayerState, bool>(
-                  selector: (context, videoState) =>
-                      videoState.shouldShowAppBar(),
-                  builder: (context, shouldShowAppBar, child) {
-                    return SettingsNoRippleTheme(
-                      disableBlurEffect: true,
-                      child: CustomScaffold(
-                        pages: pages,
-                        tabPage: settingsTabLabels(),
-                        pageIsHome: false,
-                        shouldShowAppBar: shouldShowAppBar,
-                        tabController: _tabController,
-                      ),
-                    );
-                  },
-                )),
+          builder: (context) => Selector<VideoPlayerState, bool>(
+            selector: (context, videoState) => videoState.shouldShowAppBar(),
+            builder: (context, shouldShowAppBar, child) {
+              return SettingsNoRippleTheme(
+                disableBlurEffect: true,
+                child: CustomScaffold(
+                  pages: pages,
+                  tabPage: settingsTabLabels(),
+                  pageIsHome: false,
+                  shouldShowAppBar: shouldShowAppBar,
+                  tabController: _tabController,
+                ),
+              );
+            },
+          ),
+        ),
       );
     }
   }
@@ -214,13 +180,10 @@ class _SettingsPageState extends State<SettingsPage>
   Widget build(BuildContext context) {
     final entries = _buildSettingEntries(context);
     final colorScheme = Theme.of(context).colorScheme;
-    // ResponsiveContainer 会根据 isDesktop 决定是否显示 currentPage
     return SettingsNoRippleTheme(
       disableBlurEffect: true,
       child: ResponsiveContainer(
-        currentPage:
-            currentPage ?? Container(), // 将当前页面状态传递给 ResponsiveContainer
-        // child 是 ListView，始终显示
+        currentPage: currentPage ?? Container(),
         child: ListView.separated(
           itemCount: entries.length,
           itemBuilder: (context, index) => _buildSettingTile(entries[index]),
@@ -233,139 +196,11 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  List<_SettingEntry> _buildSettingEntries(BuildContext context) {
-    final themeNotifier = context.read<ThemeNotifier>();
-    final l10n = context.l10n;
-    final entries = <_SettingEntry>[
-      _SettingEntry(
-        id: _entryAppearance,
-        title: l10n.appearance,
-        icon: Ionicons.color_palette_outline,
-        pageTitle: l10n.appearanceSettings,
-        page: ThemeModePage(themeNotifier: themeNotifier),
-      ),
-    ];
-
-    entries.addAll([
-      _SettingEntry(
-        id: _entryLanguage,
-        title: l10n.language,
-        icon: Ionicons.language_outline,
-        pageTitle: l10n.languageSettingsTitle,
-        page: const LanguagePage(),
-      ),
-      _SettingEntry(
-        id: _entryGeneral,
-        title: l10n.general,
-        icon: Ionicons.settings_outline,
-        pageTitle: l10n.generalSettings,
-        page: const GeneralPage(),
-      ),
-      _SettingEntry(
-        id: _entryStorage,
-        title: l10n.storage,
-        icon: Ionicons.folder_open_outline,
-        pageTitle: l10n.storageSettings,
-        page: const StoragePage(),
-      ),
-      _SettingEntry(
-        id: _entryNetwork,
-        title: l10n.networkSettings,
-        icon: Ionicons.wifi_outline,
-        pageTitle: l10n.networkSettings,
-        page: const NetworkSettingsPage(),
-      ),
-    ]);
-
-    if (!globals.isPhone) {
-      entries.add(
-        _SettingEntry(
-          id: _entryBackupRestore,
-          title: l10n.backupAndRestore,
-          icon: Ionicons.cloud_upload_outline,
-          pageTitle: l10n.backupAndRestore,
-          page: const BackupRestorePage(),
-        ),
-      );
-    }
-
-    entries.add(
-      _SettingEntry(
-        id: _entryPlayer,
-        title: l10n.player,
-        icon: Ionicons.play_circle_outline,
-        pageTitle: l10n.playerSettings,
-        page: const PlayerSettingsPage(),
-      ),
-    );
-
-    entries.add(
-      const _SettingEntry(
-        id: _entryDanmaku,
-        title: '弹幕',
-        icon: Ionicons.hardware_chip_outline,
-        pageTitle: '弹幕设置',
-        page: DanmakuSettingsPage(),
-      ),
-    );
-
-    entries.add(
-      _SettingEntry(
-        id: _entryExternalPlayer,
-        title: l10n.externalCall,
-        icon: Ionicons.open_outline,
-        pageTitle: l10n.externalCall,
-        page: const ExternalPlayerSettingsPage(),
-      ),
-    );
-
-    if (!globals.isPhone) {
-      entries.addAll([
-        _SettingEntry(
-          id: _entryShortcuts,
-          title: l10n.shortcuts,
-          icon: Ionicons.key_outline,
-          pageTitle: l10n.shortcutsSettings,
-          page: const ShortcutsSettingsPage(),
-        ),
-        _SettingEntry(
-          id: SettingsPage.entryRemoteAccess,
-          title: l10n.remoteAccess,
-          icon: Ionicons.link_outline,
-          pageTitle: l10n.remoteAccess,
-          page: const RemoteAccessPage(),
-        ),
-      ]);
-    }
-
-    entries.addAll([
-      _SettingEntry(
-        id: _entryRemoteMediaLibrary,
-        title: l10n.remoteMediaLibrary,
-        icon: Ionicons.library_outline,
-        pageTitle: l10n.remoteMediaLibrary,
-        page: const RemoteMediaLibraryPage(),
-      ),
-      _SettingEntry(
-        id: _entryDeveloperOptions,
-        title: l10n.developerOptions,
-        icon: Ionicons.code_slash_outline,
-        pageTitle: l10n.developerOptions,
-        page: const DeveloperOptionsPage(),
-      ),
-      _SettingEntry(
-        id: _entryAbout,
-        title: l10n.about,
-        icon: Ionicons.information_circle_outline,
-        pageTitle: l10n.about,
-        page: const AboutPage(),
-      ),
-    ]);
-
-    return entries;
+  List<NipaplaySettingEntry> _buildSettingEntries(BuildContext context) {
+    return buildNipaplaySettingEntries(context);
   }
 
-  Widget _buildSettingTile(_SettingEntry entry) {
+  Widget _buildSettingTile(NipaplaySettingEntry entry) {
     final colorScheme = Theme.of(context).colorScheme;
     final isSelected = entry.id == _selectedEntryId;
     final itemColor = isSelected ? _selectedColor : colorScheme.onSurface;
@@ -378,20 +213,4 @@ class _SettingsPageState extends State<SettingsPage>
       onTap: () => _handleItemTap(entry.id, entry.page, entry.pageTitle),
     );
   }
-}
-
-class _SettingEntry {
-  const _SettingEntry({
-    required this.id,
-    required this.title,
-    required this.icon,
-    required this.pageTitle,
-    required this.page,
-  });
-
-  final String id;
-  final String title;
-  final IconData icon;
-  final String pageTitle;
-  final Widget page;
 }

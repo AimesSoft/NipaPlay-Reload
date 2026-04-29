@@ -214,61 +214,68 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
   Widget _buildContinueWatchingCard(WatchHistoryItem item,
       {bool compact = false}) {
-    return GestureDetector(
-      onTap: _isHistoryAutoMatching ? null : () => _onWatchHistoryItemTap(item),
-      child: SizedBox(
-        key: ValueKey(
-            'continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
-        width: compact ? 220 : 280, // 手机更窄
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 图片容器
-            Container(
-              height: compact ? 110 : 158, // 进一步减少手机端高度
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: _getVideoThumbnail(item),
+    final onTap =
+        _isHistoryAutoMatching ? null : () => _onWatchHistoryItemTap(item);
+    final card = SizedBox(
+      key: ValueKey(
+          'continue_${item.animeId ?? 0}_${item.filePath.hashCode}'), // 添加唯一key
+      width: compact ? 220 : 280, // 手机更窄
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 图片容器
+          Container(
+            height: compact ? 110 : 158, // 进一步减少手机端高度
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
             ),
+            clipBehavior: Clip.antiAlias,
+            child: _getVideoThumbnail(item),
+          ),
 
-            const SizedBox(height: 8),
+          const SizedBox(height: 8),
 
-            // 媒体名称
-            Text(
-              item.animeName.isNotEmpty
-                  ? item.animeName
-                  : path.basename(item.filePath),
-              style: TextStyle(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : Colors.black,
-                fontSize: 16, // 增加字体大小
-                fontWeight: FontWeight.bold,
-              ),
-              maxLines: 2, // 增加显示行数
-              overflow: TextOverflow.ellipsis,
+          // 媒体名称
+          Text(
+            item.animeName.isNotEmpty
+                ? item.animeName
+                : path.basename(item.filePath),
+            style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white
+                  : Colors.black,
+              fontSize: 16, // 增加字体大小
+              fontWeight: FontWeight.bold,
             ),
+            maxLines: 2, // 增加显示行数
+            overflow: TextOverflow.ellipsis,
+          ),
 
-            const SizedBox(height: 4),
+          const SizedBox(height: 4),
 
-            // 进度和集数信息
-            Text(
-              "${(item.watchProgress * 100).toInt()}%${item.episodeTitle != null ? ' · ${item.episodeTitle}' : ''}",
-              style: TextStyle(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white70
-                    : Colors.black87,
-                fontSize: 14, // 增加字体大小
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          // 进度和集数信息
+          Text(
+            "${(item.watchProgress * 100).toInt()}%${item.episodeTitle != null ? ' · ${item.episodeTitle}' : ''}",
+            style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white70
+                  : Colors.black87,
+              fontSize: 14, // 增加字体大小
             ),
-          ],
-        ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
+    if (!_isLargeScreenModeActive) {
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: card,
+      );
+    }
+    return _wrapLargeScreenFocusable(child: card, onActivate: onTap);
   }
 
   void _showWatchHistoryDialog() {
@@ -318,14 +325,20 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
   }
 
   Widget _buildWatchHistoryButton() {
+    final button = _HoverScaleButton(
+      onTap: _isLargeScreenModeActive ? null : _showWatchHistoryDialog,
+      child: Icon(
+        Icons.history_rounded,
+        size: 24,
+      ),
+    );
     return Tooltip(
       message: '观看记录',
-      child: _HoverScaleButton(
-        onTap: _showWatchHistoryDialog,
-        child: const Icon(
-          Icons.history_rounded,
-          size: 24,
-        ),
+      child: _wrapLargeScreenFocusable(
+        child: button,
+        onActivate: _showWatchHistoryDialog,
+        borderRadius: BorderRadius.circular(8),
+        padding: const EdgeInsets.all(4),
       ),
     );
   }
@@ -338,14 +351,21 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
   }
 
   Widget _buildContinueWatchingRefreshButton() {
+    final button = _HoverScaleButton(
+      onTap:
+          _isLargeScreenModeActive ? null : _onContinueWatchingRefreshPressed,
+      child: Icon(
+        Icons.refresh_rounded,
+        size: 24,
+      ),
+    );
     return Tooltip(
       message: '刷新继续播放',
-      child: _HoverScaleButton(
-        onTap: _onContinueWatchingRefreshPressed,
-        child: const Icon(
-          Icons.refresh_rounded,
-          size: 24,
-        ),
+      child: _wrapLargeScreenFocusable(
+        child: button,
+        onActivate: _onContinueWatchingRefreshPressed,
+        borderRadius: BorderRadius.circular(8),
+        padding: const EdgeInsets.all(4),
       ),
     );
   }
@@ -612,19 +632,28 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
         : HorizontalAnimeCard.compactCardHeight;
 
     Widget buildCard(String? summary, {String? progress}) {
-      return SizedBox(
+      final onTap = () => onItemTap(item);
+      final card = SizedBox(
         width: cardWidth,
         height: cardHeight,
         child: HorizontalAnimeCard(
           key: ValueKey(uniqueId),
           title: name,
           imageUrl: imageUrl,
-          onTap: () => onItemTap(item),
+          onTap: onTap,
           source: sourceLabel,
           rating: rating,
           summary: summary,
           progress: progress ?? _getWatchProgressForDashboard(item),
         ),
+      );
+      if (!_isLargeScreenModeActive) {
+        return card;
+      }
+      return _wrapLargeScreenFocusable(
+        child: card,
+        onActivate: onTap,
+        borderRadius: BorderRadius.circular(4),
       );
     }
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 
 const Color _fluentAccentColor = Color(0xFFFF2E55);
 
@@ -357,6 +358,7 @@ class SettingsItem extends StatelessWidget {
                   ),
                 )
               : null,
+          onTap: null,
           enabled: enabled,
         );
       case SettingsItemType.toggle:
@@ -433,6 +435,15 @@ class SettingsItem extends StatelessWidget {
           enabled: enabled,
         );
       case SettingsItemType.slider:
+        final double min = sliderMin ?? 0;
+        final double max = sliderMax ?? 1;
+        final double current = sliderValue ?? min;
+        final int? divisions = sliderDivisions;
+        final double step = (divisions != null && divisions > 0)
+            ? ((max - min) / divisions)
+            : ((max - min) / 20);
+        final bool canAdjustByEnter =
+            enabled && onSliderChanged != null && max > min && step > 0;
         return Column(
           children: [
             ListTile(
@@ -471,6 +482,15 @@ class SettingsItem extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              onTap: canAdjustByEnter
+                  ? () {
+                      double next = current + step;
+                      if (next > max) {
+                        next = min;
+                      }
+                      onSliderChanged!(next.clamp(min, max));
+                    }
+                  : null,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -482,10 +502,10 @@ class SettingsItem extends StatelessWidget {
                     'default': _fluentAccentColor,
                   }),
                 ),
-                child: fluent.Slider(
-                  value: sliderValue ?? 0,
-                  min: sliderMin ?? 0,
-                  max: sliderMax ?? 1,
+                child: NipaplayLargeScreenEditableSlider(
+                  value: current,
+                  min: min,
+                  max: max,
                   divisions: sliderDivisions,
                   onChanged: enabled ? onSliderChanged : null,
                   label: sliderLabelFormatter?.call(sliderValue ?? 0),

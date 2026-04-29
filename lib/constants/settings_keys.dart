@@ -20,4 +20,7 @@ class SettingsKeys {
 
   static const String legacyAutoCheckUpdatesOnAboutPage =
       'auto_check_updates_on_about_page';
+
+  static const String labsEnableLargeScreenMode =
+      'labs_enable_large_screen_mode';
 }
