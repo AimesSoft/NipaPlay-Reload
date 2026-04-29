@@ -329,10 +329,6 @@ class SettingsItem extends StatelessWidget {
     switch (type) {
       case SettingsItemType.dropdown:
         final bool alignDropdownToTop = _hasDropdownDescriptions();
-        final List<DropdownMenuItemData> items =
-            dropdownItems ?? const <DropdownMenuItemData>[];
-        final bool canCycleSelection =
-            enabled && items.isNotEmpty && onDropdownChanged != null;
         return ListTile(
           titleAlignment:
               alignDropdownToTop ? ListTileTitleAlignment.top : null,
@@ -362,15 +358,7 @@ class SettingsItem extends StatelessWidget {
                   ),
                 )
               : null,
-          onTap: canCycleSelection
-              ? () async {
-                  final currentIndex = items.indexWhere((item) => item.isSelected);
-                  final nextIndex = currentIndex < 0
-                      ? 0
-                      : ((currentIndex + 1) % items.length);
-                  await onDropdownChanged!(items[nextIndex].value);
-                }
-              : null,
+          onTap: null,
           enabled: enabled,
         );
       case SettingsItemType.toggle:

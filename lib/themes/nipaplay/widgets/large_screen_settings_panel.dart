@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/settings_entries.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
 
@@ -78,6 +79,9 @@ class _NipaplayLargeScreenSettingsPanelState
       return KeyEventResult.ignored;
     }
     if (!_isFocusInsideContentScope(FocusManager.instance.primaryFocus)) {
+      return KeyEventResult.ignored;
+    }
+    if (BlurDropdown.isAnyExpanded) {
       return KeyEventResult.ignored;
     }
     if (NipaplayLargeScreenEditableSlider.isAnyEditing) {
