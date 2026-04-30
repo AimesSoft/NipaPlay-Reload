@@ -4,6 +4,7 @@ import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/themes/cupertino/pages/settings/pages/webdav_quick_settings_page.dart';
 import 'package:provider/provider.dart';
 
 class CupertinoLabsSettingsPage extends StatelessWidget {
@@ -56,6 +57,30 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                         onTap: () {
                           labsSettings.setEnableLargeScreenMode(
                             !labsSettings.enableLargeScreenMode,
+                          );
+                        },
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.cloud,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('WebDAV 快捷设置'),
+                        subtitle: const Text('配置底部 WebDAV 快捷 Tab，快速访问 WebDAV 服务器'),
+                        trailing: Icon(
+                          CupertinoIcons.chevron_forward,
+                          color: CupertinoDynamicColor.resolve(
+                            CupertinoColors.tertiaryLabel,
+                            context,
+                          ),
+                          size: 18,
+                        ),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const CupertinoWebDAVQuickSettingsPage(),
+                            ),
                           );
                         },
                         backgroundColor: resolveSettingsTileBackground(context),

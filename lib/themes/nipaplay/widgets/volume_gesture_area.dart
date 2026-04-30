@@ -10,32 +10,64 @@ class VolumeGestureArea extends StatefulWidget {
 }
 
 class _VolumeGestureAreaState extends State<VolumeGestureArea> {
+  // 防误触区域高度
+  static const double _topSafeArea = 48.0;
+  static const double _bottomSafeArea = 40.0;
+  // 最小滑动距离阈值
+  static const double _minDragDistance = 10.0;
+
+  double _accumulatedDrag = 0.0;
+  bool _hasStartedAdjustment = false;
+
   void _onVerticalDragStart(BuildContext context, DragStartDetails details) {
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    videoState.startVolumeDrag();
+    _accumulatedDrag = 0.0;
+    _hasStartedAdjustment = false;
   }
 
   void _onVerticalDragUpdate(BuildContext context, DragUpdateDetails details) {
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    videoState.updateVolumeOnDrag(details.delta.dy, context);
+    _accumulatedDrag += details.delta.dy.abs();
+
+    if (!_hasStartedAdjustment && _accumulatedDrag > _minDragDistance) {
+      _hasStartedAdjustment = true;
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.startVolumeDrag();
+    }
+
+    if (_hasStartedAdjustment) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.updateVolumeOnDrag(details.delta.dy, context);
+    }
   }
 
   void _onVerticalDragEnd(BuildContext context, DragEndDetails details) {
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    videoState.endVolumeDrag();
+    if (_hasStartedAdjustment) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.endVolumeDrag();
+    }
+    _accumulatedDrag = 0.0;
+    _hasStartedAdjustment = false;
   }
 
   void _onVerticalDragCancel(BuildContext context) {
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    videoState.endVolumeDrag();
+    if (_hasStartedAdjustment) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.endVolumeDrag();
+    }
+    _accumulatedDrag = 0.0;
+    _hasStartedAdjustment = false;
   }
 
   @override
   Widget build(BuildContext context) {
+    final safeTop = MediaQuery.of(context).padding.top;
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+    final effectiveTopSafeArea = safeTop + _topSafeArea;
+    final effectiveBottomSafeArea = safeBottom + _bottomSafeArea;
+
     return Positioned(
       right: 0,
-      top: 0,
-      bottom: 0,
+      top: effectiveTopSafeArea,
+      bottom: effectiveBottomSafeArea,
       width: MediaQuery.of(context).size.width / 2.2,
       child: GestureDetector(
         onVerticalDragStart: (details) =>
