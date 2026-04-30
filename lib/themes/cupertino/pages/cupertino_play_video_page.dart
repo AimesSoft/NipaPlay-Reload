@@ -63,6 +63,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   OverlayEntry? _playbackInfoOverlay;
   OverlayEntry? _settingsOverlay;
   final GlobalKey _settingsButtonKey = GlobalKey();
+  bool _isExiting = false;
 
   bool _isRepeatableShortcut(LogicalKeyboardKey key) {
     return key == LogicalKeyboardKey.arrowLeft ||
@@ -1757,7 +1758,10 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
   Future<bool> _requestExit(VideoPlayerState videoState) async {
     final shouldPop = await videoState.handleBackButton();
     if (shouldPop) {
-      await videoState.resetPlayer();
+      setState(() => _isExiting = true);
+      unawaited(videoState.resetPlayer().catchError((e) {
+        debugPrint('退出重置失败: $e');
+      }));
     }
     return shouldPop;
   }

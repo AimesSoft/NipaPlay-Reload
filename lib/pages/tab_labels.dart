@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 
-List<Widget> createTabLabels(BuildContext context) {
+List<Widget> createTabLabels(BuildContext context, {bool showWebDAVTab = false}) {
   List<Widget> tabs = [
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
@@ -12,6 +12,19 @@ List<Widget> createTabLabels(BuildContext context) {
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabVideoPlay),
     ),
+  ];
+
+  // 动态插入 WebDAV Tab
+  if (showWebDAVTab) {
+    tabs.add(
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8.0),
+        child: HoverZoomTab(text: 'WebDAV'),
+      ),
+    );
+  }
+
+  tabs.addAll([
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabMediaLibrary),
@@ -20,7 +33,7 @@ List<Widget> createTabLabels(BuildContext context) {
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabAccount),
     ),
-  ];
+  ]);
 
   return tabs;
 }

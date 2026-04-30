@@ -65,6 +65,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   bool _isProcessingTap = false;
   bool _isMouseVisible = true;
   bool _isHorizontalDragging = false;
+  // 防误触：最小水平滑动距离阈值
+  static const double _minHorizontalDragDistance = 20.0;
+  double _accumulatedHorizontalDrag = 0.0;
+  bool _hasStartedSeekDrag = false;
   final OverlayContextMenuController _contextMenuController =
       OverlayContextMenuController();
 
@@ -523,35 +527,45 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (!globals.isMobilePlatform && !_isTouchLikePointer(details.kind)) {
       return;
     }
-    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    if (videoState.hasVideo) {
-      _isHorizontalDragging = true;
-      videoState.startSeekDrag(context);
-      _doubleTapTimer?.cancel();
-      _tapCount = 0;
-    }
+    _accumulatedHorizontalDrag = 0.0;
+    _hasStartedSeekDrag = false;
+    _isHorizontalDragging = true;
+    _doubleTapTimer?.cancel();
+    _tapCount = 0;
   }
 
   void _handleHorizontalDragUpdate(
     BuildContext context,
     DragUpdateDetails details,
   ) {
-    if (_isHorizontalDragging) {
+    if (!_isHorizontalDragging) return;
+
+    if (details.delta.dx.abs() <= details.delta.dy.abs()) return;
+
+    _accumulatedHorizontalDrag += details.delta.dx.abs();
+
+    if (!_hasStartedSeekDrag && _accumulatedHorizontalDrag > _minHorizontalDragDistance) {
+      _hasStartedSeekDrag = true;
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-      if (details.primaryDelta != null && details.primaryDelta!.abs() > 0) {
-        if ((details.delta.dx.abs() > details.delta.dy.abs())) {
-          videoState.updateSeekDrag(details.delta.dx, context);
-        }
+      if (videoState.hasVideo) {
+        videoState.startSeekDrag(context);
       }
+    }
+
+    if (_hasStartedSeekDrag) {
+      final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+      videoState.updateSeekDrag(details.delta.dx, context);
     }
   }
 
   void _handleHorizontalDragEnd(BuildContext context, DragEndDetails details) {
-    if (_isHorizontalDragging) {
+    if (_hasStartedSeekDrag) {
       final videoState = Provider.of<VideoPlayerState>(context, listen: false);
       videoState.endSeekDrag();
-      _isHorizontalDragging = false;
     }
+    _isHorizontalDragging = false;
+    _accumulatedHorizontalDrag = 0.0;
+    _hasStartedSeekDrag = false;
   }
 
   @override
