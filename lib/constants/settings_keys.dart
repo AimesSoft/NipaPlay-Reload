@@ -23,4 +23,6 @@ class SettingsKeys {
 
   static const String labsEnableLargeScreenMode =
       'labs_enable_large_screen_mode';
+
+  static const String labsEnableRustFileScan = 'labs_enable_rust_file_scan';
 }

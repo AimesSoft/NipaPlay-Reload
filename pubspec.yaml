@@ -101,6 +101,9 @@ dependencies:
     path: packages/nipaplay_smb2
   battery_plus: ^7.0.0
   pinyin: ^3.3.0
+  rust_lib_nipaplay:
+    path: rust_builder
+  flutter_rust_bridge: 2.11.1
 
 dev_dependencies:
   flutter_test:

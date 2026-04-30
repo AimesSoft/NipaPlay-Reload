@@ -27,6 +27,19 @@ class LabsPage extends StatelessWidget {
               color: colorScheme.onSurface.withValues(alpha: 0.12),
               height: 1,
             ),
+            SettingsItem.toggle(
+              title: 'Rust 文件扫描',
+              subtitle: '开启后使用 Rust 扫描本地媒体文件并计算变化，降低 UI 卡顿风险',
+              icon: Ionicons.flash_outline,
+              value: labsSettings.enableRustFileScan,
+              onChanged: (bool value) {
+                labsSettings.setEnableRustFileScan(value);
+              },
+            ),
+            Divider(
+              color: colorScheme.onSurface.withValues(alpha: 0.12),
+              height: 1,
+            ),
           ],
         );
       },
