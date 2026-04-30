@@ -819,6 +819,7 @@ class ScanService with ChangeNotifier {
 
     for (int i = 0; i < allFoldersToScan.length; i++) {
       if (!_isScanning) {
+        _precomputedFolderDiffs.clear();
         _updateScanState(scanning: false, message: "刷新已取消。", completed: true);
         return;
       }
@@ -853,6 +854,7 @@ class ScanService with ChangeNotifier {
 
     for (String folderPath in foldersNeedingScan) {
       if (!_isScanning) {
+        _precomputedFolderDiffs.clear();
         _updateScanState(scanning: false, message: "刷新已取消。", completed: true);
         return;
       }
@@ -908,6 +910,8 @@ class ScanService with ChangeNotifier {
 
     if (!isPartOfBatch) {
       clearFailedScanFiles(notify: false);
+      // Standalone scans must not reuse diff snapshots from previous runs.
+      _precomputedFolderDiffs.clear();
     }
 
     if (!isPartOfBatch) {
