@@ -92,7 +92,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                         ),
                       ),
                     ),
-                    ...provider.availableTabs.map((tabName) {
+                    ...provider.materialAvailableTabs.map((tabName) {
                       final isSelected = tabName == provider.defaultHomeTab;
                       return RadioListTile<String>(
                         title: Text(

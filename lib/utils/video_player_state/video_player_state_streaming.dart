@@ -61,15 +61,19 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
       _logMacOSHdrExitTrace(
         'handleBackButton start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
-      // Fire-and-forget：截图和云同步改为后台执行，不阻塞退出
-      unawaited(_captureConditionalScreenshot("返回按钮时").catchError((e) {
+      // 保持顺序执行，避免与 resetPlayer 并发导致状态被提前清空。
+      try {
+        await _captureConditionalScreenshot("返回按钮时");
+      } catch (e) {
         debugPrint('退出截图失败: $e');
-      }));
+      }
 
       if (_currentVideoPath != null) {
-        unawaited(AutoSyncService.instance.syncOnPlaybackEnd().catchError((e) {
+        try {
+          await AutoSyncService.instance.syncOnPlaybackEnd();
+        } catch (e) {
           debugPrint('退出云同步失败: $e');
-        }));
+        }
       }
 
       _logMacOSHdrExitTrace(

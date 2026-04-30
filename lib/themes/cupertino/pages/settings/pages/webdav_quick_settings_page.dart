@@ -170,7 +170,7 @@ class _CupertinoWebDAVQuickSettingsPageState
             ],
           ),
         ),
-        ...provider.availableTabs.map((tabName) {
+        ...provider.cupertinoAvailableTabs.map((tabName) {
           final isSelected = tabName == provider.defaultHomeTab;
           return CupertinoSettingsTile(
             leading: Icon(
