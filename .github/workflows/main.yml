@@ -1,10 +1,12 @@
 name: Build & Release (Modular)
 
-# Trigger on push to the main branch
 on:
-  push:
-    branches:
-      - 'main'
+  workflow_dispatch:
+    inputs:
+      release_title:
+        description: 'Release title, e.g. 2026.0430'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,24 +19,24 @@ concurrency:
 
 jobs:
   Gatekeeper:
-    name: Check Commit Message
+    name: Check Release Input
     runs-on: ubuntu-latest
     outputs:
       triggered: ${{ steps.check.outputs.triggered }}
       release_title: ${{ steps.check.outputs.release_title }}
     steps:
-      - name: Check commit message for release trigger
+      - name: Check release title
         id: check
         env:
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RELEASE_TITLE: ${{ inputs.release_title }}
         run: |
-          if [[ "$COMMIT_MSG" =~ ([0-9]{4}\.[0-9]{4}) ]]; then
-            echo "✅ Release trigger found in commit message."
+          if [[ "$RELEASE_TITLE" =~ ^[0-9]{4}\.[0-9]{4}$ ]]; then
+            echo "✅ Release title accepted."
             echo "triggered=true" >> $GITHUB_OUTPUT
-            echo "release_title=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            echo "release_title=$RELEASE_TITLE" >> $GITHUB_OUTPUT
           else
-            echo "🛑 No release trigger found. Skipping release workflow."
-            echo "triggered=false" >> $GITHUB_OUTPUT
+            echo "🛑 release_title must match YYYY.MMDD, for example 2026.0430."
+            exit 1
           fi
 
   # 并行构建所有平台，支持fail-fast: false策略
