@@ -274,7 +274,9 @@ class HotkeyService extends ChangeNotifier {
     if (info == null) {
       return false;
     }
-    if (!info.modifiers.contains(HotKeyModifier.shift)) {
+    final modifierSet = info.modifiers.toSet();
+    if (modifierSet.length != 1 ||
+        !modifierSet.contains(HotKeyModifier.shift)) {
       return false;
     }
     return info.keyCode == arrowKey;
