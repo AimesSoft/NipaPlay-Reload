@@ -355,16 +355,30 @@ jobs:
     if: success() # This job runs only if Publish job succeeds
     runs-on: ubuntu-latest
     steps:
+      - name: Create release bot token
+        id: release_bot_token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.release_bot_token.outputs.token }}
           fetch-depth: 0
+
+      - name: Get release bot user id
+        id: release_bot_user
+        env:
+          GH_TOKEN: ${{ steps.release_bot_token.outputs.token }}
+        run: echo "id=$(gh api "/users/${{ steps.release_bot_token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
           
       - name: Update version
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git config --global user.name '${{ steps.release_bot_token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.release_bot_user.outputs.id }}+${{ steps.release_bot_token.outputs.app-slug }}[bot]@users.noreply.github.com'
           
           # Get latest code
           git fetch origin refs/heads/main:refs/remotes/origin/main
