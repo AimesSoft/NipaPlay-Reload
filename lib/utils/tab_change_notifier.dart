@@ -20,9 +20,13 @@ class TabChangeNotifier extends ChangeNotifier {
     debugPrint('[TabChangeNotifier] 已通知所有监听器');
   }
 
-  void changeToMediaLibrarySubTab(int subTabIndex) {
-    debugPrint('[TabChangeNotifier] changeToMediaLibrarySubTab called with subTabIndex: $subTabIndex');
-    _targetTabIndex = 2; // 媒体库页面索引
+  void changeToMediaLibrarySubTab(
+    int subTabIndex, {
+    int mainTabIndex = 2,
+  }) {
+    debugPrint(
+        '[TabChangeNotifier] changeToMediaLibrarySubTab called with subTabIndex: $subTabIndex, mainTabIndex: $mainTabIndex');
+    _targetTabIndex = mainTabIndex;
     _targetMediaLibrarySubTabIndex = subTabIndex;
     debugPrint('[TabChangeNotifier] 正在通知监听器切换到媒体库页面子标签: $subTabIndex');
     notifyListeners();
@@ -45,4 +49,4 @@ class TabChangeNotifier extends ChangeNotifier {
     _targetTabIndex = null;
     _targetMediaLibrarySubTabIndex = null;
   }
-} 
+}

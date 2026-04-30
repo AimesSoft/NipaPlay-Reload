@@ -51,6 +51,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String _keyAutoEnterSeasonFolder = 'webdav_auto_enter_season_folder';
   static const String _keySeasonFolderPattern = 'webdav_season_folder_pattern';
   static const String _keyShowPathBreadcrumb = 'webdav_show_path_breadcrumb';
+  static const String _legacyDefaultPageIndexKey = 'default_page_index';
 
   // Tab 名称常量
   static const String tabHome = 'home';
@@ -59,6 +60,14 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String tabAccount = 'account';
   static const String tabSettings = 'settings';
   static const String tabWebDAV = 'webdav';
+  static const List<String> _allSupportedTabs = [
+    tabHome,
+    tabVideo,
+    tabMediaLibrary,
+    tabAccount,
+    tabSettings,
+    tabWebDAV,
+  ];
 
   // 状态
   bool _showWebDAVTab = false;
@@ -85,17 +94,35 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   /// 获取有效的默认 Tab（处理 WebDAV 关闭时的回落）
   String get effectiveDefaultHomeTab {
     if (_defaultHomeTab == tabWebDAV && !_showWebDAVTab) {
-      return tabHome; // WebDAV 关闭时回落到首页
+      return tabHome;
     }
+
+    if (_isMaterialOnlyTab(_defaultHomeTab)) {
+      return tabHome;
+    }
+
     return _defaultHomeTab;
+  }
+
+  /// Material 主题可用的默认主页选项
+  List<String> get materialAvailableTabs {
+    if (_showWebDAVTab) {
+      return [tabHome, tabVideo, tabWebDAV, tabMediaLibrary, tabAccount];
+    }
+    return [tabHome, tabVideo, tabMediaLibrary, tabAccount];
+  }
+
+  /// Cupertino 主题可用的默认主页选项
+  List<String> get cupertinoAvailableTabs {
+    if (_showWebDAVTab) {
+      return [tabHome, tabWebDAV, tabMediaLibrary, tabAccount, tabSettings];
+    }
+    return [tabHome, tabMediaLibrary, tabAccount, tabSettings];
   }
 
   /// 获取所有可用的 Tab 选项（根据 WebDAV 是否开启）
   List<String> get availableTabs {
-    if (_showWebDAVTab) {
-      return [tabHome, tabVideo, tabWebDAV, tabMediaLibrary, tabAccount, tabSettings];
-    }
-    return [tabHome, tabVideo, tabMediaLibrary, tabAccount, tabSettings];
+    return materialAvailableTabs;
   }
 
   /// 获取 Tab 的显示名称
@@ -138,7 +165,12 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       _showWebDAVTab = prefs.getBool(_keyShowWebDAVTab) ?? false;
       _defaultServerName = prefs.getString(_keyDefaultServerName) ?? '';
       _defaultDirectory = prefs.getString(_keyDefaultDirectory) ?? '/';
-      _defaultHomeTab = prefs.getString(_keyDefaultHomeTab) ?? tabHome;
+      final storedDefaultHomeTab = prefs.getString(_keyDefaultHomeTab);
+      if (storedDefaultHomeTab != null && storedDefaultHomeTab.isNotEmpty) {
+        _defaultHomeTab = storedDefaultHomeTab;
+      } else {
+        _defaultHomeTab = _migrateLegacyDefaultPageIndex(prefs);
+      }
       _sortPreset = WebDAVSortPreset.fromValue(prefs.getString(_keySortPreset));
       _autoEnterSeasonFolder = prefs.getBool(_keyAutoEnterSeasonFolder) ?? false;
       _seasonFolderPattern = prefs.getString(_keySeasonFolderPattern) ?? 'Season*';
@@ -168,6 +200,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
   /// 设置默认主页 Tab
   Future<void> setDefaultHomeTab(String tabName) async {
+    if (!_allSupportedTabs.contains(tabName)) {
+      return;
+    }
     if (_defaultHomeTab == tabName) return;
 
     _defaultHomeTab = tabName;
@@ -179,6 +214,25 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('保存默认主页 Tab 设置失败: $e');
     }
+  }
+
+  String _migrateLegacyDefaultPageIndex(SharedPreferences prefs) {
+    final legacyIndex = prefs.getInt(_legacyDefaultPageIndexKey);
+    switch (legacyIndex) {
+      case 1:
+        return tabVideo;
+      case 2:
+        return tabMediaLibrary;
+      case 3:
+        return tabAccount;
+      case 0:
+      default:
+        return tabHome;
+    }
+  }
+
+  bool _isMaterialOnlyTab(String tabName) {
+    return tabName == tabSettings;
   }
 
   /// 设置排序预设

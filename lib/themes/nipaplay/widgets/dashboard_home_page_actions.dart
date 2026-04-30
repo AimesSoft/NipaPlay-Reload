@@ -462,29 +462,35 @@ extension DashboardHomePageActions on _DashboardHomePageState {
   // 导航到媒体库-库管理页面
   void _navigateToMediaLibraryManagement() {
     debugPrint('[DashboardHomePage] 准备导航到媒体库-库管理页面');
+    MainPageState? mainPageState = MainPageState.of(context);
+    const mediaLibraryIndexWithoutWebDAV = 2;
+    const mediaLibraryIndexWithWebDAV = 3;
+    final mediaLibraryIndex = mainPageState?.globalTabController?.length == 5
+        ? mediaLibraryIndexWithWebDAV
+        : mediaLibraryIndexWithoutWebDAV;
     
     // 先发送子标签切换请求，避免Widget销毁后无法访问
     try {
       final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
-      tabChangeNotifier.changeToMediaLibrarySubTab(1); // 直接切换到库管理标签
+      tabChangeNotifier.changeToMediaLibrarySubTab(1, mainTabIndex: mediaLibraryIndex);
       debugPrint('[DashboardHomePage] 已发送子标签切换请求');
     } catch (e) {
       debugPrint('[DashboardHomePage] 发送子标签切换请求失败: $e');
     }
     
     // 然后切换到媒体库页面
-    MainPageState? mainPageState = MainPageState.of(context);
     if (mainPageState != null && mainPageState.globalTabController != null) {
-      // 切换到媒体库页面（索引2）
-      if (mainPageState.globalTabController!.index != 2) {
-        mainPageState.globalTabController!.animateTo(2);
-        debugPrint('[DashboardHomePage] 直接调用了globalTabController.animateTo(2)');
+      if (mainPageState.globalTabController!.index != mediaLibraryIndex) {
+        mainPageState.globalTabController!.animateTo(mediaLibraryIndex);
+        debugPrint(
+            '[DashboardHomePage] 直接调用了globalTabController.animateTo($mediaLibraryIndex)');
       } else {
         debugPrint('[DashboardHomePage] globalTabController已经在媒体库页面');
         // 如果已经在媒体库页面，立即触发子标签切换
         try {
           final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
-          tabChangeNotifier.changeToMediaLibrarySubTab(1);
+          tabChangeNotifier.changeToMediaLibrarySubTab(1,
+              mainTabIndex: mediaLibraryIndex);
           debugPrint('[DashboardHomePage] 已在媒体库页面，立即触发子标签切换');
         } catch (e) {
           debugPrint('[DashboardHomePage] 立即触发子标签切换失败: $e');
@@ -495,7 +501,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
       // 如果直接访问失败，使用TabChangeNotifier作为备选方案
       try {
         final tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
-        tabChangeNotifier.changeToMediaLibrarySubTab(1); // 直接切换到媒体库-库管理标签
+        tabChangeNotifier.changeToMediaLibrarySubTab(1,
+            mainTabIndex: mediaLibraryIndex);
         debugPrint('[DashboardHomePage] 备选方案: 使用TabChangeNotifier请求切换到媒体库-库管理标签');
       } catch (e) {
         debugPrint('[DashboardHomePage] TabChangeNotifier也失败: $e');

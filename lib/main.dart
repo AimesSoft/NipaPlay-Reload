@@ -1114,6 +1114,7 @@ class MainPageState extends State<MainPage>
     debugPrint('[MainPageState] targetTabIndex: $index');
 
     if (index != null) {
+      final normalizedIndex = _normalizeTabIndex(index);
       debugPrint('[MainPageState] 准备调用_manageHotkeys()...');
       _manageHotkeys();
       debugPrint('[MainPageState] _manageHotkeys()调用完成');
@@ -1121,17 +1122,17 @@ class MainPageState extends State<MainPage>
       if (globalTabController != null) {
         debugPrint(
             '[MainPageState] globalTabController可用，当前索引: ${globalTabController!.index}');
-        if (globalTabController!.index != index) {
+        if (globalTabController!.index != normalizedIndex) {
           try {
-            debugPrint('[MainPageState] 尝试切换到标签: $index');
+            debugPrint('[MainPageState] 尝试切换到标签: $normalizedIndex');
             // 强制启用页面滑动动画
-            globalTabController!.animateTo(index);
-            debugPrint('[MainPageState] 已切换到标签: $index');
+            globalTabController!.animateTo(normalizedIndex);
+            debugPrint('[MainPageState] 已切换到标签: $normalizedIndex');
           } catch (e) {
             debugPrint('[MainPageState] 切换标签失败: $e');
           }
         } else {
-          debugPrint('[MainPageState] 已经是目标标签: $index，无需切换');
+          debugPrint('[MainPageState] 已经是目标标签: $normalizedIndex，无需切换');
         }
       } else {
         debugPrint('[MainPageState] globalTabController为空，无法切换标签');
@@ -1213,9 +1214,17 @@ class MainPageState extends State<MainPage>
   void _onWebDAVSettingsChanged() {
     final showWebDAVTab = _webdavQuickAccessProvider?.showWebDAVTab ?? false;
     if (showWebDAVTab != _showWebDAVTab) {
+      final previousShowWebDAVTab = _showWebDAVTab;
+      final currentIndex = globalTabController?.index;
       _showWebDAVTab = showWebDAVTab;
       _rebuildPages();
-      _rebuildTabController();
+      _rebuildTabController(
+        targetIndex: _remapIndexForWebDAVToggle(
+          currentIndex: currentIndex,
+          oldShowWebDAVTab: previousShowWebDAVTab,
+          newShowWebDAVTab: showWebDAVTab,
+        ),
+      );
     }
   }
 
@@ -1227,28 +1236,13 @@ class MainPageState extends State<MainPage>
   }
 
   int _getInitialTabIndex() {
-    final defaultTab = _webdavQuickAccessProvider?.effectiveDefaultHomeTab ?? WebDAVQuickAccessProvider.tabHome;
-
-    switch (defaultTab) {
-      case WebDAVQuickAccessProvider.tabHome:
-        return 0;
-      case WebDAVQuickAccessProvider.tabVideo:
-        return 1;
-      case WebDAVQuickAccessProvider.tabWebDAV:
-        return _showWebDAVTab ? 2 : 0;
-      case WebDAVQuickAccessProvider.tabMediaLibrary:
-        return _showWebDAVTab ? 3 : 2;
-      case WebDAVQuickAccessProvider.tabAccount:
-        return _showWebDAVTab ? 4 : 3;
-      case WebDAVQuickAccessProvider.tabSettings:
-        return _showWebDAVTab ? 3 : 2;
-      default:
-        return 0;
-    }
+    final defaultTab = _webdavQuickAccessProvider?.effectiveDefaultHomeTab ??
+        WebDAVQuickAccessProvider.tabHome;
+    return _tabIndexForName(defaultTab);
   }
 
-  void _rebuildTabController() {
-    final currentIndex = globalTabController?.index ?? 0;
+  void _rebuildTabController({int? targetIndex}) {
+    final currentIndex = targetIndex ?? globalTabController?.index ?? 0;
     globalTabController?.removeListener(_onTabChange);
     globalTabController?.dispose();
 
@@ -1261,6 +1255,65 @@ class MainPageState extends State<MainPage>
     globalTabController?.addListener(_onTabChange);
 
     setState(() {});
+  }
+
+  int _tabIndexForName(String tabName) {
+    final hasWebDAVTab = _showWebDAVTab;
+    switch (tabName) {
+      case WebDAVQuickAccessProvider.tabHome:
+        return 0;
+      case WebDAVQuickAccessProvider.tabVideo:
+        return 1;
+      case WebDAVQuickAccessProvider.tabWebDAV:
+        return hasWebDAVTab ? 2 : 0;
+      case WebDAVQuickAccessProvider.tabMediaLibrary:
+        return hasWebDAVTab ? 3 : 2;
+      case WebDAVQuickAccessProvider.tabAccount:
+        return hasWebDAVTab ? 4 : 3;
+      default:
+        return 0;
+    }
+  }
+
+  int _normalizeTabIndex(int requestedIndex) {
+    if (requestedIndex == 2 && _showWebDAVTab) {
+      return 3;
+    }
+    final maxIndex = _pages.length - 1;
+    return requestedIndex.clamp(0, maxIndex).toInt();
+  }
+
+  int _remapIndexForWebDAVToggle({
+    required int? currentIndex,
+    required bool oldShowWebDAVTab,
+    required bool newShowWebDAVTab,
+  }) {
+    if (currentIndex == null) {
+      return _getInitialTabIndex();
+    }
+    if (oldShowWebDAVTab == newShowWebDAVTab) {
+      return currentIndex;
+    }
+
+    if (oldShowWebDAVTab && !newShowWebDAVTab) {
+      if (currentIndex == 2) {
+        // WebDAV Tab 被隐藏，回落到首页
+        return 0;
+      }
+      if (currentIndex >= 3) {
+        return currentIndex - 1;
+      }
+      return currentIndex;
+    }
+
+    if (!oldShowWebDAVTab && newShowWebDAVTab) {
+      if (currentIndex >= 2) {
+        return currentIndex + 1;
+      }
+      return currentIndex;
+    }
+
+    return currentIndex;
   }
 
   Future<void> _initializeController() async {
@@ -1391,6 +1444,7 @@ class MainPageState extends State<MainPage>
   void dispose() {
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
+    _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
@@ -1797,24 +1851,28 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
 
 // 导航到特定页面逻辑
 void _navigateToPage(BuildContext context, int pageIndex) {
-  print('[Dart] 准备导航到页面索引: $pageIndex');
+  MainPageState? mainPageState = MainPageState.of(context);
+  final resolvedPageIndex = _resolveRequestedPageIndex(
+    requestedIndex: pageIndex,
+    tabLength: mainPageState?.globalTabController?.length,
+  );
+  print('[Dart] 准备导航到页面索引: $resolvedPageIndex');
 
   // 尝试获取MainPageState
-  MainPageState? mainPageState = MainPageState.of(context);
   if (mainPageState != null && mainPageState.globalTabController != null) {
-    if (mainPageState.globalTabController!.index != pageIndex) {
+    if (mainPageState.globalTabController!.index != resolvedPageIndex) {
       final enablePageAnimation =
           context.read<AppearanceSettingsProvider>().enablePageAnimation;
       if (enablePageAnimation) {
-        mainPageState.globalTabController!.animateTo(pageIndex);
+        mainPageState.globalTabController!.animateTo(resolvedPageIndex);
       } else {
-        mainPageState.globalTabController!.index = pageIndex;
+        mainPageState.globalTabController!.index = resolvedPageIndex;
       }
       debugPrint(
-          '[Dart - _navigateToPage] 直接切换到标签页$pageIndex (动画: $enablePageAnimation)');
+          '[Dart - _navigateToPage] 直接切换到标签页$resolvedPageIndex (动画: $enablePageAnimation)');
     } else {
       debugPrint(
-          '[Dart - _navigateToPage] globalTabController已经在索引$pageIndex，无需切换');
+          '[Dart - _navigateToPage] globalTabController已经在索引$resolvedPageIndex，无需切换');
     }
   } else {
     debugPrint(
@@ -1824,6 +1882,20 @@ void _navigateToPage(BuildContext context, int pageIndex) {
     debugPrint(
         '[Dart - _navigateToPage] 备选方案: 使用TabChangeNotifier请求切换到标签页$pageIndex');
   }
+}
+
+int _resolveRequestedPageIndex({
+  required int requestedIndex,
+  required int? tabLength,
+}) {
+  if (requestedIndex != 2) {
+    return requestedIndex;
+  }
+  // Material 首页：开启 WebDAV 后媒体库索引从 2 右移到 3。
+  if (tabLength == 5) {
+    return 3;
+  }
+  return 2;
 }
 
 Brightness _resolveEffectiveBrightness(
