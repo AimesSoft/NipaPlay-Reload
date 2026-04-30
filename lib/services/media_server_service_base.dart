@@ -329,6 +329,10 @@ abstract class MediaServerServiceBase {
         } else {
           print('$serviceNameService: 地址已存在，使用现有配置');
         }
+
+        if (profile != null && profile.username != username) {
+          profile = profile.copyWith(username: username);
+        }
       } else if (identifyResult.isConflict) {
         print('$serviceNameService: 检测到冲突，抛出异常: ${identifyResult.error}');
         logService.addLog(
@@ -365,6 +369,7 @@ abstract class MediaServerServiceBase {
       final connectionResult = await _multiAddressService.tryConnect(
         profile: profile,
         testConnection: (url) => testConnection(url, username, password),
+        preferredUrl: normalizedUrl,
       );
 
       if (connectionResult.success && connectionResult.profile != null) {

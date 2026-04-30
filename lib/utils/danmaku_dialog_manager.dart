@@ -119,6 +119,13 @@ class DanmakuDialogManager {
   // 注册发送弹幕快捷键处理
   bool handleSendDanmakuHotkey() {
     debugPrint('[DanmakuDialogManager] 处理发送弹幕快捷键，当前对话框状态: ${_isShowingDialog ? "显示中" : "未显示"}');
+
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    final isEditingText = focusedContext?.widget is EditableText;
+    if (_isShowingDialog && isEditingText) {
+      debugPrint('[DanmakuDialogManager] 检测到输入焦点，忽略关闭弹幕对话框快捷键');
+      return true;
+    }
     
     if (_isShowingDialog) {
       // 如果已经在显示弹幕对话框，则关闭它

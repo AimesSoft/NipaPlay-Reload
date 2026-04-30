@@ -141,9 +141,14 @@ class DandanplayService {
     return;
   }
 
-  /// 获取当前弹弹play API 基础 URL（包含用户自定义设置）
+  /// 获取弹幕相关 API 基础 URL（包含用户自定义设置）
   static Future<String> getApiBaseUrl() async {
     return await NetworkSettings.getDandanplayServer();
+  }
+
+  /// 获取账号相关 API 基础 URL（固定官方服务器）
+  static Future<String> getAccountApiBaseUrl() async {
+    return NetworkSettings.primaryServer;
   }
 
   // 预加载最近更新的动画数据
@@ -249,7 +254,7 @@ class DandanplayService {
         final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
             .round();
 
-        final apiBaseUrl = await getApiBaseUrl();
+        final apiBaseUrl = await getAccountApiBaseUrl();
         final requestUri = Uri.parse('$apiBaseUrl$apiPath');
         final headers = _buildLoginRenewHeaders(
           timestamp: timestamp,
@@ -489,7 +494,7 @@ class DandanplayService {
       final hash = md5.convert(utf8.encode(hashString)).toString();
 
       final response = await http.post(
-        Uri.parse('${await getApiBaseUrl()}/api/v2/login'),
+        Uri.parse('${await getAccountApiBaseUrl()}/api/v2/login'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -564,7 +569,7 @@ class DandanplayService {
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
           .round();
       const apiPath = '/api/v2/oauthprovider/bangumi/login';
-      final baseUrl = await getApiBaseUrl();
+      final baseUrl = await getAccountApiBaseUrl();
       final normalizedRedirect = redirectUrl?.trim();
       final query = <String, String>{};
       if (normalizedRedirect != null && normalizedRedirect.isNotEmpty) {
@@ -626,7 +631,7 @@ class DandanplayService {
     }
 
     try {
-      final apiBaseUrl = await getApiBaseUrl();
+      final apiBaseUrl = await getAccountApiBaseUrl();
       const apiPath = '/api/v2/login/renew';
       final appSecret = await getAppSecret();
       final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
@@ -804,7 +809,7 @@ class DandanplayService {
         appSecret,
       );
       final response = await http.post(
-        Uri.parse('${await getApiBaseUrl()}/api/v2/register'),
+        Uri.parse('${await getAccountApiBaseUrl()}/api/v2/register'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -869,7 +874,7 @@ class DandanplayService {
       const apiPath = '/api/v2/playhistory';
 
       final response = await http.post(
-        Uri.parse('${await getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getAccountApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -1662,7 +1667,7 @@ class DandanplayService {
         queryParams['toDate'] = toDate.toUtc().toIso8601String();
       }
 
-      final baseUrl = await getApiBaseUrl();
+      final baseUrl = await getAccountApiBaseUrl();
       final uri = Uri.parse(
         '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}',
       );
@@ -1743,7 +1748,7 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 提交播放历史: $episodeIdList');
 
       final response = await http.post(
-        Uri.parse('${await getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getAccountApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -1903,7 +1908,7 @@ class DandanplayService {
         queryParams['onlyOnAir'] = 'true';
       }
 
-      final baseUrl = await getApiBaseUrl();
+      final baseUrl = await getAccountApiBaseUrl();
       final uri = Uri.parse(
         '$baseUrl$apiPath${queryParams.isNotEmpty ? '?' + Uri(queryParameters: queryParams).query : ''}',
       );
@@ -1978,7 +1983,7 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 添加收藏: animeId=$animeId, status=$favoriteStatus');
 
       final response = await http.post(
-        Uri.parse('${await getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getAccountApiBaseUrl()}$apiPath'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -2031,7 +2036,7 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 取消收藏: animeId=$animeId');
 
       final response = await http.delete(
-        Uri.parse('${await getApiBaseUrl()}$apiPath'),
+        Uri.parse('${await getAccountApiBaseUrl()}$apiPath'),
         headers: {
           'Accept': 'application/json',
           'User-Agent': userAgent,
@@ -2245,7 +2250,7 @@ class DandanplayService {
       final apiPath = '/api/v2/oauth/webToken';
 
       final response = await http.get(
-        Uri.parse('${await getApiBaseUrl()}$apiPath?business=$business'),
+        Uri.parse('${await getAccountApiBaseUrl()}$apiPath?business=$business'),
         headers: {
           'Accept': 'application/json',
           'User-Agent': userAgent,
@@ -2366,7 +2371,7 @@ class DandanplayService {
 
       // 2. 构建注销页面URL
       final deleteAccountUrl =
-          '${await getApiBaseUrl()}/api/v2/oauth/deleteAccount?webToken=$webToken';
+          '${await getAccountApiBaseUrl()}/api/v2/oauth/deleteAccount?webToken=$webToken';
 
       debugPrint('[弹弹play服务] 账号注销URL: $deleteAccountUrl');
 
@@ -2397,7 +2402,7 @@ class DandanplayService {
       }
 
       final manageUri = Uri.parse(
-              '${await getApiBaseUrl()}/api/v2/oauthprovider/bangumi/manage')
+              '${await getAccountApiBaseUrl()}/api/v2/oauthprovider/bangumi/manage')
           .replace(queryParameters: {'webToken': webToken});
       final manageUrl = manageUri.toString();
       debugPrint('[弹弹play服务] Bangumi管理页URL: $manageUrl');
