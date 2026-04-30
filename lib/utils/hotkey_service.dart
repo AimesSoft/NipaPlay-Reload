@@ -228,6 +228,9 @@ class HotkeyService extends ChangeNotifier {
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (HotKey hotKey) {
+          if (_shouldBlockHotkeyInTextInput()) {
+            return;
+          }
           ////debugPrint('[HotkeyService] 热键触发: $description ($keyString)');
           handler();
         },
@@ -238,6 +241,45 @@ class HotkeyService extends ChangeNotifier {
     } catch (e) {
       ////debugPrint('[HotkeyService] 注册热键失败 $description ($keyString): $e');
     }
+  }
+
+  bool _isEditableTextFocused() {
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    if (focusedContext == null) {
+      return false;
+    }
+    return focusedContext.widget is EditableText;
+  }
+
+  bool _shouldBlockHotkeyInTextInput() {
+    if (_isEditableTextFocused()) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _isShiftPressed() {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight) ||
+        pressed.contains(LogicalKeyboardKey.shift);
+  }
+
+  bool _isShiftShortcutConfigured(String action, PhysicalKeyboardKey arrowKey) {
+    final shortcut = _shortcuts[action];
+    if (shortcut == null || !shortcut.contains('Shift+')) {
+      return false;
+    }
+    final info = _parseKeyString(shortcut);
+    if (info == null) {
+      return false;
+    }
+    final modifierSet = info.modifiers.toSet();
+    if (modifierSet.length != 1 ||
+        !modifierSet.contains(HotKeyModifier.shift)) {
+      return false;
+    }
+    return info.keyCode == arrowKey;
   }
 
   // 特别处理ESC键
@@ -598,6 +640,14 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleRewind() {
+    if (_isShiftPressed() &&
+        _isShiftShortcutConfigured(
+          'previous_episode',
+          PhysicalKeyboardKey.arrowLeft,
+        )) {
+      _handlePreviousEpisode();
+      return;
+    }
     final videoState = _getVideoPlayerState();
     if (videoState != null) {
       videoState.seekBackwardByStep();
@@ -605,6 +655,14 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleForward() {
+    if (_isShiftPressed() &&
+        _isShiftShortcutConfigured(
+          'next_episode',
+          PhysicalKeyboardKey.arrowRight,
+        )) {
+      _handleNextEpisode();
+      return;
+    }
     final videoState = _getVideoPlayerState();
     if (videoState != null) {
       videoState.seekForwardByStep();
@@ -705,6 +763,9 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleForwardKeyDown() {
+    if (_shouldBlockHotkeyInTextInput()) {
+      return;
+    }
     _isForwardKeyPressed = true;
 
     // 取消之前的计时器
@@ -719,6 +780,9 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleForwardKeyUp() {
+    if (_shouldBlockHotkeyInTextInput()) {
+      return;
+    }
     _isForwardKeyPressed = false;
 
     // 取消长按计时器
@@ -752,6 +816,9 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleEscape() {
+    if (_shouldBlockHotkeyInTextInput()) {
+      return;
+    }
     final videoState = _getVideoPlayerState();
     if (videoState != null && videoState.isFullscreen) {
       videoState.toggleFullscreen();

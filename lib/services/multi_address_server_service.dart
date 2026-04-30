@@ -280,10 +280,25 @@ class MultiAddressServerService {
   Future<ConnectionResult> tryConnect({
     required ServerProfile profile,
     required Future<bool> Function(String url) testConnection,
+    String? preferredUrl,
   }) async {
     final addresses = profile.enabledAddresses;
+    final normalizedPreferredUrl = preferredUrl == null
+        ? null
+        : _normalizeUrl(preferredUrl);
+
+    final orderedAddresses = normalizedPreferredUrl == null
+        ? addresses
+        : [
+            ...addresses.where(
+              (address) => address.normalizedUrl == normalizedPreferredUrl,
+            ),
+            ...addresses.where(
+              (address) => address.normalizedUrl != normalizedPreferredUrl,
+            ),
+          ];
     
-    if (addresses.isEmpty) {
+    if (orderedAddresses.isEmpty) {
       return ConnectionResult(
         success: false,
         error: '没有可用的服务器地址',
@@ -294,7 +309,7 @@ class MultiAddressServerService {
     ServerProfile updatedProfile = profile;
     
     // 按优先级尝试每个地址
-    for (final address in addresses) {
+    for (final address in orderedAddresses) {
       if (!address.shouldRetry()) {
         DebugLogService().addLog(
           'MultiAddressServer: 跳过地址 ${address.name} (${address.url}) - 失败次数过多'
