@@ -95,7 +95,11 @@ NipaPlay 不仅仅是一个播放器，更是您的二次元媒体管家：
 
 - **GitHub Releases (推荐)**: [下载最新版本](https://github.com/AimesSoft/nipaplay-reload/releases)
 
-- **iOS (App Store)**: [点击下载](https://apps.apple.com/cn/app/nipaplay/id6751284970)
+- **iOS (App Store)**:
+
+  <a href="https://apps.apple.com/cn/app/nipaplay/id6751284970" target="_blank" rel="noopener noreferrer">
+  <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/zh-cn?size=250x83&releaseDate=1738800000" width="200" alt="Download on the App Store"/>
+  </a>
 
 - **Windows (Microsoft Store)**:
 
