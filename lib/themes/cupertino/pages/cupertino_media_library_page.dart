@@ -3278,7 +3278,8 @@ class _CupertinoLibraryManagementSheetState
           padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
+            onTap: () =>
+                _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -3323,7 +3324,8 @@ class _CupertinoLibraryManagementSheetState
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () async {
-            final result = await CustomMediaInfoDialog.show(context, folderPath);
+            final result =
+                await CustomMediaInfoDialog.show(context, folderPath);
             if (result != null) {
               _refreshExpandedFolderContents(folderPath);
             }
@@ -3510,7 +3512,7 @@ class _CupertinoLibraryManagementSheetState
                       }
                     },
                     child: Text(
-                      '自定义',
+                      '自定义媒体信息',
                       style: TextStyle(fontSize: 12, color: accentColor),
                     ),
                   ),
