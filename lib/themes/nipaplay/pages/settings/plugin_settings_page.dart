@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/plugins/models/plugin_descriptor.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_action_result.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 
@@ -36,16 +39,16 @@ class PluginSettingsPage extends StatelessWidget {
 
   String _pluginActionTitle(BuildContext context, PluginDescriptor plugin) {
     if (context.l10n.localeName.startsWith('zh_Hant')) {
-      return '${plugin.manifest.name}：可用操作';
+      return '配置';
     }
-    return '${plugin.manifest.name}：可用操作';
+    return '配置';
   }
 
   String _pluginActionNotAvailable(BuildContext context) {
     if (context.l10n.localeName.startsWith('zh_Hant')) {
-      return '僅在插件啟用且正常加載後可使用';
+      return '僅在插件啟用後可使用';
     }
-    return '仅在插件启用且正常加载后可用';
+    return '仅在插件启用后可用';
   }
 
   String _pluginActionNotLoaded(BuildContext context) {
@@ -83,6 +86,66 @@ class PluginSettingsPage extends StatelessWidget {
     return '选择要打开的插件功能';
   }
 
+  String _importPluginButtonText(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '導入插件';
+    }
+    return '导入插件';
+  }
+
+  String _importPluginSuccess(BuildContext context, String pluginId) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '插件導入成功：$pluginId';
+    }
+    return '插件导入成功：$pluginId';
+  }
+
+  String _importPluginFailed(BuildContext context, Object error) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '導入插件失敗：$error';
+    }
+    return '导入插件失败：$error';
+  }
+
+  String _importPluginCanceled(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '已取消導入插件';
+    }
+    return '已取消导入插件';
+  }
+
+  Future<void> _importPlugin(
+    BuildContext context,
+    PluginService pluginService,
+  ) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['js'],
+      );
+      if (result == null ||
+          result.files.isEmpty ||
+          result.files.single.path == null) {
+        if (!context.mounted) return;
+        BlurSnackBar.show(context, _importPluginCanceled(context));
+        return;
+      }
+
+      final path = result.files.single.path!;
+      final importedId = await pluginService.importPluginScript(
+        sourceFilePath: path,
+      );
+      if (!context.mounted) return;
+      BlurSnackBar.show(
+        context,
+        _importPluginSuccess(context, importedId ?? path.split('/').last),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      BlurSnackBar.show(context, _importPluginFailed(context, error));
+    }
+  }
+
   String _pluginSubtitle(BuildContext context, PluginDescriptor plugin) {
     final subtitle = StringBuffer()
       ..write('v${plugin.manifest.version} · ${plugin.manifest.author}');
@@ -118,6 +181,7 @@ class PluginSettingsPage extends StatelessWidget {
   ) async {
     final entries = plugin.uiEntries;
     if (entries.isEmpty) {
+      BlurSnackBar.show(context, _pluginActionNotAvailable(context));
       return;
     }
     if (entries.length == 1) {
@@ -156,9 +220,7 @@ class PluginSettingsPage extends StatelessWidget {
   ) async {
     final pluginService = context.read<PluginService>();
     if (!plugin.enabled || !plugin.loaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_pluginActionNotLoaded(context))),
-      );
+      BlurSnackBar.show(context, _pluginActionNotLoaded(context));
       return;
     }
 
@@ -171,9 +233,7 @@ class PluginSettingsPage extends StatelessWidget {
         return;
       }
       if (result == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_pluginActionEmpty(context))),
-        );
+        BlurSnackBar.show(context, _pluginActionEmpty(context));
         return;
       }
       await _showPluginActionResult(context, result);
@@ -181,9 +241,7 @@ class PluginSettingsPage extends StatelessWidget {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_pluginActionError(context, error))),
-      );
+      BlurSnackBar.show(context, _pluginActionError(context, error));
     }
   }
 
@@ -207,44 +265,31 @@ class PluginSettingsPage extends StatelessWidget {
     PluginDescriptor plugin,
     PluginService pluginService,
   ) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final actionEnabled =
-        plugin.enabled && plugin.loaded && plugin.uiEntries.isNotEmpty;
+    final actionEnabled = plugin.enabled && plugin.uiEntries.isNotEmpty;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
+        _HoverScaleIconButton(
           tooltip: actionEnabled
               ? _pluginActionTitle(context, plugin)
               : _pluginActionNotAvailable(context),
-          icon: Icon(
-            Icons.handyman,
-            color: actionEnabled
-                ? colorScheme.primary
-                : colorScheme.onSurface.withValues(alpha: 0.35),
-          ),
+          icon: Icons.handyman,
           onPressed: actionEnabled
               ? () => _showPluginActionPicker(context, plugin)
               : null,
         ),
-        Transform.scale(
-          scale: 0.9,
-          child: Switch(
-            value: plugin.enabled,
-            onChanged: (value) async {
-              await pluginService.setPluginEnabled(plugin.manifest.id, value);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    value
-                        ? _pluginEnableToast(context, plugin.manifest.name)
-                        : _pluginDisableToast(context, plugin.manifest.name),
-                  ),
-                ),
-              );
-            },
-          ),
+        FluentSettingsSwitch(
+          value: plugin.enabled,
+          onChanged: (value) async {
+            await pluginService.setPluginEnabled(plugin.manifest.id, value);
+            if (!context.mounted) return;
+            BlurSnackBar.show(
+              context,
+              value
+                  ? _pluginEnableToast(context, plugin.manifest.name)
+                  : _pluginDisableToast(context, plugin.manifest.name),
+            );
+          },
         ),
       ],
     );
@@ -262,8 +307,33 @@ class PluginSettingsPage extends StatelessWidget {
 
         final plugins = pluginService.plugins;
         if (plugins.isEmpty) {
-          return Center(
-            child: Text(_pluginsEmpty(context)),
+          return ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: Row(
+                  children: [
+                    _HoverScaleTextAction(
+                      text: _importPluginButtonText(context),
+                      onPressed: () => _importPlugin(context, pluginService),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                child: Text(
+                  _pluginsEmpty(context),
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+            ],
           );
         }
 
@@ -300,14 +370,11 @@ class PluginSettingsPage extends StatelessWidget {
                 await pluginService.setPluginEnabled(
                     plugin.manifest.id, target);
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      target
-                          ? _pluginEnableToast(context, plugin.manifest.name)
-                          : _pluginDisableToast(context, plugin.manifest.name),
-                    ),
-                  ),
+                BlurSnackBar.show(
+                  context,
+                  target
+                      ? _pluginEnableToast(context, plugin.manifest.name)
+                      : _pluginDisableToast(context, plugin.manifest.name),
                 );
               },
             ),
@@ -325,10 +392,135 @@ class PluginSettingsPage extends StatelessWidget {
 
         return ListView(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Row(
+                children: [
+                  _HoverScaleTextAction(
+                    text: _importPluginButtonText(context),
+                    onPressed: () => _importPlugin(context, pluginService),
+                  ),
+                ],
+              ),
+            ),
+            Divider(
+              color: colorScheme.onSurface.withValues(alpha: 0.12),
+              height: 1,
+            ),
             ...items,
           ],
         );
       },
+    );
+  }
+}
+
+class _HoverScaleTextAction extends StatefulWidget {
+  const _HoverScaleTextAction({
+    required this.text,
+    required this.onPressed,
+  });
+
+  final String text;
+  final VoidCallback onPressed;
+
+  @override
+  State<_HoverScaleTextAction> createState() => _HoverScaleTextActionState();
+}
+
+class _HoverScaleTextActionState extends State<_HoverScaleTextAction> {
+  static const Color _nipaAccentColor = Color(0xFFFF2E55);
+
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: AnimatedScale(
+          scale: _isHovered ? 1.08 : 1.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutBack,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: Text(
+              widget.text,
+              style: TextStyle(
+                color: _isHovered
+                    ? _nipaAccentColor
+                    : colorScheme.onSurface.withValues(alpha: 0.78),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HoverScaleIconButton extends StatefulWidget {
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _HoverScaleIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  State<_HoverScaleIconButton> createState() => _HoverScaleIconButtonState();
+}
+
+class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
+  static const Color _nipaAccentColor = Color(0xFFFF2E55);
+
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = widget.onPressed != null;
+    final colorScheme = Theme.of(context).colorScheme;
+    final iconColor = !isEnabled
+        ? colorScheme.onSurface.withValues(alpha: 0.35)
+        : (_isHovered
+            ? _nipaAccentColor
+            : colorScheme.onSurface.withValues(alpha: 0.7));
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: Semantics(
+        button: true,
+        enabled: isEnabled,
+        label: widget.tooltip,
+        child: MouseRegion(
+          onEnter: (_) => isEnabled ? setState(() => _isHovered = true) : null,
+          onExit: (_) => isEnabled ? setState(() => _isHovered = false) : null,
+          cursor:
+              isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onPressed,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: AnimatedScale(
+                scale: _isHovered && isEnabled ? 1.1 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutBack,
+                child: Icon(widget.icon, size: 20, color: iconColor),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

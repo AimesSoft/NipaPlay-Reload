@@ -14,18 +14,51 @@ function decodeBase64Utf8(input) {
   if (!input) {
     return '';
   }
-  if (typeof atob === 'function') {
-    const binary = atob(input);
+
+  function binaryToUtf8(binary) {
     let bytes = '';
     for (let i = 0; i < binary.length; i += 1) {
       bytes += '%' + ('00' + binary.charCodeAt(i).toString(16)).slice(-2);
     }
     return decodeURIComponent(bytes);
   }
-  if (typeof Buffer !== 'undefined') {
+
+  function decodeBase64ToBinary(base64) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    const normalized = String(base64 || '').replace(/[^A-Za-z0-9+/=]/g, '');
+    let bits = 0;
+    let bitCount = 0;
+    let output = '';
+
+    for (let i = 0; i < normalized.length; i += 1) {
+      const ch = normalized.charAt(i);
+      if (ch === '=') {
+        break;
+      }
+      const index = alphabet.indexOf(ch);
+      if (index < 0) {
+        continue;
+      }
+      bits = (bits << 6) | index;
+      bitCount += 6;
+      if (bitCount >= 8) {
+        bitCount -= 8;
+        output += String.fromCharCode((bits >> bitCount) & 0xFF);
+      }
+    }
+
+    return output;
+  }
+
+  if (typeof atob === 'function') {
+    return binaryToUtf8(atob(input));
+  }
+
+  if (typeof Buffer !== 'undefined' && Buffer.from) {
     return Buffer.from(input, 'base64').toString('utf8');
   }
-  throw new Error('当前 JS 运行时不支持 base64 解码');
+
+  return binaryToUtf8(decodeBase64ToBinary(input));
 }
 
 function parseBlockWords() {
@@ -58,12 +91,10 @@ function pluginHandleUIAction(actionId) {
     };
   }
 
-  const words = pluginBlockWords;
+  const count = pluginBlockWords.length;
   return {
     type: 'text',
     title: '已生效词库预览',
-    content: words.length > 0
-      ? '共 ' + words.length + ' 条：\n' + words.join('、')
-      : '当前没有可用屏蔽词。'
+    content: count > 0 ? '当前共启用 ' + count + ' 条屏蔽词。' : '当前没有可用屏蔽词。'
   };
 }

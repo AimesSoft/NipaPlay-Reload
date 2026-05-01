@@ -9,6 +9,9 @@ class FlutterJsRuntimeAdapter implements PluginJsRuntime {
   @override
   String evaluate(String code) {
     final result = _runtime.evaluate(code);
+    if (result.isError) {
+      throw StateError(result.stringResult);
+    }
     return result.stringResult;
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/plugins/js_runtime_factory.dart';
+import 'package:nipaplay/plugins/plugin_storage.dart';
 import 'package:nipaplay/plugins/js_runtime_types.dart';
 import 'package:nipaplay/plugins/models/plugin_descriptor.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_action_result.dart';
@@ -22,11 +23,14 @@ class PluginService extends ChangeNotifier {
   ];
   static const String _defaultBuiltinPluginId =
       'builtin.cn_sensitive_danmaku_filter';
+  static const String _loadedAssetPrefix = 'asset:';
+  static const String _loadedFilePrefix = 'file:';
 
   final List<PluginDescriptor> _plugins = <PluginDescriptor>[];
   final Map<String, PluginJsRuntime> _runtimeByPluginId =
       <String, PluginJsRuntime>{};
   final Map<String, String> _scriptByPluginId = <String, String>{};
+  final PluginStorage _pluginStorage = createPluginStorage();
 
   bool _isLoaded = false;
 
@@ -53,32 +57,39 @@ class PluginService extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
-    await _loadPluginsFromAssets();
+    await _reloadPlugins();
     _isLoaded = true;
     notifyListeners();
   }
 
-  Future<void> _loadPluginsFromAssets() async {
-    final enabledIds = await _loadEnabledIds();
-    final pluginAssets = await _discoverPluginAssets();
+  Future<void> reloadPlugins() async {
+    await _reloadPlugins();
+    notifyListeners();
+  }
 
-    for (final assetPath in pluginAssets) {
+  Future<void> _reloadPlugins() async {
+    await _disposeAllRuntimes();
+    _plugins.clear();
+    _scriptByPluginId.clear();
+
+    final enabledIds = await _loadEnabledIds();
+    final discoveredPlugins = await _discoverPlugins();
+
+    for (final discovered in discoveredPlugins) {
       try {
-        final script = await rootBundle.loadString(assetPath);
-        final parsed = _parsePluginMetadata(script);
+        final parsed = _parsePluginMetadata(discovered.script);
         final manifest = parsed.manifest;
         if (_scriptByPluginId.containsKey(manifest.id)) {
-          debugPrint('发现重复插件ID(${manifest.id})，已跳过: $assetPath');
           continue;
         }
 
-        _scriptByPluginId[manifest.id] = script;
+        _scriptByPluginId[manifest.id] = discovered.script;
         final enabled = enabledIds.contains(manifest.id);
 
         final descriptor = PluginDescriptor(
           manifest: manifest,
-          assetPath: assetPath,
-          isBuiltin: assetPath.startsWith(_pluginAssetPrefixes.first),
+          assetPath: discovered.path,
+          isBuiltin: discovered.path.startsWith(_loadedAssetPrefix),
           enabled: enabled,
           loaded: false,
           errorMessage: null,
@@ -90,8 +101,8 @@ class PluginService extends ChangeNotifier {
         if (enabled) {
           await _loadPluginRuntime(manifest.id);
         }
-      } catch (e) {
-        debugPrint('插件加载失败($assetPath): $e');
+      } catch (_) {
+        // skip invalid plugin script
       }
     }
 
@@ -104,7 +115,16 @@ class PluginService extends ChangeNotifier {
     await _saveEnabledIds(sanitizedEnabled);
   }
 
-  Future<List<String>> _discoverPluginAssets() async {
+  Future<List<_DiscoveredPluginScript>> _discoverPlugins() async {
+    final assets = await _discoverAssetPlugins();
+    final files = await _discoverFilePlugins();
+    return <_DiscoveredPluginScript>[
+      ...assets,
+      ...files,
+    ];
+  }
+
+  Future<List<_DiscoveredPluginScript>> _discoverAssetPlugins() async {
     final assetManifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     final assets = assetManifest.listAssets();
 
@@ -117,13 +137,37 @@ class PluginService extends ChangeNotifier {
         )
         .toList()
       ..sort();
-    return pluginAssets;
+    final discovered = <_DiscoveredPluginScript>[];
+    for (final assetPath in pluginAssets) {
+      final script = await rootBundle.loadString(assetPath);
+      discovered.add(
+        _DiscoveredPluginScript(
+          path: '$_loadedAssetPrefix$assetPath',
+          script: script,
+        ),
+      );
+    }
+    return discovered;
+  }
+
+  Future<List<_DiscoveredPluginScript>> _discoverFilePlugins() async {
+    final scripts = await _pluginStorage.listScripts();
+    return scripts
+        .map(
+          (script) => _DiscoveredPluginScript(
+            path: '$_loadedFilePrefix${script.path}',
+            script: script.content,
+          ),
+        )
+        .toList();
   }
 
   Future<void> setPluginEnabled(String pluginId, bool enabled) async {
     final index =
         _plugins.indexWhere((plugin) => plugin.manifest.id == pluginId);
-    if (index < 0) return;
+    if (index < 0) {
+      return;
+    }
 
     final current = _plugins[index];
     if (current.enabled == enabled) {
@@ -132,7 +176,7 @@ class PluginService extends ChangeNotifier {
 
     _plugins[index] = current.copyWith(
       enabled: enabled,
-      loaded: enabled ? current.loaded : false,
+      loaded: current.loaded,
       blockWords: enabled ? current.blockWords : const <String>[],
       clearErrorMessage: !enabled,
     );
@@ -154,7 +198,9 @@ class PluginService extends ChangeNotifier {
   Future<void> _loadPluginRuntime(String pluginId) async {
     final index =
         _plugins.indexWhere((plugin) => plugin.manifest.id == pluginId);
-    if (index < 0) return;
+    if (index < 0) {
+      return;
+    }
 
     final plugin = _plugins[index];
 
@@ -206,6 +252,30 @@ class PluginService extends ChangeNotifier {
       );
       notifyListeners();
     }
+  }
+
+  Future<void> _disposeAllRuntimes() async {
+    final pluginIds = _runtimeByPluginId.keys.toList();
+    for (final pluginId in pluginIds) {
+      await _unloadPluginRuntime(pluginId);
+    }
+    _runtimeByPluginId.clear();
+  }
+
+  Future<String?> importPluginScript({
+    required String sourceFilePath,
+  }) async {
+    final script = await _pluginStorage.readTextFile(sourceFilePath);
+    final parsed = _parsePluginMetadata(script);
+    final fileName = '${parsed.manifest.id}.js';
+    await _pluginStorage.saveScript(fileName, script);
+    await reloadPlugins();
+    final loaded = _plugins.any((p) => p.manifest.id == parsed.manifest.id);
+    return loaded ? parsed.manifest.id : null;
+  }
+
+  Future<String?> getPluginDirectoryPath() async {
+    return _pluginStorage.getPluginDirectoryPath();
   }
 
   Future<PluginUiActionResult?> invokePluginUiAction(
@@ -263,10 +333,14 @@ class PluginService extends ChangeNotifier {
     final runtime = createPluginRuntime();
     try {
       runtime.evaluate(script);
+      final manifest = _extractManifest(runtime);
+      final uiEntries = _extractUiEntries(runtime);
       return _ParsedPluginMetadata(
-        manifest: _extractManifest(runtime),
-        uiEntries: _extractUiEntries(runtime),
+        manifest: manifest,
+        uiEntries: uiEntries,
       );
+    } catch (_) {
+      rethrow;
     } finally {
       try {
         runtime.dispose();
@@ -332,9 +406,7 @@ class PluginService extends ChangeNotifier {
             Map<String, dynamic>.from(item.cast<String, dynamic>()),
           );
           uiEntries.add(entry);
-        } catch (e) {
-          debugPrint('插件UI入口解析失败: $e');
-        }
+        } catch (_) {}
       }
       return uiEntries;
     } catch (_) {
@@ -377,4 +449,14 @@ class _ParsedPluginMetadata {
 
   final PluginManifest manifest;
   final List<PluginUiEntry> uiEntries;
+}
+
+class _DiscoveredPluginScript {
+  const _DiscoveredPluginScript({
+    required this.path,
+    required this.script,
+  });
+
+  final String path;
+  final String script;
 }

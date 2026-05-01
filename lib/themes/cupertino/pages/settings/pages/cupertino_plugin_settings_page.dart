@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' show SelectableText;
+import 'package:file_picker/file_picker.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/plugins/models/plugin_descriptor.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_action_result.dart';
@@ -39,9 +40,9 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
 
   String _pluginActionTitle(BuildContext context, PluginDescriptor plugin) {
     if (context.l10n.localeName.startsWith('zh_Hant')) {
-      return '${plugin.manifest.name}：可用操作';
+      return '配置';
     }
-    return '${plugin.manifest.name}：可用操作';
+    return '配置';
   }
 
   String _pluginActionNotLoaded(BuildContext context) {
@@ -79,6 +80,70 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
     return '（无可显示内容）';
   }
 
+  String _importPluginTitle(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '導入插件';
+    }
+    return '导入插件';
+  }
+
+  String _importPluginHint(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '從本機選擇 .js 文件';
+    }
+    return '从本机选择 .js 文件';
+  }
+
+  String _importPluginSuccess(BuildContext context, String pluginId) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '插件導入成功：$pluginId';
+    }
+    return '插件导入成功：$pluginId';
+  }
+
+  String _importPluginFailed(BuildContext context, Object error) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '導入插件失敗：$error';
+    }
+    return '导入插件失败：$error';
+  }
+
+  Future<void> _importPlugin(
+    BuildContext context,
+    PluginService pluginService,
+  ) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['js'],
+      );
+      if (result == null ||
+          result.files.isEmpty ||
+          result.files.single.path == null) {
+        return;
+      }
+
+      final path = result.files.single.path!;
+      final importedId = await pluginService.importPluginScript(
+        sourceFilePath: path,
+      );
+      if (!context.mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message:
+            _importPluginSuccess(context, importedId ?? path.split('/').last),
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: _importPluginFailed(context, error),
+        type: AdaptiveSnackBarType.error,
+      );
+    }
+  }
+
   String _pluginSubtitle(BuildContext context, PluginDescriptor plugin) {
     final buffer = StringBuffer()
       ..write('v${plugin.manifest.version} · ${plugin.manifest.author}');
@@ -113,7 +178,14 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
     PluginDescriptor plugin,
   ) async {
     final entries = plugin.uiEntries;
-    if (entries.isEmpty) return;
+    if (entries.isEmpty) {
+      AdaptiveSnackBar.show(
+        context,
+        message: _pluginActionNotLoaded(context),
+        type: AdaptiveSnackBarType.warning,
+      );
+      return;
+    }
     if (entries.length == 1) {
       await _invokePluginAction(context, plugin, entries.first);
       return;
@@ -238,8 +310,7 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
     PluginDescriptor plugin,
     PluginService pluginService,
   ) {
-    final actionEnabled =
-        plugin.enabled && plugin.loaded && plugin.uiEntries.isNotEmpty;
+    final actionEnabled = plugin.enabled && plugin.uiEntries.isNotEmpty;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -308,7 +379,39 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
 
               final plugins = pluginService.plugins;
               if (plugins.isEmpty) {
-                return Center(child: Text(_pluginsEmpty(context)));
+                return ListView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
+                  children: [
+                    CupertinoSettingsGroupCard(
+                      margin: EdgeInsets.zero,
+                      backgroundColor:
+                          resolveSettingsSectionBackground(context),
+                      addDividers: true,
+                      children: [
+                        CupertinoSettingsTile(
+                          leading: Icon(
+                            CupertinoIcons.square_arrow_down,
+                            color: resolveSettingsIconColor(context),
+                          ),
+                          title: Text(_importPluginTitle(context)),
+                          subtitle: Text(_importPluginHint(context)),
+                          showChevron: true,
+                          onTap: () => _importPlugin(context, pluginService),
+                          backgroundColor:
+                              resolveSettingsTileBackground(context),
+                        ),
+                        CupertinoSettingsTile(
+                          title: Text(_pluginsEmpty(context)),
+                          backgroundColor:
+                              resolveSettingsTileBackground(context),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
               }
 
               return ListView(
@@ -322,6 +425,17 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
                     backgroundColor: resolveSettingsSectionBackground(context),
                     addDividers: true,
                     children: [
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.square_arrow_down,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: Text(_importPluginTitle(context)),
+                        subtitle: Text(_importPluginHint(context)),
+                        showChevron: true,
+                        onTap: () => _importPlugin(context, pluginService),
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
                       for (final plugin in plugins)
                         CupertinoSettingsTile(
                           leading: Icon(
