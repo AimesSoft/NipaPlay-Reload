@@ -44,6 +44,7 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
@@ -3262,10 +3263,6 @@ class _CupertinoLibraryManagementSheetState
         .where(_isBatchMatchVideoFilePath)
         .toList(growable: false);
 
-    if (candidateFiles.length < 2) {
-      return const SizedBox.shrink();
-    }
-
     final labelColor =
         CupertinoDynamicColor.resolve(CupertinoColors.label, context);
     final subtitleColor =
@@ -3273,45 +3270,104 @@ class _CupertinoLibraryManagementSheetState
     final accentColor = CupertinoDynamicColor.resolve(
         CupertinoTheme.of(context).primaryColor, context);
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(
-              CupertinoIcons.collections,
-              size: 16,
-              color: accentColor,
+    final List<Widget> children = [];
+
+    if (candidateFiles.length >= 2) {
+      children.add(
+        Padding(
+          padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _showBatchDanmakuMatchDialog(folderPath, candidateFiles),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  CupertinoIcons.collections,
+                  size: 16,
+                  color: accentColor,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '批量匹配弹幕（本文件夹）',
+                        style: TextStyle(fontSize: 13, color: labelColor),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '对齐顺序后批量匹配 ${candidateFiles.length} 个文件',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: subtitleColor),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '开始',
+                  style: TextStyle(fontSize: 12, color: accentColor),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '批量匹配弹幕（本文件夹）',
-                    style: TextStyle(fontSize: 13, color: labelColor),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '对齐顺序后批量匹配 ${candidateFiles.length} 个文件',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: subtitleColor),
-                  ),
-                ],
+          ),
+        ),
+      );
+    }
+
+    children.add(
+      Padding(
+        padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () async {
+            final result = await CustomMediaInfoDialog.show(context, folderPath);
+            if (result != null) {
+              _refreshExpandedFolderContents(folderPath);
+            }
+          },
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.info,
+                size: 16,
+                color: accentColor,
               ),
-            ),
-            Text(
-              '开始',
-              style: TextStyle(fontSize: 12, color: accentColor),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '自定义媒体信息（实验性）',
+                      style: TextStyle(fontSize: 13, color: labelColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '自定义媒体信息，并将当前文件夹添加到媒体库中',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: subtitleColor),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '开始',
+                style: TextStyle(fontSize: 12, color: accentColor),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
     );
   }
 
@@ -3440,6 +3496,24 @@ class _CupertinoLibraryManagementSheetState
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minSize: 28,
+                    onPressed: () async {
+                      final result = await CustomMediaInfoDialog.show(
+                        context,
+                        p.dirname(file.path),
+                        initialVideoPath: file.path,
+                      );
+                      if (result != null) {
+                        _refreshExpandedFolderContents(p.dirname(file.path));
+                      }
+                    },
+                    child: Text(
+                      '自定义',
+                      style: TextStyle(fontSize: 12, color: accentColor),
+                    ),
+                  ),
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     minSize: 28,
