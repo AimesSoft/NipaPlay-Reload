@@ -640,6 +640,10 @@ abstract class MediaServerServiceBase {
       if (nextUri == null) {
         return response;
       }
+
+      if (!isAllowedRedirectTarget(currentUri, nextUri)) {
+        throw Exception('拒绝跨域重定向: $currentUri -> $nextUri');
+      }
       redirectCount += 1;
       if (redirectCount > _maxRedirects) {
         throw Exception('重定向次数过多: $currentUri');
@@ -697,6 +701,74 @@ abstract class MediaServerServiceBase {
       return null;
     }
     return currentUri.resolve(location.trim());
+  }
+
+  @protected
+  bool isAllowedRedirectTarget(Uri currentUri, Uri nextUri) {
+    final scheme = nextUri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') {
+      return false;
+    }
+
+    return currentUri.scheme.toLowerCase() == nextUri.scheme.toLowerCase() &&
+        currentUri.host.toLowerCase() == nextUri.host.toLowerCase() &&
+        currentUri.port == nextUri.port;
+  }
+
+  @protected
+  String resolveServerRelativeUrl(String serverUrl, String rawUrl) {
+    final baseUri = Uri.parse(serverUrl);
+    final trimmedRawUrl = rawUrl.trim();
+    if (trimmedRawUrl.isEmpty) {
+      return baseUri.toString();
+    }
+
+    final parsed = Uri.tryParse(trimmedRawUrl);
+    if (parsed != null &&
+        (parsed.scheme == 'http' || parsed.scheme == 'https') &&
+        parsed.host.isNotEmpty) {
+      return trimmedRawUrl;
+    }
+
+    final relativeText = trimmedRawUrl.startsWith('/')
+        ? trimmedRawUrl.substring(1)
+        : trimmedRawUrl;
+    final relativeUri = Uri.parse(relativeText);
+
+    final baseSegments = _normalizedPathSegments(baseUri.pathSegments);
+    final relativeSegments = _normalizedPathSegments(relativeUri.pathSegments);
+
+    final useRelativeAsAbsolute = baseSegments.isNotEmpty &&
+        _startsWithPathSegments(relativeSegments, baseSegments);
+    final mergedSegments = useRelativeAsAbsolute
+        ? relativeSegments
+        : <String>[...baseSegments, ...relativeSegments];
+
+    final mergedPath =
+        mergedSegments.isEmpty ? '/' : '/${mergedSegments.join('/')}';
+    return baseUri
+        .replace(
+          path: mergedPath,
+          query: relativeUri.hasQuery ? relativeUri.query : null,
+          fragment: relativeUri.hasFragment ? relativeUri.fragment : null,
+        )
+        .toString();
+  }
+
+  bool _startsWithPathSegments(List<String> path, List<String> prefix) {
+    if (prefix.length > path.length) {
+      return false;
+    }
+    for (var i = 0; i < prefix.length; i++) {
+      if (path[i] != prefix[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<String> _normalizedPathSegments(List<String> pathSegments) {
+    return pathSegments.where((segment) => segment.isNotEmpty).toList();
   }
 
   Uri _buildRequestUri(String path, {String? baseUrl}) {

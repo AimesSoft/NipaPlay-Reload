@@ -1230,17 +1230,7 @@ class JellyfinService extends MediaServerServiceBase
   }
 
   String _resolvePlaybackUrl(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      if (uri.host.isNotEmpty) {
-        return url;
-      }
-      if (_serverUrl != null && _serverUrl!.isNotEmpty) {
-        return Uri.parse(_serverUrl!).resolveUri(uri).toString();
-      }
-    }
-    final normalized = url.startsWith('/') ? url : '/$url';
-    return Uri.parse(_serverUrl!).resolve(normalized).toString();
+    return resolveServerRelativeUrl(_serverUrl!, url);
   }
 
   String? _resolveSubtitleMethod({
