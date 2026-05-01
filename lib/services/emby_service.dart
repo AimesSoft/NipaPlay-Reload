@@ -84,8 +84,8 @@ class EmbyService extends MediaServerServiceBase
         defaultQuality: quality,
         settings: settings,
       );
-      DebugLogService().addLog(
-          'Emby: 已加载转码偏好 缓存 enabled=$enabled, quality=$quality');
+      DebugLogService()
+          .addLog('Emby: 已加载转码偏好 缓存 enabled=$enabled, quality=$quality');
     } catch (e) {
       DebugLogService().addLog('Emby: 加载转码偏好失败，使用默认值: $e');
       updateTranscodeCache(
@@ -238,11 +238,13 @@ class EmbyService extends MediaServerServiceBase
       String url, String username, String password) async {
     try {
       // 获取服务器信息
-      final configResponse = await http
-          .get(
-            Uri.parse('$url/emby/System/Info/Public'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final configResponse = await sendRequestFollowingRedirects(
+        Uri.parse('$url/emby/System/Info/Public'),
+        method: 'GET',
+        headers: const {},
+        timeout: const Duration(seconds: 5),
+        redirectLogLabel: 'EmbyService',
+      );
 
       return configResponse.statusCode == 200;
     } catch (e) {
@@ -254,8 +256,9 @@ class EmbyService extends MediaServerServiceBase
   Future<void> _performAuthentication(
       String serverUrl, String username, String password) async {
     final clientInfo = await getClientInfo();
-    final authResponse = await http.post(
+    final authResponse = await sendRequestFollowingRedirects(
       Uri.parse('$serverUrl/emby/Users/AuthenticateByName'),
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Emby-Authorization': clientInfo,
@@ -264,6 +267,8 @@ class EmbyService extends MediaServerServiceBase
         'Username': username,
         'Pw': password,
       }),
+      timeout: const Duration(seconds: 30),
+      redirectLogLabel: 'EmbyService',
     );
 
     if (authResponse.statusCode != 200) {
@@ -279,11 +284,13 @@ class EmbyService extends MediaServerServiceBase
   /// 如果无法获取，将抛出异常
   Future<String> _getEmbyServerId(String url) async {
     try {
-      final response = await http
-          .get(
-            Uri.parse('$url/emby/System/Info/Public'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await sendRequestFollowingRedirects(
+        Uri.parse('$url/emby/System/Info/Public'),
+        method: 'GET',
+        headers: const {},
+        timeout: const Duration(seconds: 5),
+        redirectLogLabel: 'EmbyService',
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -302,11 +309,13 @@ class EmbyService extends MediaServerServiceBase
   /// 获取服务器名称
   Future<String?> _getServerName(String url) async {
     try {
-      final response = await http
-          .get(
-            Uri.parse('$url/emby/System/Info/Public'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await sendRequestFollowingRedirects(
+        Uri.parse('$url/emby/System/Info/Public'),
+        method: 'GET',
+        headers: const {},
+        timeout: const Duration(seconds: 5),
+        redirectLogLabel: 'EmbyService',
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -439,9 +448,8 @@ class EmbyService extends MediaServerServiceBase
         final data = json.decode(response.body);
         final List<dynamic> items = data['Items'] ?? [];
 
-        final results = items
-            .map((item) => EmbyMediaItem.fromJson(item))
-            .toList();
+        final results =
+            items.map((item) => EmbyMediaItem.fromJson(item)).toList();
 
         results.sort((a, b) {
           if (a.isFolder != b.isFolder) {
@@ -704,7 +712,8 @@ class EmbyService extends MediaServerServiceBase
   /// 获取 Resume 列表用于同步播放记录
   Future<List<Map<String, dynamic>>> fetchResumeItems({int limit = 5}) async {
     if (!_isConnected || _userId == null) {
-      debugPrint('EmbyService.fetchResumeItems -> skip, connected=$_isConnected userId=$_userId');
+      debugPrint(
+          'EmbyService.fetchResumeItems -> skip, connected=$_isConnected userId=$_userId');
       return [];
     }
 
@@ -1055,10 +1064,10 @@ class EmbyService extends MediaServerServiceBase
             : JellyfinVideoQuality.original);
 
     final enableTranscoding = transcodeEnabledCache &&
-      effectiveQuality != JellyfinVideoQuality.original;
+        effectiveQuality != JellyfinVideoQuality.original;
 
     final maxStreamingBitrate =
-      enableTranscoding ? effectiveQuality.bitrate : null;
+        enableTranscoding ? effectiveQuality.bitrate : null;
     final resolvedPlaySessionId = playSessionId;
 
     final deviceProfile = PlaybackDeviceProfileBuilder.build(
@@ -1149,7 +1158,7 @@ class EmbyService extends MediaServerServiceBase
     String? requestedMediaSourceId,
   }) {
     final playSessionId =
-      forcedPlaySessionId ?? data['PlaySessionId']?.toString();
+        forcedPlaySessionId ?? data['PlaySessionId']?.toString();
     final rawSources = data['MediaSources'];
     final sources = <PlaybackMediaSource>[];
     if (rawSources is List) {
@@ -1178,7 +1187,9 @@ class EmbyService extends MediaServerServiceBase
 
     bool useTranscoding = false;
     String? chosenUrl;
-    if (!forceDirectPlay && transcodingUrl != null && transcodingUrl.isNotEmpty) {
+    if (!forceDirectPlay &&
+        transcodingUrl != null &&
+        transcodingUrl.isNotEmpty) {
       if (preferTranscoding ||
           directStreamUrl == null ||
           directStreamUrl.isEmpty) {
@@ -1219,11 +1230,7 @@ class EmbyService extends MediaServerServiceBase
   }
 
   String _resolvePlaybackUrl(String url) {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url;
-    }
-    final normalized = url.startsWith('/') ? url : '/$url';
-    return '$_serverUrl$normalized';
+    return resolveServerRelativeUrl(_serverUrl!, url);
   }
 
   String? _resolveSubtitleMethod({
@@ -1692,9 +1699,23 @@ class EmbyService extends MediaServerServiceBase
       } else if (collectionType == 'movies') {
         includeItemTypes = ['Movie'];
       } else if (collectionType == 'mixed') {
-        includeItemTypes = ['Folder', 'Series', 'Season', 'Episode', 'Movie', 'Video'];
+        includeItemTypes = [
+          'Folder',
+          'Series',
+          'Season',
+          'Episode',
+          'Movie',
+          'Video'
+        ];
       } else {
-        includeItemTypes = ['Folder', 'Series', 'Season', 'Episode', 'Movie', 'Video'];
+        includeItemTypes = [
+          'Folder',
+          'Series',
+          'Season',
+          'Episode',
+          'Movie',
+          'Video'
+        ];
       }
 
       return await searchMediaItems(

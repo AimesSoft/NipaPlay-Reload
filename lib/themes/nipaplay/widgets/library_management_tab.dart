@@ -11,14 +11,12 @@ import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/scan_service.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/storage_service.dart'; // 导入StorageService
 import 'package:permission_handler/permission_handler.dart'; // 导入权限处理库
 import 'package:nipaplay/utils/android_storage_helper.dart'; // 导入Android存储辅助类
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/utils/globals.dart'; // 导入全局变量和设备检测函数
 // Import MethodChannel
 import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
 import 'package:nipaplay/services/manual_danmaku_matcher.dart'; // 导入手动弹幕匹配器
@@ -424,10 +422,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       // 获取Android版本
       final int sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
 
-      // Android 13+：使用媒体API扫描视频文件
+      // Android 13+ 先申请视频媒体权限，但仍允许用户手动选择目录。
       if (sdkVersion >= 33) {
-        await _scanAndroidMediaFolders();
-        return;
+        final videoStatus = await Permission.videos.request();
+        if (!videoStatus.isGranted && mounted) {
+          BlurSnackBar.show(context, '未授予视频媒体权限，将继续尝试通过系统文件夹选择器授权。');
+        }
       }
 
       // Android 13以下：允许自由选择文件夹
@@ -455,8 +455,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         // 使用原生方法检查目录权限
         final dirCheck = await AndroidStorageHelper.checkDirectoryPermissions(
             selectedDirectory);
-        accessCheck =
-            dirCheck['canRead'] == true && dirCheck['canWrite'] == true;
+        accessCheck = dirCheck['canRead'] == true;
         debugPrint('Android目录权限检查结果: $dirCheck');
       } else {
         // 非Android平台使用Flutter方法检查
@@ -554,8 +553,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       try {
         // 尝试读取文件夹内容以检查权限
         final dir = io.Directory(selectedDirectory);
-        await dir.list().first.timeout(const Duration(seconds: 2),
-            onTimeout: () {
+        await dir
+            .list(recursive: false, followLinks: false)
+            .take(1)
+            .toList()
+            .timeout(const Duration(seconds: 2), onTimeout: () {
           throw TimeoutException('无法访问文件夹');
         });
       } catch (e) {
@@ -1458,161 +1460,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     } catch (e) {
       if (mounted) {
         BlurSnackBar.show(context, '检查权限状态失败: $e');
-      }
-    }
-  }
-
-  // 新增：用于Android 13+扫描媒体文件夹的方法
-  Future<void> _scanAndroidMediaFolders() async {
-    try {
-      // 请求媒体权限
-      await Permission.photos.request();
-      await Permission.videos.request();
-      await Permission.audio.request();
-
-      bool hasMediaPermissions = await Permission.photos.isGranted &&
-          await Permission.videos.isGranted &&
-          await Permission.audio.isGranted;
-
-      if (!hasMediaPermissions && mounted) {
-        BlurDialog.show<void>(
-          context: context,
-          title: "需要媒体权限",
-          content:
-              "NipaPlay需要访问媒体文件权限才能扫描视频文件。\n\n请在系统设置中允许NipaPlay访问照片、视频和音频权限。",
-          actions: <Widget>[
-            HoverScaleTextButton(
-              child: const Text("稍后再说",
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.white70)),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            HoverScaleTextButton(
-              child: const Text("打开设置",
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.lightBlueAccent)),
-              onPressed: () {
-                Navigator.of(context).pop();
-                openAppSettings();
-              },
-            ),
-          ],
-        );
-        return;
-      }
-
-      // 显示加载提示
-      if (mounted) {
-        BlurSnackBar.show(context, '正在扫描视频文件夹，请稍候...');
-      }
-
-      // 获取系统媒体文件夹
-      final scanService = Provider.of<ScanService>(context, listen: false);
-      String? moviesPath;
-
-      // 尝试获取Movies目录路径
-      try {
-        final externalDirs = await getExternalStorageDirectories();
-        if (externalDirs != null && externalDirs.isNotEmpty) {
-          String baseDir = externalDirs[0].path;
-          baseDir = baseDir.substring(0, baseDir.indexOf('Android'));
-          final moviesDir = io.Directory('${baseDir}Movies');
-
-          if (await moviesDir.exists()) {
-            moviesPath = moviesDir.path;
-            debugPrint('找到Movies目录: $moviesPath');
-          }
-        }
-      } catch (e) {
-        debugPrint('无法获取Movies目录: $e');
-      }
-
-      // 如果没有找到Movies目录，尝试其他常用媒体目录
-      if (moviesPath == null) {
-        try {
-          final externalDirs = await getExternalStorageDirectories();
-          if (externalDirs != null && externalDirs.isNotEmpty) {
-            String baseDir = externalDirs[0].path;
-            baseDir = baseDir.substring(0, baseDir.indexOf('Android'));
-
-            // 检查DCIM目录
-            final dcimDir = io.Directory('${baseDir}DCIM');
-            if (await dcimDir.exists()) {
-              moviesPath = dcimDir.path;
-              debugPrint('找到DCIM目录: $moviesPath');
-            } else {
-              // 尝试Download目录
-              final downloadDir = io.Directory('${baseDir}Download');
-              if (await downloadDir.exists()) {
-                moviesPath = downloadDir.path;
-                debugPrint('找到Download目录: $moviesPath');
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint('无法获取备选媒体目录: $e');
-        }
-      }
-
-      // 如果仍然没有找到任何媒体目录，提示用户
-      if (moviesPath == null && mounted) {
-        BlurDialog.show<void>(
-          context: context,
-          title: "未找到视频文件夹",
-          content: "无法找到系统视频文件夹。建议使用\"管理所有文件\"权限或手动选择文件夹。",
-          actions: <Widget>[
-            HoverScaleTextButton(
-              child: const Text("取消",
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.white70)),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            HoverScaleTextButton(
-              child: const Text("开启完整权限",
-                  locale: Locale("zh-Hans", "zh"),
-                  style: TextStyle(color: Colors.lightBlueAccent)),
-              onPressed: () {
-                Navigator.of(context).pop();
-                AndroidStorageHelper.requestManageExternalStoragePermission();
-              },
-            ),
-          ],
-        );
-        return;
-      }
-
-      // 扫描找到的文件夹
-      if (moviesPath != null) {
-        try {
-          // 检查目录权限
-          final dirPerms =
-              await AndroidStorageHelper.checkDirectoryPermissions(moviesPath);
-          if (dirPerms['canRead'] == true) {
-            await scanService.startDirectoryScan(moviesPath,
-                skipPreviouslyMatchedUnwatched: false);
-            if (mounted) {
-              BlurSnackBar.show(context, '已扫描视频文件夹: ${p.basename(moviesPath)}');
-            }
-          } else {
-            if (mounted) {
-              BlurSnackBar.show(context, '无法读取视频文件夹，请检查权限设置');
-            }
-          }
-        } catch (e) {
-          if (mounted) {
-            BlurSnackBar.show(context,
-                '扫描视频文件夹失败: ${e.toString().substring(0, min(e.toString().length, 50))}');
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        BlurSnackBar.show(context,
-            '扫描视频文件夹时出错: ${e.toString().substring(0, min(e.toString().length, 50))}');
       }
     }
   }

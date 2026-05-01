@@ -35,6 +35,9 @@ class MainActivity: FlutterActivity() {
     private val FILE_ASSOCIATION_CHANNEL = "file_association_channel"
     private val SYSTEM_SHARE_CHANNEL = "nipaplay/system_share"
     private val DEVICE_PROFILE_CHANNEL = "nipaplay/device_profile"
+    private var fileAssociationChannel: MethodChannel? = null
+    private var pendingOpenFilePath: String? = null
+    private var lastDeliveredOpenUri: String? = null
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -228,22 +231,17 @@ class MainActivity: FlutterActivity() {
         }
 
         // 文件关联通道 - 处理从系统传入的文件
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_ASSOCIATION_CHANNEL).setMethodCallHandler { call, result ->
+        fileAssociationChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_ASSOCIATION_CHANNEL)
+        fileAssociationChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getOpenFileUri" -> {
-                    val uri = intent?.data
-                    if (uri != null) {
-                        val filePath = getPathFromUri(this@MainActivity, uri)
-                        if (filePath != null) {
-                            Log.d("MainActivity", "File association: $filePath")
-                            result.success(filePath)
-                        } else {
-                            Log.e("MainActivity", "Failed to resolve file path from URI: $uri")
-                            result.error("PATH_RESOLUTION_FAILED", "Failed to resolve file path", null)
-                        }
-                    } else {
-                        result.success(null)
+                    val pending = pendingOpenFilePath
+                    if (pending != null) {
+                        pendingOpenFilePath = null
+                        result.success(pending)
+                        return@setMethodCallHandler
                     }
+                    result.success(resolveOpenFileFromIntent(intent, allowDuplicate = false))
                 }
                 else -> result.notImplemented()
             }
@@ -331,6 +329,7 @@ class MainActivity: FlutterActivity() {
     // 覆盖onCreate以添加额外的配置，解决黑屏问题
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingOpenFilePath = resolveOpenFileFromIntent(intent, allowDuplicate = false)
         
         // 设置窗口属性，确保硬件加速启用
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -342,6 +341,19 @@ class MainActivity: FlutterActivity() {
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         )
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+
+        val filePath = resolveOpenFileFromIntent(intent, allowDuplicate = true)
+        if (filePath == null) {
+            return
+        }
+
+        pendingOpenFilePath = filePath
+        fileAssociationChannel?.invokeMethod("onOpenFileUri", filePath)
     }
     
     // 文件选择请求码和结果回调
@@ -380,6 +392,23 @@ class MainActivity: FlutterActivity() {
     }
     
     // 从URI获取实际文件路径的辅助方法
+    private fun resolveOpenFileFromIntent(intent: Intent?, allowDuplicate: Boolean): String? {
+        val uri = intent?.data ?: return null
+        if (!allowDuplicate && uri.toString() == lastDeliveredOpenUri) {
+            return null
+        }
+
+        val filePath = getPathFromUri(this@MainActivity, uri)
+        if (filePath != null) {
+            Log.d("MainActivity", "File association: $filePath")
+            lastDeliveredOpenUri = uri.toString()
+            return filePath
+        }
+
+        Log.e("MainActivity", "Failed to resolve file path from URI: $uri")
+        return null
+    }
+
     private fun getPathFromUri(context: Context, uri: Uri): String? {
         // 首先尝试使用DocumentFile
         if (DocumentsContract.isDocumentUri(context, uri)) {
@@ -389,6 +418,7 @@ class MainActivity: FlutterActivity() {
         // 如果是内容URI，尝试从MediaStore查询
         if (ContentResolver.SCHEME_CONTENT == uri.scheme) {
             return getDataColumn(context, uri, null, null)
+                ?: saveContentToCache(context, uri)
         }
         
         // 如果是文件URI，直接返回路径

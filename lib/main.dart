@@ -1084,6 +1084,7 @@ class MainPageState extends State<MainPage>
   bool _showSplash = true;
   bool _isThemeRevealRunning = false;
   bool _useLargeScreenLayout = false;
+  StreamSubscription<String>? _androidFileAssociationSubscription;
 
   // 动态页面列表
   static const List<Widget> _basePages = [
@@ -1208,7 +1209,23 @@ class MainPageState extends State<MainPage>
 
     await _initializeController();
     _initializeListeners();
+    _initializeAndroidFileAssociationListener();
     _postFrameCallbacks();
+  }
+
+  void _initializeAndroidFileAssociationListener() {
+    if (kIsWeb || !Platform.isAndroid) {
+      return;
+    }
+    _androidFileAssociationSubscription ??=
+        FileAssociationService.openFileStream.listen((filePath) async {
+      if (!mounted) return;
+      if (!await FileAssociationService.validateFilePath(filePath)) {
+        BlurSnackBar.show(context, '无法播放启动文件: ${path.basename(filePath)}');
+        return;
+      }
+      await _handleLaunchFile(filePath);
+    });
   }
 
   void _onWebDAVSettingsChanged() {
@@ -1445,6 +1462,7 @@ class MainPageState extends State<MainPage>
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
+    _androidFileAssociationSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
     globalTabController?.dispose();
@@ -1690,7 +1708,8 @@ class MainPageState extends State<MainPage>
             builder: (context, shouldShowAppBar, child) {
               return CustomScaffold(
                 pages: _pages,
-                tabPage: createTabLabels(context, showWebDAVTab: _showWebDAVTab),
+                tabPage:
+                    createTabLabels(context, showWebDAVTab: _showWebDAVTab),
                 pageIsHome: true,
                 shouldShowAppBar: shouldShowAppBar,
                 tabController: globalTabController,

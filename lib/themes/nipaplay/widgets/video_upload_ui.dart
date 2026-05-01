@@ -553,8 +553,8 @@ class _VideoUploadUIState extends State<VideoUploadUI>
         Future.microtask(() async {
           await videoState.initializePlayer(fileName, actualPlayUrl: url);
         });
-      } else if (globals.isPhone) {
-        // 手机端弹窗选择来源
+      } else if (io.Platform.isAndroid || io.Platform.isIOS) {
+        // 移动端弹窗选择来源，iPad 也需要显式相册入口。
         final source = await BlurDialog.show<String>(
           context: context,
           title: '选择来源',
@@ -739,8 +739,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
       videoState.setPreInitLoadingState('正在准备视频文件...');
 
       final picker = ImagePicker();
-      // 使用 pickMedia 因为你需要视频
-      final XFile? picked = await picker.pickMedia();
+      final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
       if (!mounted) return; // 再次检查 mounted
 
       if (picked != null) {

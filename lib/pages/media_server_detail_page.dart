@@ -31,27 +31,31 @@ class MediaServerDetailPage extends StatefulWidget {
   final MediaServerType serverType;
 
   const MediaServerDetailPage({
-    super.key, 
-    required this.mediaId, 
+    super.key,
+    required this.mediaId,
     required this.serverType,
   });
 
   @override
   State<MediaServerDetailPage> createState() => _MediaServerDetailPageState();
-  
-  static Future<WatchHistoryItem?> showJellyfin(BuildContext context, String jellyfinId) {
+
+  static Future<WatchHistoryItem?> showJellyfin(
+      BuildContext context, String jellyfinId) {
     return show(context, jellyfinId, MediaServerType.jellyfin);
   }
 
-  static Future<WatchHistoryItem?> showEmby(BuildContext context, String embyId) {
+  static Future<WatchHistoryItem?> showEmby(
+      BuildContext context, String embyId) {
     return show(context, embyId, MediaServerType.emby);
   }
 
-  static Future<WatchHistoryItem?> show(BuildContext context, String mediaId, MediaServerType serverType) {
+  static Future<WatchHistoryItem?> show(
+      BuildContext context, String mediaId, MediaServerType serverType) {
     // 获取外观设置Provider
-    final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
+    final appearanceSettings =
+        Provider.of<AppearanceSettingsProvider>(context, listen: false);
     final enableAnimation = appearanceSettings.enablePageAnimation;
-    
+
     return NipaplayWindow.show<WatchHistoryItem>(
       context: context,
       enableAnimation: enableAnimation,
@@ -60,11 +64,12 @@ class MediaServerDetailPage extends StatefulWidget {
   }
 }
 
-class _MediaServerDetailPageState extends State<MediaServerDetailPage> with SingleTickerProviderStateMixin {
+class _MediaServerDetailPageState extends State<MediaServerDetailPage>
+    with SingleTickerProviderStateMixin {
   // 静态Map，用于存储视频的哈希值（ID -> 哈希值）
   static final Map<String, String> _videoHashes = {};
   static final Map<String, Map<String, dynamic>> _videoInfos = {};
-  
+
   // 通用媒体详情（可以是Jellyfin或Emby）
   dynamic _mediaDetail;
   List<dynamic> _seasons = [];
@@ -86,12 +91,17 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     if (widget.serverType == MediaServerType.jellyfin) {
       if (actor.primaryImageTag != null) {
         final service = JellyfinService.instance;
-        return service.getImageUrl(actor.id, type: 'Primary', width: 100, quality: 90);
+        return service.getImageUrl(actor.id,
+            type: 'Primary', width: 100, quality: 90);
       }
     } else {
       if (actor.imagePrimaryTag != null && actor.id != null) {
         final service = EmbyService.instance;
-        return service.getImageUrl(actor.id!, type: 'Primary', width: 100, height: 100, tag: actor.imagePrimaryTag);
+        return service.getImageUrl(actor.id!,
+            type: 'Primary',
+            width: 100,
+            height: 100,
+            tag: actor.imagePrimaryTag);
       }
     }
     return null;
@@ -100,23 +110,27 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
   // 辅助方法：获取剧集缩略图URL
   String _getEpisodeImageUrl(dynamic episode, dynamic service) {
     if (widget.serverType == MediaServerType.jellyfin) {
-      return service.getImageUrl(episode.id, type: 'Primary', width: 300, quality: 90);
+      return service.getImageUrl(episode.id,
+          type: 'Primary', width: 300, quality: 90);
     } else {
       // Emby需要传递tag参数
-      return service.getImageUrl(episode.id, type: 'Primary', width: 300, tag: episode.imagePrimaryTag);
+      return service.getImageUrl(episode.id,
+          type: 'Primary', width: 300, tag: episode.imagePrimaryTag);
     }
   }
 
   // 辅助方法：获取海报URL
   String _getPosterUrl({int width = 300}) {
     if (_mediaDetail?.imagePrimaryTag == null) return '';
-    
+
     if (widget.serverType == MediaServerType.jellyfin) {
       final service = JellyfinService.instance;
-      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: width, quality: 95);
+      return service.getImageUrl(_mediaDetail!.id,
+          type: 'Primary', width: width, quality: 95);
     } else {
       final service = EmbyService.instance;
-      return service.getImageUrl(_mediaDetail!.id, type: 'Primary', width: width, tag: _mediaDetail!.imagePrimaryTag);
+      return service.getImageUrl(_mediaDetail!.id,
+          type: 'Primary', width: width, tag: _mediaDetail!.imagePrimaryTag);
     }
   }
 
@@ -159,16 +173,16 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
 
   Future<void> _loadMediaDetail() async {
     if (!mounted) return;
-    
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
-    
+
     try {
       dynamic service;
       dynamic detail;
-      
+
       if (widget.serverType == MediaServerType.jellyfin) {
         service = JellyfinService.instance;
         detail = await service.getMediaItemDetails(widget.mediaId);
@@ -176,7 +190,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
         service = EmbyService.instance;
         detail = await service.getMediaItemDetails(widget.mediaId);
       }
-      
+
       if (mounted) {
         setState(() {
           _mediaDetail = detail;
@@ -190,9 +204,12 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
             _tabController = TabController(
                 length: 2,
                 vsync: this,
-                initialIndex: Provider.of<AppearanceSettingsProvider>(context, listen: false)
-                    .animeCardAction == AnimeCardAction.synopsis ? 0 : 1
-            );
+                initialIndex: Provider.of<AppearanceSettingsProvider>(context,
+                                listen: false)
+                            .animeCardAction ==
+                        AnimeCardAction.synopsis
+                    ? 0
+                    : 1);
             _tabController!.addListener(() {
               if (mounted && !_tabController!.indexIsChanging) {
                 setState(() {
@@ -208,16 +225,17 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       if (!_isMovie) {
         dynamic seasons;
         if (widget.serverType == MediaServerType.jellyfin) {
-          seasons = await (service as JellyfinService).getSeriesSeasons(widget.mediaId);
+          seasons = await (service as JellyfinService)
+              .getSeriesSeasons(widget.mediaId);
         } else {
           seasons = await (service as EmbyService).getSeasons(widget.mediaId);
         }
-        
+
         if (mounted) {
           setState(() {
             _seasons = seasons;
             _isLoading = false;
-            
+
             // 如果有季，选择第一个季
             if (seasons.isNotEmpty) {
               _selectedSeasonId = seasons.first.id;
@@ -235,7 +253,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       }
     }
   }
-  
+
   Future<void> _loadEpisodesForSeason(String seasonId) async {
     // 如果已经加载过，不重复加载
     if (_episodesBySeasonId.containsKey(seasonId)) {
@@ -244,13 +262,13 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       });
       return;
     }
-    
+
     setState(() {
       _isLoading = true;
       _error = null;
       _selectedSeasonId = seasonId;
     });
-    
+
     try {
       // 确保_mediaDetail不为null且有有效id
       if (_mediaDetail?.id == null) {
@@ -262,7 +280,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
         }
         return;
       }
-      
+
       dynamic episodes;
       if (widget.serverType == MediaServerType.jellyfin) {
         final service = JellyfinService.instance;
@@ -271,7 +289,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
         final service = EmbyService.instance;
         episodes = await service.getSeasonEpisodes(_mediaDetail!.id, seasonId);
       }
-      
+
       if (mounted) {
         setState(() {
           _episodesBySeasonId[seasonId] = episodes;
@@ -287,7 +305,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       }
     }
   }
-  
+
   Future<WatchHistoryItem?> _createWatchHistoryItem(dynamic episode) async {
     // 根据服务器类型使用相应的匹配器创建可播放的历史记录项
     try {
@@ -297,20 +315,22 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       } else {
         matcher = EmbyDandanplayMatcher.instance;
       }
-      
+
       // 先进行预计算和预匹配，不阻塞主流程
-      matcher.precomputeVideoInfoAndMatch(context, episode).then((preMatchResult) {
+      matcher
+          .precomputeVideoInfoAndMatch(context, episode)
+          .then((preMatchResult) {
         final String? videoHash = preMatchResult['videoHash'] as String?;
         final String? fileName = preMatchResult['fileName'] as String?;
         final int? fileSize = preMatchResult['fileSize'] as int?;
-        
+
         if (videoHash != null && videoHash.isNotEmpty) {
           debugPrint('预计算哈希值成功: $videoHash');
-          
+
           // 需要在播放器创建或历史项创建时使用这个哈希值
           _videoHashes[episode.id] = videoHash;
           debugPrint('视频哈希值已缓存: ${episode.id} -> $videoHash');
-          
+
           // 同时保存文件名和文件大小信息
           Map<String, dynamic> videoInfo = {
             'hash': videoHash,
@@ -320,19 +340,21 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
           _videoInfos[episode.id] = videoInfo;
           debugPrint('视频信息已缓存: ${episode.id} -> $videoInfo');
         }
-        
+
         if (preMatchResult['success'] == true) {
-          debugPrint('预匹配成功: animeId=${preMatchResult['animeId']}, episodeId=${preMatchResult['episodeId']}');
+          debugPrint(
+              '预匹配成功: animeId=${preMatchResult['animeId']}, episodeId=${preMatchResult['episodeId']}');
         } else {
           debugPrint('预匹配未成功: ${preMatchResult['message']}');
         }
       }).catchError((e) {
         debugPrint('预计算过程中出错: $e');
       });
-      
+
       // 继续常规匹配流程
-      final playableItem = await matcher.createPlayableHistoryItem(context, episode);
-      
+      final playableItem =
+          await matcher.createPlayableHistoryItem(context, episode);
+
       // 如果我们有这个视频的信息，添加到历史项中
       if (playableItem != null) {
         // 添加哈希值
@@ -341,15 +363,17 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
           playableItem.videoHash = videoHash;
           debugPrint('成功将哈希值 $videoHash 添加到历史记录项');
         }
-        
+
         // 存储完整的视频信息，可用于后续弹幕匹配
         if (_videoInfos.containsKey(episode.id)) {
           final videoInfo = _videoInfos[episode.id]!;
-          debugPrint('已准备视频信息: ${videoInfo['fileName']}, 文件大小: ${videoInfo['fileSize']} 字节');
+          debugPrint(
+              '已准备视频信息: ${videoInfo['fileName']}, 文件大小: ${videoInfo['fileSize']} 字节');
         }
       }
-      
-      debugPrint('成功创建可播放历史项: ${playableItem?.animeName} - ${playableItem?.episodeTitle}, animeId=${playableItem?.animeId}, episodeId=${playableItem?.episodeId}');
+
+      debugPrint(
+          '成功创建可播放历史项: ${playableItem?.animeName} - ${playableItem?.episodeTitle}, animeId=${playableItem?.animeId}, episodeId=${playableItem?.episodeId}');
       return playableItem;
     } catch (e) {
       debugPrint('创建可播放历史记录项失败: $e');
@@ -366,7 +390,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     }
 
     try {
-      final playableItem = await _runDetailAutoMatchTask<WatchHistoryItem?>(() async {
+      final playableItem =
+          await _runDetailAutoMatchTask<WatchHistoryItem?>(() async {
         if (widget.serverType == MediaServerType.jellyfin) {
           final movieInfo = JellyfinMovieInfo(
             id: _mediaDetail!.id,
@@ -431,15 +456,15 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       debugPrint('电影播放失败: $e');
     }
   }
-  
+
   String _formatRuntime(int? runTimeTicks) {
     if (runTimeTicks == null) return '';
-    
+
     // Jellyfin和Emby中的RunTimeTicks单位是100纳秒
     final durationInSeconds = runTimeTicks / 10000000;
     final hours = (durationInSeconds / 3600).floor();
     final minutes = ((durationInSeconds % 3600) / 60).floor();
-    
+
     if (hours > 0) {
       return '$hours小时${minutes > 0 ? ' $minutes分钟' : ''}';
     } else {
@@ -475,11 +500,12 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
       if (i < fullStars) {
         stars.add(Icon(Ionicons.star, color: Colors.yellow[600], size: 16));
       } else if (i == fullStars && halfStar) {
-        stars.add(
-            Icon(Ionicons.star_half, color: Colors.yellow[600], size: 16));
+        stars
+            .add(Icon(Ionicons.star_half, color: Colors.yellow[600], size: 16));
       } else {
         stars.add(Icon(Ionicons.star_outline,
-            color: Colors.yellow[600]?.withOpacity(isDark ? 0.7 : 0.4), size: 16));
+            color: Colors.yellow[600]?.withOpacity(isDark ? 0.7 : 0.4),
+            size: 16));
       }
       if (i < 9) {
         stars.add(const SizedBox(width: 1));
@@ -585,12 +611,13 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
-    
+
     Widget pageContent;
 
     if (_isLoading && _mediaDetail == null) {
       pageContent = Center(
-        child: CircularProgressIndicator(color: isDark ? Colors.white : Colors.black87),
+        child: CircularProgressIndicator(
+            color: isDark ? Colors.white : Colors.black87),
       );
     } else if (_error != null && _mediaDetail == null) {
       pageContent = Center(
@@ -599,15 +626,17 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage> with Sing
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              const Icon(Icons.error_outline,
+                  size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
-              Text('加载详情失败:', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: textColor.withOpacity(0.8))),
+              Text('加载详情失败:',
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(color: textColor.withOpacity(0.8))),
               const SizedBox(height: 8),
               Text(
                 _error!,
-                locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: secondaryTextColor),
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: secondaryTextColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -615,14 +644,16 @@ style: TextStyle(color: secondaryTextColor),
                 icon: Icons.refresh,
                 text: '重试',
                 onTap: _loadMediaDetail,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 fontSize: 16,
               ),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('关闭', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: secondaryTextColor)),
+                child: Text('关闭',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: secondaryTextColor)),
               ),
             ],
           ),
@@ -630,11 +661,14 @@ style: TextStyle(color: secondaryTextColor)),
       );
     } else if (_mediaDetail == null) {
       // 理论上在成功加载后 _mediaDetail 不会为 null，除非发生意外
-      pageContent = Center(child: Text('未找到媒体详情', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: secondaryTextColor)));
+      pageContent = Center(
+          child: Text('未找到媒体详情',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: secondaryTextColor)));
     } else {
       // 成功加载，构建详情UI
-      final appearanceSettings = Provider.of<AppearanceSettingsProvider>(context, listen: false);
+      final appearanceSettings =
+          Provider.of<AppearanceSettingsProvider>(context, listen: false);
       final enableAnimation = appearanceSettings.enablePageAnimation;
       final subtitle = _mediaDetail!.originalTitle;
       final bool isDesktopOrTablet = globals.isDesktopOrTablet;
@@ -642,9 +676,8 @@ style: TextStyle(color: secondaryTextColor)));
       pageContent = NipaplayAnimeDetailLayout(
         title: _mediaDetail!.name,
         subtitle: subtitle,
-        sourceLabel: widget.serverType == MediaServerType.jellyfin
-            ? 'Jellyfin'
-            : 'Emby',
+        sourceLabel:
+            widget.serverType == MediaServerType.jellyfin ? 'Jellyfin' : 'Emby',
         sourceLabelUseContainer: false,
         onClose: () => Navigator.of(context).pop(),
         tabController: _tabController,
@@ -652,9 +685,8 @@ style: TextStyle(color: secondaryTextColor)));
         enableAnimation: enableAnimation,
         isDesktopOrTablet: isDesktopOrTablet,
         infoView: RepaintBoundary(child: _buildInfoView()),
-        episodesView: _isMovie
-            ? null
-            : RepaintBoundary(child: _buildEpisodesView()),
+        episodesView:
+            _isMovie ? null : RepaintBoundary(child: _buildEpisodesView()),
         desktopView: (isDesktopOrTablet && !_isMovie)
             ? _buildDesktopTabletLayout()
             : null,
@@ -666,7 +698,8 @@ style: TextStyle(color: secondaryTextColor)));
     final hasBackdrop = backdropUrl.isNotEmpty;
 
     return NipaplayWindowScaffold(
-      backgroundImageUrl: hasBackdrop ? backdropUrl : (posterUrl.isNotEmpty ? posterUrl : null),
+      backgroundImageUrl:
+          hasBackdrop ? backdropUrl : (posterUrl.isNotEmpty ? posterUrl : null),
       blurBackground: !hasBackdrop, // 如果没有横向图而使用竖向图，开启高斯模糊
       onClose: () => Navigator.of(context).pop(),
       child: pageContent,
@@ -676,14 +709,14 @@ style: TextStyle(color: secondaryTextColor)));
   Widget _buildInfoView() {
     if (_mediaDetail == null) return const SizedBox.shrink();
 
-    final summaryText =
-        (_mediaDetail!.overview != null && _mediaDetail!.overview!.trim().isNotEmpty
-                ? _mediaDetail!.overview!
-                : '暂无简介')
-            .replaceAll('<br>', ' ')
-            .replaceAll('<br/>', ' ')
-            .replaceAll('<br />', ' ')
-            .replaceAll('```', '');
+    final summaryText = (_mediaDetail!.overview != null &&
+                _mediaDetail!.overview!.trim().isNotEmpty
+            ? _mediaDetail!.overview!
+            : '暂无简介')
+        .replaceAll('<br>', ' ')
+        .replaceAll('<br/>', ' ')
+        .replaceAll('<br />', ' ')
+        .replaceAll('```', '');
     final posterUrl = _getPosterUrl();
     final backdropUrl = _getBackdropUrl();
     final ratingValue = double.tryParse(_mediaDetail!.communityRating ?? '');
@@ -741,164 +774,165 @@ style: TextStyle(color: secondaryTextColor)));
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              if (_mediaDetail!.originalTitle != null &&
-                  _mediaDetail!.originalTitle!.isNotEmpty &&
-                  _mediaDetail!.originalTitle != _mediaDetail!.name)
+          if (_mediaDetail!.originalTitle != null &&
+              _mediaDetail!.originalTitle!.isNotEmpty &&
+              _mediaDetail!.originalTitle != _mediaDetail!.name)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text(
+                _mediaDetail!.originalTitle!,
+                style: valueStyle.copyWith(
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (posterUrl.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(
-                    _mediaDetail!.originalTitle!,
-                    style: valueStyle.copyWith(
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
+                  padding: const EdgeInsets.only(right: 16.0, bottom: 8.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImageWidget(
+                      imageUrl: posterUrl,
+                      width: 130,
+                      height: 195,
+                      fit: BoxFit.cover,
+                      loadMode: CachedImageLoadMode.legacy,
                     ),
                   ),
                 ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Expanded(
+                child: SizedBox(
+                  height: 195,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Text(summaryText, style: valueStyle),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Divider(color: textColor.withOpacity(0.15)),
+          const SizedBox(height: 8),
+          if (ratingValue != null && ratingValue > 0) ...[
+            RichText(
+              text: TextSpan(
                 children: [
-                  if (posterUrl.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16.0, bottom: 8.0),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImageWidget(
-                          imageUrl: posterUrl,
-                          width: 130,
-                          height: 195,
-                          fit: BoxFit.cover,
-                          loadMode: CachedImageLoadMode.legacy,
-                        ),
-                      ),
-                    ),
-                  Expanded(
-                    child: SizedBox(
-                      height: 195,
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: Text(summaryText, style: valueStyle),
-                      ),
+                  TextSpan(text: '评分: ', style: boldWhiteKeyStyle),
+                  WidgetSpan(child: _buildRatingStars(ratingValue)),
+                  TextSpan(
+                    text: ' ${ratingValue.toStringAsFixed(1)} ',
+                    style: TextStyle(
+                      color: Colors.yellow[600],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Divider(color: textColor.withOpacity(0.15)),
-              const SizedBox(height: 8),
-              if (ratingValue != null && ratingValue > 0) ...[
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(text: '评分: ', style: boldWhiteKeyStyle),
-                      WidgetSpan(child: _buildRatingStars(ratingValue)),
-                      TextSpan(
-                        text: ' ${ratingValue.toStringAsFixed(1)} ',
-                        style: TextStyle(
-                          color: Colors.yellow[600],
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
+            ),
+            const SizedBox(height: 6),
+          ],
+          ...infoRows,
+          if (_mediaDetail!.genres.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _mediaDetail!.genres.map<Widget>((genre) {
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: textColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: textColor.withOpacity(0.12), width: 0.5),
                   ),
-                ),
-                const SizedBox(height: 6),
-              ],
-              ...infoRows,
-              if (_mediaDetail!.genres.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _mediaDetail!.genres.map<Widget>((genre) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: textColor.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: textColor.withOpacity(0.12), width: 0.5),
-                      ),
-                      child: Text(
-                        genre,
-                        style: TextStyle(color: secondaryTextColor, fontSize: 12),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              if (_mediaDetail!.cast.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                if (sectionTitleStyle != null)
-                  Text('演员', style: sectionTitleStyle),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 100,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _mediaDetail!.cast.length,
-                    itemBuilder: (context, index) {
-                      final actor = _mediaDetail!.cast[index];
-                      final actorImage = _getActorImageUrl(actor);
+                  child: Text(
+                    genre,
+                    style: TextStyle(color: secondaryTextColor, fontSize: 12),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          if (_mediaDetail!.cast.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            if (sectionTitleStyle != null) Text('演员', style: sectionTitleStyle),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 100,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _mediaDetail!.cast.length,
+                itemBuilder: (context, index) {
+                  final actor = _mediaDetail!.cast[index];
+                  final actorImage = _getActorImageUrl(actor);
 
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 30,
-                              backgroundColor: Colors.grey.shade800,
-                              backgroundImage:
-                                  actorImage != null ? NetworkImage(actorImage) : null,
-                              child: actorImage == null
-                                  ? Icon(Icons.person,
-                                      color: secondaryTextColor)
-                                  : null,
-                            ),
-                            const SizedBox(height: 4),
-                            SizedBox(
-                              width: 70,
-                              child: Text(
-                                actor.name,
-                                style: TextStyle(
-                                    fontSize: 12, color: secondaryTextColor),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: Colors.grey.shade800,
+                          backgroundImage: actorImage != null
+                              ? NetworkImage(actorImage)
+                              : null,
+                          child: actorImage == null
+                              ? Icon(Icons.person, color: secondaryTextColor)
+                              : null,
                         ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-              if (_isMovie) ...[
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    BlurButton(
-                      icon: Icons.play_arrow,
-                      text: '播放',
-                      foregroundColor: const Color(0xFF3B82F6),
-                      hoverForegroundColor: const Color(0xFF60A5FA),
-                      onTap: () {
-                        if (_isDetailAutoMatching) {
-                          BlurSnackBar.show(context, '正在自动匹配，请稍候');
-                          return;
-                        }
-                        _playMovie();
-                      },
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      fontSize: 18,
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: 70,
+                          child: Text(
+                            actor.name,
+                            style: TextStyle(
+                                fontSize: 12, color: secondaryTextColor),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  );
+                },
+              ),
+            ),
+          ],
+          if (_isMovie) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                BlurButton(
+                  icon: Icons.play_arrow,
+                  text: '播放',
+                  foregroundColor: const Color(0xFF3B82F6),
+                  hoverForegroundColor: const Color(0xFF60A5FA),
+                  onTap: () {
+                    if (_isDetailAutoMatching) {
+                      BlurSnackBar.show(context, '正在自动匹配，请稍候');
+                      return;
+                    }
+                    _playMovie();
+                  },
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  fontSize: 18,
                 ),
               ],
-            ],
-          ),
-        );
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildDesktopTabletLayout() {
@@ -922,6 +956,7 @@ style: TextStyle(color: secondaryTextColor)));
       ),
     );
   }
+
   Widget _buildEpisodesView() {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
@@ -929,10 +964,11 @@ style: TextStyle(color: secondaryTextColor)));
     const Color accentColor = Color(0xFFFF2E55);
 
     // 移除原有的 Positioned 返回按钮，因为顶部已经有了全局关闭按钮
-    return Column( // 不再需要 Stack，因为返回按钮已全局处理
+    return Column(
+      // 不再需要 Stack，因为返回按钮已全局处理
       children: [
         // const SizedBox(height: 16), // 顶部间距可以根据整体布局调整，TabBar外部已有间距
-        
+
         // 季节选择器
         if (_seasons.isNotEmpty)
           Padding(
@@ -948,25 +984,35 @@ style: TextStyle(color: secondaryTextColor)));
                   final bool enableSeasonHover = !globals.isTouch;
                   final Color seasonTextColor =
                       isSelected ? accentColor : secondaryTextColor;
-                  
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: MouseRegion(
-                      cursor: enableSeasonHover
-                          ? SystemMouseCursors.click
-                          : SystemMouseCursors.basic,
-                      child: GestureDetector(
-                        onTap: () => _loadEpisodesForSeason(season.id),
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 4),
-                          child: Text(
-                            season.name,
-                            style: TextStyle(
-                              color: seasonTextColor,
-                              fontWeight:
-                                  isSelected ? FontWeight.w600 : FontWeight.w400,
+
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Tooltip(
+                        message: season.name,
+                        waitDuration: const Duration(milliseconds: 500),
+                        child: MouseRegion(
+                          cursor: enableSeasonHover
+                              ? SystemMouseCursors.click
+                              : SystemMouseCursors.basic,
+                          child: GestureDetector(
+                            onTap: () => _loadEpisodesForSeason(season.id),
+                            behavior: HitTestBehavior.opaque,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 4),
+                              child: Text(
+                                season.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: seasonTextColor,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -977,10 +1023,15 @@ style: TextStyle(color: secondaryTextColor)));
               ),
             ),
           ),
-        
+
         if (_seasons.isNotEmpty) // 仅当有季节选择器时显示分割线
-          Divider(height: 1, thickness: 1, color: textColor.withOpacity(0.1), indent: 16, endIndent: 16),
-        
+          Divider(
+              height: 1,
+              thickness: 1,
+              color: textColor.withOpacity(0.1),
+              indent: 16,
+              endIndent: 16),
+
         // 剧集列表
         Expanded(
           child: _buildEpisodesListForSelectedSeason(),
@@ -988,48 +1039,59 @@ style: TextStyle(color: secondaryTextColor)));
       ],
     );
   }
-  
+
   Widget _buildEpisodesListForSelectedSeason() {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     const Color accentColor = Color(0xFFFF2E55);
 
-    if (_selectedSeasonId == null && _seasons.isNotEmpty) { // 如果有季但没有选择，提示选择
+    if (_selectedSeasonId == null && _seasons.isNotEmpty) {
+      // 如果有季但没有选择，提示选择
       return Center(
-        child: Text('请选择一个季', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: secondaryTextColor)),
+        child: Text('请选择一个季',
+            locale: Locale("zh-Hans", "zh"),
+            style: TextStyle(color: secondaryTextColor)),
       );
     }
-    if (_selectedSeasonId == null && _seasons.isEmpty && !_isLoading) { // 如果没有季且不在加载中
-        return Center(
-        child: Text('该剧集没有季节信息', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: secondaryTextColor)),
+    if (_selectedSeasonId == null && _seasons.isEmpty && !_isLoading) {
+      // 如果没有季且不在加载中
+      return Center(
+        child: Text('该剧集没有季节信息',
+            locale: Locale("zh-Hans", "zh"),
+            style: TextStyle(color: secondaryTextColor)),
       );
     }
-    
-    if (_isLoading && (_episodesBySeasonId[_selectedSeasonId ?? ''] == null || _episodesBySeasonId[_selectedSeasonId ?? '']!.isEmpty)) {
+
+    if (_isLoading &&
+        (_episodesBySeasonId[_selectedSeasonId ?? ''] == null ||
+            _episodesBySeasonId[_selectedSeasonId ?? '']!.isEmpty)) {
       return Center(
         child: CircularProgressIndicator(color: textColor),
       );
     }
-    
-    if (_error != null && _selectedSeasonId != null) { // 仅在尝试加载特定季出错时显示
+
+    if (_error != null && _selectedSeasonId != null) {
+      // 仅在尝试加载特定季出错时显示
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              const Icon(Icons.error_outline,
+                  size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
-              Text('加载剧集失败: $_error', style: TextStyle(color: secondaryTextColor), textAlign: TextAlign.center),
+              Text('加载剧集失败: $_error',
+                  style: TextStyle(color: secondaryTextColor),
+                  textAlign: TextAlign.center),
               const SizedBox(height: 16),
               BlurButton(
                 icon: Icons.refresh,
                 text: '重试',
                 onTap: () => _loadEpisodesForSeason(_selectedSeasonId!),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 fontSize: 16,
               ),
             ],
@@ -1037,23 +1099,28 @@ style: TextStyle(color: secondaryTextColor)),
         ),
       );
     }
-    
+
     final episodes = _episodesBySeasonId[_selectedSeasonId] ?? [];
-    
-    if (episodes.isEmpty && !_isLoading && _selectedSeasonId != null) { // 确保不是在加载中，并且确实选择了季
+
+    if (episodes.isEmpty && !_isLoading && _selectedSeasonId != null) {
+      // 确保不是在加载中，并且确实选择了季
       return Center(
-        child: Text('该季没有剧集', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: secondaryTextColor)),
+        child: Text('该季没有剧集',
+            locale: Locale("zh-Hans", "zh"),
+            style: TextStyle(color: secondaryTextColor)),
       );
     }
-     if (episodes.isEmpty && _isLoading) { // 如果仍在加载，显示加载指示器
+    if (episodes.isEmpty && _isLoading) {
+      // 如果仍在加载，显示加载指示器
       return Center(child: CircularProgressIndicator(color: textColor));
     }
-    if (episodes.isEmpty && _selectedSeasonId == null && _seasons.isEmpty) { // 处理没有季的情况
-        return Center(child: Text('没有可显示的剧集', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: secondaryTextColor)));
+    if (episodes.isEmpty && _selectedSeasonId == null && _seasons.isEmpty) {
+      // 处理没有季的情况
+      return Center(
+          child: Text('没有可显示的剧集',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: secondaryTextColor)));
     }
-
 
     dynamic service;
     if (widget.serverType == MediaServerType.jellyfin) {
@@ -1061,7 +1128,7 @@ style: TextStyle(color: secondaryTextColor)));
     } else {
       service = EmbyService.instance;
     }
-    
+
     return SettingsNoRippleTheme(
       child: ListView.builder(
         padding: const EdgeInsets.only(top: 8, bottom: 24),
@@ -1077,9 +1144,8 @@ style: TextStyle(color: secondaryTextColor)));
               playHoverEnabled && _hoveredEpisodeId == episode.id;
           final Color playIconColor =
               isEpisodeHovered ? accentColor : secondaryTextColor;
-          final Color titleColor =
-              isEpisodeHovered ? accentColor : textColor;
-          
+          final Color titleColor = isEpisodeHovered ? accentColor : textColor;
+
           return MouseRegion(
             cursor: playHoverEnabled
                 ? SystemMouseCursors.click
@@ -1105,7 +1171,8 @@ style: TextStyle(color: secondaryTextColor)));
                   borderRadius: BorderRadius.circular(4),
                   child: episodeImageUrl.isNotEmpty
                       ? CachedNetworkImageWidget(
-                          key: ValueKey(episode.id), // 为 CachedNetworkImageWidget 添加 Key
+                          key: ValueKey(
+                              episode.id), // 为 CachedNetworkImageWidget 添加 Key
                           imageUrl: episodeImageUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error) {
@@ -1123,8 +1190,7 @@ style: TextStyle(color: secondaryTextColor)));
                           },
                         )
                       : Container(
-                          color:
-                              isDark ? Colors.grey[800] : Colors.grey[300],
+                          color: isDark ? Colors.grey[800] : Colors.grey[300],
                           child: Center(
                             child: Icon(
                               Ionicons.film_outline, // 使用 Ionicons
@@ -1189,25 +1255,25 @@ style: TextStyle(color: secondaryTextColor)));
                 }
                 try {
                   BlurSnackBar.show(context, '准备播放: ${episode.name}');
-                  
+
                   debugPrint('准备创建播放会话');
-                  
+
                   // 显示加载指示器
                   if (mounted) {
                     BlurSnackBar.show(context, '正在匹配弹幕信息...');
                   }
-                  
+
                   // 使用JellyfinDandanplayMatcher创建增强的WatchHistoryItem
                   // 这一步会显示匹配对话框，阻塞直到用户完成选择或跳过
                   final historyItem =
                       await _runDetailAutoMatchTask<WatchHistoryItem?>(
                           () => _createWatchHistoryItem(episode));
                   if (historyItem == null) return; // 用户关闭弹窗，什么都不做
-                  
+
                   // 用户已完成匹配选择，现在可以继续播放流程
                   debugPrint(
                       '成功获取历史记录项: ${historyItem.animeName} - ${historyItem.episodeTitle}, animeId=${historyItem.animeId}, episodeId=${historyItem.episodeId}');
-                  
+
                   // 调试：检查 historyItem 的弹幕 ID
                   if (historyItem.animeId == null ||
                       historyItem.episodeId == null) {
@@ -1220,7 +1286,7 @@ style: TextStyle(color: secondaryTextColor)));
                     debugPrint('  animeId: ${historyItem.animeId}');
                     debugPrint('  episodeId: ${historyItem.episodeId}');
                   }
-                  
+
                   // 创建一个专门用于流媒体播放的历史记录项，使用稳定的jellyfin://或emby://协议
                   final playableHistoryItem = WatchHistoryItem(
                     filePath:
@@ -1258,8 +1324,7 @@ style: TextStyle(color: secondaryTextColor)));
                       final embyPath = playableHistoryItem.filePath
                           .replaceFirst('emby://', '');
                       final parts = embyPath.split('/');
-                      final embyId =
-                          parts.isNotEmpty ? parts.last : embyPath;
+                      final embyId = parts.isNotEmpty ? parts.last : embyPath;
                       playbackSession =
                           await EmbyService.instance.createPlaybackSession(
                         itemId: embyId,
@@ -1284,11 +1349,11 @@ style: TextStyle(color: secondaryTextColor)));
                       return;
                     }
                   }
-                  
+
                   // 获取必要的服务引用
                   final videoPlayerState =
                       Provider.of<VideoPlayerState>(context, listen: false);
-                  
+
                   // 在页面关闭前，获取TabChangeNotifier
                   // 注意：通过listen: false方式获取，避免建立依赖关系
                   TabChangeNotifier? tabChangeNotifier;
@@ -1298,27 +1363,27 @@ style: TextStyle(color: secondaryTextColor)));
                   } catch (e) {
                     debugPrint('无法获取TabChangeNotifier: $e');
                   }
-                  
+
                   // *** 关键修改：立即切换页面和关闭详情页，像本地视频播放一样 ***
                   // 1. 立即切换到播放页面，显示加载中
                   if (tabChangeNotifier != null) {
                     debugPrint('立即切换到播放页面');
                     tabChangeNotifier.changeTab(1);
                   }
-                  
+
                   // 2. 立即关闭详情页面
                   Navigator.of(context).pop();
                   debugPrint('详情页面已立即关闭');
-                  
+
                   // 3. 显示开始播放的提示（这个提示会在播放页面显示）
                   if (mounted) {
                     BlurSnackBar.show(
                         context, '开始播放: ${historyItem.episodeTitle}');
                   }
-                  
+
                   // 4. 异步初始化播放器（页面已切换，用户能看到加载中）
                   debugPrint('开始异步初始化播放器...');
-                  
+
                   // 使用异步方式初始化播放器，不阻塞UI
                   Future.delayed(const Duration(milliseconds: 100), () async {
                     try {
@@ -1329,8 +1394,8 @@ style: TextStyle(color: secondaryTextColor)));
                           .startsWith('jellyfin://')) {
                         final jellyfinId = playableHistoryItem.filePath
                             .replaceFirst('jellyfin://', '');
-                        playbackSession =
-                            await JellyfinService.instance.createPlaybackSession(
+                        playbackSession = await JellyfinService.instance
+                            .createPlaybackSession(
                           itemId: jellyfinId,
                           startPositionMs: playableHistoryItem.lastPosition > 0
                               ? playableHistoryItem.lastPosition
@@ -1341,8 +1406,7 @@ style: TextStyle(color: secondaryTextColor)));
                         final embyPath = playableHistoryItem.filePath
                             .replaceFirst('emby://', '');
                         final parts = embyPath.split('/');
-                        final embyId =
-                            parts.isNotEmpty ? parts.last : embyPath;
+                        final embyId = parts.isNotEmpty ? parts.last : embyPath;
                         playbackSession =
                             await EmbyService.instance.createPlaybackSession(
                           itemId: embyId,
@@ -1358,7 +1422,7 @@ style: TextStyle(color: secondaryTextColor)));
                         playbackSession: playbackSession,
                       );
                       debugPrint('异步初始化播放器 - 完成');
-                      
+
                       // 开始播放
                       debugPrint('异步播放 - 开始播放视频');
                       videoPlayerState.play();

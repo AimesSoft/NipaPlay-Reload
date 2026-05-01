@@ -116,6 +116,8 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       fontSize: 12,
       fontWeight: FontWeight.w500,
     );
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxWidth = (screenWidth - 20).clamp(80.0, 320.0);
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final textPainter = TextPainter(
       text: TextSpan(
@@ -125,29 +127,42 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       textDirection: TextDirection.ltr,
       maxLines: 1,
       textScaleFactor: textScaleFactor,
-    )..layout(minWidth: 0, maxWidth: double.infinity);
+    )..layout(minWidth: 0, maxWidth: maxWidth - widget.padding * 2);
 
     // 增加额外的宽度，确保组合键能够完整显示
     final String lowerText = widget.text.toLowerCase();
+    double width;
     if (Platform.isWindows &&
         lowerText.contains('(') &&
         lowerText.contains(')')) {
       // 只在 Windows 端，如果文本包含括号（通常是快捷键），增加额外宽度
-      return textPainter.width + widget.padding * 2 + 20;
+      width = textPainter.width + widget.padding * 2 + 20;
     } else if (lowerText.contains('shift') ||
         lowerText.contains('ctrl') ||
         lowerText.contains('command') ||
         lowerText.contains('tab') ||
         lowerText.contains('alt') ||
         lowerText.contains('esc')) {
-      return textPainter.width + widget.padding * 2 + 20;
+      width = textPainter.width + widget.padding * 2 + 20;
     } else {
-      return textPainter.width + widget.padding * 2 + 4;
+      width = textPainter.width + widget.padding * 2 + 4;
     }
+    return width.clamp(48.0, maxWidth);
   }
 
   double _getBubbleHeight() {
-    return 30; // 固定高度，因为文字只有一行
+    const textStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+    );
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    final textPainter = TextPainter(
+      text: TextSpan(text: widget.text, style: textStyle),
+      textDirection: TextDirection.ltr,
+      maxLines: 2,
+      textScaleFactor: textScaleFactor,
+    )..layout(maxWidth: _getBubbleWidth() - widget.padding * 2);
+    return (textPainter.height + 12).clamp(30.0, 48.0);
   }
 
   void _hideOverlay() {
@@ -220,8 +235,9 @@ class _TooltipBubbleState extends State<TooltipBubble> {
             child: Text(
               widget.text,
               style: textStyle,
-              maxLines: 1,
-              overflow: TextOverflow.visible,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
           ),
         ),
@@ -263,9 +279,9 @@ class _TooltipBubbleState extends State<TooltipBubble> {
                 child: Text(
                   widget.text,
                   style: textStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.visible,
-                  //textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
               ),
             ),

@@ -144,6 +144,14 @@
                 <data android:scheme="file" android:pathPattern=".*\\.wmv" />
                 <data android:scheme="content" android:pathPattern=".*\\.wmv" />
             </intent-filter>
+
+            <!-- 部分 Android 7/8 文件管理器只提供 content:// 和 video/*，不带可匹配扩展名 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" android:mimeType="video/*" />
+                <data android:scheme="file" android:mimeType="video/*" />
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"

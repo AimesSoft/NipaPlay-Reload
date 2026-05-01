@@ -186,7 +186,8 @@ class _CupertinoSharedAnimeDetailPageState
       }
       _maybeLoadVividCover();
     });
-    BangumiApiService.loginStatusNotifier.addListener(_onBangumiLoginStatusChanged);
+    BangumiApiService.loginStatusNotifier
+        .addListener(_onBangumiLoginStatusChanged);
   }
 
   @override
@@ -891,8 +892,7 @@ class _CupertinoSharedAnimeDetailPageState
             ? widget.anime.nameCn!
             : widget.anime.name;
 
-    final action =
-        await showCupertinoDialog<_CupertinoEpisodeCleanupAction>(
+    final action = await showCupertinoDialog<_CupertinoEpisodeCleanupAction>(
       context: context,
       builder: (dialogContext) {
         return CupertinoAlertDialog(
@@ -940,9 +940,7 @@ class _CupertinoSharedAnimeDetailPageState
         );
         if (!mounted) return;
         _showSnack(
-          affectedCount > 0
-              ? '已清除 $affectedCount 条扫描结果'
-              : '没有可清除的扫描结果',
+          affectedCount > 0 ? '已清除 $affectedCount 条扫描结果' : '没有可清除的扫描结果',
           type: affectedCount > 0
               ? AdaptiveSnackBarType.success
               : AdaptiveSnackBarType.info,
@@ -953,9 +951,7 @@ class _CupertinoSharedAnimeDetailPageState
         );
         if (!mounted) return;
         _showSnack(
-          affectedCount > 0
-              ? '已删除 $affectedCount 条观看记录'
-              : '没有可删除的观看记录',
+          affectedCount > 0 ? '已删除 $affectedCount 条观看记录' : '没有可删除的观看记录',
           type: affectedCount > 0
               ? AdaptiveSnackBarType.success
               : AdaptiveSnackBarType.info,
@@ -965,8 +961,7 @@ class _CupertinoSharedAnimeDetailPageState
       await _refreshWatchHistoryProvider();
     } catch (e) {
       if (mounted) {
-        _showSnack('操作失败: ${e.toString()}',
-            type: AdaptiveSnackBarType.error);
+        _showSnack('操作失败: ${e.toString()}', type: AdaptiveSnackBarType.error);
       }
     } finally {
       if (mounted) {
@@ -2573,24 +2568,29 @@ class _CupertinoSharedAnimeDetailPageState
         itemBuilder: (context, index) {
           final season = seasons[index];
           final isSelected = season.id == selectedId;
-          return CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            minSize: 0,
-            color: isSelected
-                ? selectedColor.withOpacity(0.15)
-                : backgroundColor,
-            borderRadius: BorderRadius.circular(12),
-            onPressed: widget.onSeasonChanged == null
-                ? null
-                : () => widget.onSeasonChanged!(season.id),
-            child: Text(
-              season.name,
-              style: TextStyle(
-                fontSize: 12,
-                color: isSelected
-                    ? selectedColor
-                    : CupertinoDynamicColor.resolve(
-                        CupertinoColors.label, context),
+          return ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 160),
+            child: CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              minSize: 0,
+              color: isSelected
+                  ? selectedColor.withOpacity(0.15)
+                  : backgroundColor,
+              borderRadius: BorderRadius.circular(12),
+              onPressed: widget.onSeasonChanged == null
+                  ? null
+                  : () => widget.onSeasonChanged!(season.id),
+              child: Text(
+                season.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSelected
+                      ? selectedColor
+                      : CupertinoDynamicColor.resolve(
+                          CupertinoColors.label, context),
+                ),
               ),
             ),
           );
@@ -2809,8 +2809,8 @@ class _CupertinoSharedAnimeDetailPageState
                                             color: resolvedCardColor,
                                             child: const Icon(
                                               CupertinoIcons.person,
-                                              color:
-                                                  CupertinoColors.secondaryLabel,
+                                              color: CupertinoColors
+                                                  .secondaryLabel,
                                             ),
                                           ),
                                         )
@@ -2818,7 +2818,8 @@ class _CupertinoSharedAnimeDetailPageState
                                           color: resolvedCardColor,
                                           child: const Icon(
                                             CupertinoIcons.person,
-                                            color: CupertinoColors.secondaryLabel,
+                                            color:
+                                                CupertinoColors.secondaryLabel,
                                           ),
                                         ),
                                 ),
@@ -2855,7 +2856,8 @@ class _CupertinoSharedAnimeDetailPageState
                       child: CupertinoActivityIndicator(),
                     ),
                   )
-                else if (widget.enableBangumiFeatures && _bangumiAnime != null) ...[
+                else if (widget.enableBangumiFeatures &&
+                    _bangumiAnime != null) ...[
                   // 制作信息
                   if (_bangumiAnime!.metadata != null &&
                       _bangumiAnime!.metadata!.isNotEmpty) ...[
@@ -3356,7 +3358,8 @@ class _CupertinoSharedAnimeDetailPageState
               ),
               const Spacer(),
               CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 minSize: 0,
                 onPressed: () {
                   setState(() {
@@ -3923,7 +3926,8 @@ class _CupertinoSharedAnimeDetailPageState
 
   @override
   void dispose() {
-    BangumiApiService.loginStatusNotifier.removeListener(_onBangumiLoginStatusChanged);
+    BangumiApiService.loginStatusNotifier
+        .removeListener(_onBangumiLoginStatusChanged);
     _scrollController.dispose();
     super.dispose();
   }
