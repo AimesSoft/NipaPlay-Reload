@@ -45,6 +45,7 @@ import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/theme_descriptor.dart';
 import 'themes/nipaplay/pages/settings/account_page.dart';
 import 'dart:async';
@@ -677,6 +678,7 @@ void main(List<String> args) async {
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
           ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => PluginService()),
           ChangeNotifierProvider(create: (_) => HomeSectionsSettingsProvider()),
           ChangeNotifierProvider(create: (_) => UIThemeProvider()),
           ChangeNotifierProvider(create: (_) => SharedRemoteLibraryProvider()),

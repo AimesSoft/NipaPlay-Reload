@@ -412,6 +412,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.1"
+  flutter_js:
+    dependency: "direct main"
+    description:
+      name: flutter_js
+      sha256: "046428059ac7bef71e305dc35fc24be933b684684a43e83eab7ebd0dc407ad85"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.7"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -1461,6 +1469,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  sync_http:
+    dependency: transitive
+    description:
+      name: sync_http
+      sha256: "7f0cd72eca000d2e026bcd6f990b81d0ca06022ef4e32fb257b30d3d1014a961"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.1"
   synchronized:
     dependency: transitive
     description:

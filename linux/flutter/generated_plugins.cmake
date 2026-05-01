@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_multi_window
   dynamic_color
   file_selector_linux
+  flutter_js
   fvp
   hotkey_manager_linux
   media_kit_libs_linux
