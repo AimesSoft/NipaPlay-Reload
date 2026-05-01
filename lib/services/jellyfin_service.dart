@@ -88,8 +88,8 @@ class JellyfinService extends MediaServerServiceBase
         defaultQuality: quality,
         settings: settings,
       );
-      DebugLogService().addLog(
-          'Jellyfin: 已加载转码偏好 缓存 enabled=$enabled, quality=$quality');
+      DebugLogService()
+          .addLog('Jellyfin: 已加载转码偏好 缓存 enabled=$enabled, quality=$quality');
     } catch (e) {
       DebugLogService().addLog('Jellyfin: 加载转码偏好失败，使用默认值: $e');
       updateTranscodeCache(
@@ -257,11 +257,13 @@ class JellyfinService extends MediaServerServiceBase
       String url, String username, String password) async {
     try {
       // 获取服务器信息
-      final configResponse = await http
-          .get(
-            Uri.parse('$url/System/Info/Public'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final configResponse = await sendRequestFollowingRedirects(
+        Uri.parse('$url/System/Info/Public'),
+        method: 'GET',
+        headers: const {},
+        timeout: const Duration(seconds: 5),
+        redirectLogLabel: 'JellyfinService',
+      );
 
       return configResponse.statusCode == 200;
     } catch (e) {
@@ -273,8 +275,9 @@ class JellyfinService extends MediaServerServiceBase
   Future<void> _performAuthentication(
       String serverUrl, String username, String password) async {
     final clientInfo = await getClientInfo();
-    final authResponse = await http.post(
+    final authResponse = await sendRequestFollowingRedirects(
       Uri.parse('$serverUrl/Users/AuthenticateByName'),
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Emby-Authorization': clientInfo,
@@ -283,6 +286,8 @@ class JellyfinService extends MediaServerServiceBase
         'Username': username,
         'Pw': password,
       }),
+      timeout: const Duration(seconds: 30),
+      redirectLogLabel: 'JellyfinService',
     );
 
     if (authResponse.statusCode != 200) {
@@ -297,11 +302,13 @@ class JellyfinService extends MediaServerServiceBase
   /// 获取Jellyfin服务器ID，如果无法获取将抛出异常
   Future<String> _getJellyfinServerId(String url) async {
     try {
-      final response = await http
-          .get(
-            Uri.parse('$url/System/Info/Public'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await sendRequestFollowingRedirects(
+        Uri.parse('$url/System/Info/Public'),
+        method: 'GET',
+        headers: const {},
+        timeout: const Duration(seconds: 5),
+        redirectLogLabel: 'JellyfinService',
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -320,11 +327,13 @@ class JellyfinService extends MediaServerServiceBase
   /// 获取服务器名称
   Future<String?> _getServerName(String url) async {
     try {
-      final response = await http
-          .get(
-            Uri.parse('$url/System/Info/Public'),
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await sendRequestFollowingRedirects(
+        Uri.parse('$url/System/Info/Public'),
+        method: 'GET',
+        headers: const {},
+        timeout: const Duration(seconds: 5),
+        redirectLogLabel: 'JellyfinService',
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -424,9 +433,8 @@ class JellyfinService extends MediaServerServiceBase
         final data = json.decode(response.body);
         final List<dynamic> items = data['Items'] ?? [];
 
-        final results = items
-            .map((item) => JellyfinMediaItem.fromJson(item))
-            .toList();
+        final results =
+            items.map((item) => JellyfinMediaItem.fromJson(item)).toList();
 
         results.sort((a, b) {
           if (a.isFolder != b.isFolder) {
@@ -1057,9 +1065,9 @@ class JellyfinService extends MediaServerServiceBase
     }
 
     final enableTranscoding = transcodeEnabledCache &&
-      effectiveQuality != JellyfinVideoQuality.original;
+        effectiveQuality != JellyfinVideoQuality.original;
     final maxStreamingBitrate =
-      enableTranscoding ? effectiveQuality.bitrate : null;
+        enableTranscoding ? effectiveQuality.bitrate : null;
     final resolvedPlaySessionId = playSessionId;
 
     final deviceProfile = PlaybackDeviceProfileBuilder.build(
@@ -1150,7 +1158,7 @@ class JellyfinService extends MediaServerServiceBase
     String? requestedMediaSourceId,
   }) {
     final playSessionId =
-      forcedPlaySessionId ?? data['PlaySessionId']?.toString();
+        forcedPlaySessionId ?? data['PlaySessionId']?.toString();
     final rawSources = data['MediaSources'];
     final sources = <PlaybackMediaSource>[];
     if (rawSources is List) {
@@ -1179,7 +1187,9 @@ class JellyfinService extends MediaServerServiceBase
 
     bool useTranscoding = false;
     String? chosenUrl;
-    if (!forceDirectPlay && transcodingUrl != null && transcodingUrl.isNotEmpty) {
+    if (!forceDirectPlay &&
+        transcodingUrl != null &&
+        transcodingUrl.isNotEmpty) {
       if (preferTranscoding ||
           directStreamUrl == null ||
           directStreamUrl.isEmpty) {
@@ -1220,11 +1230,17 @@ class JellyfinService extends MediaServerServiceBase
   }
 
   String _resolvePlaybackUrl(String url) {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url;
+    final uri = Uri.tryParse(url);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      if (uri.host.isNotEmpty) {
+        return url;
+      }
+      if (_serverUrl != null && _serverUrl!.isNotEmpty) {
+        return Uri.parse(_serverUrl!).resolveUri(uri).toString();
+      }
     }
     final normalized = url.startsWith('/') ? url : '/$url';
-    return '$_serverUrl$normalized';
+    return Uri.parse(_serverUrl!).resolve(normalized).toString();
   }
 
   String? _resolveSubtitleMethod({
@@ -1256,9 +1272,8 @@ class JellyfinService extends MediaServerServiceBase
     String? mediaSourceId,
     String? playSessionId,
   }) {
-    final resolvedMediaSourceId = (mediaSourceId?.isNotEmpty ?? false)
-        ? mediaSourceId!
-        : itemId;
+    final resolvedMediaSourceId =
+        (mediaSourceId?.isNotEmpty ?? false) ? mediaSourceId! : itemId;
     final params = <String, String>{
       'static': 'true',
       'MediaSourceId': resolvedMediaSourceId,
@@ -1467,11 +1482,12 @@ class JellyfinService extends MediaServerServiceBase
     }
 
     int? resolvedIndex = subtitleStreamIndex;
-    final needsServerSubtitle = transcodeSettingsCache.subtitle.enableTranscoding &&
-        transcodeSettingsCache.subtitle.deliveryMethod !=
-            JellyfinSubtitleDeliveryMethod.external &&
-        transcodeSettingsCache.subtitle.deliveryMethod !=
-            JellyfinSubtitleDeliveryMethod.drop;
+    final needsServerSubtitle =
+        transcodeSettingsCache.subtitle.enableTranscoding &&
+            transcodeSettingsCache.subtitle.deliveryMethod !=
+                JellyfinSubtitleDeliveryMethod.external &&
+            transcodeSettingsCache.subtitle.deliveryMethod !=
+                JellyfinSubtitleDeliveryMethod.drop;
 
     if (resolvedIndex == null && needsServerSubtitle) {
       try {
@@ -1781,9 +1797,23 @@ class JellyfinService extends MediaServerServiceBase
       } else if (collectionType == 'movies') {
         includeItemTypes = ['Movie'];
       } else if (collectionType == 'mixed') {
-        includeItemTypes = ['Folder', 'Series', 'Season', 'Episode', 'Movie', 'Video'];
+        includeItemTypes = [
+          'Folder',
+          'Series',
+          'Season',
+          'Episode',
+          'Movie',
+          'Video'
+        ];
       } else {
-        includeItemTypes = ['Folder', 'Series', 'Season', 'Episode', 'Movie', 'Video'];
+        includeItemTypes = [
+          'Folder',
+          'Series',
+          'Season',
+          'Episode',
+          'Movie',
+          'Video'
+        ];
       }
 
       return await searchMediaItems(
@@ -1872,5 +1902,4 @@ class JellyfinService extends MediaServerServiceBase
     return makeAuthenticatedRequest(endpoint,
         method: method, body: body, timeout: timeout);
   }
-
 }

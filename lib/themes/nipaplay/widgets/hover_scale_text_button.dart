@@ -53,7 +53,8 @@ class _HoverScaleTextButtonState extends State<HoverScaleTextButton> {
         _isHovered && isEnabled ? widget.hoverColor : resolvedBaseColor;
     final TextStyle defaultStyle =
         Theme.of(context).textTheme.labelLarge ?? const TextStyle(fontSize: 14);
-    final TextStyle effectiveBaseStyle = childTextStyle ?? widget.textStyle ?? defaultStyle;
+    final TextStyle effectiveBaseStyle =
+        childTextStyle ?? widget.textStyle ?? defaultStyle;
 
     final Widget content = _buildContent(
       textColor: textColor,
@@ -67,12 +68,12 @@ class _HoverScaleTextButtonState extends State<HoverScaleTextButton> {
       child: GestureDetector(
         onTap: widget.onPressed,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedScale(
-          scale: _isHovered && isEnabled ? widget.hoverScale : 1.0,
-          duration: widget.duration,
-          curve: widget.curve,
-          child: Padding(
-            padding: widget.padding,
+        child: Padding(
+          padding: widget.padding,
+          child: AnimatedScale(
+            scale: _isHovered && isEnabled ? widget.hoverScale : 1.0,
+            duration: widget.duration,
+            curve: widget.curve,
             child: content,
           ),
         ),

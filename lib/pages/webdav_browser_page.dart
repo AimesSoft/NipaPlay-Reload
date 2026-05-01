@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 
 /// WebDAV 文件浏览器页面
@@ -46,7 +47,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     if (!mounted) return;
 
     // 加载快捷设置
-    final provider = Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+    final provider =
+        Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
     await provider.loadSettings();
 
     if (!mounted) return;
@@ -87,15 +89,14 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       );
 
       // 应用排序预设
-      final provider = Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
-      _sortFiles(files, provider.sortPreset);
+      final provider =
+          Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+      WebDAVFileSorter.sort(files, provider.sortPreset);
 
       // 检查是否需要自动进入 Season 文件夹
       if (provider.autoEnterSeasonFolder) {
-        final folderNames = files
-            .where((f) => f.isDirectory)
-            .map((f) => f.name)
-            .toList();
+        final folderNames =
+            files.where((f) => f.isDirectory).map((f) => f.name).toList();
         final matchFolder = provider.findMatchingSeasonFolder(folderNames);
 
         if (matchFolder != null && mounted) {
@@ -128,66 +129,6 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     }
   }
 
-  /// 根据排序预设对文件列表排序
-  void _sortFiles(List<WebDAVFile> files, WebDAVSortPreset preset) {
-    switch (preset) {
-      case WebDAVSortPreset.defaultValue:
-        // 默认：文件夹在前，各自按名称 A-Z
-        files.sort((a, b) {
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        });
-        break;
-
-      case WebDAVSortPreset.nameAsc:
-        // 名称 A-Z（混合排序）
-        files.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-        break;
-
-      case WebDAVSortPreset.nameDesc:
-        // 名称 Z-A（混合排序）
-        files.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
-        break;
-
-      case WebDAVSortPreset.modifiedDesc:
-        // 最新修改
-        files.sort((a, b) {
-          final aTime = a.lastModified ?? DateTime(1970);
-          final bTime = b.lastModified ?? DateTime(1970);
-          return bTime.compareTo(aTime);
-        });
-        break;
-
-      case WebDAVSortPreset.modifiedAsc:
-        // 最旧修改
-        files.sort((a, b) {
-          final aTime = a.lastModified ?? DateTime(1970);
-          final bTime = b.lastModified ?? DateTime(1970);
-          return aTime.compareTo(bTime);
-        });
-        break;
-
-      case WebDAVSortPreset.sizeDesc:
-        // 最大文件
-        files.sort((a, b) {
-          final aSize = a.size ?? 0;
-          final bSize = b.size ?? 0;
-          return bSize.compareTo(aSize);
-        });
-        break;
-
-      case WebDAVSortPreset.sizeAsc:
-        // 最小文件
-        files.sort((a, b) {
-          final aSize = a.size ?? 0;
-          final bSize = b.size ?? 0;
-          return aSize.compareTo(bSize);
-        });
-        break;
-    }
-  }
-
   void _navigateToDirectory(String path) {
     if (_currentPath != '/') {
       _pathHistory.add(_currentPath);
@@ -206,7 +147,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       _loadDirectory();
     } else if (_currentPath != '/') {
       // 返回上一级目录（而不是直接跳到根目录）
-      final segments = _currentPath.split('/').where((s) => s.isNotEmpty).toList();
+      final segments =
+          _currentPath.split('/').where((s) => s.isNotEmpty).toList();
       if (segments.isNotEmpty) {
         segments.removeLast();
         final parentPath = segments.isEmpty ? '/' : '/' + segments.join('/');
@@ -292,9 +234,11 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
 
         // 如果添加前没有服务器，添加后只有一个服务器，则自动设置为默认服务器
         if (connectionsBefore == 0 && connectionsAfter.length == 1) {
-          final provider = Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+          final provider =
+              Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
           await provider.setDefaultServerName(newConnection.name);
-          BlurSnackBar.show(context, '已将 ${newConnection.name} 设置为默认 WebDAV 服务器');
+          BlurSnackBar.show(
+              context, '已将 ${newConnection.name} 设置为默认 WebDAV 服务器');
         }
 
         // 自动选择新添加的服务器并加载目录
@@ -311,7 +255,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5);
+    final backgroundColor =
+        isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5);
     final cardColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
@@ -394,7 +339,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             Expanded(
               child: _isLoading
                   ? const Center(
-                      child: CircularProgressIndicator(color: Color(0xFFFF2E55)),
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF2E55)),
                     )
                   : _currentFiles.isEmpty
                       ? Center(
@@ -405,21 +351,21 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.all(16),
-                        itemCount: _currentFiles.length,
-                        itemBuilder: (context, index) {
-                          final file = _currentFiles[index];
-                          return _buildFileItem(
-                            file: file,
-                            cardColor: cardColor,
-                            textColor: textColor,
-                            secondaryTextColor: secondaryTextColor,
-                            accentColor: accentColor,
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
+                          itemCount: _currentFiles.length,
+                          itemBuilder: (context, index) {
+                            final file = _currentFiles[index];
+                            return _buildFileItem(
+                              file: file,
+                              cardColor: cardColor,
+                              textColor: textColor,
+                              secondaryTextColor: secondaryTextColor,
+                              accentColor: accentColor,
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -504,7 +450,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             ],
           ),
           // 路径面包屑导航（根据设置显示）
-          if (Provider.of<WebDAVQuickAccessProvider>(context).showPathBreadcrumb) ...[
+          if (Provider.of<WebDAVQuickAccessProvider>(context)
+              .showPathBreadcrumb) ...[
             const SizedBox(height: 12),
             _buildPathBreadcrumb(
               textColor: textColor,
@@ -523,7 +470,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     required Color accentColor,
   }) {
     // 将路径分割成片段
-    final segments = _currentPath.split('/').where((s) => s.isNotEmpty).toList();
+    final segments =
+        _currentPath.split('/').where((s) => s.isNotEmpty).toList();
     final hasSegments = segments.isNotEmpty;
 
     return SizedBox(
@@ -544,7 +492,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                   style: TextStyle(
                     color: !hasSegments ? accentColor : secondaryTextColor,
                     fontSize: 13,
-                    fontWeight: !hasSegments ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight:
+                        !hasSegments ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               ),
@@ -566,13 +515,15 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                     onTap: isLast ? null : () => _navigateToPath(path),
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 4),
                       child: Text(
                         segment,
                         style: TextStyle(
                           color: isLast ? accentColor : secondaryTextColor,
                           fontSize: 13,
-                          fontWeight: isLast ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight:
+                              isLast ? FontWeight.w600 : FontWeight.normal,
                         ),
                       ),
                     ),
@@ -617,7 +568,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     final videoUrl = _currentConnection != null
         ? WebDAVService.instance.getFileUrl(_currentConnection!, file.path)
         : null;
-    final historyProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+    final historyProvider =
+        Provider.of<WatchHistoryProvider>(context, listen: false);
     WatchHistoryItem? historyItem;
     if (videoUrl != null) {
       try {
@@ -677,7 +629,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                     // 文件大小和播放进度
                     Row(
                       children: [
-                        if (!isDirectory && file.size != null && file.size! > 0) ...[
+                        if (!isDirectory &&
+                            file.size != null &&
+                            file.size! > 0) ...[
                           Text(
                             _formatFileSize(file.size!),
                             style: TextStyle(
@@ -688,7 +642,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                           if (seasonEpisode != null) ...[
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
                               decoration: BoxDecoration(
                                 color: Colors.blue.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(4),
@@ -710,7 +665,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                           if (hasProgress) ...[
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: accentColor.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
@@ -753,7 +709,8 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                         child: LinearProgressIndicator(
                           value: historyItem.watchProgress,
                           backgroundColor: secondaryTextColor.withOpacity(0.2),
-                          valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(accentColor),
                           minHeight: 3,
                         ),
                       ),
@@ -857,7 +814,8 @@ class _ServerSelectorSheet extends StatelessWidget {
                   connection.name,
                   style: TextStyle(
                     color: textColor,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
                 subtitle: Text(

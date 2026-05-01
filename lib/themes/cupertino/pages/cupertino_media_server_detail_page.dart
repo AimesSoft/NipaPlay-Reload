@@ -18,7 +18,7 @@ import 'package:nipaplay/services/jellyfin_dandanplay_matcher.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart'
-  show MediaServerType;
+    show MediaServerType;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -389,8 +389,10 @@ class _CupertinoMediaServerDetailPageState
           ),
         );
         if (historyItem != null) {
-          final jellyfinId = historyItem.filePath.replaceFirst('jellyfin://', '');
-          playbackSession = await JellyfinService.instance.createPlaybackSession(
+          final jellyfinId =
+              historyItem.filePath.replaceFirst('jellyfin://', '');
+          playbackSession =
+              await JellyfinService.instance.createPlaybackSession(
             itemId: jellyfinId,
             startPositionMs:
                 historyItem.lastPosition > 0 ? historyItem.lastPosition : null,
@@ -491,8 +493,8 @@ class _CupertinoMediaServerDetailPageState
     final posterUrl = _getPosterUrl();
     final episodeCount = _isMovie
         ? 1
-        : _episodesBySeasonId.values.fold<int>(
-            0, (sum, list) => sum + list.length);
+        : _episodesBySeasonId.values
+            .fold<int>(0, (sum, list) => sum + list.length);
 
     return SharedRemoteAnimeSummary(
       animeId: widget.mediaId.hashCode,
@@ -524,8 +526,8 @@ class _CupertinoMediaServerDetailPageState
       return const [];
     }
     return _seasons
-        .map((season) =>
-            CupertinoDetailSeason(id: season.id, name: season.name))
+        .map(
+            (season) => CupertinoDetailSeason(id: season.id, name: season.name))
         .toList();
   }
 
@@ -1079,16 +1081,14 @@ class _CupertinoMediaServerDetailPageState
           },
           children: <int, Widget>{
             0: Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: Text(
                 '简介',
                 style: TextStyle(color: segmentLabelColor),
               ),
             ),
             1: Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: Text(
                 '剧集',
                 style: TextStyle(color: segmentLabelColor),
@@ -1398,25 +1398,26 @@ class _CupertinoMediaServerDetailPageState
                 padding: const EdgeInsets.only(right: 10),
                 child: GestureDetector(
                   onTap: () => _loadEpisodesForSeason(season.id),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? activeColor
-                          : chipBackgroundColor,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      season.name,
-                      style: TextStyle(
-                        color: selected
-                            ? CupertinoColors.white
-                            : labelColor,
-                        fontSize: 14,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected ? activeColor : chipBackgroundColor,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        season.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected ? CupertinoColors.white : labelColor,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ),

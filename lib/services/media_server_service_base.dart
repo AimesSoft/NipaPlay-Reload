@@ -13,6 +13,8 @@ import 'media_server_device_id_service.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 
 abstract class MediaServerServiceBase {
+  static const int _maxRedirects = 5;
+
   final MultiAddressServerService _multiAddressService =
       MultiAddressServerService.instance;
 
@@ -152,7 +154,8 @@ abstract class MediaServerServiceBase {
         final packageInfo = await PackageInfo.fromPlatform();
         appName =
             packageInfo.appName.isNotEmpty ? packageInfo.appName : 'NipaPlay';
-        version = packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
+        version =
+            packageInfo.version.isNotEmpty ? packageInfo.version : '1.4.9';
 
         platform = 'Flutter';
         if (!kIsWeb && !kDebugMode) {
@@ -296,8 +299,9 @@ abstract class MediaServerServiceBase {
 
     final normalizedUrl = normalizeUrl(serverUrl);
     final logService = DebugLogService();
-    final addressLabel =
-        (addressName == null || addressName.trim().isEmpty) ? '默认' : addressName.trim();
+    final addressLabel = (addressName == null || addressName.trim().isEmpty)
+        ? '默认'
+        : addressName.trim();
     logService.addLog(
       '$serviceName: 开始连接服务器 $normalizedUrl (用户: $username, 地址名: $addressLabel)',
       tag: 'Network',
@@ -467,8 +471,7 @@ abstract class MediaServerServiceBase {
         DebugLogService()
             .addLog('$serviceNameService: 已删除服务器配置文件 $currentProfileId');
       } catch (e) {
-        DebugLogService()
-            .addLog('$serviceNameService: 删除服务器配置文件失败: $e');
+        DebugLogService().addLog('$serviceNameService: 删除服务器配置文件失败: $e');
       }
     }
   }
@@ -498,32 +501,13 @@ abstract class MediaServerServiceBase {
 
     http.Response response;
     try {
-      switch (method.toUpperCase()) {
-        case 'GET':
-          response =
-              await http.get(uri, headers: headers).timeout(requestTimeout);
-          break;
-        case 'POST':
-          response = await http
-              .post(uri,
-                  headers: headers,
-                  body: body != null ? json.encode(body) : null)
-              .timeout(requestTimeout);
-          break;
-        case 'PUT':
-          response = await http
-              .put(uri,
-                  headers: headers,
-                  body: body != null ? json.encode(body) : null)
-              .timeout(requestTimeout);
-          break;
-        case 'DELETE':
-          response =
-              await http.delete(uri, headers: headers).timeout(requestTimeout);
-          break;
-        default:
-          throw Exception('不支持的 HTTP 方法: $method');
-      }
+      response = await _sendAuthenticatedRequest(
+        uri,
+        method: method,
+        headers: headers,
+        body: body,
+        timeout: requestTimeout,
+      );
     } catch (e) {
       if (e is TimeoutException) {
         throw Exception('请求$serviceName服务器超时: ${e.message}');
@@ -562,33 +546,13 @@ abstract class MediaServerServiceBase {
 
       try {
         http.Response response;
-        switch (method.toUpperCase()) {
-          case 'GET':
-            response =
-                await http.get(uri, headers: headers).timeout(requestTimeout);
-            break;
-          case 'POST':
-            response = await http
-                .post(uri,
-                    headers: headers,
-                    body: body != null ? json.encode(body) : null)
-                .timeout(requestTimeout);
-            break;
-          case 'PUT':
-            response = await http
-                .put(uri,
-                    headers: headers,
-                    body: body != null ? json.encode(body) : null)
-                .timeout(requestTimeout);
-            break;
-          case 'DELETE':
-            response = await http
-                .delete(uri, headers: headers)
-                .timeout(requestTimeout);
-            break;
-          default:
-            throw Exception('不支持的 HTTP 方法: $method');
-        }
+        response = await _sendAuthenticatedRequest(
+          uri,
+          method: method,
+          headers: headers,
+          body: body,
+          timeout: requestTimeout,
+        );
 
         if (response.statusCode < 400) {
           if (currentAddressId != address.id) {
@@ -628,6 +592,111 @@ abstract class MediaServerServiceBase {
     await _multiAddressService.updateProfile(currentProfile!);
 
     throw lastError ?? Exception('所有地址连接失败');
+  }
+
+  Future<http.Response> _sendAuthenticatedRequest(
+    Uri uri, {
+    required String method,
+    required Map<String, String> headers,
+    Map<String, dynamic>? body,
+    required Duration timeout,
+  }) async {
+    return sendRequestFollowingRedirects(
+      uri,
+      method: method,
+      headers: headers,
+      body: body != null ? json.encode(body) : null,
+      timeout: timeout,
+    );
+  }
+
+  @protected
+  Future<http.Response> sendRequestFollowingRedirects(
+    Uri uri, {
+    required String method,
+    required Map<String, String> headers,
+    String? body,
+    required Duration timeout,
+    String? redirectLogLabel,
+  }) async {
+    var currentUri = uri;
+    var currentMethod = method.toUpperCase();
+    var redirectCount = 0;
+
+    while (true) {
+      final response = await _sendSingleRequest(
+        currentUri,
+        method: currentMethod,
+        headers: headers,
+        body: body,
+        timeout: timeout,
+      );
+
+      if (!_isRedirectStatus(response.statusCode)) {
+        return response;
+      }
+
+      final nextUri = _resolveRedirectUri(currentUri, response);
+      if (nextUri == null) {
+        return response;
+      }
+      redirectCount += 1;
+      if (redirectCount > _maxRedirects) {
+        throw Exception('重定向次数过多: $currentUri');
+      }
+
+      if (response.statusCode == 303) {
+        currentMethod = 'GET';
+      }
+      DebugLogService().addLog(
+          '${redirectLogLabel ?? serviceNameService}: 跟随HTTP ${response.statusCode}重定向: $currentUri -> $nextUri');
+      currentUri = nextUri;
+    }
+  }
+
+  Future<http.Response> _sendSingleRequest(
+    Uri uri, {
+    required String method,
+    required Map<String, String> headers,
+    String? body,
+    required Duration timeout,
+  }) async {
+    final request = http.Request(method, uri)
+      ..followRedirects = false
+      ..headers.addAll(headers);
+
+    switch (method) {
+      case 'GET':
+      case 'DELETE':
+        break;
+      case 'POST':
+      case 'PUT':
+        if (body != null) {
+          request.body = body;
+        }
+        break;
+      default:
+        throw Exception('不支持的 HTTP 方法: $method');
+    }
+
+    final streamedResponse = await request.send().timeout(timeout);
+    return http.Response.fromStream(streamedResponse).timeout(timeout);
+  }
+
+  bool _isRedirectStatus(int statusCode) {
+    return statusCode == 301 ||
+        statusCode == 302 ||
+        statusCode == 303 ||
+        statusCode == 307 ||
+        statusCode == 308;
+  }
+
+  Uri? _resolveRedirectUri(Uri currentUri, http.Response response) {
+    final location = response.headers['location'];
+    if (location == null || location.trim().isEmpty) {
+      return null;
+    }
+    return currentUri.resolve(location.trim());
   }
 
   Uri _buildRequestUri(String path, {String? baseUrl}) {
@@ -751,9 +820,8 @@ abstract class MediaServerServiceBase {
         final originalUrl = serverUrl;
         serverUrl = address.normalizedUrl;
 
-        final authResponse =
-            await makeAuthenticatedRequest(systemInfoPath)
-                .timeout(const Duration(seconds: 5));
+        final authResponse = await makeAuthenticatedRequest(systemInfoPath)
+            .timeout(const Duration(seconds: 5));
 
         if (authResponse.statusCode == 200) {
           currentAddressId = address.id;
@@ -803,7 +871,8 @@ abstract class MediaServerServiceBase {
     selectedLibraryIds = libraryIds;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('${prefsKeyPrefix}_selected_libraries', libraryIds);
+    await prefs.setStringList(
+        '${prefsKeyPrefix}_selected_libraries', libraryIds);
   }
 
   void setTranscodePreferences(
