@@ -26,7 +26,9 @@ class CustomMediaInfoDialog {
 
   static Future<Map<String, dynamic>?> _showStep1(
       BuildContext context, String folderPath,
-      {String? initialVideoPath, Map<String, dynamic>? step1Data}) async {
+      {String? initialVideoPath,
+      Map<String, dynamic>? step1Data,
+      VoidCallback? onBack}) async {
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
       context,
       listen: false,
@@ -63,6 +65,7 @@ class CustomMediaInfoDialog {
     final TextEditingController coverUrlController =
         TextEditingController(text: step1Data?['coverUrl'] ?? '');
 
+    final callerContext = context;
     return NipaplayWindow.show<Map<String, dynamic>>(
       context: context,
       enableAnimation: enableAnimation,
@@ -891,8 +894,14 @@ class CustomMediaInfoDialog {
 
                           // 关闭当前对话框并打开第二步
                           Navigator.of(context).pop();
-                          _Step2Dialog.show(context, step1Data,
-                              initialVideoPath: initialVideoPath);
+                          _Step2Dialog.show(callerContext, step1Data,
+                              initialVideoPath: initialVideoPath,
+                              onBack: onBack ??
+                                  () {
+                                    _showStep1(callerContext, folderPath,
+                                        initialVideoPath: initialVideoPath,
+                                        step1Data: step1Data);
+                                  });
                         },
                         style: ButtonStyle(
                           backgroundColor:
@@ -1106,7 +1115,7 @@ class _Step2Dialog extends StatefulWidget {
 
   static Future<Map<String, dynamic>?> show(
       BuildContext context, Map<String, dynamic> step1Data,
-      {String? initialVideoPath}) async {
+      {String? initialVideoPath, VoidCallback? onBack}) async {
     final _Step2Dialog dialog =
         _Step2Dialog(step1Data: step1Data, initialVideoPath: initialVideoPath);
     final enableAnimation = Provider.of<AppearanceSettingsProvider>(
@@ -1200,7 +1209,10 @@ class _Step2Dialog extends StatefulWidget {
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop('back'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onBack?.call();
+                      },
                       style: ButtonStyle(
                         backgroundColor:
                             MaterialStateProperty.all(Colors.transparent),
@@ -1299,14 +1311,6 @@ class _Step2Dialog extends StatefulWidget {
         );
       }),
     );
-
-    // 处理上一步逻辑
-    if (result == 'back') {
-      // 关闭当前对话框并重新打开第一步，传递回 step1Data
-      return CustomMediaInfoDialog._showStep1(
-          context, step1Data['folderPath'] as String,
-          initialVideoPath: initialVideoPath, step1Data: step1Data);
-    }
 
     return result as Map<String, dynamic>?;
   }
