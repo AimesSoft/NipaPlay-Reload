@@ -344,7 +344,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 在文件选择后立即设置加载状态，显示加载界面
   void setPreInitLoadingState(String message) {
     _statusMessages.clear(); // 清除之前的状态消息
-    _setStatus(PlayerStatus.loading, message: message);
+    _setStatus(PlayerStatus.loading, message: message, resetState: true);
     // 确保状态变更立即生效
     _notifyListeners();
   }
