@@ -1939,9 +1939,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       } else {
         final prefs = await SharedPreferences.getInstance();
         final savedFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
-        if (savedFontDir.isNotEmpty) {
+        if (savedFontDir.isNotEmpty &&
+            savedFontDir.contains('subtitle_fonts')) {
           effectiveFontDir = savedFontDir;
           _subtitleFontDir = savedFontDir;
+        } else {
+          _subtitleFontDir = '';
         }
       }
 
@@ -1949,6 +1952,11 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         player.setProperty('sub-fonts-dir', effectiveFontDir);
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', effectiveFontDir);
+        }
+      } else {
+        player.setProperty('sub-fonts-dir', '');
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          player.setProperty('sub-file-paths', '');
         }
       }
 

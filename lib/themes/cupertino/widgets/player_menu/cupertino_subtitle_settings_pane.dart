@@ -107,7 +107,7 @@ class _CupertinoSubtitleSettingsPaneState
 
   String _getFontDirDisplayText(VideoPlayerState videoState) {
     final fontDir = videoState.subtitleFontDir;
-    if (fontDir.isEmpty) return '无';
+    if (fontDir.isEmpty) return '未配置过字体库，使用默认设置';
 
     // 根据路径特征动态推断来源
     if (fontDir.contains('subtitle_fonts')) {
