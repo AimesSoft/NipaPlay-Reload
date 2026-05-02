@@ -18,7 +18,7 @@ jobs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-Windows-x64
     env:
-      FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
+      FVP_DEPS_URL: https://sourceforge.net/projects/mdk-sdk/files/nightly
       FVP_DEPS_LATEST: 1
     steps:
       - name: Checkout repository
