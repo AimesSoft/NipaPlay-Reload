@@ -105,8 +105,6 @@ part 'video_player_state/video_player_state_lifecycle.dart';
 
 enum SubtitleStyleOverrideMode { auto, none, scale, force }
 
-enum SubtitleFontDirSource { none, localFonts, customLibrary }
-
 enum SubtitleAlignX { left, center, right }
 
 enum SubtitleAlignY { top, center, bottom }
@@ -517,7 +515,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _subtitleShadowColorValue = defaultSubtitleShadowColorValue;
   String _subtitleFontName = '';
   String _subtitleFontDir = '';
-  SubtitleFontDirSource _subtitleFontDirSource = SubtitleFontDirSource.none;
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
 
   // 弹幕轨道显示区域设置
@@ -1165,7 +1162,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Color get subtitleShadowColor => Color(_subtitleShadowColorValue);
   String get subtitleFontName => _subtitleFontName;
   String get subtitleFontDir => _subtitleFontDir;
-  SubtitleFontDirSource get subtitleFontDirSource => _subtitleFontDirSource;
   SubtitleStyleOverrideMode get subtitleOverrideMode => _subtitleOverrideMode;
   double get danmakuDisplayArea => _danmakuDisplayArea;
   double get danmakuSpeedMultiplier => _danmakuSpeedMultiplier;

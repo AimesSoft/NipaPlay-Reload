@@ -1551,14 +1551,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         VideoPlayerState.defaultSubtitleShadowColorValue;
     _subtitleFontName = prefs.getString(_subtitleFontNameKey) ?? '';
     _subtitleFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
-    debugPrint('[VideoPlayerState] loadSettings: _subtitleFontDir=$_subtitleFontDir, _subtitleFontDirSource=$_subtitleFontDirSource');
     _subtitleOverrideMode = SubtitleStyleOverrideMode.values[(prefs.getInt(
               _subtitleOverrideModeKey,
             ) ??
             VideoPlayerState.defaultSubtitleOverrideMode.index)
         .clamp(0, SubtitleStyleOverrideMode.values.length - 1)];
     await applySubtitleStylePreference();
-    debugPrint('[VideoPlayerState] loadSettings after apply: _subtitleFontDirSource=$_subtitleFontDirSource');
     _notifyListeners();
   }
 
@@ -1738,7 +1736,6 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await File(sourcePath).copy(destPath);
       _subtitleFontDir = fontsDir.path;
       _subtitleFontName = p.basenameWithoutExtension(destPath);
-      _subtitleFontDirSource = SubtitleFontDirSource.customLibrary;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
       await prefs.setString(_subtitleFontNameKey, _subtitleFontName);
@@ -1756,38 +1753,44 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
       await fontsDir.create(recursive: true);
 
+      final sourceDir = Directory(sourceDirPath);
+      final List<File> fontFiles = [];
+
+      await for (final entity in sourceDir.list()) {
+        if (entity is File) {
+          final ext = p.extension(entity.path).toLowerCase();
+          if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
+            fontFiles.add(entity);
+          }
+        }
+      }
+
+      if (fontFiles.isEmpty) {
+        debugPrint('[VideoPlayerState] 未在目录中找到字体文件');
+        return 0;
+      }
+
       await for (final entity in fontsDir.list()) {
         if (entity is File) {
           await entity.delete();
         }
       }
 
-      final sourceDir = Directory(sourceDirPath);
       int copiedCount = 0;
-
-      await for (final entity in sourceDir.list()) {
-        if (entity is File) {
-          final ext = p.extension(entity.path).toLowerCase();
-          if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
-            final fileName = p.basename(entity.path);
-            final destPath = p.join(fontsDir.path, fileName);
-            await entity.copy(destPath);
-            copiedCount++;
-          }
-        }
+      for (final file in fontFiles) {
+        final fileName = p.basename(file.path);
+        final destPath = p.join(fontsDir.path, fileName);
+        await file.copy(destPath);
+        copiedCount++;
       }
 
-      if (copiedCount > 0) {
-        _subtitleFontDir = fontsDir.path;
-        _subtitleFontDirSource = SubtitleFontDirSource.customLibrary;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
-        await applySubtitleStylePreference();
-        _notifyListeners();
-        debugPrint('[VideoPlayerState] 成功从 $sourceDirPath 导入了 $copiedCount 个字体文件到 $fontsDir.path');
-      } else {
-        debugPrint('[VideoPlayerState] 未在目录中找到字体文件');
-      }
+      _subtitleFontDir = fontsDir.path;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
+      await applySubtitleStylePreference();
+      _notifyListeners();
+      debugPrint(
+          '[VideoPlayerState] 成功从 $sourceDirPath 导入了 $copiedCount 个字体文件到 $fontsDir.path');
       return copiedCount;
     } catch (e) {
       debugPrint('[VideoPlayerState] 导入字幕字体目录失败: $e');
@@ -1922,7 +1925,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       String? effectiveFontDir;
       String? localFontsFolder;
 
-      if (_currentVideoPath != null && !_currentVideoPath!.startsWith('http') &&
+      if (_currentVideoPath != null &&
+          !_currentVideoPath!.startsWith('http') &&
           !_currentVideoPath!.startsWith('jellyfin://') &&
           !_currentVideoPath!.startsWith('emby://')) {
         localFontsFolder = await _detectLocalFontsFolder(_currentVideoPath!);
@@ -1930,11 +1934,15 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
       if (localFontsFolder != null) {
         effectiveFontDir = localFontsFolder;
-        _subtitleFontDirSource = SubtitleFontDirSource.localFonts;
+        _subtitleFontDir = localFontsFolder;
         debugPrint('[VideoPlayerState] 使用本地 fonts 文件夹: $effectiveFontDir');
-      } else if (_subtitleFontDir.isNotEmpty &&
-          _subtitleFontDirSource != SubtitleFontDirSource.localFonts) {
-        effectiveFontDir = _subtitleFontDir;
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        final savedFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
+        if (savedFontDir.isNotEmpty) {
+          effectiveFontDir = savedFontDir;
+          _subtitleFontDir = savedFontDir;
+        }
       }
 
       if (effectiveFontDir != null) {

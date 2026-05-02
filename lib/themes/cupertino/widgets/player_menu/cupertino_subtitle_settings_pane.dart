@@ -106,13 +106,15 @@ class _CupertinoSubtitleSettingsPaneState
   }
 
   String _getFontDirDisplayText(VideoPlayerState videoState) {
-    final source = videoState.subtitleFontDirSource;
-    if (source == SubtitleFontDirSource.localFonts) {
-      return '${videoState.subtitleFontDir} [本地fonts]';
-    } else if (source == SubtitleFontDirSource.customLibrary) {
-      return '${videoState.subtitleFontDir} [字体库]';
+    final fontDir = videoState.subtitleFontDir;
+    if (fontDir.isEmpty) return '无';
+
+    // 根据路径特征动态推断来源
+    if (fontDir.contains('subtitle_fonts')) {
+      return '$fontDir [字体库]';
+    } else {
+      return '$fontDir [本地fonts]';
     }
-    return videoState.subtitleFontDir;
   }
 
   void _syncSubtitleDelayController(VideoPlayerState videoState) {
