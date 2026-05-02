@@ -239,13 +239,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     PlayerStatus newStatus, {
     String? message,
     bool clearPreviousMessages = false,
+    bool resetState = false,
   }) {
-    switch (newStatus) {
-      case PlayerStatus.idle:
-      case PlayerStatus.loading:
-        _resetVideoState();
-        break;
-      default:
+    if (newStatus == PlayerStatus.idle || resetState) {
+      _resetVideoState();
     }
     // 在状态即将从loading或recognizing变为ready或playing时，设置最终加载阶段标志
     if ((_status == PlayerStatus.loading ||
