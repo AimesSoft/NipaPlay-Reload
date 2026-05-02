@@ -417,7 +417,7 @@ class PluginService extends ChangeNotifier {
   Future<List<String>> _loadEnabledIds() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getStringList(_enabledPluginsKey);
-    if (saved == null || saved.isEmpty) {
+    if (saved == null) {
       return const <String>[_defaultBuiltinPluginId];
     }
     return saved.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
