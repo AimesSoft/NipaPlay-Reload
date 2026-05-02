@@ -251,6 +251,21 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       message = '正在初始化播放器: $_animeTitle $_episodeTitle';
     }
     _setStatus(PlayerStatus.loading, message: message);
+
+    // 检测本地 fonts 文件夹
+    if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+      final localFontsFolder = await _detectLocalFontsFolder(videoPath);
+      debugPrint('[VideoPlayerState] 自动检测本地fonts结果: $localFontsFolder');
+      if (localFontsFolder != null) {
+        // 检测到本地 fonts 文件夹，直接设置路径和来源
+        _subtitleFontDir = localFontsFolder;
+        _subtitleFontDirSource = SubtitleFontDirSource.localFonts;
+        _statusMessages.add('发现Fonts目录，已自动配置字幕字体');
+        _notifyListeners();
+        debugPrint(
+            '[VideoPlayerState] 已设置本地fonts: $_subtitleFontDir, 来源: $_subtitleFontDirSource');
+      }
+    }
     try {
       debugPrint(
         'VideoPlayerState: initializePlayer CALLED for path: $videoPath',

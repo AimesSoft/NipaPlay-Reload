@@ -34,6 +34,7 @@ class _CupertinoSubtitleSettingsPaneState
   final FocusNode _shadowColorFocus = FocusNode();
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
+  String? _fontImportMessage;
 
   @override
   void dispose() {
@@ -84,8 +85,34 @@ class _CupertinoSubtitleSettingsPaneState
     await videoState.importSubtitleFontFile(file.path);
   }
 
+  Future<void> _pickFontDirectory(VideoPlayerState videoState) async {
+    final directory = await getDirectoryPath();
+    if (directory == null) return;
+    final count = await videoState.importSubtitleFontDirectory(directory);
+    if (!mounted) return;
+    if (count > 0) {
+      setState(() {
+        _fontImportMessage = '已从该文件夹导入 $count 个字体文件';
+      });
+    } else if (count == 0) {
+      setState(() {
+        _fontImportMessage = '未在目录中找到字体文件';
+      });
+    }
+  }
+
   double _currentSubtitleDelayDisplayValue(VideoPlayerState videoState) {
     return _subtitleDelayPreviewValue ?? videoState.subtitleDelaySeconds;
+  }
+
+  String _getFontDirDisplayText(VideoPlayerState videoState) {
+    final source = videoState.subtitleFontDirSource;
+    if (source == SubtitleFontDirSource.localFonts) {
+      return '${videoState.subtitleFontDir} [本地fonts]';
+    } else if (source == SubtitleFontDirSource.customLibrary) {
+      return '${videoState.subtitleFontDir} [字体库]';
+    }
+    return videoState.subtitleFontDir;
   }
 
   void _syncSubtitleDelayController(VideoPlayerState videoState) {
@@ -444,6 +471,40 @@ class _CupertinoSubtitleSettingsPaneState
                       padding: EdgeInsets.zero,
                       onPressed: () => _pickFontFile(videoState),
                       child: const Text('选择'),
+                    ),
+                  ),
+                  CupertinoListTile(
+                    title: const Text('导入字体文件夹'),
+                    trailing: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: () => _pickFontDirectory(videoState),
+                      child: const Text('选择'),
+                    ),
+                  ),
+                  if (_fontImportMessage != null)
+                    CupertinoListTile(
+                      title: Text(
+                        _fontImportMessage!,
+                        style: TextStyle(
+                          color: CupertinoColors.activeBlue,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  if (videoState.subtitleFontDir.isNotEmpty)
+                    CupertinoListTile(
+                      title: const Text('当前字体目录'),
+                      subtitle: Text(_getFontDirDisplayText(videoState)),
+                    ),
+                  CupertinoListTile(
+                    title: const Text('清除字体设置'),
+                    trailing: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        videoState.setSubtitleFontName('');
+                        videoState.setSubtitleFontDir('');
+                      },
+                      child: const Text('清除'),
                     ),
                   ),
                 ],
