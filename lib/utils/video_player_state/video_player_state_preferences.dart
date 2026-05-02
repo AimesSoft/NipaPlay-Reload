@@ -1930,10 +1930,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
       if (localFontsFolder != null) {
         effectiveFontDir = localFontsFolder;
-        _subtitleFontDir = localFontsFolder;
         _subtitleFontDirSource = SubtitleFontDirSource.localFonts;
         debugPrint('[VideoPlayerState] 使用本地 fonts 文件夹: $effectiveFontDir');
-      } else if (_subtitleFontDir.isNotEmpty) {
+      } else if (_subtitleFontDir.isNotEmpty &&
+          _subtitleFontDirSource != SubtitleFontDirSource.localFonts) {
         effectiveFontDir = _subtitleFontDir;
       }
 
