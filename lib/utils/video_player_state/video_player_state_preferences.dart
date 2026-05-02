@@ -1746,6 +1746,58 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     }
   }
 
+  Future<int> importSubtitleFontDirectory(String sourceDirPath) async {
+    if (sourceDirPath.isEmpty) return 0;
+    try {
+      final baseDir = await StorageService.getAppStorageDirectory();
+      final fontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+      await fontsDir.create(recursive: true);
+
+      final sourceDir = Directory(sourceDirPath);
+      final List<File> fontFiles = [];
+
+      await for (final entity in sourceDir.list()) {
+        if (entity is File) {
+          final ext = p.extension(entity.path).toLowerCase();
+          if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
+            fontFiles.add(entity);
+          }
+        }
+      }
+
+      if (fontFiles.isEmpty) {
+        debugPrint('[VideoPlayerState] 未在目录中找到字体文件');
+        return 0;
+      }
+
+      await for (final entity in fontsDir.list()) {
+        if (entity is File) {
+          await entity.delete();
+        }
+      }
+
+      int copiedCount = 0;
+      for (final file in fontFiles) {
+        final fileName = p.basename(file.path);
+        final destPath = p.join(fontsDir.path, fileName);
+        await file.copy(destPath);
+        copiedCount++;
+      }
+
+      _subtitleFontDir = fontsDir.path;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_subtitleFontDirKey, _subtitleFontDir);
+      await applySubtitleStylePreference();
+      _notifyListeners();
+      debugPrint(
+          '[VideoPlayerState] 成功从 $sourceDirPath 导入了 $copiedCount 个字体文件到 $fontsDir.path');
+      return copiedCount;
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 导入字幕字体目录失败: $e');
+      return -1;
+    }
+  }
+
   Future<void> setSubtitleOverrideMode(SubtitleStyleOverrideMode mode) async {
     if (_subtitleOverrideMode == mode) return;
     _subtitleOverrideMode = mode;
@@ -1799,6 +1851,40 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  Future<String?> _detectLocalFontsFolder(String videoPath) async {
+    if (kIsWeb) return null;
+    try {
+      final videoFile = File(videoPath);
+      if (!await videoFile.exists()) return null;
+
+      final videoDir = videoFile.parent;
+      final possibleNames = ['fonts', 'Fonts', 'FONTS'];
+
+      for (final name in possibleNames) {
+        final fontsDir = Directory(p.join(videoDir.path, name));
+        if (await fontsDir.exists()) {
+          bool hasFontFiles = false;
+          await for (final entity in fontsDir.list()) {
+            if (entity is File) {
+              final ext = p.extension(entity.path).toLowerCase();
+              if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
+                hasFontFiles = true;
+                break;
+              }
+            }
+          }
+          if (hasFontFiles) {
+            debugPrint('[VideoPlayerState] 检测到本地 fonts 文件夹: ${fontsDir.path}');
+            return fontsDir.path;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 检测本地 fonts 文件夹失败: $e');
+    }
+    return null;
+  }
+
   Future<void> applySubtitleStylePreference() async {
     if (kIsWeb || _isDisposed) return;
     try {
@@ -1835,12 +1921,45 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       );
       player.setProperty('sub-bold', _subtitleBold ? 'yes' : 'no');
       player.setProperty('sub-italic', _subtitleItalic ? 'yes' : 'no');
-      if (_subtitleFontDir.isNotEmpty) {
-        player.setProperty('sub-fonts-dir', _subtitleFontDir);
-        if (defaultTargetPlatform == TargetPlatform.iOS) {
-          player.setProperty('sub-file-paths', _subtitleFontDir);
+
+      String? effectiveFontDir;
+      String? localFontsFolder;
+
+      if (_currentVideoPath != null &&
+          !_currentVideoPath!.startsWith('http') &&
+          !_currentVideoPath!.startsWith('jellyfin://') &&
+          !_currentVideoPath!.startsWith('emby://')) {
+        localFontsFolder = await _detectLocalFontsFolder(_currentVideoPath!);
+      }
+
+      if (localFontsFolder != null) {
+        effectiveFontDir = localFontsFolder;
+        _subtitleFontDir = localFontsFolder;
+        debugPrint('[VideoPlayerState] 使用本地 fonts 文件夹: $effectiveFontDir');
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        final savedFontDir = prefs.getString(_subtitleFontDirKey) ?? '';
+        if (savedFontDir.isNotEmpty &&
+            savedFontDir.contains('subtitle_fonts')) {
+          effectiveFontDir = savedFontDir;
+          _subtitleFontDir = savedFontDir;
+        } else {
+          _subtitleFontDir = '';
         }
       }
+
+      if (effectiveFontDir != null) {
+        player.setProperty('sub-fonts-dir', effectiveFontDir);
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          player.setProperty('sub-file-paths', effectiveFontDir);
+        }
+      } else {
+        player.setProperty('sub-fonts-dir', '');
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          player.setProperty('sub-file-paths', '');
+        }
+      }
+
       final resolvedFontName = _subtitleFontName.isNotEmpty
           ? _subtitleFontName
           : _defaultSubtitleFontNameForPlatform();

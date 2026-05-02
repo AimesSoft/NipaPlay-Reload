@@ -42,6 +42,7 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
   String? _subtitleDelayError;
   bool _subtitleDelayDirty = false;
   double? _subtitleDelayPreviewValue;
+  String? _fontImportMessage;
 
   @override
   void dispose() {
@@ -95,8 +96,36 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
     await videoState.importSubtitleFontFile(file.path);
   }
 
+  Future<void> _pickFontDirectory(VideoPlayerState videoState) async {
+    final directory = await getDirectoryPath();
+    if (directory == null) return;
+    final count = await videoState.importSubtitleFontDirectory(directory);
+    if (!mounted) return;
+    if (count > 0) {
+      setState(() {
+        _fontImportMessage = '已从该文件夹导入 $count 个字体文件';
+      });
+    } else if (count == 0) {
+      setState(() {
+        _fontImportMessage = '未在目录中找到字体文件';
+      });
+    }
+  }
+
   double _currentSubtitleDelayDisplayValue(VideoPlayerState videoState) {
     return _subtitleDelayPreviewValue ?? videoState.subtitleDelaySeconds;
+  }
+
+  String _getFontDirDisplayText(VideoPlayerState videoState) {
+    final fontDir = videoState.subtitleFontDir;
+    if (fontDir.isEmpty) return '未导入过字体文件，使用默认设置';
+
+    // 根据路径特征动态推断来源
+    if (fontDir.contains('subtitle_fonts')) {
+      return '当前字体目录: $fontDir [字体库]';
+    } else {
+      return '当前字体目录: $fontDir [本地fonts]';
+    }
   }
 
   void _syncSubtitleDelayController(VideoPlayerState videoState) {
@@ -667,14 +696,40 @@ class _SubtitleSettingsMenuState extends State<SubtitleSettingsMenu> {
               const SizedBox(width: 8),
               Expanded(
                 child: BlurButton(
-                  text: '清除字体',
-                  icon: Icons.clear,
-                  onTap: () => videoState.setSubtitleFontName(''),
+                  text: '导入字体文件夹',
+                  icon: Icons.folder_outlined,
+                  onTap: () => _pickFontDirectory(videoState),
                   expandHorizontally: true,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: BlurButton(
+                  text: '清除字体设置',
+                  icon: Icons.clear,
+                  onTap: () {
+                    videoState.setSubtitleFontName('');
+                    videoState.setSubtitleFontDir('');
+                  },
+                  expandHorizontally: true,
+                ),
+              ),
+            ],
+          ),
+          if (_fontImportMessage != null) ...[
+            const SizedBox(height: 4),
+            SettingsHintText(_fontImportMessage!),
+          ],
+          if (videoState.subtitleFontDir.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            SettingsHintText(
+              _getFontDirDisplayText(videoState),
+            ),
+          ],
           const SizedBox(height: 4),
           const SettingsHintText('字体名称需与系统或导入字体匹配'),
         ],

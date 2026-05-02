@@ -251,6 +251,24 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       message = '正在初始化播放器: $_animeTitle $_episodeTitle';
     }
     _setStatus(PlayerStatus.loading, message: message);
+
+    // 检测本地 fonts 文件夹
+    if (!kIsWeb && !isNetworkUrl && !isJellyfinStream && !isEmbyStream) {
+      final localFontsFolder = await _detectLocalFontsFolder(videoPath);
+      debugPrint('[VideoPlayerState] 自动检测本地fonts结果: $localFontsFolder');
+      if (localFontsFolder != null) {
+        // 检测到本地 fonts 文件夹，直接设置路径并立即应用
+        _subtitleFontDir = localFontsFolder;
+        _statusMessages.add('发现Fonts目录，已自动配置字幕字体');
+        _notifyListeners();
+        debugPrint('[VideoPlayerState] 已设置本地fonts: $_subtitleFontDir');
+        // 立即设置mpv字体目录，确保自动配置生效
+        player.setProperty('sub-fonts-dir', localFontsFolder);
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          player.setProperty('sub-file-paths', localFontsFolder);
+        }
+      }
+    }
     try {
       debugPrint(
         'VideoPlayerState: initializePlayer CALLED for path: $videoPath',
