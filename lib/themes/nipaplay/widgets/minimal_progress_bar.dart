@@ -12,15 +12,22 @@ class MinimalProgressBar extends StatelessWidget {
         if (!videoState.hasVideo || !videoState.minimalProgressBarEnabled) {
           return const SizedBox.shrink();
         }
-        
+
+        double progress = videoState.progress;
+        if (progress.isNaN || !progress.isFinite) {
+          progress = 0.0;
+        } else {
+          progress = progress.clamp(0.0, 1.0).toDouble();
+        }
+
         return Positioned(
           left: 0,
           right: 0,
           bottom: 0,
-          child: Container(
+          child: SizedBox(
             height: 2,
             child: FractionallySizedBox(
-              widthFactor: videoState.progress,
+              widthFactor: progress,
               alignment: Alignment.centerLeft,
               child: Container(
                 height: 2,

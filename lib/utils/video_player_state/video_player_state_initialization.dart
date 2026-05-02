@@ -54,6 +54,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 加载弹幕屏蔽词
     await _loadDanmakuBlockWords();
+    _attachPluginDanmakuFilter();
     await _loadSpoilerPreventionEnabled();
     await _loadSpoilerAiSettings();
 

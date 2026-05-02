@@ -1,6 +1,55 @@
 part of video_player_state;
 
 extension VideoPlayerStateSubtitles on VideoPlayerState {
+  void _attachPluginDanmakuFilter() {
+    _detachPluginDanmakuFilter();
+
+    final context = _context;
+    if (context == null || !context.mounted) {
+      return;
+    }
+
+    PluginService? pluginService;
+    try {
+      pluginService = context.read<PluginService>();
+    } catch (_) {
+      pluginService = null;
+    }
+    if (pluginService == null) {
+      return;
+    }
+
+    _pluginService = pluginService;
+    _pluginServiceListener = () {
+      _syncPluginDanmakuBlockWords();
+    };
+    pluginService.addListener(_pluginServiceListener!);
+    _syncPluginDanmakuBlockWords();
+  }
+
+  void _detachPluginDanmakuFilter() {
+    final listener = _pluginServiceListener;
+    final service = _pluginService;
+    if (listener != null && service != null) {
+      service.removeListener(listener);
+    }
+    _pluginServiceListener = null;
+    _pluginService = null;
+    _pluginDanmakuBlockWords = [];
+  }
+
+  void _syncPluginDanmakuBlockWords() {
+    final service = _pluginService;
+    if (service == null) return;
+
+    final words = service.activeDanmakuBlockWords;
+    if (listEquals(words, _pluginDanmakuBlockWords)) {
+      return;
+    }
+    _pluginDanmakuBlockWords = words;
+    _updateMergedDanmakuList();
+  }
+
   // 更新指定的字幕轨道信息
   void _updateSubtitleTracksInfo(int trackIndex) {
     if (player.mediaInfo.subtitle == null ||
@@ -521,6 +570,12 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
         if (content.contains(word)) {
           return true;
         }
+      }
+    }
+
+    for (final word in _pluginDanmakuBlockWords) {
+      if (content.contains(word)) {
+        return true;
       }
     }
     return false;

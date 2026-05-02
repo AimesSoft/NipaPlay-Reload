@@ -9,6 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_multi_window
   dynamic_color
   file_selector_windows
+  flutter_js
   fvp
   hotkey_manager_windows
   media_kit_libs_windows_video

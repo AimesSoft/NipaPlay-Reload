@@ -12,6 +12,7 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/language_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/labs_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/network_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/player_settings_page.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/plugin_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_access_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/remote_media_library_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/storage_page.dart';
@@ -37,6 +38,7 @@ class NipaplaySettingEntryIds {
   static const String remoteMediaLibrary = 'remote_media_library';
   static const String developerOptions = 'developer_options';
   static const String labs = 'labs';
+  static const String plugins = 'plugins';
   static const String about = 'about';
 }
 
@@ -59,6 +61,9 @@ class NipaplaySettingEntry {
 List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
   final themeNotifier = context.read<ThemeNotifier>();
   final l10n = context.l10n;
+  final pluginsTitle = l10n.localeName.startsWith('zh_Hant') ? '插件' : '插件';
+  final pluginsPageTitle =
+      l10n.localeName.startsWith('zh_Hant') ? '插件設定' : '插件设置';
   final entries = <NipaplaySettingEntry>[
     NipaplaySettingEntry(
       id: NipaplaySettingEntryIds.appearance,
@@ -182,6 +187,13 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
       icon: Ionicons.flask_outline,
       pageTitle: '实验室',
       page: LabsPage(),
+    ),
+    NipaplaySettingEntry(
+      id: NipaplaySettingEntryIds.plugins,
+      title: pluginsTitle,
+      icon: Ionicons.extension_puzzle_outline,
+      pageTitle: pluginsPageTitle,
+      page: const PluginSettingsPage(),
     ),
     NipaplaySettingEntry(
       id: NipaplaySettingEntryIds.about,

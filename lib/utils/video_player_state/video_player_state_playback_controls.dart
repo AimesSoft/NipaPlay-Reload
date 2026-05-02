@@ -902,6 +902,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   // 设置上下文
   void setContext(BuildContext context) {
     _context = context;
+    _attachPluginDanmakuFilter();
     _subtitleManager.onUserNotification = (message) {
       final currentContext = _context;
       if (currentContext == null || !currentContext.mounted) {

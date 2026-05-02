@@ -48,6 +48,7 @@ import 'package:nipaplay/models/watch_history_database.dart'; // 导入观看记
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
 
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
@@ -416,6 +417,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕屏蔽词
   final String _danmakuBlockWordsKey = 'danmaku_block_words';
   List<String> _danmakuBlockWords = []; // 弹幕屏蔽词列表
+  List<String> _pluginDanmakuBlockWords = [];
+  VoidCallback? _pluginServiceListener;
+  PluginService? _pluginService;
   int _totalDanmakuCount = 0; // 添加一个字段来存储总弹幕数
 
   // 防剧透模式
@@ -1308,6 +1312,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   void dispose() {
     _isDisposed = true;
     PlayerRemoteControlBridge.instance.detach(this);
+    _detachPluginDanmakuFilter();
 
     // Jellyfin同步：如果是Jellyfin流媒体，停止同步
     if (_currentVideoPath != null &&
