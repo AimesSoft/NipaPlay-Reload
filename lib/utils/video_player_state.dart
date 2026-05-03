@@ -462,7 +462,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _danmakuOutlineStyleKey = 'danmaku_outline_style';
   DanmakuOutlineStyle _danmakuOutlineStyle = DanmakuOutlineStyle.uniform;
   final String _danmakuShadowStyleKey = 'danmaku_shadow_style';
-  DanmakuShadowStyle _danmakuShadowStyle = DanmakuShadowStyle.strong;
+  DanmakuShadowStyle _danmakuShadowStyle = globals.isMobilePlatform
+      ? DanmakuShadowStyle.none
+      : DanmakuShadowStyle.strong;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
   static const double defaultSubtitleScale = 1.0;

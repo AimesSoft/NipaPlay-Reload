@@ -1211,7 +1211,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (index == null ||
         index < 0 ||
         index >= DanmakuShadowStyle.values.length) {
-      return DanmakuShadowStyle.strong;
+      return globals.isMobilePlatform
+          ? DanmakuShadowStyle.none
+          : DanmakuShadowStyle.strong;
     }
     return DanmakuShadowStyle.values[index];
   }
