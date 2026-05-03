@@ -16,6 +16,7 @@ abstract class PluginStorage {
   Future<List<PluginStorageScript>> listScripts();
   Future<String> readTextFile(String filePath);
   Future<String> saveScript(String fileName, String content);
+  Future<void> deleteScript(String filePath);
   Future<String?> getPluginDirectoryPath();
 }
 

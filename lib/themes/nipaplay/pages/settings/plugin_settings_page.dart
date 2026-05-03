@@ -30,6 +30,70 @@ class PluginSettingsPage extends StatelessWidget {
     return '已禁用插件：$name';
   }
 
+  String _pluginDeleteToast(BuildContext context, String name) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '已刪除插件：$name';
+    }
+    return '已删除插件：$name';
+  }
+
+  String _pluginDeleteFailed(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '內建插件無法刪除';
+    }
+    return '内置插件无法删除';
+  }
+
+  String _pluginDeleteTooltip(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '刪除插件';
+    }
+    return '删除插件';
+  }
+
+  Future<void> _confirmDeletePlugin(
+    BuildContext context,
+    PluginDescriptor plugin,
+    PluginService pluginService,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          context.l10n.localeName.startsWith('zh_Hant') ? '確認刪除' : '确认删除',
+        ),
+        content: Text(
+          context.l10n.localeName.startsWith('zh_Hant')
+              ? '確定要刪除插件「${plugin.manifest.name}」嗎？此操作不可撤銷。'
+              : '确定要删除插件「${plugin.manifest.name}」吗？此操作不可撤销。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              context.l10n.localeName.startsWith('zh_Hant') ? '刪除' : '删除',
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final success = await pluginService.deletePlugin(plugin.manifest.id);
+    if (!context.mounted) return;
+    if (success) {
+      BlurSnackBar.show(context, _pluginDeleteToast(context, plugin.manifest.name));
+    } else {
+      BlurSnackBar.show(context, _pluginDeleteFailed(context));
+    }
+  }
+
   String _pluginsEmpty(BuildContext context) {
     if (context.l10n.localeName.startsWith('zh_Hant')) {
       return '暫無可用插件';
@@ -184,33 +248,84 @@ class PluginSettingsPage extends StatelessWidget {
       BlurSnackBar.show(context, _pluginActionNotAvailable(context));
       return;
     }
-    if (entries.length == 1) {
+    if (entries.length == 1 && entries.first.enabled == null) {
       await _invokePluginAction(context, plugin, entries.first);
       return;
     }
 
-    final selected = await GlassBottomSheet.show<PluginUiEntry>(
+    final hasSwitches = entries.any((e) => e.enabled != null);
+
+    if (!hasSwitches) {
+      // 无开关型入口，保持原有点击选择行为
+      final selected = await GlassBottomSheet.show<PluginUiEntry>(
+        context: context,
+        title: _pluginActionTitle(context, plugin),
+        height: MediaQuery.of(context).size.height * 0.56,
+        child: ListView.builder(
+          itemCount: entries.length,
+          itemBuilder: (itemContext, index) {
+            final entry = entries[index];
+            return ListTile(
+              title: Text(entry.title),
+              subtitle:
+                  entry.description == null ? null : Text(entry.description!),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(itemContext).pop(entry),
+            );
+          },
+        ),
+      );
+      if (!context.mounted || selected == null) return;
+      await _invokePluginAction(context, plugin, selected);
+      return;
+    }
+
+    // 开关型入口
+    await GlassBottomSheet.show<void>(
       context: context,
       title: _pluginActionTitle(context, plugin),
       height: MediaQuery.of(context).size.height * 0.56,
-      child: ListView.builder(
-        itemCount: entries.length,
-        itemBuilder: (itemContext, index) {
-          final entry = entries[index];
-          return ListTile(
-            title: Text(entry.title),
-            subtitle:
-                entry.description == null ? null : Text(entry.description!),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(itemContext).pop(entry),
+      child: StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final currentEntries = plugin.uiEntries;
+          return ListView.builder(
+            itemCount: currentEntries.length,
+            itemBuilder: (itemContext, index) {
+              final entry = currentEntries[index];
+              if (entry.enabled != null) {
+                return ListTile(
+                  title: Text(entry.title),
+                  subtitle: entry.description == null
+                      ? null
+                      : Text(entry.description!),
+                  trailing: FluentSettingsSwitch(
+                    value: entry.enabled!,
+                    onChanged: (_) async {
+                      await _invokePluginAction(
+                          sheetContext, plugin, entry);
+                      if (!sheetContext.mounted) return;
+                      setSheetState(() {});
+                    },
+                  ),
+                );
+              }
+              return ListTile(
+                title: Text(entry.title),
+                subtitle: entry.description == null
+                    ? null
+                    : Text(entry.description!),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.of(itemContext).pop();
+                  if (!context.mounted) return;
+                  await _invokePluginAction(context, plugin, entry);
+                },
+              );
+            },
           );
         },
       ),
     );
-    if (!context.mounted || selected == null) {
-      return;
-    }
-    await _invokePluginAction(context, plugin, selected);
   }
 
   Future<void> _invokePluginAction(
@@ -269,6 +384,12 @@ class PluginSettingsPage extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (!plugin.isBuiltin)
+          _HoverScaleIconButton(
+            tooltip: _pluginDeleteTooltip(context),
+            icon: Icons.delete_outline,
+            onPressed: () => _confirmDeletePlugin(context, plugin, pluginService),
+          ),
         _HoverScaleIconButton(
           tooltip: actionEnabled
               ? _pluginActionTitle(context, plugin)

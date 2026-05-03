@@ -574,8 +574,23 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     }
 
     for (final word in _pluginDanmakuBlockWords) {
-      if (content.contains(word)) {
-        return true;
+      if (_isRegexRule(word)) {
+        final parsed = _parseRegexRule(word);
+        if (parsed != null) {
+          final (_, pattern) = parsed;
+          try {
+            final regex = RegExp(pattern);
+            if (regex.hasMatch(content)) {
+              return true;
+            }
+          } catch (e) {
+            debugPrint('插件正则表达式规则无效: $pattern, 错误: $e');
+          }
+        }
+      } else {
+        if (content.contains(word)) {
+          return true;
+        }
       }
     }
     return false;

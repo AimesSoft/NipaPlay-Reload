@@ -50,8 +50,17 @@ const pluginManifest = {
 用于弹幕过滤词库。必须是字符串数组；非数组时按空数组处理。
 
 ```js
-const pluginBlockWords = ['示例词1', '示例词2'];
+const pluginBlockWords = [
+  '示例词1',
+  '示例词2',
+  '规则名/正则表达式/'
+];
 ```
+
+每项支持两种格式：
+
+- **纯文本**：直接进行子串匹配（`content.contains(word)`）。
+- **正则表达式**：格式为 `名称/正则表达式/`，宿主会按 `/` 分隔提取正则部分，对弹幕文本执行 `RegExp.hasMatch`。名称部分用于展示，正则部分用于匹配。
 
 宿主读取后会做：
 
@@ -78,6 +87,7 @@ const pluginUIEntries = [
 - `id`：必填，非空。
 - `title`：必填，非空。
 - `description`：可选。
+- `enabled`：可选，布尔值。当提供时，宿主在设置页中渲染开关（`Switch`）而非普通点击项，用户可通过开关切换状态。点击开关后宿主会调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换自身逻辑并返回结果。
 
 无效 entry 会被跳过，不会导致整个插件失败。
 
@@ -106,12 +116,14 @@ function pluginHandleUIAction(actionId) {
 返回值要求：
 
 - 可以返回对象，也可以返回对象的 JSON 字符串。
-- 返回 `null/undefined`（或等效空值）会被视为“无结果”。
+- 返回 `null/undefined`（或等效空值）会被视为”无结果”。
 - 目前仅支持 `type: 'text'`。
 - 对象字段：
   - `type`：必填，当前只支持 `text`
   - `title`：必填，非空
   - `content`：可为空字符串
+
+重要行为：`pluginHandleUIAction` 执行完毕后，宿主会自动重新读取 JS 运行时中的 `pluginBlockWords` 和 `pluginUIEntries` 变量。这意味着插件可以在回调中动态修改这两个变量（例如切换规则启用状态），宿主会即时同步更新弹幕过滤词库和 UI 入口列表。
 
 ## 4. 宿主当前暴露能力（对 JS）
 
@@ -141,6 +153,7 @@ function pluginHandleUIAction(actionId) {
 - 插件启用后才会加载运行时并读取 `pluginBlockWords/pluginUIEntries`。
 - 禁用插件会卸载运行时并清空该插件的生效屏蔽词。
 - 启用状态持久化在 `SharedPreferences`：`plugin_enabled_ids`。
+- 非内置插件（外部导入）可在设置页中删除，删除前会自动禁用并卸载运行时。
 
 ## 6. 与弹幕过滤的集成
 
@@ -186,3 +199,85 @@ function pluginHandleUIAction(actionId) {
   };
 }
 ```
+
+## 9. 带开关切换的插件示例
+
+以下示例展示如何使用 `enabled` 字段实现逐条规则的开关切换，以及动态更新 `pluginBlockWords` 和 `pluginUIEntries`。
+
+```js
+const pluginManifest = {
+  id: 'custom.regex_filter',
+  name: '正则过滤规则',
+  version: '1.0.0',
+  description: '可逐条开关的弹幕正则过滤规则',
+  author: 'You'
+};
+
+var rules = [
+  {
+    id: 'repeat',
+    name: '刷屏重复',
+    desc: '重复字符、笑声刷屏',
+    pattern: '[哈嘿]{7,}',
+    enabled: true
+  },
+  {
+    id: 'keyword',
+    name: '纯关键词',
+    desc: '"路过""打卡"等占位弹幕',
+    pattern: '^(路过|打卡|签到)+$',
+    enabled: true
+  }
+];
+
+function buildBlockWords() {
+  var result = [];
+  for (var i = 0; i < rules.length; i++) {
+    if (rules[i].enabled) {
+      // 正则格式：名称/正则表达式/
+      result.push(rules[i].name + '/' + rules[i].pattern);
+    }
+  }
+  return result;
+}
+
+function buildUIEntries() {
+  var result = [];
+  for (var i = 0; i < rules.length; i++) {
+    result.push({
+      id: rules[i].id,
+      title: rules[i].name,
+      description: rules[i].desc,
+      enabled: rules[i].enabled  // 提供 enabled 字段，宿主渲染开关
+    });
+  }
+  return result;
+}
+
+var pluginBlockWords = buildBlockWords();
+var pluginUIEntries = buildUIEntries();
+
+function pluginHandleUIAction(actionId) {
+  for (var i = 0; i < rules.length; i++) {
+    if (rules[i].id === actionId) {
+      rules[i].enabled = !rules[i].enabled;
+      // 修改后重建两个数组，宿主会在回调结束后自动重新读取
+      pluginBlockWords = buildBlockWords();
+      pluginUIEntries = buildUIEntries();
+      return {
+        type: 'text',
+        title: rules[i].name,
+        content: (rules[i].enabled ? '已启用' : '已禁用') + '「' + rules[i].name + '」'
+      };
+    }
+  }
+  return { type: 'text', title: '正则过滤', content: '未知操作。' };
+}
+```
+
+要点：
+
+- `pluginUIEntries` 中每项可提供 `enabled: bool`，宿主会渲染为开关（`Switch`）。
+- 开关切换时宿主调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换 `rules[i].enabled`，然后重建 `pluginBlockWords` 和 `pluginUIEntries`。
+- 回调执行完毕后宿主自动重新读取这两个变量，无需额外操作。
+- `pluginBlockWords` 中的正则格式项（`名称/正则表达式/`）会被宿主识别并按正则匹配弹幕。
