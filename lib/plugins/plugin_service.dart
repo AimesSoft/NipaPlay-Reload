@@ -370,7 +370,7 @@ class PluginService extends ChangeNotifier {
     final newUiEntries = _extractUiEntries(runtime);
     if (newBlockWords.length != plugin.blockWords.length ||
         !_listEquals(newBlockWords, plugin.blockWords) ||
-        newUiEntries.length != plugin.uiEntries.length) {
+        !_pluginUiEntriesListEquals(newUiEntries, plugin.uiEntries)) {
       _plugins[index] = plugin.copyWith(
         blockWords: newBlockWords,
         uiEntries: newUiEntries,
@@ -385,6 +385,24 @@ class PluginService extends ChangeNotifier {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  static bool _pluginUiEntriesListEquals(
+    List<PluginUiEntry> a,
+    List<PluginUiEntry> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i];
+      final y = b[i];
+      if (x.id != y.id ||
+          x.title != y.title ||
+          x.description != y.description ||
+          x.enabled != y.enabled) {
+        return false;
+      }
     }
     return true;
   }

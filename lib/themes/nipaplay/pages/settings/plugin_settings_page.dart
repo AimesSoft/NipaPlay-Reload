@@ -285,9 +285,11 @@ class PluginSettingsPage extends StatelessWidget {
       context: context,
       title: _pluginActionTitle(context, plugin),
       height: MediaQuery.of(context).size.height * 0.56,
-      child: StatefulBuilder(
-        builder: (sheetContext, setSheetState) {
-          final currentEntries = plugin.uiEntries;
+      child: Consumer<PluginService>(
+        builder: (sheetContext, pluginService, child) {
+          final updatedPlugin = pluginService.plugins
+              .firstWhere((p) => p.manifest.id == plugin.manifest.id, orElse: () => plugin);
+          final currentEntries = updatedPlugin.uiEntries;
           return ListView.builder(
             itemCount: currentEntries.length,
             itemBuilder: (itemContext, index) {
@@ -301,10 +303,7 @@ class PluginSettingsPage extends StatelessWidget {
                   trailing: FluentSettingsSwitch(
                     value: entry.enabled!,
                     onChanged: (_) async {
-                      await _invokePluginAction(
-                          sheetContext, plugin, entry);
-                      if (!sheetContext.mounted) return;
-                      setSheetState(() {});
+                      await _invokePluginAction(sheetContext, updatedPlugin, entry);
                     },
                   ),
                 );
@@ -318,7 +317,7 @@ class PluginSettingsPage extends StatelessWidget {
                 onTap: () async {
                   Navigator.of(itemContext).pop();
                   if (!context.mounted) return;
-                  await _invokePluginAction(context, plugin, entry);
+                  await _invokePluginAction(context, updatedPlugin, entry);
                 },
               );
             },
