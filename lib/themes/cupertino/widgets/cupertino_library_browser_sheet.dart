@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
@@ -1265,6 +1266,29 @@ class _CupertinoLibraryFolderBrowserSheetState
                             ),
                           ),
                           Container(height: 0.5, color: separatorColor),
+                          if (entry.isDirectory)
+                            buildAction(
+                              title: '自定义媒体信息（本文件夹）',
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                await CustomMediaInfoDialog.show(
+                                  context,
+                                  entry.path,
+                                );
+                              },
+                            ),
+                          if (!entry.isDirectory)
+                            buildAction(
+                              title: '自定义媒体信息',
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                await CustomMediaInfoDialog.show(
+                                  context,
+                                  p.dirname(entry.path),
+                                  initialVideoPath: entry.path,
+                                );
+                              },
+                            ),
                           if (canManualMatch)
                             buildAction(
                               title: '手动选择弹幕',

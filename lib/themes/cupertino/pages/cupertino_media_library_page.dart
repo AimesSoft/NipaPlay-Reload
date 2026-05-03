@@ -44,7 +44,6 @@ import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_server_detail_page.dart';
@@ -3318,55 +3317,6 @@ class _CupertinoLibraryManagementSheetState
       );
     }
 
-    children.add(
-      Padding(
-        padding: EdgeInsets.fromLTRB(indentation, 6, 12, 6),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () async {
-            final result =
-                await CustomMediaInfoDialog.show(context, folderPath);
-            if (result != null) {
-              _refreshExpandedFolderContents(folderPath);
-            }
-          },
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                CupertinoIcons.info,
-                size: 16,
-                color: accentColor,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '自定义媒体信息（实验性）',
-                      style: TextStyle(fontSize: 13, color: labelColor),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '自定义媒体信息，并将当前文件夹添加到媒体库中',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: subtitleColor),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '开始',
-                style: TextStyle(fontSize: 12, color: accentColor),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
@@ -3498,24 +3448,6 @@ class _CupertinoLibraryManagementSheetState
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minSize: 28,
-                    onPressed: () async {
-                      final result = await CustomMediaInfoDialog.show(
-                        context,
-                        p.dirname(file.path),
-                        initialVideoPath: file.path,
-                      );
-                      if (result != null) {
-                        _refreshExpandedFolderContents(p.dirname(file.path));
-                      }
-                    },
-                    child: Text(
-                      '自定义媒体信息',
-                      style: TextStyle(fontSize: 12, color: accentColor),
-                    ),
-                  ),
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     minSize: 28,
@@ -5671,10 +5603,29 @@ class _CupertinoLibraryManagementSheetState
       }
 
       if (Platform.isAndroid) {
-        final sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
-        if (sdkVersion >= 33) {
-          await _handleScanAndroidMediaFolders(scanService);
+        final filePicker = FilePickerService();
+        try {
+          final selectedDirectory = await filePicker.pickDirectory();
+          if (selectedDirectory != null) {
+            await scanService.startDirectoryScan(
+              selectedDirectory,
+              skipPreviouslyMatchedUnwatched: false,
+            );
+            _showSnack('已提交扫描任务：${p.basename(selectedDirectory)}');
+            return;
+          }
           return;
+        } catch (e) {
+          AdaptiveSnackBar.show(
+            context,
+            message: '文件选择器不可用，使用应用默认目录',
+            type: AdaptiveSnackBarType.warning,
+          );
+          final sdkVersion = await AndroidStorageHelper.getAndroidSDKVersion();
+          if (sdkVersion >= 33) {
+            await _handleScanAndroidMediaFolders(scanService);
+            return;
+          }
         }
       }
 
@@ -5685,8 +5636,6 @@ class _CupertinoLibraryManagementSheetState
         return;
       }
 
-      // [修改] 自定义目录会影响安卓缓存，先注释
-      //await StorageService.saveCustomStoragePath(selectedDirectory);
       await scanService.startDirectoryScan(
         selectedDirectory,
         skipPreviouslyMatchedUnwatched: false,
