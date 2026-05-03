@@ -17,6 +17,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/custom_scaffold.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_actions.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_preferences.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'pages/anime_page.dart';
@@ -1773,6 +1774,24 @@ class MainPageState extends State<MainPage>
                 onMinimize: _minimizeWindow,
                 onMaximizeRestore: _toggleWindowSize,
                 onClose: _closeWindow,
+              );
+            },
+          ),
+          Selector<DeveloperOptionsProvider, bool>(
+            selector: (context, devOptions) => devOptions.showSystemResources,
+            builder: (context, showSystemResources, child) {
+              if (!showSystemResources) {
+                return const SizedBox.shrink();
+              }
+              return Positioned(
+                top: 25,
+                right: 8 + mediaPadding.right,
+                child: const IgnorePointer(
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: SystemResourceDisplay(),
+                  ),
+                ),
               );
             },
           ),

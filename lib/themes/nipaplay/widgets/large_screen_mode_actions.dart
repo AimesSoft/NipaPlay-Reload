@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/system_resource_display.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 
@@ -66,8 +65,6 @@ class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SystemResourceDisplay(),
-          const SizedBox(width: 8),
           _NormalModeActionButtons(
             isDarkMode: isDarkMode,
             isLargeScreenLayoutActive: isLargeScreenLayoutActive,
