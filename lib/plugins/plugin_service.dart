@@ -274,6 +274,43 @@ class PluginService extends ChangeNotifier {
     return loaded ? parsed.manifest.id : null;
   }
 
+  Future<bool> deletePlugin(String pluginId) async {
+    final index =
+        _plugins.indexWhere((p) => p.manifest.id == pluginId);
+    if (index < 0) return false;
+
+    final plugin = _plugins[index];
+    if (plugin.isBuiltin) return false;
+
+    // 先禁用并卸载运行时
+    if (plugin.enabled) {
+      await setPluginEnabled(pluginId, false);
+    }
+    await _unloadPluginRuntime(pluginId);
+
+    // 删除脚本文件
+    final filePath = plugin.assetPath;
+    if (filePath.startsWith(_loadedFilePrefix)) {
+      final realPath = filePath.substring(_loadedFilePrefix.length);
+      try {
+        await _pluginStorage.deleteScript(realPath);
+      } catch (_) {}
+    }
+
+    // 从列表中移除
+    _plugins.removeAt(index);
+
+    // 清理持久化的启用状态
+    final enabledIds = _plugins
+        .where((p) => p.enabled)
+        .map((p) => p.manifest.id)
+        .toList();
+    await _saveEnabledIds(enabledIds);
+
+    notifyListeners();
+    return true;
+  }
+
   Future<String?> getPluginDirectoryPath() async {
     return _pluginStorage.getPluginDirectoryPath();
   }
@@ -324,9 +361,50 @@ class PluginService extends ChangeNotifier {
     if (decoded is! Map) {
       throw const FormatException('插件动作返回值不是对象');
     }
-    return PluginUiActionResult.fromJson(
+    final result = PluginUiActionResult.fromJson(
       Map<String, dynamic>.from(decoded.cast<String, dynamic>()),
     );
+
+    // UI 操作后重新提取 blockWords 和 uiEntries，支持插件动态切换规则
+    final newBlockWords = _extractBlockWords(runtime);
+    final newUiEntries = _extractUiEntries(runtime);
+    if (newBlockWords.length != plugin.blockWords.length ||
+        !_listEquals(newBlockWords, plugin.blockWords) ||
+        !_pluginUiEntriesListEquals(newUiEntries, plugin.uiEntries)) {
+      _plugins[index] = plugin.copyWith(
+        blockWords: newBlockWords,
+        uiEntries: newUiEntries,
+      );
+      notifyListeners();
+    }
+
+    return result;
+  }
+
+  static bool _listEquals<T>(List<T> a, List<T> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  static bool _pluginUiEntriesListEquals(
+    List<PluginUiEntry> a,
+    List<PluginUiEntry> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i];
+      final y = b[i];
+      if (x.id != y.id ||
+          x.title != y.title ||
+          x.description != y.description ||
+          x.enabled != y.enabled) {
+        return false;
+      }
+    }
+    return true;
   }
 
   _ParsedPluginMetadata _parsePluginMetadata(String script) {

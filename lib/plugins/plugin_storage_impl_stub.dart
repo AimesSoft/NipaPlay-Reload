@@ -17,6 +17,11 @@ class _StubPluginStorage implements PluginStorage {
   Future<String> saveScript(String fileName, String content) async {
     throw UnsupportedError('External JS plugins are not supported on web.');
   }
+
+  @override
+  Future<void> deleteScript(String filePath) async {
+    throw UnsupportedError('External JS plugins are not supported on web.');
+  }
 }
 
 PluginStorage createPluginStorage() => _StubPluginStorage();

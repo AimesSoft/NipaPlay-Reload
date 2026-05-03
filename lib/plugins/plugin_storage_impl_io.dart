@@ -62,6 +62,14 @@ class _IoPluginStorage implements PluginStorage {
     return file.path;
   }
 
+  @override
+  Future<void> deleteScript(String filePath) async {
+    final file = File(filePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
   String _sanitizeFileName(String input) {
     var name = input.trim();
     if (name.isEmpty) {

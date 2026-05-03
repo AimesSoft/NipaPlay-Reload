@@ -31,6 +31,72 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
     return '已禁用插件：$name';
   }
 
+  String _pluginDeleteToast(BuildContext context, String name) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '已刪除插件：$name';
+    }
+    return '已删除插件：$name';
+  }
+
+  String _pluginDeleteFailed(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '內建插件無法刪除';
+    }
+    return '内置插件无法删除';
+  }
+
+  Future<void> _confirmDeletePlugin(
+    BuildContext context,
+    PluginDescriptor plugin,
+    PluginService pluginService,
+  ) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(
+          context.l10n.localeName.startsWith('zh_Hant') ? '確認刪除' : '确认删除',
+        ),
+        content: Text(
+          context.l10n.localeName.startsWith('zh_Hant')
+              ? '確定要刪除插件「${plugin.manifest.name}」嗎？此操作不可撤銷。'
+              : '确定要删除插件「${plugin.manifest.name}」吗？此操作不可撤销。',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              context.l10n.localeName.startsWith('zh_Hant') ? '刪除' : '删除',
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final success = await pluginService.deletePlugin(plugin.manifest.id);
+    if (!context.mounted) return;
+    if (success) {
+      AdaptiveSnackBar.show(
+        context,
+        message: _pluginDeleteToast(context, plugin.manifest.name),
+        type: AdaptiveSnackBarType.success,
+      );
+    } else {
+      AdaptiveSnackBar.show(
+        context,
+        message: _pluginDeleteFailed(context),
+        type: AdaptiveSnackBarType.error,
+      );
+    }
+  }
+
   String _pluginsEmpty(BuildContext context) {
     if (context.l10n.localeName.startsWith('zh_Hant')) {
       return '暫無可用插件';
@@ -186,48 +252,114 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
       );
       return;
     }
-    if (entries.length == 1) {
+    if (entries.length == 1 && entries.first.enabled == null) {
       await _invokePluginAction(context, plugin, entries.first);
       return;
     }
 
-    final selected = await showCupertinoModalPopupWithBottomBar<PluginUiEntry>(
-      context: context,
-      builder: (sheetContext) => CupertinoActionSheet(
-        title: Text(_pluginActionTitle(context, plugin)),
-        actions: entries
-            .map(
-              (entry) => CupertinoActionSheetAction(
-                onPressed: () => Navigator.of(sheetContext).pop(entry),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(entry.title),
-                    if (entry.description != null &&
-                        entry.description!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        entry.description!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.systemGrey,
+    final hasSwitches = entries.any((e) => e.enabled != null);
+
+    if (!hasSwitches) {
+      final selected =
+          await showCupertinoModalPopupWithBottomBar<PluginUiEntry>(
+        context: context,
+        builder: (sheetContext) => CupertinoActionSheet(
+          title: Text(_pluginActionTitle(context, plugin)),
+          actions: entries
+              .map(
+                (entry) => CupertinoActionSheetAction(
+                  onPressed: () => Navigator.of(sheetContext).pop(entry),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(entry.title),
+                      if (entry.description != null &&
+                          entry.description!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          entry.description!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: CupertinoColors.systemGrey,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            )
-            .toList(),
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: Text(context.l10n.cancel),
+              )
+              .toList(),
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: Text(context.l10n.cancel),
+          ),
         ),
+      );
+      if (!context.mounted || selected == null) return;
+      await _invokePluginAction(context, plugin, selected);
+      return;
+    }
+
+    // 开关型入口
+    await CupertinoBottomSheet.show<void>(
+      context: context,
+      title: _pluginActionTitle(context, plugin),
+      heightRatio: 0.56,
+      child: StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          final currentEntries = plugin.uiEntries;
+          return SafeArea(
+            top: false,
+            child: CupertinoBottomSheetContentLayout(
+              sliversBuilder: (contentContext, topSpacing) => [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(0, topSpacing, 0, 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final entry = currentEntries[index];
+                        if (entry.enabled != null) {
+                          return CupertinoListTile(
+                            title: Text(entry.title),
+                            subtitle: entry.description == null
+                                ? null
+                                : Text(entry.description!),
+                            trailing: CupertinoSwitch(
+                              value: entry.enabled!,
+                              onChanged: (_) async {
+                                await _invokePluginAction(
+                                    sheetContext, plugin, entry);
+                                if (!sheetContext.mounted) return;
+                                setSheetState(() {});
+                              },
+                            ),
+                          );
+                        }
+                        return CupertinoListTile(
+                          title: Text(entry.title),
+                          subtitle: entry.description == null
+                              ? null
+                              : Text(entry.description!),
+                          trailing: const CupertinoListTileChevron(),
+                          onTap: () async {
+                            Navigator.of(contentContext).pop();
+                            if (!context.mounted) return;
+                            await _invokePluginAction(
+                                context, plugin, entry);
+                          },
+                        );
+                      },
+                      childCount: currentEntries.length,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
-    if (!context.mounted || selected == null) return;
-    await _invokePluginAction(context, plugin, selected);
   }
 
   Future<void> _invokePluginAction(
@@ -314,6 +446,18 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (!plugin.isBuiltin)
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            minimumSize: const Size(0, 0),
+            onPressed: () =>
+                _confirmDeletePlugin(context, plugin, pluginService),
+            child: const Icon(
+              CupertinoIcons.trash,
+              size: 19,
+              color: CupertinoColors.destructiveRed,
+            ),
+          ),
         CupertinoButton(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           minimumSize: const Size(0, 0),
