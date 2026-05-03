@@ -637,8 +637,7 @@ class FilePickerService {
           _saveLastDirectory(appDocDir.path, _lastDirKey);
           return _normalizePath(appDocDir.path);
         } catch (e) {
-          print("Error getting documents directory for iOS: $e");
-          return null;
+          throw Exception('获取iOS文档目录失败: $e');
         }
       } else {
         // 非iOS平台正常选择目录
@@ -661,8 +660,8 @@ class FilePickerService {
         return _normalizePath(selectedDirectory);
       }
     } catch (e) {
-      print('选择文件夹失败: $e');
-      return null;
+      if (e is Exception) rethrow;
+      throw Exception('选择文件夹失败: $e');
     }
   }
 
