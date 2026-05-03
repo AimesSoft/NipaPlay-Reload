@@ -918,16 +918,16 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           '已有观看记录存在，只更新播放进度: 动画=$finalAnimeName, 集数=$finalEpisodeTitle',
         );
 
+        // 将历史记录中的弹幕ID赋值给实例变量，避免重复识别
+        _episodeId ??= existingHistory.episodeId ?? _initialHistoryItem?.episodeId;
+        _animeId ??= existingHistory.animeId ?? _initialHistoryItem?.animeId;
+
         final updatedHistory = WatchHistoryItem(
           filePath: path,
           animeName: finalAnimeName,
           episodeTitle: finalEpisodeTitle,
-          episodeId: _episodeId ??
-              existingHistory.episodeId ??
-              _initialHistoryItem?.episodeId,
-          animeId: _animeId ??
-              existingHistory.animeId ??
-              _initialHistoryItem?.animeId,
+          episodeId: _episodeId,
+          animeId: _animeId,
           watchProgress: existingHistory.watchProgress,
           lastPosition: existingHistory.lastPosition,
           duration: existingHistory.duration,

@@ -624,41 +624,45 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
   Widget _buildEpisodeItem(Map<String, dynamic> episode) {
     final isSelected = _selectedEpisode != null &&
         _selectedEpisode!['episodeId'] == episode['episodeId'];
-    final title = episode['episodeTitle'] ?? '第${episode['episodeId']}话';
+    final episodeNumber = episode['episodeNumber'];
+    final label = episodeNumber != null
+        ? '第$episodeNumber话  ${episode['episodeTitle'] ?? ''}'
+        : episode['episodeTitle'] ?? '第${episode['episodeId']}话';
 
-    return Material(
-      color: Colors.transparent,
+    final backgroundColor = isSelected
+        ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.15)
+        : _panelAltColor;
+    final borderColor =
+        isSelected ? _accentColor.withOpacity(0.6) : _borderColor;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor),
+      ),
       child: InkWell(
-        splashFactory: NoSplash.splashFactory,
+        borderRadius: BorderRadius.circular(10),
         onTap: () {
           setState(() {
             _selectedEpisode = episode;
           });
         },
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? _accentColor.withOpacity(_isDarkMode ? 0.2 : 0.15)
-                : _panelAltColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected ? _accentColor.withOpacity(0.6) : _borderColor,
-            ),
-          ),
           child: Row(
             children: [
               Expanded(
                 child: Text(
-                  title,
+                  label,
                   style: TextStyle(
                     color: _textColor,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight:
                         isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -677,7 +681,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
 
   Widget _buildResultsPanel(BuildContext context) {
     final windowHeight = MediaQuery.of(context).size.height;
-    final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
+    final panelHeight = windowHeight * 0.4;
 
     final bool isError = _searchMessage.contains('出错');
 
@@ -762,7 +766,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
 
   Widget _buildEpisodesPanel(BuildContext context) {
     final windowHeight = MediaQuery.of(context).size.height;
-    final panelHeight = windowHeight * 0.4; // 占窗口高度的40%
+    final panelHeight = windowHeight * 0.4;
 
     final bool isError =
         _episodesMessage.contains('出错') || _episodesMessage.contains('失败');
@@ -816,7 +820,9 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             child: _buildSelectedAnimePanel(),
           ),
           const SizedBox(width: 16),
-          _buildEpisodesPanel(context),
+          Expanded(
+            child: _buildEpisodesPanel(context),
+          ),
         ],
       );
     }
@@ -858,8 +864,6 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     final dialogWidth = screenSize.width >= 960
         ? 900.0
         : globals.DialogSizes.getDialogWidth(screenSize.width);
-    final maxHeightFactor =
-        (globals.isPhone && screenSize.shortestSide < 600) ? 0.9 : 0.85;
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
     return Focus(
@@ -873,8 +877,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           onClose: () => Navigator.of(context).maybePop(),
           backgroundColor: _surfaceColor,
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-                24, 16, 24, 24 + keyboardHeight), // 使用viewInsets.bottom适应键盘高度
+            padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + keyboardHeight),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
