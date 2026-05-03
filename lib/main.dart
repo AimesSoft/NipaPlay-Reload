@@ -1784,7 +1784,7 @@ class MainPageState extends State<MainPage>
                 return const SizedBox.shrink();
               }
               return Positioned(
-                top: 25,
+                top: 35,
                 right: 8 + mediaPadding.right,
                 child: const IgnorePointer(
                   child: Align(
