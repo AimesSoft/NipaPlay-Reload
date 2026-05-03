@@ -77,6 +77,25 @@ class CupertinoDeveloperOptionsPage extends StatelessWidget {
                     children: [
                       CupertinoSettingsTile(
                         leading: Icon(
+                          CupertinoIcons.speedometer,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('显示系统资源监控'),
+                        subtitle: const Text('在界面右上角显示 CPU、内存和帧率信息'),
+                        trailing: AdaptiveSwitch(
+                          value: devOptions.showSystemResources,
+                          onChanged: (value) async {
+                            await devOptions.setShowSystemResources(value);
+                          },
+                        ),
+                        onTap: () async {
+                          final newValue = !devOptions.showSystemResources;
+                          await devOptions.setShowSystemResources(newValue);
+                        },
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
                           CupertinoIcons.command,
                           color: resolveSettingsIconColor(context),
                         ),
