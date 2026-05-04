@@ -152,7 +152,7 @@ fn sample_process_cpu_linux() -> Result<RustCpuSample, String> {
         .parse::<i64>()
         .map_err(|e| format!("parse stime failed: {e}"))?;
 
-    let ticks_per_sec = 100.0;
+    let ticks_per_sec = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
     let cpu_micros = (((utime + stime) as f64) / ticks_per_sec * 1_000_000.0) as i64;
 
     Ok(RustCpuSample {
