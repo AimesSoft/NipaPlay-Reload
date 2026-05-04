@@ -25,6 +25,7 @@ import 'themes/nipaplay/pages/settings_page.dart';
 import 'pages/play_video_page.dart';
 import 'pages/new_series_page.dart';
 import 'pages/dashboard_home_page.dart';
+import 'pages/torrent_download_page.dart';
 import 'themes/cupertino/pages/cupertino_main_page.dart';
 import 'utils/settings_storage.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -1094,6 +1095,7 @@ class MainPageState extends State<MainPage>
     DashboardHomePage(),
     PlayVideoPage(),
     AnimePage(),
+    TorrentDownloadPage(),
     AccountPage(),
   ];
   List<Widget> _pages = [];
@@ -1288,16 +1290,18 @@ class MainPageState extends State<MainPage>
         return hasWebDAVTab ? 2 : 0;
       case WebDAVQuickAccessProvider.tabMediaLibrary:
         return hasWebDAVTab ? 3 : 2;
-      case WebDAVQuickAccessProvider.tabAccount:
+      case WebDAVQuickAccessProvider.tabTorrent:
         return hasWebDAVTab ? 4 : 3;
+      case WebDAVQuickAccessProvider.tabAccount:
+        return hasWebDAVTab ? 5 : 4;
       default:
         return 0;
     }
   }
 
   int _normalizeTabIndex(int requestedIndex) {
-    if (requestedIndex == 2 && _showWebDAVTab) {
-      return 3;
+    if (_showWebDAVTab && requestedIndex >= 2) {
+      return requestedIndex + 1;
     }
     final maxIndex = _pages.length - 1;
     return requestedIndex.clamp(0, maxIndex).toInt();
@@ -1928,14 +1932,14 @@ int _resolveRequestedPageIndex({
   required int requestedIndex,
   required int? tabLength,
 }) {
-  if (requestedIndex != 2) {
+  if (requestedIndex < 2) {
     return requestedIndex;
   }
-  // Material 首页：开启 WebDAV 后媒体库索引从 2 右移到 3。
-  if (tabLength == 5) {
-    return 3;
+  // Material 首页：开启 WebDAV 后，WebDAV 插在视频播放和媒体库之间。
+  if (tabLength == 6) {
+    return requestedIndex + 1;
   }
-  return 2;
+  return requestedIndex;
 }
 
 Brightness _resolveEffectiveBrightness(

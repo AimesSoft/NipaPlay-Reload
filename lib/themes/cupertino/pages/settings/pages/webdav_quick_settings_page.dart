@@ -216,6 +216,8 @@ class _CupertinoWebDAVQuickSettingsPageState
         return CupertinoIcons.play_rectangle_fill;
       case WebDAVQuickAccessProvider.tabMediaLibrary:
         return CupertinoIcons.film_fill;
+      case WebDAVQuickAccessProvider.tabTorrent:
+        return CupertinoIcons.cloud_download_fill;
       case WebDAVQuickAccessProvider.tabAccount:
         return CupertinoIcons.person_crop_circle_fill;
       case WebDAVQuickAccessProvider.tabSettings:

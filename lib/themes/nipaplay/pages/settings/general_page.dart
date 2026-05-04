@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
+import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -67,10 +68,12 @@ class _GeneralPageState extends State<GeneralPage> {
           title: "视频播放", value: 1, isSelected: _defaultPageIndex == 1),
       DropdownMenuItemData(
           title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
+      DropdownMenuItemData(
+          title: "种子下载", value: 3, isSelected: _defaultPageIndex == 3),
     ];
 
     items.add(DropdownMenuItemData(
-        title: "个人中心", value: 3, isSelected: _defaultPageIndex == 3));
+        title: "个人中心", value: 4, isSelected: _defaultPageIndex == 4));
 
     return items;
   }
@@ -110,22 +113,32 @@ class _GeneralPageState extends State<GeneralPage> {
         await DesktopStartupWindowPreferences.loadPosition();
     final startupSize = await DesktopStartupWindowPreferences.loadSize();
     final autoCheckUpdatesEnabled = await UpdateService.isAutoCheckEnabled();
+    final storedHomeTab = prefs.getString(_defaultHomeTabKey);
+    final storedTabIndex = _defaultPageIndexForTab(storedHomeTab);
+    int resolvedIndex;
+    if (storedTabIndex != null) {
+      resolvedIndex = storedTabIndex;
+    } else {
+      resolvedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
+      if (resolvedIndex == 3) {
+        resolvedIndex = 4;
+      }
+    }
+
+    if (resolvedIndex < 0) {
+      resolvedIndex = 0;
+    } else if (resolvedIndex > 4) {
+      resolvedIndex = 4;
+    }
+
     if (mounted) {
       setState(() {
-        var storedIndex = prefs.getInt(defaultPageIndexKey) ?? 0;
         _desktopExitBehavior = desktopExitBehavior;
         _startupWindowState = startupState;
         _startupWindowPosition = startupPosition;
         _startupWindowSize = startupSize;
         _autoCheckUpdatesEnabled = autoCheckUpdatesEnabled;
-
-        if (storedIndex < 0) {
-          storedIndex = 0;
-        } else if (storedIndex > 3) {
-          storedIndex = 3;
-        }
-
-        _defaultPageIndex = storedIndex;
+        _defaultPageIndex = resolvedIndex;
       });
     }
   }
@@ -133,6 +146,42 @@ class _GeneralPageState extends State<GeneralPage> {
   Future<void> _saveDefaultPagePreference(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(defaultPageIndexKey, index);
+    await prefs.setString(_defaultHomeTabKey, _defaultHomeTabName(index));
+  }
+
+  static const String _defaultHomeTabKey = 'default_home_tab';
+
+  String _defaultHomeTabName(int index) {
+    switch (index) {
+      case 1:
+        return WebDAVQuickAccessProvider.tabVideo;
+      case 2:
+        return WebDAVQuickAccessProvider.tabMediaLibrary;
+      case 3:
+        return WebDAVQuickAccessProvider.tabTorrent;
+      case 4:
+        return WebDAVQuickAccessProvider.tabAccount;
+      case 0:
+      default:
+        return WebDAVQuickAccessProvider.tabHome;
+    }
+  }
+
+  int? _defaultPageIndexForTab(String? tabName) {
+    switch (tabName) {
+      case WebDAVQuickAccessProvider.tabHome:
+        return 0;
+      case WebDAVQuickAccessProvider.tabVideo:
+        return 1;
+      case WebDAVQuickAccessProvider.tabMediaLibrary:
+        return 2;
+      case WebDAVQuickAccessProvider.tabTorrent:
+        return 3;
+      case WebDAVQuickAccessProvider.tabAccount:
+        return 4;
+      default:
+        return null;
+    }
   }
 
   Future<void> _saveDesktopExitBehavior(DesktopExitBehavior behavior) async {
