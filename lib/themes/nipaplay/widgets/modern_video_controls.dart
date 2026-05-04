@@ -593,12 +593,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
                                     // 弹幕开关按钮
                                     _buildControlButton(
-                                      icon: _DanmakuToggleIcon(
+                                      icon: SvgPicture.asset(
+                                        videoState.danmakuVisible
+                                            ? 'assets/danmaku-fill.svg'
+                                            : 'assets/danmaku-off-fill.svg',
                                         key: ValueKey<bool>(
-                                          videoState.danmakuVisible,
-                                        ),
-                                        visible: videoState.danmakuVisible,
-                                        size: globals.isPhone ? 32 : 24,
+                                            videoState.danmakuVisible),
+                                        width: globals.isPhone ? 32 : 24,
+                                        height: globals.isPhone ? 32 : 24,
                                       ),
                                       onTap: () =>
                                           videoState.toggleDanmakuVisible(),
