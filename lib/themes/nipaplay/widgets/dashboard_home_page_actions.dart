@@ -465,7 +465,7 @@ extension DashboardHomePageActions on _DashboardHomePageState {
     MainPageState? mainPageState = MainPageState.of(context);
     const mediaLibraryIndexWithoutWebDAV = 2;
     const mediaLibraryIndexWithWebDAV = 3;
-    final mediaLibraryIndex = mainPageState?.globalTabController?.length == 5
+    final mediaLibraryIndex = mainPageState?.globalTabController?.length == 6
         ? mediaLibraryIndexWithWebDAV
         : mediaLibraryIndexWithoutWebDAV;
     

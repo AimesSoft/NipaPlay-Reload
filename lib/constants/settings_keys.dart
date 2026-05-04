@@ -25,4 +25,6 @@ class SettingsKeys {
       'labs_enable_large_screen_mode';
 
   static const String labsEnableRustFileScan = 'labs_enable_rust_file_scan';
+
+  static const String torrentDownloadDirectory = 'torrent_download_directory';
 }

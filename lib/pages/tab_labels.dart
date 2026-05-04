@@ -31,6 +31,10 @@ List<Widget> createTabLabels(BuildContext context,
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabMediaLibrary),
     ),
+    const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: HoverZoomTab(text: '种子下载'),
+    ),
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabAccount),
