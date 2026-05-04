@@ -4,6 +4,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class LanguagePage extends StatelessWidget {
   const LanguagePage({super.key});
@@ -48,7 +49,7 @@ class LanguagePage extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Text(
@@ -72,12 +73,12 @@ class LanguagePage extends StatelessWidget {
     final bool selected = provider.mode == mode;
     return ListTile(
       dense: false,
-      leading: const Icon(Ionicons.language_outline),
+      leading: Icon(Ionicons.language_outline),
       title: Text(title),
       trailing: selected
-          ? const Icon(
+          ? Icon(
               Icons.check_rounded,
-              color: Color(0xFFFF2E55),
+              color: AppAccentColors.current,
             )
           : null,
       onTap: () => context.read<AppLanguageProvider>().setMode(mode),

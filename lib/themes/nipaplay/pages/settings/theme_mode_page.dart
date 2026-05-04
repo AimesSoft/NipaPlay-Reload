@@ -17,6 +17,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
@@ -36,6 +37,7 @@ class _ThemeModePageState extends State<ThemeModePage> {
   final GlobalKey _blurDropdownKey = GlobalKey();
   final GlobalKey _backgroundImageDropdownKey = GlobalKey();
   final GlobalKey _animationDropdownKey = GlobalKey();
+  final GlobalKey _accentColorDropdownKey = GlobalKey();
   final GlobalKey _backgroundRenderModeDropdownKey = GlobalKey();
   final GlobalKey _windowDisplayModeDropdownKey = GlobalKey();
   late BackgroundImageRenderMode _backgroundImageRenderMode;
@@ -242,6 +244,28 @@ class _ThemeModePageState extends State<ThemeModePage> {
                 }
               },
               dropdownKey: _dropdownKey,
+            ),
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+            SettingsItem.dropdown(
+              title: "主题色",
+              subtitle: "选择应用界面的强调色",
+              icon: Ionicons.color_palette_outline,
+              items: AppAccentColorPreset.values
+                  .map(
+                    (preset) => DropdownMenuItemData(
+                      title: preset.title,
+                      value: preset,
+                      isSelected:
+                          appearanceSettings.accentColorPreset == preset,
+                    ),
+                  )
+                  .toList(),
+              onChanged: (preset) {
+                if (preset is AppAccentColorPreset) {
+                  appearanceSettings.setAccentColorPreset(preset);
+                }
+              },
+              dropdownKey: _accentColorDropdownKey,
             ),
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             if (!kIsWeb) ...[

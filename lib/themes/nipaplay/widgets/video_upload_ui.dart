@@ -14,6 +14,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class VideoUploadUI extends StatefulWidget {
   const VideoUploadUI({super.key});
@@ -100,7 +101,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           Flexible(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 620),
@@ -117,7 +118,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                       fontWeight: FontWeight.normal,
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: 18),
                   MouseRegion(
                     cursor: SystemMouseCursors.click,
                     onEnter: (_) => setState(() => _isHovered = true),
@@ -133,7 +134,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                           locale: const Locale("zh-Hans", "zh"),
                           style: TextStyle(
                             color: _isHovered
-                                ? const Color(0xFFFF2E55)
+                                ? AppAccentColors.current
                                 : textColor,
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
@@ -142,7 +143,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     '从本地文件、相册或文件管理器中打开视频',
                     style: TextStyle(
@@ -150,9 +151,9 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                       fontSize: 14,
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: 18),
                   _buildChoiceDivider(textColor),
-                  const SizedBox(height: 18),
+                  SizedBox(height: 18),
                   MouseRegion(
                     cursor: SystemMouseCursors.click,
                     onEnter: (_) => setState(() => _isUrlActionHovered = true),
@@ -168,7 +169,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                           locale: const Locale("zh-Hans", "zh"),
                           style: TextStyle(
                             color: _isUrlActionHovered
-                                ? const Color(0xFFFF2E55)
+                                ? AppAccentColors.current
                                 : textColor.withOpacity(0.9),
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
@@ -177,7 +178,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     '粘贴 http/https 串流直链后直接播放',
                     style: TextStyle(
@@ -186,7 +187,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                     ),
                   ),
                   if (_showUrlInput) ...[
-                    const SizedBox(height: 14),
+                    SizedBox(height: 14),
                     _buildUrlInputCard(context, textColor),
                   ],
                 ],
@@ -290,7 +291,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     '支持 http/https 串流直链，建议使用 Media Kit 或 MDK 内核。',
                     style: TextStyle(
@@ -299,7 +300,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                       height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   TextField(
                     controller: _urlController,
                     focusNode: _urlFocusNode,
@@ -325,7 +326,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Wrap(
                     alignment: WrapAlignment.end,
                     spacing: 8,
@@ -346,8 +347,8 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                             : () => _handlePlayFromUrlFromDialog(dialogContext),
                         child: Text(
                           _isSubmittingUrl ? '处理中...' : '播放链接',
-                          style: const TextStyle(
-                            color: Color(0xFFFF2E55),
+                          style: TextStyle(
+                            color: AppAccentColors.current,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -395,7 +396,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           TextField(
             controller: _urlController,
             focusNode: _urlFocusNode,
@@ -420,7 +421,7 @@ class _VideoUploadUIState extends State<VideoUploadUI>
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Wrap(
             alignment: WrapAlignment.end,
             spacing: 8,
@@ -434,8 +435,8 @@ class _VideoUploadUIState extends State<VideoUploadUI>
                 onPressed: _isSubmittingUrl ? null : _handlePlayFromUrl,
                 child: Text(
                   _isSubmittingUrl ? '处理中...' : '播放链接',
-                  style: const TextStyle(
-                    color: Color(0xFFFF2E55),
+                  style: TextStyle(
+                    color: AppAccentColors.current,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

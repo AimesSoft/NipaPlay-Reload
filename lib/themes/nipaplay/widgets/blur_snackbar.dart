@@ -7,6 +7,7 @@ import 'package:nipaplay/main.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class BlurSnackBar {
   static OverlayEntry? _currentOverlayEntry;
@@ -52,7 +53,7 @@ class BlurSnackBar {
         }
       });
     }
-    
+
     // 如有旧控制器，先释放
     _controller?.dispose();
     _controller = AnimationController(
@@ -72,7 +73,7 @@ class BlurSnackBar {
       begin: 0.96,
       end: 1.0,
     ).animate(animation);
-    
+
     overlayEntry = OverlayEntry(
       builder: (context) {
         final colorScheme = Theme.of(context).colorScheme;
@@ -104,8 +105,9 @@ class BlurSnackBar {
         final borderColor = colorScheme.onSurface.withOpacity(
           useGlassBackground ? (isDark ? 0.25 : 0.18) : (isDark ? 0.2 : 0.12),
         );
-        final textColor = colorScheme.onSurface.withOpacity(isDark ? 0.92 : 0.88);
-        const actionForeground = Color(0xFFFF2E55);
+        final textColor =
+            colorScheme.onSurface.withOpacity(isDark ? 0.92 : 0.88);
+        final actionForeground = AppAccentColors.current;
         final shadowColor = isDark
             ? Colors.black.withOpacity(0.45)
             : Colors.black.withOpacity(0.16);
@@ -141,7 +143,7 @@ class BlurSnackBar {
                 ),
               ),
               if (actionText != null && onAction != null) ...[
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 TextButton(
                   onPressed: () {
                     dismiss();
@@ -160,7 +162,7 @@ class BlurSnackBar {
                   child: Text(actionText),
                 ),
               ],
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
               IconButton(
                 icon: Icon(
                   Icons.close,

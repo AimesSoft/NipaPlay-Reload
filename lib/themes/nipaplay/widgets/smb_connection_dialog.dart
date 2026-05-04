@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SMBConnectionDialog {
   static Future<bool?> show(
@@ -38,7 +39,7 @@ class _SMBConnectionForm extends StatefulWidget {
 }
 
 class _SMBConnectionFormState extends State<_SMBConnectionForm> {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -121,22 +122,22 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-          Text(
-            'SMB服务器支持Samba/CIFS共享，可在局域网中直接浏览视频文件。\n'
-            '建议优先使用IP地址并确保设备在同一网络内。',
-            style: TextStyle(
-              color: _subTextColor,
-              fontSize: 13,
+            Text(
+              'SMB服务器支持Samba/CIFS共享，可在局域网中直接浏览视频文件。\n'
+              '建议优先使用IP地址并确保设备在同一网络内。',
+              style: TextStyle(
+                color: _subTextColor,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
+            SizedBox(height: 20),
             _buildTextField(
               controller: _nameController,
               label: '连接名称（可选）',
               hint: '留空则使用主机名',
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             _buildTextField(
               controller: _hostController,
               label: '主机/IP 地址',
@@ -151,7 +152,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                 return null;
               },
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             _buildTextField(
               controller: _portController,
               label: '端口',
@@ -169,19 +170,19 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                 return null;
               },
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             _buildTextField(
               controller: _domainController,
               label: '域（可选）',
               hint: '多数情况下可留空',
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             _buildTextField(
               controller: _usernameController,
               label: '用户名（可选）',
               hint: '留空将使用匿名访问',
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             _buildTextField(
               controller: _passwordController,
               label: '密码（可选）',
@@ -202,7 +203,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -213,12 +214,12 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                   style: _plainButtonStyle(),
                   child: const Text('取消'),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 TextButton(
                   onPressed: _isSubmitting ? null : _handleSubmit,
                   style: _plainButtonStyle(baseColor: _accentColor),
                   child: _isSubmitting
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
@@ -268,7 +269,7 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: _accentColor),
+          borderSide: BorderSide(color: _accentColor),
         ),
         filled: true,
         fillColor: _fillColor,
@@ -287,8 +288,9 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
       _isSubmitting = true;
     });
 
-    final port =
-        int.tryParse(_portController.text.trim()) ?? widget.editConnection?.port ?? 445;
+    final port = int.tryParse(_portController.text.trim()) ??
+        widget.editConnection?.port ??
+        445;
 
     final connection = SMBConnection(
       name: _nameController.text.trim(),

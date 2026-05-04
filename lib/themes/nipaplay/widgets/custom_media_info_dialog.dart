@@ -13,9 +13,10 @@ import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class CustomMediaInfoDialog {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
   static const double _rowIndexWidth = 32;
 
   static Future<Map<String, dynamic>?> show(
@@ -117,13 +118,13 @@ class CustomMediaInfoDialog {
                           color: _accentColor.withOpacity(0.18),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.edit_note,
                           color: _accentColor,
                           size: 20,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,7 +137,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: 4),
                             Text(
                               '填写媒体基本信息，包括名称、简介等',
                               style:
@@ -147,18 +148,18 @@ class CustomMediaInfoDialog {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   // 步骤指示器
                   Row(
                     children: [
                       Container(
                         width: 24,
                         height: 24,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: _accentColor,
                           shape: BoxShape.circle,
                         ),
-                        child: const Center(
+                        child: Center(
                           child: Text(
                             '1',
                             style: TextStyle(
@@ -169,7 +170,7 @@ class CustomMediaInfoDialog {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         '基本信息',
                         style: TextStyle(
@@ -178,7 +179,7 @@ class CustomMediaInfoDialog {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(width: 24),
+                      SizedBox(width: 24),
                       Container(
                         width: 24,
                         height: 24,
@@ -186,7 +187,7 @@ class CustomMediaInfoDialog {
                           color: mutedTextColor,
                           shape: BoxShape.circle,
                         ),
-                        child: const Center(
+                        child: Center(
                           child: Text(
                             '2',
                             style: TextStyle(
@@ -197,7 +198,7 @@ class CustomMediaInfoDialog {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         '剧集信息',
                         style: TextStyle(
@@ -207,7 +208,7 @@ class CustomMediaInfoDialog {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   // 表单内容
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,7 +227,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: nameController,
                               style: TextStyle(color: textColor),
@@ -250,7 +251,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -271,7 +272,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: nameCnController,
                               style: TextStyle(color: textColor),
@@ -295,7 +296,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -316,7 +317,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: coverUrlController,
                               style: TextStyle(color: textColor),
@@ -340,7 +341,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -361,7 +362,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: summaryController,
                               style: TextStyle(color: textColor),
@@ -385,7 +386,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                               maxLines: 3,
@@ -407,7 +408,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: airDateController,
                               style: TextStyle(color: textColor),
@@ -431,7 +432,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -452,7 +453,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: airWeekdayController,
                               style: TextStyle(color: textColor),
@@ -476,7 +477,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -497,7 +498,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: ratingController,
                               style: TextStyle(color: textColor),
@@ -521,7 +522,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -542,7 +543,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: tagsController,
                               style: TextStyle(color: textColor),
@@ -566,7 +567,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -587,7 +588,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: metadataController,
                               style: TextStyle(color: textColor),
@@ -611,7 +612,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -632,7 +633,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: platformController,
                               style: TextStyle(color: textColor),
@@ -656,7 +657,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -677,7 +678,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: totalEpisodesController,
                               style: TextStyle(color: textColor),
@@ -701,7 +702,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -722,7 +723,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: typeDescriptionController,
                               style: TextStyle(color: textColor),
@@ -746,7 +747,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -767,7 +768,7 @@ class CustomMediaInfoDialog {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             TextField(
                               controller: bangumiUrlController,
                               style: TextStyle(color: textColor),
@@ -791,7 +792,7 @@ class CustomMediaInfoDialog {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide:
-                                      const BorderSide(color: _accentColor),
+                                      BorderSide(color: _accentColor),
                                 ),
                               ),
                             ),
@@ -800,7 +801,7 @@ class CustomMediaInfoDialog {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   // 按钮
                   Row(
                     children: [
@@ -848,7 +849,7 @@ class CustomMediaInfoDialog {
                         ),
                         child: const Text('取消'),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       ElevatedButton(
                         onPressed: () {
                           // 验证必填字段
@@ -1161,13 +1162,13 @@ class _Step2Dialog extends StatefulWidget {
                             .withOpacity(0.18),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.playlist_add_check,
                         color: CustomMediaInfoDialog._accentColor,
                         size: 20,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1180,7 +1181,7 @@ class _Step2Dialog extends StatefulWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          SizedBox(height: 4),
                           Text(
                             '设置剧集信息，包括文件名和剧集名称',
                             style: TextStyle(color: subTextColor, fontSize: 13),
@@ -1190,13 +1191,13 @@ class _Step2Dialog extends StatefulWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 // 内容
                 SizedBox(
                   height: 400,
                   child: dialog,
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 // 按钮
                 Row(
                   children: [
@@ -1246,7 +1247,7 @@ class _Step2Dialog extends StatefulWidget {
                       ),
                       child: const Text('上一步'),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: () async {
                         // 构建完整的返回数据
@@ -1397,7 +1398,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
                 _buildRowIndexText(index),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             TextField(
               controller: item.titleController,
               style: TextStyle(color: textColor),
@@ -1422,7 +1423,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(
+                  borderSide: BorderSide(
                       color: CustomMediaInfoDialog._accentColor),
                 ),
               ),
@@ -1476,7 +1477,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
             size: 16,
             color: iconColor,
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: 6),
           Expanded(
             child: Text(
               message,
@@ -1494,10 +1495,10 @@ class _Step2DialogState extends State<_Step2Dialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.inbox_outlined, color: _mutedTextColor, size: 32),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(title, style: TextStyle(color: _subTextColor, fontSize: 13)),
           if (subtitle != null) ...[
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               subtitle,
               style: TextStyle(color: _mutedTextColor, fontSize: 12),
@@ -1770,7 +1771,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
                     color: _mutedTextColor,
                     shape: BoxShape.circle,
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
                       '1',
                       style: TextStyle(
@@ -1781,7 +1782,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   '基本信息',
                   style: TextStyle(
@@ -1789,15 +1790,15 @@ class _Step2DialogState extends State<_Step2Dialog> {
                     fontSize: 16,
                   ),
                 ),
-                const SizedBox(width: 24),
+                SizedBox(width: 24),
                 Container(
                   width: 24,
                   height: 24,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: CustomMediaInfoDialog._accentColor,
                     shape: BoxShape.circle,
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Text(
                       '2',
                       style: TextStyle(
@@ -1808,7 +1809,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   '剧集信息',
                   style: TextStyle(
@@ -1819,7 +1820,7 @@ class _Step2DialogState extends State<_Step2Dialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             // 扫描选项
             Row(
               children: [
@@ -1841,14 +1842,14 @@ class _Step2DialogState extends State<_Step2Dialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             // 视频文件列表
             _buildSectionTitle('视频文件列表'),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             if (isScanning)
               Container(
                 decoration: _panelDecoration(),
-                child: const Center(
+                child: Center(
                   child: Padding(
                     padding: EdgeInsets.all(40.0),
                     child: CircularProgressIndicator(

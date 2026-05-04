@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bounce_hover_scale.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SendDanmakuDialogContent extends StatefulWidget {
   final int episodeId;
@@ -132,7 +133,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    const inputThemeColor = Color(0xFFff2e55);
+    final inputThemeColor = AppAccentColors.current;
 
     final strokeColor = _getStrokeColor(selectedColor);
 
@@ -191,8 +192,8 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                       fontSize: previewStyle.fontSize,
                       shadows: const [],
                     ),
-                    border: const OutlineInputBorder(),
-                    focusedBorder: const OutlineInputBorder(
+                    border: OutlineInputBorder(),
+                    focusedBorder: OutlineInputBorder(
                       borderSide: BorderSide(color: inputThemeColor, width: 2),
                     ),
                     fillColor: colorScheme.surfaceContainerHighest,
@@ -203,9 +204,9 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                     setState(() {});
                   },
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text('选择颜色', style: TextStyle(color: colorScheme.onSurface)),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Wrap(
                   spacing: 8.0,
                   runSpacing: 8.0,
@@ -249,7 +250,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                     );
                   }).toList(),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 TextField(
                   controller: _hexColorController,
                   maxLength: 6,
@@ -281,9 +282,9 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                     }
                   },
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text('弹幕模式', style: TextStyle(color: colorScheme.onSurface)),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
@@ -323,11 +324,11 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 Align(
                   alignment: Alignment.centerRight,
                   child: _isSending
-                      ? const CircularProgressIndicator()
+                      ? CircularProgressIndicator()
                       : MouseRegion(
                           onEnter: (_) =>
                               setState(() => _isSendButtonHovered = true),
@@ -400,7 +401,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
                 fontSize: previewStyle.fontSize,
                 shadows: const [],
               ),
-              border: const OutlineInputBorder(),
+              border: OutlineInputBorder(),
               focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: inputThemeColor, width: 2),
               ),
@@ -412,9 +413,9 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
               setState(() {});
             },
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text('弹幕模式', style: TextStyle(color: theme.colorScheme.onSurface)),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           CupertinoSegmentedControl<String>(
             groupValue: danmakuType,
             selectedColor: inputThemeColor,
@@ -447,9 +448,9 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
               });
             },
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text('选择颜色', style: TextStyle(color: theme.colorScheme.onSurface)),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Wrap(
             spacing: 8.0,
             runSpacing: 8.0,
@@ -491,7 +492,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
               );
             }).toList(),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           TextField(
             controller: _hexColorController,
             maxLength: 6,
@@ -523,7 +524,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
               }
             },
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildSendButton(
             width: double.infinity,
             label: '发送弹幕',
@@ -540,7 +541,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
     required double height,
   }) {
     if (_isSending) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(child: CircularProgressIndicator());
     }
     return MouseRegion(
       onEnter: (_) => setState(() => _isSendButtonHovered = true),
@@ -559,12 +560,12 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
             height: height,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(height / 2),
-              color: const Color(0xFFff2e55),
+              color: AppAccentColors.current,
             ),
             alignment: Alignment.center,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -595,7 +596,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
               fontSize: previewStyle.fontSize,
               shadows: const [],
             ),
-            border: const OutlineInputBorder(),
+            border: OutlineInputBorder(),
             focusedBorder: OutlineInputBorder(
               borderSide: BorderSide(color: inputThemeColor, width: 2),
             ),
@@ -608,12 +609,12 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
           },
         ),
 
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
 
         // 弹幕模式选择
         Text('弹幕模式',
             style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14)),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
@@ -635,7 +636,7 @@ class SendDanmakuDialogContentState extends State<SendDanmakuDialogContent> {
             borderRadius: BorderRadius.circular(8),
             splashColor: Colors.transparent,
             highlightColor: Colors.transparent,
-            selectedColor: const Color(0xFFff2e55),
+            selectedColor: AppAccentColors.current,
             fillColor: Colors.transparent,
             color: theme.colorScheme.onSurface,
             constraints: const BoxConstraints(minHeight: 32.0, minWidth: 60.0),

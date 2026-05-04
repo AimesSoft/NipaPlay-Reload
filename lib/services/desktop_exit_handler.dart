@@ -16,6 +16,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'desktop_exit_preferences.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum DesktopExitAction {
   cancelAndReturn,
@@ -191,7 +192,7 @@ class DesktopExitHandler
       contentWidget: material.StatefulBuilder(
         builder: (context, setState) {
           final colorScheme = material.Theme.of(context).colorScheme;
-          const accentColor = material.Color(0xFFFF2E55);
+          final accentColor = AppAccentColors.current;
           final textStyle = material.TextStyle(
             color: colorScheme.onSurface.withOpacity(0.8),
           );
@@ -247,7 +248,7 @@ class DesktopExitHandler
             return HoverScaleTextButton(
               text: '取消并返回',
               idleColor: colorScheme.onSurface.withOpacity(0.7),
-              hoverColor: const material.Color(0xFFFF2E55),
+              hoverColor: AppAccentColors.current,
               onPressed: () => material.Navigator.of(context).pop(
                 const DesktopExitDecision(
                   action: DesktopExitAction.cancelAndReturn,
@@ -263,7 +264,7 @@ class DesktopExitHandler
             return HoverScaleTextButton(
               text: '最小化到系统托盘',
               idleColor: colorScheme.onSurface.withOpacity(0.8),
-              hoverColor: const material.Color(0xFFFF2E55),
+              hoverColor: AppAccentColors.current,
               onPressed: () => material.Navigator.of(context).pop(
                 DesktopExitDecision(
                   action: DesktopExitAction.minimizeToTrayOrTaskbar,
@@ -279,7 +280,7 @@ class DesktopExitHandler
             return HoverScaleTextButton(
               text: '关闭播放器',
               idleColor: colorScheme.onSurface.withOpacity(0.9),
-              hoverColor: const material.Color(0xFFFF2E55),
+              hoverColor: AppAccentColors.current,
               textStyle: const material.TextStyle(
                 fontWeight: material.FontWeight.w600,
               ),

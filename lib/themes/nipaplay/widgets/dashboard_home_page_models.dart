@@ -90,7 +90,7 @@ class _HoverScaleButtonState extends State<_HoverScaleButton> {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = Color(0xFFFF2E55);
+    final activeColor = AppAccentColors.current;
     final isEnabled = widget.enabled;
     final baseIconTheme = Theme.of(context).iconTheme;
     final Color? iconColor =

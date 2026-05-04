@@ -7,6 +7,7 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:nipaplay/models/anime_detail_display_mode.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -26,6 +27,7 @@ class _CupertinoAppearanceSettingsPageState
   late ThemeMode _currentMode;
   late AnimeDetailDisplayMode _detailMode;
   late RecentWatchingStyle _recentStyle;
+  late AppAccentColorPreset _accentPreset;
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _CupertinoAppearanceSettingsPageState
     _currentMode = notifier.themeMode;
     _detailMode = notifier.animeDetailDisplayMode;
     _recentStyle = appearanceSettings.recentWatchingStyle;
+    _accentPreset = appearanceSettings.accentColorPreset;
   }
 
   void _updateThemeMode(ThemeMode mode) {
@@ -62,6 +65,15 @@ class _CupertinoAppearanceSettingsPageState
     });
     Provider.of<AppearanceSettingsProvider>(context, listen: false)
         .setRecentWatchingStyle(style);
+  }
+
+  void _updateAccentPreset(AppAccentColorPreset preset) {
+    if (_accentPreset == preset) return;
+    setState(() {
+      _accentPreset = preset;
+    });
+    Provider.of<AppearanceSettingsProvider>(context, listen: false)
+        .setAccentColorPreset(preset);
   }
 
   @override
@@ -113,7 +125,33 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '主题色',
+                  style:
+                      CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                            fontSize: 13,
+                            color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey,
+                              context,
+                            ),
+                            letterSpacing: 0.2,
+                          ),
+                ),
+              ),
+              SizedBox(height: 8),
+              CupertinoSettingsGroupCard(
+                margin: EdgeInsets.zero,
+                backgroundColor: sectionBackground,
+                addDividers: true,
+                dividerIndent: 16,
+                children: [
+                  ...AppAccentColorPreset.values.map(_buildAccentPresetTile),
+                ],
+              ),
+              SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
@@ -129,7 +167,7 @@ class _CupertinoAppearanceSettingsPageState
                           ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -148,7 +186,7 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
@@ -164,7 +202,7 @@ class _CupertinoAppearanceSettingsPageState
                           ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -183,7 +221,7 @@ class _CupertinoAppearanceSettingsPageState
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
@@ -199,7 +237,7 @@ class _CupertinoAppearanceSettingsPageState
                           ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               CupertinoSettingsGroupCard(
                 margin: EdgeInsets.zero,
                 backgroundColor: sectionBackground,
@@ -298,6 +336,22 @@ class _CupertinoAppearanceSettingsPageState
       backgroundColor: tileColor,
       selected: _recentStyle == style,
       onTap: () => _updateRecentStyle(style),
+    );
+  }
+
+  Widget _buildAccentPresetTile(AppAccentColorPreset preset) {
+    final tileColor = resolveSettingsTileBackground(context);
+
+    return CupertinoSettingsTile(
+      leading: Icon(
+        CupertinoIcons.circle_grid_hex,
+        color: preset.color,
+      ),
+      title: Text(preset.title),
+      subtitle: const Text('切换应用强调色'),
+      backgroundColor: tileColor,
+      selected: _accentPreset == preset,
+      onTap: () => _updateAccentPreset(preset),
     );
   }
 

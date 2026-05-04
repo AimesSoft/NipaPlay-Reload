@@ -51,6 +51,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';

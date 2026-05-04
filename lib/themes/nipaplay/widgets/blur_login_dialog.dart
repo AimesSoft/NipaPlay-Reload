@@ -4,6 +4,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 /// 通用的毛玻璃登录对话框组件
 /// 基于弹弹play登录对话框的样式设计
@@ -56,7 +57,7 @@ class BlurLoginDialog extends StatefulWidget {
 }
 
 class _BlurLoginDialogState extends State<BlurLoginDialog> {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
 
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, FocusNode> _focusNodes = {};
@@ -70,7 +71,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
       _controllers[field.key] = TextEditingController(text: field.initialValue);
       _focusNodes[field.key] = FocusNode();
     }
-    
+
     // 在下一帧自动聚焦到第一个输入框（适用于Android TV）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.fields.isNotEmpty && mounted) {
@@ -109,7 +110,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
 
     try {
       final result = await widget.onLogin(values);
-      
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -121,7 +122,8 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
             BlurSnackBar.show(context, result.message!);
           }
         } else {
-          BlurSnackBar.show(context, result.message ?? '${widget.loginButtonText}失败');
+          BlurSnackBar.show(
+              context, result.message ?? '${widget.loginButtonText}失败');
         }
       }
     } catch (e) {
@@ -198,7 +200,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                           ),
                       textAlign: TextAlign.left,
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: 24),
                     Expanded(
                       child: SingleChildScrollView(
                         child: Column(
@@ -218,7 +220,8 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                                   controller: _controllers[field.key],
                                   focusNode: _focusNodes[field.key],
                                   cursorColor: _accentColor,
-                                  style: TextStyle(color: colorScheme.onSurface),
+                                  style:
+                                      TextStyle(color: colorScheme.onSurface),
                                   obscureText: field.isPassword,
                                   textInputAction: isLastField
                                       ? TextInputAction.done
@@ -239,10 +242,12 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                                     labelStyle: TextStyle(color: labelColor),
                                     hintStyle: TextStyle(color: hintColor),
                                     enabledBorder: UnderlineInputBorder(
-                                      borderSide: BorderSide(color: borderColor),
+                                      borderSide:
+                                          BorderSide(color: borderColor),
                                     ),
-                                    focusedBorder: const UnderlineInputBorder(
-                                      borderSide: BorderSide(color: _accentColor),
+                                    focusedBorder: UnderlineInputBorder(
+                                      borderSide:
+                                          BorderSide(color: _accentColor),
                                     ),
                                   ),
                                 ),
@@ -252,7 +257,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
                       child: TextButton(
@@ -271,7 +276,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
                               )
                             : Text(
                                 widget.loginButtonText,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -317,4 +322,4 @@ class LoginResult {
     required this.success,
     this.message,
   });
-} 
+}

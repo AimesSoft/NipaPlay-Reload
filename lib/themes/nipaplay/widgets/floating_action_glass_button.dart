@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_tooltip_bubble.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class FloatingActionGlassButton extends StatefulWidget {
   final IconData iconData;
@@ -38,7 +39,7 @@ class _FloatingActionGlassButtonState extends State<FloatingActionGlassButton> {
     final textColor =
         Theme.of(context).textTheme.bodyMedium?.color ?? colorScheme.onSurface;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
     final Color baseBackground = Color.alphaBlend(
       colorScheme.onSurface.withOpacity(isDark ? 0.12 : 0.06),
       colorScheme.surface,

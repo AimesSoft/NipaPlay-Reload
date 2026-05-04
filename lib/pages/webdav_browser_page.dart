@@ -10,6 +10,7 @@ import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 /// WebDAV 文件浏览器页面
 /// 用于快捷 Tab，提供快速浏览和播放 WebDAV 视频的功能
@@ -260,13 +261,13 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
     final cardColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
-    final accentColor = const Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
 
     if (_isInitializing) {
       return Scaffold(
         backgroundColor: backgroundColor,
-        body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF2E55)),
+        body: Center(
+          child: CircularProgressIndicator(color: AppAccentColors.current),
         ),
       );
     }
@@ -284,7 +285,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                 size: 64,
                 color: secondaryTextColor,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               Text(
                 '没有配置 WebDAV 服务器',
                 style: TextStyle(
@@ -292,7 +293,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                   color: textColor,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 '请先在设置中添加 WebDAV 服务器',
                 style: TextStyle(
@@ -300,10 +301,10 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                   color: secondaryTextColor,
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: () => _showAddServerDialog(),
-                icon: const Icon(Icons.add),
+                icon: Icon(Icons.add),
                 label: const Text('添加服务器'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: accentColor,
@@ -338,9 +339,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
             // 文件列表
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child:
-                          CircularProgressIndicator(color: Color(0xFFFF2E55)),
+                  ? Center(
+                      child: CircularProgressIndicator(
+                          color: AppAccentColors.current),
                     )
                   : _currentFiles.isEmpty
                       ? Center(
@@ -398,7 +399,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               // 返回按钮
               if (_currentPath != '/' || _pathHistory.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.arrow_back),
+                  icon: Icon(Icons.arrow_back),
                   color: textColor,
                   onPressed: _navigateBack,
                 ),
@@ -426,7 +427,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                           size: 20,
                           color: accentColor,
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _currentConnection?.name ?? '选择服务器',
@@ -452,7 +453,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
           // 路径面包屑导航（根据设置显示）
           if (Provider.of<WebDAVQuickAccessProvider>(context)
               .showPathBreadcrumb) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             _buildPathBreadcrumb(
               textColor: textColor,
               secondaryTextColor: secondaryTextColor,
@@ -609,7 +610,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                 color: isDirectory ? Colors.amber : accentColor,
                 size: 28,
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,7 +626,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     // 文件大小和播放进度
                     Row(
                       children: [
@@ -640,7 +641,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                             ),
                           ),
                           if (seasonEpisode != null) ...[
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 5, vertical: 1),
@@ -654,7 +655,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                               ),
                               child: Text(
                                 seasonEpisode,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Colors.blue,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
@@ -663,7 +664,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                             ),
                           ],
                           if (hasProgress) ...[
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
@@ -684,7 +685,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                         ] else if (!isDirectory && seasonEpisode != null) ...[
                           Text(
                             seasonEpisode,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.blue,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -703,7 +704,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                     ),
                     // 播放进度条
                     if (hasProgress) ...[
-                      const SizedBox(height: 6),
+                      SizedBox(height: 6),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(2),
                         child: LinearProgressIndicator(
@@ -718,10 +719,10 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               if (!isDirectory)
                 IconButton(
-                  icon: const Icon(Icons.play_circle_outline),
+                  icon: Icon(Icons.play_circle_outline),
                   color: accentColor,
                   onPressed: () => _playVideo(file),
                 )
@@ -765,7 +766,7 @@ class _ServerSelectorSheet extends StatelessWidget {
     final backgroundColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
     final secondaryTextColor = isDark ? Colors.white60 : Colors.black54;
-    final accentColor = const Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
 
     return Container(
       decoration: BoxDecoration(

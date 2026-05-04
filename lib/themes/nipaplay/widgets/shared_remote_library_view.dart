@@ -20,6 +20,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart'
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_host_selection_sheet.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum SharedRemoteViewMode { mediaLibrary, libraryManagement }
 
@@ -40,7 +41,7 @@ class SharedRemoteLibraryView extends StatefulWidget {
 
 class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     with AutomaticKeepAliveClientMixin {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
   final ScrollController _gridScrollController = ScrollController();
   final ScrollController _managementScrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -246,12 +247,12 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(status?.message ?? '正在扫描...',
-              style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          const SizedBox(height: 4),
+              style: TextStyle(color: Colors.white70, fontSize: 12)),
+          SizedBox(height: 4),
           LinearProgressIndicator(
             value: progress,
             backgroundColor: Colors.white10,
-            valueColor: const AlwaysStoppedAnimation<Color>(_accentColor),
+            valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
           ),
         ],
       ),
@@ -277,7 +278,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     bool hasHosts,
   ) {
     if (provider.isInitializing) {
-      return const Center(
+      return Center(
           child: CircularProgressIndicator(color: _accentColor));
     }
 
@@ -286,7 +287,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
 
     if (provider.isLoading && animeSummaries.isEmpty) {
-      return const Center(
+      return Center(
           child: CircularProgressIndicator(color: _accentColor));
     }
 
@@ -658,20 +659,20 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         ),
         child: Row(
           children: [
-            const Icon(Ionicons.warning_outline,
+            Icon(Ionicons.warning_outline,
                 color: Colors.orangeAccent, size: 18),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
                 message,
                 locale: const Locale('zh', 'CN'),
                 style:
-                    const TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                    TextStyle(color: Colors.orangeAccent, fontSize: 13),
               ),
             ),
             IconButton(
               onPressed: onClose,
-              icon: const Icon(Ionicons.close_outline,
+              icon: Icon(Ionicons.close_outline,
                   color: Colors.orangeAccent, size: 16),
             ),
           ],
@@ -687,7 +688,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     List<SharedRemoteScannedFolder> folders,
   ) {
     if (provider.isInitializing) {
-      return const Center(
+      return Center(
           child: CircularProgressIndicator(color: _accentColor));
     }
 
@@ -698,7 +699,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     if (provider.isManagementLoading &&
         folders.isEmpty &&
         provider.scanStatus == null) {
-      return const Center(
+      return Center(
           child: CircularProgressIndicator(color: _accentColor));
     }
 
@@ -805,7 +806,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 constraints: const BoxConstraints(),
                 onPressed:
                     busy ? null : () => provider.removeRemoteFolder(folderPath),
-                icon: const Icon(
+                icon: Icon(
                   Icons.delete_outline,
                   color: Colors.redAccent,
                   size: 22,
@@ -832,7 +833,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
                 ),
               ),
               if (loading)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(left: 8.0),
                   child: SizedBox(
                     width: 14,
@@ -877,14 +878,13 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Ionicons.folder_open_outline,
-              color: Colors.white38, size: 48),
-          const SizedBox(height: 12),
+          Icon(Ionicons.folder_open_outline, color: Colors.white38, size: 48),
+          SizedBox(height: 12),
           Text(
             host == null ? '请选择一个共享客户端' : '该客户端尚未扫描任何番剧',
             locale: const Locale('zh', 'CN'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white60),
+            style: TextStyle(color: Colors.white60),
           ),
         ],
       ),

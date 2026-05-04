@@ -22,6 +22,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class _TagSearchStyle {
   const _TagSearchStyle({
@@ -74,7 +75,7 @@ class _TagSearchStyle {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final onSurface = theme.colorScheme.onSurface;
-    const accent = Color(0xFFFF2E55);
+    final accent = AppAccentColors.current;
     final tintBase = isDark ? Colors.white : Colors.black;
 
     return _TagSearchStyle(
@@ -92,17 +93,13 @@ class _TagSearchStyle {
           : Colors.black.withOpacity(0.05),
       chipSelectedColor: accent.withOpacity(isDark ? 0.25 : 0.18),
       chipBorderColor: onSurface.withOpacity(isDark ? 0.22 : 0.14),
-      inputFillColor:
-          isDark ? Colors.white.withOpacity(0.08) : Colors.white,
+      inputFillColor: isDark ? Colors.white.withOpacity(0.08) : Colors.white,
       inputBorderColor: onSurface.withOpacity(isDark ? 0.2 : 0.12),
       inputFocusedBorderColor: accent,
-      glassGradientStart:
-          tintBase.withOpacity(isDark ? 0.2 : 0.04),
+      glassGradientStart: tintBase.withOpacity(isDark ? 0.2 : 0.04),
       glassGradientEnd: tintBase.withOpacity(isDark ? 0.12 : 0.02),
-      glassBorderStart:
-          tintBase.withOpacity(isDark ? 0.35 : 0.12),
-      glassBorderEnd:
-          tintBase.withOpacity(isDark ? 0.2 : 0.08),
+      glassBorderStart: tintBase.withOpacity(isDark ? 0.35 : 0.12),
+      glassBorderEnd: tintBase.withOpacity(isDark ? 0.2 : 0.08),
       accentColor: accent,
       buttonColor: accent.withOpacity(isDark ? 0.25 : 0.16),
       buttonDisabledColor: onSurface.withOpacity(isDark ? 0.1 : 0.08),
@@ -124,8 +121,8 @@ class TagSearchModal extends StatefulWidget {
   final bool useWindow;
 
   const TagSearchModal({
-    super.key, 
-    this.prefilledTag, 
+    super.key,
+    this.prefilledTag,
     this.preselectedTags,
     this.onBeforeOpenAnimeDetail,
     this.useWindow = false,
@@ -228,7 +225,8 @@ class _TagSearchModalState extends State<TagSearchModal> {
       _performTextSearch();
     }
     // 如果有预选择的标签，不自动添加到搜索标签中，只显示在"当前标签"区域
-    else if (widget.preselectedTags != null && widget.preselectedTags!.isNotEmpty) {
+    else if (widget.preselectedTags != null &&
+        widget.preselectedTags!.isNotEmpty) {
       // 仍需要加载搜索配置，以防用户切换到高级搜索
       _loadSearchConfig();
     } else {
@@ -409,17 +407,17 @@ class _TagSearchModalState extends State<TagSearchModal> {
   void _openAnimeDetail(int animeId) {
     // 先关闭搜索弹出框
     Navigator.pop(context);
-    
+
     // 如果有回调，先执行回调（通常是关闭当前番剧详情页面）
     if (widget.onBeforeOpenAnimeDetail != null) {
       widget.onBeforeOpenAnimeDetail!();
     }
-    
+
     // 延迟一帧后打开新的番剧详情页面，确保之前的页面已关闭
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // 检查widget是否仍然挂载
       if (!mounted) return;
-      
+
       // 如果没有提供回调，使用默认的关闭逻辑（用于从其他地方调用）
       if (widget.onBeforeOpenAnimeDetail == null) {
         // 查找并关闭可能存在的番剧详情页面（DialogRoute类型）
@@ -431,12 +429,12 @@ class _TagSearchModalState extends State<TagSearchModal> {
           return true; // 保留其他路由
         });
       }
-      
+
       // 打开新的番剧详情页面，并处理返回的播放历史记录
       ThemedAnimeDetail.show(context, animeId).then((historyItem) async {
         // 检查widget是否仍然挂载，避免在widget销毁后访问context
         if (!mounted) return;
-        
+
         if (historyItem != null) {
           await _handlePlayEpisode(historyItem);
         }
@@ -456,7 +454,8 @@ class _TagSearchModalState extends State<TagSearchModal> {
       final videoFile = File(historyItem.filePath);
       if (!videoFile.existsSync()) {
         debugPrint('[TagSearchWidget] 文件不存在: ${historyItem.filePath}');
-        BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
+        BlurSnackBar.show(
+            context, '文件不存在或无法访问: ${path.basename(historyItem.filePath)}');
         return;
       }
     }
@@ -478,8 +477,10 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
     try {
       // 获取视频播放状态
-      final videoPlayerState = Provider.of<VideoPlayerState>(context, listen: false);
-      debugPrint('[TagSearchWidget] 获取到VideoPlayerState，当前状态: ${videoPlayerState.status}');
+      final videoPlayerState =
+          Provider.of<VideoPlayerState>(context, listen: false);
+      debugPrint(
+          '[TagSearchWidget] 获取到VideoPlayerState，当前状态: ${videoPlayerState.status}');
 
       late VoidCallback statusListener;
       statusListener = () {
@@ -488,37 +489,41 @@ class _TagSearchModalState extends State<TagSearchModal> {
           videoPlayerState.removeListener(statusListener);
           return;
         }
-        
+
         debugPrint('[TagSearchWidget] 播放器状态变化: ${videoPlayerState.status}');
-        
-        if ((videoPlayerState.status == PlayerStatus.ready || 
-             videoPlayerState.status == PlayerStatus.playing) && 
+
+        if ((videoPlayerState.status == PlayerStatus.ready ||
+                videoPlayerState.status == PlayerStatus.playing) &&
             !tabChangeLogicExecuted) {
           tabChangeLogicExecuted = true;
           debugPrint('[TagSearchWidget] 播放器准备就绪，开始切换页面');
-          
+
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               try {
                 // 首先尝试通过Navigator找到根context
-                final rootContext = Navigator.of(context, rootNavigator: true).context;
+                final rootContext =
+                    Navigator.of(context, rootNavigator: true).context;
                 debugPrint('[TagSearchWidget] 尝试使用根context切换页面');
-                
+
                 // 尝试从根context获取MainPageState
                 MainPageState? mainPageState;
                 try {
                   mainPageState = MainPageState.of(rootContext);
                 } catch (e) {
-                  debugPrint('[TagSearchWidget] 从根context获取MainPageState失败: $e');
+                  debugPrint(
+                      '[TagSearchWidget] 从根context获取MainPageState失败: $e');
                   // 如果失败，尝试从当前context获取
                   try {
                     mainPageState = MainPageState.of(context);
                   } catch (e2) {
-                    debugPrint('[TagSearchWidget] 从当前context获取MainPageState也失败: $e2');
+                    debugPrint(
+                        '[TagSearchWidget] 从当前context获取MainPageState也失败: $e2');
                   }
                 }
-                
-                if (mainPageState != null && mainPageState.globalTabController != null) {
+
+                if (mainPageState != null &&
+                    mainPageState.globalTabController != null) {
                   if (mainPageState.globalTabController!.index != 1) {
                     mainPageState.globalTabController!.animateTo(1);
                     debugPrint('[TagSearchWidget] 成功切换到播放页面 (tab 1)');
@@ -529,13 +534,16 @@ class _TagSearchModalState extends State<TagSearchModal> {
                   debugPrint('[TagSearchWidget] 无法获取MainPageState，尝试备用方案');
                   // 备用方案：使用TabChangeNotifier
                   try {
-                    final tabNotifier = Provider.of<TabChangeNotifier>(rootContext, listen: false);
+                    final tabNotifier = Provider.of<TabChangeNotifier>(
+                        rootContext,
+                        listen: false);
                     tabNotifier.changeTab(1);
                     debugPrint('[TagSearchWidget] 使用TabChangeNotifier成功切换页面');
                   } catch (e) {
                     debugPrint('[TagSearchWidget] TabChangeNotifier也失败: $e');
                     // 最后的备用方案：直接关闭所有模态对话框
-                    Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
+                    Navigator.of(context, rootNavigator: true)
+                        .popUntil((route) => route.isFirst);
                     debugPrint('[TagSearchWidget] 关闭所有模态对话框作为备用方案');
                   }
                 }
@@ -552,7 +560,8 @@ class _TagSearchModalState extends State<TagSearchModal> {
           debugPrint('[TagSearchWidget] 播放器错误: ${videoPlayerState.error}');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              BlurSnackBar.show(context, '播放器加载失败: ${videoPlayerState.error ?? '未知错误'}');
+              BlurSnackBar.show(
+                  context, '播放器加载失败: ${videoPlayerState.error ?? '未知错误'}');
             }
           });
         }
@@ -560,10 +569,10 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
       videoPlayerState.addListener(statusListener);
       debugPrint('[TagSearchWidget] 添加状态监听器，开始初始化播放器');
-      
+
       // 启动视频播放
-      videoPlayerState.initializePlayer(historyItem.filePath, historyItem: historyItem);
-      
+      videoPlayerState.initializePlayer(historyItem.filePath,
+          historyItem: historyItem);
     } catch (e) {
       debugPrint('[TagSearchWidget] 播放器初始化异常: $e');
       if (mounted) {
@@ -584,8 +593,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
     final content = LayoutBuilder(
       builder: (context, constraints) {
-        final isDesktopLayout =
-            constraints.maxWidth >= _desktopWidthThreshold;
+        final isDesktopLayout = constraints.maxWidth >= _desktopWidthThreshold;
         const titleText = '搜索';
 
         return Column(
@@ -604,7 +612,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                   ),
                 ),
               ),
-            if (widget.useWindow) const SizedBox(height: 12),
+            if (widget.useWindow) SizedBox(height: 12),
 
             // 标题
             Padding(
@@ -645,7 +653,11 @@ class _TagSearchModalState extends State<TagSearchModal> {
               width: double.infinity,
               height: double.infinity,
               borderRadius: 20,
-              blur: context.watch<AppearanceSettingsProvider>().enableWidgetBlurEffect ? 20 : 0,
+              blur: context
+                      .watch<AppearanceSettingsProvider>()
+                      .enableWidgetBlurEffect
+                  ? 20
+                  : 0,
               alignment: Alignment.center,
               border: 1,
               linearGradient: LinearGradient(
@@ -688,7 +700,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
       child: Row(
         children: [
           Icon(Ionicons.pricetag, color: style.iconColor, size: 20),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -714,7 +726,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
         children: [
           // 显示当前搜索的标签
           _buildPrefilledTagInfo(style),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           // 搜索结果标题
           if (_displayedTextResults.isNotEmpty || _isTextSearching) ...[
@@ -726,7 +738,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
           ],
 
           // 搜索结果列表
@@ -750,8 +762,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildCombinedFilters(style),
-          const SizedBox(height: 16),
-
+          SizedBox(height: 16),
           if (showHeader) ...[
             Text(
               '搜索结果',
@@ -761,9 +772,8 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
           ],
-
           _buildCombinedResultsSection(style),
         ],
       ),
@@ -788,7 +798,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -825,7 +835,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                                     size: 14,
                                   ),
                                 if (_textTags.contains(tag))
-                                  const SizedBox(width: 4),
+                                  SizedBox(width: 4),
                                 Text(
                                   tag,
                                   style: TextStyle(
@@ -843,7 +853,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
           ),
         ),
       );
-      sections.add(const SizedBox(height: 16));
+      sections.add(SizedBox(height: 16));
     }
 
     sections.add(
@@ -860,7 +870,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -894,7 +904,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                     onSubmitted: (_) => _addTextTag(),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 MouseRegion(
                   onEnter: (_) => setState(() => _isAddTagHovered = true),
                   onExit: (_) => setState(() => _isAddTagHovered = false),
@@ -919,13 +929,13 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             if (_textTags.isNotEmpty) ...[
               Text(
                 '已添加标签 (用于搜索):',
                 style: TextStyle(color: style.textSecondary, fontSize: 14),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -956,7 +966,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                                     fontSize: 12,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                SizedBox(width: 6),
                                 GestureDetector(
                                   onTap: () => _removeTextTag(tag),
                                   child: Icon(
@@ -971,7 +981,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                         ))
                     .toList(),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
             ],
           ],
         ),
@@ -1111,7 +1121,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
           ],
           Expanded(
             child: _buildTextResultsBody(style),
@@ -1158,7 +1168,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
           ],
           Expanded(
             child: _buildSearchResults(
@@ -1193,7 +1203,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
             size: 64,
             color: style.textMuted,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             '暂无搜索结果',
             style: TextStyle(
@@ -1222,8 +1232,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
           padding: const EdgeInsets.all(32.0),
           child: Center(
             child: CircularProgressIndicator(
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(style.progressColor),
+              valueColor: AlwaysStoppedAnimation<Color>(style.progressColor),
             ),
           ),
         ),
@@ -1243,7 +1252,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                   size: 64,
                   color: style.textMuted,
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(
                   '暂无搜索结果',
                   style: TextStyle(
@@ -1272,8 +1281,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
           padding: const EdgeInsets.all(16.0),
           child: Center(
             child: CircularProgressIndicator(
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(style.progressColor),
+              valueColor: AlwaysStoppedAnimation<Color>(style.progressColor),
             ),
           ),
         ),
@@ -1295,7 +1303,8 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 disabledForegroundColor: style.textMuted,
                 elevation: 0,
                 shadowColor: Colors.transparent,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -1316,12 +1325,12 @@ class _TagSearchModalState extends State<TagSearchModal> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Ionicons.warning, color: style.textPrimary, size: 48),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             '加载搜索配置失败',
             style: TextStyle(color: style.textPrimary, fontSize: 16),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           ElevatedButton(
             onPressed: _loadSearchConfig,
             style: ElevatedButton.styleFrom(
@@ -1387,7 +1396,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 },
                 style: style,
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _buildRatingSliderRow(
                 label: '最高评分',
                 value: _maxRating,
@@ -1437,9 +1446,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                         isSelected: _selectedYear == null,
                       ),
                       ...List.generate(
-                        _searchConfig!.maxYear -
-                            _searchConfig!.minYear +
-                            1,
+                        _searchConfig!.maxYear - _searchConfig!.minYear + 1,
                         (index) => _searchConfig!.maxYear - index,
                       ).map((year) => DropdownMenuItemData<int?>(
                             title: '$year',
@@ -1463,7 +1470,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
 
   Widget _buildSearchButton(_TagSearchStyle style) {
     final isSearching = _isTextSearching || _isAdvancedSearching;
-    const searchColor = Color(0xFFFF2E55);
+    final searchColor = AppAccentColors.current;
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
@@ -1497,8 +1504,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 width: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor:
-                      const AlwaysStoppedAnimation<Color>(Colors.white),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
             : const Text('搜索', style: TextStyle(fontSize: 16)),
@@ -1511,9 +1517,9 @@ class _TagSearchModalState extends State<TagSearchModal> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ..._buildTextSearchFilterSections(style),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         _buildAdvancedSearchFilters(style),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         _buildSearchButton(style),
       ],
     );
@@ -1544,7 +1550,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             child,
           ],
         ),
@@ -1558,7 +1564,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
     required ValueChanged<double> onChanged,
     required _TagSearchStyle style,
   }) {
-    const searchColor = Color(0xFFFF2E55);
+    final searchColor = AppAccentColors.current;
     final sliderStyle = fluent.SliderThemeData(
       activeColor: fluent.WidgetStatePropertyAll(style.accentColor),
       thumbColor: fluent.WidgetStatePropertyAll(style.accentColor),
@@ -1595,7 +1601,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         fluent.FluentTheme(
           data: fluentTheme,
           child: fluent.Slider(
@@ -1677,7 +1683,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
       child: Row(
         children: [
           _buildSearchThumbnail(anime, style),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1693,7 +1699,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Text(
                   subtitle,
                   style: TextStyle(
@@ -1711,8 +1717,12 @@ class _TagSearchModalState extends State<TagSearchModal> {
     );
   }
 
-  Widget _buildSearchResults(List<SearchResultAnime> results, bool isLoading,
-      ScrollController scrollController, bool isLoadingMore, int totalResults,
+  Widget _buildSearchResults(
+      List<SearchResultAnime> results,
+      bool isLoading,
+      ScrollController scrollController,
+      bool isLoadingMore,
+      int totalResults,
       _TagSearchStyle style) {
     if (isLoading) {
       return Center(
@@ -1732,7 +1742,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
               size: 64,
               color: style.textMuted,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               '暂无搜索结果',
               style: TextStyle(
@@ -1756,8 +1766,7 @@ class _TagSearchModalState extends State<TagSearchModal> {
             padding: const EdgeInsets.all(16.0),
             child: Center(
               child: CircularProgressIndicator(
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(style.progressColor),
+                valueColor: AlwaysStoppedAnimation<Color>(style.progressColor),
               ),
             ),
           );

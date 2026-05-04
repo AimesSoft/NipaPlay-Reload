@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 /// Fluent UI版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
@@ -19,7 +20,7 @@ class MaterialAccountPage extends StatefulWidget {
 
 class _MaterialAccountPageState extends State<MaterialAccountPage>
     with AccountPageController {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
   static const double _buttonHoverScale = 1.06;
   static const double _authControlFontSize = 16;
   static const double _authControlIconSize = 20;
@@ -179,18 +180,18 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     Text(
                       '注销后将：',
                       style: TextStyle(color: colorScheme.onSurface),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
                       '• 永久删除您的弹弹play账号\n• 清除所有个人数据和收藏\n• 无法恢复已发送的弹幕\n• 失去所有积分和等级',
                       style: TextStyle(
                           color: colorScheme.onSurface.withOpacity(0.7)),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     const Text(
                       '点击"继续注销"将在浏览器中打开注销页面，请在页面中完成最终确认。',
                       style:
@@ -287,7 +288,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                   size: 48,
                   color: colorScheme.onSurface.withOpacity(0.6),
                 ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           // 用户信息
           Expanded(
             child: Column(
@@ -304,7 +305,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                   overflow: TextOverflow.ellipsis,
                   softWrap: false,
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   '已登录',
                   locale: const Locale("zh-Hans", "zh"),
@@ -322,7 +323,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             fluent.FluentIcons.sign_out,
             performLogout,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           // 账号注销按钮
           _buildActionButton(
             isLoading ? '处理中...' : '注销账号',
@@ -377,19 +378,19 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             text: "登录弹弹play账号",
             onTap: showLoginDialog,
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             "登录后可以同步观看记录和个人设置",
             locale: const Locale("zh-Hans", "zh"),
             style: subtitleStyle,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildAuthControlButton(
             icon: fluent.FluentIcons.add_friend,
             text: "注册弹弹play账号",
             onTap: showRegisterDialog,
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             "创建新的弹弹play账号，享受完整功能",
             locale: const Locale("zh-Hans", "zh"),
@@ -414,7 +415,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 color: colorScheme.onSurface,
                 size: 24,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 'Bangumi观看记录同步',
                 locale: const Locale("zh-Hans", "zh"),
@@ -426,9 +427,9 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildDandanplayBangumiLinkCard(),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           if (isBangumiLoggedIn) ...[
             // 已登录状态
             _buildBangumiLoggedInView(),
@@ -456,7 +457,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 color: Colors.green,
                 size: 20,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -484,7 +485,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
 
         // 同步状态
         if (isBangumiSyncing) ...[
@@ -508,7 +509,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                     activeColor: _accentColor,
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     bangumiSyncStatus,
@@ -519,7 +520,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
         ],
 
         // 操作按钮
@@ -575,7 +576,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             fontSize: 14,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
 
         Text(
           '需要在以下页面创建访问令牌',
@@ -585,7 +586,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             fontSize: 12,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         _buildAuthControlButton(
           icon: fluent.FluentIcons.link,
           text: '打开访问令牌页面',
@@ -594,7 +595,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             await _openExternalUrl(url, cannotOpenMessage: '无法打开链接');
           },
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         SelectableText(
           'https://next.bgm.tv/demo/access-token',
           style: TextStyle(
@@ -602,7 +603,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             fontSize: 12,
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
 
         // 令牌输入框
         SizedBox(
@@ -610,11 +611,11 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           child: fluent.PasswordBox(
             controller: bangumiTokenController,
             placeholder: '请输入Bangumi访问令牌',
-            style: const TextStyle(fontSize: _authControlFontSize),
+            style: TextStyle(fontSize: _authControlFontSize),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
 
         // 保存按钮
         _buildAuthControlButton(
@@ -669,7 +670,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             statusText,
             locale: const Locale("zh-Hans", "zh"),
@@ -681,7 +682,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             ),
           ),
           if (expiresAt != null) ...[
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               '授权过期时间：${_formatAbsoluteDateTime(expiresAt)}',
               locale: const Locale("zh-Hans", "zh"),
@@ -694,18 +695,18 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             ),
           ],
           if (isExpired) ...[
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               '授权已过期或续期失败，请重新授权。',
               locale: const Locale("zh-Hans", "zh"),
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.orange,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ],
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           _buildAuthControlButton(
             icon: fluent.FluentIcons.link,
             text: isRequestingDandanBangumiAuth
@@ -715,7 +716,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 ? null
                 : _startDandanBangumiAuthorize,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildAuthControlButton(
             icon: fluent.FluentIcons.link,
             text: linked == null ? '先绑定后再管理同步设置' : '管理Bangumi同步设置',
@@ -724,13 +725,13 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                     ? null
                     : _openDandanBangumiManagePage,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildAuthControlButton(
             icon: fluent.FluentIcons.sync,
             text: '我已完成网页操作，刷新状态',
             onTap: !isLoggedIn ? null : _manualRefreshDandanBangumiStatus,
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             '此方式不支持评论，仅用于让弹弹服务器自动同步观看历史。',
             locale: const Locale("zh-Hans", "zh"),
@@ -893,7 +894,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
       children: [
         if (isLoggedIn) ...[
           _buildLoggedInView(),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16),

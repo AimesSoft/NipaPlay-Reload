@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class HoverScaleTextButton extends StatefulWidget {
   final String? text;
   final Widget? child;
   final VoidCallback? onPressed;
   final Color? idleColor;
-  final Color hoverColor;
+  final Color? hoverColor;
   final TextStyle? textStyle;
   final EdgeInsetsGeometry padding;
   final double hoverScale;
@@ -18,7 +19,7 @@ class HoverScaleTextButton extends StatefulWidget {
     this.child,
     required this.onPressed,
     this.idleColor,
-    this.hoverColor = const Color(0xFFFF2E55),
+    this.hoverColor,
     this.textStyle,
     this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     this.hoverScale = 1.1,
@@ -49,10 +50,11 @@ class _HoverScaleTextButtonState extends State<HoverScaleTextButton> {
         Theme.of(context).colorScheme.onSurface.withOpacity(0.7);
     final Color resolvedBaseColor =
         isEnabled ? baseColor : baseColor.withOpacity(0.5);
+    final Color hoverColor = widget.hoverColor ?? AppAccentColors.current;
     final Color textColor =
-        _isHovered && isEnabled ? widget.hoverColor : resolvedBaseColor;
+        _isHovered && isEnabled ? hoverColor : resolvedBaseColor;
     final TextStyle defaultStyle =
-        Theme.of(context).textTheme.labelLarge ?? const TextStyle(fontSize: 14);
+        Theme.of(context).textTheme.labelLarge ?? TextStyle(fontSize: 14);
     final TextStyle effectiveBaseStyle =
         childTextStyle ?? widget.textStyle ?? defaultStyle;
 

@@ -3,6 +3,7 @@ import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/url_name_generator.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 /// 多地址管理组件
 class MultiAddressManagerWidget extends StatefulWidget {
@@ -12,7 +13,7 @@ class MultiAddressManagerWidget extends StatefulWidget {
   final Function(String addressId) onRemoveAddress;
   final Function(String addressId) onSwitchAddress;
   final Function(String addressId, int priority)? onUpdatePriority;
-  
+
   const MultiAddressManagerWidget({
     super.key,
     required this.addresses,
@@ -24,11 +25,12 @@ class MultiAddressManagerWidget extends StatefulWidget {
   });
 
   @override
-  State<MultiAddressManagerWidget> createState() => _MultiAddressManagerWidgetState();
+  State<MultiAddressManagerWidget> createState() =>
+      _MultiAddressManagerWidgetState();
 }
 
 class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
 
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
@@ -91,18 +93,18 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
           _sortedAddressList(widget.addresses, widget.currentAddressId);
     }
   }
-  
+
   @override
   void dispose() {
     _urlController.dispose();
     _nameController.dispose();
     super.dispose();
   }
-  
+
   Future<void> _showAddAddressDialog() async {
     _urlController.clear();
     _nameController.clear();
-    
+
     final result = await NipaplayWindow.show<Map<String, String>>(
       context: context,
       barrierDismissible: false,
@@ -128,13 +130,13 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                           color: _accentColor.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.add_link,
                           color: _accentColor,
                           size: 20,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       Text(
                         '添加服务器地址',
                         style: TextStyle(
@@ -145,12 +147,12 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Text(
                     '为同一服务器添加多个访问地址，系统会自动选择可用的地址连接。',
                     style: TextStyle(color: _subTextColor, fontSize: 14),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   TextField(
                     controller: _urlController,
                     cursorColor: _accentColor,
@@ -166,11 +168,11 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: _accentColor),
+                        borderSide: BorderSide(color: _accentColor),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   TextField(
                     controller: _nameController,
                     cursorColor: _accentColor,
@@ -186,11 +188,11 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: _accentColor),
+                        borderSide: BorderSide(color: _accentColor),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
@@ -199,7 +201,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                         style: _plainTextButtonStyle(),
                         child: const Text('取消'),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       TextButton(
                         onPressed: () {
                           if (_urlController.text.trim().isNotEmpty) {
@@ -229,18 +231,18 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ),
       ),
     );
-    
+
     if (result != null) {
       widget.onAddAddress(result['url']!, result['name']!);
     }
   }
-  
+
   Future<void> _confirmRemoveAddress(ServerAddress address) async {
     if (widget.addresses.length <= 1) {
       BlurSnackBar.show(context, '至少需要保留一个地址');
       return;
     }
-    
+
     final confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -266,7 +268,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ],
       ),
     );
-    
+
     if (confirm == true) {
       widget.onRemoveAddress(address.id);
     }
@@ -277,7 +279,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
 
     final TextEditingController priorityController = TextEditingController();
     priorityController.text = address.priority.toString();
-    
+
     final result = await showDialog<int>(
       context: context,
       barrierDismissible: false,
@@ -295,17 +297,17 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                 '地址: ${address.name}',
                 style: TextStyle(color: _subTextColor, fontSize: 14),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 'URL: ${address.url}',
                 style: TextStyle(color: _subTextColor, fontSize: 14),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               Text(
                 '优先级（数字越小优先级越高）:',
                 style: TextStyle(color: _textColor, fontSize: 16),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               // 优先级输入框
               TextField(
                 controller: priorityController,
@@ -321,19 +323,19 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _accentColor),
+                    borderSide: BorderSide(color: _accentColor),
                   ),
                   errorBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.red),
+                    borderSide: BorderSide(color: Colors.red),
                   ),
                   focusedErrorBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.red),
+                    borderSide: BorderSide(color: Colors.red),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -351,7 +353,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       '• 0: 最高优先级（优先）\n• 1-3: 高优先级\n• 4-9: 中等优先级\n• 10+: 低优先级',
                       style: TextStyle(color: _subTextColor, fontSize: 12),
@@ -395,12 +397,12 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ),
       ),
     );
-    
+
     if (result != null && result != address.priority) {
       widget.onUpdatePriority!(address.id, result);
     }
   }
-  
+
   Widget _buildAddressStatus(ServerAddress address) {
     // 当前使用中的地址
     if (address.id == widget.currentAddressId) {
@@ -421,7 +423,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ),
       );
     }
-    
+
     // 最近成功连接
     if (address.lastSuccessTime != null) {
       final timeDiff = DateTime.now().difference(address.lastSuccessTime!);
@@ -435,13 +437,13 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
       } else {
         timeText = '${timeDiff.inDays}天前';
       }
-      
+
       return Text(
         '上次成功: $timeText',
         style: TextStyle(color: _mutedTextColor, fontSize: 12),
       );
     }
-    
+
     // 连续失败
     if (address.failureCount > 0) {
       return Container(
@@ -452,11 +454,11 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ),
         child: Text(
           '失败 ${address.failureCount} 次',
-          style: const TextStyle(color: Colors.orange, fontSize: 12),
+          style: TextStyle(color: Colors.orange, fontSize: 12),
         ),
       );
     }
-    
+
     // 未启用
     if (!address.isEnabled) {
       return Container(
@@ -471,14 +473,15 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ),
       );
     }
-    
+
     return const SizedBox.shrink();
   }
 
   Widget _buildPriorityBadge(ServerAddress address) {
-    final lowestPriority = widget.addresses.map((a) => a.priority).reduce((a, b) => a < b ? a : b);
+    final lowestPriority =
+        widget.addresses.map((a) => a.priority).reduce((a, b) => a < b ? a : b);
     final isHighestPriority = address.priority == lowestPriority;
-    
+
     // 只有最高优先级（数字最小）的地址显示优先标记
     if (isHighestPriority && widget.addresses.length > 1) {
       return Container(
@@ -487,13 +490,13 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
           color: _accentColor.withOpacity(0.2),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: const Text(
+        child: Text(
           '优先',
           style: TextStyle(color: _accentColor, fontSize: 10),
         ),
       );
     }
-    
+
     // 显示优先级数字（如果不是0且有多个地址）
     if (address.priority > 0 && widget.addresses.length > 1) {
       return Container(
@@ -508,7 +511,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
         ),
       );
     }
-    
+
     return const SizedBox.shrink();
   }
 
@@ -522,7 +525,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
     });
     return sorted;
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -542,48 +545,50 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
             ),
             TextButton.icon(
               onPressed: _showAddAddressDialog,
-              icon: const Icon(Icons.add, size: 16),
+              icon: Icon(Icons.add, size: 16),
               label: const Text('添加地址'),
               style: _plainTextButtonStyle(baseColor: _accentColor),
             ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      
-      // 地址列表
-      Container(
-        decoration: BoxDecoration(
-          color: _panelColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _borderColor),
+          ],
         ),
-        child: ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _sortedAddresses.length,
-          separatorBuilder: (context, index) => Divider(
-            color: _borderColor,
-            height: 1,
+        SizedBox(height: 12),
+
+        // 地址列表
+        Container(
+          decoration: BoxDecoration(
+            color: _panelColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _borderColor),
           ),
-          itemBuilder: (context, index) {
-            final address = _sortedAddresses[index];
-            final isCurrent = address.id == widget.currentAddressId;
-      
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              title: Row(
-                children: [
-                  // 优先级标记
-                  _buildPriorityBadge(address),
-                    if (widget.addresses.length > 1) const SizedBox(width: 8),
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _sortedAddresses.length,
+            separatorBuilder: (context, index) => Divider(
+              color: _borderColor,
+              height: 1,
+            ),
+            itemBuilder: (context, index) {
+              final address = _sortedAddresses[index];
+              final isCurrent = address.id == widget.currentAddressId;
+
+              return ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                title: Row(
+                  children: [
+                    // 优先级标记
+                    _buildPriorityBadge(address),
+                    if (widget.addresses.length > 1) SizedBox(width: 8),
                     Text(
                       address.name,
                       style: TextStyle(
                         color: isCurrent ? Colors.green : _textColor,
-                        fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight:
+                            isCurrent ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     _buildAddressStatus(address),
                   ],
                 ),
@@ -601,7 +606,8 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // 优先级设置按钮
-                    if (widget.onUpdatePriority != null && widget.addresses.length > 1)
+                    if (widget.onUpdatePriority != null &&
+                        widget.addresses.length > 1)
                       IconButton(
                         icon: Icon(Icons.tune, color: _subTextColor),
                         tooltip: '设置优先级',
@@ -633,15 +639,15 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
                           overlayColor: Colors.transparent,
                         ),
                       ),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
         ),
-      ),
-        
+
         // 提示信息
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -653,7 +659,7 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
             children: [
               Icon(Icons.info_outline,
                   color: _accentColor.withOpacity(0.8), size: 16),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '系统会自动选择最优地址连接。当一个地址无法连接时，会自动尝试其他地址。',

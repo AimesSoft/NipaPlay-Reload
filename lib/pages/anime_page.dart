@@ -45,6 +45,7 @@ import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings_page.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 // Custom ScrollBehavior for NoScrollbarBehavior is removed as NestedScrollView handles scrolling differently.
 
@@ -717,7 +718,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
     required Color iconColor,
     required Color textColor,
   }) {
-    const Color hoverColor = Color(0xFFFF2E55);
+    final Color hoverColor = AppAccentColors.current;
     final Color displayColor = _isRemoteAccessHovered ? hoverColor : textColor;
 
     return Padding(
@@ -736,7 +737,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.link, size: 18, color: displayColor),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 Text(
                   '远程访问',
                   locale: const Locale("zh-Hans", "zh"),
@@ -758,7 +759,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
     required Color iconColor,
     required Color textColor,
   }) {
-    const Color hoverColor = Color(0xFFFF2E55);
+    final Color hoverColor = AppAccentColors.current;
     final Color displayColor = _isAddEntryHovered ? hoverColor : textColor;
 
     return Padding(
@@ -777,7 +778,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.cloud_outlined, size: 18, color: displayColor),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 Text(
                   '添加媒体',
                   locale: const Locale("zh-Hans", "zh"),
@@ -993,7 +994,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
 
         // 动态生成标签
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        const Color activeColor = Color(0xFFFF2E55);
+        final Color activeColor = AppAccentColors.current;
         final unselectedLabelColor =
             isDarkMode ? Colors.white60 : Colors.black54;
 
@@ -1158,7 +1159,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
               // 高度受限时，使用简化布局避免溢出
               return SizedBox(
                 height: availableHeight,
-                child: const Center(
+                child: Center(
                   child: Text(
                     '布局空间不足',
                     locale: Locale("zh-Hans", "zh"),
@@ -1189,7 +1190,7 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
                               unselectedLabelColor: unselectedLabelColor,
                               labelPadding: const EdgeInsets.only(bottom: 12.0),
                               indicatorPadding: EdgeInsets.zero,
-                              indicator: const _CustomTabIndicator(
+                              indicator: _CustomTabIndicator(
                                 indicatorHeight: 3.0,
                                 indicatorColor: activeColor,
                                 radius: 30.0,
@@ -1205,13 +1206,13 @@ class _MediaLibraryTabsState extends State<_MediaLibraryTabs>
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         if (!globals.isPhone) ...[
                           _buildRemoteAccessEntry(
                             iconColor: activeColor,
                             textColor: unselectedLabelColor,
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                         ],
                         _buildAddMediaServerEntry(
                           iconColor: activeColor,
@@ -1367,7 +1368,7 @@ class _CustomTabIndicator extends Decoration {
   final Color indicatorColor;
   final double radius;
 
-  const _CustomTabIndicator({
+  _CustomTabIndicator({
     required this.indicatorHeight,
     required this.indicatorColor,
     required this.radius,

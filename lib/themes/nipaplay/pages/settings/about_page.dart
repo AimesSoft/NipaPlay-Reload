@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class AboutPage extends StatefulWidget {
   const AboutPage({super.key});
@@ -134,13 +135,13 @@ class _AboutPageState extends State<AboutPage> {
                 style: TextStyle(color: colorScheme.onSurface.withOpacity(0.9)),
               ),
             if (info.error != null && info.error!.trim().isNotEmpty) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 info.error!.trim(),
-                style: const TextStyle(color: Colors.redAccent),
+                style: TextStyle(color: Colors.redAccent),
               ),
             ],
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
               context.l10n.aboutReleaseNotesTitle,
               style: TextStyle(
@@ -149,7 +150,7 @@ class _AboutPageState extends State<AboutPage> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: ConstrainedBox(
@@ -277,7 +278,7 @@ class _AboutPageState extends State<AboutPage> {
                       size: 60,
                       color: colorScheme.onSurface.withOpacity(0.7),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     Text(
                       context.l10n.appreciationImageLoadFailed,
                       style: TextStyle(
@@ -315,7 +316,7 @@ class _AboutPageState extends State<AboutPage> {
     final bool showUpdateButtonHover =
         isUpdateButtonEnabled && _isUpdateButtonHovered;
     final l10n = context.l10n;
-    const Color updateAccentColor = Color(0xFFFF2E55);
+    final Color updateAccentColor = AppAccentColors.current;
     final Color updateIdleColor =
         colorScheme.onSurface.withOpacity(isUpdateButtonEnabled ? 0.75 : 0.4);
     final Color updateButtonColor =
@@ -328,7 +329,7 @@ class _AboutPageState extends State<AboutPage> {
         mainAxisAlignment: MainAxisAlignment.start, // Change to start
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 40), // Add some space at the top
+          SizedBox(height: 40), // Add some space at the top
           Image.asset(
             'assets/logo.png', // Ensure this path is correct
             height: 120, // Adjust size as needed
@@ -339,7 +340,7 @@ class _AboutPageState extends State<AboutPage> {
                       .withOpacity(0.7)); // Placeholder if logo fails
             },
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           // 版本信息，点击跳转到releases页面（如果有更新）
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -383,7 +384,7 @@ class _AboutPageState extends State<AboutPage> {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           MouseRegion(
             onEnter: (_) => isUpdateButtonEnabled
                 ? setState(() => _isUpdateButtonHovered = true)
@@ -427,7 +428,7 @@ class _AboutPageState extends State<AboutPage> {
                             size: 18,
                             color: updateButtonColor,
                           ),
-                        const SizedBox(width: 6),
+                        SizedBox(width: 6),
                         Text(
                           _isCheckingUpdate
                               ? l10n.aboutCheckingUpdates
@@ -444,7 +445,7 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
 
           _buildInfoCard(
             context: context,
@@ -464,7 +465,7 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
 
           _buildInfoCard(
             context: context,
@@ -488,14 +489,14 @@ class _AboutPageState extends State<AboutPage> {
                         fontWeight: FontWeight.bold)),
                 TextSpan(text: l10n.aboutThanksSakikoSuffix),
               ]),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _buildRichText(
                 context,
                 [
                   TextSpan(text: l10n.thanksSponsorUsers),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -505,7 +506,7 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
 
           _buildInfoCard(
             context: context,
@@ -514,7 +515,7 @@ class _AboutPageState extends State<AboutPage> {
               _buildRichText(context, [
                 TextSpan(text: l10n.aboutCommunityHint),
               ]),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               GestureDetector(
                 onTap: () => _launchURL(
                     'https://www.github.com/AimesSoft/NipaPlay-Reload'),
@@ -526,7 +527,7 @@ class _AboutPageState extends State<AboutPage> {
                       Icon(Ionicons.logo_github,
                           color: colorScheme.onSurface.withOpacity(0.8),
                           size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         'AimesSoft/NipaPlay-Reload',
                         locale: Locale("zh-Hans", "zh"),
@@ -541,7 +542,7 @@ class _AboutPageState extends State<AboutPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               GestureDetector(
                 onTap: () => _launchURL('https://qm.qq.com/q/w9j09QJn4Q'),
                 child: MouseRegion(
@@ -552,7 +553,7 @@ class _AboutPageState extends State<AboutPage> {
                       Icon(Ionicons.chatbubbles_outline,
                           color: colorScheme.onSurface.withOpacity(0.8),
                           size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         l10n.aboutQqGroup('961207150'),
                         style: TextStyle(
@@ -566,7 +567,7 @@ class _AboutPageState extends State<AboutPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               GestureDetector(
                 onTap: () => _launchURL('https://nipaplay.aimes-soft.com'),
                 child: MouseRegion(
@@ -577,7 +578,7 @@ class _AboutPageState extends State<AboutPage> {
                       Icon(Ionicons.globe_outline,
                           color: colorScheme.onSurface.withOpacity(0.8),
                           size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         l10n.aboutOfficialWebsite,
                         style: TextStyle(
@@ -593,7 +594,7 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
 
           _buildInfoCard(
             context: context,
@@ -605,7 +606,7 @@ class _AboutPageState extends State<AboutPage> {
                       '${l10n.aboutSponsorParagraph1}${l10n.aboutSponsorParagraph2}',
                 ),
               ]),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               GestureDetector(
                 onTap: () => _launchURL('https://afdian.com/a/irigas'),
                 child: MouseRegion(
@@ -615,7 +616,7 @@ class _AboutPageState extends State<AboutPage> {
                     children: [
                       Icon(Ionicons.heart,
                           color: Colors.pinkAccent[100], size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         l10n.aboutAfdianSponsorPage,
                         style: TextStyle(
@@ -629,7 +630,7 @@ class _AboutPageState extends State<AboutPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               GestureDetector(
                 onTap: _showAppreciationQR,
                 child: MouseRegion(
@@ -639,7 +640,7 @@ class _AboutPageState extends State<AboutPage> {
                     children: [
                       Icon(Ionicons.qr_code,
                           color: Colors.orangeAccent[100], size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         l10n.appreciationCode,
                         style: TextStyle(
@@ -655,7 +656,7 @@ class _AboutPageState extends State<AboutPage> {
               ),
             ],
           ),
-          const SizedBox(height: 30),
+          SizedBox(height: 30),
         ],
       ),
     );
@@ -672,7 +673,7 @@ class _AboutPageState extends State<AboutPage> {
           size: 16,
           color: accentColor,
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Text(
           name,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -713,7 +714,7 @@ class _AboutPageState extends State<AboutPage> {
                     fontWeight: FontWeight.bold,
                   ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
           ],
           ...children,
         ],

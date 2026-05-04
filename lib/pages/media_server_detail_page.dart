@@ -25,6 +25,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/providers/settings_provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class MediaServerDetailPage extends StatefulWidget {
   final String mediaId;
@@ -508,7 +509,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             size: 16));
       }
       if (i < 9) {
-        stars.add(const SizedBox(width: 1));
+        stars.add(SizedBox(width: 1));
       }
     }
     return Row(mainAxisSize: MainAxisSize.min, children: stars);
@@ -569,11 +570,11 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       contentWidget: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           CircularProgressIndicator(
             valueColor: AlwaysStoppedAnimation<Color>(textColor),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             '正在为当前条目匹配弹幕，请稍候…',
             style: TextStyle(color: textColor, fontSize: 14),
@@ -626,20 +627,19 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: Colors.redAccent),
-              const SizedBox(height: 16),
+              Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              SizedBox(height: 16),
               Text('加载详情失败:',
                   locale: Locale("zh-Hans", "zh"),
                   style: TextStyle(color: textColor.withOpacity(0.8))),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 _error!,
                 locale: Locale("zh-Hans", "zh"),
                 style: TextStyle(color: secondaryTextColor),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               BlurButton(
                 icon: Icons.refresh,
                 text: '重试',
@@ -648,7 +648,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 fontSize: 16,
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: Text('关闭',
@@ -815,9 +815,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Divider(color: textColor.withOpacity(0.15)),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           if (ratingValue != null && ratingValue > 0) ...[
             RichText(
               text: TextSpan(
@@ -835,11 +835,11 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                 ],
               ),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
           ],
           ...infoRows,
           if (_mediaDetail!.genres.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -862,9 +862,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             ),
           ],
           if (_mediaDetail!.cast.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             if (sectionTitleStyle != null) Text('演员', style: sectionTitleStyle),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             SizedBox(
               height: 100,
               child: ListView.builder(
@@ -888,7 +888,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                               ? Icon(Icons.person, color: secondaryTextColor)
                               : null,
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         SizedBox(
                           width: 70,
                           child: Text(
@@ -908,7 +908,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
             ),
           ],
           if (_isMovie) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Row(
               children: [
                 BlurButton(
@@ -961,13 +961,13 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
-    const Color accentColor = Color(0xFFFF2E55);
+    final Color accentColor = AppAccentColors.current;
 
     // 移除原有的 Positioned 返回按钮，因为顶部已经有了全局关闭按钮
     return Column(
       // 不再需要 Stack，因为返回按钮已全局处理
       children: [
-        // const SizedBox(height: 16), // 顶部间距可以根据整体布局调整，TabBar外部已有间距
+        // SizedBox(height: 16), // 顶部间距可以根据整体布局调整，TabBar外部已有间距
 
         // 季节选择器
         if (_seasons.isNotEmpty)
@@ -1044,7 +1044,7 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
-    const Color accentColor = Color(0xFFFF2E55);
+    final Color accentColor = AppAccentColors.current;
 
     if (_selectedSeasonId == null && _seasons.isNotEmpty) {
       // 如果有季但没有选择，提示选择
@@ -1079,13 +1079,12 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: Colors.redAccent),
-              const SizedBox(height: 16),
+              Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+              SizedBox(height: 16),
               Text('加载剧集失败: $_error',
                   style: TextStyle(color: secondaryTextColor),
                   textAlign: TextAlign.center),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               BlurButton(
                 icon: Icons.refresh,
                 text: '重试',

@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class PluginSettingsPage extends StatelessWidget {
   const PluginSettingsPage({super.key});
@@ -76,7 +77,7 @@ class PluginSettingsPage extends StatelessWidget {
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               context.l10n.localeName.startsWith('zh_Hant') ? '刪除' : '删除',
-              style: const TextStyle(color: Colors.redAccent),
+              style: TextStyle(color: Colors.redAccent),
             ),
           ),
         ],
@@ -88,7 +89,8 @@ class PluginSettingsPage extends StatelessWidget {
     final success = await pluginService.deletePlugin(plugin.manifest.id);
     if (!context.mounted) return;
     if (success) {
-      BlurSnackBar.show(context, _pluginDeleteToast(context, plugin.manifest.name));
+      BlurSnackBar.show(
+          context, _pluginDeleteToast(context, plugin.manifest.name));
     } else {
       BlurSnackBar.show(context, _pluginDeleteFailed(context));
     }
@@ -269,7 +271,7 @@ class PluginSettingsPage extends StatelessWidget {
               title: Text(entry.title),
               subtitle:
                   entry.description == null ? null : Text(entry.description!),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: Icon(Icons.chevron_right),
               onTap: () => Navigator.of(itemContext).pop(entry),
             );
           },
@@ -287,8 +289,9 @@ class PluginSettingsPage extends StatelessWidget {
       height: MediaQuery.of(context).size.height * 0.56,
       child: Consumer<PluginService>(
         builder: (sheetContext, pluginService, child) {
-          final updatedPlugin = pluginService.plugins
-              .firstWhere((p) => p.manifest.id == plugin.manifest.id, orElse: () => plugin);
+          final updatedPlugin = pluginService.plugins.firstWhere(
+              (p) => p.manifest.id == plugin.manifest.id,
+              orElse: () => plugin);
           final currentEntries = updatedPlugin.uiEntries;
           return ListView.builder(
             itemCount: currentEntries.length,
@@ -303,17 +306,17 @@ class PluginSettingsPage extends StatelessWidget {
                   trailing: FluentSettingsSwitch(
                     value: entry.enabled!,
                     onChanged: (_) async {
-                      await _invokePluginAction(sheetContext, updatedPlugin, entry);
+                      await _invokePluginAction(
+                          sheetContext, updatedPlugin, entry);
                     },
                   ),
                 );
               }
               return ListTile(
                 title: Text(entry.title),
-                subtitle: entry.description == null
-                    ? null
-                    : Text(entry.description!),
-                trailing: const Icon(Icons.chevron_right),
+                subtitle:
+                    entry.description == null ? null : Text(entry.description!),
+                trailing: Icon(Icons.chevron_right),
                 onTap: () async {
                   Navigator.of(itemContext).pop();
                   if (!context.mounted) return;
@@ -387,7 +390,8 @@ class PluginSettingsPage extends StatelessWidget {
           _HoverScaleIconButton(
             tooltip: _pluginDeleteTooltip(context),
             icon: Icons.delete_outline,
-            onPressed: () => _confirmDeletePlugin(context, plugin, pluginService),
+            onPressed: () =>
+                _confirmDeletePlugin(context, plugin, pluginService),
           ),
         _HoverScaleIconButton(
           tooltip: actionEnabled
@@ -422,7 +426,7 @@ class PluginSettingsPage extends StatelessWidget {
     return Consumer<PluginService>(
       builder: (context, pluginService, child) {
         if (!pluginService.isLoaded) {
-          return const Center(child: CircularProgressIndicator());
+          return Center(child: CircularProgressIndicator());
         }
 
         final plugins = pluginService.plugins;
@@ -549,7 +553,7 @@ class _HoverScaleTextAction extends StatefulWidget {
 }
 
 class _HoverScaleTextActionState extends State<_HoverScaleTextAction> {
-  static const Color _nipaAccentColor = Color(0xFFFF2E55);
+  static Color get _nipaAccentColor => AppAccentColors.current;
 
   bool _isHovered = false;
 
@@ -601,7 +605,7 @@ class _HoverScaleIconButton extends StatefulWidget {
 }
 
 class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
-  static const Color _nipaAccentColor = Color(0xFFFF2E55);
+  static Color get _nipaAccentColor => AppAccentColors.current;
 
   bool _isHovered = false;
 

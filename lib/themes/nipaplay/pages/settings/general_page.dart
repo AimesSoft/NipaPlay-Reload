@@ -16,6 +16,7 @@ import 'package:nipaplay/services/desktop_startup_window_preferences.dart';
 import 'package:nipaplay/services/update_service.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 // Define the key for SharedPreferences
 const String defaultPageIndexKey = 'default_page_index';
@@ -297,7 +298,7 @@ class _GeneralPageState extends State<GeneralPage> {
                   controller: widthController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  cursorColor: const Color(0xFFFF2E55),
+                  cursorColor: AppAccentColors.current,
                   decoration: InputDecoration(
                     labelText: '宽度 (px)',
                     labelStyle: TextStyle(
@@ -310,16 +311,16 @@ class _GeneralPageState extends State<GeneralPage> {
                           color: colorScheme.onSurface.withOpacity(0.38)),
                     ),
                   ),
-                  style: const TextStyle(color: Color(0xFFFF2E55)),
+                  style: TextStyle(color: AppAccentColors.current),
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               Expanded(
                 child: TextField(
                   controller: heightController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  cursorColor: const Color(0xFFFF2E55),
+                  cursorColor: AppAccentColors.current,
                   decoration: InputDecoration(
                     labelText: '高度 (px)',
                     labelStyle: TextStyle(
@@ -332,12 +333,12 @@ class _GeneralPageState extends State<GeneralPage> {
                           color: colorScheme.onSurface.withOpacity(0.38)),
                     ),
                   ),
-                  style: const TextStyle(color: Color(0xFFFF2E55)),
+                  style: TextStyle(color: AppAccentColors.current),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Text(
             '最小尺寸 ' +
                 _formatWindowSize(
@@ -401,7 +402,7 @@ class _GeneralPageState extends State<GeneralPage> {
             children: [
               Icon(Ionicons.home_outline,
                   color: colorScheme.onSurface, size: 18),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 '主页板块',
                 locale: const Locale("zh-Hans", "zh"),
@@ -421,7 +422,7 @@ class _GeneralPageState extends State<GeneralPage> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
@@ -433,7 +434,7 @@ class _GeneralPageState extends State<GeneralPage> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           ReorderableListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -499,7 +500,7 @@ class _GeneralPageState extends State<GeneralPage> {
               value: enabled,
               onChanged: onToggle,
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: 6),
             ReorderableDragStartListener(
               index: index,
               child: Icon(
@@ -674,7 +675,7 @@ class _HoverScaleActionButton extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
   final Color? idleColor;
-  final Color hoverColor;
+  final Color? hoverColor;
   final double iconSize;
   final double hoverScale;
   final EdgeInsetsGeometry padding;
@@ -686,7 +687,7 @@ class _HoverScaleActionButton extends StatefulWidget {
     required this.label,
     required this.onTap,
     this.idleColor,
-    this.hoverColor = const Color(0xFFFF2E55),
+    this.hoverColor,
     this.iconSize = 16,
     this.hoverScale = 1.1,
     this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -706,9 +707,10 @@ class _HoverScaleActionButtonState extends State<_HoverScaleActionButton> {
   Widget build(BuildContext context) {
     final baseColor =
         widget.idleColor ?? Theme.of(context).colorScheme.onSurface;
-    final color = _isHovered ? widget.hoverColor : baseColor;
+    final color =
+        _isHovered ? (widget.hoverColor ?? AppAccentColors.current) : baseColor;
     final textStyle =
-        Theme.of(context).textTheme.labelLarge ?? const TextStyle(fontSize: 14);
+        Theme.of(context).textTheme.labelLarge ?? TextStyle(fontSize: 14);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -727,7 +729,7 @@ class _HoverScaleActionButtonState extends State<_HoverScaleActionButton> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(widget.icon, size: widget.iconSize, color: color),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 Text(
                   widget.label,
                   locale: const Locale("zh-Hans", "zh"),

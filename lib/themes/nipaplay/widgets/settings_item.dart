@@ -6,8 +6,9 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
-const Color _fluentAccentColor = Color(0xFFFF2E55);
+Color get _fluentAccentColor => AppAccentColors.current;
 
 /// 设置项的类型枚举
 enum SettingsItemType {
@@ -291,7 +292,7 @@ class SettingsItem extends StatelessWidget {
 
     if (descriptionItems.isNotEmpty) {
       if (children.isNotEmpty) {
-        children.add(const SizedBox(height: 4));
+        children.add(SizedBox(height: 4));
       }
       for (int i = 0; i < descriptionItems.length; i++) {
         final item = descriptionItems[i];
@@ -303,7 +304,7 @@ class SettingsItem extends StatelessWidget {
           ),
         );
         if (i != descriptionItems.length - 1) {
-          children.add(const SizedBox(height: 2));
+          children.add(SizedBox(height: 2));
         }
       }
     }

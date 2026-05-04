@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class RemoteAccessPage extends StatefulWidget {
   const RemoteAccessPage({super.key});
@@ -262,7 +263,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         controller: portController,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        cursorColor: const Color(0xFFFF2E55),
+        cursorColor: AppAccentColors.current,
         decoration: InputDecoration(
           labelText: '端口 (1-65535)',
           labelStyle:
@@ -275,7 +276,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 color: colorScheme.onSurface.withValues(alpha: 0.38)),
           ),
         ),
-        style: const TextStyle(color: Color(0xFFFF2E55)),
+        style: TextStyle(color: AppAccentColors.current),
       ),
       actions: [
         HoverScaleTextButton(
@@ -383,7 +384,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 color: colorScheme.onSurface,
                 size: 24,
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Text(
                 '远程访问',
                 style: TextStyle(
@@ -405,7 +406,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             ],
           ),
 
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           Text(
             '启用后可供其他 NipaPlay 客户端远程访问本机媒体库，并可作为被遥控端供控制端自动发现与遥控。',
@@ -415,7 +416,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             ),
           ),
 
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           // 启用/禁用开关
           _buildSettingItem(
@@ -449,20 +450,20 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             ),
           ),
 
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Divider(
               color: colorScheme.onSurface.withValues(alpha: 0.12), height: 1),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
 
           if (_webServerEnabled) ...[
             // 访问地址
             _buildAccessAddressSection(),
 
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
                 height: 1),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
           ],
 
           // 端口设置
@@ -495,7 +496,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 color: colorScheme.onSurface.withValues(alpha: 0.7),
                 size: 20,
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               Text(
                 '客户端连接地址',
                 style: TextStyle(
@@ -506,7 +507,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text(
             '选择建议：\n'
             '• 本机：仅在这台设备上访问（localhost/127.0.0.1）\n'
@@ -518,7 +519,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               height: 1.35,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           if (_accessUrls.isEmpty)
             Text(
               '正在获取地址...',
@@ -545,7 +546,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                                 colorScheme.onSurface),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Text('正在获取公网IP...',
                             style: TextStyle(
                               color:
@@ -582,7 +583,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       child: Row(
         children: [
           Icon(iconData, color: tagColor, size: 14),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text(
             label,
             style: TextStyle(
@@ -591,7 +592,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               url,
@@ -630,7 +631,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             color: colorScheme.onSurface.withValues(alpha: 0.7),
             size: 20,
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -643,7 +644,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                     fontSize: 15,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   subtitle,
                   style: TextStyle(
@@ -667,7 +668,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 32),
+          SizedBox(height: 32),
           Row(
             children: [
               Icon(
@@ -675,7 +676,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 color: colorScheme.onSurface,
                 size: 24,
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Text(
                 '受信任设备',
                 style: TextStyle(
@@ -686,7 +687,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             '受信任的设备可以直接连接并控制播放器，无需再次确认。',
             style: TextStyle(
@@ -694,9 +695,9 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           if (_isLoadingTrustedDevices)
-            const Center(
+            Center(
               child: Padding(
                 padding: EdgeInsets.all(16.0),
                 child: CircularProgressIndicator(),
@@ -752,7 +753,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                           color: colorScheme.primary,
                           size: 24,
                         ),
-                        const SizedBox(width: 16),
+                        SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -765,7 +766,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                                   fontSize: 15,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(height: 4),
                               Text(
                                 '$platform · $remoteIp',
                                 style: TextStyle(
@@ -774,7 +775,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                                   fontSize: 14,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(height: 4),
                               Text(
                                 '信任时间: $trustedTime',
                                 style: TextStyle(
@@ -827,7 +828,7 @@ class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    const hoverColor = Color(0xFFFF2E55);
+    final hoverColor = AppAccentColors.current;
     const iconSize = 20.0;
     const hoverScale = 1.1;
     const padding = EdgeInsets.all(6);

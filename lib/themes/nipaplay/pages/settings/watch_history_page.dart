@@ -22,6 +22,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/history_like_list_card.dart';
 import 'package:nipaplay/utils/watch_history_auto_match_helper.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class WatchHistoryPage extends StatefulWidget {
   const WatchHistoryPage({super.key});
@@ -74,7 +75,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
               final item = validHistory[index];
               return _buildWatchHistoryItem(item);
             },
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            separatorBuilder: (context, index) => SizedBox(height: 8),
           );
         },
       ),
@@ -83,7 +84,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
 
   Widget _buildWatchHistoryItem(WatchHistoryItem item) {
     final colorScheme = Theme.of(context).colorScheme;
-    const Color nipaColor = Color(0xFFFF2E55);
+    final Color nipaColor = AppAccentColors.current;
 
     return HistoryLikeListCard(
       margin: const EdgeInsets.only(bottom: 2),
@@ -91,7 +92,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       child: Row(
         children: [
           _buildThumbnail(item),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,7 +110,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2),
                 Text(
                   item.episodeTitle ?? '未知集数',
                   style: TextStyle(
@@ -120,7 +121,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (item.watchProgress > 0) ...[
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Container(
                     width: double.infinity,
                     height: 2,
@@ -133,7 +134,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
                       widthFactor: item.watchProgress,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: nipaColor, // 使用 ff2e55
+                          color: nipaColor, // 使用主题色
                           borderRadius: BorderRadius.circular(1),
                         ),
                       ),
@@ -143,7 +144,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           Text(
             _formatTime(item.lastWatchTime),
             style: TextStyle(
@@ -151,7 +152,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
               fontSize: 11,
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           _AnimatedTrashButton(
             onTap: () => _showDeleteConfirmDialog(item),
           ),
@@ -226,7 +227,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       builder: (context, snapshot) {
         String? imageUrl;
         if (snapshot.hasData) {
-          imageUrl = snapshot.data!.getString('media_library_image_url_${item.animeId}');
+          imageUrl = snapshot.data!
+              .getString('media_library_image_url_${item.animeId}');
         }
 
         final colorScheme = Theme.of(context).colorScheme;
@@ -251,21 +253,23 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           child: SizedBox(
             width: 80,
             height: 45,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(color: Colors.white),
-                  ImageFiltered(
-                    imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-                    child: CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(color: Colors.black12),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(color: Colors.white),
+                ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, error) =>
+                        Container(color: Colors.black12),
                   ),
                 ),
                 Container(color: Colors.black.withValues(alpha: 0.1)),
-                const Center(
-                  child: Icon(Ionicons.play_outline, color: Colors.white70, size: 16),
+                Center(
+                  child: Icon(Ionicons.play_outline,
+                      color: Colors.white70, size: 16),
                 ),
               ],
             ),
@@ -286,21 +290,21 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
             color: colorScheme.onSurface.withOpacity(0.6),
             size: 64,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             '暂无观看记录',
-            locale:const Locale("zh-Hans","zh"),
-style: TextStyle(
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
               color: colorScheme.onSurface,
               fontSize: 18,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             '开始播放视频后，这里会显示观看记录',
-            locale:const Locale("zh-Hans","zh"),
-style: TextStyle(
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
               color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 14,
             ),
@@ -314,7 +318,7 @@ style: TextStyle(
   String _formatTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-    
+
     if (difference.inDays > 0) {
       return '${difference.inDays}天前';
     } else if (difference.inHours > 0) {
@@ -332,14 +336,16 @@ style: TextStyle(
       return;
     }
 
-    debugPrint('[WatchHistoryPage] _onWatchHistoryItemTap: Received item: $item');
+    debugPrint(
+        '[WatchHistoryPage] _onWatchHistoryItemTap: Received item: $item');
     var currentItem = item;
 
     // 检查是否为网络URL或流媒体协议URL
-    final isNetworkUrl = currentItem.filePath.startsWith('http://') || currentItem.filePath.startsWith('https://');
+    final isNetworkUrl = currentItem.filePath.startsWith('http://') ||
+        currentItem.filePath.startsWith('https://');
     final isJellyfinProtocol = currentItem.filePath.startsWith('jellyfin://');
     final isEmbyProtocol = currentItem.filePath.startsWith('emby://');
-    
+
     bool fileExists = false;
     String filePath = currentItem.filePath;
     PlaybackSession? playbackSession;
@@ -348,13 +354,15 @@ style: TextStyle(
       fileExists = true;
       if (isJellyfinProtocol) {
         try {
-          final jellyfinId = currentItem.filePath.replaceFirst('jellyfin://', '');
+          final jellyfinId =
+              currentItem.filePath.replaceFirst('jellyfin://', '');
           final jellyfinService = JellyfinService.instance;
           if (jellyfinService.isConnected) {
             playbackSession = await jellyfinService.createPlaybackSession(
               itemId: jellyfinId,
-              startPositionMs:
-                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+              startPositionMs: currentItem.lastPosition > 0
+                  ? currentItem.lastPosition
+                  : null,
             );
           } else {
             BlurSnackBar.show(context, '未连接到Jellyfin服务器');
@@ -365,7 +373,7 @@ style: TextStyle(
           return;
         }
       }
-      
+
       if (isEmbyProtocol) {
         try {
           final embyId = currentItem.filePath.replaceFirst('emby://', '');
@@ -373,8 +381,9 @@ style: TextStyle(
           if (embyService.isConnected) {
             playbackSession = await embyService.createPlaybackSession(
               itemId: embyId,
-              startPositionMs:
-                  currentItem.lastPosition > 0 ? currentItem.lastPosition : null,
+              startPositionMs: currentItem.lastPosition > 0
+                  ? currentItem.lastPosition
+                  : null,
             );
           } else {
             BlurSnackBar.show(context, '未连接到Emby服务器');
@@ -391,12 +400,12 @@ style: TextStyle(
       } else {
         final videoFile = File(currentItem.filePath);
         fileExists = videoFile.existsSync();
-        
+
         if (!fileExists && Platform.isIOS) {
-          String altPath = filePath.startsWith('/private') 
-              ? filePath.replaceFirst('/private', '') 
+          String altPath = filePath.startsWith('/private')
+              ? filePath.replaceFirst('/private', '')
               : '/private$filePath';
-          
+
           final File altFile = File(altPath);
           if (altFile.existsSync()) {
             filePath = altPath;
@@ -406,9 +415,10 @@ style: TextStyle(
         }
       }
     }
-    
+
     if (!fileExists) {
-      BlurSnackBar.show(context, '文件不存在或无法访问: ${path.basename(currentItem.filePath)}');
+      BlurSnackBar.show(
+          context, '文件不存在或无法访问: ${path.basename(currentItem.filePath)}');
       return;
     }
 
@@ -533,11 +543,13 @@ style: TextStyle(
           },
         ),
         HoverScaleTextButton(
-          child: const Text('删除', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red)),
+          child: const Text('删除',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.red)),
           onPressed: () async {
             // 调用 Provider 的方法删除观看记录
-            final watchHistoryProvider = Provider.of<WatchHistoryProvider>(context, listen: false);
+            final watchHistoryProvider =
+                Provider.of<WatchHistoryProvider>(context, listen: false);
             await watchHistoryProvider.removeHistory(item.filePath);
             Navigator.of(context).pop();
           },
@@ -579,7 +591,9 @@ style: TextStyle(color: Colors.red)),
     int hash = history.length;
     final sample = history.length > 5 ? history.take(5) : history;
     for (final item in sample) {
-      hash = hash ^ item.filePath.hashCode ^ item.lastWatchTime.millisecondsSinceEpoch;
+      hash = hash ^
+          item.filePath.hashCode ^
+          item.lastWatchTime.millisecondsSinceEpoch;
     }
     return hash;
   }
@@ -600,7 +614,7 @@ class _AnimatedTrashButtonState extends State<_AnimatedTrashButton> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    const Color nipaColor = Color(0xFFFF2E55);
+    final Color nipaColor = AppAccentColors.current;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -615,12 +629,16 @@ class _AnimatedTrashButtonState extends State<_AnimatedTrashButton> {
           child: AnimatedDefaultTextStyle(
             duration: const Duration(milliseconds: 150),
             style: TextStyle(
-              color: _isHovered ? nipaColor : colorScheme.onSurface.withOpacity(0.4),
+              color: _isHovered
+                  ? nipaColor
+                  : colorScheme.onSurface.withOpacity(0.4),
             ),
             child: Icon(
               Ionicons.trash_outline,
               size: 16,
-              color: _isHovered ? nipaColor : colorScheme.onSurface.withOpacity(0.4),
+              color: _isHovered
+                  ? nipaColor
+                  : colorScheme.onSurface.withOpacity(0.4),
             ),
           ),
         ),

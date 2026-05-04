@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum LocalLibrarySortType {
   name,
@@ -60,19 +61,23 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
 
   @override
   Widget build(BuildContext context) {
-    assert(!widget.showSort || (widget.currentSort != null && widget.onSortChanged != null));
+    assert(!widget.showSort ||
+        (widget.currentSort != null && widget.onSortChanged != null));
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentSort = widget.currentSort ?? LocalLibrarySortType.dateAdded;
-    
-    const activeColor = Color(0xFFFF2E55);
-    final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1);
-    
+
+    final activeColor = AppAccentColors.current;
+    final idleBorderColor = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : Colors.black.withValues(alpha: 0.1);
+
     // 提高背景对比度，日间模式下使用纯白
-    final bgColor = isDark 
-        ? Colors.white.withValues(alpha: 0.12) 
-        : Colors.white;
-    
-    final textColor = isDark ? Colors.white.withValues(alpha: 0.8) : Colors.black.withValues(alpha: 0.7);
+    final bgColor =
+        isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white;
+
+    final textColor = isDark
+        ? Colors.white.withValues(alpha: 0.8)
+        : Colors.black.withValues(alpha: 0.7);
     final primaryTextColor = isDark ? Colors.white : Colors.black;
 
     return Container(
@@ -103,11 +108,12 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
           ],
           if (widget.title != null && widget.title!.isNotEmpty) ...[
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.25),
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.25),
               child: Text(
                 widget.title!,
                 maxLines: 1,
@@ -119,7 +125,7 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
                 ),
               ),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
           ],
           // 搜索框
           Expanded(
@@ -127,9 +133,10 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               height: 40,
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(8), 
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
+                  color:
+                      _searchFocusNode.hasFocus ? activeColor : idleBorderColor,
                   width: _searchFocusNode.hasFocus ? 1.5 : 1,
                 ),
               ),
@@ -148,9 +155,14 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
                   cursorColor: activeColor,
                   decoration: InputDecoration(
                     hintText: '搜索...',
-                    hintStyle: TextStyle(color: textColor.withValues(alpha: 0.5), fontSize: 14),
-                    prefixIcon: Icon(Ionicons.search_outline, size: 18, color: _searchFocusNode.hasFocus ? activeColor : textColor.withValues(alpha: 0.5)),
-                    suffixIcon: widget.searchController.text.isNotEmpty 
+                    hintStyle: TextStyle(
+                        color: textColor.withValues(alpha: 0.5), fontSize: 14),
+                    prefixIcon: Icon(Ionicons.search_outline,
+                        size: 18,
+                        color: _searchFocusNode.hasFocus
+                            ? activeColor
+                            : textColor.withValues(alpha: 0.5)),
+                    suffixIcon: widget.searchController.text.isNotEmpty
                         ? SearchBarActionButton(
                             icon: Ionicons.close_circle,
                             onPressed: () {
@@ -167,18 +179,19 @@ class _LocalLibraryControlBarState extends State<LocalLibraryControlBar> {
               ),
             ),
           ),
-          if (widget.trailingActions != null && widget.trailingActions!.isNotEmpty) ...[
-            const SizedBox(width: 12),
+          if (widget.trailingActions != null &&
+              widget.trailingActions!.isNotEmpty) ...[
+            SizedBox(width: 12),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: widget.trailingActions!
-                  .expand((action) => [const SizedBox(width: 8), action])
+                  .expand((action) => [SizedBox(width: 8), action])
                   .skip(1)
                   .toList(),
             ),
           ],
           if (widget.showSort) ...[
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             // 排序按钮直接使用本体
             BlurDropdown<LocalLibrarySortType>(
               dropdownKey: _dropdownKey,

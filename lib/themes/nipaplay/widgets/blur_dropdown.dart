@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/theme_utils.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class _BlurDropdownGlobalState {
   static int expandedCount = 0;
@@ -188,7 +189,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isLargeScreenModeActive =
         NipaplayLargeScreenModeScope.isActiveOf(context);
-    const activeColor = Color(0xFFFF2E55);
+    final activeColor = AppAccentColors.current;
     final idleBorderColor = isDark
         ? Colors.white.withValues(alpha: 0.1)
         : Colors.black.withValues(alpha: 0.1);
@@ -201,10 +202,12 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
         color: bgColor,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: (_isDropdownOpen || (isLargeScreenModeActive && _isControlFocused))
+          color: (_isDropdownOpen ||
+                  (isLargeScreenModeActive && _isControlFocused))
               ? activeColor
               : idleBorderColor,
-          width: (_isDropdownOpen || (isLargeScreenModeActive && _isControlFocused))
+          width: (_isDropdownOpen ||
+                  (isLargeScreenModeActive && _isControlFocused))
               ? 1.5
               : 1,
         ),
@@ -236,7 +239,7 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                     _getSelectedItemText(),
                     style: getTitleTextStyle(context),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   RotationTransition(
                     turns: Tween(begin: 0.0, end: 0.5)
                         .animate(_animationController),
@@ -513,10 +516,12 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                           itemCount: widget.items.length,
                           itemBuilder: (context, index) {
                             final item = widget.items[index];
-                            final isHighlighted = index == _keyboardHighlightedIndex;
-                            final isSelected = item.value == _currentSelectedValue;
+                            final isHighlighted =
+                                index == _keyboardHighlightedIndex;
+                            final isSelected =
+                                item.value == _currentSelectedValue;
                             final backgroundColor = isHighlighted
-                                ? const Color(0xFFFF2E55).withValues(alpha: 0.2)
+                                ? AppAccentColors.current.withValues(alpha: 0.2)
                                 : (isSelected
                                     ? (isDark
                                         ? Colors.white.withValues(alpha: 0.1)
@@ -544,7 +549,8 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                                     bottom: BorderSide(
                                       color: isDark
                                           ? Colors.white.withValues(alpha: 0.1)
-                                          : Colors.black.withValues(alpha: 0.05),
+                                          : Colors.black
+                                              .withValues(alpha: 0.05),
                                       width: 0.5,
                                     ),
                                   ),

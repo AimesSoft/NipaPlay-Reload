@@ -6,10 +6,11 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overla
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 const double kNipaplayLargeScreenSettingsPanelWidth = 900;
 const double _kNipaplayLargeScreenSettingsMenuWidth = 230;
-const Color _kNipaplayLargeScreenActiveColor = Color(0xFFFF2E55);
+Color get _kNipaplayLargeScreenActiveColor => AppAccentColors.current;
 
 enum NipaplayLargeScreenSettingsPanelCommand {
   activateFocused,
@@ -185,7 +186,7 @@ class _NipaplayLargeScreenSettingsPanelState
                         child: Row(
                           children: [
                             Icon(entry.icon, size: 19, color: itemColor),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 entry.title,

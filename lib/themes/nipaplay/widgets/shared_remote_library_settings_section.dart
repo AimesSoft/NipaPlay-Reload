@@ -9,11 +9,12 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SharedRemoteLibrarySettingsSection extends StatelessWidget {
   const SharedRemoteLibrarySettingsSection({super.key});
 
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +41,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   'NipaPlay 局域网媒体共享',
                   locale: const Locale('zh', 'CN'),
@@ -52,7 +53,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
               '在另一台设备（手机/平板/电脑等客户端）开启远程访问后，填写其局域网地址即可直接浏览并播放它的本地媒体库。',
               locale: const Locale('zh', 'CN'),
@@ -61,7 +62,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
                 fontSize: 13,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             if (provider.isInitializing)
               Center(
                 child: Padding(
@@ -82,18 +83,19 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, SharedRemoteLibraryProvider provider) {
+  Widget _buildEmptyState(
+      BuildContext context, SharedRemoteLibraryProvider provider) {
     final colorScheme = Theme.of(context).colorScheme;
     return Column(
       children: [
         Icon(Icons.info_outline, color: colorScheme.onSurface.withOpacity(0.6)),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Text(
           '尚未添加任何共享客户端',
           locale: const Locale('zh', 'CN'),
           style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: _buildGlassButton(
@@ -107,127 +109,132 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     );
   }
 
-  Widget _buildHostList(BuildContext context, SharedRemoteLibraryProvider provider) {
+  Widget _buildHostList(
+      BuildContext context, SharedRemoteLibraryProvider provider) {
     final colorScheme = Theme.of(context).colorScheme;
     return Column(
       children: [
         ...provider.hosts.map((host) {
-        final isActive = provider.activeHostId == host.id;
-        final statusColor = host.isOnline ? Colors.green : Colors.orange;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    host.isOnline ? Icons.check_circle : Icons.pending_outlined,
-                    color: statusColor,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      host.displayName.isNotEmpty ? host.displayName : host.baseUrl,
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
+          final isActive = provider.activeHostId == host.id;
+          final statusColor = host.isOnline ? Colors.green : Colors.orange;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      host.isOnline
+                          ? Icons.check_circle
+                          : Icons.pending_outlined,
+                      color: statusColor,
+                      size: 18,
+                    ),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        host.displayName.isNotEmpty
+                            ? host.displayName
+                            : host.baseUrl,
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
-                  ),
-                  if (!isActive)
-                    HoverScaleTextButton(
-                      text: '设为当前',
-                      idleColor: colorScheme.onSurface.withOpacity(0.7),
-                      hoverColor: _accentColor,
-                      onPressed: () => provider.setActiveHost(host.id),
-                    )
-                  else
-                    Text(
-                      '当前使用',
-                      locale: const Locale('zh', 'CN'),
-                      style: TextStyle(
-                        color: _accentColor,
-                        fontSize: 12,
+                    if (!isActive)
+                      HoverScaleTextButton(
+                        text: '设为当前',
+                        idleColor: colorScheme.onSurface.withOpacity(0.7),
+                        hoverColor: _accentColor,
+                        onPressed: () => provider.setActiveHost(host.id),
+                      )
+                    else
+                      Text(
+                        '当前使用',
+                        locale: const Locale('zh', 'CN'),
+                        style: TextStyle(
+                          color: _accentColor,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SelectableText(
-                host.baseUrl,
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.7),
-                  fontSize: 13,
+                  ],
                 ),
-              ),
-              if (host.lastError != null && host.lastError!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  host.lastError!,
-                  locale: const Locale('zh', 'CN'),
+                SizedBox(height: 8),
+                SelectableText(
+                  host.baseUrl,
                   style: TextStyle(
-                    color: colorScheme.error,
-                    fontSize: 12,
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    fontSize: 13,
                   ),
+                ),
+                if (host.lastError != null && host.lastError!.isNotEmpty) ...[
+                  SizedBox(height: 8),
+                  Text(
+                    host.lastError!,
+                    locale: const Locale('zh', 'CN'),
+                    style: TextStyle(
+                      color: colorScheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    HoverScaleTextButton(
+                      text: '刷新',
+                      idleColor: _accentColor,
+                      hoverColor: _accentColor,
+                      onPressed: () =>
+                          provider.refreshLibrary(userInitiated: true),
+                    ),
+                    HoverScaleTextButton(
+                      text: '重命名',
+                      idleColor: _accentColor,
+                      hoverColor: _accentColor,
+                      onPressed: () => _showRenameDialog(
+                        context,
+                        provider,
+                        host.id,
+                        host.displayName,
+                      ),
+                    ),
+                    HoverScaleTextButton(
+                      text: '修改地址',
+                      idleColor: _accentColor,
+                      hoverColor: _accentColor,
+                      onPressed: () => _showUpdateUrlDialog(
+                        context,
+                        provider,
+                        host.id,
+                        host.baseUrl,
+                      ),
+                    ),
+                    const Spacer(),
+                    HoverScaleTextButton(
+                      text: '删除',
+                      idleColor: _accentColor,
+                      hoverColor: _accentColor,
+                      onPressed: () => _confirmRemoveHost(
+                        context,
+                        provider,
+                        host.id,
+                      ),
+                    ),
+                  ],
+                ),
+                Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12),
+                  height: 16,
                 ),
               ],
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  HoverScaleTextButton(
-                    text: '刷新',
-                    idleColor: _accentColor,
-                    hoverColor: _accentColor,
-                    onPressed: () =>
-                        provider.refreshLibrary(userInitiated: true),
-                  ),
-                  HoverScaleTextButton(
-                    text: '重命名',
-                    idleColor: _accentColor,
-                    hoverColor: _accentColor,
-                    onPressed: () => _showRenameDialog(
-                      context,
-                      provider,
-                      host.id,
-                      host.displayName,
-                    ),
-                  ),
-                  HoverScaleTextButton(
-                    text: '修改地址',
-                    idleColor: _accentColor,
-                    hoverColor: _accentColor,
-                    onPressed: () => _showUpdateUrlDialog(
-                      context,
-                      provider,
-                      host.id,
-                      host.baseUrl,
-                    ),
-                  ),
-                  const Spacer(),
-                  HoverScaleTextButton(
-                    text: '删除',
-                    idleColor: _accentColor,
-                    hoverColor: _accentColor,
-                    onPressed: () => _confirmRemoveHost(
-                      context,
-                      provider,
-                      host.id,
-                    ),
-                  ),
-                ],
-              ),
-              Divider(
-                color: colorScheme.onSurface.withOpacity(0.12),
-                height: 16,
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-        const SizedBox(height: 12),
+            ),
+          );
+        }).toList(),
+        SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: _buildGlassButton(
@@ -330,8 +337,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondaryTextColor = colorScheme.onSurface.withOpacity(0.7);
     final hintColor = colorScheme.onSurface.withOpacity(0.5);
-    final borderColor =
-        colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
+    final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
     final selectionTheme = TextSelectionThemeData(
       cursorColor: _accentColor,
       selectionColor: _accentColor.withOpacity(0.3),
@@ -352,11 +358,11 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
             enabledBorder: UnderlineInputBorder(
               borderSide: BorderSide(color: borderColor),
             ),
-            focusedBorder: const UnderlineInputBorder(
+            focusedBorder: UnderlineInputBorder(
               borderSide: BorderSide(color: _accentColor),
             ),
           ),
-          style: const TextStyle(color: _accentColor),
+          style: TextStyle(color: _accentColor),
         ),
       ),
       actions: [
@@ -390,8 +396,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final secondaryTextColor = colorScheme.onSurface.withOpacity(0.7);
     final hintColor = colorScheme.onSurface.withOpacity(0.5);
-    final borderColor =
-        colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
+    final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
     final selectionTheme = TextSelectionThemeData(
       cursorColor: _accentColor,
       selectionColor: _accentColor.withOpacity(0.3),
@@ -412,11 +417,11 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
             enabledBorder: UnderlineInputBorder(
               borderSide: BorderSide(color: borderColor),
             ),
-            focusedBorder: const UnderlineInputBorder(
+            focusedBorder: UnderlineInputBorder(
               borderSide: BorderSide(color: _accentColor),
             ),
           ),
-          style: const TextStyle(color: _accentColor),
+          style: TextStyle(color: _accentColor),
         ),
       ),
       actions: [
@@ -467,7 +472,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(icon, color: colorScheme.onSurface, size: 18),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   label,
                   style: TextStyle(
