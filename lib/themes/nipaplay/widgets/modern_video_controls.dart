@@ -593,14 +593,12 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
                                     // 弹幕开关按钮
                                     _buildControlButton(
-                                      icon: SvgPicture.asset(
-                                        videoState.danmakuVisible
-                                            ? 'assets/danmaku-fill.svg'
-                                            : 'assets/danmaku-off-fill.svg',
+                                      icon: _DanmakuToggleIcon(
                                         key: ValueKey<bool>(
-                                            videoState.danmakuVisible),
-                                        width: globals.isPhone ? 32 : 24,
-                                        height: globals.isPhone ? 32 : 24,
+                                          videoState.danmakuVisible,
+                                        ),
+                                        visible: videoState.danmakuVisible,
+                                        size: globals.isPhone ? 32 : 24,
                                       ),
                                       onTap: () =>
                                           videoState.toggleDanmakuVisible(),
@@ -764,83 +762,36 @@ class _DanmakuToggleIcon extends StatelessWidget {
       );
     }
 
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _DanmakuOffIconPainter(
-        accentColor: AppAccentColors.current,
-      ),
+    final accentColor = AppAccentColors.current;
+    final r = (accentColor.r * 255.0)
+        .round()
+        .clamp(0, 255)
+        .toRadixString(16)
+        .padLeft(2, '0')
+        .toUpperCase();
+    final g = (accentColor.g * 255.0)
+        .round()
+        .clamp(0, 255)
+        .toRadixString(16)
+        .padLeft(2, '0')
+        .toUpperCase();
+    final b = (accentColor.b * 255.0)
+        .round()
+        .clamp(0, 255)
+        .toRadixString(16)
+        .padLeft(2, '0')
+        .toUpperCase();
+    final accentColorStr = '#$r$g$b';
+    final svgString =
+        _danmakuOffFillSvg.replaceAll('{{ACCENT_COLOR}}', accentColorStr);
+
+    return SvgPicture.string(
+      svgString,
+      width: size,
+      height: size,
     );
   }
-}
 
-class _DanmakuOffIconPainter extends CustomPainter {
-  const _DanmakuOffIconPainter({
-    required this.accentColor,
-  });
-
-  final Color accentColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final scaleX = size.width / 24;
-    final scaleY = size.height / 24;
-    canvas.save();
-    canvas.scale(scaleX, scaleY);
-
-    final bubblePaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    final offPaint = Paint()
-      ..color = accentColor
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(
-      Path()
-        ..moveTo(18, 3)
-        ..cubicTo(19.657, 3, 21, 4.343, 21, 6)
-        ..lineTo(21, 10.437)
-        ..cubicTo(18.109, 8.758, 14.392, 9.368, 12.184, 11.872)
-        ..cubicTo(10.644, 13.619, 10.096, 16.021, 10.768, 18.425)
-        ..lineTo(8, 20.5)
-        ..cubicTo(7.176, 21.118, 6, 20.53, 6, 19.5)
-        ..lineTo(6, 18)
-        ..lineTo(5, 18)
-        ..cubicTo(3.343, 18, 2, 16.657, 2, 15)
-        ..lineTo(2, 6)
-        ..cubicTo(2, 4.343, 3.343, 3, 5, 3)
-        ..lineTo(18, 3)
-        ..close(),
-      bubblePaint,
-    );
-
-    final linePaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(const Offset(3, 13), const Offset(9, 13), linePaint);
-    canvas.drawLine(const Offset(5, 8), const Offset(7, 8), linePaint);
-    canvas.drawLine(const Offset(11, 8), const Offset(19, 8), linePaint);
-
-    canvas.drawCircle(const Offset(17.5, 16.5), 4.5, offPaint);
-
-    final slashPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      const Offset(15.732, 18.268),
-      const Offset(19.268, 14.732),
-      slashPaint,
-    );
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _DanmakuOffIconPainter oldDelegate) {
-    return oldDelegate.accentColor != accentColor;
-  }
+  static const String _danmakuOffFillSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" fill-rule="evenodd"><path fill="white" d="M18 3a3 3 0 0 1 3 3v4.437a7 7 0 0 0-10.232 7.988L8 20.5c-.824.618-2 .03-2-1V18H5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12M9 12H3a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2M7 7H5a1 1 0 0 0-.117 1.993L5 9h2a1 1 0 0 0 .117-1.993zm12 0h-8a1 1 0 0 0-.117 1.993L11 9h8a1 1 0 0 0 .117-1.993z"/><path xmlns="http://www.w3.org/2000/svg" fill="{{ACCENT_COLOR}}" d="M13 16.5a4.5 4.5 0 1 1 9 0a4.5 4.5 0 0 1-9 0m2.172-.914a2.5 2.5 0 0 0 3.241 3.241zm1.414-1.414l3.242 3.242a2.5 2.5 0 0 0-3.241-3.241"/></g></svg>';
 }
