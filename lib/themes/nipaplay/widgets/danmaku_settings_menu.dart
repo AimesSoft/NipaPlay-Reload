@@ -14,6 +14,8 @@ import 'package:nipaplay/utils/danmaku_history_sync.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/text_input_dialog.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
@@ -37,12 +39,12 @@ class DanmakuSettingsMenu extends StatefulWidget {
 
 class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   static const List<double> _danmakuDisplayAreaOptions = <double>[
-    0.0, // 单行显示
-    0.125, // 1/8
-    0.25, // 1/4
-    0.33, // 1/3
-    0.67, // 2/3
-    1.0, // 全屏
+    0.0,
+    0.125,
+    0.25,
+    0.33,
+    0.67,
+    1.0,
   ];
 
   static final Map<double, String> _danmakuDisplayAreaLabels = <double, String>{
@@ -54,12 +56,9 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     1.0: '全屏',
   };
 
-  // 屏蔽词输入控制器
   final TextEditingController _blockWordController = TextEditingController();
-  // 屏蔽词是否有错误
   bool _hasBlockWordError = false;
-  // 错误消息
-  String _blockWordErrorMessage = '';
+  String? _blockWordErrorMessage = '';
   bool _isSavingDanmaku = false;
 
   @override
@@ -124,12 +123,46 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     }
   }
 
-  // 添加屏蔽词
-  void _addBlockWord() {
-    final word = _blockWordController.text.trim();
+  List<String> _splitBlockWords(String input) {
+    final result = <String>[];
+    final current = StringBuffer();
+    bool inRegex = false;
 
-    // 验证输入
-    if (word.isEmpty) {
+    for (int i = 0; i < input.length; i++) {
+      final char = input[i];
+
+      if (char == '/' && !inRegex) {
+        final prev = current.toString();
+        if (prev.isNotEmpty && RegExp(r'\S$').hasMatch(prev)) {
+          inRegex = true;
+        }
+        current.write(char);
+      } else if (char == '/' && inRegex) {
+        inRegex = false;
+        current.write(char);
+      } else if (char == ',' && !inRegex) {
+        final word = current.toString().trim();
+        if (word.isNotEmpty) {
+          result.add(word);
+        }
+        current.clear();
+      } else {
+        current.write(char);
+      }
+    }
+
+    final lastWord = current.toString().trim();
+    if (lastWord.isNotEmpty) {
+      result.add(lastWord);
+    }
+
+    return result;
+  }
+
+  void _addBlockWordFromInput(String input) {
+    final trimmed = input.trim();
+
+    if (trimmed.isEmpty) {
       setState(() {
         _hasBlockWordError = true;
         _blockWordErrorMessage = '屏蔽词不能为空';
@@ -137,23 +170,87 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
       return;
     }
 
-    if (widget.videoState.danmakuBlockWords.contains(word)) {
+    final rawWords = _splitBlockWords(trimmed);
+    final validWords = <String>[];
+    final duplicateWords = <String>[];
+    final emptyWords = <String>[];
+
+    for (final w in rawWords) {
+      final word = w.trim();
+      if (word.isEmpty) {
+        emptyWords.add(w);
+        continue;
+      }
+      if (widget.videoState.danmakuBlockWords.contains(word)) {
+        duplicateWords.add(word);
+      } else {
+        validWords.add(word);
+      }
+    }
+
+    for (final word in validWords) {
+      widget.videoState.addDanmakuBlockWord(word);
+    }
+
+    String? errorMessage;
+    if (validWords.isEmpty && duplicateWords.isEmpty && emptyWords.isNotEmpty) {
+      errorMessage = '所有输入的词都是空的';
+    } else if (validWords.isEmpty && duplicateWords.isNotEmpty) {
+      errorMessage = duplicateWords.length == 1
+          ? '该屏蔽词已存在'
+          : '这些屏蔽词已存在：${duplicateWords.join('、')}';
+    } else if (validWords.isNotEmpty) {
+      final successMessage = validWords.length == 1
+          ? '已添加屏蔽词：${validWords.first}'
+          : '已添加 ${validWords.length} 个屏蔽词';
+      BlurSnackBar.show(context, successMessage);
+      _blockWordController.clear();
       setState(() {
-        _hasBlockWordError = true;
-        _blockWordErrorMessage = '该屏蔽词已存在';
+        _hasBlockWordError = false;
+        _blockWordErrorMessage = '';
       });
       return;
     }
 
-    // 添加屏蔽词
-    widget.videoState.addDanmakuBlockWord(word);
+    if (errorMessage != null) {
+      setState(() {
+        _hasBlockWordError = true;
+        _blockWordErrorMessage = errorMessage;
+      });
+    }
+  }
 
-    // 清空输入框和错误状态
-    _blockWordController.clear();
-    setState(() {
-      _hasBlockWordError = false;
-      _blockWordErrorMessage = '';
-    });
+  Future<void> _showBlockWordInputDialog() async {
+    final result = await TextInputDialog.show(
+      context,
+      title: '添加屏蔽词',
+      subtitle: '输入要屏蔽的关键词，批量添加请用逗号隔开（支持正则，以"规则名称/表达式/"形式输入）',
+      hintText: '请输入文本',
+      minLines: 4,
+    );
+
+    if (result != null && result.isNotEmpty) {
+      _addBlockWordFromInput(result);
+    }
+  }
+
+  void _addBlockWord() {
+    if (globals.isMobilePlatform) {
+      _showBlockWordInputDialog();
+      return;
+    }
+
+    final input = _blockWordController.text.trim();
+
+    if (input.isEmpty) {
+      setState(() {
+        _hasBlockWordError = true;
+        _blockWordErrorMessage = '屏蔽词不能为空';
+      });
+      return;
+    }
+
+    _addBlockWordFromInput(input);
   }
 
   Future<void> _saveDanmaku(_DanmakuExportFormat format) async {
@@ -480,12 +577,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                                 videoState.setEpisodeTitle(
                                     result['episodeTitle']?.toString());
                               }
-                            } catch (e) {
-                              // 即使历史记录同步失败，也要继续加载弹幕
-                            }
-
-                            // 直接调用 loadDanmaku，不检查 mounted 状态
-                            // 因为 videoState 是独立的状态管理对象，不依赖于当前组件的生命周期
+                            } catch (e) {}
                             videoState.loadDanmaku(episodeId, animeId);
                           }
                         }
@@ -754,65 +846,15 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // 添加输入框
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                          child: Container(
-                            height: 80, // 设置固定高度
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: _hasBlockWordError
-                                    ? Colors.redAccent.withOpacity(0.8)
-                                    : Colors.white.withOpacity(0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: Center(
-                              // 使用Center包装确保垂直居中
-                              child: TextField(
-                                controller: _blockWordController,
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 13),
-                                textAlignVertical: TextAlignVertical.center,
-                                maxLines: 3,
-                                decoration: InputDecoration(
-                                  hintText:
-                                      '输入要屏蔽的关键词\n（支持正则，以"规则名称/表达式/"形式输入）',
-                                  hintStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.5),
-                                      fontSize: 13),
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 0), // 垂直padding设为0
-                                  isDense: true,
-                                  suffixIcon: IconButton(
-                                    icon: const Icon(Icons.clear,
-                                        color: Colors.white, size: 18),
-                                    onPressed: () =>
-                                        _blockWordController.clear(),
-                                    tooltip: '',
-                                    padding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                ),
-                                onSubmitted: (_) => _addBlockWord(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // 错误信息
-                      if (_hasBlockWordError)
+                      if (globals.isMobilePlatform)
+                        _buildMobileBlockWordInput()
+                      else
+                        _buildDesktopBlockWordInput(),
+                      if (_hasBlockWordError && _blockWordErrorMessage != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4, left: 12),
                           child: Text(
-                            _blockWordErrorMessage,
+                            _blockWordErrorMessage!,
                             style: const TextStyle(
                                 color: Colors.redAccent, fontSize: 12),
                           ),
@@ -991,9 +1033,90 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
       },
     );
   }
+
+  Widget _buildDesktopBlockWordInput() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: Container(
+          height: 80,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _hasBlockWordError
+                  ? Colors.redAccent.withOpacity(0.8)
+                  : Colors.white.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: TextField(
+              controller: _blockWordController,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              textAlignVertical: TextAlignVertical.center,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: '输入要屏蔽的关键词\n（支持正则，以"规则名称/表达式/"形式输入；支持逗号分隔批量添加）',
+                hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.5), fontSize: 13),
+                border: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                isDense: true,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.white, size: 18),
+                  onPressed: () => _blockWordController.clear(),
+                  tooltip: '',
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(),
+                ),
+              ),
+              onSubmitted: (_) => _addBlockWord(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileBlockWordInput() {
+    return GestureDetector(
+      onTap: _showBlockWordInputDialog,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Container(
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _hasBlockWordError
+                    ? Colors.redAccent.withOpacity(0.8)
+                    : Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                '点击输入屏蔽词',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-// 新增弹幕不透明度滑块组件
 class _DanmakuOpacitySlider extends StatefulWidget {
   final VideoPlayerState videoState;
   const _DanmakuOpacitySlider({required this.videoState});
@@ -1158,8 +1281,8 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
                 return Stack(
                   key: _sliderKey,
                   clipBehavior: Clip.none,
+                  // 背景轨道
                   children: [
-                    // 背景轨道
                     Container(
                       height: 4,
                       margin: const EdgeInsets.symmetric(vertical: 20),
