@@ -1245,20 +1245,20 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
                 return Stack(
                   key: _sliderKey,
                   clipBehavior: Clip.none,
+                  // 背景轨道
                   children: [
                     Container(
                       height: 4,
                       margin: const EdgeInsets.symmetric(vertical: 20),
-                      // 背景轨道
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
+                    // 进度轨道
                     Positioned(
                       left: 0,
                       right: 0,
-                      // 进度轨道
                       top: 20,
                       child: FractionallySizedBox(
                         widthFactor: widget.videoState.danmakuOpacity,
@@ -1279,10 +1279,10 @@ class _DanmakuOpacitySliderState extends State<_DanmakuOpacitySlider> {
                         ),
                       ),
                     ),
+                    // 滑块
                     Positioned(
                       left: (widget.videoState.danmakuOpacity *
                               constraints.maxWidth) -
-                          // 滑块
                           (_isThumbHovered || _isDragging ? 8 : 6),
                       top: 22 - (_isThumbHovered || _isDragging ? 8 : 6),
                       child: MouseRegion(
