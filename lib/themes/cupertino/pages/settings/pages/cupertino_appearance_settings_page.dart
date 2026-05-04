@@ -78,6 +78,16 @@ class _CupertinoAppearanceSettingsPageState
 
   @override
   Widget build(BuildContext context) {
+    // Sync local accent preset from provider in case it was loaded
+    // asynchronously after initState.
+    final providerAccent =
+        context.select<AppearanceSettingsProvider, AppAccentColorPreset>(
+      (p) => p.accentColorPreset,
+    );
+    if (_accentPreset != providerAccent) {
+      _accentPreset = providerAccent;
+    }
+
     final homeSections = context.watch<HomeSectionsSettingsProvider>();
     final backgroundColor = CupertinoDynamicColor.resolve(
       CupertinoColors.systemGroupedBackground,
