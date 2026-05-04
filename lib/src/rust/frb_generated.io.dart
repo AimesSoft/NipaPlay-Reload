@@ -4,170 +4,171 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/file_scan.dart';
+import 'api/performance.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
-abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
-  RustLibApiImplPlatform({
-    required super.handler,
-    required super.wire,
-    required super.generalizedFrbRustBinding,
-    required super.portManager,
-  });
 
-  @protected
-  String dco_decode_String(dynamic raw);
 
-  @protected
-  bool dco_decode_bool(dynamic raw);
 
-  @protected
-  int dco_decode_i_32(dynamic raw);
+                abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
+                  RustLibApiImplPlatform({
+                    required super.handler,
+                    required super.wire,
+                    required super.generalizedFrbRustBinding,
+                    required super.portManager,
+                  });
 
-  @protected
-  PlatformInt64 dco_decode_i_64(dynamic raw);
+                  
 
-  @protected
-  List<String> dco_decode_list_String(dynamic raw);
+                  @protected String dco_decode_String(dynamic raw);
 
-  @protected
-  Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+@protected bool dco_decode_bool(dynamic raw);
 
-  @protected
-  List<RustFileHashEntry> dco_decode_list_rust_file_hash_entry(dynamic raw);
+@protected double dco_decode_box_autoadd_f_64(dynamic raw);
 
-  @protected
-  List<RustFileScanEntry> dco_decode_list_rust_file_scan_entry(dynamic raw);
+@protected double dco_decode_f_64(dynamic raw);
 
-  @protected
-  RustFileHashEntry dco_decode_rust_file_hash_entry(dynamic raw);
+@protected int dco_decode_i_32(dynamic raw);
 
-  @protected
-  RustFileScanDiff dco_decode_rust_file_scan_diff(dynamic raw);
+@protected PlatformInt64 dco_decode_i_64(dynamic raw);
 
-  @protected
-  RustFileScanEntry dco_decode_rust_file_scan_entry(dynamic raw);
+@protected List<String> dco_decode_list_String(dynamic raw);
 
-  @protected
-  RustFileScanSnapshot dco_decode_rust_file_scan_snapshot(dynamic raw);
+@protected Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
-  @protected
-  int dco_decode_u_8(dynamic raw);
+@protected List<RustFileHashEntry> dco_decode_list_rust_file_hash_entry(dynamic raw);
 
-  @protected
-  void dco_decode_unit(dynamic raw);
+@protected List<RustFileScanEntry> dco_decode_list_rust_file_scan_entry(dynamic raw);
 
-  @protected
-  String sse_decode_String(SseDeserializer deserializer);
+@protected String? dco_decode_opt_String(dynamic raw);
 
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+@protected double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
 
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
+@protected RustCpuSample dco_decode_rust_cpu_sample(dynamic raw);
 
-  @protected
-  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+@protected RustFileHashEntry dco_decode_rust_file_hash_entry(dynamic raw);
 
-  @protected
-  List<String> sse_decode_list_String(SseDeserializer deserializer);
+@protected RustFileScanDiff dco_decode_rust_file_scan_diff(dynamic raw);
 
-  @protected
-  Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+@protected RustFileScanEntry dco_decode_rust_file_scan_entry(dynamic raw);
 
-  @protected
-  List<RustFileHashEntry> sse_decode_list_rust_file_hash_entry(
-      SseDeserializer deserializer);
+@protected RustFileScanSnapshot dco_decode_rust_file_scan_snapshot(dynamic raw);
 
-  @protected
-  List<RustFileScanEntry> sse_decode_list_rust_file_scan_entry(
-      SseDeserializer deserializer);
+@protected RustGpuSample dco_decode_rust_gpu_sample(dynamic raw);
 
-  @protected
-  RustFileHashEntry sse_decode_rust_file_hash_entry(
-      SseDeserializer deserializer);
+@protected RustPerformanceSample dco_decode_rust_performance_sample(dynamic raw);
 
-  @protected
-  RustFileScanDiff sse_decode_rust_file_scan_diff(SseDeserializer deserializer);
+@protected int dco_decode_u_8(dynamic raw);
 
-  @protected
-  RustFileScanEntry sse_decode_rust_file_scan_entry(
-      SseDeserializer deserializer);
+@protected void dco_decode_unit(dynamic raw);
 
-  @protected
-  RustFileScanSnapshot sse_decode_rust_file_scan_snapshot(
-      SseDeserializer deserializer);
+@protected String sse_decode_String(SseDeserializer deserializer);
 
-  @protected
-  int sse_decode_u_8(SseDeserializer deserializer);
+@protected bool sse_decode_bool(SseDeserializer deserializer);
 
-  @protected
-  void sse_decode_unit(SseDeserializer deserializer);
+@protected double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_String(String self, SseSerializer serializer);
+@protected double sse_decode_f_64(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
+@protected int sse_decode_i_32(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
+@protected PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+@protected List<String> sse_decode_list_String(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+@protected Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_list_prim_u_8_strict(
-      Uint8List self, SseSerializer serializer);
+@protected List<RustFileHashEntry> sse_decode_list_rust_file_hash_entry(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_list_rust_file_hash_entry(
-      List<RustFileHashEntry> self, SseSerializer serializer);
+@protected List<RustFileScanEntry> sse_decode_list_rust_file_scan_entry(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_list_rust_file_scan_entry(
-      List<RustFileScanEntry> self, SseSerializer serializer);
+@protected String? sse_decode_opt_String(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_rust_file_hash_entry(
-      RustFileHashEntry self, SseSerializer serializer);
+@protected double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_rust_file_scan_diff(
-      RustFileScanDiff self, SseSerializer serializer);
+@protected RustCpuSample sse_decode_rust_cpu_sample(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_rust_file_scan_entry(
-      RustFileScanEntry self, SseSerializer serializer);
+@protected RustFileHashEntry sse_decode_rust_file_hash_entry(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_rust_file_scan_snapshot(
-      RustFileScanSnapshot self, SseSerializer serializer);
+@protected RustFileScanDiff sse_decode_rust_file_scan_diff(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_u_8(int self, SseSerializer serializer);
+@protected RustFileScanEntry sse_decode_rust_file_scan_entry(SseDeserializer deserializer);
 
-  @protected
-  void sse_encode_unit(void self, SseSerializer serializer);
-}
+@protected RustFileScanSnapshot sse_decode_rust_file_scan_snapshot(SseDeserializer deserializer);
+
+@protected RustGpuSample sse_decode_rust_gpu_sample(SseDeserializer deserializer);
+
+@protected RustPerformanceSample sse_decode_rust_performance_sample(SseDeserializer deserializer);
+
+@protected int sse_decode_u_8(SseDeserializer deserializer);
+
+@protected void sse_decode_unit(SseDeserializer deserializer);
+
+@protected void sse_encode_String(String self, SseSerializer serializer);
+
+@protected void sse_encode_bool(bool self, SseSerializer serializer);
+
+@protected void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
+
+@protected void sse_encode_f_64(double self, SseSerializer serializer);
+
+@protected void sse_encode_i_32(int self, SseSerializer serializer);
+
+@protected void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+@protected void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+@protected void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer);
+
+@protected void sse_encode_list_rust_file_hash_entry(List<RustFileHashEntry> self, SseSerializer serializer);
+
+@protected void sse_encode_list_rust_file_scan_entry(List<RustFileScanEntry> self, SseSerializer serializer);
+
+@protected void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+@protected void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+
+@protected void sse_encode_rust_cpu_sample(RustCpuSample self, SseSerializer serializer);
+
+@protected void sse_encode_rust_file_hash_entry(RustFileHashEntry self, SseSerializer serializer);
+
+@protected void sse_encode_rust_file_scan_diff(RustFileScanDiff self, SseSerializer serializer);
+
+@protected void sse_encode_rust_file_scan_entry(RustFileScanEntry self, SseSerializer serializer);
+
+@protected void sse_encode_rust_file_scan_snapshot(RustFileScanSnapshot self, SseSerializer serializer);
+
+@protected void sse_encode_rust_gpu_sample(RustGpuSample self, SseSerializer serializer);
+
+@protected void sse_encode_rust_performance_sample(RustPerformanceSample self, SseSerializer serializer);
+
+@protected void sse_encode_u_8(int self, SseSerializer serializer);
+
+@protected void sse_encode_unit(void self, SseSerializer serializer);
+                }
+                
+
 
 // Section: wire_class
 
-class RustLibWire implements BaseWire {
-  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) =>
-      RustLibWire(lib.ffiDynamicLibrary);
 
-  /// Holds the symbol lookup function.
-  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      _lookup;
+        class RustLibWire implements BaseWire {
 
-  /// The symbols are looked up in [dynamicLibrary].
-  RustLibWire(ffi.DynamicLibrary dynamicLibrary)
-      : _lookup = dynamicLibrary.lookup;
-}
+            factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) =>
+              RustLibWire(lib.ffiDynamicLibrary);
+        
+            /// Holds the symbol lookup function.
+            final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
+                _lookup;
+  
+            /// The symbols are looked up in [dynamicLibrary].
+            RustLibWire(ffi.DynamicLibrary dynamicLibrary)
+                : _lookup = dynamicLibrary.lookup;
+
+            
+        }
+        

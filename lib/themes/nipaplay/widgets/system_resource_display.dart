@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:nipaplay/utils/system_resource_monitor.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:io';
-import 'dart:ui';
-import 'package:provider/provider.dart';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
-import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/utils/system_resource_monitor.dart';
+import 'package:provider/provider.dart';
 
 /// 系统资源显示组件
-/// 用于在界面右上角显示当前CPU使用率、内存使用和帧率
+/// 单行高密度 HUD：无背景容器，仅文本描边。
 class SystemResourceDisplay extends StatefulWidget {
   const SystemResourceDisplay({super.key});
 
@@ -18,18 +17,16 @@ class SystemResourceDisplay extends StatefulWidget {
 }
 
 class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
-  // 用于定期刷新UI的计时器
   Timer? _refreshTimer;
-  bool _registered = false; // 是否已向监控器注册为消费者
-  
-  // 资源指标
+  bool _registered = false;
+
   double _cpuUsage = 0.0;
   double _memoryUsageMB = 0.0;
   double _fps = 0.0;
-  String _activeDecoder = "未知"; // 添加当前活跃的解码器
-  String _mdkVersion = "未知"; // 添加MDK版本号
-  String _playerKernelType = "未知"; // 添加播放器内核类型
-  String _danmakuKernelType = "未知"; // 添加弹幕内核类型
+  double? _gpuUsage;
+  String _activeDecoder = '未知';
+  String _playerKernelType = '未知';
+  String _danmakuKernelType = '未知';
 
   bool get _isMacOSNativeVideoActive {
     if (kIsWeb || !Platform.isMacOS) {
@@ -37,17 +34,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
     }
     return Platform.environment['NIPAPLAY_ENABLE_MACOS_NATIVE_VIDEO'] == '1';
   }
-  
-  @override
-  void initState() {
-    super.initState();
-    
-    // 移除桌面平台限制，在所有平台启用
-    if (!kIsWeb) {
-      // 不在这里直接启动更新，等到真正需要显示时再注册与启动
-    }
-  }
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -78,8 +65,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
     }
     super.dispose();
   }
-  
-  /// 开始定期更新资源信息
+
   void _startUpdating() {
     _refreshTimer?.cancel();
     _refreshTimer = null;
@@ -90,225 +76,244 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         _cpuUsage = SystemResourceMonitor().cpuUsage;
         _memoryUsageMB = SystemResourceMonitor().memoryUsageMB;
         _fps = SystemResourceMonitor().fps;
+        _gpuUsage = SystemResourceMonitor().gpuUsage;
         _activeDecoder = SystemResourceMonitor().activeDecoder;
-        _mdkVersion = SystemResourceMonitor().mdkVersion;
         _playerKernelType = SystemResourceMonitor().playerKernelType;
         _danmakuKernelType = SystemResourceMonitor().danmakuKernelType;
       });
     }
 
-    if (_isMacOSNativeVideoActive) {
-      refreshMetrics();
-      return;
-    }
+    refreshMetrics();
+    if (_isMacOSNativeVideoActive) return;
 
-    // 每0.5秒刷新一次UI
     _refreshTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       refreshMetrics();
     });
   }
-  
-  /// 获取CPU使用率的颜色（根据负载程度变色）
-  Color _getCpuColor() {
-    if (_cpuUsage < 50) {
-      return const Color.fromARGB(255, 113, 255, 117);
-    } else if (_cpuUsage < 80) {
-      return Colors.orange;
-    } else {
-      return Colors.red;
-    }
+
+  String _formatPercent(double? value) {
+    if (value == null) return 'N/A';
+    return '${value.toStringAsFixed(1)}%';
   }
-  
-  /// 获取内存使用量的颜色
-  Color _getMemoryColor() {
-    if (_memoryUsageMB < 200) {
-      return const Color.fromARGB(255, 111, 252, 116);
-    } else if (_memoryUsageMB < 500) {
-      return Colors.orange;
-    } else {
-      return Colors.red;
-    }
+
+  String _formatMemory(double value) {
+    if (value <= 0) return 'N/A';
+    return '${value.toStringAsFixed(0)}M';
   }
-  
-  /// 获取帧率的颜色
-  Color _getFpsColor() {
-    if (_fps >= 55) {
-      return const Color.fromARGB(255, 112, 255, 117);
-    } else if (_fps >= 30) {
-      return Colors.orange;
-    } else {
-      return Colors.red;
-    }
+
+  TextStyle _outlinedTextStyle({
+    required Color color,
+    required double fontSize,
+    FontWeight weight = FontWeight.w900,
+    double strokeWidth = 2.4,
+    double letterSpacing = 0.2,
+  }) {
+    return TextStyle(
+      fontSize: fontSize,
+      height: 1.0,
+      fontWeight: weight,
+      color: color,
+      letterSpacing: letterSpacing,
+      shadows: [
+        Shadow(
+            color: Colors.black.withValues(alpha: 0.95),
+            offset: const Offset(-0.7, -0.7)),
+        Shadow(
+            color: Colors.black.withValues(alpha: 0.95),
+            offset: const Offset(0.7, -0.7)),
+        Shadow(
+            color: Colors.black.withValues(alpha: 0.95),
+            offset: const Offset(-0.7, 0.7)),
+        Shadow(
+            color: Colors.black.withValues(alpha: 0.95),
+            offset: const Offset(0.7, 0.7)),
+        Shadow(
+            color: Colors.black.withValues(alpha: 0.82),
+            blurRadius: strokeWidth),
+      ],
+    );
+  }
+
+  Color _shade(Color base, double amount) {
+    return Color.lerp(base, Colors.black, amount)!;
+  }
+
+  Widget _segment({
+    required String label,
+    required String value,
+    required Color labelColor,
+    required Color valueColor,
+    bool compact = false,
+  }) {
+    return RichText(
+      maxLines: 1,
+      overflow: TextOverflow.fade,
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$label ',
+            style: _outlinedTextStyle(
+              color: labelColor,
+              fontSize: compact ? 12 : 13,
+              weight: FontWeight.w800,
+              strokeWidth: 1.9,
+              letterSpacing: 0.35,
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: _outlinedTextStyle(
+              color: valueColor,
+              fontSize: compact ? 13 : 14,
+              weight: FontWeight.w900,
+              strokeWidth: 2.6,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // 移除桌面平台限制，允许在所有平台显示
     if (kIsWeb) {
       return const SizedBox.shrink();
     }
-    
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    // 使用Consumer检查开发者选项中的设置
+
     return Consumer<DeveloperOptionsProvider>(
       builder: (context, devOptions, child) {
-        // 如果开发者选项设置为不显示，则返回空组件
         if (!devOptions.showSystemResources) {
           return const SizedBox.shrink();
         }
-        
-        // 否则显示系统资源信息（纯色背景）
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.dividerColor,
-              width: 0.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+
+        final cpuText = '${_cpuUsage.toStringAsFixed(1)}%';
+        final memText = _formatMemory(_memoryUsageMB);
+        final gpuText = _formatPercent(_gpuUsage);
+        final fpsText = _fps <= 0 ? 'N/A' : _fps.toStringAsFixed(1);
+
+        const cpuBase = Color(0xFF22B8E6);
+        const memBase = Color(0xFFD89A1C);
+        const gpuBase = Color(0xFF9A67FF);
+        const fpsBase = Color(0xFF46D27A);
+        const decBase = Color(0xFFFF9850);
+        const playerBase = Color(0xFF5E9BFF);
+        const danmakuBase = Color(0xFFFF6EBF);
+
+        Color valueFromBase(Color base, double? load,
+            {double warn = 60, double danger = 85}) {
+          if (load == null) return const Color(0xFFB7BEC7);
+          if (load >= danger) return const Color(0xFFFF6D7A);
+          if (load >= warn) {
+            return Color.lerp(base, const Color(0xFFFFC35A), 0.45)!;
+          }
+          return base;
+        }
+
+        final cpuColor = valueFromBase(cpuBase, _cpuUsage);
+        final memColor = _memoryUsageMB > 0
+            ? valueFromBase(memBase, (_memoryUsageMB / 1024) * 100,
+                warn: 55, danger: 80)
+            : const Color(0xFFB7BEC7);
+        final gpuColor = valueFromBase(gpuBase, _gpuUsage);
+        final fpsColor = _fps > 0
+            ? (_fps >= 55
+                ? fpsBase
+                : (_fps >= 30
+                    ? Color.lerp(fpsBase, const Color(0xFFFFC35A), 0.5)!
+                    : const Color(0xFFFF6D7A)))
+            : const Color(0xFFB7BEC7);
+
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final narrowScreen = screenWidth < 720;
+        final showDetail = screenWidth >= 1160;
+        final compact = screenWidth < 900;
+
+        final items = <Widget>[
+          _segment(
+            label: 'CPU',
+            value: cpuText,
+            labelColor: cpuBase,
+            valueColor: cpuColor,
+            compact: compact,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
+          _segment(
+            label: 'MEM',
+            value: memText,
+            labelColor: memBase,
+            valueColor: memColor,
+            compact: compact,
+          ),
+          _segment(
+            label: 'GPU',
+            value: gpuText,
+            labelColor: gpuBase,
+            valueColor: gpuColor,
+            compact: compact,
+          ),
+          _segment(
+            label: 'FPS',
+            value: fpsText,
+            labelColor: fpsBase,
+            valueColor: fpsColor,
+            compact: compact,
+          ),
+          if (showDetail)
+            _segment(
+              label: 'DEC',
+              value: _activeDecoder,
+              labelColor: _shade(decBase, 0.28),
+              valueColor: _shade(decBase, 0.06),
+              compact: true,
+            ),
+          if (showDetail)
+            _segment(
+              label: 'P',
+              value: _playerKernelType,
+              labelColor: _shade(playerBase, 0.28),
+              valueColor: _shade(playerBase, 0.06),
+              compact: true,
+            ),
+          if (showDetail)
+            _segment(
+              label: 'D',
+              value: _danmakuKernelType,
+              labelColor: _shade(danmakuBase, 0.28),
+              valueColor: _shade(danmakuBase, 0.06),
+              compact: true,
+            ),
+        ];
+
+        if (narrowScreen) {
+          return IgnorePointer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < items.length; i++) ...[
+                  items[i],
+                  if (i != items.length - 1) const SizedBox(height: 2),
+                ],
+              ],
+            ),
+          );
+        }
+
+        return IgnorePointer(
+          child: SizedBox(
+            height: compact ? 18 : 20,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // CPU使用率
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.memory, size: 22, color: colorScheme.onSurface.withOpacity(0.7)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_cpuUsage.toStringAsFixed(1)}%',
-                        locale: const Locale("zh", "CN"),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _getCpuColor(),
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 10),
-                  
-                  // 内存使用量
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.sd_storage_outlined, size: 22, color: colorScheme.onSurface.withOpacity(0.7)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_memoryUsageMB.toStringAsFixed(1)}MB',
-                        locale: const Locale("zh", "CN"),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _getMemoryColor(),
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 10),
-                  
-                  // 帧率
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.speed, size: 22, color: colorScheme.onSurface.withOpacity(0.7)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_fps.toStringAsFixed(1)} FPS',
-                        locale: const Locale("zh", "CN"),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _getFpsColor(),
-                          decoration: TextDecoration.none,
-                        ),
-                      ),
-                    ],
-                  ),
+                  for (int i = 0; i < items.length; i++) ...[
+                    if (i > 0) SizedBox(width: compact ? 8 : 10),
+                    items[i],
+                  ],
                 ],
               ),
-              const SizedBox(height: 4),
-              
-              // 播放器内核信息
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 播放器内核信息
-                  Flexible(
-                    flex: 1,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.developer_board, size: 16, color: colorScheme.onSurface.withOpacity(0.7)),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            '播放器: $_playerKernelType',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                              decoration: TextDecoration.none,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // 分隔符
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Container(
-                      height: 16,
-                      width: 1,
-                      color: theme.dividerColor,
-                    ),
-                  ),
-                  
-                  // 弹幕内核信息
-                  Flexible(
-                    flex: 1,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.subtitles, size: 16, color: colorScheme.onSurface.withOpacity(0.7)),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            '弹幕: $_danmakuKernelType',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                              decoration: TextDecoration.none,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         );
       },
