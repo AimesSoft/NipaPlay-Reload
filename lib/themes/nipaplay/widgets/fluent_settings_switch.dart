@@ -1,11 +1,12 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class FluentSettingsSwitch extends StatelessWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
 
-  static const Color _activeColor = Color(0xFFFF2E55);
+  static Color get _activeColor => AppAccentColors.current;
 
   const FluentSettingsSwitch({
     super.key,

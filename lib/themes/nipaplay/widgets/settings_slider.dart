@@ -1,7 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
-const Color _fluentAccentColor = Color(0xFFFF2E55);
+Color get _fluentAccentColor => AppAccentColors.current;
 
 class SettingsSlider extends StatefulWidget {
   final double value;
@@ -77,7 +78,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         fluent.FluentTheme(
           data: fluent.FluentThemeData(
             brightness: Theme.of(context).brightness,

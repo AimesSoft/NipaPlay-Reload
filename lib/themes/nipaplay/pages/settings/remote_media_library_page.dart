@@ -18,6 +18,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_library_settings_section.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class RemoteMediaLibraryPage extends StatefulWidget {
   const RemoteMediaLibraryPage({super.key});
@@ -68,8 +69,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
     final platform = _clientPlatformLabel();
     final customDeviceId =
         await MediaServerDeviceIdService.instance.getCustomDeviceId();
-    final generatedDeviceId =
-        await MediaServerDeviceIdService.instance.getOrCreateGeneratedDeviceId();
+    final generatedDeviceId = await MediaServerDeviceIdService.instance
+        .getOrCreateGeneratedDeviceId();
     final effectiveDeviceId =
         await MediaServerDeviceIdService.instance.getEffectiveDeviceId(
       appName: appName,
@@ -94,7 +95,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
   @override
   Widget build(BuildContext context) {
     return Consumer3<JellyfinProvider, EmbyProvider, DandanplayRemoteProvider>(
-      builder: (context, jellyfinProvider, embyProvider, dandanProvider, child) {
+      builder:
+          (context, jellyfinProvider, embyProvider, dandanProvider, child) {
         final colorScheme = Theme.of(context).colorScheme;
         // 检查 Provider 是否已初始化
         if (!jellyfinProvider.isInitialized &&
@@ -105,28 +107,30 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CircularProgressIndicator(color: colorScheme.primary),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(
                   '正在初始化远程媒体库服务...',
-                  locale: const Locale("zh-Hans","zh"),
-                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  locale: const Locale("zh-Hans", "zh"),
+                  style:
+                      TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
               ],
             ),
           );
         }
-        
+
         // 检查是否有严重错误
-        final hasJellyfinError = jellyfinProvider.hasError && 
-                                 jellyfinProvider.errorMessage != null &&
-                                 !jellyfinProvider.isConnected;
-        final hasEmbyError = embyProvider.hasError && 
-                            embyProvider.errorMessage != null &&
-                            !embyProvider.isConnected;
-        final hasDandanError = (dandanProvider.errorMessage?.isNotEmpty ?? false) &&
-            !dandanProvider.isConnected &&
-            dandanProvider.isInitialized;
-        
+        final hasJellyfinError = jellyfinProvider.hasError &&
+            jellyfinProvider.errorMessage != null &&
+            !jellyfinProvider.isConnected;
+        final hasEmbyError = embyProvider.hasError &&
+            embyProvider.errorMessage != null &&
+            !embyProvider.isConnected;
+        final hasDandanError =
+            (dandanProvider.errorMessage?.isNotEmpty ?? false) &&
+                !dandanProvider.isConnected &&
+                dandanProvider.isInitialized;
+
         return ListView(
           padding: const EdgeInsets.all(24.0),
           children: [
@@ -138,32 +142,32 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 dandanProvider,
                 hasDandanError,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
             ],
-            
+
             // Jellyfin服务器配置部分
             _buildJellyfinSection(jellyfinProvider),
 
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // Emby服务器配置部分
             _buildEmbySection(embyProvider),
 
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // 弹弹play 远程服务
             _buildDandanplaySection(dandanProvider),
 
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             const SharedRemoteLibrarySettingsSection(),
 
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // 其他远程媒体库服务 (预留)
             _buildOtherServicesSection(),
 
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // 设备标识（Jellyfin/Emby）
             _buildDeviceIdSection(),
@@ -190,10 +194,10 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               color: colorScheme.error,
               size: 24,
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text(
               '服务初始化错误',
-              locale: const Locale("zh-Hans","zh"),
+              locale: const Locale("zh-Hans", "zh"),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -202,28 +206,28 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         if (jellyfinProvider.hasError && jellyfinProvider.errorMessage != null)
           _buildErrorItem('Jellyfin', jellyfinProvider.errorMessage!),
         if (embyProvider.hasError && embyProvider.errorMessage != null) ...[
-          if (jellyfinProvider.hasError) const SizedBox(height: 8),
+          if (jellyfinProvider.hasError) SizedBox(height: 8),
           _buildErrorItem('Emby', embyProvider.errorMessage!),
         ],
         if (hasDandanError) ...[
           if (jellyfinProvider.hasError || embyProvider.hasError)
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
           _buildErrorItem('弹弹play', dandanProvider.errorMessage ?? '未知错误'),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(Icons.info, color: colorScheme.tertiary, size: 16),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
                 '这些错误不会影响其他功能的正常使用。您可以尝试重新配置服务器连接。',
-                locale: const Locale("zh-Hans","zh"),
+                locale: const Locale("zh-Hans", "zh"),
                 style: TextStyle(
                   color: colorScheme.onSurface.withOpacity(0.7),
                   fontSize: 12,
@@ -249,10 +253,10 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             fontSize: 13,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           errorMessage,
-          locale: const Locale("zh-Hans","zh"),
+          locale: const Locale("zh-Hans", "zh"),
           style: TextStyle(
             color: colorScheme.error.withOpacity(0.8),
             fontSize: 12,
@@ -278,10 +282,10 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               width: 24,
               height: 24,
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text(
               'Jellyfin 媒体服务器',
-              locale: const Locale("zh-Hans","zh"),
+              locale: const Locale("zh-Hans", "zh"),
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -292,7 +296,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             if (jellyfinProvider.isConnected)
               const Text(
                 '已连接',
-                locale: Locale("zh-Hans","zh"),
+                locale: Locale("zh-Hans", "zh"),
                 style: TextStyle(
                   color: Colors.green,
                   fontSize: 12,
@@ -301,19 +305,17 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               ),
           ],
         ),
-            
-        const SizedBox(height: 16),
-            
+        SizedBox(height: 16),
         if (!jellyfinProvider.isConnected) ...[
           Text(
             'Jellyfin是一个免费的媒体服务器软件，可以让您在任何设备上流式传输您的媒体收藏。',
-            locale: const Locale("zh-Hans","zh"),
+            locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
               color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: _buildGlassButton(
@@ -325,14 +327,14 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
         ] else ...[
           // 已连接状态显示服务器信息
           _buildServerInfo(jellyfinProvider),
-              
-          const SizedBox(height: 16),
-              
+
+          SizedBox(height: 16),
+
           // 媒体库信息
           _buildLibraryInfo(jellyfinProvider),
-              
-          const SizedBox(height: 16),
-              
+
+          SizedBox(height: 16),
+
           // 操作按钮
           Row(
             children: [
@@ -343,7 +345,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   label: '管理服务器',
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: _buildGlassButton(
                   onPressed: () => _disconnectServer(jellyfinProvider),
@@ -374,9 +376,10 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
         Row(
           children: [
             Icon(Icons.dns, color: colorScheme.primary, size: 16),
-            const SizedBox(width: 8),
-            Text('服务器:', locale: const Locale("zh-Hans","zh"), style: labelStyle),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
+            Text('服务器:',
+                locale: const Locale("zh-Hans", "zh"), style: labelStyle),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
                 jellyfinProvider.serverUrl ?? '未知',
@@ -386,13 +389,14 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Row(
           children: [
             Icon(Icons.person, color: colorScheme.primary, size: 16),
-            const SizedBox(width: 8),
-            Text('用户:', locale: const Locale("zh-Hans","zh"), style: labelStyle),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
+            Text('用户:',
+                locale: const Locale("zh-Hans", "zh"), style: labelStyle),
+            SizedBox(width: 8),
             Text(
               jellyfinProvider.username ?? '匿名',
               style: valueStyle,
@@ -421,10 +425,12 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       children: [
         Row(
           children: [
-            Icon(Ionicons.library_outline, color: colorScheme.primary, size: 16),
-            const SizedBox(width: 8),
-            Text('媒体库:', locale: const Locale("zh-Hans","zh"), style: labelStyle),
-            const SizedBox(width: 8),
+            Icon(Ionicons.library_outline,
+                color: colorScheme.primary, size: 16),
+            SizedBox(width: 8),
+            Text('媒体库:',
+                locale: const Locale("zh-Hans", "zh"), style: labelStyle),
+            SizedBox(width: 8),
             Text(
               '已选择 ${selectedLibraries.length} / ${availableLibraries.length}',
               style: valueStyle,
@@ -432,12 +438,14 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           ],
         ),
         if (selectedLibraries.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 4,
             children: selectedLibraries.map((libraryId) {
-              final library = availableLibraries.where((lib) => lib.id == libraryId).isNotEmpty
+              final library = availableLibraries
+                      .where((lib) => lib.id == libraryId)
+                      .isNotEmpty
                   ? availableLibraries.firstWhere((lib) => lib.id == libraryId)
                   : null;
               if (library == null) {
@@ -479,10 +487,10 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               width: 24,
               height: 24,
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text(
               'Emby 媒体服务器',
-              locale: const Locale("zh-Hans","zh"),
+              locale: const Locale("zh-Hans", "zh"),
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -493,7 +501,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             if (embyProvider.isConnected)
               const Text(
                 '已连接',
-                locale: Locale("zh-Hans","zh"),
+                locale: Locale("zh-Hans", "zh"),
                 style: TextStyle(
                   color: Color(0xFF52B54B),
                   fontSize: 12,
@@ -502,19 +510,17 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               ),
           ],
         ),
-        
-        const SizedBox(height: 16),
-        
+        SizedBox(height: 16),
         if (!embyProvider.isConnected) ...[
           Text(
             'Emby是一个强大的个人媒体服务器，可以让您在任何设备上组织、播放和流式传输您的媒体收藏。',
-            locale: const Locale("zh-Hans","zh"),
+            locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
               color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: _buildGlassButton(
@@ -526,14 +532,14 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
         ] else ...[
           // 已连接状态显示服务器信息
           _buildEmbyServerInfo(embyProvider),
-          
-          const SizedBox(height: 16),
-          
+
+          SizedBox(height: 16),
+
           // 媒体库信息
           _buildEmbyLibraryInfo(embyProvider),
-          
-          const SizedBox(height: 16),
-          
+
+          SizedBox(height: 16),
+
           // 操作按钮
           Row(
             children: [
@@ -544,7 +550,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   label: '管理服务器',
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: _buildGlassButton(
                   onPressed: () => _disconnectEmbyServer(embyProvider),
@@ -573,10 +579,11 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(colorScheme.primary),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Text(
                 '正在加载设备标识...',
                 locale: const Locale("zh-Hans", "zh"),
@@ -599,13 +606,13 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   color: colorScheme.onSurface,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 '加载失败: ${snapshot.error}',
                 locale: const Locale("zh-Hans", "zh"),
                 style: TextStyle(color: colorScheme.error, fontSize: 13),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: _buildGlassButton(
@@ -634,7 +641,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             Row(
               children: [
                 Icon(Icons.fingerprint, color: colorScheme.onSurface),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Text(
                   '设备标识（Jellyfin/Emby）',
                   locale: const Locale("zh-Hans", "zh"),
@@ -657,7 +664,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
               '用于区分不同设备，避免多台 iOS 设备被识别为同一设备导致互踢登出。',
               locale: const Locale("zh-Hans", "zh"),
@@ -666,21 +673,21 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 fontSize: 14,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             _buildDeviceIdValueRow('当前 DeviceId', info.effectiveDeviceId),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             if (!hasCustom)
               _buildDeviceIdValueRow('自动生成标识', info.generatedDeviceId),
             if (hasCustom) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               _buildDeviceIdValueRow('自定义 DeviceId', info.customDeviceId!),
             ],
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.info, color: colorScheme.tertiary, size: 16),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '修改 DeviceId 后，建议断开并重新连接 Jellyfin/Emby 以确保生效。',
@@ -693,7 +700,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -703,7 +710,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                     label: hasCustom ? '修改 DeviceId' : '自定义 DeviceId',
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: _buildGlassButton(
                     onPressed: hasCustom
@@ -745,7 +752,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             fontSize: 12,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         SelectableText(
           value,
           style: TextStyle(
@@ -762,12 +769,13 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
     final controller = TextEditingController(text: info.customDeviceId ?? '');
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
     final textColor = colorScheme.onSurface;
     final secondaryTextColor = textColor.withOpacity(0.7);
     final hintColor = textColor.withOpacity(0.5);
     final borderColor = textColor.withOpacity(isDark ? 0.25 : 0.2);
-    final fillColor = isDark ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
+    final fillColor =
+        isDark ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
     final selectionTheme = TextSelectionThemeData(
       cursorColor: accentColor,
       selectionColor: accentColor.withOpacity(0.3),
@@ -794,12 +802,12 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               TextField(
                 controller: controller,
                 maxLength: 128,
                 cursorColor: accentColor,
-                style: const TextStyle(color: accentColor),
+                style: TextStyle(color: accentColor),
                 decoration: InputDecoration(
                   hintText: '例如: My-iPhone-01',
                   hintStyle: TextStyle(color: hintColor),
@@ -812,7 +820,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: accentColor, width: 1),
+                    borderSide: BorderSide(color: accentColor, width: 1),
                   ),
                 ),
               ),
@@ -837,8 +845,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               BlurSnackBar.show(context, '设备ID已更新，重新连接后生效');
             } on FormatException {
               if (mounted) {
-                BlurSnackBar.show(
-                    context, 'DeviceId 无效：请避免双引号/换行，且长度 ≤ 128');
+                BlurSnackBar.show(context, 'DeviceId 无效：请避免双引号/换行，且长度 ≤ 128');
               }
             } catch (e) {
               if (mounted) {
@@ -867,10 +874,11 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       children: [
         Row(
           children: [
-            const Icon(Icons.dns, color: Color(0xFF52B54B), size: 16),
-            const SizedBox(width: 8),
-            Text('服务器:', locale: const Locale("zh-Hans","zh"), style: labelStyle),
-            const SizedBox(width: 8),
+            Icon(Icons.dns, color: Color(0xFF52B54B), size: 16),
+            SizedBox(width: 8),
+            Text('服务器:',
+                locale: const Locale("zh-Hans", "zh"), style: labelStyle),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
                 embyProvider.serverUrl ?? '未知',
@@ -880,13 +888,14 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Row(
           children: [
-            const Icon(Icons.person, color: Color(0xFF52B54B), size: 16),
-            const SizedBox(width: 8),
-            Text('用户:', locale: const Locale("zh-Hans","zh"), style: labelStyle),
-            const SizedBox(width: 8),
+            Icon(Icons.person, color: Color(0xFF52B54B), size: 16),
+            SizedBox(width: 8),
+            Text('用户:',
+                locale: const Locale("zh-Hans", "zh"), style: labelStyle),
+            SizedBox(width: 8),
             Text(
               embyProvider.username ?? '匿名',
               style: valueStyle,
@@ -915,10 +924,11 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       children: [
         Row(
           children: [
-            const Icon(Ionicons.library_outline, color: Color(0xFF52B54B), size: 16),
-            const SizedBox(width: 8),
-            Text('媒体库:', locale: const Locale("zh-Hans","zh"), style: labelStyle),
-            const SizedBox(width: 8),
+            Icon(Ionicons.library_outline, color: Color(0xFF52B54B), size: 16),
+            SizedBox(width: 8),
+            Text('媒体库:',
+                locale: const Locale("zh-Hans", "zh"), style: labelStyle),
+            SizedBox(width: 8),
             Text(
               '已选择 ${selectedLibraries.length} / ${availableLibraries.length}',
               style: valueStyle,
@@ -926,12 +936,14 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           ],
         ),
         if (selectedLibraries.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 4,
             children: selectedLibraries.map((libraryId) {
-              final library = availableLibraries.where((lib) => lib.id == libraryId).isNotEmpty
+              final library = availableLibraries
+                      .where((lib) => lib.id == libraryId)
+                      .isNotEmpty
                   ? availableLibraries.firstWhere((lib) => lib.id == libraryId)
                   : null;
               if (library == null) {
@@ -945,7 +957,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               }
               return Text(
                 library.name,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Color(0xFF52B54B),
                   fontSize: 12,
                 ),
@@ -974,10 +986,10 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               height: 32,
               fit: BoxFit.contain,
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text(
               '弹弹play 远程访问',
-              locale: const Locale("zh-Hans","zh"),
+              locale: const Locale("zh-Hans", "zh"),
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -991,7 +1003,8 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(colorScheme.primary),
                 ),
               )
             else if (isConnected)
@@ -1005,21 +1018,21 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
               ),
           ],
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         if ((errorMessage?.isNotEmpty ?? false) && !isLoading) ...[
           _buildDandanErrorBanner(errorMessage!),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
         ],
         if (!isConnected) ...[
           Text(
             '通过弹弹play桌面端开启远程访问后，可在此直接浏览和播放家中 NAS/电脑上的弹幕番剧。',
-            locale: const Locale("zh-Hans","zh"),
+            locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
               color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: _buildGlassButton(
@@ -1030,11 +1043,11 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           ),
         ] else ...[
           _buildDandanServerInfo(provider),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildDandanStats(provider),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildDandanAnimePreview(provider),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -1046,19 +1059,18 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
                   label: '管理连接',
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: _buildGlassButton(
-                  onPressed: isLoading
-                      ? null
-                      : () => _refreshDandanLibrary(provider),
+                  onPressed:
+                      isLoading ? null : () => _refreshDandanLibrary(provider),
                   icon: Icons.refresh,
                   label: isLoading ? '同步中...' : '刷新媒体库',
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: _buildGlassButton(
@@ -1084,11 +1096,11 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           color: colorScheme.error,
           size: 18,
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Expanded(
           child: Text(
             message,
-            locale: const Locale("zh-Hans","zh"),
+            locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
               color: colorScheme.error,
               fontSize: 13,
@@ -1120,7 +1132,7 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
           label: '服务器地址',
           value: provider.serverUrl ?? '未配置',
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         _buildInfoRow(
           icon: Icons.sync,
           iconColor: const Color(0xFFFFC857),
@@ -1143,13 +1155,14 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
     return Row(
       children: [
         Icon(icon, color: resolvedIconColor, size: 16),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Text(
           '$label:',
-          locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
+          locale: Locale("zh-Hans", "zh"),
+          style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Expanded(
           child: Text(
             value,
@@ -1211,7 +1224,7 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, color: colorScheme.onSurface.withOpacity(0.7), size: 18),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           value,
           style: TextStyle(
@@ -1220,11 +1233,12 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           label,
-          locale: const Locale("zh-Hans","zh"),
-          style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.6), fontSize: 12),
         ),
       ],
     );
@@ -1238,8 +1252,9 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
       final colorScheme = Theme.of(context).colorScheme;
       return Text(
         '暂无远程媒体记录，可尝试刷新或确认远程访问设置。',
-        locale: const Locale("zh-Hans","zh"),
-        style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6), fontSize: 13),
+        locale: const Locale("zh-Hans", "zh"),
+        style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.6), fontSize: 13),
       );
     }
 
@@ -1249,14 +1264,14 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
       children: [
         Text(
           '最近更新',
-          locale: const Locale("zh-Hans","zh"),
+          locale: const Locale("zh-Hans", "zh"),
           style: TextStyle(
             color: colorScheme.onSurface.withOpacity(0.7),
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         ...preview.map(_buildDandanAnimeGroupTile),
       ],
     );
@@ -1274,7 +1289,7 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
         children: [
           Icon(Ionicons.play_outline,
               color: colorScheme.onSurface.withOpacity(0.7), size: 20),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1287,10 +1302,10 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   subtitle,
-                  locale: const Locale("zh-Hans","zh"),
+                  locale: const Locale("zh-Hans", "zh"),
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.6),
                     fontSize: 12,
@@ -1300,10 +1315,10 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Text(
             '共 ${group.episodeCount} 集',
-            locale: const Locale("zh-Hans","zh"),
+            locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
               color: colorScheme.onSurface.withOpacity(0.7),
               fontSize: 12,
@@ -1349,10 +1364,10 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
               color: colorScheme.onSurface,
               size: 24,
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text(
               '其他媒体服务',
-              locale: const Locale("zh-Hans","zh"),
+              locale: const Locale("zh-Hans", "zh"),
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -1361,20 +1376,20 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
             ),
           ],
         ),
-        
-        const SizedBox(height: 16),
-        
+
+        SizedBox(height: 16),
+
         Text(
           '更多远程媒体服务支持正在开发中...',
-          locale: const Locale("zh-Hans","zh"),
+          locale: const Locale("zh-Hans", "zh"),
           style: TextStyle(
             color: colorScheme.onSurface.withOpacity(0.7),
             fontSize: 14,
           ),
         ),
-        
-        const SizedBox(height: 16),
-        
+
+        SizedBox(height: 16),
+
         // 预留的服务列表
         ..._buildFutureServices(context),
       ],
@@ -1396,7 +1411,7 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
               service['icon'] as IconData,
               color: colorScheme.onSurface.withOpacity(0.7),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Text(
                 service['name'] as String,
@@ -1417,8 +1432,9 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
   }
 
   Future<void> _showJellyfinServerDialog() async {
-    final result = await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
-    
+    final result =
+        await NetworkMediaServerDialog.show(context, MediaServerType.jellyfin);
+
     if (result == true) {
       if (mounted) {
         BlurSnackBar.show(context, 'Jellyfin服务器设置已更新');
@@ -1434,13 +1450,15 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 14),
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+          child: const Text('取消',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70)),
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red)),
+          child: const Text('断开连接',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.red)),
         ),
       ],
     );
@@ -1473,13 +1491,12 @@ style: TextStyle(color: Colors.red)),
         final colorScheme = Theme.of(context).colorScheme;
         final Color baseTextColor = colorScheme.onSurface;
         final Color destructiveColor = colorScheme.error;
-        final Color accentColor = isDestructive ? destructiveColor : baseTextColor;
-        final double backgroundOpacity = isDisabled
-            ? 0.06
-            : (isHovered ? 0.22 : 0.12);
-        final double borderOpacity = isDisabled
-            ? 0.15
-            : (isHovered ? 0.4 : 0.2);
+        final Color accentColor =
+            isDestructive ? destructiveColor : baseTextColor;
+        final double backgroundOpacity =
+            isDisabled ? 0.06 : (isHovered ? 0.22 : 0.12);
+        final double borderOpacity =
+            isDisabled ? 0.15 : (isHovered ? 0.4 : 0.2);
 
         void updateHover(bool value) {
           if (isDisabled) {
@@ -1494,12 +1511,10 @@ style: TextStyle(color: Colors.red)),
         final Color borderColor = isDestructive
             ? destructiveColor.withOpacity(borderOpacity)
             : baseTextColor.withOpacity(borderOpacity);
-        final Color iconColor = isDisabled
-            ? baseTextColor.withOpacity(0.38)
-            : accentColor;
-        final Color labelColor = isDisabled
-            ? baseTextColor.withOpacity(0.5)
-            : accentColor;
+        final Color iconColor =
+            isDisabled ? baseTextColor.withOpacity(0.38) : accentColor;
+        final Color labelColor =
+            isDisabled ? baseTextColor.withOpacity(0.5) : accentColor;
 
         final buttonContainer = AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -1527,7 +1542,7 @@ style: TextStyle(color: Colors.red)),
                       color: iconColor,
                       size: 18,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Text(
                       label,
                       style: TextStyle(
@@ -1546,7 +1561,8 @@ style: TextStyle(color: Colors.red)),
         return MouseRegion(
           onEnter: (_) => updateHover(true),
           onExit: (_) => updateHover(false),
-          cursor: isDisabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
+          cursor:
+              isDisabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: disableBlur
@@ -1562,8 +1578,9 @@ style: TextStyle(color: Colors.red)),
   }
 
   Future<void> _showEmbyServerDialog() async {
-    final result = await NetworkMediaServerDialog.show(context, MediaServerType.emby);
-    
+    final result =
+        await NetworkMediaServerDialog.show(context, MediaServerType.emby);
+
     if (result == true) {
       if (mounted) {
         BlurSnackBar.show(context, 'Emby服务器设置已更新');
@@ -1579,13 +1596,15 @@ style: TextStyle(color: Colors.red)),
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+          child: const Text('取消',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70)),
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red)),
+          child: const Text('断开连接',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.red)),
         ),
       ],
     );
@@ -1621,9 +1640,7 @@ style: TextStyle(color: Colors.red)),
         LoginField(
           key: 'token',
           label: 'API密钥 (可选)',
-          hint: provider.tokenRequired
-              ? '服务器已启用 API 验证'
-              : '若服务器开启验证请填写',
+          hint: provider.tokenRequired ? '服务器已启用 API 验证' : '若服务器开启验证请填写',
           isPassword: true,
           required: false,
         ),
@@ -1651,8 +1668,7 @@ style: TextStyle(color: Colors.red)),
     }
   }
 
-  Future<void> _refreshDandanLibrary(
-      DandanplayRemoteProvider provider) async {
+  Future<void> _refreshDandanLibrary(DandanplayRemoteProvider provider) async {
     try {
       await provider.refresh();
       if (mounted) {
@@ -1665,8 +1681,7 @@ style: TextStyle(color: Colors.red)),
     }
   }
 
-  Future<void> _disconnectDandanplay(
-      DandanplayRemoteProvider provider) async {
+  Future<void> _disconnectDandanplay(DandanplayRemoteProvider provider) async {
     final confirm = await BlurDialog.show<bool>(
       context: context,
       title: '断开弹弹play远程服务',
@@ -1674,13 +1689,15 @@ style: TextStyle(color: Colors.red)),
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+          child: const Text('取消',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70)),
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('断开连接', locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red)),
+          child: const Text('断开连接',
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.red)),
         ),
       ],
     );

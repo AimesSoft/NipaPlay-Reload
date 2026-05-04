@@ -4,8 +4,9 @@ import 'dart:ui';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
-const Color _nipaAccentColor = Color(0xFFFF2E55);
+Color get _nipaAccentColor => AppAccentColors.current;
 
 class BlurButton extends StatefulWidget {
   final IconData? icon;
@@ -131,7 +132,7 @@ class _BlurButtonState extends State<BlurButton> {
             size: _isHovered ? widget.iconSize + 1 : widget.iconSize,
             color: effectiveForegroundColor,
           ),
-          const SizedBox(width: 4),
+          SizedBox(width: 4),
         ],
         text,
       ],

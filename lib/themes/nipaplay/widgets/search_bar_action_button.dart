@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
-/// 统一的媒体库操作按钮：悬停时图标放大并变色为 #ff2e55
+/// 统一的媒体库操作按钮：悬停时图标放大并使用主题色
 class SearchBarActionButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onPressed;
@@ -28,16 +29,18 @@ class _SearchBarActionButtonState extends State<SearchBarActionButton> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bool isEnabled = widget.onPressed != null;
-    
+
     // 默认颜色：深色模式白色透明度，浅色模式黑色透明度
-    Color idleColor = widget.color ?? 
-        (isDark ? Colors.white.withValues(alpha: 0.6) : Colors.black.withValues(alpha: 0.6));
-    
+    Color idleColor = widget.color ??
+        (isDark
+            ? Colors.white.withValues(alpha: 0.6)
+            : Colors.black.withValues(alpha: 0.6));
+
     if (!isEnabled) {
       idleColor = idleColor.withValues(alpha: 0.3);
     }
-    
-    const activeColor = Color(0xFFFF2E55);
+
+    final activeColor = AppAccentColors.current;
 
     Widget result = MouseRegion(
       onEnter: (_) => isEnabled ? setState(() => _isHovered = true) : null,

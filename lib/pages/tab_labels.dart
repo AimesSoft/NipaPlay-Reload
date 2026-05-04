@@ -1,8 +1,10 @@
 // tab_labels.dart
 import 'package:flutter/material.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
-List<Widget> createTabLabels(BuildContext context, {bool showWebDAVTab = false}) {
+List<Widget> createTabLabels(BuildContext context,
+    {bool showWebDAVTab = false}) {
   List<Widget> tabs = [
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
@@ -62,20 +64,20 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final highlightColor = isDarkMode ? Colors.white : Colors.black;
-    const activeColor = Color(0xFFFF2E55);
-    
+    final activeColor = AppAccentColors.current;
+
     // 获取父级 TabBar 传递下来的样式（用于判断选中状态）
     final defaultStyle = DefaultTextStyle.of(context).style;
     final currentColor = defaultStyle.color ?? highlightColor;
-    
+
     // 增加颜色比对的容差，确保在动画切换过程中也能正确识别选中状态
-    final bool isSelected = (currentColor.r - activeColor.r).abs() < 0.1 && 
-                            (currentColor.g - activeColor.g).abs() < 0.1 && 
-                            (currentColor.b - activeColor.b).abs() < 0.1;
+    final bool isSelected = (currentColor.r - activeColor.r).abs() < 0.1 &&
+        (currentColor.g - activeColor.g).abs() < 0.1 &&
+        (currentColor.b - activeColor.b).abs() < 0.1;
 
     // 1. 确定基础颜色（必须是不透明的，用于后续着色）
     Color solidColor = isSelected ? activeColor : highlightColor;
-    
+
     // 如果设置了悬停颜色且当前处于悬停状态，应用悬停颜色
     if (_isHovered && widget.hoverColor != null && !isSelected) {
       solidColor = widget.hoverColor!;
@@ -83,7 +85,9 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
 
     // 2. 确定整体透明度
     // 选中或悬停时 100% 不透明，未选中默认状态跟随 TabBar 的 alpha (通常为 0.6 左右)
-    final double targetOpacity = (isSelected || _isHovered) ? 1.0 : (currentColor.a < 1.0 ? currentColor.a : 0.6);
+    final double targetOpacity = (isSelected || _isHovered)
+        ? 1.0
+        : (currentColor.a < 1.0 ? currentColor.a : 0.6);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -110,7 +114,7 @@ class _HoverZoomTabState extends State<HoverZoomTab> {
                     child: widget.icon!,
                   ),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
               ],
               Text(
                 widget.text,

@@ -39,6 +39,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum _EpisodeCleanupAction {
   clearScanResults,
@@ -89,12 +90,12 @@ class AnimeDetailPage extends StatefulWidget {
           enableAnimation: true,
           dismissible: false,
           builder: (_) => NipaplayLargeScreenAnimeDetailPage(
-                animeId: animeId,
-                sharedSummary: sharedSummary,
-                sharedEpisodeLoader: sharedEpisodeLoader,
-                sharedEpisodeBuilder: sharedEpisodeBuilder,
-                sharedSourceLabel: sharedSourceLabel,
-              ),
+            animeId: animeId,
+            sharedSummary: sharedSummary,
+            sharedEpisodeLoader: sharedEpisodeLoader,
+            sharedEpisodeBuilder: sharedEpisodeBuilder,
+            sharedSourceLabel: sharedSourceLabel,
+          ),
         ),
       );
     }
@@ -1011,20 +1012,19 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     int fullStars = rating.floor();
     bool halfStar = (rating - fullStars) >= 0.5;
 
-    const Color bangumiColor = Color(0xFFFF2E55);
+    final Color bangumiColor = AppAccentColors.current;
 
     for (int i = 0; i < 10; i++) {
       if (i < fullStars) {
-        stars.add(const Icon(Ionicons.star, color: bangumiColor, size: 16));
+        stars.add(Icon(Ionicons.star, color: bangumiColor, size: 16));
       } else if (i == fullStars && halfStar) {
-        stars
-            .add(const Icon(Ionicons.star_half, color: bangumiColor, size: 16));
+        stars.add(Icon(Ionicons.star_half, color: bangumiColor, size: 16));
       } else {
         stars.add(Icon(Ionicons.star_outline,
             color: bangumiColor.withOpacity(isDark ? 0.7 : 0.4), size: 16));
       }
       if (i < 9) {
-        stars.add(const SizedBox(width: 1)); // 星星之间的小间距
+        stars.add(SizedBox(width: 1)); // 星星之间的小间距
       }
     }
     return Row(mainAxisSize: MainAxisSize.min, children: stars);
@@ -1079,7 +1079,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     List<Widget> metadataWidgets = [];
     if (anime.metadata != null && anime.metadata!.isNotEmpty) {
-      metadataWidgets.add(const SizedBox(height: 8));
+      metadataWidgets.add(SizedBox(height: 8));
       metadataWidgets.add(Text('制作信息:', style: sectionTitleStyle));
       for (String item in anime.metadata!) {
         if (item.trim().startsWith('别名:') || item.trim().startsWith('别名：')) {
@@ -1108,9 +1108,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     List<Widget> titlesWidgets = [];
     if (anime.titles != null && anime.titles!.isNotEmpty) {
-      titlesWidgets.add(const SizedBox(height: 8));
+      titlesWidgets.add(SizedBox(height: 8));
       titlesWidgets.add(Text('其他标题:', style: sectionTitleStyle));
-      titlesWidgets.add(const SizedBox(height: 4));
+      titlesWidgets.add(SizedBox(height: 4));
       TextStyle aliasTextStyle =
           TextStyle(color: secondaryTextColor, fontSize: 12);
       for (var titleEntry in anime.titles!) {
@@ -1163,9 +1163,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               ),
             ),
           ]),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Divider(color: textColor.withOpacity(0.15)),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           if (bangumiRatingValue is num && bangumiRatingValue > 0) ...[
             RichText(
                 text: TextSpan(
@@ -1177,8 +1177,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   TextSpan(
                       text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
                       locale: const Locale("zh-Hans", "zh"),
-                      style: const TextStyle(
-                          color: Color(0xFFFF2E55),
+                      style: TextStyle(
+                          color: AppAccentColors.current,
                           fontWeight: FontWeight.bold,
                           fontSize: 14)),
                   TextSpan(
@@ -1186,7 +1186,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       locale: const Locale("zh-Hans", "zh"),
                       style: TextStyle(color: secondaryTextColor, fontSize: 12))
                 ])),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
           ],
 
           // Bangumi云端收藏信息
@@ -1207,7 +1207,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                               AlwaysStoppedAnimation<Color>(secondaryTextColor),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         '正在加载Bangumi收藏信息...',
                         style: valueStyle.copyWith(fontSize: 12),
@@ -1221,15 +1221,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       children: [
                         TextSpan(
                           text: '我的Bangumi评分: ',
-                          style: const TextStyle(
-                              color: Color(0xFFFF2E55),
+                          style: TextStyle(
+                              color: AppAccentColors.current,
                               fontWeight: FontWeight.bold),
                         ),
                         if (_bangumiUserRating > 0) ...[
                           TextSpan(
                             text: '$_bangumiUserRating 分',
-                            style: const TextStyle(
-                              color: Color(0xFFFF2E55),
+                            style: TextStyle(
+                              color: AppAccentColors.current,
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
                             ),
@@ -1240,7 +1240,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                 ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
                                 : '',
                             style: TextStyle(
-                              color: const Color(0xFFFF2E55).withOpacity(0.75),
+                              color: AppAccentColors.current.withOpacity(0.75),
                               fontSize: 12,
                             ),
                           ),
@@ -1252,7 +1252,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                       ],
                     ),
                   ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Builder(
                   builder: (context) {
                     final bool isBangumiActionEnabled =
@@ -1264,7 +1264,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                         enableBangumiHover && _isBangumiRatingButtonHovered;
                     final Color bangumiActionColor = isBangumiActionEnabled
                         ? (isBangumiHovered
-                            ? const Color(0xFFFF2E55)
+                            ? AppAccentColors.current
                             : textColor.withOpacity(0.9))
                         : textColor.withOpacity(0.45);
 
@@ -1319,8 +1319,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                         ),
                                       )
                                     else
-                                      const Icon(Icons.edit),
-                                    const SizedBox(width: 4),
+                                      Icon(Icons.edit),
+                                    SizedBox(width: 4),
                                     const Text('编辑Bangumi评分'),
                                   ],
                                 ),
@@ -1340,7 +1340,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             if (!_isLoadingBangumiCollection && _hasBangumiCollection) ...[
               Wrap(
                 spacing: 12,
@@ -1356,14 +1356,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6),
             ] else if (!_isLoadingBangumiCollection) ...[
               Text(
                 '尚未在Bangumi收藏此番剧',
                 style: valueStyle.copyWith(
                     fontSize: 12, color: secondaryTextColor),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6),
             ],
             if (!_isLoadingBangumiCollection)
               Builder(builder: (context) {
@@ -1388,7 +1388,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                           style: boldWhiteKeyStyle.copyWith(
                               fontSize: 12, fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
                           _bangumiComment!,
                           style: valueStyle.copyWith(fontSize: 12, height: 1.4),
@@ -1511,7 +1511,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           ...metadataWidgets,
           ...titlesWidgets,
           if (anime.tags != null && anime.tags!.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1531,7 +1531,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Wrap(
                 spacing: 8.0,
                 runSpacing: 4.0,
@@ -1543,7 +1543,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                         ))
                     .toList())
           ],
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
         ],
       ),
     );
@@ -1553,7 +1553,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
-    const Color accentColor = Color(0xFFFF2E55);
+    final Color accentColor = AppAccentColors.current;
     final Color progressOrange =
         isDark ? Colors.orangeAccent : const Color(0xFFB45309);
     final Color progressGreen =
@@ -1582,15 +1582,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Ionicons.alert_circle_outline,
+              Icon(Ionicons.alert_circle_outline,
                   color: Colors.orangeAccent, size: 42),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Text(
                 _sharedEpisodesError!,
                 style: TextStyle(color: secondaryTextColor),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: textColor.withOpacity(0.1),
@@ -1641,7 +1641,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                   fontSize: 12,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               if (_lastWatchedEpisode != null)
                 Builder(builder: (context) {
                   final episodeId = _lastWatchedEpisode!.episodeId;
@@ -1716,8 +1716,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Ionicons.trash_outline),
-                                const SizedBox(width: 4),
+                                Icon(Ionicons.trash_outline),
+                                SizedBox(width: 4),
                                 Text(
                                   _isCleaningEpisodeHistory ? '处理中' : '清理记录',
                                   locale: const Locale('zh-Hans', 'zh'),
@@ -1774,8 +1774,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Ionicons.swap_vertical_outline),
-                                const SizedBox(width: 4),
+                                Icon(Ionicons.swap_vertical_outline),
+                                SizedBox(width: 4),
                                 Text(
                                   _isEpisodeListReversed ? '倒序' : '正序',
                                   locale: const Locale('zh-Hans', 'zh'),
@@ -1792,7 +1792,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             ],
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Expanded(
           child: SettingsNoRippleTheme(
             child: ListView.builder(
@@ -1823,7 +1823,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     final bool isEpisodeHovered = enableEpisodeHover &&
                         _hoveredEpisodeTileId == episode.id;
                     Widget leadingIcon =
-                        const SizedBox(width: 20); // Default empty space
+                        SizedBox(width: 20); // Default empty space
                     String? progressText;
                     Color? tileColor;
                     Color iconColor =
@@ -1951,7 +1951,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                                           size: 12,
                                         ),
                                       if (isEpisodeWatched)
-                                        const SizedBox(width: 4),
+                                        SizedBox(width: 4),
                                       Text(
                                         isEpisodeWatched ? '已看' : '',
                                         locale: const Locale('zh-Hans', 'zh'),
@@ -2080,14 +2080,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               Text('加载详情失败:',
                   locale: Locale("zh-Hans", "zh"),
                   style: TextStyle(color: textColor.withOpacity(0.8))),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 _error ?? '未知错误',
                 locale: Locale("zh-Hans", "zh"),
                 style: TextStyle(color: secondaryTextColor.withOpacity(0.9)),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                     backgroundColor: textColor.withOpacity(0.2)),
@@ -2096,7 +2096,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     locale: Locale("zh-Hans", "zh"),
                     style: TextStyle(color: textColor)),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: Text('关闭',
@@ -2677,7 +2677,7 @@ class _EpisodeWatchToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color displayColor = isHovered ? const Color(0xFFFF2E55) : idleColor;
+    final Color displayColor = isHovered ? AppAccentColors.current : idleColor;
 
     final button = MouseRegion(
       cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,

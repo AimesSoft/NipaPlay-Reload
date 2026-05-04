@@ -36,12 +36,16 @@ class NipaplayThemeDescriptor extends ThemeDescriptor {
         final themeAnimationDuration = revealProvider.isActive
             ? Duration.zero
             : const Duration(milliseconds: 420);
+        final accentColor = buildContext
+            .watch<AppearanceSettingsProvider>()
+            .accentColorPreset
+            .color;
         return MaterialApp(
           title: 'NipaPlay',
           debugShowCheckedModeBanner: false,
           color: Colors.transparent,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
+          theme: AppTheme.lightTheme(accentColor),
+          darkTheme: AppTheme.darkTheme(accentColor),
           themeMode: context.themeNotifier.themeMode,
           themeAnimationDuration: themeAnimationDuration,
           themeAnimationCurve: Curves.easeInOutCubic,

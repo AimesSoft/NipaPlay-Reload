@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 // 定义番剧卡片点击行为的枚举
 enum AnimeCardAction {
@@ -28,6 +29,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   static const String _uiScaleKey = 'ui_scale_factor';
   static const String _showAnimeCardSummaryKey = 'show_anime_card_summary';
   static const String _windowDisplayModeKey = 'nipaplay_window_display_mode';
+  static const String _accentColorPresetKey = 'app_accent_color_preset';
 
   static const double uiScaleMin = 1.0;
   static const double uiScaleMax = 1.3;
@@ -42,6 +44,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late double _uiScale;
   late bool _showAnimeCardSummary;
   late NipaplayWindowDisplayMode _windowDisplayMode;
+  late AppAccentColorPreset _accentColorPreset;
 
   // 获取设置值
   // 页面滑动动画始终启用
@@ -54,6 +57,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   double get uiScale => _uiScale;
   bool get showAnimeCardSummary => _showAnimeCardSummary;
   NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
+  AppAccentColorPreset get accentColorPreset => _accentColorPreset;
 
   // 构造函数
   AppearanceSettingsProvider() {
@@ -65,6 +69,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     _uiScale = _resolveDefaultUiScale();
     _showAnimeCardSummary = true; // 默认显示番剧卡片简介
     _windowDisplayMode = _resolveDefaultWindowDisplayMode();
+    _accentColorPreset = AppAccentColorPreset.rose;
+    AppAccentColors.setCurrent(_accentColorPreset);
     _loadSettings();
   }
 
@@ -88,6 +94,10 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       _enableWidgetBlurEffect = prefs.getBool(_widgetBlurEffectKey) ?? true;
       _showDanmakuDensityChart = prefs.getBool(_showDanmakuDensityKey) ?? true;
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
+      _accentColorPreset = AppAccentColorPreset.fromStorageKey(
+        prefs.getString(_accentColorPresetKey),
+      );
+      AppAccentColors.setCurrent(_accentColorPreset);
       final savedUiScale = prefs.getDouble(_uiScaleKey);
       _uiScale = (savedUiScale ?? _resolveDefaultUiScale())
           .clamp(uiScaleMin, uiScaleMax)
@@ -226,6 +236,21 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       await prefs.setInt(_windowDisplayModeKey, value.index);
     } catch (e) {
       debugPrint('保存窗口显示区域设置时出错: $e');
+    }
+  }
+
+  Future<void> setAccentColorPreset(AppAccentColorPreset value) async {
+    if (_accentColorPreset == value) return;
+
+    _accentColorPreset = value;
+    AppAccentColors.setCurrent(value);
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_accentColorPresetKey, value.storageKey);
+    } catch (e) {
+      debugPrint('保存主题色设置时出错: $e');
     }
   }
 }

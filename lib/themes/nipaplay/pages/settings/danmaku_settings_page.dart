@@ -13,6 +13,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_editable_slider.da
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class DanmakuSettingsPage extends StatefulWidget {
   const DanmakuSettingsPage({super.key});
@@ -22,7 +23,7 @@ class DanmakuSettingsPage extends StatefulWidget {
 }
 
 class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
-  static const Color _fluentAccentColor = Color(0xFFFF2E55);
+  static Color get _fluentAccentColor => AppAccentColors.current;
 
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
 
@@ -296,7 +297,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                             color: colorScheme.onSurface,
                             size: 18,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Text(
                             '防剧透 AI 设置',
                             style: TextStyle(
@@ -307,7 +308,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Text(
                         '开启防剧透前请先填写并保存配置（必须提供接口 URL / Key / 模型）。',
                         style: TextStyle(
@@ -315,7 +316,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                           fontSize: 12,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: 6),
                       Text(
                         isGemini
                             ? 'Gemini：URL 可填到 /v1beta/models，实际请求会自动拼接 /<模型>:generateContent。'
@@ -325,7 +326,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                           fontSize: 12,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       Row(
                         children: [
                           Text(
@@ -336,7 +337,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           BlurDropdown<SpoilerAiApiFormat>(
                             dropdownKey: _spoilerAiApiFormatDropdownKey,
                             items: [
@@ -361,7 +362,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       TextField(
                         controller: _spoilerAiUrlController,
                         keyboardType: TextInputType.url,
@@ -379,11 +380,11 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                           ),
                           filled: true,
                           fillColor: colorScheme.onSurface.withOpacity(0.1),
-                          border: const OutlineInputBorder(
+                          border: OutlineInputBorder(
                             borderSide: BorderSide.none,
                             borderRadius: BorderRadius.all(Radius.circular(8)),
                           ),
-                          focusedBorder: const OutlineInputBorder(
+                          focusedBorder: OutlineInputBorder(
                             borderSide:
                                 BorderSide(color: _fluentAccentColor, width: 2),
                             borderRadius: BorderRadius.all(Radius.circular(8)),
@@ -391,7 +392,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                         ),
                         style: TextStyle(color: colorScheme.onSurface),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       TextField(
                         controller: _spoilerAiModelController,
                         autocorrect: false,
@@ -408,11 +409,11 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                           ),
                           filled: true,
                           fillColor: colorScheme.onSurface.withOpacity(0.1),
-                          border: const OutlineInputBorder(
+                          border: OutlineInputBorder(
                             borderSide: BorderSide.none,
                             borderRadius: BorderRadius.all(Radius.circular(8)),
                           ),
-                          focusedBorder: const OutlineInputBorder(
+                          focusedBorder: OutlineInputBorder(
                             borderSide:
                                 BorderSide(color: _fluentAccentColor, width: 2),
                             borderRadius: BorderRadius.all(Radius.circular(8)),
@@ -420,7 +421,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                         ),
                         style: TextStyle(color: colorScheme.onSurface),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       TextField(
                         controller: _spoilerAiApiKeyController,
                         autocorrect: false,
@@ -437,11 +438,11 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                           ),
                           filled: true,
                           fillColor: colorScheme.onSurface.withOpacity(0.1),
-                          border: const OutlineInputBorder(
+                          border: OutlineInputBorder(
                             borderSide: BorderSide.none,
                             borderRadius: BorderRadius.all(Radius.circular(8)),
                           ),
-                          focusedBorder: const OutlineInputBorder(
+                          focusedBorder: OutlineInputBorder(
                             borderSide:
                                 BorderSide(color: _fluentAccentColor, width: 2),
                             borderRadius: BorderRadius.all(Radius.circular(8)),
@@ -449,7 +450,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                         ),
                         style: TextStyle(color: colorScheme.onSurface),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       Text(
                         '温度：${_spoilerAiTemperatureDraft.toStringAsFixed(2)}',
                         style: TextStyle(

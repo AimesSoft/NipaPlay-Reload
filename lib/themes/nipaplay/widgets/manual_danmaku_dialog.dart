@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/global_hotkey_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/chinese_converter.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 /// 手动弹幕匹配对话框
 ///
@@ -24,7 +25,7 @@ class ManualDanmakuMatchDialog extends StatefulWidget {
 
 class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     with GlobalHotkeyManagerMixin {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -405,13 +406,13 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             color: _accentColor.withOpacity(0.18),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.subtitles,
             color: _accentColor,
             size: 20,
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -424,7 +425,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
               Text(
                 subtitle,
                 style: TextStyle(
@@ -469,18 +470,18 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _accentColor),
+                borderSide: BorderSide(color: _accentColor),
               ),
             ),
             onSubmitted: (_) => _performSearch(),
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         ElevatedButton(
           onPressed: _isSearching ? null : _performSearch,
           style: _primaryButtonStyle(),
           child: _isSearching
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
@@ -529,7 +530,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             size: 16,
             color: iconColor,
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: 6),
           Expanded(
             child: Text(
               message,
@@ -547,13 +548,13 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.inbox_outlined, color: _mutedTextColor, size: 32),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             title,
             style: TextStyle(color: _subTextColor, fontSize: 13),
           ),
           if (subtitle != null) ...[
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               subtitle,
               style: TextStyle(color: _mutedTextColor, fontSize: 12),
@@ -598,7 +599,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       '$typeDescription | ${episodeCount}集',
                       style: TextStyle(
@@ -690,10 +691,10 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
       children: [
         _buildSectionTitle('搜索结果'),
         if (_searchMessage.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildStatusBanner(_searchMessage, isError: isError),
         ],
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           height: panelHeight,
           decoration: BoxDecoration(
@@ -713,7 +714,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                   : ListView.separated(
                       padding: const EdgeInsets.all(12),
                       itemCount: _currentMatches.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, __) => SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final match = _currentMatches[index];
                         return _buildAnimeItem(match);
@@ -743,7 +744,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             '已选动画',
             style: TextStyle(color: _subTextColor, fontSize: 12),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             title,
             style: TextStyle(
@@ -754,7 +755,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             '$typeDescription | ${episodeCount}集',
             style: TextStyle(color: _mutedTextColor, fontSize: 12),
@@ -776,10 +777,10 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
       children: [
         _buildSectionTitle('剧集列表'),
         if (_episodesMessage.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildStatusBanner(_episodesMessage, isError: isError),
         ],
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           height: panelHeight,
           decoration: BoxDecoration(
@@ -799,7 +800,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                   : ListView.separated(
                       padding: const EdgeInsets.all(12),
                       itemCount: _currentEpisodes.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, __) => SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final episode = _currentEpisodes[index];
                         return _buildEpisodeItem(episode);
@@ -819,7 +820,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
             width: 280,
             child: _buildSelectedAnimePanel(),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           Expanded(
             child: _buildEpisodesPanel(context),
           ),
@@ -830,7 +831,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     return Column(
       children: [
         _buildSelectedAnimePanel(),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         _buildEpisodesPanel(context),
       ],
     );
@@ -848,7 +849,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
           style: _textButtonStyle(),
           child: const Text('返回搜索'),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         ElevatedButton(
           onPressed: canConfirm ? _completeSelection : null,
           style: _primaryButtonStyle(),
@@ -882,10 +883,10 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 if (!_showEpisodesView) ...[
                   _buildSearchBar(),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                 ],
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -896,7 +897,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
                   },
                 ),
                 if (_showEpisodesView) ...[
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   _buildActionButtons(),
                 ],
               ],

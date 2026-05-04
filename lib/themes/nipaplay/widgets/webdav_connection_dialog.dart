@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class WebDAVConnectionDialog {
   static Future<bool?> show(
@@ -30,13 +31,13 @@ class _WebDAVForm extends StatefulWidget {
   final WebDAVConnection? editConnection;
   final Future<bool> Function(WebDAVConnection)? onSave;
   final Future<bool> Function(WebDAVConnection)? onTest;
-  
+
   const _WebDAVForm({
     this.editConnection,
     this.onSave,
     this.onTest,
   });
-  
+
   @override
   State<_WebDAVForm> createState() => _WebDAVFormState();
 }
@@ -47,10 +48,10 @@ class _WebDAVFormState extends State<_WebDAVForm> {
   final _urlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isLoading = false;
   bool _passwordVisible = false;
-  
+
   @override
   void initState() {
     super.initState();
@@ -64,7 +65,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       _urlController.text = 'http://192.168.1.1:5244/';
     }
   }
-  
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -73,17 +74,18 @@ class _WebDAVFormState extends State<_WebDAVForm> {
     _passwordController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = colorScheme.onSurface;
     final subTextColor = colorScheme.onSurface.withOpacity(0.7);
     final hintColor = colorScheme.onSurface.withOpacity(0.5);
     final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.25 : 0.2);
-    final fillColor = isDark ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
+    final fillColor =
+        isDark ? const Color(0xFF262626) : const Color(0xFFE8E8E8);
     final selectionTheme = TextSelectionThemeData(
       cursorColor: accentColor,
       selectionColor: accentColor.withOpacity(0.3),
@@ -132,7 +134,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: borderColor),
         ),
-        focusedBorder: const OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(8)),
           borderSide: BorderSide(color: accentColor),
         ),
@@ -150,15 +152,15 @@ class _WebDAVFormState extends State<_WebDAVForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          Text(
-            'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
-            style: TextStyle(
-              color: subTextColor,
-              fontSize: 13,
+            Text(
+              'WebDAV服务器只会建立连接，不会自动扫描。\n您可以在连接后手动选择要扫描的文件夹。',
+              style: TextStyle(
+                color: subTextColor,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
+            SizedBox(height: 24),
 
             // 连接名称
             TextFormField(
@@ -175,7 +177,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
               },
             ),
 
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
 
             // WebDAV URL
             TextFormField(
@@ -198,7 +200,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
               },
             ),
 
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
 
             // 用户名
             TextFormField(
@@ -211,7 +213,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
 
             // 密码
             TextFormField(
@@ -239,7 +241,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
               ),
             ),
 
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
 
             // 按钮行
             Row(
@@ -252,14 +254,12 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                   style: plainButtonStyle,
                   child: const Text('取消'),
                 ),
-
-                const SizedBox(width: 12),
-
+                SizedBox(width: 12),
                 TextButton(
                   onPressed: _isLoading ? null : _testConnection,
                   style: accentButtonStyle,
                   child: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
@@ -270,9 +270,7 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                         )
                       : const Text('测试连接'),
                 ),
-
-                const SizedBox(width: 12),
-
+                SizedBox(width: 12),
                 TextButton(
                   onPressed: _isLoading ? null : _saveConnection,
                   style: accentButtonStyle,
@@ -285,25 +283,25 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       ),
     );
   }
-  
+
   Future<void> _testConnection() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       print('🧪 开始测试WebDAV连接...');
-      
+
       String connectionName = _nameController.text.trim();
-      
+
       // 如果没有提供连接名称，自动生成用于测试
       if (connectionName.isEmpty) {
         try {
           final uri = Uri.parse(_urlController.text.trim());
           final username = _usernameController.text.trim();
-          
+
           if (username.isNotEmpty) {
             connectionName = '${uri.host}@$username';
           } else {
@@ -313,24 +311,24 @@ class _WebDAVFormState extends State<_WebDAVForm> {
           connectionName = '测试连接';
         }
       }
-      
+
       final connection = WebDAVConnection(
         name: connectionName,
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      
+
       print('📋 连接信息:');
       print('  名称: ${connection.name}');
       print('  地址: ${connection.url}');
       print('  用户名: ${connection.username}');
       print('  密码: ${connection.password.isNotEmpty ? '[已设置]' : '[未设置]'}');
-      
+
       final isValid = widget.onTest != null
           ? await widget.onTest!(connection)
           : await WebDAVService.instance.testConnection(connection);
-      
+
       if (mounted) {
         if (isValid) {
           BlurSnackBar.show(context, '连接测试成功！');
@@ -352,50 +350,52 @@ class _WebDAVFormState extends State<_WebDAVForm> {
       }
     }
   }
-  
+
   Future<void> _saveConnection() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       String connectionName = _nameController.text.trim();
-      
+
       // 如果没有提供连接名称，自动生成
       if (connectionName.isEmpty) {
         final uri = Uri.parse(_urlController.text.trim());
         final username = _usernameController.text.trim();
-        
+
         if (username.isNotEmpty) {
           connectionName = '${uri.host}@$username';
         } else {
           connectionName = uri.host;
         }
       }
-      
+
       final connection = WebDAVConnection(
         name: connectionName,
         url: _urlController.text.trim(),
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      
+
       bool success;
       if (widget.onSave != null) {
         success = await widget.onSave!(connection);
       } else {
         if (widget.editConnection != null) {
           // 如果是编辑模式，先删除旧连接
-          await WebDAVService.instance.removeConnection(widget.editConnection!.name);
+          await WebDAVService.instance
+              .removeConnection(widget.editConnection!.name);
         }
         success = await WebDAVService.instance.addConnection(connection);
       }
-      
+
       if (mounted) {
         if (success) {
-          BlurSnackBar.show(context, '${widget.editConnection == null ? "添加" : "保存"}WebDAV连接成功！');
+          BlurSnackBar.show(context,
+              '${widget.editConnection == null ? "添加" : "保存"}WebDAV连接成功！');
           Navigator.of(context).pop(true);
         } else {
           BlurSnackBar.show(context, '连接失败，请检查地址和认证信息');

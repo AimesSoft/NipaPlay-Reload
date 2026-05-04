@@ -8,6 +8,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 /// Fluent UI版本的用户活动记录组件
 class MaterialUserActivity extends StatefulWidget {
@@ -17,9 +18,9 @@ class MaterialUserActivity extends StatefulWidget {
   State<MaterialUserActivity> createState() => _MaterialUserActivityState();
 }
 
-class _MaterialUserActivityState extends State<MaterialUserActivity> 
+class _MaterialUserActivityState extends State<MaterialUserActivity>
     with SingleTickerProviderStateMixin, UserActivityController {
-  static const Color _ratingAccentColor = Color(0xFFFF2E55);
+  static Color get _ratingAccentColor => AppAccentColors.current;
   static const double _buttonHoverScale = 1.06;
 
   @override
@@ -29,13 +30,12 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
     final textSecondary = theme.resources.textFillColorSecondary;
     final accent = theme.accentColor.defaultBrushFor(theme.brightness);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final unselectedLabelColor =
-        isDarkMode ? Colors.white60 : Colors.black54;
+    final unselectedLabelColor = isDarkMode ? Colors.white60 : Colors.black54;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 12),
-        
+        SizedBox(height: 12),
+
         // 标题和刷新按钮
         Row(
           children: [
@@ -60,7 +60,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         TabBar(
           controller: tabController,
           isScrollable: true,
@@ -72,7 +72,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                   recentWatched.length,
                 ),
                 fontSize: 18,
-                icon: const Icon(
+                icon: Icon(
                   Ionicons.play_circle_outline,
                   size: 18,
                 ),
@@ -85,7 +85,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                   favorites.length,
                 ),
                 fontSize: 18,
-                icon: const Icon(
+                icon: Icon(
                   Ionicons.heart_outline,
                   size: 18,
                 ),
@@ -98,7 +98,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                   rated.length,
                 ),
                 fontSize: 18,
-                icon: const Icon(
+                icon: Icon(
                   Ionicons.star_outline,
                   size: 18,
                 ),
@@ -121,7 +121,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
           dividerHeight: 3.0,
           indicatorSize: TabBarIndicatorSize.label,
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         // 内容区域
         Expanded(
           child: SwitchableView(
@@ -178,13 +178,13 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             color: textSecondary,
             size: 48,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             error!,
             style: TextStyle(color: textSecondary),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           BlurButton(
             icon: Ionicons.refresh_outline,
             text: context.l10n.retry,
@@ -215,7 +215,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
         final item = recentWatched[index];
         return _buildAnimeListItem(
           item: item,
-          subtitle: item['lastEpisodeTitle'] != null 
+          subtitle: item['lastEpisodeTitle'] != null
               ? context.l10n.userActivityWatchedEpisode(
                   item['lastEpisodeTitle'].toString(),
                 )
@@ -261,7 +261,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                       color: _ratingAccentColor,
                       size: 14,
                     ),
-                    const SizedBox(width: 2),
+                    SizedBox(width: 2),
                     Text(
                       '${item['rating']}',
                       style: TextStyle(
@@ -302,7 +302,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
                 color: _ratingAccentColor,
                 size: 16,
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
               Text(
                 '${item['rating']}',
                 style: TextStyle(
@@ -344,7 +344,7 @@ class _MaterialUserActivityState extends State<MaterialUserActivity>
             color: textSecondary,
             size: 48,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             message,
             style: TextStyle(
@@ -389,7 +389,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
     const coverWidth = 48.0;
     const coverHeight = 60.0;
     const coverRadius = 4.0;
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -401,7 +401,9 @@ class _ActivityListItemState extends State<_ActivityListItem> {
           color: theme.resources.cardBackgroundFillColorDefault,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: _isHovered ? accentColor : theme.resources.cardStrokeColorDefault,
+            color: _isHovered
+                ? accentColor
+                : theme.resources.cardStrokeColorDefault,
             width: _isHovered ? 1.5 : 0.5,
           ),
         ),
@@ -429,7 +431,8 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                                 return Container(
                                   width: coverWidth,
                                   height: coverHeight,
-                                  color: theme.resources.cardBackgroundFillColorSecondary,
+                                  color: theme.resources
+                                      .cardBackgroundFillColorSecondary,
                                   child: fluent.Icon(
                                     Ionicons.image_outline,
                                     color: textSecondary,
@@ -441,7 +444,8 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                           : Container(
                               width: coverWidth,
                               height: coverHeight,
-                              color: theme.resources.cardBackgroundFillColorSecondary,
+                              color: theme
+                                  .resources.cardBackgroundFillColorSecondary,
                               child: fluent.Icon(
                                 Ionicons.image_outline,
                                 color: textSecondary,
@@ -449,7 +453,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                               ),
                             ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     // Title and Subtitle
                     Expanded(
                       child: Column(
@@ -467,7 +471,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          SizedBox(height: 4),
                           Text(
                             widget.subtitle,
                             style: TextStyle(
@@ -482,7 +486,7 @@ class _ActivityListItemState extends State<_ActivityListItem> {
                     ),
                     // Trailing
                     if (widget.trailing != null) ...[
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       widget.trailing!,
                     ],
                   ],
@@ -502,7 +506,7 @@ class _CustomTabIndicator extends Decoration {
   final Color indicatorColor;
   final double radius;
 
-  const _CustomTabIndicator({
+  _CustomTabIndicator({
     required this.indicatorHeight,
     required this.indicatorColor,
     required this.radius,

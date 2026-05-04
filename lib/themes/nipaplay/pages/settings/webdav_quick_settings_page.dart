@@ -4,13 +4,15 @@ import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 /// WebDAV 快捷访问设置页面
 class WebDAVQuickSettingsPage extends StatefulWidget {
   const WebDAVQuickSettingsPage({super.key});
 
   @override
-  State<WebDAVQuickSettingsPage> createState() => _WebDAVQuickSettingsPageState();
+  State<WebDAVQuickSettingsPage> createState() =>
+      _WebDAVQuickSettingsPageState();
 }
 
 class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
@@ -18,7 +20,8 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<WebDAVQuickAccessProvider>(context, listen: false).loadSettings();
+      Provider.of<WebDAVQuickAccessProvider>(context, listen: false)
+          .loadSettings();
     });
   }
 
@@ -28,8 +31,9 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = colorScheme.onSurface;
     final secondaryTextColor = textColor.withOpacity(0.7);
-    final cardColor = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
-    const accentColor = Color(0xFFFF2E55);
+    final cardColor =
+        isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
+    final accentColor = AppAccentColors.current;
 
     return Consumer<WebDAVQuickAccessProvider>(
       builder: (context, provider, child) {
@@ -48,7 +52,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                   fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // 开关：显示 WebDAV Tab
               _buildSettingsCard(
@@ -73,7 +77,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // 默认主页 Tab 设置
               _buildSettingsCard(
@@ -119,7 +123,9 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                         },
                       );
                     }),
-                    if (provider.defaultHomeTab == WebDAVQuickAccessProvider.tabWebDAV && !provider.showWebDAVTab)
+                    if (provider.defaultHomeTab ==
+                            WebDAVQuickAccessProvider.tabWebDAV &&
+                        !provider.showWebDAVTab)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                         child: Text(
@@ -134,7 +140,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // 只有在开启 Tab 显示且有服务器连接时才显示以下设置
               if (provider.showWebDAVTab && connections.isNotEmpty) ...[
@@ -185,7 +191,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
 
                 // 设置默认目录
                 _buildSettingsCard(
@@ -203,7 +209,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         TextField(
                           controller: TextEditingController(
                             text: provider.defaultDirectory,
@@ -228,10 +234,10 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: accentColor),
+                              borderSide: BorderSide(color: accentColor),
                             ),
                             suffixIcon: IconButton(
-                              icon: const Icon(Icons.refresh),
+                              icon: Icon(Icons.refresh),
                               color: secondaryTextColor,
                               onPressed: () {
                                 // 重置为根目录
@@ -243,7 +249,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                             provider.setDefaultDirectory(value);
                           },
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                         Text(
                           '点击 WebDAV Tab 时将直接打开此目录',
                           style: TextStyle(
@@ -256,7 +262,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
 
                 // 排序设置
                 _buildSettingsCard(
@@ -304,7 +310,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
 
                 // 路径面包屑导航开关
                 _buildSettingsCard(
@@ -329,7 +335,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
 
                 // 自动进入 Season 文件夹设置
                 _buildSettingsCard(
@@ -370,7 +376,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              SizedBox(height: 8),
                               Text(
                                 '支持通配符：* 匹配任意字符，? 匹配单个字符',
                                 style: TextStyle(
@@ -378,7 +384,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                                   fontSize: 12,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: 12),
                               TextField(
                                 controller: TextEditingController(
                                   text: provider.seasonFolderPattern,
@@ -386,31 +392,35 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                                 style: TextStyle(color: textColor),
                                 decoration: InputDecoration(
                                   hintText: '例如: Season*、Season ??、S*',
-                                  hintStyle: TextStyle(color: secondaryTextColor),
+                                  hintStyle:
+                                      TextStyle(color: secondaryTextColor),
                                   filled: true,
                                   fillColor: cardColor,
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(
-                                      color: secondaryTextColor.withOpacity(0.3),
+                                      color:
+                                          secondaryTextColor.withOpacity(0.3),
                                     ),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide(
-                                      color: secondaryTextColor.withOpacity(0.3),
+                                      color:
+                                          secondaryTextColor.withOpacity(0.3),
                                     ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    borderSide: const BorderSide(color: accentColor),
+                                    borderSide:
+                                        BorderSide(color: accentColor),
                                   ),
                                 ),
                                 onSubmitted: (value) {
                                   provider.setSeasonFolderPattern(value);
                                 },
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: 12),
                               // 预设模式
                               Wrap(
                                 spacing: 8,
@@ -463,7 +473,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                           size: 48,
                           color: secondaryTextColor,
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         Text(
                           '没有配置 WebDAV 服务器',
                           style: TextStyle(
@@ -471,7 +481,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                             fontSize: 16,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                         Text(
                           '请先在「远程媒体库」设置中添加 WebDAV 服务器',
                           style: TextStyle(
@@ -484,12 +494,12 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                   ),
                 ),
 
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
 
               // 重置按钮
               Center(
                 child: TextButton.icon(
-                  icon: const Icon(Icons.refresh),
+                  icon: Icon(Icons.refresh),
                   label: const Text('重置所有设置'),
                   style: TextButton.styleFrom(
                     foregroundColor: secondaryTextColor,

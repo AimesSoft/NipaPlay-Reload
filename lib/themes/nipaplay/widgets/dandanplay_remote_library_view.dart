@@ -16,6 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/themed_anime_detail.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/local_library_control_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/search_bar_action_button.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class DandanplayRemoteLibraryView extends StatefulWidget {
   const DandanplayRemoteLibraryView({
@@ -32,7 +33,7 @@ class DandanplayRemoteLibraryView extends StatefulWidget {
 
 class _DandanplayRemoteLibraryViewState
     extends State<DandanplayRemoteLibraryView> {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
@@ -62,10 +63,11 @@ class _DandanplayRemoteLibraryViewState
   Widget build(BuildContext context) {
     return Consumer<DandanplayRemoteProvider>(
       builder: (context, provider, child) {
-            if (!provider.isInitialized && provider.isLoading) {
-              return const Center(child: CircularProgressIndicator(color: _accentColor));
-            }
-                if (!provider.isConnected) {
+        if (!provider.isInitialized && provider.isLoading) {
+          return Center(
+              child: CircularProgressIndicator(color: _accentColor));
+        }
+        if (!provider.isConnected) {
           return _buildDisconnectedState(provider);
         }
 
@@ -82,10 +84,10 @@ class _DandanplayRemoteLibraryViewState
             _buildToolbar(),
             if ((provider.errorMessage?.isNotEmpty ?? false) &&
                 !provider.isLoading) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _buildDandanErrorBanner(provider.errorMessage!),
             ],
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Expanded(
               child: _buildMediaGrid(groups, provider),
             ),
@@ -118,12 +120,12 @@ class _DandanplayRemoteLibraryViewState
         ),
         child: Row(
           children: [
-            const Icon(Ionicons.warning_outline, color: Colors.redAccent, size: 18),
-            const SizedBox(width: 12),
+            Icon(Ionicons.warning_outline, color: Colors.redAccent, size: 18),
+            SizedBox(width: 12),
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                style: TextStyle(color: Colors.white, fontSize: 13),
               ),
             ),
           ],
@@ -218,9 +220,12 @@ class _DandanplayRemoteLibraryViewState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : Colors.black;
     final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
-    const activeColor = Color(0xFFFF2E55);
-    final idleBorderColor = isDark ? Colors.white.withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.1);
-    final fieldColor = isDark ? const Color(0xFF262626) : const Color(0xFFF2F2F2);
+    final activeColor = AppAccentColors.current;
+    final idleBorderColor = isDark
+        ? Colors.white.withValues(alpha: 0.25)
+        : Colors.black.withValues(alpha: 0.1);
+    final fieldColor =
+        isDark ? const Color(0xFF262626) : const Color(0xFFF2F2F2);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -248,8 +253,9 @@ class _DandanplayRemoteLibraryViewState
             decoration: InputDecoration(
               prefixIcon: Icon(
                 Icons.search,
-                color:
-                    _searchFocusNode.hasFocus ? activeColor : secondaryTextColor,
+                color: _searchFocusNode.hasFocus
+                    ? activeColor
+                    : secondaryTextColor,
                 size: 20,
               ),
               suffixIcon: _searchQuery.isEmpty
@@ -467,8 +473,8 @@ class _DandanplayRemoteLibraryViewState
         (episode.entryId.isNotEmpty
             ? episode.entryId.hashCode
             : (episode.hash.isNotEmpty
-                    ? episode.hash.hashCode
-                    : episode.name.hashCode));
+                ? episode.hash.hashCode
+                : episode.name.hashCode));
 
     final shareKey = episode.entryId.isNotEmpty
         ? episode.entryId
@@ -476,9 +482,8 @@ class _DandanplayRemoteLibraryViewState
 
     return SharedRemoteEpisode(
       shareId: 'dandan_$shareKey',
-      title: episode.episodeTitle.isNotEmpty
-          ? episode.episodeTitle
-          : episode.name,
+      title:
+          episode.episodeTitle.isNotEmpty ? episode.episodeTitle : episode.name,
       fileName: episode.name,
       streamPath: streamUrl,
       fileExists: true,
@@ -599,7 +604,7 @@ class _DandanplayRemoteLibraryViewState
     final textColor = colorScheme.onSurface;
     final subTextColor = textColor.withOpacity(0.7);
     final mutedTextColor = textColor.withOpacity(0.5);
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
     final ButtonStyle actionButtonStyle = ButtonStyle(
       foregroundColor: MaterialStateProperty.resolveWith((states) {
         if (states.contains(MaterialState.disabled)) {
@@ -625,22 +630,22 @@ class _DandanplayRemoteLibraryViewState
           children: [
             Icon(Ionicons.cloud_offline_outline,
                 color: mutedTextColor, size: 48),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               '尚未连接弹弹play远程服务',
               style: TextStyle(color: textColor, fontSize: 18),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               '请先在下方完成远程访问配置，即可浏览家中弹弹play媒体库。',
               textAlign: TextAlign.center,
               style: TextStyle(color: subTextColor, fontSize: 14),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             TextButton.icon(
               onPressed: () => _showConnectDialog(context, provider),
               style: actionButtonStyle,
-              icon: const Icon(Ionicons.link_outline, size: 18),
+              icon: Icon(Ionicons.link_outline, size: 18),
               label: const Text('连接弹弹play'),
             ),
           ],
@@ -668,13 +673,13 @@ class _DandanplayRemoteLibraryViewState
               color: mutedTextColor,
               size: 48,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
               style: TextStyle(color: textColor, fontSize: 18),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
@@ -694,7 +699,7 @@ class _DandanplayRemoteLibraryViewState
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) {
-        const accentColor = Color(0xFFFF2E55);
+        final accentColor = AppAccentColors.current;
         final colorScheme = Theme.of(dialogContext).colorScheme;
         final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
         final textColor = colorScheme.onSurface;
@@ -759,12 +764,12 @@ class _DandanplayRemoteLibraryViewState
                     enabledBorder: UnderlineInputBorder(
                       borderSide: BorderSide(color: borderColor),
                     ),
-                    focusedBorder: const UnderlineInputBorder(
+                    focusedBorder: UnderlineInputBorder(
                       borderSide: BorderSide(color: accentColor),
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 TextField(
                   controller: tokenController,
                   obscureText: true,
@@ -778,7 +783,7 @@ class _DandanplayRemoteLibraryViewState
                     enabledBorder: UnderlineInputBorder(
                       borderSide: BorderSide(color: borderColor),
                     ),
-                    focusedBorder: const UnderlineInputBorder(
+                    focusedBorder: UnderlineInputBorder(
                       borderSide: BorderSide(color: accentColor),
                     ),
                   ),
@@ -828,7 +833,8 @@ class _DandanplayRemoteLibraryViewState
     }
 
     try {
-      await provider.connect(url, token: token?.isNotEmpty == true ? token : null);
+      await provider.connect(url,
+          token: token?.isNotEmpty == true ? token : null);
       if (!mounted) return;
       BlurSnackBar.show(context, '弹弹play远程服务已连接');
     } catch (e) {
@@ -836,5 +842,4 @@ class _DandanplayRemoteLibraryViewState
       BlurSnackBar.show(context, '连接失败: $e');
     }
   }
-
 }

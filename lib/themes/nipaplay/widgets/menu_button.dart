@@ -1,5 +1,6 @@
 // ignore: file_names
 import 'package:flutter/material.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class WindowControlButtons extends StatelessWidget {
   final bool isMaximized;
@@ -26,15 +27,17 @@ class WindowControlButtons extends StatelessWidget {
           tooltip: '最小化',
           onPressed: onMinimize,
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         _WindowControlIconButton(
-          icon: isMaximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
+          icon: isMaximized
+              ? Icons.filter_none_rounded
+              : Icons.crop_square_rounded,
           size: isMaximized ? 18 : 22,
           isFlipped: isMaximized,
           tooltip: isMaximized ? '还原' : '最大化',
           onPressed: onMaximizeRestore,
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         _WindowControlIconButton(
           icon: Icons.close_rounded,
           size: 22,
@@ -84,7 +87,7 @@ class _WindowControlIconButtonState extends State<_WindowControlIconButton> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
     final Color iconColor = _isHovered
-        ? const Color(0xFFFF2E55)
+        ? AppAccentColors.current
         : (isDarkMode ? Colors.white : Colors.black87);
 
     Widget iconWidget = Icon(

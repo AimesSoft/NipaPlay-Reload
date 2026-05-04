@@ -6,6 +6,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class NetworkSettingsPage extends StatefulWidget {
   const NetworkSettingsPage({super.key});
@@ -170,7 +171,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   children: [
                     Icon(Ionicons.create_outline,
                         color: colorScheme.onSurface, size: 18),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Text(
                       l10n.customServer,
                       style: TextStyle(
@@ -181,32 +182,36 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(
                   l10n.customServerInputHint,
-                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
+                  style: TextStyle(
+                      color: colorScheme.onSurface.withOpacity(0.7),
+                      fontSize: 12),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 TextField(
                   controller: _customServerController,
-                  cursorColor: const Color(0xFFff2e55),
+                  cursorColor: AppAccentColors.current,
                   decoration: InputDecoration(
                     hintText: l10n.customServerPlaceholder,
-                    hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
+                    hintStyle: TextStyle(
+                        color: colorScheme.onSurface.withOpacity(0.38)),
                     filled: true,
                     fillColor: colorScheme.onSurface.withOpacity(0.1),
-                    border: const OutlineInputBorder(
+                    border: OutlineInputBorder(
                       borderSide: BorderSide.none,
                       borderRadius: BorderRadius.all(Radius.circular(8)),
                     ),
-                    focusedBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFff2e55), width: 2),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide:
+                          BorderSide(color: AppAccentColors.current, width: 2),
                       borderRadius: BorderRadius.all(Radius.circular(8)),
                     ),
                   ),
                   style: TextStyle(color: colorScheme.onSurface),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
                   child: BlurButton(
@@ -218,7 +223,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fontSize: 13,
                     iconSize: 16,
                     foregroundColor: colorScheme.onSurface,
-                    hoverForegroundColor: const Color(0xFFFF2E55),
+                    hoverForegroundColor: AppAccentColors.current,
                   ),
                 ),
               ],
@@ -238,7 +243,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                       color: colorScheme.onSurface,
                       size: 18,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Text(
                       l10n.currentServerInfo,
                       style: TextStyle(
@@ -249,15 +254,16 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(
-                  l10n.serverField(_getServerDisplayName(context, _currentServer)),
+                  l10n.serverField(
+                      _getServerDisplayName(context, _currentServer)),
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 13,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   l10n.urlField(_currentServer),
                   style: TextStyle(
@@ -282,7 +288,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                       color: colorScheme.onSurface,
                       size: 18,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Text(
                       l10n.serverDescriptionTitle,
                       style: TextStyle(
@@ -293,7 +299,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(
                   l10n.serverBullet(
                     l10n.primaryServer,
@@ -304,7 +310,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   l10n.serverBullet(
                     l10n.backupServer,

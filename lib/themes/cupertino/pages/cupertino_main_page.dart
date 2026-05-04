@@ -13,6 +13,7 @@ import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bounce_wrapper.dart';
 import 'package:nipaplay/pages/webdav_browser_page.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class CupertinoMainPage extends StatefulWidget {
   final String? launchFilePath;
@@ -57,8 +58,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     if (_showWebDAVTab) {
       return [
         BottomNavigationBarItem(
-          icon: const Icon(CupertinoIcons.house),
-          activeIcon: const Icon(CupertinoIcons.house_fill),
+          icon: Icon(CupertinoIcons.house),
+          activeIcon: Icon(CupertinoIcons.house_fill),
           label: l10n.tabHome,
         ),
         const BottomNavigationBarItem(
@@ -67,47 +68,48 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           label: 'WebDAV',
         ),
         BottomNavigationBarItem(
-          icon: const Icon(CupertinoIcons.play_rectangle),
-          activeIcon: const Icon(CupertinoIcons.play_rectangle_fill),
+          icon: Icon(CupertinoIcons.play_rectangle),
+          activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
           label: l10n.tabMediaLibrary,
         ),
         BottomNavigationBarItem(
-          icon: const Icon(CupertinoIcons.person_crop_circle),
-          activeIcon: const Icon(CupertinoIcons.person_crop_circle_fill),
+          icon: Icon(CupertinoIcons.person_crop_circle),
+          activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
           label: l10n.tabAccount,
         ),
         BottomNavigationBarItem(
-          icon: const Icon(CupertinoIcons.gear_alt),
-          activeIcon: const Icon(CupertinoIcons.gear_alt_fill),
+          icon: Icon(CupertinoIcons.gear_alt),
+          activeIcon: Icon(CupertinoIcons.gear_alt_fill),
           label: l10n.tabSettings,
         ),
       ];
     }
     return [
       BottomNavigationBarItem(
-        icon: const Icon(CupertinoIcons.house),
-        activeIcon: const Icon(CupertinoIcons.house_fill),
+        icon: Icon(CupertinoIcons.house),
+        activeIcon: Icon(CupertinoIcons.house_fill),
         label: l10n.tabHome,
       ),
       BottomNavigationBarItem(
-        icon: const Icon(CupertinoIcons.play_rectangle),
-        activeIcon: const Icon(CupertinoIcons.play_rectangle_fill),
+        icon: Icon(CupertinoIcons.play_rectangle),
+        activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
         label: l10n.tabMediaLibrary,
       ),
       BottomNavigationBarItem(
-        icon: const Icon(CupertinoIcons.person_crop_circle),
-        activeIcon: const Icon(CupertinoIcons.person_crop_circle_fill),
+        icon: Icon(CupertinoIcons.person_crop_circle),
+        activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
         label: l10n.tabAccount,
       ),
       BottomNavigationBarItem(
-        icon: const Icon(CupertinoIcons.gear_alt),
-        activeIcon: const Icon(CupertinoIcons.gear_alt_fill),
+        icon: Icon(CupertinoIcons.gear_alt),
+        activeIcon: Icon(CupertinoIcons.gear_alt_fill),
         label: l10n.tabSettings,
       ),
     ];
   }
 
-  List<AdaptiveNavigationDestination> _buildAdaptiveNavItems(BuildContext context) {
+  List<AdaptiveNavigationDestination> _buildAdaptiveNavItems(
+      BuildContext context) {
     final l10n = context.l10n;
     if (_showWebDAVTab) {
       return [
@@ -161,7 +163,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   }
 
   int _getInitialTabIndex() {
-    final defaultTab = _webdavProvider?.effectiveDefaultHomeTab ?? WebDAVQuickAccessProvider.tabHome;
+    final defaultTab = _webdavProvider?.effectiveDefaultHomeTab ??
+        WebDAVQuickAccessProvider.tabHome;
 
     switch (defaultTab) {
       case WebDAVQuickAccessProvider.tabHome:
@@ -201,9 +204,11 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     _updateBounceKeys();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      _tabChangeNotifier = Provider.of<TabChangeNotifier>(context, listen: false);
+      _tabChangeNotifier =
+          Provider.of<TabChangeNotifier>(context, listen: false);
       _tabChangeNotifier?.addListener(_handleTabChange);
-      _webdavProvider = Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+      _webdavProvider =
+          Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
       _webdavProvider?.addListener(_onWebDAVSettingsChanged);
       await _webdavProvider?.loadSettings();
 
@@ -228,7 +233,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    const Color activeColor = Color(0xFFFF2E55);
+    final Color activeColor = AppAccentColors.current;
     final Color inactiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);
     final double bottomInset = MediaQuery.viewPaddingOf(context).bottom;
@@ -335,5 +340,4 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
       }
     }
   }
-
 }

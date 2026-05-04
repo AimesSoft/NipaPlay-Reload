@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/url_name_generator.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class WebRemoteAccessGate extends StatefulWidget {
   final Widget child;
@@ -21,7 +22,7 @@ class WebRemoteAccessGate extends StatefulWidget {
 }
 
 class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
   final TextEditingController _controller = TextEditingController();
   bool _ready = !kIsWeb;
   bool _checking = kIsWeb;
@@ -98,8 +99,7 @@ class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
       if (ok) {
         await WebRemoteAccessService.setBaseUrl(candidate);
         await DandanplayService.refreshWebApiBaseUrl();
-        final sharedProvider =
-            context.read<SharedRemoteLibraryProvider>();
+        final sharedProvider = context.read<SharedRemoteLibraryProvider>();
         unawaited(_autoMountSharedLibraries(sharedProvider, candidate));
         if (mounted) {
           setState(() {
@@ -190,7 +190,7 @@ class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
           child: Container(color: Colors.black54),
         ),
         if (_checking)
-          const Center(
+          Center(
             child: CircularProgressIndicator(),
           )
         else
@@ -213,15 +213,16 @@ class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
                       children: [
                         Text(
                           '连接远程访问',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         const Text(
                           '请输入已开启远程访问的 NipaPlay 地址，连接成功后才能使用 Web UI。',
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         TextField(
                           controller: _controller,
                           autofocus: true,
@@ -242,13 +243,13 @@ class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
                             enabledBorder: UnderlineInputBorder(
                               borderSide: BorderSide(color: borderColor),
                             ),
-                            focusedBorder: const UnderlineInputBorder(
+                            focusedBorder: UnderlineInputBorder(
                               borderSide: BorderSide(color: _accentColor),
                             ),
                           ),
                         ),
                         if (_error != null) ...[
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           Text(
                             _error!,
                             style: TextStyle(
@@ -256,7 +257,7 @@ class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
                           child: TextButton(
@@ -264,9 +265,10 @@ class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
                             style: ButtonStyle(
                               foregroundColor:
                                   MaterialStateProperty.resolveWith(
-                                (states) => states.contains(MaterialState.disabled)
-                                    ? hintColor
-                                    : _accentColor,
+                                (states) =>
+                                    states.contains(MaterialState.disabled)
+                                        ? hintColor
+                                        : _accentColor,
                               ),
                               overlayColor:
                                   MaterialStateProperty.all(Colors.transparent),
@@ -276,13 +278,12 @@ class _WebRemoteAccessGateState extends State<WebRemoteAccessGate> {
                               ),
                             ),
                             child: _connecting
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor:
-                                          AlwaysStoppedAnimation<Color>(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
                                         _accentColor,
                                       ),
                                     ),

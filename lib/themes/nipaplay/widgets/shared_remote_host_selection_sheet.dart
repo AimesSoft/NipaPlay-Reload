@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/shared_remote_lan_scan_dialog.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SharedRemoteHostSelectionSheet extends StatelessWidget {
   const SharedRemoteHostSelectionSheet({super.key});
@@ -31,7 +32,8 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     final provider = context.watch<SharedRemoteLibraryProvider>();
     final hosts = provider.hosts;
     final screenSize = MediaQuery.of(context).size;
-    final baseDialogWidth = globals.DialogSizes.getDialogWidth(screenSize.width);
+    final baseDialogWidth =
+        globals.DialogSizes.getDialogWidth(screenSize.width);
     final bool useWideDialog =
         globals.isDesktopOrTablet && screenSize.width >= 720;
     final dialogWidth = useWideDialog
@@ -48,10 +50,12 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
     final textColor = colorScheme.onSurface;
     final subTextColor = colorScheme.onSurface.withOpacity(0.7);
     final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
     final borderColor = colorScheme.onSurface.withOpacity(isDark ? 0.12 : 0.18);
-    final panelColor = isDark ? const Color(0xFF242424) : const Color(0xFFEDEDED);
-    final itemColor = isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
+    final panelColor =
+        isDark ? const Color(0xFF242424) : const Color(0xFFEDEDED);
+    final itemColor =
+        isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
     final backgroundColor =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
     final listWidget = hosts.isEmpty
@@ -92,7 +96,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                   Row(
                     children: [
                       Icon(Ionicons.link_outline, color: textColor, size: 20),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         '选择共享客户端',
                         locale: const Locale('zh', 'CN'),
@@ -110,7 +114,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Text(
                     '从下方列表中选择已开启远程访问的 NipaPlay 客户端，切换后即可浏览它的本地媒体库。',
                     locale: const Locale('zh', 'CN'),
@@ -120,14 +124,14 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Expanded(
                     child: useSplitLayout
                         ? Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(child: listWidget),
-                              const SizedBox(width: 16),
+                              SizedBox(width: 16),
                               SizedBox(
                                 width: (dialogWidth * 0.32).clamp(220.0, 280.0),
                                 child: _buildActionPanel(
@@ -150,7 +154,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                                 provider,
                                 accentColor: accentColor,
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: 12),
                               Expanded(child: listWidget),
                             ],
                           ),
@@ -183,7 +187,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
         children: [
           Icon(Ionicons.cloud_offline_outline,
               color: subTextColor.withOpacity(0.8)),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Text(
             '尚未添加任何共享客户端\n请使用操作按钮进行添加',
             textAlign: TextAlign.center,
@@ -207,7 +211,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
   }) {
     return ListView.separated(
       itemCount: hosts.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, __) => SizedBox(height: 12),
       itemBuilder: (context, index) {
         final host = hosts[index];
         final isActive = provider.activeHostId == host.id;
@@ -247,7 +251,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                       color: statusColor,
                       size: 18,
                     ),
-                    const SizedBox(width: 6),
+                    SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         displayName,
@@ -279,21 +283,21 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
                           color: textColor.withOpacity(0.5), size: 16),
                   ],
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: 6),
                 Text(
                   host.baseUrl,
                   style: TextStyle(color: subTextColor, fontSize: 12),
                 ),
                 if (host.lastError != null && host.lastError!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     host.lastError!,
                     locale: const Locale('zh', 'CN'),
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: Colors.orangeAccent, fontSize: 12),
                   ),
                 ],
-                const SizedBox(height: 6),
+                SizedBox(height: 6),
                 Text(
                   lastSync != null ? '最后同步: $lastSync' : '最后同步: 尚未成功连接',
                   style: TextStyle(color: mutedTextColor, fontSize: 11),
@@ -361,7 +365,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _buildPrimaryActionButton(
             icon: Ionicons.wifi_outline,
             label: '扫描局域网',
@@ -369,7 +373,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
             accentColor: accentColor,
             expand: true,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildSecondaryActionButton(
             icon: Ionicons.add_outline,
             label: '添加共享客户端',
@@ -377,7 +381,7 @@ class SharedRemoteHostSelectionSheet extends StatelessWidget {
             accentColor: accentColor,
             expand: true,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text(
             '已开启远程访问的设备会被自动发现，未发现可手动输入地址。',
             locale: const Locale('zh', 'CN'),

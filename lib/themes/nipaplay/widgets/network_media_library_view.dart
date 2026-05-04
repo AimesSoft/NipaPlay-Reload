@@ -19,6 +19,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/media_library_sort_dialog.dart'
 import 'package:nipaplay/themes/nipaplay/widgets/jellyfin_library_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/emby_library_card.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum NetworkMediaServerType { jellyfin, emby }
 
@@ -46,7 +47,7 @@ abstract class NetworkMediaLibrary {
 class JellyfinMediaItemAdapter implements NetworkMediaItem {
   final JellyfinMediaItem _item;
   JellyfinMediaItemAdapter(this._item);
-  
+
   @override
   String get id => _item.id;
   @override
@@ -58,33 +59,34 @@ class JellyfinMediaItemAdapter implements NetworkMediaItem {
   @override
   int? get episodeCount => null; // Jellyfin doesn't have this field directly
   @override
-  int? get watchedEpisodeCount => null; // Jellyfin doesn't have this field directly
+  int? get watchedEpisodeCount =>
+      null; // Jellyfin doesn't have this field directly
   @override
   double? get userRating => null; // Convert from string if needed
   @override
   bool get isFolder => _item.isFolder;
-  
+
   @override
   String? get progress {
     if (_item.userData?.played == true) return '已看完';
     // Jellyfin 列表接口可能不返回具体的播放进度集数，如果需要更详细的可以后续扩展
     return null;
   }
-  
+
   JellyfinMediaItem get originalItem => _item;
 }
 
 class JellyfinLibraryAdapter implements NetworkMediaLibrary {
   final JellyfinLibrary _library;
   JellyfinLibraryAdapter(this._library);
-  
+
   @override
   String get id => _library.id;
   @override
   String get name => _library.name;
   @override
   String get type => _library.type ?? 'unknown';
-  
+
   JellyfinLibrary get originalLibrary => _library;
 }
 
@@ -92,7 +94,7 @@ class JellyfinLibraryAdapter implements NetworkMediaLibrary {
 class EmbyMediaItemAdapter implements NetworkMediaItem {
   final EmbyMediaItem _item;
   EmbyMediaItemAdapter(this._item);
-  
+
   @override
   String get id => _item.id;
   @override
@@ -115,21 +117,21 @@ class EmbyMediaItemAdapter implements NetworkMediaItem {
     if (_item.userData?.played == true) return '已看完';
     return null;
   }
-  
+
   EmbyMediaItem get originalItem => _item;
 }
 
 class EmbyLibraryAdapter implements NetworkMediaLibrary {
   final EmbyLibrary _library;
   EmbyLibraryAdapter(this._library);
-  
+
   @override
   String get id => _library.id;
   @override
   String get name => _library.name;
   @override
   String get type => _library.type ?? 'unknown';
-  
+
   EmbyLibrary get originalLibrary => _library;
 }
 
@@ -144,27 +146,27 @@ class NetworkMediaLibraryView extends StatefulWidget {
   });
 
   @override
-  State<NetworkMediaLibraryView> createState() => _NetworkMediaLibraryViewState();
+  State<NetworkMediaLibraryView> createState() =>
+      _NetworkMediaLibraryViewState();
 }
 
-class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView> 
+class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     with AutomaticKeepAliveClientMixin {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
 
-  
   List<NetworkMediaItem> _mediaItems = [];
   String? _error;
   Timer? _refreshTimer;
   final ScrollController _gridScrollController = ScrollController();
   final GlobalKey _remoteSortDropdownKey = GlobalKey();
-  
+
   // 库视图状态
   String? _selectedLibraryId;
   bool _isShowingLibraryContent = false;
   bool _isLoadingLibraryContent = false;
   bool _isFolderNavigation = false;
   final List<_FolderNode> _folderStack = [];
-  
+
   // 搜索状态
   final TextEditingController _searchController = TextEditingController();
   LocalLibrarySortType _currentSort = LocalLibrarySortType.dateAdded;
@@ -214,13 +216,15 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (!mounted) return;
     setState(() {
       String query = _searchController.text.toLowerCase().trim();
-      
+
       // 基础过滤
       List<NetworkMediaItem> source = _mediaItems;
       if (query.isNotEmpty) {
-        source = source.where((item) => item.title.toLowerCase().contains(query)).toList();
+        source = source
+            .where((item) => item.title.toLowerCase().contains(query))
+            .toList();
       }
-      
+
       if (_showRemoteSortDropdown) {
         _filteredMediaItems = source;
         return;
@@ -344,7 +348,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildPlainActionButton(
                 icon: Icons.cloud,
                 text: '添加媒体服务器',
@@ -369,7 +373,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final selectedLibraries = _getSelectedLibraries(provider);
     final showSummary =
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
-    
+
     if (selectedLibraries.isEmpty) {
       return Center(
         child: Padding(
@@ -381,7 +385,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                 '没有可用的媒体库',
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildPlainActionButton(
                 icon: Icons.refresh,
                 text: '刷新媒体库',
@@ -404,7 +408,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               controller: _gridScrollController,
               thickness: 4,
               radius: const Radius.circular(2),
-                child: _isSearching
+              child: _isSearching
                   ? GridView.builder(
                       controller: _gridScrollController,
                       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -420,7 +424,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                       padding: const EdgeInsets.all(16),
                       cacheExtent: 800,
                       clipBehavior: Clip.hardEdge,
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics()),
                       addAutomaticKeepAlives: false,
                       addRepaintBoundaries: true,
                       itemCount: _searchResults.length,
@@ -431,7 +436,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                     )
                   : GridView.builder(
                       controller: _gridScrollController,
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 400,
                         childAspectRatio: 16 / 9,
                         crossAxisSpacing: 16,
@@ -440,7 +446,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                       padding: const EdgeInsets.all(20),
                       cacheExtent: 800,
                       clipBehavior: Clip.hardEdge,
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics()),
                       addAutomaticKeepAlives: false,
                       addRepaintBoundaries: true,
                       itemCount: selectedLibraries.length,
@@ -460,7 +467,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     final showSummary =
         context.watch<AppearanceSettingsProvider>().showAnimeCardSummary;
     if (_isLoadingLibraryContent) {
-      return const Center(child: CircularProgressIndicator(color: _accentColor));
+      return Center(
+          child: CircularProgressIndicator(color: _accentColor));
     }
 
     if (_error != null) {
@@ -470,8 +478,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('加载媒体库内容失败: $_error', style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 16),
+              Text('加载媒体库内容失败: $_error',
+                  style: TextStyle(color: Colors.white70)),
+              SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -480,7 +489,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                     text: '重试',
                     onPressed: _retryCurrentView,
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: 16),
                   _buildPlainActionButton(
                     icon: Icons.arrow_back,
                     text: '返回',
@@ -512,7 +521,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     _buildPlainActionButton(
                       icon: Icons.arrow_back,
                       text: _isFolderNavigation && !_isAtFolderRoot
@@ -557,12 +566,17 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
                       padding: const EdgeInsets.all(16),
                       cacheExtent: 800,
                       clipBehavior: Clip.hardEdge,
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics()),
                       addAutomaticKeepAlives: false,
                       addRepaintBoundaries: true,
-                      itemCount: _isSearching ? _searchResults.length : _filteredMediaItems.length,
+                      itemCount: _isSearching
+                          ? _searchResults.length
+                          : _filteredMediaItems.length,
                       itemBuilder: (context, index) {
-                        final item = _isSearching ? _searchResults[index] : _filteredMediaItems[index];
+                        final item = _isSearching
+                            ? _searchResults[index]
+                            : _filteredMediaItems[index];
                         return _buildMediaCard(item);
                       },
                     ),
@@ -577,13 +591,15 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     if (_isFolderNavigation && _folderStack.isNotEmpty) {
       return _folderStack.last.name;
     }
-    
+
     // 直接实现获取选中媒体库名称的逻辑
     try {
       final selectedLibraries = _getSelectedLibraries(provider);
       final currentLibrary = selectedLibraries.firstWhere(
         (l) => l.id == _selectedLibraryId,
-        orElse: () => selectedLibraries.isNotEmpty ? selectedLibraries.first : selectedLibraries.first,
+        orElse: () => selectedLibraries.isNotEmpty
+            ? selectedLibraries.first
+            : selectedLibraries.first,
       );
       return currentLibrary.name;
     } catch (_) {
@@ -602,7 +618,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   Widget _buildLibraryCard(NetworkMediaLibrary library) {
     switch (widget.serverType) {
       case NetworkMediaServerType.jellyfin:
-        final jellyfinLibrary = (library as JellyfinLibraryAdapter).originalLibrary;
+        final jellyfinLibrary =
+            (library as JellyfinLibraryAdapter).originalLibrary;
         return JellyfinLibraryCard(
           key: ValueKey('library_${library.id}'),
           library: jellyfinLibrary,
@@ -621,7 +638,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   Widget _buildMediaCard(NetworkMediaItem item) {
     String imageUrl = '';
     String uniqueId = '';
-    
+
     // 根据服务器类型获取正确的图片URL和唯一ID
     switch (widget.serverType) {
       case NetworkMediaServerType.jellyfin:
@@ -674,7 +691,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           leading: Icon(icon, color: Colors.white70, size: 20),
           title: Text(
             item.title,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: TextStyle(color: Colors.white, fontSize: 14),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -696,13 +713,15 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       case NetworkMediaServerType.jellyfin:
         final jellyfinProvider = provider as JellyfinProvider;
         return jellyfinProvider.availableLibraries
-            .where((library) => jellyfinProvider.selectedLibraryIds.contains(library.id))
+            .where((library) =>
+                jellyfinProvider.selectedLibraryIds.contains(library.id))
             .map((lib) => JellyfinLibraryAdapter(lib))
             .toList();
       case NetworkMediaServerType.emby:
         final embyProvider = provider as EmbyProvider;
         return embyProvider.availableLibraries
-            .where((library) => embyProvider.selectedLibraryIds.contains(library.id))
+            .where((library) =>
+                embyProvider.selectedLibraryIds.contains(library.id))
             .map((lib) => EmbyLibraryAdapter(lib))
             .toList();
     }
@@ -711,9 +730,9 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   // 加载数据
   Future<void> _loadData() async {
     if (!mounted) return;
-    
+
     final provider = _provider;
-    
+
     if (!provider.isConnected || provider.selectedLibraryIds.isEmpty) {
       if (mounted) {
         setState(() {
@@ -742,7 +761,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     try {
       final service = _service;
       List<dynamic> items;
-      
+
       switch (widget.serverType) {
         case NetworkMediaServerType.jellyfin:
           items = await (service as JellyfinService).getLatestMediaItems(
@@ -760,7 +779,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           );
           break;
       }
-      
+
       if (mounted && !_isShowingLibraryContent) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
@@ -828,7 +847,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   void _onSearchChanged(String query) {
     // 取消之前的搜索定时器
     _searchDebounceTimer?.cancel();
-    
+
     if (_isFolderNavigation) {
       if (query.isEmpty) {
         setState(() {
@@ -875,7 +894,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   void _onMainSearchChanged(String query) {
     // 取消之前的搜索定时器
     _searchDebounceTimer?.cancel();
-    
+
     if (query.isEmpty) {
       setState(() {
         _isSearching = false;
@@ -941,7 +960,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _isSearchLoading = false;
         });
 
-        debugPrint('[$_serverName] 搜索 "$query" 找到 ${_searchResults.length} 个结果');
+        debugPrint(
+            '[$_serverName] 搜索 "$query" 找到 ${_searchResults.length} 个结果');
       }
     } catch (e) {
       if (mounted) {
@@ -971,10 +991,11 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         }
         try {
           List<dynamic> libraryResults = [];
-          
+
           switch (widget.serverType) {
             case NetworkMediaServerType.jellyfin:
-              libraryResults = await (service as JellyfinService).searchInLibrary(
+              libraryResults =
+                  await (service as JellyfinService).searchInLibrary(
                 library.id,
                 query,
                 limit: 50,
@@ -988,9 +1009,10 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
               );
               break;
           }
-          
+
           allSearchResults.addAll(libraryResults);
-          debugPrint('[$_serverName] 在媒体库 "${library.name}" 中搜索 "$query" 找到 ${libraryResults.length} 个结果');
+          debugPrint(
+              '[$_serverName] 在媒体库 "${library.name}" 中搜索 "$query" 找到 ${libraryResults.length} 个结果');
         } catch (e) {
           debugPrint('[$_serverName] 在媒体库 "${library.name}" 中搜索失败: $e');
           // 继续搜索其他媒体库
@@ -1004,7 +1026,8 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           _isSearchLoading = false;
         });
 
-        debugPrint('[$_serverName] 跨媒体库搜索 "$query" 共找到 ${_searchResults.length} 个结果');
+        debugPrint(
+            '[$_serverName] 跨媒体库搜索 "$query" 共找到 ${_searchResults.length} 个结果');
       }
     } catch (e) {
       if (mounted) {
@@ -1079,7 +1102,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   // 返回媒体库列表
   void _backToLibraries() {
     _clearSearch();
-    
+
     if (mounted) {
       setState(() {
         _selectedLibraryId = null;
@@ -1089,7 +1112,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
         _mediaItems.clear(); // 清空当前媒体项
         _error = null;
       });
-      
+
       // 重新加载数据以同步最新的媒体库状态
       _loadData();
     }
@@ -1107,8 +1130,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       _isFolderNavigation = isMixedLibrary;
       _mediaItems.clear();
       _error = null;
-      _folderStack
-        ..clear();
+      _folderStack..clear();
       if (isMixedLibrary) {
         _folderStack.add(_FolderNode(id: library.id, name: library.name));
       }
@@ -1134,13 +1156,14 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       final service = _service;
       final provider = _provider;
       List<dynamic> items;
-      
+
       // 获取该媒体库的排序设置
       final sortSettings = provider.getLibrarySortSettings(libraryId);
-      
+
       switch (widget.serverType) {
         case NetworkMediaServerType.jellyfin:
-          items = await (service as JellyfinService).getLatestMediaItemsByLibrary(
+          items =
+              await (service as JellyfinService).getLatestMediaItemsByLibrary(
             libraryId,
             limit: 99999,
             sortBy: sortSettings['sortBy']!,
@@ -1156,7 +1179,7 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
           );
           break;
       }
-      
+
       if (mounted) {
         setState(() {
           _mediaItems = _convertToNetworkMediaItems(items);
@@ -1247,11 +1270,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
   List<NetworkMediaItem> _convertToNetworkMediaItems(List<dynamic> items) {
     switch (widget.serverType) {
       case NetworkMediaServerType.jellyfin:
-        return items.cast<JellyfinMediaItem>()
+        return items
+            .cast<JellyfinMediaItem>()
             .map((item) => JellyfinMediaItemAdapter(item))
             .toList();
       case NetworkMediaServerType.emby:
-        return items.cast<EmbyMediaItem>()
+        return items
+            .cast<EmbyMediaItem>()
             .map((item) => EmbyMediaItemAdapter(item))
             .toList();
     }
@@ -1298,15 +1323,13 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
     _loadFolderItems(item.id);
   }
 
-
   // 显示服务器设置对话框
   Future<void> _showServerDialog() async {
     final result = await NetworkMediaServerDialog.show(
-      context, 
-      widget.serverType == NetworkMediaServerType.jellyfin 
-          ? MediaServerType.jellyfin 
-          : MediaServerType.emby
-    );
+        context,
+        widget.serverType == NetworkMediaServerType.jellyfin
+            ? MediaServerType.jellyfin
+            : MediaServerType.emby);
     if (result == true && mounted) {
       _loadData();
     }
@@ -1387,8 +1410,6 @@ class _NetworkMediaLibraryViewState extends State<NetworkMediaLibraryView>
       provider.updateSortSettingsOnly(selection.sortBy, selection.sortOrder);
     }
   }
-
-
 }
 
 class _FolderNode {

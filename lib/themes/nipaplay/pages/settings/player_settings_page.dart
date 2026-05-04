@@ -26,6 +26,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/auto_next_episode_service.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class PlayerSettingsPage extends StatefulWidget {
   const PlayerSettingsPage({super.key});
@@ -38,7 +39,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   static const String _selectedDecodersKey = 'selected_decoders';
   static const String _playerKernelTypeKey = 'player_kernel_type';
   static const String _danmakuRenderEngineKey = 'danmaku_render_engine';
-  static const Color _fluentAccentColor = Color(0xFFFF2E55);
+  static Color get _fluentAccentColor => AppAccentColors.current;
 
   List<String> _availableDecoders = [];
   List<String> _selectedDecoders = [];

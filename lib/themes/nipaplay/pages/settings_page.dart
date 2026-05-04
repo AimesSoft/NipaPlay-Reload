@@ -10,6 +10,7 @@ import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SettingsPage extends StatefulWidget {
   static const String entryRemoteAccess = NipaplaySettingEntryIds.remoteAccess;
@@ -76,7 +77,7 @@ class _SettingsPageState extends State<SettingsPage>
     with SingleTickerProviderStateMixin {
   Widget? currentPage;
   late TabController _tabController;
-  static const Color _selectedColor = Color(0xFFFF2E55);
+  static Color get _selectedColor => AppAccentColors.current;
   String? _selectedEntryId;
 
   @override

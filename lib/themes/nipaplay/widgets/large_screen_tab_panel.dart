@@ -6,6 +6,7 @@ import 'package:nipaplay/pages/tab_labels.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_side_panel.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 const double kNipaplayLargeScreenTabPanelWidth = 220;
 
@@ -104,13 +105,13 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
           buildChild: (_) => Row(
             children: [
               Icon(themeActionIcon, size: 20),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Expanded(
                 child: Text(
                   themeActionLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -134,14 +135,14 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
         _NipaplayLargeScreenMenuEntry(
           buildChild: (_) => Row(
             children: [
-              const Icon(Icons.settings_rounded, size: 20),
-              const SizedBox(width: 8),
+              Icon(Icons.settings_rounded, size: 20),
+              SizedBox(width: 8),
               Expanded(
                 child: Text(
                   context.l10n.settingsLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -161,7 +162,7 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color activeColor = Color(0xFFFF2E55);
+    final Color activeColor = AppAccentColors.current;
     final Color inactiveColor = isDarkMode ? Colors.white60 : Colors.black54;
     // Keep the side tab panel aligned with page base background color.
     final Color panelBackgroundColor =
@@ -277,7 +278,7 @@ class NipaplayLargeScreenTabPanel extends StatelessWidget {
               data: IconThemeData(color: itemColor),
               child: tabWidget.icon!,
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: 6),
           ],
           Text(
             tabWidget.text,

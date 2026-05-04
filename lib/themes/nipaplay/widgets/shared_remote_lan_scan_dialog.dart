@@ -13,6 +13,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class SharedRemoteLanScanDialog {
   static Future<bool?> show(
@@ -22,7 +23,7 @@ class SharedRemoteLanScanDialog {
     final colorScheme = Theme.of(context).colorScheme;
     final textColor = colorScheme.onSurface.withOpacity(0.7);
     final mutedTextColor = colorScheme.onSurface.withOpacity(0.5);
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor =
         isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF2F2F2);
@@ -254,7 +255,8 @@ class _SharedRemoteLanScanDialogContentState
         if (event != RawSocketEvent.read) return;
         Datagram? datagram;
         while ((datagram = socket?.receive()) != null) {
-          final parsed = NipaPlayLanDiscoveryProtocol.tryParseResponse(datagram!);
+          final parsed =
+              NipaPlayLanDiscoveryProtocol.tryParseResponse(datagram!);
           if (parsed == null) continue;
           final host = _DiscoveredHost(
             ip: parsed.ip,
@@ -408,7 +410,8 @@ class _SharedRemoteLanScanDialogContentState
       final uri = Uri.parse(normalized);
       final host = uri.host;
       final isLocalHost = host == 'localhost' || host == '127.0.0.1';
-      final isLocal = isLocalHost || _isPrivateIpv4(host) || host.endsWith('.local');
+      final isLocal =
+          isLocalHost || _isPrivateIpv4(host) || host.endsWith('.local');
       if (!uri.hasPort && uri.scheme == 'http' && isLocal) {
         normalized = uri.replace(port: 1180).toString();
       }
@@ -424,13 +427,14 @@ class _SharedRemoteLanScanDialogContentState
   @override
   Widget build(BuildContext context) {
     const defaultPort = 1180;
-    const accentColor = Color(0xFFFF2E55);
+    final accentColor = AppAccentColors.current;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = Theme.of(context).colorScheme.onSurface;
     final subTextColor = textColor.withOpacity(0.7);
     final mutedTextColor = textColor.withOpacity(0.5);
     final borderColor = textColor.withOpacity(isDark ? 0.12 : 0.18);
-    final itemColor = isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
+    final itemColor =
+        isDark ? const Color(0xFF2B2B2B) : const Color(0xFFF7F7F7);
     final ButtonStyle actionButtonStyle = ButtonStyle(
       foregroundColor: MaterialStateProperty.resolveWith((states) {
         if (states.contains(MaterialState.disabled)) {
@@ -472,14 +476,14 @@ class _SharedRemoteLanScanDialogContentState
               height: 1.35,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Row(
             children: [
               const Spacer(),
               SizedBox(
                 width: 120,
                 child: TextButton.icon(
-                  icon: const Icon(Ionicons.refresh_outline, size: 18),
+                  icon: Icon(Ionicons.refresh_outline, size: 18),
                   label: Text(_isScanning ? '停止' : '重新扫描'),
                   onPressed: _isScanning
                       ? () => _cancelScan(updateState: true)
@@ -489,7 +493,7 @@ class _SharedRemoteLanScanDialogContentState
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Row(
             children: [
               Icon(
@@ -499,13 +503,14 @@ class _SharedRemoteLanScanDialogContentState
                 color: _isScanning ? subTextColor : mutedTextColor,
                 size: 16,
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Expanded(
                 child: Text(
                   statusText,
                   style: TextStyle(
-                    color:
-                        _errorMessage != null ? Colors.orangeAccent : subTextColor,
+                    color: _errorMessage != null
+                        ? Colors.orangeAccent
+                        : subTextColor,
                     fontSize: 12,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -522,7 +527,7 @@ class _SharedRemoteLanScanDialogContentState
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Expanded(
             child: _foundHosts.isEmpty
                 ? Center(
@@ -533,13 +538,12 @@ class _SharedRemoteLanScanDialogContentState
                   )
                 : ListView.separated(
                     itemCount: _foundHosts.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, __) => SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final host = _foundHosts[index];
-                      final title =
-                          (host.hostname?.trim().isNotEmpty ?? false)
-                              ? host.hostname!.trim()
-                              : host.ip;
+                      final title = (host.hostname?.trim().isNotEmpty ?? false)
+                          ? host.hostname!.trim()
+                          : host.ip;
                       return Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -551,7 +555,7 @@ class _SharedRemoteLanScanDialogContentState
                           children: [
                             Icon(Ionicons.desktop_outline,
                                 color: subTextColor, size: 18),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -564,7 +568,7 @@ class _SharedRemoteLanScanDialogContentState
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 2),
+                                  SizedBox(height: 2),
                                   Text(
                                     host.baseUrl,
                                     style: TextStyle(
@@ -576,14 +580,14 @@ class _SharedRemoteLanScanDialogContentState
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             TextButton(
                               onPressed: _isAdding
                                   ? null
                                   : () => _addDiscoveredHost(host),
                               style: actionButtonStyle,
                               child: _isAdding
-                                  ? const SizedBox(
+                                  ? SizedBox(
                                       width: 14,
                                       height: 14,
                                       child: CircularProgressIndicator(

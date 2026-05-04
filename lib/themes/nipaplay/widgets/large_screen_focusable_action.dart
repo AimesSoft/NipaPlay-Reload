@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class NipaplayLargeScreenFocusableStyle {
   const NipaplayLargeScreenFocusableStyle({
-    this.focusStrokeColor = const Color(0xFFFF2E55),
+    this.focusStrokeColor,
     this.focusStrokeWidth = 2,
     this.idleBackgroundDark = const Color(0x0AFFFFFF),
     this.idleBackgroundLight = const Color(0x08000000),
@@ -11,7 +12,7 @@ class NipaplayLargeScreenFocusableStyle {
     this.contentColorLight = Colors.black87,
   });
 
-  final Color focusStrokeColor;
+  final Color? focusStrokeColor;
   final double focusStrokeWidth;
   final Color idleBackgroundDark;
   final Color idleBackgroundLight;
@@ -102,7 +103,9 @@ class _NipaplayLargeScreenFocusableActionState
           foregroundDecoration: BoxDecoration(
             borderRadius: widget.borderRadius,
             border: Border.all(
-              color: isActive ? style.focusStrokeColor : Colors.transparent,
+              color: isActive
+                  ? (style.focusStrokeColor ?? AppAccentColors.current)
+                  : Colors.transparent,
               width: style.focusStrokeWidth,
               strokeAlign: BorderSide.strokeAlignInside,
             ),

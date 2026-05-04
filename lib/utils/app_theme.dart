@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class AppTheme {
   // 获取适合当前平台的默认字体
@@ -12,12 +13,10 @@ class AppTheme {
     return Platform.isWindows ? "微软雅黑" : null;
   }
 
-  static const Color _materialSeedColor = Color(0xFF2196F3);
-
   static ColorScheme material3LightScheme(ColorScheme? dynamicScheme) {
     return dynamicScheme ??
         ColorScheme.fromSeed(
-          seedColor: _materialSeedColor,
+          seedColor: AppAccentColors.current,
           brightness: Brightness.light,
         );
   }
@@ -25,7 +24,7 @@ class AppTheme {
   static ColorScheme material3DarkScheme(ColorScheme? dynamicScheme) {
     return dynamicScheme ??
         ColorScheme.fromSeed(
-          seedColor: _materialSeedColor,
+          seedColor: AppAccentColors.current,
           brightness: Brightness.dark,
         );
   }
@@ -48,35 +47,35 @@ class AppTheme {
     );
   }
 
-  static ThemeData lightTheme = ThemeData(
-    brightness: Brightness.light, // 设置亮度为浅色模式
-    fontFamily: _platformDefaultFont, // 使用平台默认字体
-    colorScheme: ColorScheme(
-      brightness: Brightness.light, // 设置颜色方案的亮度为浅色模式
-      primary: Colors.blue, // 主要颜色
-      onPrimary: Colors.white, // 在主要颜色上的文本和图标颜色
-      secondary: Colors.grey[600]!, // 辅助颜色
-      onSecondary: Colors.white, // 在辅助颜色上的文本和图标颜色
-      surface: Colors.white, // 表面颜色
-      onSurface: Colors.black87, // 在表面颜色上的文本和图标颜色
-      error: Colors.red, // 错误颜色
-      onError: Colors.white, // 在错误颜色上的文本和图标颜色
-    ),
-  );
+  static ThemeData lightTheme(Color accentColor) => ThemeData(
+        brightness: Brightness.light, // 设置亮度为浅色模式
+        fontFamily: _platformDefaultFont, // 使用平台默认字体
+        colorScheme: ColorScheme(
+          brightness: Brightness.light, // 设置颜色方案的亮度为浅色模式
+          primary: accentColor, // 主要颜色
+          onPrimary: Colors.white, // 在主要颜色上的文本和图标颜色
+          secondary: accentColor, // 辅助颜色
+          onSecondary: Colors.white, // 在辅助颜色上的文本和图标颜色
+          surface: Colors.white, // 表面颜色
+          onSurface: Colors.black87, // 在表面颜色上的文本和图标颜色
+          error: Colors.red, // 错误颜色
+          onError: Colors.white, // 在错误颜色上的文本和图标颜色
+        ),
+      );
 
-  static ThemeData darkTheme = ThemeData(
-    brightness: Brightness.dark, // 设置亮度为深色模式
-    fontFamily: _platformDefaultFont, // 使用平台默认字体
-    colorScheme: ColorScheme(
-      brightness: Brightness.dark, // 设置颜色方案的亮度为深色模式
-      primary: Colors.grey[500]!.withOpacity(0.4), // 主要颜色，在深色模式下使用深灰色，带透明度。
-      onPrimary: Colors.white, // 在主要颜色上的文本和图标颜色，确保对比度。
-      secondary: Colors.grey[300]!, // 辅助颜色，深色模式下使用灰色。
-      onSecondary: Colors.white, // 在辅助颜色上的文本和图标颜色，确保对比度。
-      surface: Colors.black, // 表面颜色，深色模式下使用黑色。
-      onSurface: Colors.white, // 在表面颜色上的文本和图标颜色，确保对比度。
-      error: Colors.red, // 错误颜色，用于显示错误信息。
-      onError: Colors.white, // 在错误颜色上的文本和图标颜色，确保对比度。
-    ),
-  );
+  static ThemeData darkTheme(Color accentColor) => ThemeData(
+        brightness: Brightness.dark, // 设置亮度为深色模式
+        fontFamily: _platformDefaultFont, // 使用平台默认字体
+        colorScheme: ColorScheme(
+          brightness: Brightness.dark, // 设置颜色方案的亮度为深色模式
+          primary: accentColor, // 主要颜色
+          onPrimary: Colors.white, // 在主要颜色上的文本和图标颜色，确保对比度。
+          secondary: accentColor, // 辅助颜色
+          onSecondary: Colors.white, // 在辅助颜色上的文本和图标颜色，确保对比度。
+          surface: Colors.black, // 表面颜色，深色模式下使用黑色。
+          onSurface: Colors.white, // 在表面颜色上的文本和图标颜色，确保对比度。
+          error: Colors.red, // 错误颜色，用于显示错误信息。
+          onError: Colors.white, // 在错误颜色上的文本和图标颜色，确保对比度。
+        ),
+      );
 }

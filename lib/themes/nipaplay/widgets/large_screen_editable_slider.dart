@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class NipaplayLargeScreenEditableSlider extends StatefulWidget {
   const NipaplayLargeScreenEditableSlider({
@@ -160,7 +161,8 @@ class _NipaplayLargeScreenEditableSliderState
   Widget build(BuildContext context) {
     final isLargeScreenModeActive =
         NipaplayLargeScreenModeScope.isActiveOf(context);
-    final normalizedValue = widget.value.clamp(widget.min, widget.max).toDouble();
+    final normalizedValue =
+        widget.value.clamp(widget.min, widget.max).toDouble();
     final slider = fluent.Slider(
       value: normalizedValue,
       min: widget.min,
@@ -178,8 +180,10 @@ class _NipaplayLargeScreenEditableSliderState
 
     final colorScheme = Theme.of(context).colorScheme;
     final borderColor = _isEditing
-        ? const Color(0xFFFF2E55)
-        : (_hasFocus ? colorScheme.onSurface.withValues(alpha: 0.5) : Colors.transparent);
+        ? AppAccentColors.current
+        : (_hasFocus
+            ? colorScheme.onSurface.withValues(alpha: 0.5)
+            : Colors.transparent);
 
     return Actions(
       actions: <Type, Action<Intent>>{

@@ -13,6 +13,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/chinese_converter.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class BatchDanmakuMatchDialog extends StatefulWidget {
   final List<String> filePaths;
@@ -53,7 +54,7 @@ class BatchDanmakuMatchDialog extends StatefulWidget {
 class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     with GlobalHotkeyManagerMixin {
   static const double _rowIndexWidth = 32;
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -233,7 +234,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
           : <Map<String, dynamic>>[];
 
       // 对搜索结果进行简繁转换
-      final isTraditional = await ChineseConverter.isTraditionalChineseEnvironment(context);
+      final isTraditional =
+          await ChineseConverter.isTraditionalChineseEnvironment(context);
       if (isTraditional) {
         // 对每个搜索结果进行转换
         for (var anime in results) {
@@ -528,7 +530,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (item.episodeNumber != null) ...[
-                      const SizedBox(height: 2),
+                      SizedBox(height: 2),
                       Text(
                         '剧集: ${item.episodeNumber}',
                         style: TextStyle(color: _subTextColor, fontSize: 11),
@@ -539,9 +541,9 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               _buildRowIndexText(index, isDragging: isDragging),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               ReorderableDragStartListener(
                 index: index,
                 enabled: !isDragging,
@@ -623,9 +625,9 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               _buildRowIndexText(index, isDragging: isDragging),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               ReorderableDragStartListener(
                 index: index,
                 enabled: !isDragging,
@@ -676,7 +678,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (animeId.isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       Text(
                         'ID: $animeId',
                         style: TextStyle(color: _subTextColor, fontSize: 12),
@@ -702,13 +704,13 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
             color: _accentColor.withOpacity(0.18),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.playlist_add_check,
             color: _accentColor,
             size: 20,
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -721,7 +723,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
               Text(
                 '对齐本地文件与剧集顺序，一键完成匹配',
                 style: TextStyle(color: _subTextColor, fontSize: 13),
@@ -761,18 +763,18 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _accentColor),
+                borderSide: BorderSide(color: _accentColor),
               ),
             ),
             onSubmitted: (_) => _performSearch(),
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         ElevatedButton(
           onPressed: _isSearching ? null : _performSearch,
           style: _primaryButtonStyle(),
           child: _isSearching
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
@@ -828,7 +830,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
             size: 16,
             color: iconColor,
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: 6),
           Expanded(
             child: Text(
               message,
@@ -846,10 +848,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.inbox_outlined, color: _mutedTextColor, size: 32),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(title, style: TextStyle(color: _subTextColor, fontSize: 13)),
           if (subtitle != null) ...[
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               subtitle,
               style: TextStyle(color: _mutedTextColor, fontSize: 12),
@@ -874,7 +876,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
             style: TextStyle(color: _subTextColor, fontSize: 12),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           height: panelHeight,
           decoration: _panelDecoration(),
@@ -933,10 +935,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
       children: [
         _buildSectionTitle('搜索结果'),
         if (_searchMessage.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildStatusBanner(_searchMessage, isError: isError),
         ],
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           height: panelHeight,
           decoration: _panelDecoration(),
@@ -1047,10 +1049,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         if (_episodesMessage.isNotEmpty) ...[
           _buildStatusBanner(_episodesMessage, isError: isError),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
         ],
         Container(
           height: panelHeight,
@@ -1096,9 +1098,9 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 _buildSearchBar(),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final isWideLayout = constraints.maxWidth >= 820;
@@ -1111,7 +1113,7 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(child: _buildFilesPanel(context)),
-                          const SizedBox(width: 16),
+                          SizedBox(width: 16),
                           Expanded(child: rightPanel),
                         ],
                       );
@@ -1120,13 +1122,13 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
                     return Column(
                       children: [
                         _buildFilesPanel(context),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         rightPanel,
                       ],
                     );
                   },
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(

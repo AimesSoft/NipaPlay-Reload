@@ -2,12 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/globals.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 const double _libraryManagementTreeBaseIndent = 12.0;
 const double _libraryManagementTreeIndentStep = 16.0;
 
 double libraryManagementTreeIndent(int depth) {
-  return _libraryManagementTreeBaseIndent + depth * _libraryManagementTreeIndentStep;
+  return _libraryManagementTreeBaseIndent +
+      depth * _libraryManagementTreeIndentStep;
 }
 
 class LibraryManagementCard extends StatelessWidget {
@@ -23,8 +25,9 @@ class LibraryManagementCard extends StatelessWidget {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color borderColor =
         isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
-    final Color bgColor =
-        isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03);
+    final Color bgColor = isDark
+        ? Colors.white.withOpacity(0.05)
+        : Colors.black.withOpacity(0.03);
 
     return Container(
       decoration: BoxDecoration(
@@ -67,14 +70,14 @@ class LibraryManagementEmptyState extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 64, color: iconColor),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
               style: TextStyle(color: titleColor, fontSize: 16),
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 subtitle!,
                 textAlign: TextAlign.center,
@@ -220,12 +223,12 @@ class LibraryManagementFolderRow extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         trailing: loading
-            ? const SizedBox(
+            ? SizedBox(
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Color(0xFFFF2E55),
+                  color: AppAccentColors.current,
                 ),
               )
             : Row(

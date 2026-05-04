@@ -10,8 +10,8 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
           borderRadius: BorderRadius.circular(8),
           color: Colors.white10,
         ),
-        child: const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF2E55)),
+        child: Center(
+          child: CircularProgressIndicator(color: AppAccentColors.current),
         ),
       );
     }
@@ -107,7 +107,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 // 右侧小卡片区域 - 上下两个（第6和第7个）
                 Expanded(
                   flex: 1,
@@ -115,7 +115,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     children: [
                       Expanded(
                           child: _buildSmallRecommendationCard(items[5], 5)),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Expanded(
                           child: _buildSmallRecommendationCard(items[6], 6)),
                     ],
@@ -168,7 +168,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   lowResMinScale: 0.8,
                   errorBuilder: (context, error) => Container(
                     color: Colors.white10,
-                    child: const Center(
+                    child: Center(
                       child: Icon(Icons.broken_image, color: Colors.white30),
                     ),
                   ),
@@ -231,15 +231,15 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.star_rounded,
                           color: Colors.white,
                           size: 16,
                         ),
-                        const SizedBox(width: 4),
+                        SizedBox(width: 4),
                         Text(
                           item.rating!.toStringAsFixed(1),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -322,7 +322,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildServiceIcon(item.source, size: compact ? 22 : 24),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           item.title,
@@ -347,7 +347,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
 
                   // 桌面端显示间距和简介，手机端不显示
                   if (!compact) ...[
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
 
                     // 剧情简介（只在桌面端显示）
                     if (item.subtitle.isNotEmpty)
@@ -356,7 +356,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                             .replaceAll('<br>', ' ')
                             .replaceAll('<br/>', ' ')
                             .replaceAll('<br />', ' '),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white70,
                           fontSize: 14,
                           shadows: [
@@ -429,7 +429,7 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                   lowResMinScale: 0.8,
                   errorBuilder: (context, error) => Container(
                     color: Colors.white10,
-                    child: const Center(
+                    child: Center(
                       child: Icon(Icons.broken_image,
                           color: Colors.white30, size: 16),
                     ),
@@ -493,15 +493,15 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.star_rounded,
                           color: Colors.white,
                           size: 12,
                         ),
-                        const SizedBox(width: 2),
+                        SizedBox(width: 2),
                         Text(
                           item.rating!.toStringAsFixed(1),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -576,11 +576,11 @@ extension DashboardHomePageHeroBuild on _DashboardHomePageState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildServiceIcon(item.source, size: 12),
-                const SizedBox(width: 4),
+                SizedBox(width: 4),
                 Flexible(
                   child: Text(
                     item.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,

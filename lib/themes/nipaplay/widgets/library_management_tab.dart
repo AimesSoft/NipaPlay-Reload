@@ -35,6 +35,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 enum LibraryManagementSection { local, webdav, smb }
 
@@ -75,7 +76,7 @@ class LibraryManagementTab extends StatefulWidget {
 }
 
 class _LibraryManagementTabState extends State<LibraryManagementTab> {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
   static const String _lastScannedDirectoryPickerPathKey =
       'last_scanned_dir_picker_path';
   static const String _librarySortOptionKey =
@@ -1133,7 +1134,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           SizedBox(
             height: 200, // 减少高度
             child: SingleChildScrollView(
@@ -1159,14 +1160,14 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                           child: Row(
                             children: [
                               if (isSelected) ...[
-                                const Icon(
+                                Icon(
                                   Icons.check,
                                   color: Colors.lightBlueAccent,
                                   size: 18,
                                 ),
-                                const SizedBox(width: 10),
+                                SizedBox(width: 10),
                               ] else ...[
-                                const SizedBox(width: 28),
+                                SizedBox(width: 28),
                               ],
                               Expanded(
                                 child: Text(
@@ -1193,7 +1194,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           HoverScaleTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('取消',
@@ -1281,9 +1282,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
       content: dialogContent,
       actions: <Widget>[
         HoverScaleTextButton(
-          child: const Text("知道了",
+          child: Text("知道了",
               locale: Locale("zh-Hans", "zh"),
-              style: TextStyle(color: Color(0xFFFF2E55))),
+              style: TextStyle(color: AppAccentColors.current)),
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -1323,7 +1324,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                   '${index + 1}. $displayPath',
                   style: TextStyle(color: primaryTextColor, fontSize: 14),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   '原因：$error',
                   style: TextStyle(color: secondaryTextColor, fontSize: 12),
@@ -1869,7 +1870,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         value: scanService!.scanProgress,
                         backgroundColor: scanProgressBackground,
                         valueColor:
-                            const AlwaysStoppedAnimation<Color>(_accentColor),
+                            AlwaysStoppedAnimation<Color>(_accentColor),
                       ),
                     ),
                   if (!scanService!.isScanning &&
@@ -1881,11 +1882,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         child: TextButton.icon(
                           onPressed: () =>
                               _showFailedScanFilesDialog(scanService!),
-                          icon: const Icon(Icons.error_outline,
+                          icon: Icon(Icons.error_outline,
                               size: 16, color: Colors.orangeAccent),
                           label: Text(
                             '查看失败文件（${scanService!.failedScanFiles.length}）',
-                            style: const TextStyle(color: Colors.orangeAccent),
+                            style: TextStyle(color: Colors.orangeAccent),
                           ),
                           style: TextButton.styleFrom(padding: EdgeInsets.zero),
                         ),
@@ -1930,9 +1931,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.notification_important,
+                          Icon(Icons.notification_important,
                               color: Colors.orange, size: 20),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           const Text(
                             "检测到文件夹变化",
                             locale: Locale("zh-Hans", "zh"),
@@ -1951,13 +1952,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Text(
                         scanService!.getChangeDetectionSummary(),
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: Colors.white70, fontSize: 14),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       ...scanService!.detectedChanges.map((change) => Padding(
                             padding: const EdgeInsets.only(bottom: 8.0),
                             child: Row(
@@ -1969,13 +1970,13 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                                     children: [
                                       Text(
                                         change.displayName,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w500),
                                       ),
                                       Text(
                                         change.changeDescription,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             color: Colors.white60,
                                             fontSize: 12),
                                       ),
@@ -2001,7 +2002,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                               ],
                             ),
                           )),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
@@ -2054,7 +2055,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                         value: _remoteScrapeProgress,
                         backgroundColor: scanProgressBackground,
                         valueColor:
-                            const AlwaysStoppedAnimation<Color>(_accentColor),
+                            AlwaysStoppedAnimation<Color>(_accentColor),
                       ),
                     ),
                 ],
@@ -2691,7 +2692,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         _isRemoteMode ? remoteProvider!.webdavConnections : _webdavConnections;
     if (connections.isEmpty) {
       if (_isRemoteMode && remoteProvider!.isManagementLoading) {
-        return const Center(
+        return Center(
           child: CircularProgressIndicator(color: _accentColor),
         );
       }
@@ -2728,7 +2729,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         _isRemoteMode ? remoteProvider!.smbConnections : _smbConnections;
     if (connections.isEmpty) {
       if (_isRemoteMode && remoteProvider!.isManagementLoading) {
-        return const Center(
+        return Center(
           child: CircularProgressIndicator(color: _accentColor),
         );
       }

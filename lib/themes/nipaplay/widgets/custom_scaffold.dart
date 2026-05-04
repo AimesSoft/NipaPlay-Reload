@@ -10,6 +10,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 class CustomScaffold extends StatefulWidget {
   final List<Widget> pages;
@@ -108,7 +109,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
   @override
   Widget build(BuildContext context) {
     if (widget.tabController == null) {
-      return const Center(
+      return Center(
         child: Text("Error: TabController not provided to CustomScaffold"),
       );
     }
@@ -191,7 +192,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
               leading: widget.pageIsHome
                   ? null
                   : IconButton(
-                      icon: const Icon(Ionicons.chevron_back_outline),
+                      icon: Icon(Ionicons.chevron_back_outline),
                       color: isDarkMode ? Colors.white : Colors.black,
                       onPressed: () {
                         Navigator.of(context).pop();
@@ -206,7 +207,7 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                   controller: widget.tabController,
                   isScrollable: true,
                   tabs: widget.tabPage,
-                  labelColor: const Color(0xFFFF2E55),
+                  labelColor: AppAccentColors.current,
                   unselectedLabelColor:
                       isDarkMode ? Colors.white60 : Colors.black54,
                   labelPadding: const EdgeInsets.only(bottom: 15.0),
@@ -216,9 +217,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
                   dividerColor:
                       showTabDivider ? tabDividerColor : Colors.transparent,
                   dividerHeight: 3.0,
-                  indicator: const _CustomTabIndicator(
+                  indicator: _CustomTabIndicator(
                     indicatorHeight: 3.0,
-                    indicatorColor: Color(0xFFFF2E55),
+                    indicatorColor: AppAccentColors.current,
                     radius: 30.0,
                   ),
                   indicatorSize: TabBarIndicatorSize.label,
@@ -301,7 +302,7 @@ class _CustomTabIndicator extends Decoration {
   final Color indicatorColor;
   final double radius;
 
-  const _CustomTabIndicator({
+  _CustomTabIndicator({
     required this.indicatorHeight,
     required this.indicatorColor,
     required this.radius,
@@ -352,7 +353,7 @@ class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
 
     return Row(
       children: [
-        const SizedBox(width: 16),
+        SizedBox(width: 16),
         Padding(
           padding: const EdgeInsets.only(bottom: 20.0),
           child: Image.asset(
@@ -361,7 +362,7 @@ class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
             fit: BoxFit.contain,
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Expanded(child: tabBar),
       ],
     );

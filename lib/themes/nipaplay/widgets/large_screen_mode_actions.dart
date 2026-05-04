@@ -3,6 +3,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/menu_button.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 const double kNipaplayWindowCaptionHeight = 28;
 
@@ -73,7 +74,7 @@ class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
             onOpenSettings: onOpenSettings,
           ),
           if (windowButtons != null) ...[
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             windowButtons,
           ],
         ],
@@ -115,9 +116,9 @@ class _LargeScreenModeToggleIconButtonState
     final bool isActive = widget.isActive;
     final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
     final Color iconColor = isActive
-        ? const Color(0xFFFF2E55)
+        ? AppAccentColors.current
         : (_isHovered
-            ? const Color(0xFFFF2E55)
+            ? AppAccentColors.current
             : (isDarkMode ? Colors.white : Colors.black87));
     final icon = isActive ? Icons.view_day_rounded : Icons.view_sidebar_rounded;
 
@@ -179,7 +180,7 @@ class _NormalModeActionButtons extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         if (onToggleLargeScreen != null) ...[
           SizedBox(
             height: kNipaplayWindowCaptionHeight,
@@ -190,7 +191,7 @@ class _NormalModeActionButtons extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
         ],
         SizedBox(
           height: kNipaplayWindowCaptionHeight,
@@ -200,7 +201,7 @@ class _NormalModeActionButtons extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         SizedBox(
           height: kNipaplayWindowCaptionHeight,
           child: Center(
@@ -246,7 +247,7 @@ class _ThemeToggleIconButtonState extends State<_ThemeToggleIconButton> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
     final Color iconColor = _isHovered
-        ? const Color(0xFFFF2E55)
+        ? AppAccentColors.current
         : (isDarkMode ? Colors.white : Colors.black87);
     final icon =
         isDarkMode ? Icons.nightlight_rounded : Icons.light_mode_rounded;
@@ -334,7 +335,7 @@ class _SettingsIconButtonState extends State<_SettingsIconButton> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final double scale = _isPressed ? 0.92 : (_isHovered ? 1.1 : 1.0);
     final Color iconColor = _isHovered
-        ? const Color(0xFFFF2E55)
+        ? AppAccentColors.current
         : (isDarkMode ? Colors.white : Colors.black87);
 
     return Tooltip(

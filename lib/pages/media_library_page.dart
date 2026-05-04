@@ -32,6 +32,7 @@ import 'dart:ui' as ui;
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/chinese_converter.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 
 // Define a callback type for when an episode is selected for playing
 typedef OnPlayEpisodeCallback = void Function(WatchHistoryItem item);
@@ -61,7 +62,7 @@ class MediaLibraryPage extends StatefulWidget {
 }
 
 class _MediaLibraryPageState extends State<MediaLibraryPage> {
-  static const Color _accentColor = Color(0xFFFF2E55);
+  static Color get _accentColor => AppAccentColors.current;
   // 🔥 临时禁用页面保活，测试是否解决CPU泄漏问题
   // with AutomaticKeepAliveClientMixin {
   List<WatchHistoryItem> _uniqueLibraryItems = [];
@@ -870,7 +871,7 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
 
   Widget _buildLocalMediaLibrary() {
     if (_isLoadingInitial) {
-      return const SizedBox(
+      return SizedBox(
         height: 200,
         child: Center(child: CircularProgressIndicator(color: _accentColor)),
       );
@@ -884,8 +885,8 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text('加载媒体库失败: $_error',
-                  style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 16),
+                  style: TextStyle(color: Colors.white70)),
+              SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _loadInitialMediaLibraryData,
                 child: const Text('重试'),
@@ -907,9 +908,9 @@ class _MediaLibraryPageState extends State<MediaLibraryPage> {
                 _emptyMessage,
                 textAlign: TextAlign.center,
                 locale: const Locale("zh-Hans", "zh"),
-                style: const TextStyle(color: Colors.grey, fontSize: 16),
+                style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
             ],
           ),
         ),

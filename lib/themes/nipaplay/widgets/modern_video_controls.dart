@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 import 'package:nipaplay/utils/shortcut_tooltip_manager.dart'; // 添加新的快捷键提示管理器
@@ -592,14 +593,12 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
 
                                     // 弹幕开关按钮
                                     _buildControlButton(
-                                      icon: SvgPicture.asset(
-                                        videoState.danmakuVisible
-                                            ? 'assets/danmaku-fill.svg'
-                                            : 'assets/danmaku-off-fill.svg',
+                                      icon: _DanmakuToggleIcon(
                                         key: ValueKey<bool>(
-                                            videoState.danmakuVisible),
-                                        width: globals.isPhone ? 32 : 24,
-                                        height: globals.isPhone ? 32 : 24,
+                                          videoState.danmakuVisible,
+                                        ),
+                                        visible: videoState.danmakuVisible,
+                                        size: globals.isPhone ? 32 : 24,
                                       ),
                                       onTap: () =>
                                           videoState.toggleDanmakuVisible(),
@@ -740,5 +739,106 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
         );
       },
     );
+  }
+}
+
+class _DanmakuToggleIcon extends StatelessWidget {
+  const _DanmakuToggleIcon({
+    super.key,
+    required this.visible,
+    required this.size,
+  });
+
+  final bool visible;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    if (visible) {
+      return SvgPicture.asset(
+        'assets/danmaku-fill.svg',
+        width: size,
+        height: size,
+      );
+    }
+
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _DanmakuOffIconPainter(
+        accentColor: AppAccentColors.current,
+      ),
+    );
+  }
+}
+
+class _DanmakuOffIconPainter extends CustomPainter {
+  const _DanmakuOffIconPainter({
+    required this.accentColor,
+  });
+
+  final Color accentColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scaleX = size.width / 24;
+    final scaleY = size.height / 24;
+    canvas.save();
+    canvas.scale(scaleX, scaleY);
+
+    final bubblePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final offPaint = Paint()
+      ..color = accentColor
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(
+      Path()
+        ..moveTo(18, 3)
+        ..cubicTo(19.657, 3, 21, 4.343, 21, 6)
+        ..lineTo(21, 10.437)
+        ..cubicTo(18.109, 8.758, 14.392, 9.368, 12.184, 11.872)
+        ..cubicTo(10.644, 13.619, 10.096, 16.021, 10.768, 18.425)
+        ..lineTo(8, 20.5)
+        ..cubicTo(7.176, 21.118, 6, 20.53, 6, 19.5)
+        ..lineTo(6, 18)
+        ..lineTo(5, 18)
+        ..cubicTo(3.343, 18, 2, 16.657, 2, 15)
+        ..lineTo(2, 6)
+        ..cubicTo(2, 4.343, 3.343, 3, 5, 3)
+        ..lineTo(18, 3)
+        ..close(),
+      bubblePaint,
+    );
+
+    final linePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(const Offset(3, 13), const Offset(9, 13), linePaint);
+    canvas.drawLine(const Offset(5, 8), const Offset(7, 8), linePaint);
+    canvas.drawLine(const Offset(11, 8), const Offset(19, 8), linePaint);
+
+    canvas.drawCircle(const Offset(17.5, 16.5), 4.5, offPaint);
+
+    final slashPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      const Offset(15.732, 18.268),
+      const Offset(19.268, 14.732),
+      slashPaint,
+    );
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _DanmakuOffIconPainter oldDelegate) {
+    return oldDelegate.accentColor != accentColor;
   }
 }
