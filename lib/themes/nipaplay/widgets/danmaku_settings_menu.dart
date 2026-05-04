@@ -123,6 +123,42 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     }
   }
 
+  List<String> _splitBlockWords(String input) {
+    final result = <String>[];
+    final current = StringBuffer();
+    bool inRegex = false;
+
+    for (int i = 0; i < input.length; i++) {
+      final char = input[i];
+
+      if (char == '/' && !inRegex) {
+        final prev = current.toString();
+        if (prev.isNotEmpty && RegExp(r'\S$').hasMatch(prev)) {
+          inRegex = true;
+        }
+        current.write(char);
+      } else if (char == '/' && inRegex) {
+        inRegex = false;
+        current.write(char);
+      } else if (char == ',' && !inRegex) {
+        final word = current.toString().trim();
+        if (word.isNotEmpty) {
+          result.add(word);
+        }
+        current.clear();
+      } else {
+        current.write(char);
+      }
+    }
+
+    final lastWord = current.toString().trim();
+    if (lastWord.isNotEmpty) {
+      result.add(lastWord);
+    }
+
+    return result;
+  }
+
   void _addBlockWordFromInput(String input) {
     final trimmed = input.trim();
 
@@ -134,7 +170,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
       return;
     }
 
-    final rawWords = trimmed.split(',');
+    final rawWords = _splitBlockWords(trimmed);
     final validWords = <String>[];
     final duplicateWords = <String>[];
     final emptyWords = <String>[];
