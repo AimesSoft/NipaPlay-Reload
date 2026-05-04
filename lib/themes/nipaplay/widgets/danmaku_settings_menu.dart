@@ -199,7 +199,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
   }
 
   void _addBlockWord() {
-    if (globals.isPhone) {
+    if (globals.isMobilePlatform) {
       _showBlockWordInputDialog();
       return;
     }
