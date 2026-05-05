@@ -69,7 +69,7 @@ class _GeneralPageState extends State<GeneralPage> {
       DropdownMenuItemData(
           title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
       DropdownMenuItemData(
-          title: "种子下载", value: 3, isSelected: _defaultPageIndex == 3),
+          title: "下载器", value: 3, isSelected: _defaultPageIndex == 3),
     ];
 
     items.add(DropdownMenuItemData(

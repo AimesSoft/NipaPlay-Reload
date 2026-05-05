@@ -146,7 +146,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       case tabMediaLibrary:
         return '媒体库';
       case tabTorrent:
-        return '种子下载';
+        return '下载器';
       case tabAccount:
         return '我的';
       case tabSettings:

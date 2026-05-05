@@ -6,6 +6,7 @@ import 'package:nipaplay/themes/nipaplay/pages/settings/about_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/backup_restore_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/danmaku_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/developer_options_page.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/downloader_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/external_player_settings_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/general_page.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/language_page.dart';
@@ -36,6 +37,7 @@ class NipaplaySettingEntryIds {
   static const String shortcuts = 'shortcuts';
   static const String remoteAccess = 'remote_access';
   static const String remoteMediaLibrary = 'remote_media_library';
+  static const String downloader = 'downloader';
   static const String developerOptions = 'developer_options';
   static const String labs = 'labs';
   static const String plugins = 'plugins';
@@ -173,6 +175,13 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
       icon: Ionicons.library_outline,
       pageTitle: l10n.remoteMediaLibrary,
       page: const RemoteMediaLibraryPage(),
+    ),
+    const NipaplaySettingEntry(
+      id: NipaplaySettingEntryIds.downloader,
+      title: '下载器',
+      icon: Ionicons.cloud_download_outline,
+      pageTitle: '下载器',
+      page: DownloaderSettingsPage(),
     ),
     NipaplaySettingEntry(
       id: NipaplaySettingEntryIds.developerOptions,

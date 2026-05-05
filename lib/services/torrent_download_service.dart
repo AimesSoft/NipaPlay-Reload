@@ -51,19 +51,23 @@ class TorrentDownloadService {
 
   Future<void> addMagnet(String magnetUri) async {
     final downloadDir = await getDownloadDirectory();
+    final createFolder = await _createFolderForTask();
     await _initSession(downloadDir);
     await rust_torrent.torrentAddMagnet(
       magnetUri: magnetUri,
       downloadDir: downloadDir,
+      createFolderForTask: createFolder,
     );
   }
 
   Future<void> addTorrentFile(String torrentFilePath) async {
     final downloadDir = await getDownloadDirectory();
+    final createFolder = await _createFolderForTask();
     await _initSession(downloadDir);
     await rust_torrent.torrentAddFile(
       torrentFilePath: torrentFilePath,
       downloadDir: downloadDir,
+      createFolderForTask: createFolder,
     );
   }
 
@@ -93,5 +97,12 @@ class TorrentDownloadService {
     await rust_torrent.torrentInitSession(downloadDir: downloadDir);
     _sessionInitialized = true;
     _sessionDownloadDir = downloadDir;
+  }
+
+  Future<bool> _createFolderForTask() {
+    return SettingsStorage.loadBool(
+      SettingsKeys.downloaderCreateFolderForTask,
+      defaultValue: true,
+    );
   }
 }

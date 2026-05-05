@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use librqbit::{
-    AddTorrent, AddTorrentOptions, Api, Session, SessionOptions, SessionPersistenceConfig,
+    AddTorrent, AddTorrentOptions, Api, Magnet, Session, SessionOptions, SessionPersistenceConfig,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -83,7 +83,11 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
     Ok(())
 }
 
-pub fn torrent_add_magnet(magnet_uri: String, download_dir: String) -> Result<String, String> {
+pub fn torrent_add_magnet(
+    magnet_uri: String,
+    download_dir: String,
+    create_folder_for_task: bool,
+) -> Result<String, String> {
     let magnet_uri = magnet_uri.trim().to_string();
     if magnet_uri.is_empty() {
         return Err("magnet URI is empty".to_string());
@@ -92,15 +96,14 @@ pub fn torrent_add_magnet(magnet_uri: String, download_dir: String) -> Result<St
     torrent_init_session(normalized_dir.clone())?;
     let state = torrent_runtime();
     let api = current_api(state)?;
+    let folder_name = create_folder_for_task
+        .then(|| magnet_folder_name(&magnet_uri))
+        .flatten();
 
     state.runtime.block_on(async {
         api.api_add_torrent(
             AddTorrent::from_url(magnet_uri),
-            Some(AddTorrentOptions {
-                overwrite: true,
-                output_folder: Some(normalized_dir),
-                ..Default::default()
-            }),
+            Some(add_torrent_options(normalized_dir, folder_name)),
         )
         .await
         .map_err(|error| format!("failed to add magnet: {error:#}"))
@@ -108,7 +111,11 @@ pub fn torrent_add_magnet(magnet_uri: String, download_dir: String) -> Result<St
     })
 }
 
-pub fn torrent_add_file(torrent_file_path: String, download_dir: String) -> Result<String, String> {
+pub fn torrent_add_file(
+    torrent_file_path: String,
+    download_dir: String,
+    create_folder_for_task: bool,
+) -> Result<String, String> {
     let torrent_file_path = torrent_file_path.trim().to_string();
     if torrent_file_path.is_empty() {
         return Err("torrent file path is empty".to_string());
@@ -117,16 +124,13 @@ pub fn torrent_add_file(torrent_file_path: String, download_dir: String) -> Resu
     torrent_init_session(normalized_dir.clone())?;
     let state = torrent_runtime();
     let api = current_api(state)?;
+    let folder_name = create_folder_for_task.then(|| file_stem_folder_name(&torrent_file_path));
 
     state.runtime.block_on(async {
         api.api_add_torrent(
             AddTorrent::from_local_filename(&torrent_file_path)
                 .map_err(|error| format!("failed to read torrent file: {error:#}"))?,
-            Some(AddTorrentOptions {
-                overwrite: true,
-                output_folder: Some(normalized_dir),
-                ..Default::default()
-            }),
+            Some(add_torrent_options(normalized_dir, folder_name)),
         )
         .await
         .map_err(|error| format!("failed to add torrent file: {error:#}"))
@@ -199,6 +203,56 @@ fn current_api(state: &TorrentRuntime) -> Result<Api, String> {
         .map_err(|_| "torrent API lock poisoned".to_string())?
         .clone()
         .ok_or_else(|| "torrent session is not initialized".to_string())
+}
+
+fn add_torrent_options(download_dir: String, folder_name: Option<String>) -> AddTorrentOptions {
+    let output_folder = folder_name
+        .map(|folder| Path::new(&download_dir).join(folder))
+        .unwrap_or_else(|| PathBuf::from(download_dir));
+
+    AddTorrentOptions {
+        overwrite: true,
+        output_folder: Some(output_folder.to_string_lossy().into_owned()),
+        ..Default::default()
+    }
+}
+
+fn magnet_folder_name(magnet_uri: &str) -> Option<String> {
+    Magnet::parse(magnet_uri)
+        .ok()
+        .and_then(|magnet| magnet.name)
+        .and_then(|name| sanitize_folder_name(&name))
+}
+
+fn file_stem_folder_name(file_path: &str) -> String {
+    let fallback = "torrent";
+    let name = Path::new(file_path)
+        .file_stem()
+        .or_else(|| Path::new(file_path).file_name())
+        .and_then(|name| name.to_str())
+        .unwrap_or(fallback);
+    sanitize_folder_name(name).unwrap_or_else(|| fallback.to_string())
+}
+
+fn sanitize_folder_name(name: &str) -> Option<String> {
+    let stem = Path::new(name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(name);
+    let sanitized: String = stem
+        .chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            ch if ch.is_control() => '_',
+            ch => ch,
+        })
+        .collect();
+    let sanitized = sanitized.trim().trim_matches('.').trim().to_string();
+    if sanitized.is_empty() {
+        None
+    } else {
+        Some(sanitized)
+    }
 }
 
 fn normalize_download_dir(download_dir: String) -> Result<String, String> {

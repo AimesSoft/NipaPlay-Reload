@@ -4,7 +4,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
 List<Widget> createTabLabels(BuildContext context,
-    {bool showWebDAVTab = false}) {
+    {bool showWebDAVTab = false, bool showDownloaderTab = true}) {
   List<Widget> tabs = [
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
@@ -26,20 +26,28 @@ List<Widget> createTabLabels(BuildContext context,
     );
   }
 
-  tabs.addAll([
+  tabs.add(
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabMediaLibrary),
     ),
-    Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8.0),
-      child: HoverZoomTab(text: context.l10n.tabTorrentDownload),
-    ),
+  );
+
+  if (showDownloaderTab) {
+    tabs.add(
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8.0),
+        child: HoverZoomTab(text: context.l10n.tabTorrentDownload),
+      ),
+    );
+  }
+
+  tabs.add(
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabAccount),
     ),
-  ]);
+  );
 
   return tabs;
 }

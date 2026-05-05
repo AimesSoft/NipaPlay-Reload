@@ -124,7 +124,7 @@ abstract class AppLocalizations {
   /// No description provided for @tabTorrentDownload.
   ///
   /// In zh, this message translates to:
-  /// **'种子下载'**
+  /// **'下载器'**
   String get tabTorrentDownload;
 
   /// No description provided for @tabAccount.
