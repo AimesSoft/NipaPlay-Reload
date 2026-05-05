@@ -33,6 +33,10 @@ List<Widget> createTabLabels(BuildContext context,
     ),
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.0),
+      child: HoverZoomTab(text: context.l10n.tabTorrentDownload),
+    ),
+    Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.0),
       child: HoverZoomTab(text: context.l10n.tabAccount),
     ),
   ]);

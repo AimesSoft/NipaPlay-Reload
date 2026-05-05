@@ -5,660 +5,1145 @@
 
 import 'api/file_scan.dart';
 import 'api/performance.dart';
+import 'api/torrent.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
-import 'frb_generated.io.dart' if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'frb_generated.io.dart'
+    if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+/// Main entrypoint of the Rust API
+class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
+  @internal
+  static final instance = RustLib._();
 
-                /// Main entrypoint of the Rust API
-                class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
-                  @internal
-                  static final instance = RustLib._();
-
-                  RustLib._();
-
-                  /// Initialize flutter_rust_bridge
-                  static Future<void> init({
-                    RustLibApi? api,
-                    BaseHandler? handler,
-                    ExternalLibrary? externalLibrary,
-                    bool forceSameCodegenVersion = true,
-                  }) async {
-                    await instance.initImpl(
-                      api: api,
-                      handler: handler,
-                      externalLibrary: externalLibrary,
-                      forceSameCodegenVersion: forceSameCodegenVersion,
-                    );
-                  }
-
-                  /// Initialize flutter_rust_bridge in mock mode.
-                  /// No libraries for FFI are loaded.
-                  static void initMock({
-                    required RustLibApi api,
-                  }) {
-                    instance.initMockImpl(
-                      api: api,
-                    );
-                  }
-
-                  /// Dispose flutter_rust_bridge
-                  ///
-                  /// The call to this function is optional, since flutter_rust_bridge (and everything else)
-                  /// is automatically disposed when the app stops.
-                  static void dispose() => instance.disposeImpl();
-
-                  @override
-                  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor => RustLibApiImpl.new;
-
-                  @override
-                  WireConstructor<RustLibWire> get wireConstructor => RustLibWire.fromExternalLibrary;
-
-                  @override
-                  Future<void> executeRustInitializers() async {
-                    await api.crateApiSimpleInitApp();
-
-                  }
-
-                  @override
-                  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig => kDefaultExternalLibraryLoaderConfig;
-
-                  @override
-                  String get codegenVersion => '2.11.1';
-
-                  @override
-                  int get rustContentHash => 563754150;
-
-                  static const kDefaultExternalLibraryLoaderConfig = ExternalLibraryLoaderConfig(
-                    stem: 'rust_lib_nipaplay',
-                    ioDirectory: 'rust/target/release/',
-                    webPrefix: 'pkg/',
-                  );
-                }
-                
-
-                abstract class RustLibApi extends BaseApi {
-                  Future<RustFileScanDiff> crateApiFileScanDiffVideoFiles({required String folderPath , required List<RustFileHashEntry> cachedHashes });
-
-Future<void> crateApiSimpleInitApp();
-
-bool crateApiPerformanceIsPerformanceProbeAvailable();
-
-bool crateApiFileScanIsRustFileScanAvailable();
-
-Future<RustCpuSample> crateApiPerformanceSampleCpuCounters();
-
-Future<RustGpuSample> crateApiPerformanceSampleGpuPercent();
-
-Future<double> crateApiPerformanceSampleMemoryRssMb();
-
-Future<RustPerformanceSample> crateApiPerformanceSamplePerformance();
-
-Future<RustFileScanSnapshot> crateApiFileScanScanVideoFiles({required String folderPath });
-
-
-                }
-                
-
-                class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
-                  RustLibApiImpl({
-                    required super.handler,
-                    required super.wire,
-                    required super.generalizedFrbRustBinding,
-                    required super.portManager,
-                  });
-
-                  @override Future<RustFileScanDiff> crateApiFileScanDiffVideoFiles({required String folderPath , required List<RustFileHashEntry> cachedHashes })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(folderPath, serializer);
-sse_encode_list_rust_file_hash_entry(cachedHashes, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_rust_file_scan_diff,
-          decodeErrorData: sse_decode_String,
-        )
-        ,
-            constMeta: kCrateApiFileScanDiffVideoFilesConstMeta,
-            argValues: [folderPath, cachedHashes],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiFileScanDiffVideoFilesConstMeta => const TaskConstMeta(
-            debugName: "diff_video_files",
-            argNames: ["folderPath", "cachedHashes"],
-        );
-        
-
-@override Future<void> crateApiSimpleInitApp()  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateApiSimpleInitAppConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiSimpleInitAppConstMeta => const TaskConstMeta(
-            debugName: "init_app",
-            argNames: [],
-        );
-        
-
-@override bool crateApiPerformanceIsPerformanceProbeAvailable()  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_bool,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateApiPerformanceIsPerformanceProbeAvailableConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiPerformanceIsPerformanceProbeAvailableConstMeta => const TaskConstMeta(
-            debugName: "is_performance_probe_available",
-            argNames: [],
-        );
-        
-
-@override bool crateApiFileScanIsRustFileScanAvailable()  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_bool,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateApiFileScanIsRustFileScanAvailableConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiFileScanIsRustFileScanAvailableConstMeta => const TaskConstMeta(
-            debugName: "is_rust_file_scan_available",
-            argNames: [],
-        );
-        
-
-@override Future<RustCpuSample> crateApiPerformanceSampleCpuCounters()  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_rust_cpu_sample,
-          decodeErrorData: sse_decode_String,
-        )
-        ,
-            constMeta: kCrateApiPerformanceSampleCpuCountersConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiPerformanceSampleCpuCountersConstMeta => const TaskConstMeta(
-            debugName: "sample_cpu_counters",
-            argNames: [],
-        );
-        
-
-@override Future<RustGpuSample> crateApiPerformanceSampleGpuPercent()  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_rust_gpu_sample,
-          decodeErrorData: sse_decode_String,
-        )
-        ,
-            constMeta: kCrateApiPerformanceSampleGpuPercentConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiPerformanceSampleGpuPercentConstMeta => const TaskConstMeta(
-            debugName: "sample_gpu_percent",
-            argNames: [],
-        );
-        
-
-@override Future<double> crateApiPerformanceSampleMemoryRssMb()  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_f_64,
-          decodeErrorData: sse_decode_String,
-        )
-        ,
-            constMeta: kCrateApiPerformanceSampleMemoryRssMbConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiPerformanceSampleMemoryRssMbConstMeta => const TaskConstMeta(
-            debugName: "sample_memory_rss_mb",
-            argNames: [],
-        );
-        
-
-@override Future<RustPerformanceSample> crateApiPerformanceSamplePerformance()  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_rust_performance_sample,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateApiPerformanceSamplePerformanceConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiPerformanceSamplePerformanceConstMeta => const TaskConstMeta(
-            debugName: "sample_performance",
-            argNames: [],
-        );
-        
-
-@override Future<RustFileScanSnapshot> crateApiFileScanScanVideoFiles({required String folderPath })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(folderPath, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_rust_file_scan_snapshot,
-          decodeErrorData: sse_decode_String,
-        )
-        ,
-            constMeta: kCrateApiFileScanScanVideoFilesConstMeta,
-            argValues: [folderPath],
-            apiImpl: this,
-        )); }
-
-
-        TaskConstMeta get kCrateApiFileScanScanVideoFilesConstMeta => const TaskConstMeta(
-            debugName: "scan_video_files",
-            argNames: ["folderPath"],
-        );
-        
-
-
-
-                  @protected String dco_decode_String(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as String; }
-
-@protected bool dco_decode_bool(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as bool; }
-
-@protected double dco_decode_box_autoadd_f_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as double; }
-
-@protected double dco_decode_f_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as double; }
-
-@protected int dco_decode_i_32(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as int; }
-
-@protected PlatformInt64 dco_decode_i_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return dcoDecodeI64(raw); }
-
-@protected List<String> dco_decode_list_String(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return (raw as List<dynamic>).map(dco_decode_String).toList(); }
-
-@protected Uint8List dco_decode_list_prim_u_8_strict(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as Uint8List; }
-
-@protected List<RustFileHashEntry> dco_decode_list_rust_file_hash_entry(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return (raw as List<dynamic>).map(dco_decode_rust_file_hash_entry).toList(); }
-
-@protected List<RustFileScanEntry> dco_decode_list_rust_file_scan_entry(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return (raw as List<dynamic>).map(dco_decode_rust_file_scan_entry).toList(); }
-
-@protected String? dco_decode_opt_String(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw == null ? null : dco_decode_String(raw); }
-
-@protected double? dco_decode_opt_box_autoadd_f_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw == null ? null : dco_decode_box_autoadd_f_64(raw); }
-
-@protected RustCpuSample dco_decode_rust_cpu_sample(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-final arr = raw as List<dynamic>;
-                if (arr.length != 3) throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
-                return RustCpuSample(processCpuMicros: dco_decode_i_64(arr[0]),
-timestampMs: dco_decode_i_64(arr[1]),
-logicalCpus: dco_decode_i_32(arr[2]),); }
-
-@protected RustFileHashEntry dco_decode_rust_file_hash_entry(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-final arr = raw as List<dynamic>;
-                if (arr.length != 2) throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-                return RustFileHashEntry(relativePath: dco_decode_String(arr[0]),
-hash: dco_decode_String(arr[1]),); }
-
-@protected RustFileScanDiff dco_decode_rust_file_scan_diff(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-final arr = raw as List<dynamic>;
-                if (arr.length != 8) throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
-                return RustFileScanDiff(currentCount: dco_decode_i_32(arr[0]),
-cachedCount: dco_decode_i_32(arr[1]),
-currentFiles: dco_decode_list_String(arr[2]),
-newFiles: dco_decode_list_String(arr[3]),
-modifiedFiles: dco_decode_list_String(arr[4]),
-deletedFiles: dco_decode_list_String(arr[5]),
-folderHash: dco_decode_String(arr[6]),
-currentHashes: dco_decode_list_rust_file_hash_entry(arr[7]),); }
-
-@protected RustFileScanEntry dco_decode_rust_file_scan_entry(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-final arr = raw as List<dynamic>;
-                if (arr.length != 5) throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-                return RustFileScanEntry(relativePath: dco_decode_String(arr[0]),
-absolutePath: dco_decode_String(arr[1]),
-size: dco_decode_i_64(arr[2]),
-modifiedMillis: dco_decode_i_64(arr[3]),
-fileHash: dco_decode_String(arr[4]),); }
-
-@protected RustFileScanSnapshot dco_decode_rust_file_scan_snapshot(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-final arr = raw as List<dynamic>;
-                if (arr.length != 2) throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-                return RustFileScanSnapshot(folderHash: dco_decode_String(arr[0]),
-files: dco_decode_list_rust_file_scan_entry(arr[1]),); }
-
-@protected RustGpuSample dco_decode_rust_gpu_sample(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-final arr = raw as List<dynamic>;
-                if (arr.length != 2) throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
-                return RustGpuSample(gpuPercent: dco_decode_f_64(arr[0]),
-source: dco_decode_String(arr[1]),); }
-
-@protected RustPerformanceSample dco_decode_rust_performance_sample(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-final arr = raw as List<dynamic>;
-                if (arr.length != 6) throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
-                return RustPerformanceSample(cpuProcessPercent: dco_decode_opt_box_autoadd_f_64(arr[0]),
-memoryRssMb: dco_decode_opt_box_autoadd_f_64(arr[1]),
-gpuPercent: dco_decode_opt_box_autoadd_f_64(arr[2]),
-source: dco_decode_String(arr[3]),
-timestampMs: dco_decode_i_64(arr[4]),
-note: dco_decode_opt_String(arr[5]),); }
-
-@protected int dco_decode_u_8(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as int; }
-
-@protected void dco_decode_unit(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return; }
-
-@protected String sse_decode_String(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var inner = sse_decode_list_prim_u_8_strict(deserializer);
-        return utf8.decoder.convert(inner); }
-
-@protected bool sse_decode_bool(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getUint8() != 0; }
-
-@protected double sse_decode_box_autoadd_f_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return (sse_decode_f_64(deserializer)); }
-
-@protected double sse_decode_f_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getFloat64(); }
-
-@protected int sse_decode_i_32(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getInt32(); }
-
-@protected PlatformInt64 sse_decode_i_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getPlatformInt64(); }
-
-@protected List<String> sse_decode_list_String(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-
-        var len_ = sse_decode_i_32(deserializer);
-        var ans_ = <String>[];
-        for (var idx_ = 0; idx_ < len_; ++idx_) { ans_.add(sse_decode_String(deserializer)); }
-        return ans_;
-         }
-
-@protected Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var len_ = sse_decode_i_32(deserializer);
-                return deserializer.buffer.getUint8List(len_); }
-
-@protected List<RustFileHashEntry> sse_decode_list_rust_file_hash_entry(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-
-        var len_ = sse_decode_i_32(deserializer);
-        var ans_ = <RustFileHashEntry>[];
-        for (var idx_ = 0; idx_ < len_; ++idx_) { ans_.add(sse_decode_rust_file_hash_entry(deserializer)); }
-        return ans_;
-         }
-
-@protected List<RustFileScanEntry> sse_decode_list_rust_file_scan_entry(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-
-        var len_ = sse_decode_i_32(deserializer);
-        var ans_ = <RustFileScanEntry>[];
-        for (var idx_ = 0; idx_ < len_; ++idx_) { ans_.add(sse_decode_rust_file_scan_entry(deserializer)); }
-        return ans_;
-         }
-
-@protected String? sse_decode_opt_String(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-
-            if (sse_decode_bool(deserializer)) {
-                return (sse_decode_String(deserializer));
-            } else {
-                return null;
-            }
-             }
-
-@protected double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-
-            if (sse_decode_bool(deserializer)) {
-                return (sse_decode_box_autoadd_f_64(deserializer));
-            } else {
-                return null;
-            }
-             }
-
-@protected RustCpuSample sse_decode_rust_cpu_sample(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var var_processCpuMicros = sse_decode_i_64(deserializer);
-var var_timestampMs = sse_decode_i_64(deserializer);
-var var_logicalCpus = sse_decode_i_32(deserializer);
-return RustCpuSample(processCpuMicros: var_processCpuMicros, timestampMs: var_timestampMs, logicalCpus: var_logicalCpus); }
-
-@protected RustFileHashEntry sse_decode_rust_file_hash_entry(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var var_relativePath = sse_decode_String(deserializer);
-var var_hash = sse_decode_String(deserializer);
-return RustFileHashEntry(relativePath: var_relativePath, hash: var_hash); }
-
-@protected RustFileScanDiff sse_decode_rust_file_scan_diff(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var var_currentCount = sse_decode_i_32(deserializer);
-var var_cachedCount = sse_decode_i_32(deserializer);
-var var_currentFiles = sse_decode_list_String(deserializer);
-var var_newFiles = sse_decode_list_String(deserializer);
-var var_modifiedFiles = sse_decode_list_String(deserializer);
-var var_deletedFiles = sse_decode_list_String(deserializer);
-var var_folderHash = sse_decode_String(deserializer);
-var var_currentHashes = sse_decode_list_rust_file_hash_entry(deserializer);
-return RustFileScanDiff(currentCount: var_currentCount, cachedCount: var_cachedCount, currentFiles: var_currentFiles, newFiles: var_newFiles, modifiedFiles: var_modifiedFiles, deletedFiles: var_deletedFiles, folderHash: var_folderHash, currentHashes: var_currentHashes); }
-
-@protected RustFileScanEntry sse_decode_rust_file_scan_entry(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var var_relativePath = sse_decode_String(deserializer);
-var var_absolutePath = sse_decode_String(deserializer);
-var var_size = sse_decode_i_64(deserializer);
-var var_modifiedMillis = sse_decode_i_64(deserializer);
-var var_fileHash = sse_decode_String(deserializer);
-return RustFileScanEntry(relativePath: var_relativePath, absolutePath: var_absolutePath, size: var_size, modifiedMillis: var_modifiedMillis, fileHash: var_fileHash); }
-
-@protected RustFileScanSnapshot sse_decode_rust_file_scan_snapshot(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var var_folderHash = sse_decode_String(deserializer);
-var var_files = sse_decode_list_rust_file_scan_entry(deserializer);
-return RustFileScanSnapshot(folderHash: var_folderHash, files: var_files); }
-
-@protected RustGpuSample sse_decode_rust_gpu_sample(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var var_gpuPercent = sse_decode_f_64(deserializer);
-var var_source = sse_decode_String(deserializer);
-return RustGpuSample(gpuPercent: var_gpuPercent, source: var_source); }
-
-@protected RustPerformanceSample sse_decode_rust_performance_sample(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var var_cpuProcessPercent = sse_decode_opt_box_autoadd_f_64(deserializer);
-var var_memoryRssMb = sse_decode_opt_box_autoadd_f_64(deserializer);
-var var_gpuPercent = sse_decode_opt_box_autoadd_f_64(deserializer);
-var var_source = sse_decode_String(deserializer);
-var var_timestampMs = sse_decode_i_64(deserializer);
-var var_note = sse_decode_opt_String(deserializer);
-return RustPerformanceSample(cpuProcessPercent: var_cpuProcessPercent, memoryRssMb: var_memoryRssMb, gpuPercent: var_gpuPercent, source: var_source, timestampMs: var_timestampMs, note: var_note); }
-
-@protected int sse_decode_u_8(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getUint8(); }
-
-@protected void sse_decode_unit(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
- }
-
-@protected void sse_encode_String(String self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer); }
-
-@protected void sse_encode_bool(bool self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putUint8(self ? 1 : 0); }
-
-@protected void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_f_64(self, serializer); }
-
-@protected void sse_encode_f_64(double self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putFloat64(self); }
-
-@protected void sse_encode_i_32(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putInt32(self); }
-
-@protected void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putPlatformInt64(self); }
-
-@protected void sse_encode_list_String(List<String> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_i_32(self.length, serializer);
-        for (final item in self) { sse_encode_String(item, serializer); } }
-
-@protected void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_i_32(self.length, serializer);
-                    serializer.buffer.putUint8List(self); }
-
-@protected void sse_encode_list_rust_file_hash_entry(List<RustFileHashEntry> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_i_32(self.length, serializer);
-        for (final item in self) { sse_encode_rust_file_hash_entry(item, serializer); } }
-
-@protected void sse_encode_list_rust_file_scan_entry(List<RustFileScanEntry> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_i_32(self.length, serializer);
-        for (final item in self) { sse_encode_rust_file_scan_entry(item, serializer); } }
-
-@protected void sse_encode_opt_String(String? self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-
-                sse_encode_bool(self != null, serializer);
-                if (self != null) {
-                    sse_encode_String(self, serializer);
-                }
-                 }
-
-@protected void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-
-                sse_encode_bool(self != null, serializer);
-                if (self != null) {
-                    sse_encode_box_autoadd_f_64(self, serializer);
-                }
-                 }
-
-@protected void sse_encode_rust_cpu_sample(RustCpuSample self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_i_64(self.processCpuMicros, serializer);
-sse_encode_i_64(self.timestampMs, serializer);
-sse_encode_i_32(self.logicalCpus, serializer);
- }
-
-@protected void sse_encode_rust_file_hash_entry(RustFileHashEntry self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_String(self.relativePath, serializer);
-sse_encode_String(self.hash, serializer);
- }
-
-@protected void sse_encode_rust_file_scan_diff(RustFileScanDiff self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_i_32(self.currentCount, serializer);
-sse_encode_i_32(self.cachedCount, serializer);
-sse_encode_list_String(self.currentFiles, serializer);
-sse_encode_list_String(self.newFiles, serializer);
-sse_encode_list_String(self.modifiedFiles, serializer);
-sse_encode_list_String(self.deletedFiles, serializer);
-sse_encode_String(self.folderHash, serializer);
-sse_encode_list_rust_file_hash_entry(self.currentHashes, serializer);
- }
-
-@protected void sse_encode_rust_file_scan_entry(RustFileScanEntry self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_String(self.relativePath, serializer);
-sse_encode_String(self.absolutePath, serializer);
-sse_encode_i_64(self.size, serializer);
-sse_encode_i_64(self.modifiedMillis, serializer);
-sse_encode_String(self.fileHash, serializer);
- }
-
-@protected void sse_encode_rust_file_scan_snapshot(RustFileScanSnapshot self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_String(self.folderHash, serializer);
-sse_encode_list_rust_file_scan_entry(self.files, serializer);
- }
-
-@protected void sse_encode_rust_gpu_sample(RustGpuSample self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_f_64(self.gpuPercent, serializer);
-sse_encode_String(self.source, serializer);
- }
-
-@protected void sse_encode_rust_performance_sample(RustPerformanceSample self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_opt_box_autoadd_f_64(self.cpuProcessPercent, serializer);
-sse_encode_opt_box_autoadd_f_64(self.memoryRssMb, serializer);
-sse_encode_opt_box_autoadd_f_64(self.gpuPercent, serializer);
-sse_encode_String(self.source, serializer);
-sse_encode_i_64(self.timestampMs, serializer);
-sse_encode_opt_String(self.note, serializer);
- }
-
-@protected void sse_encode_u_8(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putUint8(self); }
-
-@protected void sse_encode_unit(void self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
- }
-                }
-                
+  RustLib._();
+
+  /// Initialize flutter_rust_bridge
+  static Future<void> init({
+    RustLibApi? api,
+    BaseHandler? handler,
+    ExternalLibrary? externalLibrary,
+    bool forceSameCodegenVersion = true,
+  }) async {
+    await instance.initImpl(
+      api: api,
+      handler: handler,
+      externalLibrary: externalLibrary,
+      forceSameCodegenVersion: forceSameCodegenVersion,
+    );
+  }
+
+  /// Initialize flutter_rust_bridge in mock mode.
+  /// No libraries for FFI are loaded.
+  static void initMock({
+    required RustLibApi api,
+  }) {
+    instance.initMockImpl(
+      api: api,
+    );
+  }
+
+  /// Dispose flutter_rust_bridge
+  ///
+  /// The call to this function is optional, since flutter_rust_bridge (and everything else)
+  /// is automatically disposed when the app stops.
+  static void dispose() => instance.disposeImpl();
+
+  @override
+  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor =>
+      RustLibApiImpl.new;
+
+  @override
+  WireConstructor<RustLibWire> get wireConstructor =>
+      RustLibWire.fromExternalLibrary;
+
+  @override
+  Future<void> executeRustInitializers() async {
+    await api.crateApiSimpleInitApp();
+  }
+
+  @override
+  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig =>
+      kDefaultExternalLibraryLoaderConfig;
+
+  @override
+  String get codegenVersion => '2.11.1';
+
+  @override
+  int get rustContentHash => -1390884270;
+
+  static const kDefaultExternalLibraryLoaderConfig =
+      ExternalLibraryLoaderConfig(
+    stem: 'rust_lib_nipaplay',
+    ioDirectory: 'rust/target/release/',
+    webPrefix: 'pkg/',
+  );
+}
+
+abstract class RustLibApi extends BaseApi {
+  Future<RustFileScanDiff> crateApiFileScanDiffVideoFiles(
+      {required String folderPath,
+      required List<RustFileHashEntry> cachedHashes});
+
+  Future<void> crateApiSimpleInitApp();
+
+  bool crateApiPerformanceIsPerformanceProbeAvailable();
+
+  bool crateApiFileScanIsRustFileScanAvailable();
+
+  bool crateApiTorrentIsTorrentEngineAvailable();
+
+  Future<RustCpuSample> crateApiPerformanceSampleCpuCounters();
+
+  Future<RustGpuSample> crateApiPerformanceSampleGpuPercent();
+
+  Future<double> crateApiPerformanceSampleMemoryRssMb();
+
+  Future<RustPerformanceSample> crateApiPerformanceSamplePerformance();
+
+  Future<RustFileScanSnapshot> crateApiFileScanScanVideoFiles(
+      {required String folderPath});
+
+  Future<String> crateApiTorrentTorrentAddFile(
+      {required String torrentFilePath, required String downloadDir});
+
+  Future<String> crateApiTorrentTorrentAddMagnet(
+      {required String magnetUri, required String downloadDir});
+
+  Future<void> crateApiTorrentTorrentDelete({required int id});
+
+  Future<void> crateApiTorrentTorrentForget({required int id});
+
+  Future<void> crateApiTorrentTorrentInitSession({required String downloadDir});
+
+  Future<String> crateApiTorrentTorrentList({required String downloadDir});
+
+  Future<void> crateApiTorrentTorrentPause({required int id});
+
+  Future<void> crateApiTorrentTorrentResume({required int id});
+}
+
+class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
+  RustLibApiImpl({
+    required super.handler,
+    required super.wire,
+    required super.generalizedFrbRustBinding,
+    required super.portManager,
+  });
+
+  @override
+  Future<RustFileScanDiff> crateApiFileScanDiffVideoFiles(
+      {required String folderPath,
+      required List<RustFileHashEntry> cachedHashes}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(folderPath, serializer);
+        sse_encode_list_rust_file_hash_entry(cachedHashes, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 1, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_file_scan_diff,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiFileScanDiffVideoFilesConstMeta,
+      argValues: [folderPath, cachedHashes],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiFileScanDiffVideoFilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "diff_video_files",
+        argNames: ["folderPath", "cachedHashes"],
+      );
+
+  @override
+  Future<void> crateApiSimpleInitApp() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 2, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiSimpleInitAppConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiSimpleInitAppConstMeta => const TaskConstMeta(
+        debugName: "init_app",
+        argNames: [],
+      );
+
+  @override
+  bool crateApiPerformanceIsPerformanceProbeAvailable() {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiPerformanceIsPerformanceProbeAvailableConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiPerformanceIsPerformanceProbeAvailableConstMeta =>
+      const TaskConstMeta(
+        debugName: "is_performance_probe_available",
+        argNames: [],
+      );
+
+  @override
+  bool crateApiFileScanIsRustFileScanAvailable() {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiFileScanIsRustFileScanAvailableConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiFileScanIsRustFileScanAvailableConstMeta =>
+      const TaskConstMeta(
+        debugName: "is_rust_file_scan_available",
+        argNames: [],
+      );
+
+  @override
+  bool crateApiTorrentIsTorrentEngineAvailable() {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiTorrentIsTorrentEngineAvailableConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentIsTorrentEngineAvailableConstMeta =>
+      const TaskConstMeta(
+        debugName: "is_torrent_engine_available",
+        argNames: [],
+      );
+
+  @override
+  Future<RustCpuSample> crateApiPerformanceSampleCpuCounters() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 6, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_cpu_sample,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiPerformanceSampleCpuCountersConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiPerformanceSampleCpuCountersConstMeta =>
+      const TaskConstMeta(
+        debugName: "sample_cpu_counters",
+        argNames: [],
+      );
+
+  @override
+  Future<RustGpuSample> crateApiPerformanceSampleGpuPercent() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 7, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_gpu_sample,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiPerformanceSampleGpuPercentConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiPerformanceSampleGpuPercentConstMeta =>
+      const TaskConstMeta(
+        debugName: "sample_gpu_percent",
+        argNames: [],
+      );
+
+  @override
+  Future<double> crateApiPerformanceSampleMemoryRssMb() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 8, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_f_64,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiPerformanceSampleMemoryRssMbConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiPerformanceSampleMemoryRssMbConstMeta =>
+      const TaskConstMeta(
+        debugName: "sample_memory_rss_mb",
+        argNames: [],
+      );
+
+  @override
+  Future<RustPerformanceSample> crateApiPerformanceSamplePerformance() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 9, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_performance_sample,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiPerformanceSamplePerformanceConstMeta,
+      argValues: [],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiPerformanceSamplePerformanceConstMeta =>
+      const TaskConstMeta(
+        debugName: "sample_performance",
+        argNames: [],
+      );
+
+  @override
+  Future<RustFileScanSnapshot> crateApiFileScanScanVideoFiles(
+      {required String folderPath}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(folderPath, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 10, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_rust_file_scan_snapshot,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiFileScanScanVideoFilesConstMeta,
+      argValues: [folderPath],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiFileScanScanVideoFilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "scan_video_files",
+        argNames: ["folderPath"],
+      );
+
+  @override
+  Future<String> crateApiTorrentTorrentAddFile(
+      {required String torrentFilePath, required String downloadDir}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(torrentFilePath, serializer);
+        sse_encode_String(downloadDir, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 11, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentAddFileConstMeta,
+      argValues: [torrentFilePath, downloadDir],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentAddFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_add_file",
+        argNames: ["torrentFilePath", "downloadDir"],
+      );
+
+  @override
+  Future<String> crateApiTorrentTorrentAddMagnet(
+      {required String magnetUri, required String downloadDir}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(magnetUri, serializer);
+        sse_encode_String(downloadDir, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 12, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentAddMagnetConstMeta,
+      argValues: [magnetUri, downloadDir],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentAddMagnetConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_add_magnet",
+        argNames: ["magnetUri", "downloadDir"],
+      );
+
+  @override
+  Future<void> crateApiTorrentTorrentDelete({required int id}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_i_32(id, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 13, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentDeleteConstMeta,
+      argValues: [id],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentDeleteConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_delete",
+        argNames: ["id"],
+      );
+
+  @override
+  Future<void> crateApiTorrentTorrentForget({required int id}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_i_32(id, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 14, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentForgetConstMeta,
+      argValues: [id],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentForgetConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_forget",
+        argNames: ["id"],
+      );
+
+  @override
+  Future<void> crateApiTorrentTorrentInitSession(
+      {required String downloadDir}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(downloadDir, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 15, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentInitSessionConstMeta,
+      argValues: [downloadDir],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentInitSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_init_session",
+        argNames: ["downloadDir"],
+      );
+
+  @override
+  Future<String> crateApiTorrentTorrentList({required String downloadDir}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(downloadDir, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 16, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentListConstMeta,
+      argValues: [downloadDir],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentListConstMeta => const TaskConstMeta(
+        debugName: "torrent_list",
+        argNames: ["downloadDir"],
+      );
+
+  @override
+  Future<void> crateApiTorrentTorrentPause({required int id}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_i_32(id, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 17, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentPauseConstMeta,
+      argValues: [id],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentPauseConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_pause",
+        argNames: ["id"],
+      );
+
+  @override
+  Future<void> crateApiTorrentTorrentResume({required int id}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_i_32(id, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 18, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentResumeConstMeta,
+      argValues: [id],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentResumeConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_resume",
+        argNames: ["id"],
+      );
+
+  @protected
+  String dco_decode_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as String;
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as Uint8List;
+  }
+
+  @protected
+  List<RustFileHashEntry> dco_decode_list_rust_file_hash_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_rust_file_hash_entry).toList();
+  }
+
+  @protected
+  List<RustFileScanEntry> dco_decode_list_rust_file_scan_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_rust_file_scan_entry).toList();
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_f_64(raw);
+  }
+
+  @protected
+  RustCpuSample dco_decode_rust_cpu_sample(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return RustCpuSample(
+      processCpuMicros: dco_decode_i_64(arr[0]),
+      timestampMs: dco_decode_i_64(arr[1]),
+      logicalCpus: dco_decode_i_32(arr[2]),
+    );
+  }
+
+  @protected
+  RustFileHashEntry dco_decode_rust_file_hash_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RustFileHashEntry(
+      relativePath: dco_decode_String(arr[0]),
+      hash: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  RustFileScanDiff dco_decode_rust_file_scan_diff(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return RustFileScanDiff(
+      currentCount: dco_decode_i_32(arr[0]),
+      cachedCount: dco_decode_i_32(arr[1]),
+      currentFiles: dco_decode_list_String(arr[2]),
+      newFiles: dco_decode_list_String(arr[3]),
+      modifiedFiles: dco_decode_list_String(arr[4]),
+      deletedFiles: dco_decode_list_String(arr[5]),
+      folderHash: dco_decode_String(arr[6]),
+      currentHashes: dco_decode_list_rust_file_hash_entry(arr[7]),
+    );
+  }
+
+  @protected
+  RustFileScanEntry dco_decode_rust_file_scan_entry(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return RustFileScanEntry(
+      relativePath: dco_decode_String(arr[0]),
+      absolutePath: dco_decode_String(arr[1]),
+      size: dco_decode_i_64(arr[2]),
+      modifiedMillis: dco_decode_i_64(arr[3]),
+      fileHash: dco_decode_String(arr[4]),
+    );
+  }
+
+  @protected
+  RustFileScanSnapshot dco_decode_rust_file_scan_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RustFileScanSnapshot(
+      folderHash: dco_decode_String(arr[0]),
+      files: dco_decode_list_rust_file_scan_entry(arr[1]),
+    );
+  }
+
+  @protected
+  RustGpuSample dco_decode_rust_gpu_sample(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RustGpuSample(
+      gpuPercent: dco_decode_f_64(arr[0]),
+      source: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  RustPerformanceSample dco_decode_rust_performance_sample(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return RustPerformanceSample(
+      cpuProcessPercent: dco_decode_opt_box_autoadd_f_64(arr[0]),
+      memoryRssMb: dco_decode_opt_box_autoadd_f_64(arr[1]),
+      gpuPercent: dco_decode_opt_box_autoadd_f_64(arr[2]),
+      source: dco_decode_String(arr[3]),
+      timestampMs: dco_decode_i_64(arr[4]),
+      note: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
+  int dco_decode_u_8(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  void dco_decode_unit(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return;
+  }
+
+  @protected
+  String sse_decode_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_list_prim_u_8_strict(deserializer);
+    return utf8.decoder.convert(inner);
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_f_64(deserializer));
+  }
+
+  @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<RustFileHashEntry> sse_decode_list_rust_file_hash_entry(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RustFileHashEntry>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_rust_file_hash_entry(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<RustFileScanEntry> sse_decode_list_rust_file_scan_entry(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RustFileScanEntry>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_rust_file_scan_entry(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_f_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  RustCpuSample sse_decode_rust_cpu_sample(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_processCpuMicros = sse_decode_i_64(deserializer);
+    var var_timestampMs = sse_decode_i_64(deserializer);
+    var var_logicalCpus = sse_decode_i_32(deserializer);
+    return RustCpuSample(
+        processCpuMicros: var_processCpuMicros,
+        timestampMs: var_timestampMs,
+        logicalCpus: var_logicalCpus);
+  }
+
+  @protected
+  RustFileHashEntry sse_decode_rust_file_hash_entry(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_relativePath = sse_decode_String(deserializer);
+    var var_hash = sse_decode_String(deserializer);
+    return RustFileHashEntry(relativePath: var_relativePath, hash: var_hash);
+  }
+
+  @protected
+  RustFileScanDiff sse_decode_rust_file_scan_diff(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_currentCount = sse_decode_i_32(deserializer);
+    var var_cachedCount = sse_decode_i_32(deserializer);
+    var var_currentFiles = sse_decode_list_String(deserializer);
+    var var_newFiles = sse_decode_list_String(deserializer);
+    var var_modifiedFiles = sse_decode_list_String(deserializer);
+    var var_deletedFiles = sse_decode_list_String(deserializer);
+    var var_folderHash = sse_decode_String(deserializer);
+    var var_currentHashes = sse_decode_list_rust_file_hash_entry(deserializer);
+    return RustFileScanDiff(
+        currentCount: var_currentCount,
+        cachedCount: var_cachedCount,
+        currentFiles: var_currentFiles,
+        newFiles: var_newFiles,
+        modifiedFiles: var_modifiedFiles,
+        deletedFiles: var_deletedFiles,
+        folderHash: var_folderHash,
+        currentHashes: var_currentHashes);
+  }
+
+  @protected
+  RustFileScanEntry sse_decode_rust_file_scan_entry(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_relativePath = sse_decode_String(deserializer);
+    var var_absolutePath = sse_decode_String(deserializer);
+    var var_size = sse_decode_i_64(deserializer);
+    var var_modifiedMillis = sse_decode_i_64(deserializer);
+    var var_fileHash = sse_decode_String(deserializer);
+    return RustFileScanEntry(
+        relativePath: var_relativePath,
+        absolutePath: var_absolutePath,
+        size: var_size,
+        modifiedMillis: var_modifiedMillis,
+        fileHash: var_fileHash);
+  }
+
+  @protected
+  RustFileScanSnapshot sse_decode_rust_file_scan_snapshot(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_folderHash = sse_decode_String(deserializer);
+    var var_files = sse_decode_list_rust_file_scan_entry(deserializer);
+    return RustFileScanSnapshot(folderHash: var_folderHash, files: var_files);
+  }
+
+  @protected
+  RustGpuSample sse_decode_rust_gpu_sample(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_gpuPercent = sse_decode_f_64(deserializer);
+    var var_source = sse_decode_String(deserializer);
+    return RustGpuSample(gpuPercent: var_gpuPercent, source: var_source);
+  }
+
+  @protected
+  RustPerformanceSample sse_decode_rust_performance_sample(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_cpuProcessPercent = sse_decode_opt_box_autoadd_f_64(deserializer);
+    var var_memoryRssMb = sse_decode_opt_box_autoadd_f_64(deserializer);
+    var var_gpuPercent = sse_decode_opt_box_autoadd_f_64(deserializer);
+    var var_source = sse_decode_String(deserializer);
+    var var_timestampMs = sse_decode_i_64(deserializer);
+    var var_note = sse_decode_opt_String(deserializer);
+    return RustPerformanceSample(
+        cpuProcessPercent: var_cpuProcessPercent,
+        memoryRssMb: var_memoryRssMb,
+        gpuPercent: var_gpuPercent,
+        source: var_source,
+        timestampMs: var_timestampMs,
+        note: var_note);
+  }
+
+  @protected
+  int sse_decode_u_8(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8();
+  }
+
+  @protected
+  void sse_decode_unit(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  void sse_encode_String(String self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_prim_u_8_strict(
+      Uint8List self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer.putUint8List(self);
+  }
+
+  @protected
+  void sse_encode_list_rust_file_hash_entry(
+      List<RustFileHashEntry> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_rust_file_hash_entry(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_rust_file_scan_entry(
+      List<RustFileScanEntry> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_rust_file_scan_entry(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_f_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_rust_cpu_sample(
+      RustCpuSample self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.processCpuMicros, serializer);
+    sse_encode_i_64(self.timestampMs, serializer);
+    sse_encode_i_32(self.logicalCpus, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_file_hash_entry(
+      RustFileHashEntry self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.relativePath, serializer);
+    sse_encode_String(self.hash, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_file_scan_diff(
+      RustFileScanDiff self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.currentCount, serializer);
+    sse_encode_i_32(self.cachedCount, serializer);
+    sse_encode_list_String(self.currentFiles, serializer);
+    sse_encode_list_String(self.newFiles, serializer);
+    sse_encode_list_String(self.modifiedFiles, serializer);
+    sse_encode_list_String(self.deletedFiles, serializer);
+    sse_encode_String(self.folderHash, serializer);
+    sse_encode_list_rust_file_hash_entry(self.currentHashes, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_file_scan_entry(
+      RustFileScanEntry self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.relativePath, serializer);
+    sse_encode_String(self.absolutePath, serializer);
+    sse_encode_i_64(self.size, serializer);
+    sse_encode_i_64(self.modifiedMillis, serializer);
+    sse_encode_String(self.fileHash, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_file_scan_snapshot(
+      RustFileScanSnapshot self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.folderHash, serializer);
+    sse_encode_list_rust_file_scan_entry(self.files, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_gpu_sample(
+      RustGpuSample self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self.gpuPercent, serializer);
+    sse_encode_String(self.source, serializer);
+  }
+
+  @protected
+  void sse_encode_rust_performance_sample(
+      RustPerformanceSample self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_box_autoadd_f_64(self.cpuProcessPercent, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.memoryRssMb, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.gpuPercent, serializer);
+    sse_encode_String(self.source, serializer);
+    sse_encode_i_64(self.timestampMs, serializer);
+    sse_encode_opt_String(self.note, serializer);
+  }
+
+  @protected
+  void sse_encode_u_8(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self);
+  }
+
+  @protected
+  void sse_encode_unit(void self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+}

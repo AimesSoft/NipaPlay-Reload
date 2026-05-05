@@ -173,6 +173,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         return _showWebDAVTab ? 1 : 0;
       case WebDAVQuickAccessProvider.tabMediaLibrary:
         return _showWebDAVTab ? 2 : 1;
+      case WebDAVQuickAccessProvider.tabTorrent:
+        return 0;
       case WebDAVQuickAccessProvider.tabAccount:
         return _showWebDAVTab ? 3 : 2;
       case WebDAVQuickAccessProvider.tabSettings:

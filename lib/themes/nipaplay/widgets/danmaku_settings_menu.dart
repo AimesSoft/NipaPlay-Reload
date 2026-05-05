@@ -58,7 +58,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
 
   final TextEditingController _blockWordController = TextEditingController();
   bool _hasBlockWordError = false;
-  String? _blockWordErrorMessage = '';
+  String? _blockWordErrorMessage;
   bool _isSavingDanmaku = false;
 
   @override

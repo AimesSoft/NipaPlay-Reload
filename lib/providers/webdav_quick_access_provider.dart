@@ -48,7 +48,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String _keyDefaultDirectory = 'webdav_default_directory';
   static const String _keyDefaultHomeTab = 'default_home_tab';
   static const String _keySortPreset = 'webdav_sort_preset';
-  static const String _keyAutoEnterSeasonFolder = 'webdav_auto_enter_season_folder';
+  static const String _keyAutoEnterSeasonFolder =
+      'webdav_auto_enter_season_folder';
   static const String _keySeasonFolderPattern = 'webdav_season_folder_pattern';
   static const String _keyShowPathBreadcrumb = 'webdav_show_path_breadcrumb';
   static const String _legacyDefaultPageIndexKey = 'default_page_index';
@@ -57,6 +58,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String tabHome = 'home';
   static const String tabVideo = 'video';
   static const String tabMediaLibrary = 'media_library';
+  static const String tabTorrent = 'torrent';
   static const String tabAccount = 'account';
   static const String tabSettings = 'settings';
   static const String tabWebDAV = 'webdav';
@@ -64,6 +66,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     tabHome,
     tabVideo,
     tabMediaLibrary,
+    tabTorrent,
     tabAccount,
     tabSettings,
     tabWebDAV,
@@ -97,7 +100,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       return tabHome;
     }
 
-    if (_isMaterialOnlyTab(_defaultHomeTab)) {
+    if (_isCupertinoOnlyTab(_defaultHomeTab) ||
+        !_allSupportedTabs.contains(_defaultHomeTab)) {
       return tabHome;
     }
 
@@ -107,9 +111,16 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   /// Material 主题可用的默认主页选项
   List<String> get materialAvailableTabs {
     if (_showWebDAVTab) {
-      return [tabHome, tabVideo, tabWebDAV, tabMediaLibrary, tabAccount];
+      return [
+        tabHome,
+        tabVideo,
+        tabWebDAV,
+        tabMediaLibrary,
+        tabTorrent,
+        tabAccount,
+      ];
     }
-    return [tabHome, tabVideo, tabMediaLibrary, tabAccount];
+    return [tabHome, tabVideo, tabMediaLibrary, tabTorrent, tabAccount];
   }
 
   /// Cupertino 主题可用的默认主页选项
@@ -134,6 +145,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
         return '视频播放';
       case tabMediaLibrary:
         return '媒体库';
+      case tabTorrent:
+        return '种子下载';
       case tabAccount:
         return '我的';
       case tabSettings:
@@ -172,8 +185,10 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
         _defaultHomeTab = _migrateLegacyDefaultPageIndex(prefs);
       }
       _sortPreset = WebDAVSortPreset.fromValue(prefs.getString(_keySortPreset));
-      _autoEnterSeasonFolder = prefs.getBool(_keyAutoEnterSeasonFolder) ?? false;
-      _seasonFolderPattern = prefs.getString(_keySeasonFolderPattern) ?? 'Season*';
+      _autoEnterSeasonFolder =
+          prefs.getBool(_keyAutoEnterSeasonFolder) ?? false;
+      _seasonFolderPattern =
+          prefs.getString(_keySeasonFolderPattern) ?? 'Season*';
       _showPathBreadcrumb = prefs.getBool(_keyShowPathBreadcrumb) ?? true;
 
       _isLoaded = true;
@@ -231,7 +246,7 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     }
   }
 
-  bool _isMaterialOnlyTab(String tabName) {
+  bool _isCupertinoOnlyTab(String tabName) {
     return tabName == tabSettings;
   }
 
@@ -361,9 +376,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       return null;
     }
 
-    final matchingFolders = folderNames
-        .where((name) => matchesSeasonPattern(name))
-        .toList();
+    final matchingFolders =
+        folderNames.where((name) => matchesSeasonPattern(name)).toList();
 
     // 如果只有一个匹配项，返回它
     if (matchingFolders.length == 1) {

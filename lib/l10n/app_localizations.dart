@@ -121,6 +121,12 @@ abstract class AppLocalizations {
   /// **'媒体库'**
   String get tabMediaLibrary;
 
+  /// No description provided for @tabTorrentDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'种子下载'**
+  String get tabTorrentDownload;
+
   /// No description provided for @tabAccount.
   ///
   /// In zh, this message translates to:
