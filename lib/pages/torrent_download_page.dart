@@ -29,7 +29,6 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   String _downloadDirectory = '';
   bool _isLoading = true;
   bool _isBusy = false;
-  bool _isVisible = false;
 
   @override
   void initState() {
@@ -57,24 +56,11 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     }
   }
 
-  /// Called by the parent when this page becomes visible/hidden.
-  void setVisible(bool visible) {
-    if (_isVisible == visible) return;
-    _isVisible = visible;
-    if (_isVisible) {
-      _startRefreshTimer();
-    } else {
-      _refreshTimer?.cancel();
-    }
-  }
-
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) {
-        if (_isVisible) _refreshTasks(silent: true);
-      },
+      (_) => _refreshTasks(silent: true),
     );
   }
 
