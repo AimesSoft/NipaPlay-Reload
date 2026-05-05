@@ -1829,6 +1829,51 @@ class DandanplayService {
     }
   }
 
+  /// 通过 Bangumi.tv subjectId 获取番剧详情
+  ///
+  /// 调用 /api/v2/bangumi/bgmtv/{bgmtvSubjectId} 接口
+  /// 返回包含 animeId、episodes 等信息的完整响应
+  static Future<Map<String, dynamic>?> getBangumiByBgmId(int bgmtvSubjectId) async {
+    try {
+      final appSecret = await getAppSecret();
+      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
+          .round();
+      final apiPath = '/api/v2/bangumi/bgmtv/$bgmtvSubjectId';
+
+      final headers = {
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+      };
+
+      if (_isLoggedIn && _token != null) {
+        headers['Authorization'] = 'Bearer $_token';
+      }
+
+      debugPrint('[弹弹play服务] 通过 bgmid 获取番剧详情: $bgmtvSubjectId');
+
+      final response = await http.get(
+        Uri.parse('${await getApiBaseUrl()}$apiPath'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['bangumi'] != null) {
+          return data;
+        }
+      }
+
+      debugPrint('[弹弹play服务] bgmid 匹配失败: HTTP ${response.statusCode}');
+      return null;
+    } catch (e) {
+      debugPrint('[弹弹play服务] 通过 bgmid 获取番剧详情出错: $e');
+      return null;
+    }
+  }
+
   // 获取用户对特定剧集的观看状态
   static Future<Map<int, bool>> getEpisodesWatchStatus(
     List<int> episodeIds,
