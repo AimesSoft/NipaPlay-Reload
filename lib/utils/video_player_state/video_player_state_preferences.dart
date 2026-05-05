@@ -1581,6 +1581,12 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _subtitleDelaySeconds = seconds;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_subtitleDelayKey, seconds);
+    // libass-wasm: timeOffset shifts subtitle timestamps relative to video position.
+    // Negate because a positive delay means we want subtitles to appear later,
+    // i.e., the sub timestamp "runs slower" → offset = -delay.
+    if (kIsWeb) {
+      LibassWebBridge.setTimeOffset(-seconds);
+    }
     await applySubtitleStylePreference();
     _notifyListeners();
   }

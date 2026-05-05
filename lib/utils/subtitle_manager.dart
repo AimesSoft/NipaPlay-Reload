@@ -11,6 +11,7 @@ import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 import 'package:nipaplay/utils/subtitle_language_utils.dart';
+import 'package:nipaplay/utils/libass_web_bridge.dart';
 
 /// 字幕管理器类，负责处理与字幕相关的所有功能
 class SubtitleManager extends ChangeNotifier {
@@ -304,6 +305,11 @@ class SubtitleManager extends ChangeNotifier {
 
   // 清空外部字幕状态，同时通知播放器关闭外挂轨道
   void _clearExternalSubtitleState({bool resetManualFlag = true}) {
+    // 若 libass-wasm 正在渲染，先释放它
+    if (kIsWeb) {
+      LibassWebBridge.dispose();
+    }
+
     try {
       if (_player.supportsExternalSubtitles) {
         _player.setMedia("", MediaType.subtitle);
@@ -350,6 +356,27 @@ class SubtitleManager extends ChangeNotifier {
       final loadToken = ++_subtitleLoadToken;
       final previousSubtitleTrackSignatures =
           _isMdkKernel() ? _snapshotCurrentSubtitleTrackSignatures() : null;
+
+      // Web + ASS/SSA: 通过 libass-wasm (SubtitlesOctopus) 渲染，绕过内核字幕管道
+      if (kIsWeb) {
+        if (path.isEmpty) {
+          LibassWebBridge.dispose();
+          _clearExternalSubtitleState();
+          onSubtitleTrackChanged();
+          notifyListeners();
+          return;
+        }
+        final ext = p.extension(path).toLowerCase();
+        if (ext == '.ass' || ext == '.ssa') {
+          _activateLibassSubtitle(path, isManualSetting: isManualSetting);
+          return;
+        }
+        // 非 ASS/SSA 格式在 web 上暂不支持
+        debugPrint('SubtitleManager: Web 平台暂仅支持 ASS/SSA 外挂字幕');
+        onUserNotification?.call('Web 播放器仅支持 .ass/.ssa 外挂字幕');
+        return;
+      }
+
       // NEW: Check if player supports external subtitles
       if (!_player.supportsExternalSubtitles && path.isNotEmpty) {
         debugPrint('SubtitleManager: 当前播放器内核不支持加载外部字幕');
@@ -426,6 +453,43 @@ class SubtitleManager extends ChangeNotifier {
     } catch (e) {
       debugPrint('设置外部字幕失败: $e');
     }
+  }
+
+  // Web ASS/SSA 字幕：通过 libass-wasm (SubtitlesOctopus) 渲染
+  void _activateLibassSubtitle(String path, {bool isManualSetting = false}) {
+    // 先释放旧实例（initWithUrl 内部也会释放，此处为了状态一致性先清理）
+    LibassWebBridge.dispose();
+
+    unawaited(LibassWebBridge.initWithUrl(path).then((_) {
+      debugPrint('SubtitleManager: libass 字幕已激活: $path');
+    }).catchError((e) {
+      debugPrint('SubtitleManager: libass 字幕激活失败: $e');
+    }));
+
+    _currentExternalSubtitlePath = path;
+    updateSubtitleTrackInfo('external_subtitle', {
+      'path': path,
+      'title': p.basename(path),
+      'isActive': true,
+      'isManualSet': isManualSetting,
+      'isLibass': true,
+    });
+
+    if (isManualSetting && _currentVideoPath != null) {
+      unawaited(saveVideoSubtitleMapping(_currentVideoPath!, path));
+    }
+    if (_currentVideoPath != null && _currentVideoPath!.isNotEmpty) {
+      unawaited(
+        _persistExternalSubtitleSelection(
+          videoPath: _currentVideoPath!,
+          subtitlePath: path,
+          isActive: true,
+        ),
+      );
+    }
+
+    onSubtitleTrackChanged();
+    notifyListeners();
   }
 
   bool _isMdkKernel() => _player.getPlayerKernelName() == 'MDK';

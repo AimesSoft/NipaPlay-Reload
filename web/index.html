@@ -31,6 +31,80 @@
 
   <title>nipaplay</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- libass-wasm (SubtitlesOctopus) for ASS/SSA subtitle rendering on web/Tizen -->
+  <script src="subtitles-octopus.js"></script>
+  <script>
+    // NipaPlay libass-wasm bridge helpers — called from Dart via dart:js_interop.
+    // The _nipaLibassInstance variable and all helper functions live here so that
+    // Dart only needs simple @JS external function declarations.
+    (function () {
+      'use strict';
+      var _instance = null;
+
+      window._nipaLibassCreate = function (videoElem, subUrl, subContent) {
+        // Dispose previous instance if any.
+        if (_instance) {
+          try { _instance.dispose(); } catch (e) {}
+          _instance = null;
+        }
+        if (typeof SubtitlesOctopus === 'undefined') {
+          console.warn('[NipaPlay libass] SubtitlesOctopus is not loaded.');
+          return;
+        }
+        var baseHref = (document.querySelector('base') || {}).href || location.href;
+        var baseUrl = new URL('.', baseHref).href;
+        var opts = {
+          video: videoElem,
+          workerUrl: baseUrl + 'subtitles-octopus-worker.js',
+          legacyWorkerUrl: baseUrl + 'subtitles-octopus-worker-legacy.js',
+          renderMode: 'wasm-blend',
+          dropAllAnimations: false,
+          libassMemoryLimit: 40,
+          libassGlyphLimit: 40,
+          onError: function (e) {
+            console.error('[NipaPlay libass] Render error:', e);
+          },
+        };
+        if (subContent && subContent.length > 0) {
+          opts.subContent = subContent;
+        } else if (subUrl && subUrl.length > 0) {
+          opts.subUrl = subUrl;
+        } else {
+          console.warn('[NipaPlay libass] Neither subUrl nor subContent provided.');
+          return;
+        }
+        try {
+          _instance = new SubtitlesOctopus(opts);
+        } catch (e) {
+          console.error('[NipaPlay libass] Failed to create instance:', e);
+        }
+      };
+
+      window._nipaLibassDispose = function () {
+        if (_instance) {
+          try { _instance.dispose(); } catch (e) {}
+          _instance = null;
+        }
+      };
+
+      window._nipaLibassResize = function () {
+        if (_instance) {
+          try { _instance.resize(); } catch (e) {}
+        }
+      };
+
+      window._nipaLibassSetTimeOffset = function (offset) {
+        if (_instance) {
+          try { _instance.timeOffset = offset; } catch (e) {}
+        }
+      };
+
+      window._nipaLibassIsActive = function () {
+        return _instance !== null;
+      };
+    })();
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
