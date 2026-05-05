@@ -1,5 +1,4 @@
 // remote_access_page.dart
-import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/service_provider.dart';
@@ -50,15 +49,16 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
     await _loadTrustedDevices();
 
     if (mounted) {
+      final shouldUpdateUrls = server.isRunning;
       setState(() {
         _webServerEnabled = server.isRunning;
         _receiverEnabled = receiverEnabled;
         _autoStartEnabled = server.autoStart;
         _currentPort = server.port;
-        if (_webServerEnabled) {
-          _updateAccessUrls();
-        }
       });
+      if (shouldUpdateUrls) {
+        _updateAccessUrls();
+      }
     }
   }
 
@@ -121,6 +121,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   Future<void> _fetchPublicIp() async {
     if (!_webServerEnabled) return;
 
+    if (!mounted) return;
     setState(() {
       _isLoadingPublicIp = true;
     });
@@ -137,6 +138,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         final ip = response.body.trim();
         // 确保是有效的IP地址
         if (ip.isNotEmpty && !ip.contains('<') && !ip.contains('>')) {
+          if (!mounted || !_webServerEnabled) return;
           setState(() {
             _publicIpUrl = 'http://$ip:$_currentPort';
             _isLoadingPublicIp = false;
@@ -149,6 +151,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
       }
     } catch (e) {
       debugPrint('获取公网IP出错: $e');
+      if (!mounted || !_webServerEnabled) return;
       setState(() {
         _publicIpUrl = null;
         _isLoadingPublicIp = false;

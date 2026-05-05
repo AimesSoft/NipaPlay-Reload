@@ -79,6 +79,7 @@ class _SettingsPageState extends State<SettingsPage>
   late TabController _tabController;
   static Color get _selectedColor => AppAccentColors.current;
   String? _selectedEntryId;
+  bool _didApplyInitialEntry = false;
 
   @override
   void initState() {
@@ -89,7 +90,13 @@ class _SettingsPageState extends State<SettingsPage>
       currentPage = const AboutPage();
       _selectedEntryId = NipaplaySettingEntryIds.about;
     }
+  }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didApplyInitialEntry) return;
+    _didApplyInitialEntry = true;
     _applyInitialEntry();
   }
 
