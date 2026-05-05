@@ -32,17 +32,21 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
     std::fs::create_dir_all(&normalized_dir)
         .map_err(|error| format!("failed to create download directory: {error}"))?;
 
-    // Check if we already have a session for this directory.
+    // Keep a single rqbit session per process. The current default download
+    // directory is still passed per torrent via AddTorrentOptions::output_folder.
+    // Recreating the session on every directory change can race with the old
+    // persistent DHT socket and fail to bind the saved DHT port.
     {
         let api_slot = state
             .api
             .lock()
             .map_err(|_| "torrent API lock poisoned".to_string())?;
-        let current_dir = state
-            .download_dir
-            .lock()
-            .map_err(|_| "torrent download directory lock poisoned".to_string())?;
-        if api_slot.is_some() && current_dir.as_deref() == Some(normalized_dir.as_str()) {
+        if api_slot.is_some() {
+            let mut current_dir = state
+                .download_dir
+                .lock()
+                .map_err(|_| "torrent download directory lock poisoned".to_string())?;
+            *current_dir = Some(normalized_dir);
             return Ok(());
         }
     }
@@ -216,9 +220,9 @@ fn normalize_download_dir(download_dir: String) -> Result<String, String> {
             .parent()
             .filter(|p| p.exists())
             .ok_or_else(|| format!("parent directory for '{}' does not exist", download_dir))?;
-        let canon_parent = parent.canonicalize().map_err(|error| {
-            format!("invalid parent directory for '{}': {error}", download_dir)
-        })?;
+        let canon_parent = parent
+            .canonicalize()
+            .map_err(|error| format!("invalid parent directory for '{}': {error}", download_dir))?;
         let file_name = path
             .file_name()
             .ok_or_else(|| "invalid download directory path".to_string())?;

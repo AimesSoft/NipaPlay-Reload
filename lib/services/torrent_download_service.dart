@@ -35,9 +35,7 @@ class TorrentDownloadService {
       SettingsKeys.torrentDownloadDirectory,
       trimmed,
     );
-    // Invalidate cache so _initSession re-initializes with the new dir.
-    _sessionInitialized = false;
-    await _initSession(trimmed);
+    _sessionDownloadDir = trimmed;
   }
 
   Future<void> initialize() async {
