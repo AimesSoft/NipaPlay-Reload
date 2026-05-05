@@ -107,10 +107,14 @@ abstract class RustLibApi extends BaseApi {
       {required String folderPath});
 
   Future<String> crateApiTorrentTorrentAddFile(
-      {required String torrentFilePath, required String downloadDir});
+      {required String torrentFilePath,
+      required String downloadDir,
+      required bool createFolderForTask});
 
   Future<String> crateApiTorrentTorrentAddMagnet(
-      {required String magnetUri, required String downloadDir});
+      {required String magnetUri,
+      required String downloadDir,
+      required bool createFolderForTask});
 
   Future<void> crateApiTorrentTorrentDelete({required int id});
 
@@ -377,12 +381,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateApiTorrentTorrentAddFile(
-      {required String torrentFilePath, required String downloadDir}) {
+      {required String torrentFilePath,
+      required String downloadDir,
+      required bool createFolderForTask}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(torrentFilePath, serializer);
         sse_encode_String(downloadDir, serializer);
+        sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 11, port: port_);
       },
@@ -391,7 +398,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_String,
       ),
       constMeta: kCrateApiTorrentTorrentAddFileConstMeta,
-      argValues: [torrentFilePath, downloadDir],
+      argValues: [torrentFilePath, downloadDir, createFolderForTask],
       apiImpl: this,
     ));
   }
@@ -399,17 +406,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTorrentTorrentAddFileConstMeta =>
       const TaskConstMeta(
         debugName: "torrent_add_file",
-        argNames: ["torrentFilePath", "downloadDir"],
+        argNames: ["torrentFilePath", "downloadDir", "createFolderForTask"],
       );
 
   @override
   Future<String> crateApiTorrentTorrentAddMagnet(
-      {required String magnetUri, required String downloadDir}) {
+      {required String magnetUri,
+      required String downloadDir,
+      required bool createFolderForTask}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(magnetUri, serializer);
         sse_encode_String(downloadDir, serializer);
+        sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 12, port: port_);
       },
@@ -418,7 +428,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: sse_decode_String,
       ),
       constMeta: kCrateApiTorrentTorrentAddMagnetConstMeta,
-      argValues: [magnetUri, downloadDir],
+      argValues: [magnetUri, downloadDir, createFolderForTask],
       apiImpl: this,
     ));
   }
@@ -426,7 +436,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTorrentTorrentAddMagnetConstMeta =>
       const TaskConstMeta(
         debugName: "torrent_add_magnet",
-        argNames: ["magnetUri", "downloadDir"],
+        argNames: ["magnetUri", "downloadDir", "createFolderForTask"],
       );
 
   @override

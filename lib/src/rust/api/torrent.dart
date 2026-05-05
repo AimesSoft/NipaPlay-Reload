@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `current_api`, `normalize_download_dir`, `normalize_torrent_id`, `response_to_json`, `torrent_runtime`
+// These functions are ignored because they are not marked as `pub`: `add_torrent_options`, `current_api`, `default_session_dir`, `file_stem_folder_name`, `magnet_folder_name`, `normalize_download_dir`, `normalize_torrent_id`, `response_to_json`, `sanitize_folder_name`, `torrent_runtime`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `TorrentRuntime`
 
 Future<void> torrentInitSession({required String downloadDir}) =>
@@ -14,14 +14,22 @@ Future<void> torrentInitSession({required String downloadDir}) =>
         .crateApiTorrentTorrentInitSession(downloadDir: downloadDir);
 
 Future<String> torrentAddMagnet(
-        {required String magnetUri, required String downloadDir}) =>
+        {required String magnetUri,
+        required String downloadDir,
+        required bool createFolderForTask}) =>
     RustLib.instance.api.crateApiTorrentTorrentAddMagnet(
-        magnetUri: magnetUri, downloadDir: downloadDir);
+        magnetUri: magnetUri,
+        downloadDir: downloadDir,
+        createFolderForTask: createFolderForTask);
 
 Future<String> torrentAddFile(
-        {required String torrentFilePath, required String downloadDir}) =>
+        {required String torrentFilePath,
+        required String downloadDir,
+        required bool createFolderForTask}) =>
     RustLib.instance.api.crateApiTorrentTorrentAddFile(
-        torrentFilePath: torrentFilePath, downloadDir: downloadDir);
+        torrentFilePath: torrentFilePath,
+        downloadDir: downloadDir,
+        createFolderForTask: createFolderForTask);
 
 Future<String> torrentList({required String downloadDir}) =>
     RustLib.instance.api.crateApiTorrentTorrentList(downloadDir: downloadDir);

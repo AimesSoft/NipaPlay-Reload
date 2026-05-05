@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
+import 'package:nipaplay/services/folder_opener.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -29,7 +30,6 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   String _downloadDirectory = '';
   bool _isLoading = true;
   bool _isBusy = false;
-  bool _isVisible = false;
 
   @override
   void initState() {
@@ -57,24 +57,11 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     }
   }
 
-  /// Called by the parent when this page becomes visible/hidden.
-  void setVisible(bool visible) {
-    if (_isVisible == visible) return;
-    _isVisible = visible;
-    if (_isVisible) {
-      _startRefreshTimer();
-    } else {
-      _refreshTimer?.cancel();
-    }
-  }
-
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) {
-        if (_isVisible) _refreshTasks(silent: true);
-      },
+      (_) => _refreshTasks(silent: true),
     );
   }
 
@@ -242,6 +229,14 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     );
   }
 
+  Future<void> _openTaskFolder(TorrentTask task) async {
+    final ok = await FolderOpener.open(task.outputFolder);
+    if (!mounted) return;
+    if (!ok) {
+      BlurSnackBar.show(context, '打开文件夹失败');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -327,6 +322,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       itemBuilder: (context, task) => _TorrentTaskCard(
         task: task,
         onToggle: () => _toggleTask(task),
+        onOpenFolder: () => _openTaskFolder(task),
         onForget: () => _forgetTask(task),
         onDelete: () => _deleteTask(task),
       ),
@@ -567,12 +563,14 @@ class _TorrentTaskCard extends StatelessWidget {
   const _TorrentTaskCard({
     required this.task,
     required this.onToggle,
+    required this.onOpenFolder,
     required this.onForget,
     required this.onDelete,
   });
 
   final TorrentTask task;
   final VoidCallback onToggle;
+  final VoidCallback onOpenFolder;
   final VoidCallback onForget;
   final VoidCallback onDelete;
 
@@ -672,12 +670,20 @@ class _TorrentTaskCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
+                if (!task.finished) ...[
+                  _TorrentHoverAction(
+                    icon: task.isPaused
+                        ? Ionicons.play_outline
+                        : Ionicons.pause_outline,
+                    label: task.isPaused ? '继续' : '暂停',
+                    onPressed: onToggle,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 _TorrentHoverAction(
-                  icon: task.isPaused
-                      ? Ionicons.play_outline
-                      : Ionicons.pause_outline,
-                  label: task.isPaused ? '继续' : '暂停',
-                  onPressed: onToggle,
+                  icon: Ionicons.folder_open_outline,
+                  label: '打开文件夹',
+                  onPressed: onOpenFolder,
                 ),
                 const SizedBox(width: 8),
                 _TorrentHoverAction(

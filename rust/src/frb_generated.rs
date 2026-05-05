@@ -393,12 +393,14 @@ fn wire__crate__api__torrent__torrent_add_file_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_torrent_file_path = <String>::sse_decode(&mut deserializer);
             let api_download_dir = <String>::sse_decode(&mut deserializer);
+            let api_create_folder_for_task = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::torrent::torrent_add_file(
                         api_torrent_file_path,
                         api_download_dir,
+                        api_create_folder_for_task,
                     )?;
                     Ok(output_ok)
                 })())
@@ -430,11 +432,15 @@ fn wire__crate__api__torrent__torrent_add_magnet_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_magnet_uri = <String>::sse_decode(&mut deserializer);
             let api_download_dir = <String>::sse_decode(&mut deserializer);
+            let api_create_folder_for_task = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
-                    let output_ok =
-                        crate::api::torrent::torrent_add_magnet(api_magnet_uri, api_download_dir)?;
+                    let output_ok = crate::api::torrent::torrent_add_magnet(
+                        api_magnet_uri,
+                        api_download_dir,
+                        api_create_folder_for_task,
+                    )?;
                     Ok(output_ok)
                 })())
             }

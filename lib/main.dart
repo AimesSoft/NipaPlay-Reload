@@ -41,6 +41,7 @@ import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -679,6 +680,7 @@ void main(List<String> args) async {
           ChangeNotifierProvider.value(value: ServiceProvider.scanService),
           ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
           ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
+          ChangeNotifierProvider(create: (_) => DownloaderSettingsProvider()),
           ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
           ChangeNotifierProvider(create: (_) => PluginService()),
           ChangeNotifierProvider(create: (_) => HomeSectionsSettingsProvider()),
@@ -1096,6 +1098,7 @@ class MainPageState extends State<MainPage>
   bool _isThemeRevealRunning = false;
   bool _useLargeScreenLayout = false;
   StreamSubscription<String>? _androidFileAssociationSubscription;
+  DownloaderSettingsProvider? _downloaderSettingsProvider;
 
   // 动态页面列表
   static const List<Widget> _basePages = [
@@ -1107,6 +1110,7 @@ class MainPageState extends State<MainPage>
   ];
   List<Widget> _pages = [];
   bool _showWebDAVTab = false;
+  bool _showDownloaderTab = true;
   WebDAVQuickAccessProvider? _webdavQuickAccessProvider;
 
   // 用于热键管理
@@ -1215,6 +1219,17 @@ class MainPageState extends State<MainPage>
     } catch (e) {
       debugPrint('加载 WebDAV 快捷设置失败: $e');
     }
+    try {
+      _downloaderSettingsProvider =
+          Provider.of<DownloaderSettingsProvider>(context, listen: false);
+      while (!_downloaderSettingsProvider!.isLoaded) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+      _showDownloaderTab = _downloaderSettingsProvider!.enabled;
+      _downloaderSettingsProvider!.addListener(_onDownloaderSettingsChanged);
+    } catch (e) {
+      debugPrint('加载下载器设置失败: $e');
+    }
 
     // 构建初始页面列表
     _rebuildPages();
@@ -1257,10 +1272,31 @@ class MainPageState extends State<MainPage>
     }
   }
 
+  void _onDownloaderSettingsChanged() {
+    final showDownloaderTab = _downloaderSettingsProvider?.enabled ?? true;
+    final currentIndex = globalTabController?.index;
+    final previousShowDownloaderTab = _showDownloaderTab;
+    final currentNeedsRebuild = showDownloaderTab != _showDownloaderTab;
+    if (!currentNeedsRebuild) return;
+
+    _showDownloaderTab = showDownloaderTab;
+    _rebuildPages();
+    _rebuildTabController(
+      targetIndex: _remapIndexForDownloaderToggle(
+        currentIndex: currentIndex,
+        oldShowDownloaderTab: previousShowDownloaderTab,
+        newShowDownloaderTab: showDownloaderTab,
+      ),
+    );
+  }
+
   void _rebuildPages() {
     _pages = List<Widget>.from(_basePages);
     if (_showWebDAVTab) {
       _pages.insert(2, const WebDAVBrowserPage());
+    }
+    if (!_showDownloaderTab) {
+      _pages.removeAt(_showWebDAVTab ? 4 : 3);
     }
   }
 
@@ -1298,8 +1334,12 @@ class MainPageState extends State<MainPage>
       case WebDAVQuickAccessProvider.tabMediaLibrary:
         return hasWebDAVTab ? 3 : 2;
       case WebDAVQuickAccessProvider.tabTorrent:
+        if (!_showDownloaderTab) return 0;
         return hasWebDAVTab ? 4 : 3;
       case WebDAVQuickAccessProvider.tabAccount:
+        if (!_showDownloaderTab) {
+          return hasWebDAVTab ? 4 : 3;
+        }
         return hasWebDAVTab ? 5 : 4;
       default:
         return 0;
@@ -1307,11 +1347,43 @@ class MainPageState extends State<MainPage>
   }
 
   int _normalizeTabIndex(int requestedIndex) {
+    if (!_showDownloaderTab && requestedIndex == tabTorrentDownload) {
+      return 0;
+    }
+    if (!_showDownloaderTab && requestedIndex > tabTorrentDownload) {
+      requestedIndex -= 1;
+    }
     if (_showWebDAVTab && requestedIndex >= 2) {
       return requestedIndex + 1;
     }
     final maxIndex = _pages.length - 1;
     return requestedIndex.clamp(0, maxIndex).toInt();
+  }
+
+  int _remapIndexForDownloaderToggle({
+    required int? currentIndex,
+    required bool oldShowDownloaderTab,
+    required bool newShowDownloaderTab,
+  }) {
+    if (currentIndex == null) {
+      return _getInitialTabIndex();
+    }
+    if (oldShowDownloaderTab == newShowDownloaderTab) {
+      return currentIndex;
+    }
+    if (newShowDownloaderTab) {
+      final insertedIndex = _showWebDAVTab ? 4 : 3;
+      if (currentIndex >= insertedIndex) return currentIndex + 1;
+      return currentIndex;
+    }
+    final downloaderIndex = _showWebDAVTab ? 4 : 3;
+    if (currentIndex == downloaderIndex) {
+      return 0;
+    }
+    if (currentIndex > downloaderIndex) {
+      return currentIndex - 1;
+    }
+    return currentIndex;
   }
 
   int _remapIndexForWebDAVToggle({
@@ -1476,6 +1548,7 @@ class MainPageState extends State<MainPage>
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
+    _downloaderSettingsProvider?.removeListener(_onDownloaderSettingsChanged);
     _androidFileAssociationSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
@@ -1722,8 +1795,11 @@ class MainPageState extends State<MainPage>
             builder: (context, shouldShowAppBar, child) {
               return CustomScaffold(
                 pages: _pages,
-                tabPage:
-                    createTabLabels(context, showWebDAVTab: _showWebDAVTab),
+                tabPage: createTabLabels(
+                  context,
+                  showWebDAVTab: _showWebDAVTab,
+                  showDownloaderTab: _showDownloaderTab,
+                ),
                 pageIsHome: true,
                 shouldShowAppBar: shouldShowAppBar,
                 tabController: globalTabController,

@@ -27,4 +27,9 @@ class SettingsKeys {
   static const String labsEnableRustFileScan = 'labs_enable_rust_file_scan';
 
   static const String torrentDownloadDirectory = 'torrent_download_directory';
+
+  static const String downloaderEnabled = 'downloader_enabled';
+
+  static const String downloaderCreateFolderForTask =
+      'downloader_create_folder_for_task';
 }
