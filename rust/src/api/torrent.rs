@@ -16,7 +16,7 @@ fn torrent_runtime() -> &'static TorrentRuntime {
     static INSTANCE: OnceLock<TorrentRuntime> = OnceLock::new();
     INSTANCE.get_or_init(|| TorrentRuntime {
         runtime: Builder::new_multi_thread()
-            .worker_threads(2)
+            .worker_threads(4)
             .enable_all()
             .thread_name("nipaplay-torrent")
             .build()
@@ -32,40 +32,49 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
     std::fs::create_dir_all(&normalized_dir)
         .map_err(|error| format!("failed to create download directory: {error}"))?;
 
+    // Check if we already have a session for this directory.
     {
-        let mut api_slot = state
+        let api_slot = state
             .api
             .lock()
             .map_err(|_| "torrent API lock poisoned".to_string())?;
-        if api_slot.is_none() {
-            let session_dir = default_session_dir(&normalized_dir);
-            let session = state.runtime.block_on(async {
-                Session::new_with_opts(
-                    PathBuf::from(&normalized_dir),
-                    SessionOptions {
-                        fastresume: true,
-                        persistence: Some(SessionPersistenceConfig::Json {
-                            folder: Some(session_dir),
-                        }),
-                        ..Default::default()
-                    },
-                )
-                .await
-                .map_err(|error| format!("failed to create torrent session: {error:#}"))
-            })?;
-            *api_slot = Some(Api::new(Arc::clone(&session), None));
-        }
-    }
-    {
-        let mut current_dir = state
+        let current_dir = state
             .download_dir
             .lock()
             .map_err(|_| "torrent download directory lock poisoned".to_string())?;
-        if current_dir.as_deref() == Some(normalized_dir.as_str()) {
+        if api_slot.is_some() && current_dir.as_deref() == Some(normalized_dir.as_str()) {
             return Ok(());
         }
-        *current_dir = Some(normalized_dir);
     }
+
+    // Session does not exist or download directory changed – (re)create it.
+    let session_dir = default_session_dir(&normalized_dir);
+    let session = state.runtime.block_on(async {
+        Session::new_with_opts(
+            PathBuf::from(&normalized_dir),
+            SessionOptions {
+                fastresume: true,
+                persistence: Some(SessionPersistenceConfig::Json {
+                    folder: Some(session_dir),
+                }),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|error| format!("failed to create torrent session: {error:#}"))
+    })?;
+
+    let mut api_slot = state
+        .api
+        .lock()
+        .map_err(|_| "torrent API lock poisoned".to_string())?;
+    *api_slot = Some(Api::new(Arc::clone(&session), None));
+
+    let mut current_dir = state
+        .download_dir
+        .lock()
+        .map_err(|_| "torrent download directory lock poisoned".to_string())?;
+    *current_dir = Some(normalized_dir);
 
     Ok(())
 }
@@ -193,7 +202,33 @@ fn normalize_download_dir(download_dir: String) -> Result<String, String> {
     if download_dir.is_empty() {
         return Err("download directory is empty".to_string());
     }
-    Ok(download_dir.to_string())
+    let path = std::path::PathBuf::from(download_dir);
+
+    // Canonicalize to resolve symlinks and relative components (e.g. ../../).
+    // This prevents path-traversal attacks.
+    let canonical = if path.exists() {
+        path.canonicalize()
+            .map_err(|error| format!("invalid download directory '{}': {error}", download_dir))?
+    } else {
+        // Path doesn't exist yet – canonicalize the parent and append the
+        // final component so the caller can later create_dir_all on it.
+        let parent = path
+            .parent()
+            .filter(|p| p.exists())
+            .ok_or_else(|| format!("parent directory for '{}' does not exist", download_dir))?;
+        let canon_parent = parent.canonicalize().map_err(|error| {
+            format!("invalid parent directory for '{}': {error}", download_dir)
+        })?;
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| "invalid download directory path".to_string())?;
+        canon_parent.join(file_name)
+    };
+
+    canonical
+        .into_os_string()
+        .into_string()
+        .map_err(|_| "download directory path contains invalid unicode".to_string())
 }
 
 fn default_session_dir(download_dir: &str) -> PathBuf {

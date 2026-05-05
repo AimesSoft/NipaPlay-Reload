@@ -20,7 +20,8 @@ class TorrentDownloadPage extends StatefulWidget {
   State<TorrentDownloadPage> createState() => _TorrentDownloadPageState();
 }
 
-class _TorrentDownloadPageState extends State<TorrentDownloadPage> {
+class _TorrentDownloadPageState extends State<TorrentDownloadPage>
+    with WidgetsBindingObserver {
   final TorrentDownloadService _service = TorrentDownloadService.instance;
   final TextEditingController _magnetController = TextEditingController();
   Timer? _refreshTimer;
@@ -28,22 +29,53 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage> {
   String _downloadDirectory = '';
   bool _isLoading = true;
   bool _isBusy = false;
+  bool _isVisible = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initialize();
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _refreshTasks(silent: true),
-    );
+    _startRefreshTimer();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _magnetController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Stop refreshing when app is backgrounded, resume when foregrounded.
+    if (state == AppLifecycleState.resumed) {
+      _startRefreshTimer();
+    } else if (state == AppLifecycleState.paused) {
+      _refreshTimer?.cancel();
+    }
+  }
+
+  /// Called by the parent when this page becomes visible/hidden.
+  void setVisible(bool visible) {
+    if (_isVisible == visible) return;
+    _isVisible = visible;
+    if (_isVisible) {
+      _startRefreshTimer();
+    } else {
+      _refreshTimer?.cancel();
+    }
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) {
+        if (_isVisible) _refreshTasks(silent: true);
+      },
+    );
   }
 
   Future<void> _initialize() async {

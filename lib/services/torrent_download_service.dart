@@ -10,6 +10,9 @@ class TorrentDownloadService {
 
   static final TorrentDownloadService instance = TorrentDownloadService._();
 
+  bool _sessionInitialized = false;
+  String _sessionDownloadDir = '';
+
   Future<String> getDownloadDirectory() async {
     final saved = await SettingsStorage.loadString(
       SettingsKeys.torrentDownloadDirectory,
@@ -32,6 +35,8 @@ class TorrentDownloadService {
       SettingsKeys.torrentDownloadDirectory,
       trimmed,
     );
+    // Invalidate cache so _initSession re-initializes with the new dir.
+    _sessionInitialized = false;
     await _initSession(trimmed);
   }
 
@@ -85,7 +90,10 @@ class TorrentDownloadService {
   }
 
   Future<void> _initSession(String downloadDir) async {
+    if (_sessionInitialized && _sessionDownloadDir == downloadDir) return;
     await ensureRustInitialized();
     await rust_torrent.torrentInitSession(downloadDir: downloadDir);
+    _sessionInitialized = true;
+    _sessionDownloadDir = downloadDir;
   }
 }

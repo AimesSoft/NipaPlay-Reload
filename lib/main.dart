@@ -1083,6 +1083,13 @@ class MainPage extends StatefulWidget {
 
 class MainPageState extends State<MainPage>
     with TickerProviderStateMixin, WindowListener {
+  // Base tab indices (before WebDAV insertion).
+  static const int tabHome = 0;
+  static const int tabVideoPlay = 1;
+  static const int tabMediaLibrary = 2;
+  static const int tabTorrentDownload = 3;
+  static const int tabAccount = 4;
+
   bool isMaximized = false;
   TabController? globalTabController;
   bool _showSplash = true;

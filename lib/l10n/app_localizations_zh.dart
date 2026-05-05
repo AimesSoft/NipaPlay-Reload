@@ -21,6 +21,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tabMediaLibrary => '媒体库';
 
   @override
+  String get tabTorrentDownload => '种子下载';
+
+  @override
   String get tabAccount => '个人中心';
 
   @override
@@ -1721,6 +1724,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get tabMediaLibrary => '媒體庫';
+
+  @override
+  String get tabTorrentDownload => '種子下載';
 
   @override
   String get tabAccount => '個人中心';
