@@ -772,7 +772,7 @@ class JellyfinService extends MediaServerServiceBase
     }
 
     final response = await _makeAuthenticatedRequest(
-        '/Shows/$seriesId/Episodes?userId=$_userId&seasonId=$seasonId&fields=Overview,UserData&enableUserData=true');
+        '/Shows/$seriesId/Episodes?userId=$_userId&seasonId=$seasonId&Fields=Overview,UserData&EnableUserData=true');
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -917,7 +917,7 @@ class JellyfinService extends MediaServerServiceBase
     try {
       // 使用adjacentTo参数获取相邻剧集，限制3个结果（上一集、当前集、下一集）
       final response = await _makeAuthenticatedRequest(
-          '/Items?adjacentTo=$currentEpisodeId&limit=3&fields=Overview,MediaSources');
+          '/Items?adjacentTo=$currentEpisodeId&limit=3&Fields=Overview,MediaSources');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
