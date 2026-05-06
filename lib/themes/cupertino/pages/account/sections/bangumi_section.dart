@@ -1,6 +1,9 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:intl/intl.dart';
+
+enum _BangumiSyncHelpService { dandanplay, nipaplay }
 
 class CupertinoBangumiSection extends StatelessWidget {
   final bool isAuthorized;
@@ -52,6 +55,65 @@ class CupertinoBangumiSection extends StatelessWidget {
     required this.onOpenHelp,
   });
 
+  Future<void> _showBangumiSyncHelpDialog(
+    BuildContext context,
+    _BangumiSyncHelpService service,
+  ) async {
+    final isDandanplay = service == _BangumiSyncHelpService.dandanplay;
+    final title = isDandanplay ? '弹弹play Bangumi同步说明' : 'NipaPlay Bangumi同步说明';
+    final message = isDandanplay
+        ? '这是弹弹play提供的 Bangumi 同步服务，会在你看完后自动同步观看记录。\n\n你可以和下方 NipaPlay 的 Bangumi 同步配合使用，也可以按需只使用其中之一。'
+        : '这是 NipaPlay 提供的 Bangumi 服务。默认需要你在番剧详情页手动配置观看集数；支持打分和写评价，也支持按钮一键同步。\n\n你可以和上方弹弹play同步配合使用，也可以按需只使用其中之一。';
+
+    await CupertinoBottomSheet.show<void>(
+      context: context,
+      title: title,
+      heightRatio: 0.55,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              message,
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 15,
+                    height: 1.45,
+                    color: CupertinoDynamicColor.resolve(
+                      CupertinoColors.label,
+                      context,
+                    ),
+                  ),
+            ),
+            const SizedBox(height: 16),
+            AdaptiveButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: AdaptiveButtonStyle.filled,
+              color: CupertinoTheme.of(context).primaryColor,
+              label: '知道了',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBangumiSyncHelpButton(
+    BuildContext context,
+    _BangumiSyncHelpService service,
+  ) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minSize: 28,
+      onPressed: () => _showBangumiSyncHelpDialog(context, service),
+      child: Icon(
+        CupertinoIcons.question_circle,
+        size: 18,
+        color: CupertinoTheme.of(context).primaryColor,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -98,12 +160,22 @@ class CupertinoBangumiSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '弹弹play内置 Bangumi 绑定（仅同步进度）',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '弹弹play内置 Bangumi 绑定（仅同步进度）',
+                  style: CupertinoTheme.of(context)
+                      .textTheme
+                      .textStyle
+                      .copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              _buildBangumiSyncHelpButton(
+                context,
+                _BangumiSyncHelpService.dandanplay,
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Text(
@@ -171,10 +243,10 @@ class CupertinoBangumiSection extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '此方式不支持评论，仅用于弹弹服务器自动同步观看历史。',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(fontSize: 13, color: CupertinoColors.systemGrey),
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  fontSize: 13,
+                  color: CupertinoColors.systemGrey,
+                ),
           ),
         ],
       ),
@@ -220,26 +292,33 @@ class CupertinoBangumiSection extends StatelessWidget {
                   color: iconColor.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  CupertinoIcons.cloud_upload,
-                  color: iconColor,
-                ),
+                child: Icon(CupertinoIcons.cloud_upload, color: iconColor),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: CupertinoTheme.of(context)
-                          .textTheme
-                          .textStyle
-                          .copyWith(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: textColor,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: CupertinoTheme.of(context)
+                                .textTheme
+                                .textStyle
+                                .copyWith(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: textColor,
+                                ),
                           ),
+                        ),
+                        _buildBangumiSyncHelpButton(
+                          context,
+                          _BangumiSyncHelpService.nipaplay,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -258,10 +337,10 @@ class CupertinoBangumiSection extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               syncInfo,
-              style: CupertinoTheme.of(context)
-                  .textTheme
-                  .textStyle
-                  .copyWith(fontSize: 13, color: CupertinoColors.systemGrey),
+              style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                    fontSize: 13,
+                    color: CupertinoColors.systemGrey,
+                  ),
             ),
           ],
           if (isSyncing) ...[
@@ -294,18 +373,17 @@ class CupertinoBangumiSection extends StatelessWidget {
         children: [
           Text(
             '访问令牌',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 12),
           Text(
             '在 Bangumi 网站生成访问令牌后粘贴到此处。',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(color: CupertinoColors.systemGrey),
+            style: CupertinoTheme.of(
+              context,
+            ).textTheme.textStyle.copyWith(color: CupertinoColors.systemGrey),
           ),
           const SizedBox(height: 12),
           AdaptiveTextField(
@@ -374,10 +452,10 @@ class CupertinoBangumiSection extends StatelessWidget {
         children: [
           Text(
             '同步操作',
-            style: CupertinoTheme.of(context)
-                .textTheme
-                .textStyle
-                .copyWith(fontSize: 16, fontWeight: FontWeight.w600),
+            style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 16),
           AdaptiveButton(
