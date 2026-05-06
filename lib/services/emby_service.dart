@@ -855,7 +855,7 @@ class EmbyService extends MediaServerServiceBase
     }
 
     final response = await _makeAuthenticatedRequest(
-        '/emby/Shows/$seriesId/Episodes?userId=$_userId&seasonId=$seasonId');
+        '/emby/Shows/$seriesId/Episodes?userId=$_userId&seasonId=$seasonId&Fields=Overview,UserData');
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);

@@ -1238,15 +1238,29 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                     ),
                 ],
               ),
-              trailing: AnimatedScale(
-                scale: isEpisodeHovered ? 1.1 : 1.0,
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                child: Icon(
-                  Ionicons.play_circle_outline,
-                  color: playIconColor,
-                  size: 22,
-                ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (episode.userData?.played == true)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: Icon(
+                        Ionicons.checkmark_circle,
+                        color: accentColor.withOpacity(0.7),
+                        size: 18,
+                      ),
+                    ),
+                  AnimatedScale(
+                    scale: isEpisodeHovered ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Ionicons.play_circle_outline,
+                      color: playIconColor,
+                      size: 22,
+                    ),
+                  ),
+                ],
               ),
               onTap: () async {
                 if (_isDetailAutoMatching) {

@@ -772,7 +772,7 @@ class JellyfinService extends MediaServerServiceBase
     }
 
     final response = await _makeAuthenticatedRequest(
-        '/Shows/$seriesId/Episodes?userId=$_userId&seasonId=$seasonId');
+        '/Shows/$seriesId/Episodes?userId=$_userId&seasonId=$seasonId&fields=Overview,UserData');
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);

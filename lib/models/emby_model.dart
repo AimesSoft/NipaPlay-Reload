@@ -241,6 +241,7 @@ class EmbyEpisodeInfo {
   final DateTime dateAdded;
   final String? premiereDate;
   final int? runTimeTicks;
+  final EmbyUserData? userData;
   
   EmbyEpisodeInfo({
     required this.id,
@@ -256,6 +257,7 @@ class EmbyEpisodeInfo {
     required this.dateAdded,
     this.premiereDate,
     this.runTimeTicks,
+    this.userData,
   });
   
   factory EmbyEpisodeInfo.fromJson(Map<String, dynamic> json) {
@@ -273,6 +275,7 @@ class EmbyEpisodeInfo {
       dateAdded: DateTime.parse(json['DateCreated'] ?? DateTime.now().toIso8601String()),
       premiereDate: json['PremiereDate'],
       runTimeTicks: json['RunTimeTicks'],
+      userData: json['UserData'] != null ? EmbyUserData.fromJson(json['UserData']) : null,
     );
   }
   

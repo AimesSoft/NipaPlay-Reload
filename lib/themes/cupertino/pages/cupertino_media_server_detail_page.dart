@@ -600,6 +600,7 @@ class _CupertinoMediaServerDetailPageState
           duration: episode.runTimeTicks != null
               ? (episode.runTimeTicks / 10000000).round()
               : null,
+          watched: episode.userData?.played == true,
         ),
       );
     }
@@ -1619,6 +1620,15 @@ class _CupertinoMediaServerDetailPageState
               ),
             ),
             const SizedBox(width: 12),
+            if (episode.userData?.played == true)
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: Icon(
+                  CupertinoIcons.checkmark_circle_fill,
+                  color: CupertinoColors.activeGreen.withOpacity(0.7),
+                  size: 18,
+                ),
+              ),
             Icon(
               CupertinoIcons.play_circle,
               color: iconColor,
