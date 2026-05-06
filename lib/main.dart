@@ -1110,7 +1110,7 @@ class MainPageState extends State<MainPage>
   ];
   List<Widget> _pages = [];
   bool _showWebDAVTab = false;
-  bool _showDownloaderTab = true;
+  bool _showDownloaderTab = globals.isDownloaderSupportedPlatform;
   WebDAVQuickAccessProvider? _webdavQuickAccessProvider;
 
   // 用于热键管理
@@ -1122,6 +1122,10 @@ class MainPageState extends State<MainPage>
   static MainPageState? of(BuildContext context) {
     return context.findAncestorStateOfType<MainPageState>();
   }
+
+  bool get _canShowDownloaderTab =>
+      globals.isDownloaderSupportedPlatform &&
+      (_downloaderSettingsProvider?.enabled ?? true);
 
   // TabChangeNotifier监听 - Temporarily remove or comment out for Scheme 1
   TabChangeNotifier? _tabChangeNotifier;
@@ -1225,7 +1229,7 @@ class MainPageState extends State<MainPage>
       while (!_downloaderSettingsProvider!.isLoaded) {
         await Future<void>.delayed(const Duration(milliseconds: 16));
       }
-      _showDownloaderTab = _downloaderSettingsProvider!.enabled;
+      _showDownloaderTab = _canShowDownloaderTab;
       _downloaderSettingsProvider!.addListener(_onDownloaderSettingsChanged);
     } catch (e) {
       debugPrint('加载下载器设置失败: $e');
@@ -1273,7 +1277,7 @@ class MainPageState extends State<MainPage>
   }
 
   void _onDownloaderSettingsChanged() {
-    final showDownloaderTab = _downloaderSettingsProvider?.enabled ?? true;
+    final showDownloaderTab = _canShowDownloaderTab;
     final currentIndex = globalTabController?.index;
     final previousShowDownloaderTab = _showDownloaderTab;
     final currentNeedsRebuild = showDownloaderTab != _showDownloaderTab;

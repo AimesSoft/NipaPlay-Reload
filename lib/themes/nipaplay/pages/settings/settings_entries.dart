@@ -168,7 +168,7 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
     ]);
   }
 
-  entries.addAll([
+  entries.add(
     NipaplaySettingEntry(
       id: NipaplaySettingEntryIds.remoteMediaLibrary,
       title: l10n.remoteMediaLibrary,
@@ -176,13 +176,21 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
       pageTitle: l10n.remoteMediaLibrary,
       page: const RemoteMediaLibraryPage(),
     ),
-    const NipaplaySettingEntry(
-      id: NipaplaySettingEntryIds.downloader,
-      title: '下载器',
-      icon: Ionicons.cloud_download_outline,
-      pageTitle: '下载器',
-      page: DownloaderSettingsPage(),
-    ),
+  );
+
+  if (globals.isDownloaderSupportedPlatform) {
+    entries.add(
+      const NipaplaySettingEntry(
+        id: NipaplaySettingEntryIds.downloader,
+        title: '下载器',
+        icon: Ionicons.cloud_download_outline,
+        pageTitle: '下载器',
+        page: DownloaderSettingsPage(),
+      ),
+    );
+  }
+
+  entries.addAll([
     NipaplaySettingEntry(
       id: NipaplaySettingEntryIds.developerOptions,
       title: l10n.developerOptions,
