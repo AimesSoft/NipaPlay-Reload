@@ -8,7 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/playback_service.dart';
-import 'package:nipaplay/services/dandanplay_service_io.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
