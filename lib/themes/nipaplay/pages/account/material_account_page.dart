@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/pages/account/account_controller.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+
+enum _BangumiSyncHelpService { dandanplay, nipaplay }
 
 /// Fluent UI版本的账号页面
 class MaterialAccountPage extends StatefulWidget {
@@ -24,8 +27,10 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
   static const double _buttonHoverScale = 1.06;
   static const double _authControlFontSize = 16;
   static const double _authControlIconSize = 20;
-  static const EdgeInsets _authControlPadding =
-      EdgeInsets.symmetric(horizontal: 18, vertical: 12);
+  static const EdgeInsets _authControlPadding = EdgeInsets.symmetric(
+    horizontal: 18,
+    vertical: 12,
+  );
 
   @override
   void showMessage(String message) {
@@ -122,10 +127,16 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         final logService = DebugLogService();
         try {
           // 先记录日志
-          logService.addLog('[Fluent账号页面] 注册对话框onLogin回调被调用',
-              level: 'INFO', tag: 'AccountPage');
-          logService.addLog('[Fluent账号页面] 收到的values: ${values.toString()}',
-              level: 'INFO', tag: 'AccountPage');
+          logService.addLog(
+            '[Fluent账号页面] 注册对话框onLogin回调被调用',
+            level: 'INFO',
+            tag: 'AccountPage',
+          );
+          logService.addLog(
+            '[Fluent账号页面] 收到的values: ${values.toString()}',
+            level: 'INFO',
+            tag: 'AccountPage',
+          );
 
           // 设置控制器的值
           registerUsernameController.text = values['username'] ?? '';
@@ -133,24 +144,33 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           registerEmailController.text = values['email'] ?? '';
           registerScreenNameController.text = values['screenName'] ?? '';
 
-          logService.addLog('[Fluent账号页面] 准备调用performRegister',
-              level: 'INFO', tag: 'AccountPage');
+          logService.addLog(
+            '[Fluent账号页面] 准备调用performRegister',
+            level: 'INFO',
+            tag: 'AccountPage',
+          );
 
           // 调用注册方法
           await performRegister();
 
           logService.addLog(
-              '[Fluent账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn',
-              level: 'INFO',
-              tag: 'AccountPage');
+            '[Fluent账号页面] performRegister执行完成，isLoggedIn=$isLoggedIn',
+            level: 'INFO',
+            tag: 'AccountPage',
+          );
 
           return LoginResult(
-              success: isLoggedIn, message: isLoggedIn ? '注册成功' : '注册失败');
+            success: isLoggedIn,
+            message: isLoggedIn ? '注册成功' : '注册失败',
+          );
         } catch (e) {
           // 捕获并记录详细错误
           print('[REGISTRATION ERROR]: $e');
-          logService.addLog('[Fluent账号页面] performRegister时发生异常: $e',
-              level: 'ERROR', tag: 'AccountPage');
+          logService.addLog(
+            '[Fluent账号页面] performRegister时发生异常: $e',
+            level: 'ERROR',
+            tag: 'AccountPage',
+          );
           return LoginResult(success: false, message: '注册失败: $e');
         }
       },
@@ -189,13 +209,15 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                     Text(
                       '• 永久删除您的弹弹play账号\n• 清除所有个人数据和收藏\n• 无法恢复已发送的弹幕\n• 失去所有积分和等级',
                       style: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.7)),
+                        color: colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
                     SizedBox(height: 16),
                     const Text(
                       '点击"继续注销"将在浏览器中打开注销页面，请在页面中完成最终确认。',
-                      style:
-                          TextStyle(color: fluent.Colors.warningPrimaryColor),
+                      style: TextStyle(
+                        color: fluent.Colors.warningPrimaryColor,
+                      ),
                     ),
                   ],
                 ),
@@ -229,6 +251,46 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     );
   }
 
+  Future<void> _showBangumiSyncHelpDialog(
+    _BangumiSyncHelpService service,
+  ) async {
+    final isDandanplay = service == _BangumiSyncHelpService.dandanplay;
+    final title = isDandanplay ? '弹弹play Bangumi同步说明' : 'NipaPlay Bangumi同步说明';
+    final message = isDandanplay
+        ? '这是弹弹play提供的 Bangumi 同步服务，会在你看完后自动同步观看记录。\n\n你可以和下方 NipaPlay 的 Bangumi 同步配合使用，也可以按需只使用其中之一。'
+        : '这是 NipaPlay 提供的 Bangumi 服务。默认需要你在番剧详情页手动配置观看集数；支持打分和写评价，也支持按钮一键同步。\n\n你可以和上方弹弹play同步配合使用，也可以按需只使用其中之一。';
+
+    await BlurDialog.show<void>(
+      context: context,
+      title: title,
+      content: message,
+      actions: [
+        BlurButton(
+          icon: fluent.FluentIcons.accept,
+          text: '知道了',
+          flatStyle: true,
+          hoverScale: _buttonHoverScale,
+          onTap: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBangumiSyncHelpButton(_BangumiSyncHelpService service) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: '查看说明',
+      child: fluent.IconButton(
+        icon: Icon(
+          Icons.help_outline_rounded,
+          size: 18,
+          color: colorScheme.onSurface.withOpacity(0.72),
+        ),
+        onPressed: () => _showBangumiSyncHelpDialog(service),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -242,17 +304,13 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: _buildDandanplayPage(),
-              ),
+              Expanded(child: _buildDandanplayPage()),
               Container(
                 width: 1,
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 color: colorScheme.onSurface.withOpacity(0.12),
               ),
-              Expanded(
-                child: _buildBangumiPage(),
-              ),
+              Expanded(child: _buildBangumiPage()),
             ],
           ),
         ),
@@ -318,11 +376,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
             ),
           ),
           // 退出按钮
-          _buildActionButton(
-            '退出',
-            fluent.FluentIcons.sign_out,
-            performLogout,
-          ),
+          _buildActionButton('退出', fluent.FluentIcons.sign_out, performLogout),
           SizedBox(width: 8),
           // 账号注销按钮
           _buildActionButton(
@@ -416,13 +470,15 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
                 size: 24,
               ),
               SizedBox(width: 8),
-              Text(
-                'Bangumi观看记录同步',
-                locale: const Locale("zh-Hans", "zh"),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  'Bangumi观看记录同步',
+                  locale: const Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],
@@ -430,6 +486,8 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           SizedBox(height: 16),
           _buildDandanplayBangumiLinkCard(),
           SizedBox(height: 16),
+          _buildNipaPlayBangumiSyncHeader(),
+          SizedBox(height: 12),
           if (isBangumiLoggedIn) ...[
             // 已登录状态
             _buildBangumiLoggedInView(),
@@ -563,6 +621,26 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     );
   }
 
+  Widget _buildNipaPlayBangumiSyncHeader() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'NipaPlay Bangumi同步（支持打分与评价）',
+            locale: const Locale("zh-Hans", "zh"),
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        _buildBangumiSyncHelpButton(_BangumiSyncHelpService.nipaplay),
+      ],
+    );
+  }
+
   Widget _buildBangumiLoggedOutView() {
     final colorScheme = Theme.of(context).colorScheme;
     return Column(
@@ -571,10 +649,7 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
         Text(
           '同步本地观看历史到Bangumi收藏',
           locale: const Locale("zh-Hans", "zh"),
-          style: TextStyle(
-            color: colorScheme.onSurface,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: colorScheme.onSurface, fontSize: 14),
         ),
         SizedBox(height: 8),
 
@@ -652,96 +727,95 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
           : '已绑定：$label（ID: $userId）';
     }
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surface.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colorScheme.onSurface.withOpacity(0.12)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '弹弹play内置 Bangumi 绑定（仅同步进度）',
-            locale: const Locale("zh-Hans", "zh"),
-            style: TextStyle(
-              color: colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '弹弹play内置 Bangumi 绑定（仅同步进度）',
+                locale: const Locale("zh-Hans", "zh"),
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
+            _buildBangumiSyncHelpButton(_BangumiSyncHelpService.dandanplay),
+          ],
+        ),
+        SizedBox(height: 6),
+        Text(
+          statusText,
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(
+            color: isExpired
+                ? Colors.orange
+                : colorScheme.onSurface.withOpacity(0.8),
+            fontSize: 12,
           ),
-          SizedBox(height: 6),
+        ),
+        if (expiresAt != null) ...[
+          SizedBox(height: 4),
           Text(
-            statusText,
+            '授权过期时间：${_formatAbsoluteDateTime(expiresAt)}',
             locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
               color: isExpired
                   ? Colors.orange
-                  : colorScheme.onSurface.withOpacity(0.8),
+                  : colorScheme.onSurface.withOpacity(0.7),
               fontSize: 12,
             ),
           ),
-          if (expiresAt != null) ...[
-            SizedBox(height: 4),
-            Text(
-              '授权过期时间：${_formatAbsoluteDateTime(expiresAt)}',
-              locale: const Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: isExpired
-                    ? Colors.orange
-                    : colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 12,
-              ),
-            ),
-          ],
-          if (isExpired) ...[
-            SizedBox(height: 4),
-            Text(
-              '授权已过期或续期失败，请重新授权。',
-              locale: const Locale("zh-Hans", "zh"),
-              style: TextStyle(
-                color: Colors.orange,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-          SizedBox(height: 10),
-          _buildAuthControlButton(
-            icon: fluent.FluentIcons.link,
-            text: isRequestingDandanBangumiAuth
-                ? '获取授权链接中...'
-                : (linked == null ? '绑定 Bangumi 账号' : '重新授权 Bangumi 账号'),
-            onTap: (!isLoggedIn || isRequestingDandanBangumiAuth)
-                ? null
-                : _startDandanBangumiAuthorize,
-          ),
-          SizedBox(height: 8),
-          _buildAuthControlButton(
-            icon: fluent.FluentIcons.link,
-            text: linked == null ? '先绑定后再管理同步设置' : '管理Bangumi同步设置',
-            onTap:
-                (!isLoggedIn || linked == null || isRequestingDandanBangumiAuth)
-                    ? null
-                    : _openDandanBangumiManagePage,
-          ),
-          SizedBox(height: 8),
-          _buildAuthControlButton(
-            icon: fluent.FluentIcons.sync,
-            text: '我已完成网页操作，刷新状态',
-            onTap: !isLoggedIn ? null : _manualRefreshDandanBangumiStatus,
-          ),
-          SizedBox(height: 6),
+        ],
+        if (isExpired) ...[
+          SizedBox(height: 4),
           Text(
-            '此方式不支持评论，仅用于让弹弹服务器自动同步观看历史。',
+            '授权已过期或续期失败，请重新授权。',
             locale: const Locale("zh-Hans", "zh"),
             style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.6),
-              fontSize: 11,
+              color: Colors.orange,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
-      ),
+        SizedBox(height: 10),
+        _buildAuthControlButton(
+          icon: fluent.FluentIcons.link,
+          text: isRequestingDandanBangumiAuth
+              ? '获取授权链接中...'
+              : (linked == null ? '绑定 Bangumi 账号' : '重新授权 Bangumi 账号'),
+          onTap: (!isLoggedIn || isRequestingDandanBangumiAuth)
+              ? null
+              : _startDandanBangumiAuthorize,
+        ),
+        SizedBox(height: 8),
+        _buildAuthControlButton(
+          icon: fluent.FluentIcons.link,
+          text: linked == null ? '先绑定后再管理同步设置' : '管理Bangumi同步设置',
+          onTap:
+              (!isLoggedIn || linked == null || isRequestingDandanBangumiAuth)
+                  ? null
+                  : _openDandanBangumiManagePage,
+        ),
+        SizedBox(height: 8),
+        _buildAuthControlButton(
+          icon: fluent.FluentIcons.sync,
+          text: '我已完成网页操作，刷新状态',
+          onTap: !isLoggedIn ? null : _manualRefreshDandanBangumiStatus,
+        ),
+        SizedBox(height: 6),
+        Text(
+          '此方式不支持评论，仅用于让弹弹服务器自动同步观看历史。',
+          locale: const Locale("zh-Hans", "zh"),
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.6),
+            fontSize: 11,
+          ),
+        ),
+      ],
     );
   }
 
@@ -910,8 +984,6 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
 
   // 构建Bangumi页面内容
   Widget _buildBangumiPage() {
-    return SingleChildScrollView(
-      child: _buildBangumiSyncSection(),
-    );
+    return SingleChildScrollView(child: _buildBangumiSyncSection());
   }
 }
