@@ -12,7 +12,6 @@ pub struct RustFileScanEntry {
 }
 
 pub struct RustFileScanSnapshot {
-    pub folder_hash: String,
     pub files: Vec<RustFileScanEntry>,
 }
 
@@ -23,18 +22,12 @@ pub struct RustFileScanDiff {
     pub new_files: Vec<String>,
     pub modified_files: Vec<String>,
     pub deleted_files: Vec<String>,
-    pub folder_hash: String,
     pub current_hashes: Vec<RustFileHashEntry>,
 }
 
 pub struct RustFileHashEntry {
     pub relative_path: String,
     pub hash: String,
-}
-
-#[flutter_rust_bridge::frb(sync)]
-pub fn is_rust_file_scan_available() -> bool {
-    true
 }
 
 pub fn scan_video_files(folder_path: String) -> Result<RustFileScanSnapshot, String> {
@@ -48,14 +41,13 @@ pub fn scan_video_files(folder_path: String) -> Result<RustFileScanSnapshot, Str
     collect_video_files(&root, &root, &mut files)?;
     files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
-    let folder_hash = calculate_folder_hash(&files);
     println!(
         "[nipaplay_rust_scan] scan_video_files finish path={} files={} elapsed_ms={}",
         folder_path,
         files.len(),
         started_at.elapsed().as_millis()
     );
-    Ok(RustFileScanSnapshot { folder_hash, files })
+    Ok(RustFileScanSnapshot { files })
 }
 
 pub fn diff_video_files(
@@ -135,7 +127,6 @@ pub fn diff_video_files(
         new_files,
         modified_files,
         deleted_files,
-        folder_hash: snapshot.folder_hash,
         current_hashes,
     })
 }
@@ -231,20 +222,6 @@ fn is_video_file(path: &Path) -> bool {
             extension == "mp4" || extension == "mkv"
         })
         .unwrap_or(false)
-}
-
-fn calculate_folder_hash(files: &[RustFileScanEntry]) -> String {
-    let combined = files
-        .iter()
-        .map(|entry| {
-            format!(
-                "{}|{}|{}",
-                entry.absolute_path, entry.size, entry.modified_millis
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    sha256_hex(combined.as_bytes())
 }
 
 fn path_to_dart_string(path: &Path) -> String {
