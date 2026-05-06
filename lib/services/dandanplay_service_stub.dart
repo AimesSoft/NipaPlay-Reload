@@ -1301,6 +1301,12 @@ class DandanplayService {
     }
   }
 
+  /// 通过 Bangumi.tv subjectId 获取番剧详情（Web stub — 不支持）
+  static Future<Map<String, dynamic>?> getBangumiByBgmId(int bgmtvSubjectId) async {
+    debugPrint('[弹弹play服务-Web] getBangumiByBgmId not supported on web');
+    return null;
+  }
+
   static Future<Map<int, bool>> getEpisodesWatchStatus(
       List<int> episodeIds) async {
     try {
