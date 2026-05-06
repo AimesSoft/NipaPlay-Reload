@@ -52,6 +52,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       'webdav_auto_enter_season_folder';
   static const String _keySeasonFolderPattern = 'webdav_season_folder_pattern';
   static const String _keyShowPathBreadcrumb = 'webdav_show_path_breadcrumb';
+  static const String _keyBgmIdQuickMatch = 'webdav_bgmid_quick_match';
+  static const String _keyBgmIdMatchPattern = 'webdav_bgmid_match_pattern';
   static const String _legacyDefaultPageIndexKey = 'default_page_index';
 
   // Tab 名称常量
@@ -81,6 +83,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   bool _autoEnterSeasonFolder = false;
   String _seasonFolderPattern = 'Season*';
   bool _showPathBreadcrumb = true;
+  bool _bgmIdQuickMatch = false; // 默认关闭，用户需明确启用
+  String _bgmIdMatchPattern = 'bgmid=(\\d+)'; // 默认正则规则
   bool _isLoaded = false;
 
   // Getters
@@ -92,6 +96,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   bool get autoEnterSeasonFolder => _autoEnterSeasonFolder;
   String get seasonFolderPattern => _seasonFolderPattern;
   bool get showPathBreadcrumb => _showPathBreadcrumb;
+  bool get bgmIdQuickMatch => _bgmIdQuickMatch;
+  String get bgmIdMatchPattern => _bgmIdMatchPattern;
   bool get isLoaded => _isLoaded;
 
   /// 获取有效的默认 Tab（处理 WebDAV 关闭时的回落）
@@ -190,6 +196,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       _seasonFolderPattern =
           prefs.getString(_keySeasonFolderPattern) ?? 'Season*';
       _showPathBreadcrumb = prefs.getBool(_keyShowPathBreadcrumb) ?? true;
+      _bgmIdQuickMatch = prefs.getBool(_keyBgmIdQuickMatch) ?? false;
+      _bgmIdMatchPattern =
+          prefs.getString(_keyBgmIdMatchPattern) ?? 'bgmid=(\\d+)';
 
       _isLoaded = true;
       notifyListeners();
@@ -351,6 +360,45 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     }
   }
 
+  /// 设置是否启用 bgmid 快速匹配
+  Future<void> setBgmIdQuickMatch(bool value) async {
+    if (_bgmIdQuickMatch == value) return;
+
+    _bgmIdQuickMatch = value;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyBgmIdQuickMatch, value);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存 bgmid 快速匹配设置失败: $e');
+    }
+  }
+
+  /// 设置 bgmid 匹配正则表达式
+  /// 用户自定义正则规则，必须包含捕获组提取数字
+  Future<void> setBgmIdMatchPattern(String pattern) async {
+    if (_bgmIdMatchPattern == pattern) return;
+
+    // 验证正则是否有效
+    try {
+      RegExp(pattern);
+    } catch (e) {
+      debugPrint('无效的正则表达式: $pattern, 错误: $e');
+      return;
+    }
+
+    _bgmIdMatchPattern = pattern;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyBgmIdMatchPattern, pattern);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存 bgmid 匹配规则失败: $e');
+    }
+  }
+
   /// 检查文件夹名称是否匹配模式（支持通配符 * 和 ?）
   bool matchesSeasonPattern(String folderName) {
     if (_seasonFolderPattern.isEmpty) return false;
@@ -428,6 +476,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     _autoEnterSeasonFolder = false;
     _seasonFolderPattern = 'Season*';
     _showPathBreadcrumb = true;
+    _bgmIdQuickMatch = false;
+    _bgmIdMatchPattern = 'bgmid=(\\d+)';
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -439,6 +489,8 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       await prefs.remove(_keyAutoEnterSeasonFolder);
       await prefs.remove(_keySeasonFolderPattern);
       await prefs.remove(_keyShowPathBreadcrumb);
+      await prefs.remove(_keyBgmIdQuickMatch);
+      await prefs.remove(_keyBgmIdMatchPattern);
       notifyListeners();
     } catch (e) {
       debugPrint('重置 WebDAV 快捷设置失败: $e');

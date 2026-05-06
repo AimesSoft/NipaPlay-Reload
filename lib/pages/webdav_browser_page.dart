@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/playback_service.dart';
+import 'package:nipaplay/services/dandanplay_service_io.dart';
 import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -22,6 +23,13 @@ class WebDAVBrowserPage extends StatefulWidget {
 }
 
 class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
+  // 静态正则表达式常量，用于提取集数（避免重复创建）
+  static final _seasonEpisodeRegex = RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})');
+  static final _chineseEpisodeRegex = RegExp(r'第(\d{1,3})[话集]');
+  static final _epNumberRegex = RegExp(r'[Ee][Pp]?(\d{1,3})');
+  static final _bracketNumberRegex = RegExp(r'[\[【](\d{1,3})[\]】]');
+  static final _delimiterNumberRegex = RegExp(r'[-_](\d{1,3})[-_\.\[]');
+
   // 当前选中的服务器连接
   WebDAVConnection? _currentConnection;
   // 当前路径
@@ -164,7 +172,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
   /// 是否可以返回上一级
   bool get _canNavigateBack => _currentPath != '/';
 
-  void _playVideo(WebDAVFile file) {
+  void _playVideo(WebDAVFile file) async {
     if (_currentConnection == null) return;
 
     final videoUrl = WebDAVService.instance.getFileUrl(
@@ -172,26 +180,115 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       file.path,
     );
 
+    final provider =
+        Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+    int? quickMatchEpisodeId;
+    int? quickMatchAnimeId;
+    String? quickMatchAnimeTitle;
+
+    if (provider.bgmIdQuickMatch) {
+      // 使用用户自定义正则从完整 URL 中匹配 bgmid
+      try {
+        final regex = RegExp(provider.bgmIdMatchPattern);
+        final bgmidMatch = regex.firstMatch(videoUrl);
+
+        if (bgmidMatch != null && bgmidMatch.groupCount >= 1) {
+          final bgmid = int.tryParse(bgmidMatch.group(1)!);
+
+          if (bgmid != null) {
+            final result = await DandanplayService.getBangumiByBgmId(bgmid);
+
+            if (result != null && result['bangumi'] != null) {
+              final bangumi = result['bangumi'] as Map<String, dynamic>;
+              final episodes = bangumi['episodes'] as List<dynamic>?;
+
+              quickMatchAnimeId = bangumi['animeId'] as int?;
+              quickMatchAnimeTitle = bangumi['animeTitle'] as String?;
+
+              final episodeNumber = _extractEpisodeNumber(file.name);
+
+              if (episodes != null && episodeNumber != null) {
+                for (final ep in episodes) {
+                  final epNum =
+                      int.tryParse(ep['episodeNumber']?.toString() ?? '');
+                  if (epNum == episodeNumber) {
+                    quickMatchEpisodeId = ep['episodeId'] as int?;
+                    break;
+                  }
+                }
+              }
+
+              debugPrint(
+                  '[WebDAV] 快速匹配结果: bgmid=$bgmid, episodeNumber=$episodeNumber, episodeId=$quickMatchEpisodeId');
+            }
+          }
+        }
+      } catch (e) {
+        // 正则无效或匹配失败，静默回退原有流程
+        debugPrint('[WebDAV] 快速匹配失败（使用规则: ${provider.bgmIdMatchPattern}）: $e');
+      }
+    }
+
     // 创建观看历史项用于播放
     final historyItem = WatchHistoryItem(
-      animeName: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      animeName: quickMatchAnimeTitle ??
+          file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       episodeTitle: file.name,
       filePath: videoUrl,
       watchProgress: 0,
       lastPosition: 0,
       duration: 0,
       lastWatchTime: DateTime.now(),
+      episodeId: quickMatchEpisodeId,
+      animeId: quickMatchAnimeId,
     );
 
     // 使用 PlaybackService 播放视频
     final playableItem = PlayableItem(
       videoPath: videoUrl,
-      title: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      title: quickMatchAnimeTitle ??
+          file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
       subtitle: file.name,
       historyItem: historyItem,
     );
 
     PlaybackService().play(playableItem);
+  }
+
+  /// 从文件名中提取集数
+  /// 支持多种格式：S01E12、第12集、EP12、[12]、_12_ 等
+  int? _extractEpisodeNumber(String fileName) {
+    // 尝试匹配 S01E12 格式
+    final seasonEpisodeMatch = _seasonEpisodeRegex.firstMatch(fileName);
+    if (seasonEpisodeMatch != null) {
+      return int.tryParse(seasonEpisodeMatch.group(2)!);
+    }
+
+    // 尝试匹配 第N集/第N话 格式
+    final chineseMatch = _chineseEpisodeRegex.firstMatch(fileName);
+    if (chineseMatch != null) {
+      return int.tryParse(chineseMatch.group(1)!);
+    }
+
+    // 尝试匹配 EP12 / E12 格式
+    final epMatch = _epNumberRegex.firstMatch(fileName);
+    if (epMatch != null) {
+      return int.tryParse(epMatch.group(1)!);
+    }
+
+    // 尝试匹配 [12] 或 【12】 格式
+    final bracketMatch = _bracketNumberRegex.firstMatch(fileName);
+    if (bracketMatch != null) {
+      return int.tryParse(bracketMatch.group(1)!);
+    }
+
+    // 尝试匹配 -12- 或 _12_ 格式（在分隔符之间的数字）
+    final delimiterMatch = _delimiterNumberRegex.firstMatch(fileName);
+    if (delimiterMatch != null) {
+      return int.tryParse(delimiterMatch.group(1)!);
+    }
+
+    return null;
   }
 
   void _showServerSelector() {

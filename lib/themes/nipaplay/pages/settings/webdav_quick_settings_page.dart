@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -16,13 +17,25 @@ class WebDAVQuickSettingsPage extends StatefulWidget {
 }
 
 class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
+  late TextEditingController _patternController;
+
   @override
   void initState() {
     super.initState();
+    _patternController = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<WebDAVQuickAccessProvider>(context, listen: false)
-          .loadSettings();
+      final provider =
+          Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+      provider.loadSettings().then((_) {
+        _patternController.text = provider.bgmIdMatchPattern;
+      });
     });
+  }
+
+  @override
+  void dispose() {
+    _patternController.dispose();
+    super.dispose();
   }
 
   @override
@@ -57,22 +70,29 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
               // 开关：显示 WebDAV Tab
               _buildSettingsCard(
                 cardColor: cardColor,
-                child: SwitchListTile(
+                child: ListTile(
+                  leading: Icon(Ionicons.cloud_outline, color: textColor.withOpacity(0.7)),
                   title: Text(
                     '显示 WebDAV Tab',
-                    style: TextStyle(color: textColor),
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   subtitle: Text(
                     '在底部导航栏显示 WebDAV 快捷入口',
                     style: TextStyle(
                       color: secondaryTextColor,
-                      fontSize: 12,
                     ),
                   ),
-                  value: provider.showWebDAVTab,
-                  activeColor: accentColor,
-                  onChanged: (value) {
-                    provider.setShowWebDAVTab(value);
+                  trailing: FluentSettingsSwitch(
+                    value: provider.showWebDAVTab,
+                    onChanged: (value) {
+                      provider.setShowWebDAVTab(value);
+                    },
+                  ),
+                  onTap: () {
+                    provider.setShowWebDAVTab(!provider.showWebDAVTab);
                   },
                 ),
               ),
@@ -315,22 +335,29 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                 // 路径面包屑导航开关
                 _buildSettingsCard(
                   cardColor: cardColor,
-                  child: SwitchListTile(
+                  child: ListTile(
+                    leading: Icon(Ionicons.folder_outline, color: textColor.withOpacity(0.7)),
                     title: Text(
                       '显示路径导航',
-                      style: TextStyle(color: textColor),
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     subtitle: Text(
                       '在顶部显示可点击的路径面包屑导航',
                       style: TextStyle(
                         color: secondaryTextColor,
-                        fontSize: 12,
                       ),
                     ),
-                    value: provider.showPathBreadcrumb,
-                    activeColor: accentColor,
-                    onChanged: (value) {
-                      provider.setShowPathBreadcrumb(value);
+                    trailing: FluentSettingsSwitch(
+                      value: provider.showPathBreadcrumb,
+                      onChanged: (value) {
+                        provider.setShowPathBreadcrumb(value);
+                      },
+                    ),
+                    onTap: () {
+                      provider.setShowPathBreadcrumb(!provider.showPathBreadcrumb);
                     },
                   ),
                 ),
@@ -343,22 +370,29 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SwitchListTile(
+                      ListTile(
+                        leading: Icon(Ionicons.folder_open_outline, color: textColor.withOpacity(0.7)),
                         title: Text(
                           '自动进入 Season 文件夹',
-                          style: TextStyle(color: textColor),
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         subtitle: Text(
                           '打开文件夹时自动进入匹配的子文件夹',
                           style: TextStyle(
                             color: secondaryTextColor,
-                            fontSize: 12,
                           ),
                         ),
-                        value: provider.autoEnterSeasonFolder,
-                        activeColor: accentColor,
-                        onChanged: (value) {
-                          provider.setAutoEnterSeasonFolder(value);
+                        trailing: FluentSettingsSwitch(
+                          value: provider.autoEnterSeasonFolder,
+                          onChanged: (value) {
+                            provider.setAutoEnterSeasonFolder(value);
+                          },
+                        ),
+                        onTap: () {
+                          provider.setAutoEnterSeasonFolder(!provider.autoEnterSeasonFolder);
                         },
                       ),
                       if (provider.autoEnterSeasonFolder) ...[
@@ -460,7 +494,104 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                 ),
               ],
 
-              // 没有服务器连接时的提示
+            SizedBox(height: 16),
+
+            // bgmid 快速匹配开关
+            _buildSettingsCard(
+              cardColor: cardColor,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Ionicons.flash_outline, color: textColor.withOpacity(0.7)),
+                    title: Text(
+                      'bgmid 快速匹配',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '解析 URL 中的 bgmid 跳过哈希计算',
+                      style: TextStyle(
+                        color: secondaryTextColor,
+                      ),
+                    ),
+                    trailing: FluentSettingsSwitch(
+                      value: provider.bgmIdQuickMatch,
+                      onChanged: (value) {
+                        provider.setBgmIdQuickMatch(value);
+                      },
+                    ),
+                    onTap: () {
+                      provider.setBgmIdQuickMatch(!provider.bgmIdQuickMatch);
+                    },
+                  ),
+                  if (provider.bgmIdQuickMatch) ...[
+                    Divider(height: 1, color: secondaryTextColor.withOpacity(0.2)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '匹配规则（正则表达式）',
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '从完整 URL 中匹配数字，默认匹配 "bgmid=数字"',
+                            style: TextStyle(
+                              color: secondaryTextColor,
+                              fontSize: 11,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          TextField(
+                            controller: _patternController,
+                            style: TextStyle(color: textColor, fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'bgmid=(\\d+)',
+                              hintStyle: TextStyle(color: secondaryTextColor.withOpacity(0.5)),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: secondaryTextColor.withOpacity(0.3)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: accentColor),
+                              ),
+                              isDense: true,
+                            ),
+                            onSubmitted: (value) {
+                              if (value.isNotEmpty) {
+                                provider.setBgmIdMatchPattern(value);
+                              }
+                            },
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '示例: bgm[=-](\\d+) 可匹配 bgmid=123 或 bgm-123',
+                            style: TextStyle(
+                              color: secondaryTextColor.withOpacity(0.7),
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // 没有服务器连接时的提示
               if (provider.showWebDAVTab && connections.isEmpty)
                 _buildSettingsCard(
                   cardColor: cardColor,

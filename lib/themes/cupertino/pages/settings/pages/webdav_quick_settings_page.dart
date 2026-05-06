@@ -20,20 +20,26 @@ class CupertinoWebDAVQuickSettingsPage extends StatefulWidget {
 class _CupertinoWebDAVQuickSettingsPageState
     extends State<CupertinoWebDAVQuickSettingsPage> {
   late final TextEditingController _directoryController;
+  late final TextEditingController _patternController;
 
   @override
   void initState() {
     super.initState();
     _directoryController = TextEditingController();
+    _patternController = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<WebDAVQuickAccessProvider>(context, listen: false)
-          .loadSettings();
+      final provider =
+          Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+      provider.loadSettings().then((_) {
+        _patternController.text = provider.bgmIdMatchPattern;
+      });
     });
   }
 
   @override
   void dispose() {
     _directoryController.dispose();
+    _patternController.dispose();
     super.dispose();
   }
 
@@ -82,6 +88,8 @@ class _CupertinoWebDAVQuickSettingsPageState
                   _buildPathBreadcrumbCard(context, provider),
                   const SizedBox(height: 24),
                   _buildAutoEnterSeasonCard(context, provider),
+                  const SizedBox(height: 24),
+                  _buildBgmIdQuickMatchCard(context, provider),
                   const SizedBox(height: 24),
                   _buildResetCard(context, provider),
                 ],
@@ -625,6 +633,74 @@ class _CupertinoWebDAVQuickSettingsPageState
           fontSize: 13,
         ),
       ),
+    );
+  }
+
+  Widget _buildBgmIdQuickMatchCard(BuildContext context, WebDAVQuickAccessProvider provider) {
+    final Color tileColor = resolveSettingsTileBackground(context);
+    final Color sectionColor = resolveSettingsSectionBackground(context);
+    final Color iconColor = resolveSettingsIconColor(context);
+    final Color textColor = resolveSettingsPrimaryTextColor(context);
+    final Color secondaryColor = resolveSettingsSecondaryTextColor(context);
+
+    return CupertinoSettingsGroupCard(
+      margin: EdgeInsets.zero,
+      backgroundColor: sectionColor,
+      children: [
+        CupertinoSettingsTile(
+          leading: Icon(CupertinoIcons.bolt_fill, color: iconColor),
+          title: const Text('bgmid 快速匹配'),
+          subtitle: const Text('解析 URL 中的 bgmid 跳过哈希计算'),
+          backgroundColor: tileColor,
+          trailing: CupertinoSwitch(
+            value: provider.bgmIdQuickMatch,
+            activeColor: CupertinoColors.activeBlue,
+            onChanged: (value) {
+              provider.setBgmIdQuickMatch(value);
+            },
+          ),
+        ),
+        if (provider.bgmIdQuickMatch)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '匹配规则（正则表达式）',
+                  style: TextStyle(color: textColor, fontSize: 13),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '从完整 URL 中匹配数字，默认匹配 "bgmid=数字"',
+                  style: TextStyle(color: secondaryColor, fontSize: 11),
+                ),
+                SizedBox(height: 8),
+                CupertinoTextField(
+                  controller: _patternController,
+                  placeholder: 'bgmid=(\\d+)',
+                  style: TextStyle(color: textColor, fontSize: 13),
+                  decoration: BoxDecoration(
+                    color: tileColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: secondaryColor.withOpacity(0.3)),
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  onSubmitted: (value) {
+                    if (value.isNotEmpty) {
+                      provider.setBgmIdMatchPattern(value);
+                    }
+                  },
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '示例: bgm[=-](\\d+) 可匹配 bgmid=123 或 bgm-123',
+                  style: TextStyle(color: secondaryColor.withOpacity(0.7), fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
