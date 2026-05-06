@@ -23,6 +23,8 @@ class NipaPlayNextEngine {
   final Map<String, double> _textWidthCache = {};
   static const int _textWidthCacheLimit = 5000;
   static const double _mergeWindowSeconds = 45.0;
+  static const double _minTrackGap = 2.0;
+  static const double _trackGapRatio = 0.20;
 
   final List<_NextItem> _items = [];
   final List<double> _itemTimes = [];
@@ -226,13 +228,14 @@ class NipaPlayNextEngine {
     }
 
     final double baseDanmakuHeight = _measureTextHeight(_fontSize);
+    final double baseTrackHeight = _resolveBaseTrackHeight(baseDanmakuHeight);
     final effectiveHeight = max(1.0, _size.height * _displayArea);
 
     int trackCount;
     if (_displayArea <= 0 || _displayArea.isNaN || _displayArea.isInfinite) {
       trackCount = 1;
     } else {
-      trackCount = (effectiveHeight / baseDanmakuHeight).floor();
+      trackCount = (effectiveHeight / baseTrackHeight).floor();
     }
 
     if (_displayArea == 1.0) {
@@ -254,11 +257,11 @@ class NipaPlayNextEngine {
     final List<_NextItem?> bottomTrackItems =
         List<_NextItem?>.filled(trackCount, null);
     final List<double> scrollTrackHeights =
-        List<double>.filled(trackCount, baseDanmakuHeight);
+        List<double>.filled(trackCount, baseTrackHeight);
     final List<double> topTrackHeights =
-        List<double>.filled(trackCount, baseDanmakuHeight);
+        List<double>.filled(trackCount, baseTrackHeight);
     final List<double> bottomTrackHeights =
-        List<double>.filled(trackCount, baseDanmakuHeight);
+        List<double>.filled(trackCount, baseTrackHeight);
 
     for (final item in _items) {
       final width = _measureTextWidth(
@@ -653,6 +656,11 @@ class NipaPlayNextEngine {
 
     final height = tp.size.height;
     return height.isFinite && height > 0 ? height : fontSize;
+  }
+
+  double _resolveBaseTrackHeight(double baseDanmakuHeight) {
+    final gap = max(_minTrackGap, _fontSize * _trackGapRatio);
+    return baseDanmakuHeight + gap;
   }
 
   int _lowerBound(double value) {
