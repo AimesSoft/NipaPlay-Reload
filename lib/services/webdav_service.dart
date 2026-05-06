@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -73,6 +74,21 @@ class WebDAVFile {
     required this.isDirectory,
     this.size,
     this.lastModified,
+  });
+}
+
+/// WebDAV 搜索结果
+class WebDAVSearchResult {
+  final WebDAVFile file;
+  final String fullPath;
+  final String relativePath;
+  final WebDAVConnection connection;
+
+  const WebDAVSearchResult({
+    required this.file,
+    required this.fullPath,
+    required this.relativePath,
+    required this.connection,
   });
 }
 
@@ -1466,6 +1482,255 @@ class WebDAVService {
     } catch (_) {
       return trimmed;
     }
+  }
+
+  // ==================== 搜索功能 ====================
+
+  /// 搜索文件（递归遍历方式）
+  ///
+  /// 参数:
+  /// - connection: WebDAV 连接
+  /// - keyword: 搜索关键词
+  /// - startPath: 搜索起点路径
+  /// - scope: 搜索范围
+  /// - depthLimit: 层级限制（对 currentWithDepth 和 global 都有效）
+  /// - searchTargets: 搜索目标类型（文件夹、视频文件）
+  /// - timeoutSeconds: 超时时间（秒，0 表示无限制）
+  /// - requestIntervalMs: 请求间隔（毫秒），防止请求过快被服务器限制
+  /// - onProgress: 进度回调（已搜索数量，已找到数量）
+  /// - onResultFound: 实时结果回调，每找到一个结果立即通知
+  /// - onStopRequested: 停止信号 getter，返回 true 时停止搜索
+  ///
+  /// 返回: 搜索结果列表
+  Future<List<WebDAVSearchResult>> searchFiles({
+    required WebDAVConnection connection,
+    required String keyword,
+    required String startPath,
+    required String scope,
+    int depthLimit = 3,
+    Set<String>? searchTargets,
+    int timeoutSeconds = 30,
+    int requestIntervalMs = 100,
+    void Function(int searched, int found)? onProgress,
+    void Function(WebDAVSearchResult result)? onResultFound,
+    bool Function()? onStopRequested,
+  }) async {
+    final targets = searchTargets ?? const {'folder', 'video'};
+    final normalizedConnection = _normalizeConnection(connection);
+    final normalizedKeyword = keyword.trim().toLowerCase();
+
+    if (normalizedKeyword.isEmpty) {
+      return [];
+    }
+
+    final results = <WebDAVSearchResult>[];
+    final startTime = DateTime.now();
+    int searchedCount = 0;
+    int foundCount = 0;
+
+    // 根据搜索范围确定起点
+    String actualStartPath;
+    switch (scope) {
+      case 'current_directory':
+        actualStartPath = startPath;
+        depthLimit = 0; // 仅当前目录
+        break;
+      case 'current_with_depth':
+        actualStartPath = startPath;
+        break;
+      case 'global':
+        actualStartPath = '/';
+        break;
+      default:
+        actualStartPath = startPath;
+    }
+
+    // 递归遍历搜索
+    await _recursiveSearch(
+      connection: normalizedConnection,
+      keyword: normalizedKeyword,
+      currentPath: actualStartPath,
+      startPath: actualStartPath,
+      currentDepth: 0,
+      depthLimit: depthLimit,
+      searchTargets: targets,
+      results: results,
+      startTime: startTime,
+      timeoutSeconds: timeoutSeconds,
+      requestIntervalMs: requestIntervalMs,
+      onProgress: onProgress,
+      onResultFound: onResultFound,
+      onStopRequested: onStopRequested,
+      searchedCount: () => searchedCount,
+      foundCount: () => foundCount,
+      updateSearchedCount: (count) { searchedCount = count; },
+      updateFoundCount: (count) { foundCount = count; },
+    );
+
+    return results;
+  }
+
+  /// 递归搜索
+  Future<void> _recursiveSearch({
+    required WebDAVConnection connection,
+    required String keyword,
+    required String currentPath,
+    required String startPath,
+    required int currentDepth,
+    required int depthLimit,
+    required Set<String> searchTargets,
+    required List<WebDAVSearchResult> results,
+    required DateTime startTime,
+    required int timeoutSeconds,
+    required int requestIntervalMs,
+    required void Function(int, int)? onProgress,
+    required void Function(WebDAVSearchResult)? onResultFound,
+    required bool Function()? onStopRequested,
+    required int Function() searchedCount,
+    required int Function() foundCount,
+    required void Function(int) updateSearchedCount,
+    required void Function(int) updateFoundCount,
+  }) async {
+    // 检查停止条件
+    if (onStopRequested != null && onStopRequested()) {
+      return;
+    }
+
+    // 检查超时
+    if (timeoutSeconds > 0) {
+      final elapsed = DateTime.now().difference(startTime).inSeconds;
+      if (elapsed >= timeoutSeconds) {
+        return;
+      }
+    }
+
+    // 检查层级限制
+    if (currentDepth > depthLimit) {
+      return;
+    }
+
+    // 添加请求间隔延迟（非首次请求）
+    if (currentDepth > 0 && requestIntervalMs > 0) {
+      await Future.delayed(Duration(milliseconds: requestIntervalMs));
+    }
+
+    try {
+      final files = await listDirectoryAll(connection, currentPath);
+      // listDirectoryAll 是网络调用，返回后立即检查停止信号
+      if (onStopRequested != null && onStopRequested()) {
+        return;
+      }
+      updateSearchedCount(searchedCount() + files.length);
+
+      for (final file in files) {
+        // 检查停止信号
+        if (onStopRequested != null && onStopRequested()) {
+          return;
+        }
+
+        // 检查超时
+        if (timeoutSeconds > 0) {
+          final elapsed = DateTime.now().difference(startTime).inSeconds;
+          if (elapsed >= timeoutSeconds) {
+            return;
+          }
+        }
+
+        // 匹配搜索目标和关键词
+        if (_matchesSearchTarget(file, searchTargets) &&
+            file.name.toLowerCase().contains(keyword)) {
+          final result = WebDAVSearchResult(
+            file: file,
+            fullPath: file.path,
+            relativePath: _getRelativePath(file.path, startPath),
+            connection: connection,
+          );
+          results.add(result);
+          updateFoundCount(foundCount() + 1);
+          // 实时通知找到的结果
+          onResultFound?.call(result);
+          onProgress?.call(searchedCount(), foundCount());
+          // 结果通知后立即检查停止信号，UI 回调可能已设置 _maxResultsReached
+          if (onStopRequested != null && onStopRequested()) {
+            return;
+          }
+        }
+
+        // 如果是目录，递归搜索
+        if (file.isDirectory) {
+          await _recursiveSearch(
+            connection: connection,
+            keyword: keyword,
+            currentPath: file.path,
+            startPath: startPath,
+            currentDepth: currentDepth + 1,
+            depthLimit: depthLimit,
+            searchTargets: searchTargets,
+            results: results,
+            startTime: startTime,
+            timeoutSeconds: timeoutSeconds,
+            requestIntervalMs: requestIntervalMs,
+            onProgress: onProgress,
+            onResultFound: onResultFound,
+            onStopRequested: onStopRequested,
+            searchedCount: searchedCount,
+            foundCount: foundCount,
+            updateSearchedCount: updateSearchedCount,
+            updateFoundCount: updateFoundCount,
+          );
+        }
+      }
+
+      onProgress?.call(searchedCount(), foundCount());
+    } catch (e) {
+      debugPrint('[WebDAV] 搜索目录失败: $currentPath - $e');
+    }
+  }
+
+  /// 检查文件是否匹配搜索目标
+  bool _matchesSearchTarget(WebDAVFile file, Set<String> targets) {
+    if (targets.contains('all')) return true;
+
+    if (file.isDirectory) {
+      return targets.contains('folder');
+    }
+
+    final extension = _getFileExtension(file.name);
+    if (targets.contains('video') && _isVideoExtension(extension)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// 获取文件扩展名
+  String _getFileExtension(String filename) {
+    final lower = filename.toLowerCase();
+    final dotIndex = lower.lastIndexOf('.');
+    if (dotIndex == -1 || dotIndex == lower.length - 1) {
+      return '';
+    }
+    return lower.substring(dotIndex + 1);
+  }
+
+  /// 检查是否为视频扩展名
+  bool _isVideoExtension(String extension) {
+    const videoExtensions = {
+      'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v',
+      'mpg', 'mpeg', 'rm', 'rmvb', 'ts', 'mts', 'm2ts',
+    };
+    return videoExtensions.contains(extension);
+  }
+
+  /// 获取相对路径
+  String _getRelativePath(String fullPath, String basePath) {
+    final normalizedBase = _ensureTrailingSlash(
+      _collapseSlashes(basePath.isEmpty ? '/' : basePath),
+    );
+    if (fullPath.startsWith(normalizedBase)) {
+      return fullPath.substring(normalizedBase.length);
+    }
+    return fullPath;
   }
 }
 
