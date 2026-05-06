@@ -2,15 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
 import 'package:nipaplay/services/rust_file_scan_service.dart';
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
-import 'package:nipaplay/utils/settings_storage.dart';
-import 'dart:async';
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
 // Import Provider if ScanService needs to directly refresh other providers,
 // otherwise it will be refreshed by UI listening to this service.
 // import 'package:provider/provider.dart';
@@ -96,7 +92,6 @@ class _FolderFileDiff {
   final List<String> newFiles;
   final List<String> modifiedFiles;
   final List<String> deletedFiles;
-  final String? folderHash;
   final Map<String, String>? currentHashes;
 
   _FolderFileDiff({
@@ -106,7 +101,6 @@ class _FolderFileDiff {
     required this.newFiles,
     required this.modifiedFiles,
     required this.deletedFiles,
-    this.folderHash,
     this.currentHashes,
   });
 
@@ -120,7 +114,6 @@ class _FolderFileDiff {
 
 class ScanService with ChangeNotifier {
   static const String _scannedFoldersPrefsKey = 'nipaplay_scanned_folders';
-  static const String _folderHashCachePrefsKey = 'nipaplay_folder_hash_cache';
   static const String _subFolderHashCachePrefsKey =
       'nipaplay_subfolder_hash_cache';
   // _lastScannedDirectoryPickerPathKey will likely remain in UI as it's picker-specific
@@ -128,10 +121,7 @@ class ScanService with ChangeNotifier {
   List<String> _scannedFolders = [];
   List<String> get scannedFolders => List.unmodifiable(_scannedFolders);
 
-  // 文件夹hash缓存，用于判断文件夹是否有变化
-  Map<String, String> _folderHashCache = {};
-
-  // 子文件夹hash缓存，用于精确定位变化
+  // 文件hash缓存由 Rust 扫描结果维护，用于精确定位新增、修改、删除文件。
   Map<String, Map<String, String>> _subFolderHashCache = {};
 
   // 批量刷新阶段已经算出的 diff，避免正式扫描时重复遍历目录。
@@ -182,7 +172,6 @@ class ScanService with ChangeNotifier {
 
   ScanService() {
     _loadScannedFolders();
-    _loadFolderHashCache();
     _loadSubFolderHashCache();
     // 启动时自动检测变化
     _performStartupChangeDetection();
@@ -250,34 +239,6 @@ class ScanService with ChangeNotifier {
     }
   }
 
-  /// 加载文件夹hash缓存
-  Future<void> _loadFolderHashCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheJson = prefs.getString(_folderHashCachePrefsKey);
-      if (cacheJson != null) {
-        final Map<String, dynamic> cacheMap = json.decode(cacheJson);
-        _folderHashCache =
-            cacheMap.map((key, value) => MapEntry(key, value.toString()));
-      }
-    } catch (e) {
-      debugPrint("加载文件夹hash缓存失败: $e");
-      _folderHashCache = {};
-    }
-  }
-
-  /// 保存文件夹hash缓存
-  Future<void> _saveFolderHashCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheJson = json.encode(_folderHashCache);
-      await prefs.setString(_folderHashCachePrefsKey, cacheJson);
-      debugPrint("文件夹hash缓存已保存，包含 ${_folderHashCache.length} 个条目");
-    } catch (e) {
-      debugPrint("保存文件夹hash缓存失败: $e");
-    }
-  }
-
   /// 加载子文件夹hash缓存
   Future<void> _loadSubFolderHashCache() async {
     try {
@@ -311,16 +272,6 @@ class ScanService with ChangeNotifier {
     }
   }
 
-  Future<bool> _shouldUseRustFileScan() async {
-    if (kIsWeb) return false;
-    final enabled = await SettingsStorage.loadBool(
-      SettingsKeys.labsEnableRustFileScan,
-      defaultValue: false,
-    );
-    if (!enabled) return false;
-    return RustFileScanService.isAvailable();
-  }
-
   _FolderFileDiff _diffFromRustResult(RustFileScanResult result) {
     return _FolderFileDiff(
       currentCount: result.currentCount,
@@ -329,171 +280,50 @@ class ScanService with ChangeNotifier {
       newFiles: result.newFiles,
       modifiedFiles: result.modifiedFiles,
       deletedFiles: result.deletedFiles,
-      folderHash: result.folderHash,
       currentHashes: result.currentHashes,
     );
   }
 
-  Future<_FolderFileDiff?> _tryCalculateFolderFileDiffWithRust(
+  Future<_FolderFileDiff> _calculateFolderFileDiffWithRust(
     String folderPath,
   ) async {
-    if (!await _shouldUseRustFileScan()) return null;
-    try {
-      final result = await RustFileScanService.calculateDiff(
-        folderPath: folderPath,
-        cachedHashes: _subFolderHashCache[folderPath] ?? {},
-      );
-      debugPrint(
-        "Rust 文件扫描完成 $folderPath: ${result.currentCount} 个视频文件",
-      );
-      return _diffFromRustResult(result);
-    } catch (e) {
-      debugPrint("Rust 文件扫描失败，回退 Dart 扫描 $folderPath: $e");
-      return null;
-    }
+    final result = await RustFileScanService.calculateDiff(
+      folderPath: folderPath,
+      cachedHashes: _subFolderHashCache[folderPath] ?? {},
+    );
+    debugPrint(
+      "Rust 文件扫描完成 $folderPath: ${result.currentCount} 个视频文件",
+    );
+    return _diffFromRustResult(result);
   }
 
-  Future<String?> _tryCalculateFolderHashWithRust(String folderPath) async {
-    if (!await _shouldUseRustFileScan()) return null;
-    try {
-      final result = await RustFileScanService.calculateDiff(
-        folderPath: folderPath,
-        cachedHashes: _subFolderHashCache[folderPath] ?? {},
-      );
-      final diff = _diffFromRustResult(result);
-      _precomputedFolderDiffs[folderPath] = diff;
-      return result.folderHash;
-    } catch (e) {
-      debugPrint("Rust 文件夹 hash 计算失败，回退 Dart 扫描 $folderPath: $e");
-      return null;
-    }
-  }
-
-  Future<void> _storeDiffHashes(
+  Future<void> _storeFileHashes(
     String folderPath,
     _FolderFileDiff diff,
   ) async {
-    var changed = false;
-    if (diff.folderHash != null && diff.folderHash!.isNotEmpty) {
-      _folderHashCache[folderPath] = diff.folderHash!;
-      await _saveFolderHashCache();
-      changed = true;
-    }
-
     if (diff.currentHashes != null) {
       _subFolderHashCache[folderPath] = Map<String, String>.from(
         diff.currentHashes!,
       );
       await _saveSubFolderHashCache();
-      changed = true;
-    }
-
-    if (changed) {
       debugPrint("已使用扫描结果更新文件夹 $folderPath 的hash缓存");
     }
   }
 
-  /// 计算文件夹的hash值
-  /// 基于文件夹内所有视频文件的路径、大小和修改时间
-  Future<String> _calculateFolderHash(String folderPath) async {
-    if (kIsWeb) return ''; // Web平台无法访问本地文件系统
-    final rustHash = await _tryCalculateFolderHashWithRust(folderPath);
-    if (rustHash != null) {
-      return rustHash;
-    }
-
-    try {
-      final directory = Directory(folderPath);
-      if (!await directory.exists()) {
-        return '';
-      }
-
-      List<String> fileInfoList = [];
-
-      await for (var entity
-          in directory.list(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          String extension = p.extension(entity.path).toLowerCase();
-          if (extension == '.mp4' || extension == '.mkv') {
-            try {
-              final stat = await entity.stat();
-              // 组合文件路径、大小和修改时间作为hash输入
-              final fileInfo =
-                  '${entity.path}|${stat.size}|${stat.modified.millisecondsSinceEpoch}';
-              fileInfoList.add(fileInfo);
-            } catch (e) {
-              // 如果无法获取文件信息，使用文件路径作为备用
-              fileInfoList.add(entity.path);
-            }
-          }
-        }
-      }
-
-      // 排序确保hash的一致性
-      fileInfoList.sort();
-
-      // 计算整个列表的hash
-      final combinedInfo = fileInfoList.join('\n');
-      final bytes = utf8.encode(combinedInfo);
-      final hash = sha256.convert(bytes).toString();
-
-      debugPrint(
-          "文件夹 $folderPath 的hash计算完成: $hash (包含 ${fileInfoList.length} 个视频文件)");
-      return hash;
-    } catch (e) {
-      debugPrint("计算文件夹hash失败 $folderPath: $e");
-      return '';
-    }
-  }
-
-  /// 检查文件夹是否有变化
-  Future<bool> _hasFolderChanged(String folderPath) async {
-    if (kIsWeb) return false; // 在Web上，假设没有变化
-    final currentHash = await _calculateFolderHash(folderPath);
-    final cachedHash = _folderHashCache[folderPath];
-
-    if (cachedHash == null) {
-      debugPrint("文件夹 $folderPath 没有缓存的hash，视为有变化");
-      return true;
-    }
-
-    final hasChanged = currentHash != cachedHash;
-    if (currentHash.length < 8 || cachedHash.length < 8) {
-      debugPrint(
-          "文件夹 $folderPath hash比较: ${hasChanged ? '有变化' : '无变化'} (当前: $currentHash, 缓存: $cachedHash)");
-      return hasChanged;
-    }
-    debugPrint(
-        "文件夹 $folderPath hash比较: ${hasChanged ? '有变化' : '无变化'} (当前: ${currentHash.substring(0, 8)}..., 缓存: ${cachedHash.substring(0, 8)}...)");
-    return hasChanged;
-  }
-
-  /// 更新文件夹hash缓存
-  Future<void> _updateFolderHash(
+  /// 更新文件hash缓存
+  Future<void> _updateFileHashes(
     String folderPath, {
     _FolderFileDiff? precomputedDiff,
   }) async {
     if (kIsWeb) return;
-    final diff = precomputedDiff ?? _precomputedFolderDiffs.remove(folderPath);
-    if (diff != null &&
-        (diff.folderHash != null || diff.currentHashes != null)) {
-      await _storeDiffHashes(folderPath, diff);
-      return;
+    try {
+      final diff = precomputedDiff ??
+          _precomputedFolderDiffs.remove(folderPath) ??
+          await _calculateFolderFileDiffWithRust(folderPath);
+      await _storeFileHashes(folderPath, diff);
+    } catch (e) {
+      debugPrint("更新文件夹hash缓存失败 $folderPath: $e");
     }
-
-    final currentHash = await _calculateFolderHash(folderPath);
-    if (currentHash.isNotEmpty) {
-      _folderHashCache[folderPath] = currentHash;
-      await _saveFolderHashCache();
-      debugPrint("已更新文件夹 $folderPath 的hash缓存");
-    }
-
-    // 同时更新子文件夹hash缓存
-    final subFolderHashes = await _calculateSubFolderHashes(folderPath);
-    _subFolderHashCache[folderPath] = subFolderHashes;
-    await _saveSubFolderHashCache();
-    debugPrint(
-        "已更新文件夹 $folderPath 的子文件夹hash缓存，包含 ${subFolderHashes.length} 个文件");
   }
 
   /// 清理不存在文件夹的hash缓存
@@ -501,7 +331,7 @@ class ScanService with ChangeNotifier {
     if (kIsWeb) return;
     final keysToRemove = <String>[];
 
-    for (final folderPath in _folderHashCache.keys) {
+    for (final folderPath in _subFolderHashCache.keys) {
       if (!_scannedFolders.contains(folderPath) ||
           !await Directory(folderPath).exists()) {
         keysToRemove.add(folderPath);
@@ -509,12 +339,10 @@ class ScanService with ChangeNotifier {
     }
 
     for (final key in keysToRemove) {
-      _folderHashCache.remove(key);
-      _subFolderHashCache.remove(key); // 同时清理子文件夹缓存
+      _subFolderHashCache.remove(key);
     }
 
     if (keysToRemove.isNotEmpty) {
-      await _saveFolderHashCache();
       await _saveSubFolderHashCache();
       debugPrint("已清理 ${keysToRemove.length} 个无效的文件夹hash缓存");
     }
@@ -522,9 +350,7 @@ class ScanService with ChangeNotifier {
 
   /// 清理所有文件夹hash缓存，强制下次扫描时重新检查所有文件夹
   Future<void> clearAllFolderHashCache() async {
-    _folderHashCache.clear();
     _subFolderHashCache.clear();
-    await _saveFolderHashCache();
     await _saveSubFolderHashCache();
     debugPrint("已清理所有文件夹hash缓存");
     _updateScanMessage("已清理智能扫描缓存，下次扫描将检查所有文件夹。");
@@ -588,54 +414,6 @@ class ScanService with ChangeNotifier {
     );
   }
 
-  /// 计算文件夹内所有子文件夹和视频文件的hash
-  Future<Map<String, String>> _calculateSubFolderHashes(
-      String folderPath) async {
-    if (kIsWeb) return {};
-    final rustDiff = await _tryCalculateFolderFileDiffWithRust(folderPath);
-    if (rustDiff?.currentHashes != null) {
-      return Map<String, String>.from(rustDiff!.currentHashes!);
-    }
-
-    final Map<String, String> subHashes = {};
-    final directory = Directory(folderPath);
-
-    if (!await directory.exists()) {
-      return subHashes;
-    }
-
-    try {
-      await for (var entity
-          in directory.list(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          String extension = p.extension(entity.path).toLowerCase();
-          if (extension == '.mp4' || extension == '.mkv') {
-            try {
-              final stat = await entity.stat();
-              final relativePath = p.relative(entity.path, from: folderPath);
-              final fileInfo =
-                  '${stat.size}|${stat.modified.millisecondsSinceEpoch}';
-              final bytes = utf8.encode(fileInfo);
-              final hash = sha256
-                  .convert(bytes)
-                  .toString()
-                  .substring(0, 16); // 使用短hash节省空间
-              subHashes[relativePath] = hash;
-            } catch (e) {
-              // 如果无法获取文件信息，使用文件路径作为备用
-              final relativePath = p.relative(entity.path, from: folderPath);
-              subHashes[relativePath] = 'error';
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint("计算子文件夹hash失败 $folderPath: $e");
-    }
-
-    return subHashes;
-  }
-
   /// 计算文件夹内视频文件的变化明细
   Future<_FolderFileDiff> _calculateFolderFileDiff(String folderPath) async {
     final precomputed = _precomputedFolderDiffs.remove(folderPath);
@@ -643,50 +421,7 @@ class ScanService with ChangeNotifier {
       return precomputed;
     }
 
-    final rustDiff = await _tryCalculateFolderFileDiffWithRust(folderPath);
-    if (rustDiff != null) {
-      return rustDiff;
-    }
-
-    final currentSubFolderHashes = await _calculateSubFolderHashes(folderPath);
-    final cachedSubFolderHashes = _subFolderHashCache[folderPath] ?? {};
-
-    final List<String> newFiles = [];
-    final List<String> modifiedFiles = [];
-    final List<String> deletedFiles = [];
-
-    for (final entry in currentSubFolderHashes.entries) {
-      final subPath = entry.key;
-      final currentHash = entry.value;
-      final cachedHash = cachedSubFolderHashes[subPath];
-
-      if (cachedHash == null) {
-        newFiles.add(subPath);
-      } else if (cachedHash != currentHash) {
-        modifiedFiles.add(subPath);
-      }
-    }
-
-    for (final cachedPath in cachedSubFolderHashes.keys) {
-      if (!currentSubFolderHashes.containsKey(cachedPath)) {
-        deletedFiles.add(cachedPath);
-      }
-    }
-
-    final List<String> currentFiles = currentSubFolderHashes.keys.toList()
-      ..sort();
-    newFiles.sort();
-    modifiedFiles.sort();
-    deletedFiles.sort();
-
-    return _FolderFileDiff(
-      currentCount: currentSubFolderHashes.length,
-      cachedCount: cachedSubFolderHashes.length,
-      currentFiles: currentFiles,
-      newFiles: newFiles,
-      modifiedFiles: modifiedFiles,
-      deletedFiles: deletedFiles,
-    );
+    return _calculateFolderFileDiffWithRust(folderPath);
   }
 
   /// 获取变化检测结果的摘要
@@ -808,13 +543,11 @@ class ScanService with ChangeNotifier {
     _updateScanState(
         scanning: true, progress: 0.0, message: "开始智能刷新所有媒体文件夹...");
 
-    // 先清理无效的hash缓存
     await _cleanupFolderHashCache();
 
-    List<String> allFoldersToScan = List.from(_scannedFolders);
-    List<String> foldersNeedingScan = [];
+    final allFoldersToScan = List<String>.from(_scannedFolders);
+    final foldersNeedingScan = <String>[];
 
-    // 第一阶段：检查哪些文件夹需要扫描
     _updateScanState(message: "正在检查文件夹变化...");
 
     for (int i = 0; i < allFoldersToScan.length; i++) {
@@ -826,17 +559,31 @@ class ScanService with ChangeNotifier {
 
       final folderPath = allFoldersToScan[i];
       _updateScanState(
-          progress: (i + 1) / allFoldersToScan.length * 0.3, // 前30%用于检查
+          progress: (i + 1) / allFoldersToScan.length * 0.3,
           message:
               "检查文件夹变化: ${p.basename(folderPath)} (${i + 1}/${allFoldersToScan.length})");
 
-      final hasChanged = await _hasFolderChanged(folderPath);
-      if (hasChanged) {
-        foldersNeedingScan.add(folderPath);
+      try {
+        final diff = await _calculateFolderFileDiffWithRust(folderPath);
+        _precomputedFolderDiffs[folderPath] = diff;
+        if (diff.hasChanges) {
+          foldersNeedingScan.add(folderPath);
+        }
+      } catch (e) {
+        _precomputedFolderDiffs.clear();
+        _updateScanState(
+          scanning: false,
+          message: "Rust 文件扫描失败: $e",
+          completed: true,
+        );
+        return;
       }
     }
 
     if (foldersNeedingScan.isEmpty) {
+      for (final diffEntry in _precomputedFolderDiffs.entries) {
+        await _storeFileHashes(diffEntry.key, diffEntry.value);
+      }
       _precomputedFolderDiffs.clear();
       _updateScanState(
           scanning: false,
@@ -846,21 +593,20 @@ class ScanService with ChangeNotifier {
       return;
     }
 
-    // 第二阶段：扫描有变化的文件夹
     _updateScanState(
         message: "发现 ${foldersNeedingScan.length} 个文件夹有变化，开始扫描...");
 
-    int foldersProcessedCount = 0;
+    var foldersProcessedCount = 0;
 
-    for (String folderPath in foldersNeedingScan) {
+    for (final folderPath in foldersNeedingScan) {
       if (!_isScanning) {
         _precomputedFolderDiffs.clear();
         _updateScanState(scanning: false, message: "刷新已取消。", completed: true);
         return;
       }
 
-      final overallProgress = 0.3 +
-          (foldersProcessedCount / foldersNeedingScan.length) * 0.7; // 后70%用于扫描
+      final overallProgress =
+          0.3 + (foldersProcessedCount / foldersNeedingScan.length) * 0.7;
       _updateScanState(
           progress: overallProgress,
           message:
@@ -874,10 +620,9 @@ class ScanService with ChangeNotifier {
     }
 
     if (_isScanning || foldersProcessedCount == foldersNeedingScan.length) {
-      // 批量扫描完成，设置标志
       _justFinishedScanning = true;
       final skippedCount = allFoldersToScan.length - foldersNeedingScan.length;
-      String completionMessage =
+      var completionMessage =
           "智能刷新完成：扫描了 ${foldersNeedingScan.length} 个有变化的文件夹";
       if (skippedCount > 0) {
         completionMessage += "，跳过了 $skippedCount 个无变化的文件夹";
@@ -936,7 +681,23 @@ class ScanService with ChangeNotifier {
 
     // 第一阶段：分析文件变化
     _updateScanState(message: "正在分析文件变化...");
-    final diff = await _calculateFolderFileDiff(directoryPath);
+    final _FolderFileDiff diff;
+    try {
+      diff = await _calculateFolderFileDiff(directoryPath);
+    } catch (e) {
+      final message = "Rust 文件扫描失败: $e";
+      debugPrint("$message ($directoryPath)");
+      if (!isPartOfBatch) {
+        _updateScanState(
+          scanning: false,
+          message: message,
+          completed: true,
+        );
+      } else {
+        _updateScanMessage("${p.basename(directoryPath)} $message");
+      }
+      return;
+    }
     if (diff.currentCount == 0 && diff.cachedCount == 0) {
       if (!isPartOfBatch) {
         _totalFilesFound = 0;
@@ -950,26 +711,18 @@ class ScanService with ChangeNotifier {
       } else {
         _updateScanMessage("在 ${p.basename(directoryPath)} 中无视频文件。");
       }
-      await _updateFolderHash(directoryPath, precomputedDiff: diff);
+      await _updateFileHashes(directoryPath, precomputedDiff: diff);
       return;
     }
 
     List<String> filesToProcess = List<String>.from(diff.filesToProcess)
       ..sort();
-    if (filesToProcess.isEmpty &&
-        diff.deletedFiles.isEmpty &&
-        diff.currentFiles.isNotEmpty) {
-      final hasChanged = await _hasFolderChanged(directoryPath);
-      if (hasChanged) {
-        filesToProcess = List<String>.from(diff.currentFiles);
-      }
-    }
     if (filesToProcess.isEmpty) {
       if (diff.deletedFiles.isNotEmpty) {
         final deletionMessage =
             "检测到 ${diff.deletedFiles.length} 个文件被删除，无需重新刮削。";
         if (!isPartOfBatch) {
-          await _updateFolderHash(directoryPath, precomputedDiff: diff);
+          await _updateFileHashes(directoryPath, precomputedDiff: diff);
           _updateScanState(
             scanning: false,
             progress: 1.0,
@@ -977,12 +730,12 @@ class ScanService with ChangeNotifier {
             completed: true,
           );
         } else {
-          await _updateFolderHash(directoryPath, precomputedDiff: diff);
+          await _updateFileHashes(directoryPath, precomputedDiff: diff);
           _updateScanMessage("${p.basename(directoryPath)} $deletionMessage");
         }
       } else {
         if (!isPartOfBatch) {
-          await _updateFolderHash(directoryPath, precomputedDiff: diff);
+          await _updateFileHashes(directoryPath, precomputedDiff: diff);
           _updateScanState(
             scanning: false,
             progress: 1.0,
@@ -990,7 +743,7 @@ class ScanService with ChangeNotifier {
             completed: true,
           );
         } else {
-          await _updateFolderHash(directoryPath, precomputedDiff: diff);
+          await _updateFileHashes(directoryPath, precomputedDiff: diff);
           _updateScanMessage("文件夹 ${p.basename(directoryPath)} 没有变化，已跳过。");
         }
       }
@@ -1062,7 +815,7 @@ class ScanService with ChangeNotifier {
       }
 
       _justFinishedScanning = true;
-      await _updateFolderHash(directoryPath, precomputedDiff: diff);
+      await _updateFileHashes(directoryPath, precomputedDiff: diff);
       _updateScanState(
           scanning: false,
           progress: 1.0,
@@ -1070,7 +823,7 @@ class ScanService with ChangeNotifier {
           completed: true);
     } else if (isPartOfBatch) {
       _totalFilesFound += videoFiles.length;
-      await _updateFolderHash(directoryPath, precomputedDiff: diff);
+      await _updateFileHashes(directoryPath, precomputedDiff: diff);
     }
   }
 
@@ -1139,17 +892,10 @@ class ScanService with ChangeNotifier {
       _scannedFolders = List.from(_scannedFolders)..remove(folderPath);
       await _saveScannedFolders();
 
-      // 同时移除对应的hash缓存
-      if (_folderHashCache.containsKey(folderPath)) {
-        _folderHashCache.remove(folderPath);
-        await _saveFolderHashCache();
-        debugPrint("已清理文件夹 $folderPath 的hash缓存");
-      }
-
       if (_subFolderHashCache.containsKey(folderPath)) {
         _subFolderHashCache.remove(folderPath);
         await _saveSubFolderHashCache();
-        debugPrint("已清理文件夹 $folderPath 的子文件夹hash缓存");
+        debugPrint("已清理文件夹 $folderPath 的文件hash缓存");
       }
 
       _updateScanMessage("已从扫描列表移除文件夹: $folderPath");

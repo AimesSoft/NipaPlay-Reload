@@ -8,20 +8,14 @@ class LabsSettingsProvider extends ChangeNotifier {
   }
 
   bool _enableLargeScreenMode = false;
-  bool _enableRustFileScan = false;
   bool _isLoaded = false;
 
   bool get enableLargeScreenMode => _enableLargeScreenMode;
-  bool get enableRustFileScan => _enableRustFileScan;
   bool get isLoaded => _isLoaded;
 
   Future<void> _loadSettings() async {
     _enableLargeScreenMode = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableLargeScreenMode,
-      defaultValue: false,
-    );
-    _enableRustFileScan = await SettingsStorage.loadBool(
-      SettingsKeys.labsEnableRustFileScan,
       defaultValue: false,
     );
     _isLoaded = true;
@@ -34,16 +28,6 @@ class LabsSettingsProvider extends ChangeNotifier {
     notifyListeners();
     await SettingsStorage.saveBool(
       SettingsKeys.labsEnableLargeScreenMode,
-      enabled,
-    );
-  }
-
-  Future<void> setEnableRustFileScan(bool enabled) async {
-    if (_enableRustFileScan == enabled) return;
-    _enableRustFileScan = enabled;
-    notifyListeners();
-    await SettingsStorage.saveBool(
-      SettingsKeys.labsEnableRustFileScan,
       enabled,
     );
   }

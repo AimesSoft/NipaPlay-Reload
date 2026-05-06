@@ -72,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1390884270;
+  int get rustContentHash => 629279474;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -90,8 +90,6 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiSimpleInitApp();
 
   bool crateApiPerformanceIsPerformanceProbeAvailable();
-
-  bool crateApiFileScanIsRustFileScanAvailable();
 
   bool crateApiTorrentIsTorrentEngineAvailable();
 
@@ -212,34 +210,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  bool crateApiFileScanIsRustFileScanAvailable() {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_bool,
-        decodeErrorData: null,
-      ),
-      constMeta: kCrateApiFileScanIsRustFileScanAvailableConstMeta,
-      argValues: [],
-      apiImpl: this,
-    ));
-  }
-
-  TaskConstMeta get kCrateApiFileScanIsRustFileScanAvailableConstMeta =>
-      const TaskConstMeta(
-        debugName: "is_rust_file_scan_available",
-        argNames: [],
-      );
-
-  @override
   bool crateApiTorrentIsTorrentEngineAvailable() {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -263,7 +238,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 6, port: port_);
+            funcId: 5, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_cpu_sample,
@@ -287,7 +262,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
+            funcId: 6, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_gpu_sample,
@@ -311,7 +286,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 8, port: port_);
+            funcId: 7, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_f_64,
@@ -335,7 +310,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 9, port: port_);
+            funcId: 8, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_performance_sample,
@@ -361,7 +336,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(folderPath, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 10, port: port_);
+            funcId: 9, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_file_scan_snapshot,
@@ -391,7 +366,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 11, port: port_);
+            funcId: 10, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -421,7 +396,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 12, port: port_);
+            funcId: 11, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -446,7 +421,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 13, port: port_);
+            funcId: 12, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -471,7 +446,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 14, port: port_);
+            funcId: 13, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -497,7 +472,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 15, port: port_);
+            funcId: 14, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -522,7 +497,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 16, port: port_);
+            funcId: 15, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -546,7 +521,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 17, port: port_);
+            funcId: 16, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -571,7 +546,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 18, port: port_);
+            funcId: 17, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -690,8 +665,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RustFileScanDiff dco_decode_rust_file_scan_diff(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return RustFileScanDiff(
       currentCount: dco_decode_i_32(arr[0]),
       cachedCount: dco_decode_i_32(arr[1]),
@@ -699,8 +674,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       newFiles: dco_decode_list_String(arr[3]),
       modifiedFiles: dco_decode_list_String(arr[4]),
       deletedFiles: dco_decode_list_String(arr[5]),
-      folderHash: dco_decode_String(arr[6]),
-      currentHashes: dco_decode_list_rust_file_hash_entry(arr[7]),
+      currentHashes: dco_decode_list_rust_file_hash_entry(arr[6]),
     );
   }
 
@@ -723,11 +697,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RustFileScanSnapshot dco_decode_rust_file_scan_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
     return RustFileScanSnapshot(
-      folderHash: dco_decode_String(arr[0]),
-      files: dco_decode_list_rust_file_scan_entry(arr[1]),
+      files: dco_decode_list_rust_file_scan_entry(arr[0]),
     );
   }
 
@@ -906,7 +879,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_newFiles = sse_decode_list_String(deserializer);
     var var_modifiedFiles = sse_decode_list_String(deserializer);
     var var_deletedFiles = sse_decode_list_String(deserializer);
-    var var_folderHash = sse_decode_String(deserializer);
     var var_currentHashes = sse_decode_list_rust_file_hash_entry(deserializer);
     return RustFileScanDiff(
         currentCount: var_currentCount,
@@ -915,7 +887,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         newFiles: var_newFiles,
         modifiedFiles: var_modifiedFiles,
         deletedFiles: var_deletedFiles,
-        folderHash: var_folderHash,
         currentHashes: var_currentHashes);
   }
 
@@ -940,9 +911,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RustFileScanSnapshot sse_decode_rust_file_scan_snapshot(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_folderHash = sse_decode_String(deserializer);
     var var_files = sse_decode_list_rust_file_scan_entry(deserializer);
-    return RustFileScanSnapshot(folderHash: var_folderHash, files: var_files);
+    return RustFileScanSnapshot(files: var_files);
   }
 
   @protected
@@ -1103,7 +1073,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.newFiles, serializer);
     sse_encode_list_String(self.modifiedFiles, serializer);
     sse_encode_list_String(self.deletedFiles, serializer);
-    sse_encode_String(self.folderHash, serializer);
     sse_encode_list_rust_file_hash_entry(self.currentHashes, serializer);
   }
 
@@ -1122,7 +1091,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_rust_file_scan_snapshot(
       RustFileScanSnapshot self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.folderHash, serializer);
     sse_encode_list_rust_file_scan_entry(self.files, serializer);
   }
 

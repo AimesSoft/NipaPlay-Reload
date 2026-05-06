@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1390884270;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 629279474;
 
 // Section: executor
 
@@ -142,36 +142,6 @@ fn wire__crate__api__performance__is_performance_probe_available_impl(
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
                     Result::<_, ()>::Ok(crate::api::performance::is_performance_probe_available())?;
-                Ok(output_ok)
-            })())
-        },
-    )
-}
-fn wire__crate__api__file_scan__is_rust_file_scan_available_impl(
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "is_rust_file_scan_available",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok =
-                    Result::<_, ()>::Ok(crate::api::file_scan::is_rust_file_scan_available())?;
                 Ok(output_ok)
             })())
         },
@@ -793,7 +763,6 @@ impl SseDecode for crate::api::file_scan::RustFileScanDiff {
         let mut var_newFiles = <Vec<String>>::sse_decode(deserializer);
         let mut var_modifiedFiles = <Vec<String>>::sse_decode(deserializer);
         let mut var_deletedFiles = <Vec<String>>::sse_decode(deserializer);
-        let mut var_folderHash = <String>::sse_decode(deserializer);
         let mut var_currentHashes =
             <Vec<crate::api::file_scan::RustFileHashEntry>>::sse_decode(deserializer);
         return crate::api::file_scan::RustFileScanDiff {
@@ -803,7 +772,6 @@ impl SseDecode for crate::api::file_scan::RustFileScanDiff {
             new_files: var_newFiles,
             modified_files: var_modifiedFiles,
             deleted_files: var_deletedFiles,
-            folder_hash: var_folderHash,
             current_hashes: var_currentHashes,
         };
     }
@@ -830,13 +798,9 @@ impl SseDecode for crate::api::file_scan::RustFileScanEntry {
 impl SseDecode for crate::api::file_scan::RustFileScanSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_folderHash = <String>::sse_decode(deserializer);
         let mut var_files =
             <Vec<crate::api::file_scan::RustFileScanEntry>>::sse_decode(deserializer);
-        return crate::api::file_scan::RustFileScanSnapshot {
-            folder_hash: var_folderHash,
-            files: var_files,
-        };
+        return crate::api::file_scan::RustFileScanSnapshot { files: var_files };
     }
 }
 
@@ -895,41 +859,41 @@ fn pde_ffi_dispatcher_primary_impl(
     match func_id {
         1 => wire__crate__api__file_scan__diff_video_files_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__performance__sample_cpu_counters_impl(
+        5 => wire__crate__api__performance__sample_cpu_counters_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        7 => wire__crate__api__performance__sample_gpu_percent_impl(
+        6 => wire__crate__api__performance__sample_gpu_percent_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        8 => wire__crate__api__performance__sample_memory_rss_mb_impl(
+        7 => wire__crate__api__performance__sample_memory_rss_mb_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__performance__sample_performance_impl(
+        8 => wire__crate__api__performance__sample_performance_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        10 => wire__crate__api__file_scan__scan_video_files_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__torrent__torrent_add_file_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__torrent__torrent_add_magnet_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
-        15 => {
+        9 => wire__crate__api__file_scan__scan_video_files_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__torrent__torrent_add_file_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__torrent__torrent_add_magnet_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__torrent__torrent_delete_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__torrent__torrent_forget_impl(port, ptr, rust_vec_len, data_len),
+        14 => {
             wire__crate__api__torrent__torrent_init_session_impl(port, ptr, rust_vec_len, data_len)
         }
-        16 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__torrent__torrent_list_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__torrent__torrent_pause_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__torrent__torrent_resume_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -947,12 +911,7 @@ fn pde_ffi_dispatcher_sync_impl(
             rust_vec_len,
             data_len,
         ),
-        4 => wire__crate__api__file_scan__is_rust_file_scan_available_impl(
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        5 => {
+        4 => {
             wire__crate__api__torrent__is_torrent_engine_available_impl(ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -1014,7 +973,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::file_scan::RustFileScanDiff {
             self.new_files.into_into_dart().into_dart(),
             self.modified_files.into_into_dart().into_dart(),
             self.deleted_files.into_into_dart().into_dart(),
-            self.folder_hash.into_into_dart().into_dart(),
             self.current_hashes.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -1058,11 +1016,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::file_scan::RustFileScanEntry>
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::file_scan::RustFileScanSnapshot {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [
-            self.folder_hash.into_into_dart().into_dart(),
-            self.files.into_into_dart().into_dart(),
-        ]
-        .into_dart()
+        [self.files.into_into_dart().into_dart()].into_dart()
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
@@ -1244,7 +1198,6 @@ impl SseEncode for crate::api::file_scan::RustFileScanDiff {
         <Vec<String>>::sse_encode(self.new_files, serializer);
         <Vec<String>>::sse_encode(self.modified_files, serializer);
         <Vec<String>>::sse_encode(self.deleted_files, serializer);
-        <String>::sse_encode(self.folder_hash, serializer);
         <Vec<crate::api::file_scan::RustFileHashEntry>>::sse_encode(
             self.current_hashes,
             serializer,
@@ -1266,7 +1219,6 @@ impl SseEncode for crate::api::file_scan::RustFileScanEntry {
 impl SseEncode for crate::api::file_scan::RustFileScanSnapshot {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.folder_hash, serializer);
         <Vec<crate::api::file_scan::RustFileScanEntry>>::sse_encode(self.files, serializer);
     }
 }
