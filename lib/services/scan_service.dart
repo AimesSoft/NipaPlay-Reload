@@ -570,13 +570,11 @@ class ScanService with ChangeNotifier {
           foldersNeedingScan.add(folderPath);
         }
       } catch (e) {
-        _precomputedFolderDiffs.clear();
-        _updateScanState(
-          scanning: false,
-          message: "Rust 文件扫描失败: $e",
-          completed: true,
-        );
-        return;
+        // Rust diff failed for this folder — fall back to a full scan
+        // instead of aborting the entire batch.
+        debugPrint(
+            'Rust 文件 diff 失败，回退到全量扫描: $folderPath — $e');
+        foldersNeedingScan.add(folderPath);
       }
     }
 
