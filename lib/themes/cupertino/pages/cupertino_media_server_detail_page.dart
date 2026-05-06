@@ -600,6 +600,7 @@ class _CupertinoMediaServerDetailPageState
           duration: episode.runTimeTicks != null
               ? (episode.runTimeTicks / 10000000).round()
               : null,
+          watched: episode.userData?.played,
         ),
       );
     }
@@ -1546,6 +1547,11 @@ class _CupertinoMediaServerDetailPageState
                 .replaceAll('<br />', ' ')
             : null;
 
+    // 支持 SharedRemoteEpisode.watched 和 raw episode userData?.played 两种类型
+    final bool isEpisodeWatched = episode is SharedRemoteEpisode
+        ? episode.watched == true
+        : episode.userData?.played == true;
+
     return GestureDetector(
       onTap: () => _playEpisode(episode),
       child: Container(
@@ -1619,6 +1625,15 @@ class _CupertinoMediaServerDetailPageState
               ),
             ),
             const SizedBox(width: 12),
+            if (isEpisodeWatched)
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: Icon(
+                  CupertinoIcons.checkmark_circle_fill,
+                  color: CupertinoColors.activeGreen.withOpacity(0.7),
+                  size: 18,
+                ),
+              ),
             Icon(
               CupertinoIcons.play_circle,
               color: iconColor,

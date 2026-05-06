@@ -133,6 +133,7 @@ class SharedRemoteEpisode {
     this.fileSize,
     this.lastWatchTime,
     this.videoHash,
+    this.watched,
   });
 
   final String shareId;
@@ -148,6 +149,7 @@ class SharedRemoteEpisode {
   final int? fileSize;
   final DateTime? lastWatchTime;
   final String? videoHash;
+  final bool? watched;
 
   factory SharedRemoteEpisode.fromJson(Map<String, dynamic> json) {
     final rawStreamPath = json['streamPath'] as String?;
@@ -172,6 +174,7 @@ class SharedRemoteEpisode {
           ? DateTime.tryParse(json['lastWatchTime'] as String)
           : null,
       videoHash: json['videoHash'] as String?,
+      watched: json['watched'] as bool?,
     );
   }
 }

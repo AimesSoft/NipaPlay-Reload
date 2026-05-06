@@ -267,6 +267,7 @@ class JellyfinEpisodeInfo {
   final DateTime dateAdded;
   final String? premiereDate;
   final int? runTimeTicks;
+  final JellyfinUserData? userData;
   
   JellyfinEpisodeInfo({
     required this.id,
@@ -282,6 +283,7 @@ class JellyfinEpisodeInfo {
     required this.dateAdded,
     this.premiereDate,
     this.runTimeTicks,
+    this.userData,
   });
   
   factory JellyfinEpisodeInfo.fromJson(Map<String, dynamic> json) {
@@ -299,6 +301,7 @@ class JellyfinEpisodeInfo {
       dateAdded: DateTime.parse(json['DateCreated'] ?? DateTime.now().toIso8601String()),
       premiereDate: json['PremiereDate'],
       runTimeTicks: json['RunTimeTicks'],
+      userData: json['UserData'] != null ? JellyfinUserData.fromJson(json['UserData']) : null,
     );
   }
   

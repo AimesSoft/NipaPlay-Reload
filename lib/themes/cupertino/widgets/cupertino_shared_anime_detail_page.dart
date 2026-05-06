@@ -1987,6 +1987,7 @@ class _CupertinoSharedAnimeDetailPageState
       context,
     );
     final episodeImage = _resolveEpisodeImage(episode);
+    final isWatched = episode.watched == true;
 
     return GestureDetector(
       onTap: hasSharedFile ? () => _playEpisode(episode) : null,
@@ -2023,6 +2024,16 @@ class _CupertinoSharedAnimeDetailPageState
                     if (!hasSharedFile)
                       Container(
                         color: CupertinoColors.black.withOpacity(0.2),
+                      ),
+                    if (isWatched)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Icon(
+                          CupertinoIcons.checkmark_circle_fill,
+                          size: 22,
+                          color: CupertinoColors.activeGreen.withOpacity(0.85),
+                        ),
                       ),
                     if (hasSharedFile)
                       Positioned(
@@ -3623,6 +3634,7 @@ class _CupertinoSharedAnimeDetailPageState
     final hasSharedFile = episode.fileExists;
     final isEnabled = hasSharedFile;
     final episodeImage = _resolveEpisodeImage(episode);
+    final isWatched = episode.watched == true;
 
     final Widget leadingWidget = episodeImage != null
         ? ClipRRect(
@@ -3751,6 +3763,15 @@ class _CupertinoSharedAnimeDetailPageState
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (isWatched)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      CupertinoIcons.checkmark_circle_fill,
+                      size: 18,
+                      color: CupertinoColors.activeGreen.withOpacity(0.75),
+                    ),
+                  ),
                 if (hasSharedFile)
                   Container(
                     padding:
