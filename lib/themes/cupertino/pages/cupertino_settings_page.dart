@@ -41,6 +41,8 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
     final Color backgroundColor =
         CupertinoColors.systemGroupedBackground.resolveFrom(context);
     final double statusBarHeight = MediaQuery.of(context).padding.top;
+    final double bottomContentPadding =
+        MediaQuery.viewPaddingOf(context).bottom + 96;
     final double titleOpacity = (1.0 - (_scrollOffset / 10.0)).clamp(0.0, 1.0);
 
     return ColoredBox(
@@ -55,10 +57,10 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.only(top: statusBarHeight + 52),
-                sliver: SliverToBoxAdapter(
+                sliver: const SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: const [
+                    children: [
                       CupertinoSettingsGeneralSection(),
                       SizedBox(height: 24),
                       CupertinoSettingsLabsSection(),
@@ -68,7 +70,9 @@ class _CupertinoSettingsPageState extends State<CupertinoSettingsPage> {
                   ),
                 ),
               ),
-              const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
+              SliverPadding(
+                padding: EdgeInsets.only(bottom: bottomContentPadding),
+              ),
             ],
           ),
           Positioned(
