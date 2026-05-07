@@ -68,9 +68,12 @@ class _GeneralPageState extends State<GeneralPage> {
           title: "视频播放", value: 1, isSelected: _defaultPageIndex == 1),
       DropdownMenuItemData(
           title: "媒体库", value: 2, isSelected: _defaultPageIndex == 2),
-      DropdownMenuItemData(
-          title: "下载器", value: 3, isSelected: _defaultPageIndex == 3),
     ];
+
+    if (globals.isDownloaderSupportedPlatform) {
+      items.add(DropdownMenuItemData(
+          title: "下载器", value: 3, isSelected: _defaultPageIndex == 3));
+    }
 
     items.add(DropdownMenuItemData(
         title: "个人中心", value: 4, isSelected: _defaultPageIndex == 4));
@@ -127,6 +130,8 @@ class _GeneralPageState extends State<GeneralPage> {
 
     if (resolvedIndex < 0) {
       resolvedIndex = 0;
+    } else if (!globals.isDownloaderSupportedPlatform && resolvedIndex == 3) {
+      resolvedIndex = 0;
     } else if (resolvedIndex > 4) {
       resolvedIndex = 4;
     }
@@ -144,6 +149,7 @@ class _GeneralPageState extends State<GeneralPage> {
   }
 
   Future<void> _saveDefaultPagePreference(int index) async {
+    if (!globals.isDownloaderSupportedPlatform && index == 3) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(defaultPageIndexKey, index);
     await prefs.setString(_defaultHomeTabKey, _defaultHomeTabName(index));

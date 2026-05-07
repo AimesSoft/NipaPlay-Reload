@@ -114,7 +114,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       );
     }
 
-    final bool isDesktopOrTablet = globals.isDesktopOrTablet;
+    final bool isDesktop = globals.isDesktop;
+    final bool isTablet = globals.isTablet;
+    final bool isDesktopOrTablet = isDesktop || isTablet;
     final bool useLargeScreenLayout = widget.useLargeScreenLayout &&
         widget.pageIsHome &&
         isDesktopOrTablet &&
@@ -186,9 +188,11 @@ class _CustomScaffoldState extends State<CustomScaffold> {
           ? AppBar(
               toolbarHeight: !widget.pageIsHome && !isDesktopOrTablet
                   ? 100
-                  : isDesktopOrTablet
+                  : isDesktop
                       ? 20
-                      : 60,
+                      : isTablet
+                          ? 30
+                          : 60,
               leading: widget.pageIsHome
                   ? null
                   : IconButton(

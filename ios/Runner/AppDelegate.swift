@@ -17,6 +17,26 @@ import Photos
     }
 
     if let controller = window?.rootViewController as? FlutterViewController {
+      let deviceProfileChannel = FlutterMethodChannel(
+        name: "nipaplay/device_profile",
+        binaryMessenger: controller.binaryMessenger
+      )
+
+      deviceProfileChannel.setMethodCallHandler { call, result in
+        guard call.method == "getStartupDeviceProfile" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+
+        let bounds = UIScreen.main.bounds
+        result([
+          "isIPad": UIDevice.current.userInterfaceIdiom == .pad,
+          "screenWidthDp": Double(bounds.width),
+          "screenHeightDp": Double(bounds.height),
+          "smallestScreenWidthDp": Double(min(bounds.width, bounds.height)),
+        ])
+      }
+
       let channel = FlutterMethodChannel(
         name: "nipaplay/system_share",
         binaryMessenger: controller.binaryMessenger

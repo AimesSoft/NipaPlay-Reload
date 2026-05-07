@@ -24,6 +24,7 @@ const MethodChannel _deviceProfileChannel =
 bool _startupDeviceProfileInitialized = false;
 bool _startupTabletLike = false;
 bool _startupAndroidTv = false;
+bool _startupIPad = false;
 
 class _DisplayMetrics {
   const _DisplayMetrics({
@@ -73,12 +74,15 @@ Future<void> initializeStartupDeviceProfile() async {
   var startupMetrics = metrics;
   var isAndroidTv = false;
 
-  if (!kIsWeb && Platform.isAndroid) {
+  var isIPad = false;
+
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     try {
       final profile = await _deviceProfileChannel
           .invokeMapMethod<String, dynamic>('getStartupDeviceProfile');
       if (profile != null) {
         isAndroidTv = profile['isAndroidTv'] == true;
+        isIPad = profile['isIPad'] == true;
         final screenWidthDp = (profile['screenWidthDp'] as num?)?.toDouble();
         final screenHeightDp = (profile['screenHeightDp'] as num?)?.toDouble();
         final smallestWidthDp =
@@ -104,6 +108,7 @@ Future<void> initializeStartupDeviceProfile() async {
     isAndroidTv: isAndroidTv,
     metrics: startupMetrics,
   );
+  _startupIPad = isIPad || (!kIsWeb && Platform.isIOS && _startupTabletLike);
   _startupDeviceProfileInitialized = true;
 }
 
@@ -142,6 +147,17 @@ bool get isTablet {
 
 bool get isTabletLikeMobile => isMobilePlatform && isTablet;
 bool get isAndroidTv => _startupAndroidTv;
+
+bool get isIPad {
+  if (kIsWeb) {
+    return defaultTargetPlatform == TargetPlatform.iOS && isTablet;
+  }
+  if (!Platform.isIOS) return false;
+  if (_startupDeviceProfileInitialized) return _startupIPad;
+  return isTablet;
+}
+
+bool get isDownloaderSupportedPlatform => !isIPad;
 
 bool get isTouch {
   //移动平台

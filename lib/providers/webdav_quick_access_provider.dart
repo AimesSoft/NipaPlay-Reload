@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// WebDAV 文件排序预设
 enum WebDAVSortPreset {
@@ -106,6 +107,11 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       return tabHome;
     }
 
+    if (_defaultHomeTab == tabTorrent &&
+        !globals.isDownloaderSupportedPlatform) {
+      return tabHome;
+    }
+
     if (_isCupertinoOnlyTab(_defaultHomeTab) ||
         !_allSupportedTabs.contains(_defaultHomeTab)) {
       return tabHome;
@@ -116,17 +122,15 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
 
   /// Material 主题可用的默认主页选项
   List<String> get materialAvailableTabs {
-    if (_showWebDAVTab) {
-      return [
-        tabHome,
-        tabVideo,
-        tabWebDAV,
-        tabMediaLibrary,
-        tabTorrent,
-        tabAccount,
-      ];
-    }
-    return [tabHome, tabVideo, tabMediaLibrary, tabTorrent, tabAccount];
+    final tabs = <String>[
+      tabHome,
+      tabVideo,
+      if (_showWebDAVTab) tabWebDAV,
+      tabMediaLibrary,
+      if (globals.isDownloaderSupportedPlatform) tabTorrent,
+      tabAccount,
+    ];
+    return tabs;
   }
 
   /// Cupertino 主题可用的默认主页选项
@@ -225,6 +229,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   /// 设置默认主页 Tab
   Future<void> setDefaultHomeTab(String tabName) async {
     if (!_allSupportedTabs.contains(tabName)) {
+      return;
+    }
+    if (tabName == tabTorrent && !globals.isDownloaderSupportedPlatform) {
       return;
     }
     if (_defaultHomeTab == tabName) return;
