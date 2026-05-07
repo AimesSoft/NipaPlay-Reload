@@ -22,6 +22,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/message_helper.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/shared_remote_history_helper.dart';
+import 'package:nipaplay/utils/webdav_file_sorter.dart';
 
 class PlaylistMenu extends StatefulWidget {
   final VoidCallback onClose;
@@ -156,9 +157,11 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                   .any((ext) => file.path.toLowerCase().endsWith(ext)))
               .toList();
 
-          // 按文件名排序
-          videoFiles.sort(
-              (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+          // 按文件名自然排序，避免 1、15、2 这类字典序播放顺序。
+          videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(
+                p.basename(a.path),
+                p.basename(b.path),
+              ));
 
           _fileSystemEpisodes = videoFiles.map((file) => file.path).toList();
           _hasFileSystemData = _fileSystemEpisodes.isNotEmpty;
@@ -332,7 +335,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           .toList();
 
       playableEntries
-          .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          .sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
       _fileSystemEpisodes = playableEntries.map((entry) {
         final streamUrl =
@@ -402,7 +405,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (aEpisodeId != bEpisodeId) {
             return aEpisodeId.compareTo(bEpisodeId);
           }
-          return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          return WebDAVFileSorter.naturalCompare(a.title, b.title);
         });
 
       final animeName = (_currentAnimeTitle?.trim().isNotEmpty ?? false)
@@ -458,7 +461,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
 
       final connectionUri = Uri.parse(resolved.connection.url);
       final basePath = connectionUri.path.isEmpty ? '/' : connectionUri.path;
-      final normalizedBasePath = basePath.endsWith('/') ? basePath : '$basePath/';
+      final normalizedBasePath =
+          basePath.endsWith('/') ? basePath : '$basePath/';
       final filePath = resolved.relativePath.startsWith('/')
           ? resolved.relativePath
           : '/${resolved.relativePath}';
@@ -490,7 +494,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               !entry.isDirectory &&
               WebDAVService.instance.isVideoFile(entry.name))
           .toList()
-        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
       _fileSystemEpisodes = videoEntries.map((entry) {
         final fileUrl = WebDAVService.instance.getFileUrl(
@@ -547,7 +551,7 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           .where((entry) =>
               !entry.isDirectory && SMBService.instance.isVideoFile(entry.name))
           .toList()
-        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
       _fileSystemEpisodes = videoEntries.map((entry) {
         final url =

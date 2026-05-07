@@ -7,6 +7,7 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_service.dart';
+import 'package:nipaplay/utils/webdav_file_sorter.dart';
 
 class AutoNextEpisodeService {
   static AutoNextEpisodeService? _instance;
@@ -23,14 +24,8 @@ class AutoNextEpisodeService {
   int _countdownDurationSeconds = defaultCountdownSeconds;
   bool _isCountingDown = false;
   String? _nextEpisodePath;
-  BuildContext? _context;
   bool _isCancelled = false;
   bool _autoPlayEnabled = true;
-  
-  // 设置上下文
-  void setContext(BuildContext context) {
-    _context = context;
-  }
   
   // 开始自动播放下一话的倒计时
   void startAutoNextEpisode(BuildContext context, String currentVideoPath) {
@@ -38,7 +33,7 @@ class AutoNextEpisodeService {
       debugPrint('[AutoNext] 自动连播已禁用，跳过startAutoNextEpisode调用');
       return;
     }
-    debugPrint('[AutoNext] startAutoNextEpisode called, _isCountingDown=$_isCountingDown, context=${context != null}, mounted=${(context is Element) ? (context).mounted : 'unknown'}');
+    debugPrint('[AutoNext] startAutoNextEpisode called, _isCountingDown=$_isCountingDown, mounted=${(context is Element) ? (context).mounted : 'unknown'}');
     if (_isCountingDown) {
       debugPrint('[AutoNext] _isCountingDown为true，直接return，不触发自动连播');
       return;
@@ -123,8 +118,11 @@ class AutoNextEpisodeService {
           .where((file) => videoExtensions.any((ext) => file.path.toLowerCase().endsWith(ext)))
           .toList();
 
-      // 按文件名排序
-      videoFiles.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+      // 按文件名自然排序，避免 1、15、2 这类字典序连播顺序。
+      videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(
+            a.uri.pathSegments.isNotEmpty ? a.uri.pathSegments.last : a.path,
+            b.uri.pathSegments.isNotEmpty ? b.uri.pathSegments.last : b.path,
+          ));
       
       // 找到当前文件的索引
       final currentIndex = videoFiles.indexWhere((file) => file.path == currentVideoPath);

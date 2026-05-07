@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
@@ -150,7 +151,7 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
   );
 
   if (!globals.isPhone) {
-    entries.addAll([
+    entries.add(
       NipaplaySettingEntry(
         id: NipaplaySettingEntryIds.shortcuts,
         title: l10n.shortcuts,
@@ -158,6 +159,11 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
         pageTitle: l10n.shortcutsSettings,
         page: const ShortcutsSettingsPage(),
       ),
+    );
+  }
+
+  if (!kIsWeb) {
+    entries.add(
       NipaplaySettingEntry(
         id: NipaplaySettingEntryIds.remoteAccess,
         title: l10n.remoteAccess,
@@ -165,7 +171,7 @@ List<NipaplaySettingEntry> buildNipaplaySettingEntries(BuildContext context) {
         pageTitle: l10n.remoteAccess,
         page: const RemoteAccessPage(),
       ),
-    ]);
+    );
   }
 
   entries.add(

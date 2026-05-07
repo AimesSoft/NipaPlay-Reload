@@ -14,6 +14,7 @@ import 'package:nipaplay/services/emby_episode_mapping_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/utils/webdav_file_sorter.dart';
 /// 剧集导航结果
 class EpisodeNavigationResult {
 
@@ -426,7 +427,7 @@ class EpisodeNavigationService {
       if (aTime != bTime) {
         return aTime.compareTo(bTime);
       }
-      return a.name.compareTo(b.name);
+      return WebDAVFileSorter.naturalCompare(a.name, b.name);
     });
     return sorted;
   }
@@ -916,8 +917,11 @@ class EpisodeNavigationService {
         return EpisodeNavigationResult.failure('目录中没有其他视频文件');
       }
 
-      // 按文件名排序
-      videoFiles.sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+      // 按文件名自然排序，保持 1、2、10 这样的播放顺序。
+      videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(
+            path.basename(a.path),
+            path.basename(b.path),
+          ));
 
       // 找到当前文件的位置
       final currentIndex = videoFiles.indexWhere((file) => file.path == currentFilePath);
@@ -969,8 +973,11 @@ class EpisodeNavigationService {
         return EpisodeNavigationResult.failure('目录中没有其他视频文件');
       }
 
-      // 按文件名排序
-      videoFiles.sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+      // 按文件名自然排序，保持 1、2、10 这样的播放顺序。
+      videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(
+            path.basename(a.path),
+            path.basename(b.path),
+          ));
 
       // 找到当前文件的位置
       final currentIndex = videoFiles.indexWhere((file) => file.path == currentFilePath);
@@ -1115,7 +1122,7 @@ class EpisodeNavigationService {
         return EpisodeNavigationResult.failure('目录中没有其他视频文件');
       }
 
-      videoFiles.sort((a, b) => a.name.compareTo(b.name));
+      videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
       final currentIndex = videoFiles.indexWhere(
         (e) => _normalizeSmbPath(e.path) == parsed.smbPath,
@@ -1172,7 +1179,7 @@ class EpisodeNavigationService {
         return EpisodeNavigationResult.failure('目录中没有其他视频文件');
       }
 
-      videoFiles.sort((a, b) => a.name.compareTo(b.name));
+      videoFiles.sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
       final currentIndex = videoFiles.indexWhere(
         (e) => _normalizeSmbPath(e.path) == parsed.smbPath,

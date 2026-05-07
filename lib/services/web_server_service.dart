@@ -410,13 +410,34 @@ class WebServerService {
       await saveSettings();
     }
   }
+
+  int _accessUrlSortWeight(String url) {
+    final uri = Uri.tryParse(url);
+    final host = uri?.host.toLowerCase() ?? '';
+    if (host == 'localhost' || host == '127.0.0.1' || host == '::1') {
+      return 2;
+    }
+    final address = InternetAddress.tryParse(host);
+    if (address != null && address.type == InternetAddressType.IPv4) {
+      final bytes = address.rawAddress;
+      if (bytes.length == 4) {
+        final first = bytes[0];
+        final second = bytes[1];
+        if (first == 10 ||
+            (first == 172 && second >= 16 && second <= 31) ||
+            (first == 192 && second == 168) ||
+            (first == 169 && second == 254)) {
+          return 0;
+        }
+      }
+    }
+    return 1;
+  }
   
   Future<List<String>> getAccessUrls() async {
     if (!_isRunning || _server == null) return [];
 
     final urls = <String>[];
-    urls.add('http://localhost:${_server!.port}');
-    urls.add('http://127.0.0.1:${_server!.port}');
 
     try {
       for (var interface in await NetworkInterface.list()) {
@@ -429,6 +450,14 @@ class WebServerService {
     } catch (e) {
       print('Error getting network interfaces: $e');
     }
+    urls.add('http://localhost:${_server!.port}');
+    urls.add('http://127.0.0.1:${_server!.port}');
+    urls.sort((a, b) {
+      final weightCompare =
+          _accessUrlSortWeight(a).compareTo(_accessUrlSortWeight(b));
+      if (weightCompare != 0) return weightCompare;
+      return a.compareTo(b);
+    });
     return urls;
   }
 
