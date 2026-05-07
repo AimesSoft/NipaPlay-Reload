@@ -980,11 +980,17 @@ class _RemoteMediaLibraryPageState extends State<RemoteMediaLibraryPage> {
       children: [
         Row(
           children: [
-            Image.asset(
-              'assets/dandanplay.png',
-              width: 32,
-              height: 32,
-              fit: BoxFit.contain,
+            ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                colorScheme.onSurface,
+                BlendMode.srcIn,
+              ),
+              child: Image.asset(
+                'assets/dandanplay.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.contain,
+              ),
             ),
             SizedBox(width: 12),
             Text(
