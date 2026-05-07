@@ -20,6 +20,7 @@ import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/utils/shared_remote_history_helper.dart';
+import 'package:nipaplay/utils/webdav_file_sorter.dart';
 import 'package:provider/provider.dart';
 
 class CupertinoPlaylistPane extends StatefulWidget {
@@ -239,7 +240,10 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
           ),
         )
         .toList()
-      ..sort((a, b) => a.path.compareTo(b.path));
+      ..sort((a, b) => WebDAVFileSorter.naturalCompare(
+            p.basename(a.path),
+            p.basename(b.path),
+          ));
 
     if (files.isEmpty) {
       throw Exception('当前目录没有其他视频文件');
@@ -267,7 +271,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         .where((entry) =>
             !entry.isDirectory && provider.isRemoteFilePlayable(entry))
         .toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
     _episodes = playableEntries.map((entry) {
       final streamUrl =
@@ -311,7 +315,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         final aId = a.episodeId ?? 0;
         final bId = b.episodeId ?? 0;
         if (aId != bId) return aId.compareTo(bId);
-        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        return WebDAVFileSorter.naturalCompare(a.title, b.title);
       });
 
     _episodes = sorted
@@ -372,7 +376,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
             !entry.isDirectory &&
             WebDAVService.instance.isVideoFile(entry.name))
         .toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
     _episodes = videoEntries.map((entry) {
       final fileUrl = WebDAVService.instance.getFileUrl(
@@ -416,7 +420,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         .where((entry) =>
             !entry.isDirectory && SMBService.instance.isVideoFile(entry.name))
         .toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      ..sort((a, b) => WebDAVFileSorter.naturalCompare(a.name, b.name));
 
     _episodes = videoEntries.map((entry) {
       final url =

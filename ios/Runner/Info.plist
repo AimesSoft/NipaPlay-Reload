@@ -203,7 +203,7 @@
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>NipaPlay 需要访问文稿目录以管理您的文件。</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>需要访问本地网络以获取新番更新和弹幕信息</string>
+	<string>NipaPlay 需要访问本地网络以发现局域网设备、启用远程访问并共享本机媒体库。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>NipaPlay需要访问您的相册以上传和选择视频文件。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

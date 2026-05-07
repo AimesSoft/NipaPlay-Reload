@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -754,14 +756,68 @@ class _DanmakuToggleIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (visible) {
-      return SvgPicture.asset(
-        'assets/danmaku-fill.svg',
-        width: size,
-        height: size,
-      );
+    final offSvgString = visible ? null : _danmakuOffSvgString();
+
+    Widget buildSvg({ColorFilter? colorFilter}) {
+      return visible
+          ? SvgPicture.asset(
+              'assets/danmaku-fill.svg',
+              width: size,
+              height: size,
+              colorFilter: colorFilter,
+            )
+          : SvgPicture.string(
+              offSvgString!,
+              width: size,
+              height: size,
+              colorFilter: colorFilter,
+            );
     }
 
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _buildSvgShadow(
+            buildSvg,
+            const Offset(0, 1.5),
+            2.5,
+            const Color.fromARGB(64, 0, 0, 0),
+          ),
+          _buildSvgShadow(
+            buildSvg,
+            const Offset(0, 3),
+            5,
+            const Color.fromARGB(48, 0, 0, 0),
+          ),
+          Positioned.fill(child: buildSvg()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSvgShadow(
+    Widget Function({ColorFilter? colorFilter}) buildSvg,
+    Offset offset,
+    double blurSigma,
+    Color color,
+  ) {
+    return Positioned.fill(
+      child: Transform.translate(
+        offset: offset,
+        child: ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: buildSvg(
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _danmakuOffSvgString() {
     final accentColor = AppAccentColors.current;
     final r = (accentColor.r * 255.0)
         .round()
@@ -781,15 +837,7 @@ class _DanmakuToggleIcon extends StatelessWidget {
         .toRadixString(16)
         .padLeft(2, '0')
         .toUpperCase();
-    final accentColorStr = '#$r$g$b';
-    final svgString =
-        _danmakuOffFillSvg.replaceAll('{{ACCENT_COLOR}}', accentColorStr);
-
-    return SvgPicture.string(
-      svgString,
-      width: size,
-      height: size,
-    );
+    return _danmakuOffFillSvg.replaceAll('{{ACCENT_COLOR}}', '#$r$g$b');
   }
 
   static const String _danmakuOffFillSvg =
