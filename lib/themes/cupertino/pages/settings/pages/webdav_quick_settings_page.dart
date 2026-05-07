@@ -91,6 +91,8 @@ class _CupertinoWebDAVQuickSettingsPageState
                   const SizedBox(height: 24),
                   _buildBgmIdQuickMatchCard(context, provider),
                   const SizedBox(height: 24),
+                  _buildSearchConfigCard(context, provider),
+                  const SizedBox(height: 24),
                   _buildResetCard(context, provider),
                 ],
               ),
@@ -650,7 +652,7 @@ class _CupertinoWebDAVQuickSettingsPageState
         CupertinoSettingsTile(
           leading: Icon(CupertinoIcons.bolt_fill, color: iconColor),
           title: const Text('bgmid 快速匹配'),
-          subtitle: const Text('解析 URL 中的 bgmid 跳过哈希计算'),
+          subtitle: const Text('从 URL 中提取 bgmid，直接获取番剧信息'),
           backgroundColor: tileColor,
           trailing: CupertinoSwitch(
             value: provider.bgmIdQuickMatch,
@@ -672,13 +674,13 @@ class _CupertinoWebDAVQuickSettingsPageState
                 ),
                 SizedBox(height: 4),
                 Text(
-                  '从完整 URL 中匹配数字，默认匹配 "bgmid=数字"',
+                  '从完整 URL 中匹配 bgmid 数字，支持 bgmid=123 或 bgm-123 格式',
                   style: TextStyle(color: secondaryColor, fontSize: 11),
                 ),
                 SizedBox(height: 8),
                 CupertinoTextField(
                   controller: _patternController,
-                  placeholder: 'bgmid=(\\d+)',
+                  placeholder: 'bgm(id)?[=-](\\d+)',
                   style: TextStyle(color: textColor, fontSize: 13),
                   decoration: BoxDecoration(
                     color: tileColor,
@@ -694,13 +696,370 @@ class _CupertinoWebDAVQuickSettingsPageState
                 ),
                 SizedBox(height: 4),
                 Text(
-                  '示例: bgm[=-](\\d+) 可匹配 bgmid=123 或 bgm-123',
+                  '最后一个捕获组应为数字，如 bgmid=(\\d+) 或 bgm-(\\d+)',
                   style: TextStyle(color: secondaryColor.withOpacity(0.7), fontSize: 10),
                 ),
               ],
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildSearchConfigCard(BuildContext context, WebDAVQuickAccessProvider provider) {
+    final Color tileColor = resolveSettingsTileBackground(context);
+    final Color sectionColor = resolveSettingsSectionBackground(context);
+    final Color iconColor = resolveSettingsIconColor(context);
+    final Color textColor = resolveSettingsPrimaryTextColor(context);
+    final Color secondaryColor = resolveSettingsSecondaryTextColor(context);
+    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
+
+    return CupertinoSettingsGroupCard(
+      margin: EdgeInsets.zero,
+      backgroundColor: sectionColor,
+      children: [
+        CupertinoSettingsTile(
+          leading: Icon(CupertinoIcons.search, color: iconColor),
+          title: const Text('文件搜索'),
+          subtitle: const Text('在 WebDAV 页面显示搜索按钮'),
+          backgroundColor: tileColor,
+          trailing: CupertinoSwitch(
+            value: provider.enableSearch,
+            activeColor: CupertinoColors.activeBlue,
+            onChanged: (value) {
+              provider.setEnableSearch(value);
+            },
+          ),
+        ),
+        if (provider.enableSearch) ...[
+          // 搜索配置详细内容
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 搜索范围
+                _buildCupertinoSectionTitle('搜索范围', textColor, iconColor),
+                SizedBox(height: 8),
+                ...WebDAVSearchScope.values.map((scope) =>
+                  _buildCupertinoRadioOption<WebDAVSearchScope>(
+                    context,
+                    scope.displayName,
+                    scope.description,
+                    scope,
+                    provider.searchScope,
+                    (value) => provider.setSearchScope(value),
+                    textColor,
+                    secondaryColor,
+                  ),
+                ),
+
+                // 层级限制（当前目录+子目录或全局搜索时显示）
+                if (provider.searchScope == WebDAVSearchScope.currentWithDepth ||
+                    provider.searchScope == WebDAVSearchScope.global) ...[
+                  SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(CupertinoIcons.layers_alt, size: 16, color: iconColor),
+                      SizedBox(width: 8),
+                      Text(
+                        '层级限制',
+                        style: textTheme.copyWith(fontSize: 13, color: secondaryColor),
+                      ),
+                      Spacer(),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.activeBlue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${provider.searchDepthLimit} 层',
+                          style: TextStyle(
+                            color: CupertinoColors.activeBlue,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  // 层级选择器
+                  Wrap(
+                    spacing: 8,
+                    children: List.generate(10, (index) {
+                      final depth = index + 1;
+                      final isSelected = provider.searchDepthLimit == depth;
+                      return CupertinoButton(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        minSize: 0,
+                        color: isSelected
+                            ? CupertinoColors.activeBlue.withOpacity(0.1)
+                            : CupertinoDynamicColor.resolve(
+                                CupertinoColors.tertiarySystemFill,
+                                context,
+                              ),
+                        borderRadius: BorderRadius.circular(16),
+                        onPressed: () {
+                          provider.setSearchDepthLimit(depth);
+                        },
+                        child: Text(
+                          '$depth',
+                          style: TextStyle(
+                            color: isSelected
+                                ? CupertinoColors.activeBlue
+                                : textColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+
+                SizedBox(height: 16),
+
+                // 搜索目标（多选）
+                _buildCupertinoSectionTitle('搜索目标（可多选）', textColor, iconColor),
+                SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: WebDAVSearchTarget.values.map((target) {
+                    final isSelected = provider.searchTargets.contains(target);
+                    return CupertinoButton(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      minSize: 0,
+                      color: isSelected
+                          ? CupertinoColors.activeBlue.withOpacity(0.1)
+                          : CupertinoDynamicColor.resolve(
+                              CupertinoColors.tertiarySystemFill,
+                              context,
+                            ),
+                      borderRadius: BorderRadius.circular(16),
+                      onPressed: () {
+                        provider.toggleSearchTarget(target);
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isSelected)
+                            Icon(
+                              CupertinoIcons.check_mark,
+                              size: 14,
+                              color: CupertinoColors.activeBlue,
+                            ),
+                          if (isSelected) SizedBox(width: 4),
+                          Text(
+                            target.displayName,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? CupertinoColors.activeBlue
+                                  : textColor,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                SizedBox(height: 16),
+
+                // 搜索超时
+                _buildCupertinoSectionTitle('搜索超时', textColor, iconColor),
+                SizedBox(height: 8),
+                ...WebDAVSearchTimeout.values.map((timeout) =>
+                  _buildCupertinoRadioOption<WebDAVSearchTimeout>(
+                    context,
+                    timeout.displayName,
+                    null,
+                    timeout,
+                    provider.searchTimeout,
+                    (value) => provider.setSearchTimeout(value),
+                    textColor,
+                    secondaryColor,
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // 请求间隔
+                Row(
+                  children: [
+                    Icon(CupertinoIcons.time, size: 16, color: iconColor),
+                    SizedBox(width: 8),
+                    Text(
+                      '请求间隔',
+                      style: textTheme.copyWith(fontSize: 13, color: secondaryColor),
+                    ),
+                    Spacer(),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.activeBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${provider.searchRequestInterval} ms',
+                        style: TextStyle(
+                          color: CupertinoColors.activeBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '防止请求过快被服务器限制，0 表示无延迟',
+                  style: TextStyle(color: secondaryColor.withOpacity(0.7), fontSize: 11),
+                ),
+                SizedBox(height: 8),
+                // 间隔选择器
+                CupertinoSlidingSegmentedControl<int>(
+                  groupValue: _clampRequestInterval(provider.searchRequestInterval),
+                  children: const {
+                    0: Text('0'),
+                    50: Text('50'),
+                    100: Text('100'),
+                    200: Text('200'),
+                    500: Text('500'),
+                  },
+                  onValueChanged: (value) {
+                    if (value != null) {
+                      provider.setSearchRequestInterval(value);
+                    }
+                  },
+                ),
+
+                SizedBox(height: 16),
+
+                // 最大结果数
+                Row(
+                  children: [
+                    Icon(CupertinoIcons.number, size: 16, color: iconColor),
+                    SizedBox(width: 8),
+                    Text(
+                      '最大结果数',
+                      style: textTheme.copyWith(fontSize: 13, color: secondaryColor),
+                    ),
+                    Spacer(),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.activeBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${provider.searchMaxResults}',
+                        style: TextStyle(
+                          color: CupertinoColors.activeBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '搜索结果达到上限时自动停止',
+                  style: TextStyle(color: secondaryColor.withOpacity(0.7), fontSize: 11),
+                ),
+                SizedBox(height: 8),
+                // 最大结果数滑块
+                CupertinoSlider(
+                  value: provider.searchMaxResults.toDouble(),
+                  min: 50,
+                  max: 2000,
+                  divisions: 39,
+                  onChanged: (value) {
+                    provider.setSearchMaxResults(value.round());
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCupertinoSectionTitle(String title, Color textColor, Color iconColor) {
+    return Row(
+      children: [
+        Icon(CupertinoIcons.chevron_right, size: 14, color: iconColor),
+        SizedBox(width: 4),
+        Text(
+          title,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCupertinoRadioOption<T>(
+    BuildContext context,
+    String title,
+    String? subtitle,
+    T value,
+    T groupValue,
+    ValueChanged<T> onChanged,
+    Color textColor,
+    Color secondaryColor,
+  ) {
+    final isSelected = value == groupValue;
+    return GestureDetector(
+      onTap: () => onChanged(value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              isSelected
+                  ? CupertinoIcons.check_mark_circled
+                  : CupertinoIcons.circle,
+              size: 20,
+              color: isSelected
+                  ? CupertinoColors.activeBlue
+                  : secondaryColor.withOpacity(0.5),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: secondaryColor,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -739,5 +1098,10 @@ class _CupertinoWebDAVQuickSettingsPageState
         ),
       ],
     );
+  }
+
+  int _clampRequestInterval(int value) {
+    const validValues = [0, 50, 100, 200, 500];
+    return validValues.reduce((a, b) => (value - a).abs() < (value - b).abs() ? a : b);
   }
 }

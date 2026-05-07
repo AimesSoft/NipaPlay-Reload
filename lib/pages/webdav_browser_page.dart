@@ -43,10 +43,32 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
   // 是否正在初始化
   bool _isInitializing = true;
 
+  // 搜索相关状态
+  bool _isSearchMode = false;
+  bool _isSearching = false;
+  bool _stopSearchRequested = false;
+  String _searchKeyword = '';
+  List<WebDAVSearchResult> _searchResults = [];
+  int _searchedCount = 0;
+  int _foundCount = 0;
+  final TextEditingController _searchController = TextEditingController();
+
+  // UI 更新节流
+  DateTime? _lastUIUpdate;
+  static const int _uiUpdateThrottleMs = 100;
+  bool _maxResultsReached = false;
+
   @override
   void initState() {
     super.initState();
     _initializePage();
+  }
+
+  @override
+  void dispose() {
+    _stopSearchRequested = true;
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _initializePage() async {
@@ -193,7 +215,9 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
         final bgmidMatch = regex.firstMatch(videoUrl);
 
         if (bgmidMatch != null && bgmidMatch.groupCount >= 1) {
-          final bgmid = int.tryParse(bgmidMatch.group(1)!);
+          // 取最后一个捕获组的数字（兼容不同正则格式）
+          final lastGroup = bgmidMatch.group(bgmidMatch.groupCount);
+          final bgmid = int.tryParse(lastGroup ?? '');
 
           if (bgmid != null) {
             final result = await DandanplayService.getBangumiByBgmId(bgmid);
@@ -433,34 +457,41 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               secondaryTextColor: secondaryTextColor,
               accentColor: accentColor,
             ),
-            // 文件列表
+            // 文件列表或搜索结果
             Expanded(
-              child: _isLoading
-                  ? Center(
-                      child: CircularProgressIndicator(
-                          color: AppAccentColors.current),
+              child: _isSearchMode
+                  ? _buildSearchResults(
+                      cardColor: cardColor,
+                      textColor: textColor,
+                      secondaryTextColor: secondaryTextColor,
+                      accentColor: accentColor,
                     )
-                  : _currentFiles.isEmpty
+                  : _isLoading
                       ? Center(
-                          child: Text(
-                            '当前目录为空',
-                            style: TextStyle(color: secondaryTextColor),
-                          ),
+                          child: CircularProgressIndicator(
+                              color: AppAccentColors.current),
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _currentFiles.length,
-                          itemBuilder: (context, index) {
-                            final file = _currentFiles[index];
-                            return _buildFileItem(
-                              file: file,
-                              cardColor: cardColor,
-                              textColor: textColor,
-                              secondaryTextColor: secondaryTextColor,
-                              accentColor: accentColor,
-                            );
-                          },
-                        ),
+                      : _currentFiles.isEmpty
+                          ? Center(
+                              child: Text(
+                                '当前目录为空',
+                                style: TextStyle(color: secondaryTextColor),
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _currentFiles.length,
+                              itemBuilder: (context, index) {
+                                final file = _currentFiles[index];
+                                return _buildFileItem(
+                                  file: file,
+                                  cardColor: cardColor,
+                                  textColor: textColor,
+                                  secondaryTextColor: secondaryTextColor,
+                                  accentColor: accentColor,
+                                );
+                              },
+                            ),
             ),
           ],
         ),
@@ -545,8 +576,41 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
                   ),
                 ),
               ),
+              // 搜索按钮（根据设置显示）
+              if (Provider.of<WebDAVQuickAccessProvider>(context, listen: true)
+                  .enableSearch)
+                IconButton(
+                  icon: Icon(
+                    _isSearchMode ? Icons.close : Icons.search,
+                    color: _isSearchMode ? accentColor : textColor,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      if (_isSearchMode) {
+                        // 退出搜索模式
+                        _isSearchMode = false;
+                        _stopSearchRequested = true;
+                        _searchResults = [];
+                        _searchController.clear();
+                        _searchKeyword = '';
+                      } else {
+                        // 进入搜索模式
+                        _isSearchMode = true;
+                      }
+                    });
+                  },
+                ),
             ],
           ),
+          // 搜索输入框（搜索模式下显示）
+          if (_isSearchMode) ...[
+            SizedBox(height: 12),
+            _buildSearchInput(
+              textColor: textColor,
+              secondaryTextColor: secondaryTextColor,
+              accentColor: accentColor,
+            ),
+          ],
           // 路径面包屑导航（根据设置显示）
           if (Provider.of<WebDAVQuickAccessProvider>(context)
               .showPathBreadcrumb) ...[
@@ -833,6 +897,488 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
         ),
       ),
     );
+  }
+
+  // ==================== 搜索功能相关方法 ====================
+
+  Widget _buildSearchInput({
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    final provider = Provider.of<WebDAVQuickAccessProvider>(context, listen: true);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 搜索输入框
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(color: textColor),
+                decoration: InputDecoration(
+                  hintText: '搜索文件...',
+                  hintStyle: TextStyle(color: secondaryTextColor),
+                  prefixIcon: Icon(Icons.search, color: secondaryTextColor),
+                  filled: true,
+                  fillColor: Colors.transparent,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: secondaryTextColor.withOpacity(0.3)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: secondaryTextColor.withOpacity(0.3)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: accentColor),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, color: secondaryTextColor),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchKeyword = '';
+                              _searchResults = [];
+                            });
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchKeyword = value;
+                  });
+                },
+                onSubmitted: (value) {
+                  if (value.isNotEmpty) {
+                    _startSearch();
+                  }
+                },
+              ),
+            ),
+            SizedBox(width: 8),
+            // 搜索按钮
+            ElevatedButton(
+              onPressed: _isSearching || _searchController.text.isEmpty
+                  ? null
+                  : _startSearch,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(_isSearching ? '搜索中' : '搜索'),
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+        // 当前设置摘要
+        Text(
+          '${provider.searchScope.displayName}(${provider.searchDepthLimit}层) | ${provider.searchTargets.map((t) => t.displayName).join(',')} | 间隔${provider.searchRequestInterval}ms',
+          style: TextStyle(
+            color: secondaryTextColor,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchResults({
+    required Color cardColor,
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    // 搜索进度显示
+    if (_isSearching) {
+      return Column(
+        children: [
+          // 进度指示器
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '搜索中... 已扫描 $_searchedCount 个目录，找到 $_foundCount 个结果',
+                        style: TextStyle(color: textColor, fontSize: 14),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _stopSearchRequested = true;
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.withOpacity(0.8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('停止'),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+                LinearProgressIndicator(
+                  backgroundColor: secondaryTextColor.withOpacity(0.2),
+                  valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                ),
+              ],
+            ),
+          ),
+          // 已找到的结果
+          Expanded(
+            child: _searchResults.isEmpty
+                ? Center(
+                    child: Text(
+                      '正在搜索...',
+                      style: TextStyle(color: secondaryTextColor),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _searchResults.length,
+                    itemBuilder: (context, index) {
+                      final result = _searchResults[index];
+                      return _buildSearchResultItem(
+                        result: result,
+                        cardColor: cardColor,
+                        textColor: textColor,
+                        secondaryTextColor: secondaryTextColor,
+                        accentColor: accentColor,
+                      );
+                    },
+                  ),
+          ),
+        ],
+      );
+    }
+
+    // 搜索完成后的结果列表
+    if (_searchResults.isEmpty) {
+      if (_searchKeyword.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.search, size: 64, color: secondaryTextColor),
+              SizedBox(height: 16),
+              Text(
+                '输入关键词搜索文件',
+                style: TextStyle(color: secondaryTextColor, fontSize: 16),
+              ),
+            ],
+          ),
+        );
+      }
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 64, color: secondaryTextColor),
+            SizedBox(height: 16),
+            Text(
+              '未找到匹配的文件',
+              style: TextStyle(color: secondaryTextColor, fontSize: 16),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '关键词: $_searchKeyword',
+              style: TextStyle(color: secondaryTextColor.withOpacity(0.7), fontSize: 14),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // 结果统计
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: accentColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, color: accentColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                '找到 ${_searchResults.length} 个结果',
+                style: TextStyle(color: accentColor, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+        // 结果列表
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _searchResults.length,
+            itemBuilder: (context, index) {
+              final result = _searchResults[index];
+              return _buildSearchResultItem(
+                result: result,
+                cardColor: cardColor,
+                textColor: textColor,
+                secondaryTextColor: secondaryTextColor,
+                accentColor: accentColor,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchResultItem({
+    required WebDAVSearchResult result,
+    required Color cardColor,
+    required Color textColor,
+    required Color secondaryTextColor,
+    required Color accentColor,
+  }) {
+    final isDirectory = result.file.isDirectory;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: cardColor,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: secondaryTextColor.withOpacity(0.1)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 文件名
+            Row(
+              children: [
+                Icon(
+                  isDirectory ? Icons.folder_outlined : Icons.video_file_outlined,
+                  color: isDirectory ? Colors.amber : accentColor,
+                  size: 24,
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    result.file.name,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 4),
+            // 路径
+            Text(
+              result.relativePath.isEmpty ? '/' : result.relativePath,
+              style: TextStyle(
+                color: secondaryTextColor,
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 8),
+            // 操作按钮
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // 跳转到目录按钮
+                TextButton.icon(
+                  icon: Icon(Icons.folder_open, size: 18, color: secondaryTextColor),
+                  label: Text('跳转', style: TextStyle(color: secondaryTextColor)),
+                  onPressed: () {
+                    // 获取父目录路径
+                    final parentPath = isDirectory
+                        ? result.file.path
+                        : result.file.path.substring(0, result.file.path.lastIndexOf('/') + 1);
+                    _navigateToPathFromSearch(parentPath);
+                  },
+                ),
+                SizedBox(width: 8),
+                // 播放按钮（仅文件）
+                if (!isDirectory)
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.play_arrow, size: 18),
+                    label: const Text('播放'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () => _playSearchResult(result),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startSearch() async {
+    if (_currentConnection == null || _searchController.text.isEmpty) return;
+    if (_isSearching) return; // 防止 onSubmitted 重复触发
+
+    final provider = Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
+    final keyword = _searchController.text.trim();
+    final maxResults = provider.searchMaxResults;
+
+    setState(() {
+      _isSearching = true;
+      _stopSearchRequested = false;
+      _searchKeyword = keyword;
+      _searchResults = [];
+      _searchedCount = 0;
+      _foundCount = 0;
+      _maxResultsReached = false;
+      _lastUIUpdate = null;
+    });
+
+    try {
+      final searchTargets = provider.searchTargets.map((t) => t.value).toSet();
+
+      await WebDAVService.instance.searchFiles(
+        connection: _currentConnection!,
+        keyword: keyword,
+        startPath: _currentPath,
+        scope: provider.searchScope.value,
+        depthLimit: provider.searchDepthLimit,
+        searchTargets: searchTargets,
+        timeoutSeconds: provider.searchTimeout.seconds,
+        requestIntervalMs: provider.searchRequestInterval,
+        onProgress: (searched, found) {
+          if (mounted && !_stopSearchRequested && !_maxResultsReached) {
+            // 节流 UI 更新
+            final now = DateTime.now();
+            if (_lastUIUpdate == null ||
+                now.difference(_lastUIUpdate!).inMilliseconds >= _uiUpdateThrottleMs) {
+              _lastUIUpdate = now;
+              setState(() {
+                _searchedCount = searched;
+                _foundCount = found;
+              });
+            }
+          }
+        },
+        onResultFound: (result) {
+          if (mounted && !_stopSearchRequested && !_maxResultsReached) {
+            if (_searchResults.length < maxResults) {
+              _searchResults.add(result);
+              // 后检查：刚达到上限时立即标记停止，不依赖下一轮回调
+              if (_searchResults.length >= maxResults) {
+                _maxResultsReached = true;
+                setState(() {
+                  _isSearching = false;
+                });
+                return;
+              }
+              // 节流 UI 更新
+              final now = DateTime.now();
+              if (_lastUIUpdate == null ||
+                  now.difference(_lastUIUpdate!).inMilliseconds >= _uiUpdateThrottleMs) {
+                _lastUIUpdate = now;
+                setState(() {});
+              }
+            }
+          }
+        },
+        onStopRequested: () => _stopSearchRequested || _maxResultsReached,
+      );
+
+      if (mounted && !_maxResultsReached) {
+        setState(() {
+          _isSearching = false;
+        });
+      }
+
+      // 显示达到上限提示
+      if (mounted && _maxResultsReached) {
+        BlurSnackBar.show(context, '已达到最大结果数 ($maxResults)，搜索已停止');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+        });
+        BlurSnackBar.show(context, '搜索失败: $e');
+      }
+    }
+  }
+
+  void _navigateToPathFromSearch(String path) {
+    setState(() {
+      _isSearchMode = false;
+      _searchResults = [];
+      _searchController.clear();
+      _searchKeyword = '';
+      _currentPath = path;
+      _pathHistory.clear();
+    });
+    _loadDirectory();
+  }
+
+  void _playSearchResult(WebDAVSearchResult result) async {
+    if (_currentConnection == null) return;
+
+    final videoUrl = WebDAVService.instance.getFileUrl(
+      _currentConnection!,
+      result.file.path,
+    );
+
+    final historyItem = WatchHistoryItem(
+      animeName: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      episodeTitle: result.file.name,
+      filePath: videoUrl,
+      watchProgress: 0,
+      lastPosition: 0,
+      duration: 0,
+      lastWatchTime: DateTime.now(),
+    );
+
+    final playableItem = PlayableItem(
+      videoPath: videoUrl,
+      title: result.file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
+      subtitle: result.file.name,
+      historyItem: historyItem,
+    );
+
+    PlaybackService().play(playableItem);
   }
 
   String _formatFileSize(int bytes) {

@@ -1,7 +1,69 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+
+/// WebDAV 搜索范围
+enum WebDAVSearchScope {
+  currentDirectory('current_directory', '仅当前目录', '只搜索当前显示的目录'),
+  currentWithDepth('current_with_depth', '当前目录 + 子目录', '向下遍历指定层级'),
+  global('global', '全局搜索', '从根目录开始搜索所有文件');
+
+  final String value;
+  final String displayName;
+  final String description;
+  const WebDAVSearchScope(this.value, this.displayName, this.description);
+
+  static WebDAVSearchScope fromValue(String? value) {
+    return values.firstWhere(
+      (e) => e.value == value,
+      orElse: () => WebDAVSearchScope.currentWithDepth,
+    );
+  }
+}
+
+/// WebDAV 搜索目标类型（支持多选）
+enum WebDAVSearchTarget {
+  folder('folder', '文件夹'),
+  video('video', '视频文件');
+
+  final String value;
+  final String displayName;
+  const WebDAVSearchTarget(this.value, this.displayName);
+
+  static WebDAVSearchTarget fromValue(String? value) {
+    return values.firstWhere(
+      (e) => e.value == value,
+      orElse: () => WebDAVSearchTarget.video,
+    );
+  }
+
+  /// 获取默认选中的搜索目标
+  static Set<WebDAVSearchTarget> get defaultTargets => {
+    WebDAVSearchTarget.folder,
+    WebDAVSearchTarget.video,
+  };
+}
+
+/// WebDAV 搜索超时选项
+enum WebDAVSearchTimeout {
+  seconds10(10, '10 秒'),
+  seconds30(30, '30 秒'),
+  seconds60(60, '60 秒'),
+  unlimited(0, '无限制');
+
+  final int seconds;
+  final String displayName;
+  const WebDAVSearchTimeout(this.seconds, this.displayName);
+
+  static WebDAVSearchTimeout fromSeconds(int? seconds) {
+    return values.firstWhere(
+      (e) => e.seconds == seconds,
+      orElse: () => WebDAVSearchTimeout.seconds30,
+    );
+  }
+}
 
 /// WebDAV 文件排序预设
 enum WebDAVSortPreset {
@@ -57,6 +119,15 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String _keyBgmIdMatchPattern = 'webdav_bgmid_match_pattern';
   static const String _legacyDefaultPageIndexKey = 'default_page_index';
 
+  // 搜索功能相关存储键名
+  static const String _keyEnableSearch = 'webdav_enable_search';
+  static const String _keySearchScope = 'webdav_search_scope';
+  static const String _keySearchDepthLimit = 'webdav_search_depth_limit';
+  static const String _keySearchTargets = 'webdav_search_targets';
+  static const String _keySearchTimeout = 'webdav_search_timeout';
+  static const String _keySearchRequestInterval = 'webdav_search_request_interval';
+  static const String _keySearchMaxResults = 'webdav_search_max_results';
+
   // Tab 名称常量
   static const String tabHome = 'home';
   static const String tabVideo = 'video';
@@ -85,8 +156,17 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   String _seasonFolderPattern = 'Season*';
   bool _showPathBreadcrumb = true;
   bool _bgmIdQuickMatch = false; // 默认关闭，用户需明确启用
-  String _bgmIdMatchPattern = 'bgmid=(\\d+)'; // 默认正则规则
+  String _bgmIdMatchPattern = 'bgm(id)?[=-](\\d+)'; // 默认正则规则
   bool _isLoaded = false;
+
+  // 搜索功能相关状态
+  bool _enableSearch = true; // 搜索功能总开关，默认开启
+  WebDAVSearchScope _searchScope = WebDAVSearchScope.currentWithDepth;
+  int _searchDepthLimit = 3; // 层级限制（1-10）
+  Set<WebDAVSearchTarget> _searchTargets = WebDAVSearchTarget.defaultTargets;
+  WebDAVSearchTimeout _searchTimeout = WebDAVSearchTimeout.seconds30;
+  int _searchRequestInterval = 100; // 请求间隔（毫秒），默认100ms
+  int _searchMaxResults = 500; // 最大搜索结果数，默认500
 
   // Getters
   bool get showWebDAVTab => _showWebDAVTab;
@@ -100,6 +180,15 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   bool get bgmIdQuickMatch => _bgmIdQuickMatch;
   String get bgmIdMatchPattern => _bgmIdMatchPattern;
   bool get isLoaded => _isLoaded;
+
+  // 搜索功能相关 Getters
+  bool get enableSearch => _enableSearch;
+  WebDAVSearchScope get searchScope => _searchScope;
+  int get searchDepthLimit => _searchDepthLimit;
+  Set<WebDAVSearchTarget> get searchTargets => _searchTargets;
+  WebDAVSearchTimeout get searchTimeout => _searchTimeout;
+  int get searchRequestInterval => _searchRequestInterval;
+  int get searchMaxResults => _searchMaxResults;
 
   /// 获取有效的默认 Tab（处理 WebDAV 关闭时的回落）
   String get effectiveDefaultHomeTab {
@@ -202,7 +291,24 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       _showPathBreadcrumb = prefs.getBool(_keyShowPathBreadcrumb) ?? true;
       _bgmIdQuickMatch = prefs.getBool(_keyBgmIdQuickMatch) ?? false;
       _bgmIdMatchPattern =
-          prefs.getString(_keyBgmIdMatchPattern) ?? 'bgmid=(\\d+)';
+          prefs.getString(_keyBgmIdMatchPattern) ?? 'bgm(id)?[=-](\\d+)';
+
+      // 加载搜索功能相关设置
+      _enableSearch = prefs.getBool(_keyEnableSearch) ?? true;
+      _searchScope = WebDAVSearchScope.fromValue(prefs.getString(_keySearchScope));
+      _searchDepthLimit = prefs.getInt(_keySearchDepthLimit) ?? 3;
+      // 加载搜索目标（多选）
+      final storedTargets = prefs.getStringList(_keySearchTargets);
+      if (storedTargets != null && storedTargets.isNotEmpty) {
+        _searchTargets = storedTargets
+            .map((v) => WebDAVSearchTarget.fromValue(v))
+            .toSet();
+      } else {
+        _searchTargets = WebDAVSearchTarget.defaultTargets;
+      }
+      _searchTimeout = WebDAVSearchTimeout.fromSeconds(prefs.getInt(_keySearchTimeout));
+      _searchRequestInterval = prefs.getInt(_keySearchRequestInterval) ?? 100;
+      _searchMaxResults = prefs.getInt(_keySearchMaxResults) ?? 500;
 
       _isLoaded = true;
       notifyListeners();
@@ -406,6 +512,134 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     }
   }
 
+  // ==================== 搜索功能相关 Setter ====================
+
+  /// 设置是否启用搜索功能
+  Future<void> setEnableSearch(bool value) async {
+    if (_enableSearch == value) return;
+
+    _enableSearch = value;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyEnableSearch, value);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存搜索功能开关设置失败: $e');
+    }
+  }
+
+  /// 设置搜索范围
+  Future<void> setSearchScope(WebDAVSearchScope scope) async {
+    if (_searchScope == scope) return;
+
+    _searchScope = scope;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keySearchScope, scope.value);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存搜索范围设置失败: $e');
+    }
+  }
+
+  /// 设置搜索层级限制
+  Future<void> setSearchDepthLimit(int limit) async {
+    if (_searchDepthLimit == limit) return;
+
+    // 确保在有效范围内
+    limit = limit.clamp(1, 10);
+    _searchDepthLimit = limit;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_keySearchDepthLimit, limit);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存搜索层级限制设置失败: $e');
+    }
+  }
+
+  /// 设置搜索目标类型
+  Future<void> setSearchTargets(Set<WebDAVSearchTarget> targets) async {
+    if (_searchTargets == targets) return;
+
+    _searchTargets = targets;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final targetValues = targets.map((t) => t.value).toList();
+      await prefs.setStringList(_keySearchTargets, targetValues);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存搜索目标类型设置失败: $e');
+    }
+  }
+
+  /// 切换单个搜索目标类型
+  Future<void> toggleSearchTarget(WebDAVSearchTarget target) async {
+    final newTargets = Set<WebDAVSearchTarget>.from(_searchTargets);
+    if (newTargets.contains(target)) {
+      // 至少保留一个选项
+      if (newTargets.length > 1) {
+        newTargets.remove(target);
+      }
+    } else {
+      newTargets.add(target);
+    }
+    await setSearchTargets(newTargets);
+  }
+
+  /// 设置搜索超时时间
+  Future<void> setSearchTimeout(WebDAVSearchTimeout timeout) async {
+    if (_searchTimeout == timeout) return;
+
+    _searchTimeout = timeout;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_keySearchTimeout, timeout.seconds);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存搜索超时设置失败: $e');
+    }
+  }
+
+  /// 设置搜索请求间隔（毫秒）
+  Future<void> setSearchRequestInterval(int intervalMs) async {
+    if (_searchRequestInterval == intervalMs) return;
+
+    // 确保在有效范围内（0-5000ms）
+    intervalMs = intervalMs.clamp(0, 5000);
+    _searchRequestInterval = intervalMs;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_keySearchRequestInterval, intervalMs);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存搜索请求间隔设置失败: $e');
+    }
+  }
+
+  /// 设置搜索最大结果数
+  Future<void> setSearchMaxResults(int maxResults) async {
+    if (_searchMaxResults == maxResults) return;
+
+    // 确保在有效范围内（50-2000）
+    maxResults = maxResults.clamp(50, 2000);
+    _searchMaxResults = maxResults;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_keySearchMaxResults, maxResults);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存搜索最大结果数设置失败: $e');
+    }
+  }
+
   /// 检查文件夹名称是否匹配模式（支持通配符 * 和 ?）
   bool matchesSeasonPattern(String folderName) {
     if (_seasonFolderPattern.isEmpty) return false;
@@ -484,7 +718,16 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     _seasonFolderPattern = 'Season*';
     _showPathBreadcrumb = true;
     _bgmIdQuickMatch = false;
-    _bgmIdMatchPattern = 'bgmid=(\\d+)';
+    _bgmIdMatchPattern = 'bgm(id)?[=-](\\d+)';
+
+    // 重置搜索功能相关设置
+    _enableSearch = true;
+    _searchScope = WebDAVSearchScope.currentWithDepth;
+    _searchDepthLimit = 3;
+    _searchTargets = WebDAVSearchTarget.defaultTargets;
+    _searchTimeout = WebDAVSearchTimeout.seconds30;
+    _searchRequestInterval = 100;
+    _searchMaxResults = 500;
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -498,6 +741,14 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       await prefs.remove(_keyShowPathBreadcrumb);
       await prefs.remove(_keyBgmIdQuickMatch);
       await prefs.remove(_keyBgmIdMatchPattern);
+      // 清除搜索功能相关设置
+      await prefs.remove(_keyEnableSearch);
+      await prefs.remove(_keySearchScope);
+      await prefs.remove(_keySearchDepthLimit);
+      await prefs.remove(_keySearchTargets);
+      await prefs.remove(_keySearchTimeout);
+      await prefs.remove(_keySearchRequestInterval);
+      await prefs.remove(_keySearchMaxResults);
       notifyListeners();
     } catch (e) {
       debugPrint('重置 WebDAV 快捷设置失败: $e');

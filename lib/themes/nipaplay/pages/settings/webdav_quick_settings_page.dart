@@ -511,7 +511,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                       ),
                     ),
                     subtitle: Text(
-                      '解析 URL 中的 bgmid 跳过哈希计算',
+                      '从 URL 中提取 bgmid，直接获取番剧信息',
                       style: TextStyle(
                         color: secondaryTextColor,
                       ),
@@ -542,7 +542,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                           ),
                           SizedBox(height: 4),
                           Text(
-                            '从完整 URL 中匹配数字，默认匹配 "bgmid=数字"',
+                            '从完整 URL 中匹配 bgmid 数字，支持 bgmid=123 或 bgm-123 格式',
                             style: TextStyle(
                               color: secondaryTextColor,
                               fontSize: 11,
@@ -553,7 +553,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                             controller: _patternController,
                             style: TextStyle(color: textColor, fontSize: 13),
                             decoration: InputDecoration(
-                              hintText: 'bgmid=(\\d+)',
+                              hintText: 'bgm(id)?[=-](\\d+)',
                               hintStyle: TextStyle(color: secondaryTextColor.withOpacity(0.5)),
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               border: OutlineInputBorder(
@@ -577,11 +577,287 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                           ),
                           SizedBox(height: 4),
                           Text(
-                            '示例: bgm[=-](\\d+) 可匹配 bgmid=123 或 bgm-123',
+                            '最后一个捕获组应为数字，如 bgmid=(\\d+) 或 bgm-(\\d+)',
                             style: TextStyle(
                               color: secondaryTextColor.withOpacity(0.7),
                               fontSize: 10,
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            SizedBox(height: 16),
+
+            // 搜索功能配置
+            _buildSettingsCard(
+              cardColor: cardColor,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 搜索功能总开关
+                  ListTile(
+                    leading: Icon(Ionicons.search_outline, color: textColor.withOpacity(0.7)),
+                    title: Text(
+                      '文件搜索',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '在 WebDAV 页面显示搜索按钮',
+                      style: TextStyle(
+                        color: secondaryTextColor,
+                      ),
+                    ),
+                    trailing: FluentSettingsSwitch(
+                      value: provider.enableSearch,
+                      onChanged: (value) {
+                        provider.setEnableSearch(value);
+                      },
+                    ),
+                    onTap: () {
+                      provider.setEnableSearch(!provider.enableSearch);
+                    },
+                  ),
+
+                  // 搜索详细配置（仅在开启搜索时显示）
+                  if (provider.enableSearch) ...[
+                    Divider(height: 1, color: secondaryTextColor.withOpacity(0.2)),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 搜索范围
+                          _buildSearchSectionTitle('搜索范围', textColor),
+                          SizedBox(height: 8),
+                          ...WebDAVSearchScope.values.map((scope) =>
+                            RadioListTile<WebDAVSearchScope>(
+                              title: Text(
+                                scope.displayName,
+                                style: TextStyle(color: textColor, fontSize: 14),
+                              ),
+                              subtitle: Text(
+                                scope.description,
+                                style: TextStyle(color: secondaryTextColor, fontSize: 11),
+                              ),
+                              value: scope,
+                              groupValue: provider.searchScope,
+                              activeColor: accentColor,
+                              contentPadding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  provider.setSearchScope(value);
+                                }
+                              },
+                            ),
+                          ),
+
+                          // 层级限制（当前目录+子目录或全局搜索时显示）
+                          if (provider.searchScope == WebDAVSearchScope.currentWithDepth ||
+                              provider.searchScope == WebDAVSearchScope.global) ...[
+                            SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Text(
+                                  '层级限制',
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Spacer(),
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: accentColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${provider.searchDepthLimit} 层',
+                                    style: TextStyle(
+                                      color: accentColor,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 8),
+                            Slider(
+                              value: provider.searchDepthLimit.toDouble(),
+                              min: 1,
+                              max: 10,
+                              divisions: 9,
+                              activeColor: accentColor,
+                              onChanged: (value) {
+                                provider.setSearchDepthLimit(value.round());
+                              },
+                            ),
+                          ],
+
+                          SizedBox(height: 16),
+
+                          // 搜索目标（多选）
+                          _buildSearchSectionTitle('搜索目标（可多选）', textColor),
+                          SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: WebDAVSearchTarget.values.map((target) {
+                              final isSelected = provider.searchTargets.contains(target);
+                              return FilterChip(
+                                label: Text(target.displayName),
+                                selected: isSelected,
+                                selectedColor: accentColor.withOpacity(0.2),
+                                checkmarkColor: accentColor,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? accentColor : textColor,
+                                  fontSize: 13,
+                                ),
+                                side: BorderSide(
+                                  color: isSelected ? accentColor : secondaryTextColor.withOpacity(0.3),
+                                ),
+                                onSelected: (selected) {
+                                  provider.toggleSearchTarget(target);
+                                },
+                              );
+                            }).toList(),
+                          ),
+
+                          SizedBox(height: 16),
+
+                          // 搜索超时
+                          _buildSearchSectionTitle('搜索超时', textColor),
+                          SizedBox(height: 8),
+                          ...WebDAVSearchTimeout.values.map((timeout) =>
+                            RadioListTile<WebDAVSearchTimeout>(
+                              title: Text(
+                                timeout.displayName,
+                                style: TextStyle(color: textColor, fontSize: 14),
+                              ),
+                              value: timeout,
+                              groupValue: provider.searchTimeout,
+                              activeColor: accentColor,
+                              contentPadding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  provider.setSearchTimeout(value);
+                                }
+                              },
+                            ),
+                          ),
+
+                          SizedBox(height: 16),
+
+                          // 请求间隔
+                          Row(
+                            children: [
+                              Text(
+                                '请求间隔',
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Spacer(),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: accentColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${provider.searchRequestInterval} ms',
+                                  style: TextStyle(
+                                    color: accentColor,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '防止请求过快被服务器限制，0 表示无延迟',
+                            style: TextStyle(
+                              color: secondaryTextColor,
+                              fontSize: 11,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Slider(
+                            value: provider.searchRequestInterval.toDouble(),
+                            min: 0,
+                            max: 1000,
+                            divisions: 20,
+                            activeColor: accentColor,
+                            onChanged: (value) {
+                              provider.setSearchRequestInterval(value.round());
+                            },
+                          ),
+
+                          SizedBox(height: 16),
+
+                          // 最大结果数
+                          Row(
+                            children: [
+                              Text(
+                                '最大结果数',
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Spacer(),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: accentColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${provider.searchMaxResults}',
+                                  style: TextStyle(
+                                    color: accentColor,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '搜索结果达到上限时自动停止',
+                            style: TextStyle(
+                              color: secondaryTextColor,
+                              fontSize: 11,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Slider(
+                            value: provider.searchMaxResults.toDouble(),
+                            min: 50,
+                            max: 2000,
+                            divisions: 39,
+                            activeColor: accentColor,
+                            onChanged: (value) {
+                              provider.setSearchMaxResults(value.round());
+                            },
                           ),
                         ],
                       ),
@@ -683,6 +959,17 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
       onPressed: () {
         provider.setSeasonFolderPattern(pattern);
       },
+    );
+  }
+
+  Widget _buildSearchSectionTitle(String title, Color textColor) {
+    return Text(
+      title,
+      style: TextStyle(
+        color: textColor,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
     );
   }
 }
