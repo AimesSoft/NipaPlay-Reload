@@ -97,7 +97,15 @@ class _CupertinoNetworkMediaManagementSheetState
     final service = _getService();
     _serverAddresses = List<ServerAddress>.from(service.getServerAddresses());
     _currentAddressId = service.currentAddressId;
-    if (_currentAddressId == null && _serverAddresses.isNotEmpty) {
+    if (_serverAddresses.isEmpty) {
+      _currentAddressId = null;
+      service.currentAddressId = null;
+      return;
+    }
+
+    final hasCurrentAddress = _currentAddressId != null &&
+        _serverAddresses.any((address) => address.id == _currentAddressId);
+    if (!hasCurrentAddress) {
       final provider = _getProvider();
       final currentUrl = provider.serverUrl?.toString();
       final matched = _serverAddresses.where(
@@ -105,6 +113,7 @@ class _CupertinoNetworkMediaManagementSheetState
       );
       _currentAddressId =
           matched.isNotEmpty ? matched.first.id : _serverAddresses.first.id;
+      service.currentAddressId = _currentAddressId;
     }
   }
 
