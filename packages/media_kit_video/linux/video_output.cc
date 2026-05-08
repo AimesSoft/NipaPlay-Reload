@@ -20,7 +20,9 @@ struct _VideoOutput {
   TextureGL* texture_gl;
   EGLDisplay egl_display; /* EGL display shared with Flutter. */
   EGLContext egl_context; /* Flutter EGL context used by mpv render API. */
-  EGLSurface egl_surface; /* Unused placeholder kept for ABI stability. */
+  EGLSurface egl_draw_surface; /* Flutter draw surface for mpv renderer teardown. */
+  EGLSurface egl_read_surface; /* Flutter read surface for mpv renderer teardown. */
+  EGLSurface egl_surface; /* Flutter draw surface kept for ABI stability. */
   guint8* pixel_buffer;
   TextureSW* texture_sw;
   GMutex mutex; /* Only used in S/W rendering. */
@@ -37,25 +39,60 @@ struct _VideoOutput {
 
 G_DEFINE_TYPE(VideoOutput, video_output, G_TYPE_OBJECT)
 
+static void video_output_free_hw_render_context(VideoOutput* self) {
+  if (self->render_context == NULL) {
+    return;
+  }
+
+  EGLDisplay previous_display = eglGetCurrentDisplay();
+  EGLContext previous_context = eglGetCurrentContext();
+  EGLSurface previous_draw = eglGetCurrentSurface(EGL_DRAW);
+  EGLSurface previous_read = eglGetCurrentSurface(EGL_READ);
+
+  gboolean restore_context = previous_context != self->egl_context;
+  gboolean made_context_current = !restore_context;
+
+  if (!made_context_current && self->egl_display != EGL_NO_DISPLAY &&
+      self->egl_context != EGL_NO_CONTEXT) {
+    made_context_current = eglMakeCurrent(self->egl_display,
+                                          self->egl_draw_surface,
+                                          self->egl_read_surface,
+                                          self->egl_context);
+    if (!made_context_current) {
+      g_printerr(
+          "media_kit: VideoOutput: Failed to make EGL context current before "
+          "freeing mpv_render_context. Error: 0x%x\n",
+          eglGetError());
+    }
+  }
+
+  if (made_context_current) {
+    mpv_render_context_set_update_callback(self->render_context, NULL, NULL);
+    mpv_render_context_free(self->render_context);
+    self->render_context = NULL;
+  }
+
+  if (restore_context && made_context_current) {
+    if (previous_context != EGL_NO_CONTEXT) {
+      eglMakeCurrent(previous_display, previous_draw, previous_read,
+                     previous_context);
+    } else {
+      eglMakeCurrent(self->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                     EGL_NO_CONTEXT);
+    }
+  }
+}
+
 static void video_output_dispose(GObject* object) {
   VideoOutput* self = VIDEO_OUTPUT(object);
   self->destroyed = TRUE;
-  
-  // Make sure that no more callbacks are invoked from mpv.
-  if (self->render_context) {
-    mpv_render_context_set_update_callback(self->render_context, NULL, NULL);
-  }
 
   // H/W
   if (self->texture_gl) {
     fl_texture_registrar_unregister_texture(self->texture_registrar,
                                             FL_TEXTURE(self->texture_gl));
 
-    // The mpv OpenGL renderer is bound to Flutter's current EGL context.
-    if (self->render_context != NULL) {
-      mpv_render_context_free(self->render_context);
-      self->render_context = NULL;
-    }
+    video_output_free_hw_render_context(self);
 
     g_object_unref(self->texture_gl);
   }
@@ -66,11 +103,12 @@ static void video_output_dispose(GObject* object) {
     g_free(self->pixel_buffer);
     g_object_unref(self->texture_sw);
     if (self->render_context != NULL) {
+      mpv_render_context_set_update_callback(self->render_context, NULL, NULL);
       mpv_render_context_free(self->render_context);
       self->render_context = NULL;
     }
   }
-  
+
   g_mutex_clear(&self->mutex);
   G_OBJECT_CLASS(video_output_parent_class)->dispose(object);
 }
@@ -83,6 +121,8 @@ static void video_output_init(VideoOutput* self) {
   self->texture_gl = NULL;
   self->egl_display = EGL_NO_DISPLAY;
   self->egl_context = EGL_NO_CONTEXT;
+  self->egl_draw_surface = EGL_NO_SURFACE;
+  self->egl_read_surface = EGL_NO_SURFACE;
   self->egl_surface = EGL_NO_SURFACE;
   self->texture_sw = NULL;
   self->pixel_buffer = NULL;
@@ -123,10 +163,15 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
     // Reuse Flutter's current EGL context to avoid per-frame context switches.
     EGLDisplay flutter_display = eglGetCurrentDisplay();
     EGLContext flutter_context = eglGetCurrentContext();
+    EGLSurface flutter_draw_surface = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface flutter_read_surface = eglGetCurrentSurface(EGL_READ);
 
     if (flutter_display != EGL_NO_DISPLAY && flutter_context != EGL_NO_CONTEXT) {
       self->egl_display = flutter_display;
       self->egl_context = flutter_context;
+      self->egl_draw_surface = flutter_draw_surface;
+      self->egl_read_surface = flutter_read_surface;
+      self->egl_surface = flutter_draw_surface;
 
       // Bind OpenGL ES API (Flutter uses OpenGL ES on Linux).
       eglBindAPI(EGL_OPENGL_ES_API);
@@ -159,7 +204,8 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
           params[2].data = gdk_x11_display_get_xdisplay(display);
         }
 
-        if (mpv_render_context_create(&self->render_context, self->handle, params) == 0) {
+        if (mpv_render_context_create(&self->render_context, self->handle,
+                                      params) == 0) {
           mpv_render_context_set_update_callback(
               self->render_context,
               [](void* data) {
