@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// Native iOS 26 slider implementation using platform views
 ///
@@ -159,6 +160,10 @@ class _IOS26SliderState extends State<IOS26Slider> {
   Widget build(BuildContext context) {
     // Only use native implementation on iOS
     if (!kIsWeb && Platform.isIOS) {
+      if (!ios26NativeViewRouteIsCurrent(context)) {
+        return const SizedBox(height: 31);
+      }
+
       final platformView = UiKitView(
         viewType: 'adaptive_platform_ui/ios26_slider',
         creationParams: _buildCreationParams(),

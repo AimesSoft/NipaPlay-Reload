@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../platform/platform_info.dart';
+import 'ios26/ios26_native_view_route_guard.dart';
 
 /// A widget that applies a platform-specific blur effect to its background
 ///
@@ -304,6 +305,16 @@ class Ios26NativeBlurViewState extends State<Ios26NativeBlurView> {
 
   @override
   Widget build(BuildContext context) {
+    if (!ios26NativeViewRouteIsCurrent(context)) {
+      return Visibility(
+        visible: false,
+        maintainAnimation: true,
+        maintainSize: true,
+        maintainState: true,
+        child: widget.child,
+      );
+    }
+
     return ClipRRect(
       borderRadius: widget.borderRadius ?? BorderRadius.zero,
       child: Stack(

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../style/sf_symbol.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// iOS 26 native button styles (Liquid Glass design)
 enum IOS26ButtonStyle {
@@ -311,6 +312,10 @@ class _IOS26ButtonState extends State<IOS26Button> {
   Widget build(BuildContext context) {
     // Only use native implementation on iOS
     if (!kIsWeb && Platform.isIOS) {
+      if (!ios26NativeViewRouteIsCurrent(context)) {
+        return SizedBox(height: _height);
+      }
+
       final platformView = UiKitView(
         viewType: 'adaptive_platform_ui/ios26_button',
         creationParams: _buildCreationParams(),

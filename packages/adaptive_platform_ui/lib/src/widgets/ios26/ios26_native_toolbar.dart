@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../adaptive_app_bar_action.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// Native iOS 26 UIToolbar widget using platform views
 /// Implements Liquid Glass design with blur effects
@@ -43,6 +44,11 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
     }
 
     final safePadding = MediaQuery.of(context).padding.top;
+    final toolbarHeight = widget.height + safePadding;
+
+    if (!ios26NativeViewRouteIsCurrent(context)) {
+      return SizedBox(height: toolbarHeight);
+    }
 
     // Priority: custom leading widget > leadingText
     // If custom leading widget provided, don't send leadingText to native
@@ -57,7 +63,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
     };
 
     final toolbar = Container(
-      height: widget.height + safePadding,
+      height: toolbarHeight,
       decoration: BoxDecoration(
         gradient: Theme.brightnessOf(context) == Brightness.light
             ? const LinearGradient(
@@ -92,7 +98,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
     // If custom leading widget provided, overlay it on top of native toolbar
     if (widget.leading != null) {
       return SizedBox(
-        height: widget.height + safePadding,
+        height: toolbarHeight,
         child: Stack(
           children: [
             toolbar,

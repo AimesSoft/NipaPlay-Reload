@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// Base type for entries in a popup menu
 abstract class AdaptivePopupMenuEntry {
@@ -265,6 +266,22 @@ class _IOS26PopupMenuButtonState<T> extends State<IOS26PopupMenuButton<T>> {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb && Platform.isIOS) {
+      if (!ios26NativeViewRouteIsCurrent(context)) {
+        if (isCustomWidget) {
+          return Visibility(
+            visible: false,
+            maintainAnimation: true,
+            maintainSize: true,
+            maintainState: true,
+            child: widget.child!,
+          );
+        }
+        return SizedBox(
+          height: widget.height,
+          width: widget.isIconButton ? widget.width ?? widget.height : null,
+        );
+      }
+
       // Flatten entries into parallel arrays for the platform view
       final labels = <String>[];
       final symbols = <String>[];

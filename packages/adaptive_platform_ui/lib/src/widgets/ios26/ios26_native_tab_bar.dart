@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import '../adaptive_scaffold.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// Native iOS 26 tab bar using UITabBar platform view
 class IOS26NativeTabBar extends StatefulWidget {
@@ -92,6 +93,11 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb && Platform.isIOS) {
+      final h = widget.height ?? _intrinsicHeight ?? 50.0;
+      if (!ios26NativeViewRouteIsCurrent(context)) {
+        return SizedBox(height: h);
+      }
+
       final labels = widget.destinations.map((e) => e.label).toList();
       final symbols = widget.destinations.map((e) {
         final icon = e.icon;
@@ -131,7 +137,6 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
         },
       );
 
-      final h = widget.height ?? _intrinsicHeight ?? 50.0;
       return SizedBox(height: h, child: platformView);
     }
 
