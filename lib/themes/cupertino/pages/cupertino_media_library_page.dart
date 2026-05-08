@@ -5,6 +5,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -1632,20 +1633,55 @@ class _CupertinoLocalMediaLibraryCardState
     scanService.rescanAllFolders();
   }
 
-  void _handleImportSelection(dynamic value) {
+  void _handleImportSelection(String value) {
     if (_isImporting) return;
     if (value == 'album') {
-      _startImport(_pickVideoFromAlbum);
+      unawaited(_startImport(_pickVideoFromAlbum));
     } else if (value == 'file') {
-      _startImport(_pickVideoFromFileManager);
+      unawaited(_startImport(_pickVideoFromFileManager));
+    } else if (value == 'stream') {
+      unawaited(_showStreamUrlDialog());
     }
+  }
+
+  Future<void> _showImportSourceSheet() async {
+    if (_isImporting) return;
+
+    final source = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('导入视频'),
+        message: const Text('选择视频来源'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop('album'),
+            child: const Text('从相册导入'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop('file'),
+            child: const Text('从文件管理器导入'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop('stream'),
+            child: const Text('输入链接串流'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+
+    if (!mounted || source == null) return;
+    _handleImportSelection(source);
   }
 
   Widget _buildImportButton(BuildContext context) {
     final bool enabled = !_isImporting;
     final Color primaryColor = CupertinoDynamicColor.resolve(
         CupertinoTheme.of(context).primaryColor, context);
-    final Color textColor = CupertinoColors.white;
+    const Color textColor = CupertinoColors.white;
 
     final child = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1674,15 +1710,11 @@ class _CupertinoLocalMediaLibraryCardState
       ),
     );
 
-    if (!enabled) return child;
-
-    return AdaptivePopupMenuButton.widget(
-      items: _buildImportMenuItems(),
+    return CupertinoButton(
+      onPressed: enabled ? () => unawaited(_showImportSourceSheet()) : null,
+      padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(12),
       child: child,
-      onSelected: (index, entry) {
-        final value = (entry as AdaptivePopupMenuItem).value;
-        _handleImportSelection(value);
-      },
     );
   }
 
@@ -1910,6 +1942,171 @@ class _CupertinoLocalMediaLibraryCardState
     await _playSelectedFile(filePath);
   }
 
+  Future<void> _showStreamUrlDialog() async {
+    if (_isImporting) return;
+
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    var dialogActive = true;
+
+    try {
+      final streamUrl = await showCupertinoDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          void submit() {
+            final value = controller.text.trim();
+            if (!_isValidStreamUrl(value)) {
+              BlurSnackBar.show(context, '请输入有效的 http/https 视频链接');
+              focusNode.requestFocus();
+              return;
+            }
+            Navigator.of(dialogContext).pop(value);
+          }
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (dialogContext.mounted) {
+              focusNode.requestFocus();
+            }
+          });
+
+          return CupertinoAlertDialog(
+            title: const Text('输入视频链接'),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: CupertinoTextField(
+                controller: controller,
+                focusNode: focusNode,
+                placeholder: 'https://example.com/video.mp4',
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.go,
+                autocorrect: false,
+                enableSuggestions: false,
+                onSubmitted: (_) => submit(),
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                onPressed: () => unawaited(
+                  _pasteStreamUrlFromClipboard(
+                    controller,
+                    focusNode,
+                    () => dialogActive,
+                  ),
+                ),
+                child: const Text('粘贴'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: submit,
+                child: const Text('播放'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!mounted || streamUrl == null) return;
+      await _playStreamUrl(streamUrl);
+    } finally {
+      dialogActive = false;
+      controller.dispose();
+      focusNode.dispose();
+    }
+  }
+
+  Future<void> _pasteStreamUrlFromClipboard(
+    TextEditingController controller,
+    FocusNode focusNode,
+    bool Function() isDialogActive,
+  ) async {
+    try {
+      final data = await Clipboard.getData('text/plain');
+      if (!isDialogActive()) return;
+
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) {
+        if (mounted) {
+          BlurSnackBar.show(context, '剪贴板里没有可用链接');
+        }
+        return;
+      }
+
+      controller.text = text;
+      controller.selection = TextSelection.fromPosition(
+        TextPosition(offset: controller.text.length),
+      );
+      focusNode.requestFocus();
+    } catch (e) {
+      if (mounted && isDialogActive()) {
+        BlurSnackBar.show(context, '读取剪贴板失败: $e');
+      }
+    }
+  }
+
+  bool _isValidStreamUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
+  }
+
+  Future<void> _playStreamUrl(String rawUrl) async {
+    final streamUrl = rawUrl.trim();
+    final uri = Uri.tryParse(streamUrl);
+    if (!_isValidStreamUrl(streamUrl) || uri == null) {
+      if (mounted) {
+        BlurSnackBar.show(context, '请输入有效的 http/https 视频链接');
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isImporting = true;
+      });
+    } else {
+      _isImporting = true;
+    }
+
+    try {
+      final playable = PlayableItem(
+        videoPath: streamUrl,
+        title: _titleFromStreamUri(uri),
+      );
+      await PlaybackService().play(playable);
+      await _watchHistoryProvider?.loadHistory();
+    } catch (e) {
+      if (mounted) {
+        BlurSnackBar.show(context, '播放链接失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImporting = false;
+        });
+      } else {
+        _isImporting = false;
+      }
+    }
+  }
+
+  String _titleFromStreamUri(Uri uri) {
+    final segments = uri.pathSegments
+        .where((segment) => segment.trim().isNotEmpty)
+        .toList(growable: false);
+    if (segments.isEmpty) {
+      return uri.host;
+    }
+
+    final fileName = Uri.decodeComponent(segments.last);
+    final title = p.basenameWithoutExtension(fileName).trim();
+    return title.isEmpty ? uri.host : title;
+  }
+
   Future<void> _playSelectedFile(String path) async {
     try {
       await WatchHistoryManager.initialize();
@@ -1937,24 +2134,6 @@ class _CupertinoLocalMediaLibraryCardState
     await PlaybackService().play(playable);
 
     await _watchHistoryProvider?.loadHistory();
-  }
-
-  List<AdaptivePopupMenuEntry> _buildImportMenuItems() {
-    return [
-      AdaptivePopupMenuItem(
-        label: '从相册导入',
-        value: 'album',
-        icon: PlatformInfo.isIOS26OrHigher()
-            ? 'photo.on.rectangle'
-            : CupertinoIcons.photo,
-      ),
-      const AdaptivePopupMenuDivider(),
-      AdaptivePopupMenuItem(
-        label: '从文件管理器导入',
-        value: 'file',
-        icon: PlatformInfo.isIOS26OrHigher() ? 'folder' : CupertinoIcons.folder,
-      ),
-    ];
   }
 }
 

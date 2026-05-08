@@ -7,6 +7,7 @@ import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart'
     show MediaServerType;
+import 'package:nipaplay/utils/url_name_generator.dart';
 
 /// Cupertino 风格的网络服务器连接弹窗 - 使用原生 iOS 26 风格
 class CupertinoNetworkServerConnectionDialog {
@@ -114,17 +115,20 @@ class CupertinoNetworkServerConnectionDialog {
 
     try {
       bool connected;
+      final addressName = UrlNameGenerator.generateAddressName(serverUrl);
       if (serverType == MediaServerType.jellyfin) {
         connected = await context.read<JellyfinProvider>().connectToServer(
               serverUrl,
               username,
               password,
+              addressName: addressName,
             );
       } else {
         connected = await context.read<EmbyProvider>().connectToServer(
               serverUrl,
               username,
               password,
+              addressName: addressName,
             );
       }
 

@@ -25,8 +25,8 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       await ScreenOrientationManager.instance.setInitialOrientation();
       await _initializeSystemVolumeController();
       await _loadInitialBrightness(); // Load initial brightness for phone
-      await _loadInitialVolume(); // <<< CALL ADDED
     }
+    await _loadInitialVolume();
     // 不在初始化时启动帧级Ticker，避免空闲/非播放状态也持续产帧
     _startUiUpdateTimer(); // 仅创建/准备Ticker，是否启动由播放状态决定
     _setupWindowManagerListener();
@@ -126,9 +126,9 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     _notifyListeners();
   }
 
-  // Load initial system volume (placeholder)
+  // Load initial volume. Mobile keeps using system volume; desktop/web use
+  // the player's own volume so keyboard volume shortcuts start from reality.
   Future<void> _loadInitialVolume() async {
-    if (!globals.isMobilePlatform) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedVolume = prefs.getDouble(_playerVolumeKey);

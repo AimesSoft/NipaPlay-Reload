@@ -702,7 +702,6 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   }
 
   void _scheduleVolumePersistence({bool immediate = false}) {
-    if (!globals.isMobilePlatform) return;
     _volumePersistenceTimer?.cancel();
     if (immediate) {
       _volumePersistenceTimer = null;

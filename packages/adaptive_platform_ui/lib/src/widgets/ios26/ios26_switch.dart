@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// Native iOS 26 switch implementation using platform views
 ///
@@ -125,6 +126,10 @@ class _IOS26SwitchState extends State<IOS26Switch> {
   Widget build(BuildContext context) {
     // Only use native implementation on iOS
     if (!kIsWeb && Platform.isIOS) {
+      if (!ios26NativeViewRouteIsCurrent(context)) {
+        return const SizedBox(width: 51, height: 31);
+      }
+
       final platformView = UiKitView(
         viewType: 'adaptive_platform_ui/ios26_switch',
         creationParams: _buildCreationParams(),

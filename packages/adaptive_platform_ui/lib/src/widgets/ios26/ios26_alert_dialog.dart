@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import '../adaptive_alert_dialog.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// Action types for alert dialog buttons
 enum AlertActionStyle {
@@ -152,6 +153,10 @@ class _IOS26AlertDialogState extends State<IOS26AlertDialog> {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb && Platform.isIOS) {
+      if (!ios26NativeViewRouteIsCurrent(context)) {
+        return const SizedBox.shrink();
+      }
+
       final creationParams = <String, dynamic>{
         'title': widget.title,
         if (widget.message != null) 'message': widget.message,

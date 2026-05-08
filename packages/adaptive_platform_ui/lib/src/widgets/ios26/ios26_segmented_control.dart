@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'ios26_native_view_route_guard.dart';
 
 /// Native iOS 26 segmented control implementation using platform views
 class IOS26SegmentedControl extends StatefulWidget {
@@ -144,6 +145,14 @@ class _IOS26SegmentedControlState extends State<IOS26SegmentedControl> {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb && Platform.isIOS) {
+      if (!ios26NativeViewRouteIsCurrent(context)) {
+        Widget placeholder = SizedBox(height: widget.height);
+        if (widget.shrinkWrap) {
+          placeholder = Center(child: placeholder);
+        }
+        return placeholder;
+      }
+
       Widget control = UiKitView(
         viewType: 'adaptive_platform_ui/ios26_segmented_control',
         creationParams: _buildCreationParams(),
