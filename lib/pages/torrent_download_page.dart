@@ -264,7 +264,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     if (!mounted) return;
     final settings =
         Provider.of<DownloaderSettingsProvider>(context, listen: false);
-    if (!settings.autoScanCompletedTasks) return;
+    if (!settings.isLoaded || !settings.autoScanCompletedTasks) return;
 
     await _loadAutoScanRegistry();
     if (!mounted) return;
