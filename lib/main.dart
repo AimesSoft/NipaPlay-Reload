@@ -944,11 +944,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                 supportedLocales: supportedLocales,
                 home: const SplashScreen(),
                 builder: (context, appChild) {
-                  return Stack(
-                    children: [
-                      appChild ?? const SizedBox.shrink(),
-                      if (_isDragging) const DragDropOverlay(),
-                    ],
+                  return _buildGlobalAppOverlay(
+                    appChild ?? const SizedBox.shrink(),
+                    isDragging: _isDragging,
                   );
                 },
               ),
@@ -964,12 +962,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
             isIOS: !kIsWeb && Platform.isIOS,
             isTablet: globals.isTablet,
           );
-          final overlayBuilder = (Widget child) => Stack(
-                children: [
-                  child,
-                  if (_isDragging) const DragDropOverlay(),
-                ],
-              );
+          Widget overlayBuilder(Widget child) {
+            return _buildGlobalAppOverlay(child, isDragging: _isDragging);
+          }
 
           final themeContext = ThemeBuildContext(
             themeNotifier: themeNotifier,
@@ -1868,29 +1863,54 @@ class MainPageState extends State<MainPage>
               );
             },
           ),
-          Selector<DeveloperOptionsProvider, bool>(
-            selector: (context, devOptions) => devOptions.showSystemResources,
-            builder: (context, showSystemResources, child) {
-              if (!showSystemResources) {
-                return const SizedBox.shrink();
-              }
-              return Positioned(
-                top: 35,
-                right: 8 + mediaPadding.right,
-                child: const IgnorePointer(
-                  child: Align(
-                    alignment: Alignment.topRight,
-                    child: SystemResourceDisplay(),
-                  ),
-                ),
-              );
-            },
-          ),
         ],
       ),
     );
 
     return content;
+  }
+}
+
+Widget _buildGlobalAppOverlay(
+  Widget child, {
+  required bool isDragging,
+}) {
+  return Stack(
+    children: [
+      child,
+      const _SystemResourceOverlay(),
+      if (isDragging) const DragDropOverlay(),
+    ],
+  );
+}
+
+class _SystemResourceOverlay extends StatelessWidget {
+  const _SystemResourceOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<DeveloperOptionsProvider, bool>(
+      selector: (context, devOptions) => devOptions.showSystemResources,
+      builder: (context, showSystemResources, child) {
+        if (!showSystemResources) {
+          return const SizedBox.shrink();
+        }
+
+        final mediaPadding = MediaQuery.paddingOf(context);
+        final top = globals.isDesktop ? 35.0 : mediaPadding.top + 8;
+
+        return Positioned(
+          top: top,
+          right: 8 + mediaPadding.right,
+          child: const IgnorePointer(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: SystemResourceDisplay(),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
