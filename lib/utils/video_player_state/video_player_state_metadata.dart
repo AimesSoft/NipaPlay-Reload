@@ -378,8 +378,17 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       }
 
       if (existingHistory == null) {
-        //debugPrint('未找到现有观看记录，跳过更新');
-        return;
+        debugPrint('[VideoPlayerState] 未找到现有观看记录，将创建基础记录后写入识别结果');
+        existingHistory = WatchHistoryItem(
+          filePath: path,
+          animeName: p.basenameWithoutExtension(path),
+          episodeTitle: null,
+          watchProgress: 0,
+          lastPosition: 0,
+          duration: _duration.inMilliseconds,
+          lastWatchTime: DateTime.now(),
+          isFromScan: false,
+        );
       }
 
       // 获取识别到的动画信息

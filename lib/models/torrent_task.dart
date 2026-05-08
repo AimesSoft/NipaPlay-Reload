@@ -1,5 +1,64 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+
+class TorrentTaskFile {
+  const TorrentTaskFile({
+    required this.index,
+    required this.name,
+    required this.components,
+    required this.length,
+    required this.included,
+  });
+
+  static const Set<String> videoExtensions = {
+    '.mp4',
+    '.m4v',
+    '.mkv',
+    '.mov',
+    '.avi',
+    '.flv',
+    '.ts',
+    '.mpeg',
+    '.mpg',
+    '.webm',
+  };
+
+  final int index;
+  final String name;
+  final List<String> components;
+  final int length;
+  final bool included;
+
+  String get displayName {
+    if (components.isNotEmpty) {
+      return components.join('/');
+    }
+    return name;
+  }
+
+  String get fileName {
+    final display = displayName;
+    return display.isEmpty ? name : p.basename(display);
+  }
+
+  bool get isVideo =>
+      videoExtensions.contains(p.extension(fileName).toLowerCase());
+
+  factory TorrentTaskFile.fromMap(int index, Map<String, dynamic> map) {
+    final rawComponents = map['components'];
+    return TorrentTaskFile(
+      index: index,
+      name: TorrentTask._asString(map['name'], fallback: '未命名文件'),
+      components: rawComponents is List
+          ? rawComponents.map((value) => value.toString()).toList()
+          : const <String>[],
+      length: TorrentTask._asInt(map['length']),
+      included: map['included'] != false,
+    );
+  }
+}
+
 class TorrentTask {
   const TorrentTask({
     required this.id,
@@ -14,6 +73,7 @@ class TorrentTask {
     required this.downloadSpeedBytesPerSecond,
     required this.uploadSpeedBytesPerSecond,
     required this.error,
+    this.files = const <TorrentTaskFile>[],
   });
 
   final int id;
@@ -28,6 +88,7 @@ class TorrentTask {
   final int downloadSpeedBytesPerSecond;
   final int uploadSpeedBytesPerSecond;
   final String? error;
+  final List<TorrentTaskFile> files;
 
   double get progress {
     if (totalBytes <= 0) return 0;
@@ -39,6 +100,8 @@ class TorrentTask {
   bool get isActive => state == 'live' || state == 'initializing';
 
   bool get hasError => state == 'error' || (error?.isNotEmpty ?? false);
+
+  String get autoScanKey => '$infoHash|$outputFolder';
 
   String get displayState {
     if (hasError) return '错误';
@@ -78,6 +141,27 @@ class TorrentTask {
       uploadSpeedBytesPerSecond:
           _speedBytes(live['upload_speed'] as Map<String, dynamic>?),
       error: stats['error']?.toString(),
+      files: _filesFromMap(map),
+    );
+  }
+
+  TorrentTask copyWith({
+    List<TorrentTaskFile>? files,
+  }) {
+    return TorrentTask(
+      id: id,
+      infoHash: infoHash,
+      name: name,
+      outputFolder: outputFolder,
+      state: state,
+      progressBytes: progressBytes,
+      uploadedBytes: uploadedBytes,
+      totalBytes: totalBytes,
+      finished: finished,
+      downloadSpeedBytesPerSecond: downloadSpeedBytesPerSecond,
+      uploadSpeedBytesPerSecond: uploadSpeedBytesPerSecond,
+      error: error,
+      files: files ?? this.files,
     );
   }
 
@@ -90,6 +174,25 @@ class TorrentTask {
         .whereType<Map<String, dynamic>>()
         .map(TorrentTask.fromMap)
         .toList();
+  }
+
+  static TorrentTask? detailsFromJson(String jsonText) {
+    final decoded = jsonDecode(jsonText);
+    if (decoded is! Map<String, dynamic>) return null;
+    return TorrentTask.fromMap(decoded);
+  }
+
+  static List<TorrentTaskFile> _filesFromMap(Map<String, dynamic> map) {
+    final rawFiles = map['files'];
+    if (rawFiles is! List) return const <TorrentTaskFile>[];
+    final files = <TorrentTaskFile>[];
+    for (var index = 0; index < rawFiles.length; index++) {
+      final rawFile = rawFiles[index];
+      if (rawFile is Map<String, dynamic>) {
+        files.add(TorrentTaskFile.fromMap(index, rawFile));
+      }
+    }
+    return files;
   }
 
   static int _speedBytes(Map<String, dynamic>? speed) {

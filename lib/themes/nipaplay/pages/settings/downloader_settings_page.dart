@@ -38,6 +38,17 @@ class DownloaderSettingsPage extends StatelessWidget {
                     value: provider.createFolderForTask,
                     onChanged: provider.setCreateFolderForTask,
                   ),
+                  Divider(
+                    color: colorScheme.onSurface.withOpacity(0.12),
+                    height: 1,
+                  ),
+                  SettingsItem.toggle(
+                    title: '完成后自动加入媒体库',
+                    subtitle: '任务下载完成后自动把输出文件夹加入库管理并扫描',
+                    icon: Ionicons.library_outline,
+                    value: provider.autoScanCompletedTasks,
+                    onChanged: provider.setAutoScanCompletedTasks,
+                  ),
                 ],
               ),
             ),

@@ -16,9 +16,21 @@ class SettingsStorage {
     await prefs.setString(key, value);
   }
 
-  static Future<String> loadString(String key, {String defaultValue = ""}) async {
+  static Future<String> loadString(String key,
+      {String defaultValue = ""}) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(key) ?? defaultValue;
+  }
+
+  static Future<void> saveStringList(String key, List<String> value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(key, value);
+  }
+
+  static Future<List<String>> loadStringList(String key,
+      {List<String> defaultValue = const []}) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(key) ?? defaultValue;
   }
 
   static Future<void> saveInt(String key, int value) async {
@@ -36,7 +48,8 @@ class SettingsStorage {
     await prefs.setDouble(key, value);
   }
 
-  static Future<double> loadDouble(String key, {double defaultValue = 0.0}) async {
+  static Future<double> loadDouble(String key,
+      {double defaultValue = 0.0}) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(key) ?? defaultValue;
   }
