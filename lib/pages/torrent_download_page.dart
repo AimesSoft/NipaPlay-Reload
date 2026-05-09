@@ -4,8 +4,12 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/models/torrent_task.dart';
+import 'package:nipaplay/models/playable_item.dart';
+import 'package:nipaplay/providers/downloader_settings_provider.dart';
+import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/services/folder_opener.dart';
+import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/torrent_download_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -13,6 +17,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart';
 
 class TorrentDownloadPage extends StatefulWidget {
   const TorrentDownloadPage({super.key});
@@ -27,9 +32,13 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   final TextEditingController _magnetController = TextEditingController();
   Timer? _refreshTimer;
   List<TorrentTask> _tasks = const <TorrentTask>[];
+  final Set<String> _autoScannedCompletedTaskKeys = <String>{};
+  final Set<String> _autoScanningTaskKeys = <String>{};
+  Future<void> _autoScanChain = Future<void>.value();
   String _downloadDirectory = '';
   bool _isLoading = true;
   bool _isBusy = false;
+  bool _autoScanRegistryLoaded = false;
 
   @override
   void initState() {
@@ -76,6 +85,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
         _tasks = tasks;
         _isLoading = false;
       });
+      unawaited(_handleAutoScanCompletedTasks(tasks, silent: true));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -93,6 +103,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       setState(() {
         _tasks = tasks;
       });
+      unawaited(_handleAutoScanCompletedTasks(tasks, silent: silent));
     } catch (e) {
       if (!mounted || silent) return;
       BlurSnackBar.show(context, '刷新下载列表失败: $e');
@@ -237,6 +248,168 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     }
   }
 
+  Future<void> _loadAutoScanRegistry() async {
+    if (_autoScanRegistryLoaded) return;
+    final keys = await _service.loadAutoScannedCompletedTaskKeys();
+    _autoScannedCompletedTaskKeys
+      ..clear()
+      ..addAll(keys);
+    _autoScanRegistryLoaded = true;
+  }
+
+  Future<void> _handleAutoScanCompletedTasks(
+    List<TorrentTask> tasks, {
+    required bool silent,
+  }) async {
+    if (!mounted) return;
+    final settings =
+        Provider.of<DownloaderSettingsProvider>(context, listen: false);
+    if (!settings.isLoaded || !settings.autoScanCompletedTasks) return;
+
+    await _loadAutoScanRegistry();
+    if (!mounted) return;
+
+    for (final task in tasks) {
+      if (!task.finished || task.outputFolder.trim().isEmpty) continue;
+      final key = task.autoScanKey;
+      if (_autoScannedCompletedTaskKeys.contains(key) ||
+          _autoScanningTaskKeys.contains(key)) {
+        continue;
+      }
+
+      _autoScanningTaskKeys.add(key);
+      _autoScanChain = _autoScanChain.then(
+        (_) => _autoScanCompletedTask(task, key, silent: silent),
+      );
+      unawaited(_autoScanChain);
+    }
+  }
+
+  Future<void> _autoScanCompletedTask(
+    TorrentTask task,
+    String key, {
+    required bool silent,
+  }) async {
+    try {
+      final scanService = ServiceProvider.scanService;
+      await scanService.addScannedFolder(task.outputFolder);
+      while (mounted && scanService.isScanning) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+      if (!mounted) return;
+
+      await scanService.startDirectoryScan(
+        task.outputFolder,
+        skipPreviouslyMatchedUnwatched: true,
+      );
+      await ServiceProvider.watchHistoryProvider.refresh();
+      await _service.markAutoScannedCompletedTask(key);
+      _autoScannedCompletedTaskKeys.add(key);
+
+      if (!mounted || silent) return;
+      BlurSnackBar.show(context, '已自动扫描并加入媒体库: ${task.name}');
+    } catch (e) {
+      if (!mounted || silent) return;
+      BlurSnackBar.show(context, '自动扫描下载任务失败: $e');
+    } finally {
+      _autoScanningTaskKeys.remove(key);
+    }
+  }
+
+  Future<void> _playTask(TorrentTask task) async {
+    if (_isBusy) return;
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      final files = await _service.listPlayableFiles(task);
+      if (!mounted) return;
+      if (files.isEmpty) {
+        BlurSnackBar.show(context, '尚未获取到可播放的视频文件，请稍后再试');
+        return;
+      }
+
+      final selected = files.length == 1
+          ? files.first
+          : await _showPlayableFilesDialog(files);
+      if (selected == null || !mounted) return;
+
+      final source = await _service.getPlaybackSource(task, selected);
+      if (!mounted) return;
+      await PlaybackService().play(
+        PlayableItem(
+          videoPath: source.videoPath,
+          title: source.historyItem?.animeName ?? selected.fileName,
+          subtitle: source.historyItem?.episodeTitle ?? task.name,
+          historyItem: source.historyItem,
+          actualPlayUrl: source.actualPlayUrl,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      BlurSnackBar.show(context, '播放下载任务失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<TorrentTaskFile?> _showPlayableFilesDialog(
+    List<TorrentTaskFile> files,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return BlurDialog.show<TorrentTaskFile>(
+      context: context,
+      title: '选择要播放的文件',
+      contentWidget: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 360),
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: files.length,
+          separatorBuilder: (_, __) => Divider(
+            color: colorScheme.onSurface.withOpacity(0.08),
+            height: 1,
+          ),
+          itemBuilder: (dialogContext, index) {
+            final file = files[index];
+            return ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Ionicons.play_circle_outline,
+                color: AppAccentColors.current,
+              ),
+              title: Text(
+                file.displayName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
+              subtitle: Text(
+                _TorrentTaskCard.formatBytes(file.length),
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)),
+              ),
+              onTap: () => Navigator.of(dialogContext).pop(file),
+            );
+          },
+        ),
+      ),
+      actions: [
+        HoverScaleTextButton(
+          child: Text(
+            '取消',
+            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -321,6 +494,7 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
       padding: const EdgeInsets.all(16),
       itemBuilder: (context, task) => _TorrentTaskCard(
         task: task,
+        onPlay: () => _playTask(task),
         onToggle: () => _toggleTask(task),
         onOpenFolder: () => _openTaskFolder(task),
         onForget: () => _forgetTask(task),
@@ -562,6 +736,7 @@ class _MagnetInputState extends State<_MagnetInput> {
 class _TorrentTaskCard extends StatelessWidget {
   const _TorrentTaskCard({
     required this.task,
+    required this.onPlay,
     required this.onToggle,
     required this.onOpenFolder,
     required this.onForget,
@@ -569,6 +744,7 @@ class _TorrentTaskCard extends StatelessWidget {
   });
 
   final TorrentTask task;
+  final VoidCallback onPlay;
   final VoidCallback onToggle;
   final VoidCallback onOpenFolder;
   final VoidCallback onForget;
@@ -646,15 +822,15 @@ class _TorrentTaskCard extends StatelessWidget {
                 _MetricText(
                   label: '已下载',
                   value:
-                      '${_formatBytes(task.progressBytes)} / ${_formatBytes(task.totalBytes)}',
+                      '${formatBytes(task.progressBytes)} / ${formatBytes(task.totalBytes)}',
                 ),
                 _MetricText(
                   label: '下载',
-                  value: '${_formatBytes(task.downloadSpeedBytesPerSecond)}/s',
+                  value: '${formatBytes(task.downloadSpeedBytesPerSecond)}/s',
                 ),
                 _MetricText(
                   label: '上传',
-                  value: '${_formatBytes(task.uploadSpeedBytesPerSecond)}/s',
+                  value: '${formatBytes(task.uploadSpeedBytesPerSecond)}/s',
                 ),
               ],
             ),
@@ -668,8 +844,16 @@ class _TorrentTaskCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
               children: [
+                if (task.finished)
+                  _TorrentHoverAction(
+                    icon: Ionicons.play_circle_outline,
+                    label: '播放',
+                    onPressed: onPlay,
+                  ),
                 if (!task.finished) ...[
                   _TorrentHoverAction(
                     icon: task.isPaused
@@ -678,20 +862,17 @@ class _TorrentTaskCard extends StatelessWidget {
                     label: task.isPaused ? '继续' : '暂停',
                     onPressed: onToggle,
                   ),
-                  const SizedBox(width: 8),
                 ],
                 _TorrentHoverAction(
                   icon: Ionicons.folder_open_outline,
                   label: '打开文件夹',
                   onPressed: onOpenFolder,
                 ),
-                const SizedBox(width: 8),
                 _TorrentHoverAction(
                   icon: Ionicons.remove_circle_outline,
                   label: '移除',
                   onPressed: onForget,
                 ),
-                const SizedBox(width: 8),
                 _TorrentHoverAction(
                   icon: Ionicons.trash_outline,
                   label: '删文件',
@@ -709,7 +890,7 @@ class _TorrentTaskCard extends StatelessWidget {
     return '${(value * 100).clamp(0, 100).toStringAsFixed(1)}%';
   }
 
-  static String _formatBytes(int bytes) {
+  static String formatBytes(int bytes) {
     if (bytes <= 0) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     var value = bytes.toDouble();

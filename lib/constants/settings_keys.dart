@@ -30,4 +30,10 @@ class SettingsKeys {
 
   static const String downloaderCreateFolderForTask =
       'downloader_create_folder_for_task';
+
+  static const String downloaderAutoScanCompletedTasks =
+      'downloader_auto_scan_completed_tasks';
+
+  static const String downloaderAutoScannedCompletedTaskKeys =
+      'downloader_auto_scanned_completed_task_keys';
 }

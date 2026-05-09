@@ -9,10 +9,12 @@ class DownloaderSettingsProvider extends ChangeNotifier {
 
   bool _enabled = true;
   bool _createFolderForTask = true;
+  bool _autoScanCompletedTasks = true;
   bool _isLoaded = false;
 
   bool get enabled => _enabled;
   bool get createFolderForTask => _createFolderForTask;
+  bool get autoScanCompletedTasks => _autoScanCompletedTasks;
   bool get isLoaded => _isLoaded;
 
   Future<void> _loadSettings() async {
@@ -22,6 +24,10 @@ class DownloaderSettingsProvider extends ChangeNotifier {
     );
     _createFolderForTask = await SettingsStorage.loadBool(
       SettingsKeys.downloaderCreateFolderForTask,
+      defaultValue: true,
+    );
+    _autoScanCompletedTasks = await SettingsStorage.loadBool(
+      SettingsKeys.downloaderAutoScanCompletedTasks,
       defaultValue: true,
     );
     _isLoaded = true;
@@ -41,6 +47,16 @@ class DownloaderSettingsProvider extends ChangeNotifier {
     notifyListeners();
     await SettingsStorage.saveBool(
       SettingsKeys.downloaderCreateFolderForTask,
+      enabled,
+    );
+  }
+
+  Future<void> setAutoScanCompletedTasks(bool enabled) async {
+    if (_autoScanCompletedTasks == enabled) return;
+    _autoScanCompletedTasks = enabled;
+    notifyListeners();
+    await SettingsStorage.saveBool(
+      SettingsKeys.downloaderAutoScanCompletedTasks,
       enabled,
     );
   }

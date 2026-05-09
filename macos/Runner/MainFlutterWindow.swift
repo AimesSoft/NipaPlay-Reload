@@ -48,7 +48,7 @@ class SecurityBookmarkPlugin: NSObject, FlutterPlugin {
         
         do {
             let bookmarkData = try url.bookmarkData(
-                options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                options: [.withSecurityScope],
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
