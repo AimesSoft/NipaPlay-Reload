@@ -24,6 +24,9 @@ class SettingsKeys {
   static const String labsEnableLargeScreenMode =
       'labs_enable_large_screen_mode';
 
+  static const String labsShowRemoteAccessQrCode =
+      'labs_show_remote_access_qr_code';
+
   static const String torrentDownloadDirectory = 'torrent_download_directory';
 
   static const String downloaderEnabled = 'downloader_enabled';

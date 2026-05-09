@@ -63,11 +63,32 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                       ),
                       CupertinoSettingsTile(
                         leading: Icon(
+                          CupertinoIcons.qrcode,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('显示远程访问二维码'),
+                        subtitle: const Text('开启后，远程访问服务页面会显示供手机扫码连接的二维码'),
+                        trailing: AdaptiveSwitch(
+                          value: labsSettings.showRemoteAccessQrCode,
+                          onChanged: (value) {
+                            labsSettings.setShowRemoteAccessQrCode(value);
+                          },
+                        ),
+                        onTap: () {
+                          labsSettings.setShowRemoteAccessQrCode(
+                            !labsSettings.showRemoteAccessQrCode,
+                          );
+                        },
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
                           CupertinoIcons.cloud,
                           color: resolveSettingsIconColor(context),
                         ),
                         title: const Text('WebDAV 快捷设置'),
-                        subtitle: const Text('配置底部 WebDAV 快捷 Tab，快速访问 WebDAV 服务器'),
+                        subtitle:
+                            const Text('配置底部 WebDAV 快捷 Tab，快速访问 WebDAV 服务器'),
                         trailing: Icon(
                           CupertinoIcons.chevron_forward,
                           color: CupertinoDynamicColor.resolve(
@@ -79,7 +100,8 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                         onTap: () {
                           Navigator.of(context).push(
                             CupertinoPageRoute(
-                              builder: (_) => const CupertinoWebDAVQuickSettingsPage(),
+                              builder: (_) =>
+                                  const CupertinoWebDAVQuickSettingsPage(),
                             ),
                           );
                         },

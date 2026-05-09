@@ -1,6 +1,7 @@
 // remote_access_page.dart
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/remote_access_qr_service.dart';
@@ -13,6 +14,7 @@ import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class RemoteAccessPage extends StatefulWidget {
@@ -377,6 +379,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
 
   Widget _buildWebServerSection() {
     final colorScheme = Theme.of(context).colorScheme;
+    final showRemoteAccessQrCode =
+        context.watch<LabsSettingsProvider>().showRemoteAccessQrCode;
     return DefaultTextStyle.merge(
       style: _pageTextStyle(context),
       child: Column(
@@ -463,7 +467,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
           if (_webServerEnabled) ...[
             // 访问地址
             _buildAccessAddressSection(),
-            _buildRemoteAccessQrSection(),
+            if (showRemoteAccessQrCode) _buildRemoteAccessQrSection(),
 
             SizedBox(height: 8),
             Divider(
