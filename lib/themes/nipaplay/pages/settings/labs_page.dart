@@ -29,6 +29,19 @@ class LabsPage extends StatelessWidget {
               color: colorScheme.onSurface.withValues(alpha: 0.12),
               height: 1,
             ),
+            SettingsItem.toggle(
+              title: '显示远程访问二维码',
+              subtitle: '开启后，远程访问服务页面会显示供手机扫码连接的二维码',
+              icon: Ionicons.qr_code_outline,
+              value: labsSettings.showRemoteAccessQrCode,
+              onChanged: (bool value) {
+                labsSettings.setShowRemoteAccessQrCode(value);
+              },
+            ),
+            Divider(
+              color: colorScheme.onSurface.withValues(alpha: 0.12),
+              height: 1,
+            ),
             SettingsItem.button(
               title: 'WebDAV 快捷设置',
               subtitle: '配置底部 WebDAV 快捷 Tab，快速访问 WebDAV 服务器',

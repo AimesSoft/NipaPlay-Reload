@@ -2,14 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
+import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/services/remote_control_client_service.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:provider/provider.dart';
 
 class CupertinoRemoteControllerSettingsPage extends StatefulWidget {
   const CupertinoRemoteControllerSettingsPage({super.key});
@@ -64,6 +67,10 @@ class _CupertinoRemoteControllerSettingsPageState
         _matchedBaseUrl = matched.baseUrl;
         _matchedHostname = matched.hostname;
       });
+      await _syncSharedLibraryTarget(
+        baseUrl: matched.baseUrl,
+        hostname: matched.hostname,
+      );
       await _refreshRemoteState();
       if (!mounted) return;
       AdaptiveSnackBar.show(
@@ -79,6 +86,66 @@ class _CupertinoRemoteControllerSettingsPageState
           _isScanning = false;
         });
       }
+    }
+  }
+
+  Future<void> _scanQrAndConnect() async {
+    try {
+      final payload = await RemoteAccessQrCameraScanner.scan();
+      if (payload == null) return;
+
+      final info = await RemoteAccessQrService.fetchServerInfo(payload.baseUrl);
+      if (!mounted) return;
+      if (info == null) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '未识别到可访问的 NipaPlay 远程访问服务',
+        );
+        return;
+      }
+
+      final hostname = payload.displayName?.trim().isNotEmpty == true
+          ? payload.displayName!.trim()
+          : info.hostname;
+      await RemoteControlSettings.saveMatchedTarget(
+        baseUrl: info.baseUrl,
+        hostname: hostname,
+      );
+      await _syncSharedLibraryTarget(
+        baseUrl: info.baseUrl,
+        hostname: hostname,
+      );
+      if (!mounted) return;
+      setState(() {
+        _matchedBaseUrl = info.baseUrl;
+        _matchedHostname = hostname;
+      });
+      await _refreshRemoteState();
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '已连接共享媒体库与遥控器',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(context, message: '扫码连接失败: $e');
+    }
+  }
+
+  Future<void> _syncSharedLibraryTarget({
+    required String baseUrl,
+    String? hostname,
+  }) async {
+    try {
+      final provider = context.read<SharedRemoteLibraryProvider>();
+      await provider.connectOrActivateHost(
+        displayName:
+            hostname?.trim().isNotEmpty == true ? hostname!.trim() : baseUrl,
+        baseUrl: baseUrl,
+      );
+    } catch (e) {
+      debugPrint('同步共享媒体库目标失败: $e');
     }
   }
 
@@ -217,6 +284,17 @@ class _CupertinoRemoteControllerSettingsPageState
                     backgroundColor: tileBackground,
                     onTap: _isScanning ? null : _scanAndMatch,
                   ),
+                  if (RemoteAccessQrCameraScanner.isSupported)
+                    CupertinoSettingsTile(
+                      leading: Icon(
+                        CupertinoIcons.camera,
+                        color: resolveSettingsIconColor(context),
+                      ),
+                      title: const Text('拍摄二维码连接'),
+                      subtitle: const Text('同时连接共享媒体库与遥控器'),
+                      backgroundColor: tileBackground,
+                      onTap: _scanQrAndConnect,
+                    ),
                   CupertinoSettingsTile(
                     leading: Icon(
                       CupertinoIcons.refresh,

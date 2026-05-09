@@ -1,8 +1,10 @@
 // remote_access_page.dart
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
+import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
@@ -12,6 +14,8 @@ import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class RemoteAccessPage extends StatefulWidget {
   const RemoteAccessPage({super.key});
@@ -375,6 +379,8 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
 
   Widget _buildWebServerSection() {
     final colorScheme = Theme.of(context).colorScheme;
+    final showRemoteAccessQrCode =
+        context.watch<LabsSettingsProvider>().showRemoteAccessQrCode;
     return DefaultTextStyle.merge(
       style: _pageTextStyle(context),
       child: Column(
@@ -461,6 +467,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
           if (_webServerEnabled) ...[
             // 访问地址
             _buildAccessAddressSection(),
+            if (showRemoteAccessQrCode) _buildRemoteAccessQrSection(),
 
             SizedBox(height: 8),
             Divider(
@@ -483,6 +490,26 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         ],
       ),
     );
+  }
+
+  String? get _recommendedQrUrl {
+    String? firstLan;
+    String? firstReachable;
+
+    for (final url in _accessUrls) {
+      final type = RemoteAccessAddressUtils.classifyUrl(url);
+      if (type == RemoteAccessAddressType.lan) {
+        firstLan ??= url;
+      }
+      if (type != RemoteAccessAddressType.local) {
+        firstReachable ??= url;
+      }
+    }
+
+    return firstLan ??
+        _publicIpUrl ??
+        firstReachable ??
+        (_accessUrls.isNotEmpty ? _accessUrls.first : null);
   }
 
   Widget _buildAccessAddressSection() {
@@ -562,6 +589,113 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                   _buildAddressItem(_publicIpUrl!),
               ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRemoteAccessQrSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final qrUrl = _recommendedQrUrl;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14.0, bottom: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.qr_code_2,
+            color: colorScheme.onSurface.withValues(alpha: 0.7),
+            size: 20,
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '手机扫码连接',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  '手机端在共享媒体库或远程访问页面点击扫码，拍摄此二维码后会同时连接共享媒体库与遥控器。',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withValues(alpha: 0.7),
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+                SizedBox(height: 12),
+                if (qrUrl == null)
+                  Text(
+                    '正在生成二维码...',
+                    style: TextStyle(
+                      color: colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: QrImageView(
+                          data: RemoteAccessQrService.buildPayload(
+                            baseUrl: qrUrl,
+                          ),
+                          version: QrVersions.auto,
+                          size: 168,
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '二维码地址',
+                              style: TextStyle(
+                                color: colorScheme.onSurface
+                                    .withValues(alpha: 0.55),
+                                fontSize: 12,
+                              ),
+                            ),
+                            SizedBox(height: 6),
+                            SelectableText(
+                              qrUrl,
+                              style: _monospaceStyle(
+                                context,
+                                colorScheme.onSurface.withValues(alpha: 0.75),
+                              ).copyWith(fontSize: 13),
+                            ),
+                            SizedBox(height: 8),
+                            HoverScaleTextButton(
+                              text: '复制地址',
+                              idleColor: colorScheme.primary,
+                              hoverColor: colorScheme.primary,
+                              onPressed: () => _copyUrl(qrUrl),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );

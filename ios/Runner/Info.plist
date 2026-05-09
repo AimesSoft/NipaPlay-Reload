@@ -199,7 +199,7 @@
 		<string>_https._tcp.</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>未来需要更新头像</string>
+	<string>NipaPlay 需要使用相机拍摄远程访问二维码以连接共享媒体库和遥控器。</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>NipaPlay 需要访问文稿目录以管理您的文件。</string>
 	<key>NSLocalNetworkUsageDescription</key>

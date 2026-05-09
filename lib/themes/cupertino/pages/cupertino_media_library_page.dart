@@ -35,6 +35,7 @@ import 'package:nipaplay/services/local_media_share_service.dart';
 import 'package:nipaplay/services/scan_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/manual_danmaku_matcher.dart';
+import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
@@ -473,6 +474,37 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                               fontSize: 15, color: CupertinoColors.white),
                         ),
                       ),
+                      if (RemoteAccessQrCameraScanner.isSupported) ...[
+                        const SizedBox(height: 10),
+                        CupertinoButton(
+                          onPressed: () => _connectSharedHostByQr(provider),
+                          color: CupertinoDynamicColor.resolve(
+                              CupertinoColors.systemGrey5, context),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 10),
+                          borderRadius: BorderRadius.circular(14),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                CupertinoIcons.camera,
+                                size: 18,
+                                color: CupertinoDynamicColor.resolve(
+                                    CupertinoColors.label, context),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '拍摄二维码',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: CupertinoDynamicColor.resolve(
+                                      CupertinoColors.label, context),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       CupertinoButton(
                         onPressed: () => _openLanScanDialog(provider),
@@ -610,6 +642,13 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
                       icon: CupertinoIcons.add,
                       onPressed: () => _openAddHostDialog(provider),
                     ),
+                    if (RemoteAccessQrCameraScanner.isSupported)
+                      _buildActionButton(
+                        context,
+                        label: '拍摄二维码',
+                        icon: CupertinoIcons.camera,
+                        onPressed: () => _connectSharedHostByQr(provider),
+                      ),
                     _buildActionButton(
                       context,
                       label: '扫描局域网',
@@ -1216,6 +1255,47 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
           );
         }
       }
+    }
+  }
+
+  Future<void> _connectSharedHostByQr(
+    SharedRemoteLibraryProvider provider,
+  ) async {
+    try {
+      final payload = await RemoteAccessQrCameraScanner.scan();
+      if (payload == null) return;
+
+      final info = await RemoteAccessQrService.fetchServerInfo(payload.baseUrl);
+      if (!mounted) return;
+      if (info == null) {
+        AdaptiveSnackBar.show(
+          context,
+          message: '未识别到可访问的 NipaPlay 远程访问服务',
+          type: AdaptiveSnackBarType.error,
+        );
+        return;
+      }
+
+      final displayName = payload.displayName?.trim().isNotEmpty == true
+          ? payload.displayName!.trim()
+          : info.displayName;
+      await provider.connectOrActivateHost(
+        displayName: displayName,
+        baseUrl: info.baseUrl,
+      );
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '已连接共享媒体库与遥控器',
+        type: AdaptiveSnackBarType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: '扫码连接失败：$e',
+        type: AdaptiveSnackBarType.error,
+      );
     }
   }
 

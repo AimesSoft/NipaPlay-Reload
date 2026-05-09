@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
+import 'package:nipaplay/services/remote_access_qr_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_login_dialog.dart';
@@ -96,15 +97,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
           style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
         ),
         SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: _buildGlassButton(
-            context: context,
-            onPressed: () => _showAddHostDialog(context, provider),
-            icon: Icons.add,
-            label: '新增客户端',
-          ),
-        ),
+        _buildConnectButtons(context, provider),
       ],
     );
   }
@@ -235,17 +228,74 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
           );
         }).toList(),
         SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: _buildGlassButton(
-            context: context,
-            onPressed: () => _showAddHostDialog(context, provider),
-            icon: Icons.add,
-            label: '新增客户端',
-          ),
-        ),
+        _buildConnectButtons(context, provider),
       ],
     );
+  }
+
+  Widget _buildConnectButtons(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) {
+    final addButton = _buildGlassButton(
+      context: context,
+      onPressed: () => _showAddHostDialog(context, provider),
+      icon: Icons.add,
+      label: '新增客户端',
+    );
+
+    if (!RemoteAccessQrCameraScanner.isSupported) {
+      return SizedBox(width: double.infinity, child: addButton);
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: _buildGlassButton(
+            context: context,
+            onPressed: () => _connectByQr(context, provider),
+            icon: Icons.qr_code_scanner,
+            label: '扫码连接',
+          ),
+        ),
+        SizedBox(width: 12),
+        Expanded(child: addButton),
+      ],
+    );
+  }
+
+  Future<void> _connectByQr(
+    BuildContext context,
+    SharedRemoteLibraryProvider provider,
+  ) async {
+    try {
+      final payload = await RemoteAccessQrCameraScanner.scan();
+      if (payload == null) return;
+
+      final info = await RemoteAccessQrService.fetchServerInfo(payload.baseUrl);
+      if (info == null) {
+        if (context.mounted) {
+          BlurSnackBar.show(context, '未识别到可访问的 NipaPlay 远程访问服务');
+        }
+        return;
+      }
+
+      final displayName = payload.displayName?.trim().isNotEmpty == true
+          ? payload.displayName!.trim()
+          : info.displayName;
+      await provider.connectOrActivateHost(
+        displayName: displayName,
+        baseUrl: info.baseUrl,
+      );
+
+      if (context.mounted) {
+        BlurSnackBar.show(context, '已连接共享媒体库与遥控器');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        BlurSnackBar.show(context, '扫码连接失败：$e');
+      }
+    }
   }
 
   Future<void> _showAddHostDialog(
