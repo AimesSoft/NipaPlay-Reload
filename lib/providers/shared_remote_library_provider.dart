@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/services/remote_control_settings.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
@@ -137,6 +138,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _errorMessage = '加载远程媒体库配置失败: $e';
     } finally {
       _isInitializing = false;
+      if (_activeHostId != null) {
+        await _syncActiveHostToRemoteControl();
+      }
       notifyListeners();
       if (_activeHostId != null) {
         refreshLibrary();
@@ -165,12 +169,50 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     _hosts.add(host);
     _activeHostId = id;
     await _persistHosts();
+    await _syncHostToRemoteControl(host);
     notifyListeners();
     await refreshLibrary(userInitiated: true);
     return host;
   }
 
+  Future<SharedRemoteHost> connectOrActivateHost({
+    required String displayName,
+    required String baseUrl,
+  }) async {
+    final normalizedUrl = _normalizeBaseUrl(baseUrl);
+    for (var i = 0; i < _hosts.length; i++) {
+      final host = _hosts[i];
+      if (_normalizeBaseUrl(host.baseUrl) != normalizedUrl) continue;
+
+      var shouldPersist = false;
+      final trimmedName = displayName.trim();
+      if (trimmedName.isNotEmpty &&
+          trimmedName != normalizedUrl &&
+          (host.displayName.trim().isEmpty ||
+              host.displayName == host.baseUrl)) {
+        _hosts[i] = host.copyWith(displayName: trimmedName);
+        shouldPersist = true;
+      }
+      if (shouldPersist) {
+        await _persistHosts();
+        notifyListeners();
+      }
+      await setActiveHost(_hosts[i].id);
+      return _hosts[i];
+    }
+
+    return addHost(displayName: displayName, baseUrl: normalizedUrl);
+  }
+
   Future<void> removeHost(String hostId) async {
+    SharedRemoteHost? removedHost;
+    for (final host in _hosts) {
+      if (host.id == hostId) {
+        removedHost = host;
+        break;
+      }
+    }
+
     _hosts.removeWhere((host) => host.id == hostId);
     if (_activeHostId == hostId) {
       _activeHostId = _hosts.isNotEmpty ? _hosts.first.id : null;
@@ -181,6 +223,14 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       _managementErrorMessage = null;
     }
     await _persistHosts();
+    if (_activeHostId != null) {
+      await _syncActiveHostToRemoteControl();
+    } else if (removedHost != null) {
+      final matchedBaseUrl = await RemoteControlSettings.getMatchedBaseUrl();
+      if (matchedBaseUrl == removedHost.baseUrl) {
+        await RemoteControlSettings.clearMatchedTarget();
+      }
+    }
     notifyListeners();
     if (_activeHostId != null) {
       await refreshLibrary(userInitiated: true);
@@ -188,7 +238,10 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
   }
 
   Future<void> setActiveHost(String hostId) async {
-    if (_activeHostId == hostId) return;
+    if (_activeHostId == hostId) {
+      await _syncActiveHostToRemoteControl();
+      return;
+    }
     if (!_hosts.any((host) => host.id == hostId)) return;
     _activeHostId = hostId;
     _animeSummaries = [];
@@ -197,6 +250,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     _scanStatus = null;
     _managementErrorMessage = null;
     await _persistHosts();
+    await _syncActiveHostToRemoteControl();
     notifyListeners();
     await refreshLibrary(userInitiated: true);
   }
@@ -634,6 +688,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     if (index == -1) return;
     _hosts[index] = _hosts[index].copyWith(displayName: newName);
     await _persistHosts();
+    if (_activeHostId == hostId) {
+      await _syncHostToRemoteControl(_hosts[index]);
+    }
     notifyListeners();
   }
 
@@ -642,11 +699,32 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
     if (index == -1) return;
     final normalized = _normalizeBaseUrl(newUrl);
     _hosts[index] = _hosts[index].copyWith(baseUrl: normalized);
+    await _persistHosts();
     if (_activeHostId == hostId) {
+      await _syncHostToRemoteControl(_hosts[index]);
       await refreshLibrary(userInitiated: true);
     }
-    await _persistHosts();
     notifyListeners();
+  }
+
+  Future<void> _syncActiveHostToRemoteControl() async {
+    final host = activeHost;
+    if (host == null) return;
+    await _syncHostToRemoteControl(host);
+  }
+
+  Future<void> _syncHostToRemoteControl(SharedRemoteHost host) async {
+    final displayName = host.displayName.trim();
+    try {
+      await RemoteControlSettings.saveMatchedTarget(
+        baseUrl: host.baseUrl,
+        hostname: displayName.isEmpty || displayName == host.baseUrl
+            ? null
+            : displayName,
+      );
+    } catch (e) {
+      debugPrint('同步远程遥控目标失败: $e');
+    }
   }
 
   String _normalizeBaseUrl(String url) {
