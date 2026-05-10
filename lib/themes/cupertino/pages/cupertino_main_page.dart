@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/themes/cupertino/pages/account/cupertino_account_page.dart';
@@ -8,7 +9,10 @@ import 'package:nipaplay/themes/cupertino/pages/cupertino_home_page.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_media_library_page.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_play_video_page.dart';
 import 'package:nipaplay/themes/cupertino/pages/cupertino_settings_page.dart';
+import 'package:nipaplay/themes/cupertino/pages/cupertino_torrent_download_page.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
+import 'package:nipaplay/providers/downloader_settings_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bounce_wrapper.dart';
@@ -29,7 +33,10 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   TabChangeNotifier? _tabChangeNotifier;
   bool _isVideoPagePresented = false;
   bool _showWebDAVTab = false;
+  bool _showDownloaderTab = false;
   WebDAVQuickAccessProvider? _webdavProvider;
+  DownloaderSettingsProvider? _downloaderProvider;
+  PluginService? _pluginService;
   String? _lastAppliedDefaultTab;
   List<GlobalKey<CupertinoBounceWrapperState>> _bounceKeys = [];
 
@@ -41,118 +48,99 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   ];
 
   List<Widget> get _pages {
+    final pages = <Widget>[];
+    // 0: Home
+    pages.add(_basePages[0]);
+    // 1: WebDAV (optional)
     if (_showWebDAVTab) {
-      return [
-        _basePages[0],
-        const WebDAVBrowserPage(),
-        _basePages[1],
-        _basePages[2],
-        _basePages[3],
-      ];
+      pages.add(const WebDAVBrowserPage());
     }
-    return _basePages;
+    // Next: Media Library
+    pages.add(_basePages[1]);
+    // Next: Account
+    pages.add(_basePages[2]);
+    // Next: Downloader (optional)
+    if (_showDownloaderTab) {
+      pages.add(const CupertinoTorrentDownloadPage());
+    }
+    // Last: Settings
+    pages.add(_basePages[3]);
+    return pages;
   }
 
   List<BottomNavigationBarItem> _buildNavItems(BuildContext context) {
     final l10n = context.l10n;
+    final items = <BottomNavigationBarItem>[];
+    items.add(BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.house),
+      activeIcon: Icon(CupertinoIcons.house_fill),
+      label: l10n.tabHome,
+    ));
     if (_showWebDAVTab) {
-      return [
-        BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.house),
-          activeIcon: Icon(CupertinoIcons.house_fill),
-          label: l10n.tabHome,
-        ),
-        const BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.cloud),
-          activeIcon: Icon(CupertinoIcons.cloud_fill),
-          label: 'WebDAV',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.play_rectangle),
-          activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
-          label: l10n.tabMediaLibrary,
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.person_crop_circle),
-          activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
-          label: l10n.tabAccount,
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(CupertinoIcons.gear_alt),
-          activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-          label: l10n.tabSettings,
-        ),
-      ];
+      items.add(const BottomNavigationBarItem(
+        icon: Icon(CupertinoIcons.cloud),
+        activeIcon: Icon(CupertinoIcons.cloud_fill),
+        label: 'WebDAV',
+      ));
     }
-    return [
-      BottomNavigationBarItem(
-        icon: Icon(CupertinoIcons.house),
-        activeIcon: Icon(CupertinoIcons.house_fill),
-        label: l10n.tabHome,
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(CupertinoIcons.play_rectangle),
-        activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
-        label: l10n.tabMediaLibrary,
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(CupertinoIcons.person_crop_circle),
-        activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
-        label: l10n.tabAccount,
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(CupertinoIcons.gear_alt),
-        activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-        label: l10n.tabSettings,
-      ),
-    ];
+    items.add(BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.play_rectangle),
+      activeIcon: Icon(CupertinoIcons.play_rectangle_fill),
+      label: l10n.tabMediaLibrary,
+    ));
+    items.add(BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.person_crop_circle),
+      activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
+      label: l10n.tabAccount,
+    ));
+    if (_showDownloaderTab) {
+      items.add(BottomNavigationBarItem(
+        icon: Icon(CupertinoIcons.arrow_down_square),
+        activeIcon: Icon(CupertinoIcons.arrow_down_square_fill),
+        label: l10n.tabTorrentDownload,
+      ));
+    }
+    items.add(BottomNavigationBarItem(
+      icon: Icon(CupertinoIcons.gear_alt),
+      activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+      label: l10n.tabSettings,
+    ));
+    return items;
   }
 
   List<AdaptiveNavigationDestination> _buildAdaptiveNavItems(
       BuildContext context) {
     final l10n = context.l10n;
+    final items = <AdaptiveNavigationDestination>[];
+    items.add(AdaptiveNavigationDestination(
+      icon: 'house.fill',
+      label: l10n.tabHome,
+    ));
     if (_showWebDAVTab) {
-      return [
-        AdaptiveNavigationDestination(
-          icon: 'house.fill',
-          label: l10n.tabHome,
-        ),
-        const AdaptiveNavigationDestination(
-          icon: 'cloud.fill',
-          label: 'WebDAV',
-        ),
-        AdaptiveNavigationDestination(
-          icon: 'play.rectangle.fill',
-          label: l10n.tabMediaLibrary,
-        ),
-        AdaptiveNavigationDestination(
-          icon: 'person.crop.circle.fill',
-          label: l10n.tabAccount,
-        ),
-        AdaptiveNavigationDestination(
-          icon: 'gearshape.fill',
-          label: l10n.tabSettings,
-        ),
-      ];
+      items.add(const AdaptiveNavigationDestination(
+        icon: 'cloud.fill',
+        label: 'WebDAV',
+      ));
     }
-    return [
-      AdaptiveNavigationDestination(
-        icon: 'house.fill',
-        label: l10n.tabHome,
-      ),
-      AdaptiveNavigationDestination(
-        icon: 'play.rectangle.fill',
-        label: l10n.tabMediaLibrary,
-      ),
-      AdaptiveNavigationDestination(
-        icon: 'person.crop.circle.fill',
-        label: l10n.tabAccount,
-      ),
-      AdaptiveNavigationDestination(
-        icon: 'gearshape.fill',
-        label: l10n.tabSettings,
-      ),
-    ];
+    items.add(AdaptiveNavigationDestination(
+      icon: 'play.rectangle.fill',
+      label: l10n.tabMediaLibrary,
+    ));
+    items.add(AdaptiveNavigationDestination(
+      icon: 'person.crop.circle.fill',
+      label: l10n.tabAccount,
+    ));
+    if (_showDownloaderTab) {
+      items.add(AdaptiveNavigationDestination(
+        icon: 'arrow.down.circle.fill',
+        label: l10n.tabTorrentDownload,
+      ));
+    }
+    items.add(AdaptiveNavigationDestination(
+      icon: 'gearshape.fill',
+      label: l10n.tabSettings,
+    ));
+    return items;
   }
 
   void _updateBounceKeys() {
@@ -172,17 +160,22 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
       case WebDAVQuickAccessProvider.tabWebDAV:
         return _showWebDAVTab ? 1 : 0;
       case WebDAVQuickAccessProvider.tabMediaLibrary:
-        return _showWebDAVTab ? 2 : 1;
+        return _mediaLibraryIndex;
       case WebDAVQuickAccessProvider.tabTorrent:
-        return 0;
+        return _showDownloaderTab ? _downloaderIndex : 0;
       case WebDAVQuickAccessProvider.tabAccount:
-        return _showWebDAVTab ? 3 : 2;
+        return _accountIndex;
       case WebDAVQuickAccessProvider.tabSettings:
-        return _showWebDAVTab ? 4 : 3;
+        return _settingsIndex;
       default:
         return 0;
     }
   }
+
+  int get _mediaLibraryIndex => _showWebDAVTab ? 2 : 1;
+  int get _accountIndex => _mediaLibraryIndex + 1;
+  int get _downloaderIndex => _showDownloaderTab ? _accountIndex + 1 : -1;
+  int get _settingsIndex => _accountIndex + (_showDownloaderTab ? 2 : 1);
 
   void _onWebDAVSettingsChanged() {
     if (!mounted) return;
@@ -196,6 +189,21 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         _lastAppliedDefaultTab = _webdavProvider?.defaultHomeTab;
         _updateBounceKeys();
         _selectedIndex = _getInitialTabIndex().clamp(0, _pages.length - 1);
+      });
+    }
+  }
+
+  void _onDownloaderSettingsChanged() {
+    if (!mounted) return;
+    final provider = _downloaderProvider;
+    if (provider == null || !provider.isLoaded) return;
+    final showDownloaderTab =
+        globals.isDownloaderSupportedPlatform && provider.enabled;
+    if (showDownloaderTab != _showDownloaderTab) {
+      setState(() {
+        _showDownloaderTab = showDownloaderTab;
+        _updateBounceKeys();
+        _selectedIndex = _selectedIndex.clamp(0, _pages.length - 1);
       });
     }
   }
@@ -214,9 +222,21 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
       _webdavProvider?.addListener(_onWebDAVSettingsChanged);
       await _webdavProvider?.loadSettings();
 
+      _downloaderProvider =
+          Provider.of<DownloaderSettingsProvider>(context, listen: false);
+      _downloaderProvider?.addListener(_onDownloaderSettingsChanged);
+
+      _pluginService = Provider.of<PluginService>(context, listen: false);
+      _pluginService?.addListener(_onDownloaderSettingsChanged);
+
       if (mounted) {
+        final dlProvider = _downloaderProvider;
         setState(() {
           _showWebDAVTab = _webdavProvider?.showWebDAVTab ?? false;
+          _showDownloaderTab = globals.isDownloaderSupportedPlatform &&
+              (dlProvider == null ||
+                  !dlProvider.isLoaded ||
+                  dlProvider.enabled);
           _updateBounceKeys();
           _selectedIndex = _getInitialTabIndex();
         });
@@ -229,12 +249,13 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   void dispose() {
     _tabChangeNotifier?.removeListener(_handleTabChange);
     _webdavProvider?.removeListener(_onWebDAVSettingsChanged);
+    _downloaderProvider?.removeListener(_onDownloaderSettingsChanged);
+    _pluginService?.removeListener(_onDownloaderSettingsChanged);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
     final Color activeColor = AppAccentColors.current;
     final Color inactiveColor =
         CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context);

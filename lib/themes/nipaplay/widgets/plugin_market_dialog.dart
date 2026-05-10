@@ -1,0 +1,734 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
+import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/widgets/adaptive_markdown.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+
+const String _pluginsIndexUrl =
+    'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json';
+
+const String _repoBaseUrl =
+    'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main';
+
+const String _readmeBaseUrl = '$_repoBaseUrl/plugins';
+
+class PluginMarketDialog extends StatefulWidget {
+  const PluginMarketDialog({super.key});
+
+  static Future<void> show(BuildContext context) {
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    return NipaplayWindow.show<void>(
+      context: context,
+      enableAnimation: enableAnimation,
+      barrierDismissible: true,
+      child: const PluginMarketDialog(),
+    );
+  }
+
+  @override
+  State<PluginMarketDialog> createState() => _PluginMarketDialogState();
+}
+
+class _PluginMarketDialogState extends State<PluginMarketDialog> {
+  static Color get _accentColor => AppAccentColors.current;
+
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  bool _isLoading = true;
+  bool _isRefreshing = false;
+  String? _errorMessage;
+  List<_PluginInfo> _plugins = [];
+  List<_PluginInfo> _filteredPlugins = [];
+
+  _PluginInfo? _selectedPlugin;
+  bool _showReadme = false;
+  String? _readmeContent;
+  bool _isLoadingReadme = false;
+
+  String _currentAppVersion = '1.0.0';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+    _loadPlugins();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _currentAppVersion = info.version;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPlugins() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await http.get(Uri.parse(_pluginsIndexUrl));
+      if (response.statusCode == 200) {
+        final dynamic jsonData = json.decode(response.body);
+        List<dynamic> data;
+        if (jsonData is List) {
+          data = jsonData;
+        } else if (jsonData is Map) {
+          if (jsonData.containsKey('plugins')) {
+            data = jsonData['plugins'] as List;
+          } else if (jsonData.containsKey('data')) {
+            data = jsonData['data'] as List;
+          } else {
+            data = [];
+          }
+        } else {
+          data = [];
+        }
+        setState(() {
+          _plugins = data.map((item) => _PluginInfo.fromJson(item)).toList();
+          _filteredPlugins = _plugins;
+        });
+      } else {
+        setState(() {
+          _errorMessage = '加载插件列表失败: ${response.statusCode}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = '网络错误: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+        _isRefreshing = false;
+      });
+    }
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) {
+      setState(() {
+        _filteredPlugins = _plugins;
+      });
+    } else {
+      setState(() {
+        _filteredPlugins = _plugins.where((plugin) {
+          return plugin.name.toLowerCase().contains(query) ||
+              plugin.description.toLowerCase().contains(query) ||
+              plugin.author.toLowerCase().contains(query) ||
+              plugin.tags.any((tag) => tag.toLowerCase().contains(query));
+        }).toList();
+      });
+    }
+  }
+
+  bool _isVersionCompatible(String minHostVersion) {
+    return _compareVersions(_currentAppVersion, minHostVersion) >= 0;
+  }
+
+  int _compareVersions(String version1, String version2) {
+    final parts1 =
+        version1.split('.').map((s) => int.tryParse(s) ?? 0).toList();
+    final parts2 =
+        version2.split('.').map((s) => int.tryParse(s) ?? 0).toList();
+    final length =
+        parts1.length > parts2.length ? parts1.length : parts2.length;
+
+    for (int i = 0; i < length; i++) {
+      final v1 = i < parts1.length ? parts1[i] : 0;
+      final v2 = i < parts2.length ? parts2[i] : 0;
+      if (v1 > v2) return 1;
+      if (v1 < v2) return -1;
+    }
+    return 0;
+  }
+
+  Future<void> _showPluginReadme(_PluginInfo plugin) async {
+    setState(() {
+      _selectedPlugin = plugin;
+      _showReadme = true;
+      _readmeContent = null;
+      _isLoadingReadme = true;
+    });
+
+    final readmeUrl = '$_readmeBaseUrl/${plugin.id}/README.md';
+
+    try {
+      final response = await http.get(Uri.parse(readmeUrl));
+      if (response.statusCode == 200) {
+        setState(() {
+          _readmeContent = response.body;
+        });
+      } else {
+        setState(() {
+          _readmeContent = '暂无文档';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _readmeContent = '文档加载失败: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoadingReadme = false;
+      });
+    }
+  }
+
+  void _closeReadme() {
+    setState(() {
+      _showReadme = false;
+      _selectedPlugin = null;
+      _readmeContent = null;
+    });
+  }
+
+  Future<void> _installPlugin(_PluginInfo plugin) async {
+    if (!_isVersionCompatible(plugin.minHostVersion)) {
+      BlurSnackBar.show(context,
+          '当前应用版本$_currentAppVersion低于插件要求的最低版本${plugin.minHostVersion}');
+      return;
+    }
+
+    if (plugin.downloadUrl.isEmpty) {
+      BlurSnackBar.show(context, '该插件暂无下载链接');
+      return;
+    }
+
+    setState(() {
+      plugin.isInstalling = true;
+    });
+
+    try {
+      final response = await http.get(Uri.parse(plugin.downloadUrl));
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+        final pluginService =
+            Provider.of<PluginService>(context, listen: false);
+        await pluginService.importPluginFromContent(response.body);
+        plugin.isInstalled = true;
+        BlurSnackBar.show(context, '插件安装成功');
+      } else {
+        BlurSnackBar.show(context, '下载插件失败: ${response.statusCode}');
+      }
+    } catch (e) {
+      BlurSnackBar.show(context, '安装错误: $e');
+    } finally {
+      setState(() {
+        plugin.isInstalling = false;
+      });
+    }
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Ionicons.storefront_outline, size: 28),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '插件市场',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    '发现更多扩展功能',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              IconButton(
+                icon: _isRefreshing
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : Icon(Ionicons.refresh_outline),
+                onPressed: _loadPlugins,
+                tooltip: '刷新',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildSearchBar(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.grey[100],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? const Color(0xFF3A3A3A) : Colors.grey[200]!,
+        ),
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          prefixIcon: Icon(Ionicons.search_outline, color: Colors.grey[400]),
+          hintText: '搜索插件',
+          hintStyle: TextStyle(color: Colors.grey[400]),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Ionicons.cloud_outline, size: 48, color: Colors.grey),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadPlugins,
+              child: const Text('重新加载'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_filteredPlugins.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Ionicons.search_outline, size: 48, color: Colors.grey),
+            const SizedBox(height: 16),
+            Text(
+              _searchController.text.isNotEmpty ? '未找到匹配的插件' : '暂无插件',
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      itemCount: _filteredPlugins.length,
+      itemBuilder: (context, index) =>
+          _buildPluginCard(_filteredPlugins[index]),
+    );
+  }
+
+  Widget _buildPluginCard(_PluginInfo plugin) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isVersionCompatible = _isVersionCompatible(plugin.minHostVersion);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2B2B2B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF3A3A3A) : Colors.grey[200]!,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            plugin.name,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _accentColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              plugin.version,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: _accentColor,
+                              ),
+                            ),
+                          ),
+                          if (plugin.isInstalled)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                '已安装',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ),
+                          if (!isVersionCompatible)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                '版本不兼容',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            plugin.author,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color:
+                                  isDark ? Colors.grey[400] : Colors.grey[500],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '最低版本: ${plugin.minHostVersion}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color:
+                                  isDark ? Colors.grey[500] : Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              plugin.description,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.grey[300] : Colors.grey[600],
+                height: 1.4,
+              ),
+            ),
+            if (plugin.tags.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: plugin.tags.map((tag) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          isDark ? const Color(0xFF1E1E1E) : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      tag,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => _showPluginReadme(plugin),
+                  icon: Icon(Ionicons.document_outline, size: 16),
+                  label: const Text('查看文档'),
+                ),
+                const Spacer(),
+                _buildActionButtons(plugin),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(_PluginInfo plugin) {
+    final isVersionCompatible = _isVersionCompatible(plugin.minHostVersion);
+
+    if (plugin.isInstalled) {
+      return TextButton(
+        onPressed: () {
+          BlurSnackBar.show(context, '该插件已安装');
+        },
+        child: const Text('已安装'),
+      );
+    }
+
+    if (plugin.isInstalling) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (!isVersionCompatible) {
+      return ElevatedButton(
+        onPressed: null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.grey[600],
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: const Text('版本不兼容'),
+      );
+    }
+
+    return ElevatedButton(
+      onPressed: () => _installPlugin(plugin),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _accentColor,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      child: const Text('安装'),
+    );
+  }
+
+  Widget _buildReadmeView(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+          child: Row(
+            children: [
+              IconButton(
+                icon: Icon(Ionicons.chevron_back_outline),
+                onPressed: _closeReadme,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _selectedPlugin?.name ?? '文档',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      'README.md',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.grey[400] : Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _isLoadingReadme
+                ? const Center(child: CircularProgressIndicator())
+                : _readmeContent != null
+                    ? SingleChildScrollView(
+                        child: AdaptiveMarkdown(
+                          data: _readmeContent!,
+                          brightness:
+                              isDark ? Brightness.dark : Brightness.light,
+                          baseTextStyle: TextStyle(
+                            fontSize: 14,
+                            color: isDark ? Colors.grey[300] : Colors.grey[700],
+                          ),
+                          linkColor: _accentColor,
+                        ),
+                      )
+                    : const Center(
+                        child: Text('暂无文档'),
+                      ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return NipaplayWindowScaffold(
+      maxWidth: 800,
+      maxHeightFactor: 0.85,
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      child: _showReadme
+          ? _buildReadmeView(context)
+          : Column(
+              children: [
+                _buildHeader(context),
+                Expanded(
+                  child: _buildContent(context),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _PluginInfo {
+  final String id;
+  final String name;
+  final String description;
+  final String author;
+  final String version;
+  final String minHostVersion;
+  final String downloadUrl;
+  final List<String> tags;
+  bool isInstalled = false;
+  bool isInstalling = false;
+
+  _PluginInfo({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.author,
+    required this.version,
+    required this.minHostVersion,
+    required this.downloadUrl,
+    required this.tags,
+  });
+
+  factory _PluginInfo.fromJson(Map<String, dynamic> json) {
+    final file = json['file'] as String? ?? '';
+    return _PluginInfo(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      author: json['author'] ?? '',
+      version: json['version'] ?? '1.0.0',
+      minHostVersion: json['minHostVersion'] ?? '1.0.0',
+      downloadUrl: file.isNotEmpty
+          ? '$_repoBaseUrl/$file'
+          : '',
+      tags:
+          (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+              [],
+    );
+  }
+}

@@ -9,6 +9,7 @@ import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/plugin_market_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -180,6 +181,17 @@ class PluginSettingsPage extends StatelessWidget {
     return '已取消导入插件';
   }
 
+  String _pluginMarketButtonText(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '插件市場';
+    }
+    return '插件市场';
+  }
+
+  void _openPluginMarket(BuildContext context) {
+    PluginMarketDialog.show(context);
+  }
+
   Future<void> _importPlugin(
     BuildContext context,
     PluginService pluginService,
@@ -307,7 +319,8 @@ class PluginSettingsPage extends StatelessWidget {
                     value: entry.enabled!,
                     onChanged: (_) async {
                       await _invokePluginAction(
-                          sheetContext, updatedPlugin, entry);
+                          sheetContext, updatedPlugin, entry,
+                          showResult: false);
                     },
                   ),
                 );
@@ -333,8 +346,9 @@ class PluginSettingsPage extends StatelessWidget {
   Future<void> _invokePluginAction(
     BuildContext context,
     PluginDescriptor plugin,
-    PluginUiEntry entry,
-  ) async {
+    PluginUiEntry entry, {
+    bool showResult = true,
+  }) async {
     final pluginService = context.read<PluginService>();
     if (!plugin.enabled || !plugin.loaded) {
       BlurSnackBar.show(context, _pluginActionNotLoaded(context));
@@ -350,10 +364,14 @@ class PluginSettingsPage extends StatelessWidget {
         return;
       }
       if (result == null) {
-        BlurSnackBar.show(context, _pluginActionEmpty(context));
+        if (showResult) {
+          BlurSnackBar.show(context, _pluginActionEmpty(context));
+        }
         return;
       }
-      await _showPluginActionResult(context, result);
+      if (showResult) {
+        await _showPluginActionResult(context, result);
+      }
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -438,8 +456,15 @@ class PluginSettingsPage extends StatelessWidget {
                 child: Row(
                   children: [
                     _HoverScaleTextAction(
+                      icon: Ionicons.cloud_upload_outline,
                       text: _importPluginButtonText(context),
                       onPressed: () => _importPlugin(context, pluginService),
+                    ),
+                    const SizedBox(width: 16),
+                    _HoverScaleTextAction(
+                      icon: Ionicons.storefront_outline,
+                      text: _pluginMarketButtonText(context),
+                      onPressed: () => _openPluginMarket(context),
                     ),
                   ],
                 ),
@@ -521,8 +546,15 @@ class PluginSettingsPage extends StatelessWidget {
               child: Row(
                 children: [
                   _HoverScaleTextAction(
+                    icon: Ionicons.cloud_upload_outline,
                     text: _importPluginButtonText(context),
                     onPressed: () => _importPlugin(context, pluginService),
+                  ),
+                  const SizedBox(width: 16),
+                  _HoverScaleTextAction(
+                    icon: Ionicons.storefront_outline,
+                    text: _pluginMarketButtonText(context),
+                    onPressed: () => _openPluginMarket(context),
                   ),
                 ],
               ),
@@ -543,10 +575,12 @@ class _HoverScaleTextAction extends StatefulWidget {
   const _HoverScaleTextAction({
     required this.text,
     required this.onPressed,
+    this.icon,
   });
 
   final String text;
   final VoidCallback onPressed;
+  final IconData? icon;
 
   @override
   State<_HoverScaleTextAction> createState() => _HoverScaleTextActionState();
@@ -560,6 +594,10 @@ class _HoverScaleTextActionState extends State<_HoverScaleTextAction> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textColor = _isHovered
+        ? _nipaAccentColor
+        : colorScheme.onSurface.withValues(alpha: 0.78);
+    
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -573,14 +611,21 @@ class _HoverScaleTextActionState extends State<_HoverScaleTextAction> {
           curve: Curves.easeOutBack,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Text(
-              widget.text,
-              style: TextStyle(
-                color: _isHovered
-                    ? _nipaAccentColor
-                    : colorScheme.onSurface.withValues(alpha: 0.78),
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.icon != null)
+                  Icon(widget.icon, color: textColor, size: 20),
+                if (widget.icon != null)
+                  const SizedBox(width: 8),
+                Text(
+                  widget.text,
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

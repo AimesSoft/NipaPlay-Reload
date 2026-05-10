@@ -306,9 +306,13 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
       context: context,
       title: _pluginActionTitle(context, plugin),
       heightRatio: 0.56,
-      child: StatefulBuilder(
-        builder: (sheetContext, setSheetState) {
-          final currentEntries = plugin.uiEntries;
+      child: Consumer<PluginService>(
+        builder: (sheetContext, pluginService, _) {
+          final updatedPlugin = pluginService.plugins.firstWhere(
+            (p) => p.manifest.id == plugin.manifest.id,
+            orElse: () => plugin,
+          );
+          final currentEntries = updatedPlugin.uiEntries;
           return SafeArea(
             top: false,
             child: CupertinoBottomSheetContentLayout(
@@ -329,9 +333,8 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
                               value: entry.enabled!,
                               onChanged: (_) async {
                                 await _invokePluginAction(
-                                    sheetContext, plugin, entry);
-                                if (!sheetContext.mounted) return;
-                                setSheetState(() {});
+                                    sheetContext, updatedPlugin, entry,
+                                    showResult: false);
                               },
                             ),
                           );
@@ -346,7 +349,7 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
                             Navigator.of(contentContext).pop();
                             if (!context.mounted) return;
                             await _invokePluginAction(
-                                context, plugin, entry);
+                                context, updatedPlugin, entry);
                           },
                         );
                       },
@@ -365,8 +368,9 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
   Future<void> _invokePluginAction(
     BuildContext context,
     PluginDescriptor plugin,
-    PluginUiEntry entry,
-  ) async {
+    PluginUiEntry entry, {
+    bool showResult = true,
+  }) async {
     final pluginService = context.read<PluginService>();
     if (!plugin.enabled || !plugin.loaded) {
       AdaptiveSnackBar.show(
@@ -386,14 +390,18 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
         return;
       }
       if (result == null) {
-        AdaptiveSnackBar.show(
-          context,
-          message: _pluginActionEmpty(context),
-          type: AdaptiveSnackBarType.warning,
-        );
+        if (showResult) {
+          AdaptiveSnackBar.show(
+            context,
+            message: _pluginActionEmpty(context),
+            type: AdaptiveSnackBarType.warning,
+          );
+        }
         return;
       }
-      await _showPluginActionResult(context, result);
+      if (showResult) {
+        await _showPluginActionResult(context, result);
+      }
     } catch (error) {
       if (!context.mounted) return;
       AdaptiveSnackBar.show(

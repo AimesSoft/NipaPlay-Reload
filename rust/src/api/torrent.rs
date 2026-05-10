@@ -90,6 +90,7 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
                 persistence: Some(SessionPersistenceConfig::Json {
                     folder: Some(session_dir),
                 }),
+                disable_dht_persistence: cfg!(target_os = "android"),
                 ..Default::default()
             },
         )
@@ -887,7 +888,14 @@ fn default_session_dir(download_dir: &str) -> PathBuf {
             .join("torrent_session");
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "android")]
+    {
+        // Android does not expose XDG_DATA_HOME or HOME env vars.
+        // Fall back to a hidden folder inside the download directory.
+        return PathBuf::from(download_dir).join(".nipaplay_torrent_session");
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
     {
         if let Some(data_home) = std::env::var_os("XDG_DATA_HOME") {
             return PathBuf::from(data_home)

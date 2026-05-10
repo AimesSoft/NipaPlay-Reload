@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nipaplay/plugins/js_runtime_factory.dart';
 import 'package:nipaplay/plugins/plugin_storage.dart';
 import 'package:nipaplay/plugins/js_runtime_types.dart';
@@ -9,14 +10,20 @@ import 'package:nipaplay/plugins/models/plugin_descriptor.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_action_result.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';
 import 'package:nipaplay/plugins/models/plugin_manifest.dart';
+import 'package:nipaplay/plugins/models/plugin_event.dart';
+import 'package:nipaplay/plugins/models/plugin_permission.dart';
+import 'package:nipaplay/plugins/plugin_event_bus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PluginService extends ChangeNotifier {
-  PluginService() {
+  PluginService()
+      : _eventBus = PluginEventBus() {
     _initialize();
+    _setupEventListeners();
   }
 
   static const String _enabledPluginsKey = 'plugin_enabled_ids';
+  static const String _downloaderOverrideKey = 'plugin_downloader_override';
   static const List<String> _pluginAssetPrefixes = <String>[
     'assets/plugins/builtin/',
     'assets/plugins/custom/',
@@ -26,11 +33,31 @@ class PluginService extends ChangeNotifier {
   static const String _loadedAssetPrefix = 'asset:';
   static const String _loadedFilePrefix = 'file:';
 
+  static bool _forceEnableDownloader = false;
+
+  static void setForceEnableDownloader(bool value) {
+    _forceEnableDownloader = value;
+    _saveDownloaderOverride(value);
+  }
+
+  static bool get forceEnableDownloader => _forceEnableDownloader;
+
+  static Future<void> loadDownloaderOverride() async {
+    final prefs = await SharedPreferences.getInstance();
+    _forceEnableDownloader = prefs.getBool(_downloaderOverrideKey) ?? false;
+  }
+
+  static Future<void> _saveDownloaderOverride(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_downloaderOverrideKey, value);
+  }
+
   final List<PluginDescriptor> _plugins = <PluginDescriptor>[];
   final Map<String, PluginJsRuntime> _runtimeByPluginId =
       <String, PluginJsRuntime>{};
   final Map<String, String> _scriptByPluginId = <String, String>{};
   final PluginStorage _pluginStorage = createPluginStorage();
+  final PluginEventBus _eventBus;
 
   bool _isLoaded = false;
 
@@ -39,6 +66,8 @@ class PluginService extends ChangeNotifier {
   List<PluginDescriptor> get plugins => List<PluginDescriptor>.unmodifiable(
         _plugins,
       );
+
+  PluginEventBus get eventBus => _eventBus;
 
   List<String> get activeDanmakuBlockWords {
     final merged = <String>[];
@@ -56,6 +85,14 @@ class PluginService extends ChangeNotifier {
     );
   }
 
+  bool hasPermission(String pluginId, PluginPermission permission) {
+    final plugin = _plugins.firstWhere(
+      (p) => p.manifest.id == pluginId,
+      orElse: () => throw StateError('插件不存在: $pluginId'),
+    );
+    return plugin.manifest.permissions.contains(permission);
+  }
+
   Future<void> _initialize() async {
     await _reloadPlugins();
     _isLoaded = true;
@@ -65,6 +102,38 @@ class PluginService extends ChangeNotifier {
   Future<void> reloadPlugins() async {
     await _reloadPlugins();
     notifyListeners();
+  }
+
+  void _setupEventListeners() {
+    _eventBus.on(PluginEventType.videoLoaded, _handleEvent);
+    _eventBus.on(PluginEventType.play, _handleEvent);
+    _eventBus.on(PluginEventType.pause, _handleEvent);
+    _eventBus.on(PluginEventType.seek, _handleEvent);
+    _eventBus.on(PluginEventType.danmakuShow, _handleEvent);
+    _eventBus.on(PluginEventType.settingsChanged, _handleEvent);
+    _eventBus.on(PluginEventType.appResumed, _handleEvent);
+    _eventBus.on(PluginEventType.appPaused, _handleEvent);
+  }
+
+  void _handleEvent(PluginEvent event) {
+    for (final plugin in _plugins) {
+      if (!plugin.enabled || !plugin.loaded) continue;
+      final runtime = _runtimeByPluginId[plugin.manifest.id];
+      if (runtime == null) continue;
+
+      try {
+        final eventJson = event.toJson();
+        runtime.evaluate(
+          '''
+          if (typeof pluginOnEvent === "function") {
+            try {
+              pluginOnEvent($eventJson);
+            } catch(e) {}
+          }
+          ''',
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> _reloadPlugins() async {
@@ -100,10 +169,9 @@ class PluginService extends ChangeNotifier {
 
         if (enabled) {
           await _loadPluginRuntime(manifest.id);
+          await _invokeLifecycleEvent(manifest.id, 'initialize');
         }
-      } catch (_) {
-        // skip invalid plugin script
-      }
+      } catch (_) {}
     }
 
     if (_plugins.isEmpty) {
@@ -162,6 +230,8 @@ class PluginService extends ChangeNotifier {
         .toList();
   }
 
+  static const String _downloaderUnlockPluginId = 'custom.downloader_unlock';
+
   Future<void> setPluginEnabled(String pluginId, bool enabled) async {
     final index =
         _plugins.indexWhere((plugin) => plugin.manifest.id == pluginId);
@@ -184,8 +254,15 @@ class PluginService extends ChangeNotifier {
 
     if (enabled) {
       await _loadPluginRuntime(pluginId);
+      await _invokeLifecycleEvent(pluginId, 'initialize');
     } else {
+      await _invokeLifecycleEvent(pluginId, 'destroy');
       await _unloadPluginRuntime(pluginId);
+    }
+
+    if (pluginId == _downloaderUnlockPluginId) {
+      setForceEnableDownloader(enabled);
+      notifyListeners();
     }
 
     final enabledIds = _plugins
@@ -193,6 +270,39 @@ class PluginService extends ChangeNotifier {
         .map((plugin) => plugin.manifest.id)
         .toList();
     await _saveEnabledIds(enabledIds);
+  }
+
+  Future<void> _invokeLifecycleEvent(String pluginId, String event) async {
+    final runtime = _runtimeByPluginId[pluginId];
+    if (runtime == null) return;
+
+    try {
+      runtime.evaluate(
+        '''
+        if (typeof pluginOn${event[0].toUpperCase()}${event.substring(1)} === "function") {
+          try {
+            pluginOn${event[0].toUpperCase()}${event.substring(1)}();
+          } catch(e) {}
+        }
+        ''',
+      );
+    } catch (_) {}
+  }
+
+  Future<void> handleAppLifecycleStateChange(bool resumed) async {
+    if (resumed) {
+      _eventBus.emitAppResumed();
+    } else {
+      _eventBus.emitAppPaused();
+    }
+
+    for (final plugin in _plugins) {
+      if (!plugin.enabled || !plugin.loaded) continue;
+      await _invokeLifecycleEvent(
+        plugin.manifest.id,
+        resumed ? 'resume' : 'suspend',
+      );
+    }
   }
 
   Future<void> _loadPluginRuntime(String pluginId) async {
@@ -212,6 +322,9 @@ class PluginService extends ChangeNotifier {
       }
 
       final runtime = createPluginRuntime();
+
+      await _injectPluginApi(runtime, pluginId);
+
       runtime.evaluate(script);
 
       final blockWords = _extractBlockWords(runtime);
@@ -232,6 +345,133 @@ class PluginService extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  Future<void> _injectPluginApi(PluginJsRuntime runtime, String pluginId) async {
+    final plugin = _plugins.firstWhere(
+      (p) => p.manifest.id == pluginId,
+      orElse: () => throw StateError('插件不存在: $pluginId'),
+    );
+
+    final apiCode = '''
+      const plugin = {
+        id: ${json.encode(plugin.manifest.id)},
+        name: ${json.encode(plugin.manifest.name)},
+        version: ${json.encode(plugin.manifest.version)},
+        hasPermission: function(permissionId) {
+          return ${json.encode(plugin.manifest.permissions.map((p) => p.id).toList())}.includes(permissionId);
+        },
+        permissions: ${json.encode(plugin.manifest.permissions.map((p) => p.id).toList())},
+      };
+
+      const player = {
+        play: function() {
+          if (!plugin.hasPermission('player.control')) return false;
+          return window.flutter_invokeMethod('playerPlay');
+        },
+        pause: function() {
+          if (!plugin.hasPermission('player.control')) return false;
+          return window.flutter_invokeMethod('playerPause');
+        },
+        seek: function(time) {
+          if (!plugin.hasPermission('player.control')) return false;
+          return window.flutter_invokeMethod('playerSeek', time);
+        },
+        getState: function() {
+          if (!plugin.hasPermission('player.control')) return null;
+          return JSON.parse(window.flutter_invokeMethod('playerGetState') || 'null');
+        },
+      };
+
+      const danmaku = {
+        show: function() {
+          if (!plugin.hasPermission('danmaku.modify')) return false;
+          return window.flutter_invokeMethod('danmakuShow');
+        },
+        hide: function() {
+          if (!plugin.hasPermission('danmaku.modify')) return false;
+          return window.flutter_invokeMethod('danmakuHide');
+        },
+        setOpacity: function(opacity) {
+          if (!plugin.hasPermission('danmaku.modify')) return false;
+          return window.flutter_invokeMethod('danmakuSetOpacity', opacity);
+        },
+        addFilter: function(filterId, pattern) {
+          if (!plugin.hasPermission('danmaku.modify')) return false;
+          return window.flutter_invokeMethod('danmakuAddFilter', filterId, pattern);
+        },
+        removeFilter: function(filterId) {
+          if (!plugin.hasPermission('danmaku.modify')) return false;
+          return window.flutter_invokeMethod('danmakuRemoveFilter', filterId);
+        },
+      };
+
+      const ui = {
+        showToast: function(message) {
+          if (!plugin.hasPermission('ui.dialog')) return;
+          window.flutter_invokeMethod('uiShowToast', message);
+        },
+        showDialog: function(title, content) {
+          if (!plugin.hasPermission('ui.dialog')) return false;
+          return JSON.parse(window.flutter_invokeMethod('uiShowDialog', title, content) || 'false');
+        },
+        showLoading: function(message) {
+          if (!plugin.hasPermission('ui.dialog')) return;
+          window.flutter_invokeMethod('uiShowLoading', message);
+        },
+        hideLoading: function() {
+          if (!plugin.hasPermission('ui.dialog')) return;
+          window.flutter_invokeMethod('uiHideLoading');
+        },
+      };
+
+      const storage = {
+        set: function(key, value) {
+          if (!plugin.hasPermission('storage')) return false;
+          return window.flutter_invokeMethod('storageSet', key, JSON.stringify(value));
+        },
+        get: function(key) {
+          if (!plugin.hasPermission('storage')) return null;
+          const result = window.flutter_invokeMethod('storageGet', key);
+          return result ? JSON.parse(result) : null;
+        },
+        remove: function(key) {
+          if (!plugin.hasPermission('storage')) return false;
+          return window.flutter_invokeMethod('storageRemove', key);
+        },
+        clear: function() {
+          if (!plugin.hasPermission('storage')) return false;
+          return window.flutter_invokeMethod('storageClear');
+        },
+      };
+
+      const dev = {
+        log: function(message) {
+          window.flutter_invokeMethod('devLog', message);
+        },
+        logError: function(error) {
+          window.flutter_invokeMethod('devLogError', error);
+        },
+      };
+
+      const system = {
+        setDownloaderEnabled: function(enabled) {
+          if (!plugin.hasPermission('system.override')) return false;
+          return window.flutter_invokeMethod('systemSetDownloaderEnabled', enabled);
+        },
+      };
+
+      const __pluginServices = {
+        player,
+        danmaku,
+        ui,
+        storage,
+        dev,
+        system,
+      };
+    ''';
+
+    runtime.evaluate(apiCode);
   }
 
   Future<void> _unloadPluginRuntime(String pluginId) async {
@@ -266,12 +506,41 @@ class PluginService extends ChangeNotifier {
     required String sourceFilePath,
   }) async {
     final script = await _pluginStorage.readTextFile(sourceFilePath);
+    return _importPluginFromContent(script);
+  }
+
+  Future<String?> importPluginFromContent(String script) async {
+    return _importPluginFromContent(script);
+  }
+
+  Future<String?> _importPluginFromContent(String script) async {
     final parsed = _parsePluginMetadata(script);
+    final minVersion = parsed.manifest.minHostVersion;
+    final packageInfo = await PackageInfo.fromPlatform();
+    final currentVersion = packageInfo.version;
+    if (_compareVersions(currentVersion, minVersion) < 0) {
+      throw StateError(
+        '当前应用版本 $currentVersion 低于插件要求的最低版本 $minVersion',
+      );
+    }
     final fileName = '${parsed.manifest.id}.js';
     await _pluginStorage.saveScript(fileName, script);
     await reloadPlugins();
     final loaded = _plugins.any((p) => p.manifest.id == parsed.manifest.id);
     return loaded ? parsed.manifest.id : null;
+  }
+
+  static int _compareVersions(String a, String b) {
+    final partsA = a.split('.').map((s) => int.tryParse(s) ?? 0).toList();
+    final partsB = b.split('.').map((s) => int.tryParse(s) ?? 0).toList();
+    final len = partsA.length > partsB.length ? partsA.length : partsB.length;
+    for (var i = 0; i < len; i++) {
+      final va = i < partsA.length ? partsA[i] : 0;
+      final vb = i < partsB.length ? partsB[i] : 0;
+      if (va > vb) return 1;
+      if (va < vb) return -1;
+    }
+    return 0;
   }
 
   Future<bool> deletePlugin(String pluginId) async {
@@ -282,13 +551,11 @@ class PluginService extends ChangeNotifier {
     final plugin = _plugins[index];
     if (plugin.isBuiltin) return false;
 
-    // 先禁用并卸载运行时
     if (plugin.enabled) {
       await setPluginEnabled(pluginId, false);
     }
     await _unloadPluginRuntime(pluginId);
 
-    // 删除脚本文件
     final filePath = plugin.assetPath;
     if (filePath.startsWith(_loadedFilePrefix)) {
       final realPath = filePath.substring(_loadedFilePrefix.length);
@@ -297,10 +564,8 @@ class PluginService extends ChangeNotifier {
       } catch (_) {}
     }
 
-    // 从列表中移除
     _plugins.removeAt(index);
 
-    // 清理持久化的启用状态
     final enabledIds = _plugins
         .where((p) => p.enabled)
         .map((p) => p.manifest.id)
@@ -365,7 +630,6 @@ class PluginService extends ChangeNotifier {
       Map<String, dynamic>.from(decoded.cast<String, dynamic>()),
     );
 
-    // UI 操作后重新提取 blockWords 和 uiEntries，支持插件动态切换规则
     final newBlockWords = _extractBlockWords(runtime);
     final newUiEntries = _extractUiEntries(runtime);
     if (newBlockWords.length != plugin.blockWords.length ||
@@ -508,6 +772,7 @@ class PluginService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _eventBus.dispose();
     for (final runtime in _runtimeByPluginId.values) {
       try {
         runtime.dispose();

@@ -511,6 +511,9 @@ void main(List<String> args) async {
   // 预加载弹幕内核设置
   await DanmakuKernelFactory.initialize();
 
+  // 初始化插件系统覆盖设置
+  await PluginService.loadDownloaderOverride();
+
   // 初始化安全书签服务 (仅限 macOS)
   if (!kIsWeb && Platform.isMacOS) {
     try {
@@ -1107,6 +1110,7 @@ class MainPageState extends State<MainPage>
   bool _showWebDAVTab = false;
   bool _showDownloaderTab = globals.isDownloaderSupportedPlatform;
   WebDAVQuickAccessProvider? _webdavQuickAccessProvider;
+  PluginService? _pluginService;
 
   // 用于热键管理
   bool _hotkeysAreRegistered = false;
@@ -1229,6 +1233,10 @@ class MainPageState extends State<MainPage>
     } catch (e) {
       debugPrint('加载下载器设置失败: $e');
     }
+    try {
+      _pluginService = Provider.of<PluginService>(context, listen: false);
+      _pluginService?.addListener(_onDownloaderSettingsChanged);
+    } catch (_) {}
 
     // 构建初始页面列表
     _rebuildPages();
@@ -1548,6 +1556,7 @@ class MainPageState extends State<MainPage>
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);
     _downloaderSettingsProvider?.removeListener(_onDownloaderSettingsChanged);
+    _pluginService?.removeListener(_onDownloaderSettingsChanged);
     _androidFileAssociationSubscription?.cancel();
     globalTabController?.removeListener(_onTabChange);
     _videoPlayerState?.removeListener(_manageHotkeys);
