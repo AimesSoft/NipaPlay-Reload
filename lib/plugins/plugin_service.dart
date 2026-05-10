@@ -230,8 +230,6 @@ class PluginService extends ChangeNotifier {
         .toList();
   }
 
-  static const String _downloaderUnlockPluginId = 'custom.downloader_unlock';
-
   Future<void> setPluginEnabled(String pluginId, bool enabled) async {
     final index =
         _plugins.indexWhere((plugin) => plugin.manifest.id == pluginId);
@@ -260,7 +258,7 @@ class PluginService extends ChangeNotifier {
       await _unloadPluginRuntime(pluginId);
     }
 
-    if (pluginId == _downloaderUnlockPluginId) {
+    if (pluginId.contains('downloader_unlock')) {
       setForceEnableDownloader(enabled);
       notifyListeners();
     }
