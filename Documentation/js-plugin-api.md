@@ -28,9 +28,11 @@ const pluginManifest = {
   id: 'builtin.cn_sensitive_danmaku_filter',
   name: '弹幕预设屏蔽词（中国大陆）',
   version: '1.1.0',
+  minHostVersion: '1.11.0',
   description: '内置常用敏感词与辱骂词，启用后自动屏蔽命中的弹幕。',
   author: 'NipaPlay Team',
-  github: 'https://github.com/xxx/xxx' // 可选
+  github: 'https://github.com/xxx/xxx', // 可选
+  permissions: ['danmaku.modify'] // 可选，权限声明
 };
 ```
 
@@ -39,11 +41,44 @@ const pluginManifest = {
 - `id`：必填，唯一标识，非空字符串。
 - `name`：必填，展示名，非空字符串。
 - `version`：必填，版本号，非空字符串。
+- `minHostVersion`：必填，插件要求的宿主（NipaPlay）最低版本，格式为 `主版本.次版本.修订号`（如 `1.11.0`）。若宿主版本低于此值，插件将被标记为不兼容。
 - `description`：选填，描述字符串。
 - `author`：选填，作者字符串。
 - `github`：选填，GitHub 链接字符串，可为空。
+- `permissions`：选填，权限字符串数组。
 
-若 `id/name/version` 任一为空，插件会被判定为无效。
+若 `id/name/version/minHostVersion` 任一为空，插件会被判定为无效。
+
+#### 权限列表
+
+| 权限 ID | 说明 |
+|---------|------|
+| `player.control` | 控制播放器（播放/暂停/跳转） |
+| `danmaku.modify` | 修改弹幕显示和过滤规则 |
+| `library.read` | 读取媒体库信息 |
+| `library.write` | 修改媒体库内容 |
+| `ui.dialog` | 显示弹窗和提示信息 |
+| `settings.read` | 读取应用设置 |
+| `settings.modify` | 修改应用设置 |
+| `storage` | 使用本地存储 |
+
+权限声明示例：
+
+```js
+const pluginManifest = {
+  id: 'com.example.myplugin',
+  name: '我的插件',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '描述',
+  author: '作者',
+  permissions: [
+    'player.control',
+    'danmaku.modify',
+    'ui.dialog'
+  ]
+};
+```
 
 ### 3.2 `pluginBlockWords`（可选）
 
@@ -125,57 +160,239 @@ function pluginHandleUIAction(actionId) {
 
 重要行为：`pluginHandleUIAction` 执行完毕后，宿主会自动重新读取 JS 运行时中的 `pluginBlockWords` 和 `pluginUIEntries` 变量。这意味着插件可以在回调中动态修改这两个变量（例如切换规则启用状态），宿主会即时同步更新弹幕过滤词库和 UI 入口列表。
 
-## 4. 宿主当前暴露能力（对 JS）
+### 3.5 `pluginOnEvent(event)`（可选）
 
-当前 JS 插件接口是“声明式变量 + action 回调”模型，不提供直接调用 Dart/Flutter API 的桥接对象。
+监听应用事件。
 
-即当前可用“接口”只有以下四项：
+```js
+function pluginOnEvent(event) {
+  console.log('事件:', event.name, event.data);
+  
+  if (event.name === 'play') {
+    ui.showToast('视频开始播放');
+  }
+}
+```
 
-1. `pluginManifest`
-2. `pluginBlockWords`
-3. `pluginUIEntries`
-4. `pluginHandleUIAction(actionId)`
+支持的事件：
 
-未提供（当前版本）：
+| 事件名 | 说明 | `event.data` 内容 |
+|--------|------|------------------|
+| `videoLoaded` | 视频加载完成 | 视频信息对象 |
+| `play` | 开始播放 | 视频信息对象 |
+| `pause` | 暂停播放 | 视频信息对象 |
+| `seek` | 进度跳转 | `{ time: 当前时间, duration: 总时长 }` |
+| `danmakuShow` | 弹幕显示 | 弹幕对象 |
+| `settingsChanged` | 设置变更 | `{ key: 设置键, value: 新值 }` |
+| `appResumed` | 应用恢复 | 空对象 |
+| `appPaused` | 应用暂停 | 空对象 |
 
-- 任意 Dart 方法直调
-- 文件系统 API
-- 网络 API 专用桥接
-- 播放控制 API
-- 设置读写 API
+### 3.6 生命周期函数（可选）
 
-如果后续要做跨语言插件系统的“全量接口暴露”，建议新增一个受控桥接对象（例如 `pluginHost`），按 capability 白名单逐步开放。
+插件可以声明以下生命周期钩子：
 
-## 5. 生命周期与状态
+```js
+function pluginOnInitialize() {
+  // 插件启用时调用
+  ui.showToast('插件已启用');
+}
+
+function pluginOnDestroy() {
+  // 插件禁用时调用
+  ui.showToast('插件已禁用');
+}
+
+function pluginOnResume() {
+  // 应用恢复到前台时调用
+}
+
+function pluginOnSuspend() {
+  // 应用进入后台时调用
+}
+```
+
+## 4. 宿主暴露的 API 桥接对象
+
+宿主在插件运行时注入了以下全局桥接对象，插件可直接使用。
+
+### 4.1 `plugin` 对象
+
+包含插件元数据和权限检查：
+
+```js
+// 获取插件信息
+console.log(plugin.id);
+console.log(plugin.name);
+console.log(plugin.version);
+
+// 检查权限
+if (plugin.hasPermission('player.control')) {
+  // 有权限，执行操作
+}
+
+// 查看所有权限
+console.log(plugin.permissions);
+```
+
+### 4.2 `player` 对象（需要 `player.control` 权限）
+
+控制播放器：
+
+```js
+// 播放
+player.play();
+
+// 暂停
+player.pause();
+
+// 跳转进度（秒）
+player.seek(120);
+
+// 获取播放器状态
+const state = player.getState();
+console.log(state.playing);
+console.log(state.currentTime);
+console.log(state.duration);
+```
+
+### 4.3 `danmaku` 对象（需要 `danmaku.modify` 权限）
+
+控制弹幕：
+
+```js
+// 显示弹幕
+danmaku.show();
+
+// 隐藏弹幕
+danmaku.hide();
+
+// 设置弹幕透明度（0.0 - 1.0）
+danmaku.setOpacity(0.8);
+
+// 添加弹幕过滤器
+danmaku.addFilter('myFilter', '屏蔽词1');
+danmaku.addFilter('myRegex', '规则名/正则表达式/');
+
+// 移除弹幕过滤器
+danmaku.removeFilter('myFilter');
+```
+
+### 4.4 `ui` 对象（需要 `ui.dialog` 权限）
+
+显示 UI 元素：
+
+```js
+// 显示 Toast 提示
+ui.showToast('提示信息');
+
+// 显示对话框
+const result = ui.showDialog('标题', '内容');
+
+// 显示加载提示
+ui.showLoading('加载中...');
+
+// 隐藏加载提示
+ui.hideLoading();
+```
+
+### 4.5 `storage` 对象（需要 `storage` 权限）
+
+本地存储：
+
+```js
+// 存储数据
+storage.set('key', 'value');
+storage.set('number', 123);
+storage.set('object', { a: 1 });
+
+// 读取数据
+const value = storage.get('key');
+const number = storage.get('number');
+const object = storage.get('object');
+
+// 删除数据
+storage.remove('key');
+
+// 清空所有数据
+storage.clear();
+```
+
+### 4.6 `dev` 对象
+
+开发调试工具：
+
+```js
+// 输出日志
+dev.log('调试信息');
+
+// 输出错误
+dev.logError('错误信息');
+```
+
+## 5. 宿主当前暴露能力（对 JS）
+
+当前 JS 插件接口支持：
+
+### 声明式变量与回调
+
+1. `pluginManifest` - 插件元数据
+2. `pluginBlockWords` - 弹幕屏蔽词
+3. `pluginUIEntries` - UI 入口列表
+4. `pluginHandleUIAction(actionId)` - UI 动作处理
+5. `pluginOnEvent(event)` - 事件监听
+6. `pluginOnInitialize()` - 初始化钩子
+7. `pluginOnDestroy()` - 销毁钩子
+8. `pluginOnResume()` - 恢复钩子
+9. `pluginOnSuspend()` - 挂起钩子
+
+### 桥接 API 对象
+
+1. `plugin` - 插件元数据与权限检查
+2. `player` - 播放器控制
+3. `danmaku` - 弹幕控制
+4. `ui` - UI 交互
+5. `storage` - 本地存储
+6. `dev` - 开发调试
+
+## 6. 生命周期与状态
 
 - 启动时扫描插件脚本并解析元数据。
 - 启动时会同时扫描资产插件和应用数据目录中的外部插件。
-- 插件启用后才会加载运行时并读取 `pluginBlockWords/pluginUIEntries`。
-- 禁用插件会卸载运行时并清空该插件的生效屏蔽词。
+- 插件启用后会：
+  - 加载运行时
+  - 调用 `pluginOnInitialize()`
+  - 读取 `pluginBlockWords/pluginUIEntries`
+- 禁用插件会：
+  - 调用 `pluginOnDestroy()`
+  - 卸载运行时
+  - 清空该插件的生效屏蔽词
 - 启用状态持久化在 `SharedPreferences`：`plugin_enabled_ids`。
 - 非内置插件（外部导入）可在设置页中删除，删除前会自动禁用并卸载运行时。
 
-## 6. 与弹幕过滤的集成
+## 7. 与弹幕过滤的集成
 
 - 所有已启用且已加载插件的 `pluginBlockWords` 会合并。
 - 合并结果用于弹幕文本过滤。
 - 同一词在多个插件重复出现时，当前实现不会去重（按合并结果原样参与匹配）。
 
-## 7. 错误与兼容性
+## 8. 错误与兼容性
 
 - 运行 JS 时报错会导致该插件 `loaded=false`，并记录错误信息到插件状态。
 - 插件 UI 动作返回格式不符时会抛出格式错误（例如 `type` 不是 `text`）。
 - Web 平台插件运行时未实现。
+- 权限检查失败时 API 调用会返回 `false` 或 `null`。
 
-## 8. 最小可用插件模板
+## 9. 最小可用插件模板
 
 ```js
 const pluginManifest = {
   id: 'custom.example',
   name: '示例插件',
   version: '1.0.0',
+  minHostVersion: '1.11.0',
   description: '一个最小可用插件',
-  author: 'You'
+  author: 'You',
+  permissions: ['ui.dialog']
 };
 
 const pluginBlockWords = ['示例屏蔽词'];
@@ -187,6 +404,10 @@ const pluginUIEntries = [
     description: '点击后显示文本'
   }
 ];
+
+function pluginOnInitialize() {
+  ui.showToast('插件已启用');
+}
 
 function pluginHandleUIAction(actionId) {
   if (actionId !== 'hello') {
@@ -200,7 +421,7 @@ function pluginHandleUIAction(actionId) {
 }
 ```
 
-## 9. 带开关切换的插件示例
+## 10. 带开关切换的插件示例
 
 以下示例展示如何使用 `enabled` 字段实现逐条规则的开关切换，以及动态更新 `pluginBlockWords` 和 `pluginUIEntries`。
 
@@ -209,8 +430,10 @@ const pluginManifest = {
   id: 'custom.regex_filter',
   name: '正则过滤规则',
   version: '1.0.0',
+  minHostVersion: '1.11.0',
   description: '可逐条开关的弹幕正则过滤规则',
-  author: 'You'
+  author: 'You',
+  permissions: ['danmaku.modify']
 };
 
 var rules = [
@@ -234,7 +457,6 @@ function buildBlockWords() {
   var result = [];
   for (var i = 0; i < rules.length; i++) {
     if (rules[i].enabled) {
-      // 正则格式：名称/正则表达式/
       result.push(rules[i].name + '/' + rules[i].pattern);
     }
   }
@@ -248,7 +470,7 @@ function buildUIEntries() {
       id: rules[i].id,
       title: rules[i].name,
       description: rules[i].desc,
-      enabled: rules[i].enabled  // 提供 enabled 字段，宿主渲染开关
+      enabled: rules[i].enabled
     });
   }
   return result;
@@ -261,7 +483,6 @@ function pluginHandleUIAction(actionId) {
   for (var i = 0; i < rules.length; i++) {
     if (rules[i].id === actionId) {
       rules[i].enabled = !rules[i].enabled;
-      // 修改后重建两个数组，宿主会在回调结束后自动重新读取
       pluginBlockWords = buildBlockWords();
       pluginUIEntries = buildUIEntries();
       return {
@@ -281,3 +502,60 @@ function pluginHandleUIAction(actionId) {
 - 开关切换时宿主调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换 `rules[i].enabled`，然后重建 `pluginBlockWords` 和 `pluginUIEntries`。
 - 回调执行完毕后宿主自动重新读取这两个变量，无需额外操作。
 - `pluginBlockWords` 中的正则格式项（`名称/正则表达式/`）会被宿主识别并按正则匹配弹幕。
+
+## 11. 事件监听插件示例
+
+```js
+const pluginManifest = {
+  id: 'com.example.event_plugin',
+  name: '事件监听插件',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '监听播放事件并提示',
+  author: 'You',
+  permissions: ['player.control', 'ui.dialog']
+};
+
+function pluginOnEvent(event) {
+  switch (event.name) {
+    case 'videoLoaded':
+      dev.log('视频已加载: ' + event.data.title);
+      break;
+    case 'play':
+      ui.showToast('开始播放');
+      break;
+    case 'pause':
+      ui.showToast('已暂停');
+      break;
+    case 'seek':
+      dev.log('跳转至: ' + event.data.time);
+      break;
+  }
+}
+```
+
+## 12. 存储使用示例
+
+```js
+const pluginManifest = {
+  id: 'com.example.storage_plugin',
+  name: '存储示例',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '演示存储功能',
+  author: 'You',
+  permissions: ['storage', 'ui.dialog']
+};
+
+let counter = 0;
+
+function pluginOnInitialize() {
+  const savedCounter = storage.get('counter');
+  if (savedCounter !== null) {
+    counter = savedCounter;
+  }
+  ui.showToast('已启动 ' + counter + ' 次');
+  counter++;
+  storage.set('counter', counter);
+}
+```
