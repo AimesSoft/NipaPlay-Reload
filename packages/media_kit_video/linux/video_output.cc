@@ -44,6 +44,8 @@ static void video_output_free_hw_render_context(VideoOutput* self) {
     return;
   }
 
+  mpv_render_context_set_update_callback(self->render_context, NULL, NULL);
+
   EGLDisplay previous_display = eglGetCurrentDisplay();
   EGLContext previous_context = eglGetCurrentContext();
   EGLSurface previous_draw = eglGetCurrentSurface(EGL_DRAW);
@@ -67,7 +69,6 @@ static void video_output_free_hw_render_context(VideoOutput* self) {
   }
 
   if (made_context_current) {
-    mpv_render_context_set_update_callback(self->render_context, NULL, NULL);
     mpv_render_context_free(self->render_context);
     self->render_context = NULL;
   }
