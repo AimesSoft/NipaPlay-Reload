@@ -61,6 +61,7 @@ const pluginManifest = {
 | `settings.read` | 读取应用设置 |
 | `settings.modify` | 修改应用设置 |
 | `storage` | 使用本地存储 |
+| `system.override` | 覆盖系统级设置（如解锁下载器） |
 
 权限声明示例：
 
@@ -123,6 +124,31 @@ const pluginUIEntries = [
 - `title`：必填，非空。
 - `description`：可选。
 - `enabled`：可选，布尔值。当提供时，宿主在设置页中渲染开关（`Switch`）而非普通点击项，用户可通过开关切换状态。点击开关后宿主会调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换自身逻辑并返回结果。
+- `textSetting`：可选，对象。当提供时（且 `enabled` 未设置），宿主在设置页中渲染文本输入框，用于收集用户自由输入的配置项。输入值由宿主持久化存储，插件可通过 `settings.getText(entry.id)` 读取。
+
+`textSetting` 对象字段：
+
+- `hintText`：可选，文本框占位提示。
+- `default`：可选，字符串，默认值。用户首次看到文本框时的初始内容。
+
+```js
+const pluginUIEntries = [
+  {
+    id: 'api_url',
+    title: 'API 地址',
+    description: '输入远程接口地址',
+    textSetting: { hintText: 'https://example.com/api', default: '' }
+  },
+  {
+    id: 'max_retries',
+    title: '最大重试次数',
+    description: '请求失败时的重试次数（0-10）',
+    textSetting: { hintText: '3', default: '3' }
+  }
+];
+```
+
+> `enabled` 与 `textSetting` 同时存在时，`enabled` 优先（渲染为开关）。两者都不存在时渲染为普通点击项。
 
 无效 entry 会被跳过，不会导致整个插件失败。
 
@@ -329,6 +355,22 @@ dev.log('调试信息');
 dev.logError('错误信息');
 ```
 
+### 4.7 `settings` 对象
+
+读写插件的文本配置项（即 `pluginUIEntries` 中声明了 `textSetting` 的条目）。宿主自动持久化，插件无需自行存储。
+
+```js
+// 读取配置值（返回字符串，未设置时返回空字符串 ''）
+const apiUrl = settings.getText('api_url');
+
+// 写入配置值（value 会自动转为字符串）
+settings.setText('api_url', 'https://new-api.example.com');
+```
+
+典型用法：在 `pluginOnInitialize` 中读取用户之前填写的配置值，或在 `pluginHandleUIAction` 中修改配置。
+
+> `settings` 对象不需要任何权限声明，始终可用。它仅操作插件自身的文本配置项，不同插件之间互不影响。
+
 ## 5. 宿主当前暴露能力（对 JS）
 
 当前 JS 插件接口支持：
@@ -353,6 +395,7 @@ dev.logError('错误信息');
 4. `ui` - UI 交互
 5. `storage` - 本地存储
 6. `dev` - 开发调试
+7. `settings` - 读写插件文本配置项
 
 ## 6. 生命周期与状态
 
@@ -559,3 +602,63 @@ function pluginOnInitialize() {
   storage.set('counter', counter);
 }
 ```
+
+## 13. 文本配置项示例
+
+以下示例展示如何使用 `textSetting` 让用户在设置页填写配置，并在插件中读取。
+
+```js
+const pluginManifest = {
+  id: 'custom.api_proxy',
+  name: 'API 代理',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '通过配置的 API 地址获取弹幕数据',
+  author: 'You',
+  permissions: ['ui.dialog']
+};
+
+var pluginUIEntries = [
+  {
+    id: 'api_url',
+    title: 'API 地址',
+    description: '弹幕数据接口地址',
+    textSetting: { hintText: 'https://example.com/danmaku', default: '' }
+  },
+  {
+    id: 'token',
+    title: '访问令牌',
+    description: '接口鉴权令牌（可留空）',
+    textSetting: { hintText: '输入 token', default: '' }
+  },
+  {
+    id: 'enable_filter',
+    title: '启用过滤',
+    description: '是否过滤低质量弹幕',
+    enabled: true
+  }
+];
+
+function pluginOnInitialize() {
+  var url = settings.getText('api_url');
+  if (url) {
+    ui.showToast('API 地址已配置: ' + url);
+  }
+}
+
+function pluginHandleUIAction(actionId) {
+  if (actionId === 'enable_filter') {
+    // 切换开关逻辑（同开关型示例）
+    // ...
+  }
+  return { type: 'text', title: 'API 代理', content: '操作完成' };
+}
+```
+
+要点：
+
+- `textSetting` 条目在设置页中渲染为标题 + 描述 + 文本输入框。
+- 用户输入的值由宿主持久化保存，关闭再打开设置页后依然存在。
+- 插件通过 `settings.getText(entryId)` 读取值，通过 `settings.setText(entryId, value)` 写入值。
+- `textSetting` 与 `enabled` 可以在同一份 `pluginUIEntries` 中混合使用，各自独立渲染为文本框或开关。
+- 底部会显示「保存并关闭」和「关闭」按钮，方便用户确认操作。

@@ -12,8 +12,12 @@ import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';
 import 'package:nipaplay/plugins/models/plugin_manifest.dart';
 import 'package:nipaplay/plugins/models/plugin_event.dart';
 import 'package:nipaplay/plugins/models/plugin_permission.dart';
+import 'package:nipaplay/plugins/models/plugin_index_entry.dart';
+import 'package:nipaplay/plugins/models/remote_plugin_info.dart';
 import 'package:nipaplay/plugins/plugin_event_bus.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 class PluginService extends ChangeNotifier {
   PluginService()
@@ -24,6 +28,7 @@ class PluginService extends ChangeNotifier {
 
   static const String _enabledPluginsKey = 'plugin_enabled_ids';
   static const String _downloaderOverrideKey = 'plugin_downloader_override';
+  static const String _textSettingPrefix = 'plugin_text_setting_';
   static const List<String> _pluginAssetPrefixes = <String>[
     'assets/plugins/builtin/',
     'assets/plugins/custom/',
@@ -56,10 +61,13 @@ class PluginService extends ChangeNotifier {
   final Map<String, PluginJsRuntime> _runtimeByPluginId =
       <String, PluginJsRuntime>{};
   final Map<String, String> _scriptByPluginId = <String, String>{};
+  final Map<String, String> _textSettingValues = <String, String>{};
   final PluginStorage _pluginStorage = createPluginStorage();
   final PluginEventBus _eventBus;
 
   bool _isLoaded = false;
+  Map<String, PluginIndexEntry> _pluginIndex = {};
+  Map<String, RemotePluginInfo> _remotePlugins = {};
 
   bool get isLoaded => _isLoaded;
 
@@ -85,6 +93,38 @@ class PluginService extends ChangeNotifier {
     );
   }
 
+  String getTextSettingValue(String pluginId, String entryId) {
+    return _textSettingValues['$pluginId::$entryId'] ?? '';
+  }
+
+  Future<void> setTextSettingValue(
+      String pluginId, String entryId, String value) async {
+    final key = '$pluginId::$entryId';
+    _textSettingValues[key] = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_textSettingPrefix$key', value);
+    notifyListeners();
+  }
+
+  Future<void> _loadTextSettingValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final plugin in _plugins) {
+      for (final entry in plugin.uiEntries) {
+        if (!entry.isTextInput) continue;
+        final key = '${plugin.manifest.id}::${entry.id}';
+        final saved = prefs.getString('$_textSettingPrefix$key');
+        if (saved != null) {
+          _textSettingValues[key] = saved;
+        } else {
+          final def = entry.textSetting?.defaultValue;
+          if (def != null && def.isNotEmpty) {
+            _textSettingValues[key] = def;
+          }
+        }
+      }
+    }
+  }
+
   bool hasPermission(String pluginId, PluginPermission permission) {
     final plugin = _plugins.firstWhere(
       (p) => p.manifest.id == pluginId,
@@ -94,6 +134,7 @@ class PluginService extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
+    _pluginIndex = await _pluginStorage.loadPluginIndex();
     await _reloadPlugins();
     _isLoaded = true;
     notifyListeners();
@@ -103,6 +144,121 @@ class PluginService extends ChangeNotifier {
     await _reloadPlugins();
     notifyListeners();
   }
+
+  Map<String, PluginIndexEntry> get pluginIndex =>
+      Map.unmodifiable(_pluginIndex);
+
+  PluginIndexEntry? getPluginIndexEntry(String pluginId) {
+    return _pluginIndex[pluginId];
+  }
+
+  Future<void> _savePluginIndex() async {
+    await _pluginStorage.savePluginIndex(_pluginIndex);
+  }
+
+  Future<void> addOrUpdatePluginIndex(PluginManifest manifest) async {
+    final now = DateTime.now();
+    if (_pluginIndex.containsKey(manifest.id)) {
+      // 更新现有插件
+      final existing = _pluginIndex[manifest.id]!;
+      _pluginIndex[manifest.id] = existing.copyWith(
+        version: manifest.version,
+        name: manifest.name,
+        description: manifest.description,
+        author: manifest.author,
+        github: manifest.github,
+        lastUpdatedAt: now,
+      );
+    } else {
+      // 添加新插件
+      _pluginIndex[manifest.id] = PluginIndexEntry(
+        id: manifest.id,
+        version: manifest.version,
+        name: manifest.name,
+        installedAt: now,
+        description: manifest.description,
+        author: manifest.author,
+        github: manifest.github,
+      );
+    }
+    await _savePluginIndex();
+  }
+
+  Future<void> removePluginFromIndex(String pluginId) async {
+    _pluginIndex.remove(pluginId);
+    await _savePluginIndex();
+  }
+
+  static const String _pluginsIndexUrl =
+      'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json';
+
+  Future<void> fetchRemotePlugins({String? proxyUrl}) async {
+    try {
+      final url = _applyProxyIfNeeded(_pluginsIndexUrl, proxyUrl);
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final dynamic jsonData = json.decode(response.body);
+        List<dynamic> data;
+        if (jsonData is List) {
+          data = jsonData;
+        } else if (jsonData is Map) {
+          if (jsonData.containsKey('plugins')) {
+            data = jsonData['plugins'] as List;
+          } else if (jsonData.containsKey('data')) {
+            data = jsonData['data'] as List;
+          } else {
+            data = [];
+          }
+        } else {
+          data = [];
+        }
+        final remotePlugins = RemotePluginInfo.fromJsonList(data);
+        _remotePlugins = {
+          for (final plugin in remotePlugins) plugin.id: plugin,
+        };
+      }
+    } catch (_) {
+      // 网络错误时保持原有数据
+    }
+  }
+
+  String _applyProxyIfNeeded(String url, String? proxyUrl) {
+    if (proxyUrl == null || proxyUrl.isEmpty) {
+      return url;
+    }
+    final normalizedProxy = proxyUrl.endsWith('/') ? proxyUrl : '$proxyUrl/';
+    return '$normalizedProxy$url';
+  }
+
+  String? getAvailableUpdateVersion(String pluginId) {
+    RemotePluginInfo? remote = _remotePlugins[pluginId];
+    // 精确匹配失败时，尝试去掉 local 前缀（custom. / builtin.）再匹配
+    if (remote == null) {
+      final dotIndex = pluginId.indexOf('.');
+      if (dotIndex >= 0 && dotIndex < pluginId.length - 1) {
+        remote = _remotePlugins[pluginId.substring(dotIndex + 1)];
+      }
+    }
+    if (remote == null) return null;
+
+    final localEntry = _pluginIndex[pluginId];
+    if (localEntry == null) return null;
+
+    final localVersion = localEntry.version;
+    final remoteVersion = remote.version;
+
+    if (_compareVersions(remoteVersion, localVersion) > 0) {
+      return remoteVersion;
+    }
+    return null;
+  }
+
+  RemotePluginInfo? getRemotePluginInfo(String pluginId) {
+    return _remotePlugins[pluginId];
+  }
+
+  Map<String, RemotePluginInfo> get remotePlugins =>
+      Map.unmodifiable(_remotePlugins);
 
   void _setupEventListeners() {
     _eventBus.on(PluginEventType.videoLoaded, _handleEvent);
@@ -178,6 +334,8 @@ class PluginService extends ChangeNotifier {
       return;
     }
 
+    await _loadTextSettingValues();
+
     final existingIds = _plugins.map((e) => e.manifest.id).toSet();
     final sanitizedEnabled = enabledIds.where(existingIds.contains).toList();
     await _saveEnabledIds(sanitizedEnabled);
@@ -230,6 +388,8 @@ class PluginService extends ChangeNotifier {
         .toList();
   }
 
+  static const String _downloaderUnlockPluginId = 'custom.downloader_unlock';
+
   Future<void> setPluginEnabled(String pluginId, bool enabled) async {
     final index =
         _plugins.indexWhere((plugin) => plugin.manifest.id == pluginId);
@@ -258,7 +418,7 @@ class PluginService extends ChangeNotifier {
       await _unloadPluginRuntime(pluginId);
     }
 
-    if (pluginId.contains('downloader_unlock')) {
+    if (pluginId == _downloaderUnlockPluginId) {
       setForceEnableDownloader(enabled);
       notifyListeners();
     }
@@ -459,6 +619,15 @@ class PluginService extends ChangeNotifier {
         },
       };
 
+      const settings = {
+        getText: function(entryId) {
+          return window.flutter_invokeMethod('pluginGetTextSetting', entryId) || '';
+        },
+        setText: function(entryId, value) {
+          window.flutter_invokeMethod('pluginSetTextSetting', entryId, String(value));
+        },
+      };
+
       const __pluginServices = {
         player,
         danmaku,
@@ -466,6 +635,7 @@ class PluginService extends ChangeNotifier {
         storage,
         dev,
         system,
+        settings,
       };
     ''';
 
@@ -523,6 +693,8 @@ class PluginService extends ChangeNotifier {
     }
     final fileName = '${parsed.manifest.id}.js';
     await _pluginStorage.saveScript(fileName, script);
+    // 更新插件索引
+    await addOrUpdatePluginIndex(parsed.manifest);
     await reloadPlugins();
     final loaded = _plugins.any((p) => p.manifest.id == parsed.manifest.id);
     return loaded ? parsed.manifest.id : null;
@@ -563,6 +735,9 @@ class PluginService extends ChangeNotifier {
     }
 
     _plugins.removeAt(index);
+
+    // 从索引中移除插件
+    await removePluginFromIndex(pluginId);
 
     final enabledIds = _plugins
         .where((p) => p.enabled)
@@ -662,7 +837,9 @@ class PluginService extends ChangeNotifier {
       if (x.id != y.id ||
           x.title != y.title ||
           x.description != y.description ||
-          x.enabled != y.enabled) {
+          x.enabled != y.enabled ||
+          x.textSetting?.hintText != y.textSetting?.hintText ||
+          x.textSetting?.defaultValue != y.textSetting?.defaultValue) {
         return false;
       }
     }

@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:nipaplay/plugins/plugin_storage_impl_stub.dart'
     if (dart.library.io) 'package:nipaplay/plugins/plugin_storage_impl_io.dart'
     as impl;
+import 'package:nipaplay/plugins/models/plugin_index_entry.dart';
 
 class PluginStorageScript {
   const PluginStorageScript({
@@ -18,6 +20,8 @@ abstract class PluginStorage {
   Future<String> saveScript(String fileName, String content);
   Future<void> deleteScript(String filePath);
   Future<String?> getPluginDirectoryPath();
+  Future<Map<String, PluginIndexEntry>> loadPluginIndex();
+  Future<void> savePluginIndex(Map<String, PluginIndexEntry> index);
 }
 
 PluginStorage createPluginStorage() => impl.createPluginStorage();

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
@@ -17,6 +18,12 @@ const String _pluginsIndexUrl =
 
 const String _repoBaseUrl =
     'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main';
+
+const String _pluginsIndexUrlForProxy =
+    'https://github.com/AimesSoft/Nipaplay-plugins/blob/main/plugins.json';
+
+const String _repoBaseUrlForProxy =
+    'https://github.com/AimesSoft/Nipaplay-plugins/blob/main';
 
 const String _readmeBaseUrl = '$_repoBaseUrl/plugins';
 
@@ -46,6 +53,14 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
 
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  String _applyProxyIfNeeded(String rawUrl, String proxyUrl, String? proxy) {
+    if (proxy == null || proxy.isEmpty) {
+      return rawUrl;
+    }
+    final normalizedProxy = proxy.endsWith('/') ? proxy : '$proxy/';
+    return '$normalizedProxy$proxyUrl';
+  }
 
   bool _isLoading = true;
   bool _isRefreshing = false;
@@ -91,7 +106,12 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
     });
 
     try {
-      final response = await http.get(Uri.parse(_pluginsIndexUrl));
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      final proxyUrl = settingsProvider.githubProxyUrl;
+      final url = _applyProxyIfNeeded(
+          _pluginsIndexUrl, _pluginsIndexUrlForProxy, proxyUrl);
+      final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final dynamic jsonData = json.decode(response.body);
         List<dynamic> data;
@@ -176,10 +196,15 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
       _isLoadingReadme = true;
     });
 
-    final readmeUrl = '$_readmeBaseUrl/${plugin.id}/README.md';
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
+    final proxyUrl = settingsProvider.githubProxyUrl;
+    final rawReadmeUrl = '$_readmeBaseUrl/${plugin.id}/README.md';
+    final proxyReadmeUrl = '${_repoBaseUrlForProxy}/plugins/${plugin.id}/README.md';
+    final url = _applyProxyIfNeeded(rawReadmeUrl, proxyReadmeUrl, proxyUrl);
 
     try {
-      final response = await http.get(Uri.parse(readmeUrl));
+      final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         setState(() {
           _readmeContent = response.body;
@@ -225,7 +250,12 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
     });
 
     try {
-      final response = await http.get(Uri.parse(plugin.downloadUrl));
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      final proxyUrl = settingsProvider.githubProxyUrl;
+      final url = _applyProxyIfNeeded(
+          plugin.downloadUrl, plugin.proxyDownloadUrl, proxyUrl);
+      final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         if (!mounted) return;
         final pluginService =
@@ -699,6 +729,7 @@ class _PluginInfo {
   final String version;
   final String minHostVersion;
   final String downloadUrl;
+  final String proxyDownloadUrl;
   final List<String> tags;
   bool isInstalled = false;
   bool isInstalling = false;
@@ -711,6 +742,7 @@ class _PluginInfo {
     required this.version,
     required this.minHostVersion,
     required this.downloadUrl,
+    required this.proxyDownloadUrl,
     required this.tags,
   });
 
@@ -723,9 +755,8 @@ class _PluginInfo {
       author: json['author'] ?? '',
       version: json['version'] ?? '1.0.0',
       minHostVersion: json['minHostVersion'] ?? '1.0.0',
-      downloadUrl: file.isNotEmpty
-          ? '$_repoBaseUrl/$file'
-          : '',
+      downloadUrl: file.isNotEmpty ? '$_repoBaseUrl/$file' : '',
+      proxyDownloadUrl: file.isNotEmpty ? '$_repoBaseUrlForProxy/$file' : '',
       tags:
           (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
               [],
