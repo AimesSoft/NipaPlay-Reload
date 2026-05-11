@@ -1,4 +1,5 @@
 import 'package:nipaplay/plugins/plugin_storage.dart';
+import 'package:nipaplay/plugins/models/plugin_index_entry.dart';
 
 class _StubPluginStorage implements PluginStorage {
   @override
@@ -22,6 +23,14 @@ class _StubPluginStorage implements PluginStorage {
   Future<void> deleteScript(String filePath) async {
     throw UnsupportedError('External JS plugins are not supported on web.');
   }
+
+  @override
+  Future<Map<String, PluginIndexEntry>> loadPluginIndex() async {
+    return {};
+  }
+
+  @override
+  Future<void> savePluginIndex(Map<String, PluginIndexEntry> index) async {}
 }
 
 PluginStorage createPluginStorage() => _StubPluginStorage();

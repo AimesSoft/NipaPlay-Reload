@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 class RemotePluginInfo {
   const RemotePluginInfo({
     required this.id,

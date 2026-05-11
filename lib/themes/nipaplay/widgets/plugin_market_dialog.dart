@@ -132,6 +132,7 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
           _plugins = data.map((item) => _PluginInfo.fromJson(item)).toList();
           _filteredPlugins = _plugins;
         });
+        _syncInstalledStatus();
       } else {
         setState(() {
           _errorMessage = '加载插件列表失败: ${response.statusCode}';
@@ -186,6 +187,33 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
       if (v1 < v2) return -1;
     }
     return 0;
+  }
+
+  void _syncInstalledStatus() {
+    final pluginService =
+        Provider.of<PluginService>(context, listen: false);
+    final index = pluginService.pluginIndex;
+
+    // 构建 remoteId → (localId, version) 的映射，支持前缀匹配
+    final remoteToLocal = <String, (String, String)>{};
+    for (final entry in index.entries) {
+      final localId = entry.key;
+      final version = entry.value.version;
+      remoteToLocal[localId] = (localId, version);
+      final dotIndex = localId.indexOf('.');
+      if (dotIndex >= 0 && dotIndex < localId.length - 1) {
+        remoteToLocal[localId.substring(dotIndex + 1)] = (localId, version);
+      }
+    }
+
+    setState(() {
+      for (final plugin in _plugins) {
+        final match = remoteToLocal[plugin.id];
+        plugin.isInstalled = match != null;
+        plugin.localId = match?.$1;
+        plugin.localVersion = match?.$2;
+      }
+    });
   }
 
   Future<void> _showPluginReadme(_PluginInfo plugin) async {
@@ -260,9 +288,14 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
         if (!mounted) return;
         final pluginService =
             Provider.of<PluginService>(context, listen: false);
-        await pluginService.importPluginFromContent(response.body);
+        final wasInstalled = plugin.isInstalled;
+        await pluginService.importPluginFromContent(response.body,
+            updateForId: plugin.localId);
         plugin.isInstalled = true;
-        BlurSnackBar.show(context, '插件安装成功');
+        plugin.localVersion = plugin.version;
+        plugin.localId = plugin.id;
+        BlurSnackBar.show(
+            context, wasInstalled ? '插件更新成功' : '插件安装成功');
       } else {
         BlurSnackBar.show(context, '下载插件失败: ${response.statusCode}');
       }
@@ -586,20 +619,36 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
   Widget _buildActionButtons(_PluginInfo plugin) {
     final isVersionCompatible = _isVersionCompatible(plugin.minHostVersion);
 
-    if (plugin.isInstalled) {
-      return TextButton(
-        onPressed: () {
-          BlurSnackBar.show(context, '该插件已安装');
-        },
-        child: const Text('已安装'),
-      );
-    }
-
     if (plugin.isInstalling) {
       return const SizedBox(
         width: 24,
         height: 24,
         child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (plugin.isInstalled) {
+      final hasUpdate = plugin.localVersion != null &&
+          _compareVersions(plugin.version, plugin.localVersion!) > 0;
+      if (hasUpdate) {
+        return ElevatedButton(
+          onPressed: () => _installPlugin(plugin),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _accentColor,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          child: const Text('更新'),
+        );
+      }
+      return TextButton(
+        onPressed: () {
+          BlurSnackBar.show(context, '该插件已安装');
+        },
+        child: const Text('已安装'),
       );
     }
 
@@ -733,6 +782,8 @@ class _PluginInfo {
   final List<String> tags;
   bool isInstalled = false;
   bool isInstalling = false;
+  String? localVersion;
+  String? localId;
 
   _PluginInfo({
     required this.id,

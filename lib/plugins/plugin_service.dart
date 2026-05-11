@@ -15,7 +15,6 @@ import 'package:nipaplay/plugins/models/plugin_permission.dart';
 import 'package:nipaplay/plugins/models/plugin_index_entry.dart';
 import 'package:nipaplay/plugins/models/remote_plugin_info.dart';
 import 'package:nipaplay/plugins/plugin_event_bus.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
@@ -677,13 +676,16 @@ class PluginService extends ChangeNotifier {
     return _importPluginFromContent(script);
   }
 
-  Future<String?> importPluginFromContent(String script) async {
-    return _importPluginFromContent(script);
+  Future<String?> importPluginFromContent(String script,
+      {String? updateForId}) async {
+    return _importPluginFromContent(script, updateForId: updateForId);
   }
 
-  Future<String?> _importPluginFromContent(String script) async {
+  Future<String?> _importPluginFromContent(String script,
+      {String? updateForId}) async {
     final parsed = _parsePluginMetadata(script);
-    final minVersion = parsed.manifest.minHostVersion;
+    final manifest = parsed.manifest;
+    final minVersion = manifest.minHostVersion;
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
     if (_compareVersions(currentVersion, minVersion) < 0) {
@@ -691,13 +693,57 @@ class PluginService extends ChangeNotifier {
         '当前应用版本 $currentVersion 低于插件要求的最低版本 $minVersion',
       );
     }
-    final fileName = '${parsed.manifest.id}.js';
+
+    // 查找已安装的同 ID 插件（支持 custom./builtin. 前缀匹配）
+    String? existingLocalId;
+    if (_pluginIndex.containsKey(manifest.id)) {
+      existingLocalId = manifest.id;
+    } else if (updateForId != null && _pluginIndex.containsKey(updateForId)) {
+      existingLocalId = updateForId;
+    } else {
+      // 尝试给 manifest.id 加前缀匹配
+      for (final prefix in ['custom.', 'builtin.']) {
+        final prefixedId = '$prefix${manifest.id}';
+        if (_pluginIndex.containsKey(prefixedId)) {
+          existingLocalId = prefixedId;
+          break;
+        }
+      }
+    }
+
+    if (existingLocalId != null) {
+      final existing = _pluginIndex[existingLocalId]!;
+      if (_compareVersions(manifest.version, existing.version) <= 0) {
+        throw StateError(
+          '当前已安装版本 ${existing.version} 不低于插件版本 ${manifest.version}',
+        );
+      }
+      // 前缀不同时，删除旧文件并移除旧索引条目，迁移启用状态
+      if (existingLocalId != manifest.id) {
+        final pluginDir = await _pluginStorage.getPluginDirectoryPath();
+        if (pluginDir != null) {
+          await _pluginStorage
+              .deleteScript('$pluginDir/${existingLocalId}.js');
+        }
+        await removePluginFromIndex(existingLocalId);
+        // 迁移启用状态
+        final enabledIds = await _loadEnabledIds();
+        if (enabledIds.contains(existingLocalId)) {
+          enabledIds.remove(existingLocalId);
+          if (!enabledIds.contains(manifest.id)) {
+            enabledIds.add(manifest.id);
+          }
+          await _saveEnabledIds(enabledIds);
+        }
+      }
+    }
+
+    final fileName = '${manifest.id}.js';
     await _pluginStorage.saveScript(fileName, script);
-    // 更新插件索引
-    await addOrUpdatePluginIndex(parsed.manifest);
+    await addOrUpdatePluginIndex(manifest);
     await reloadPlugins();
-    final loaded = _plugins.any((p) => p.manifest.id == parsed.manifest.id);
-    return loaded ? parsed.manifest.id : null;
+    final loaded = _plugins.any((p) => p.manifest.id == manifest.id);
+    return loaded ? manifest.id : null;
   }
 
   static int _compareVersions(String a, String b) {
