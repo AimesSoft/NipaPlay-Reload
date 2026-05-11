@@ -43,6 +43,10 @@ class PluginEventBus {
     emit(PluginEventType.danmakuShow, data);
   }
 
+  void emitDanmakuLoaded(Map<String, dynamic> data) {
+    emit(PluginEventType.danmakuLoaded, data);
+  }
+
   void emitSettingsChanged(Map<String, dynamic> data) {
     emit(PluginEventType.settingsChanged, data);
   }

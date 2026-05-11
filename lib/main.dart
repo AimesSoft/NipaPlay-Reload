@@ -1236,6 +1236,7 @@ class MainPageState extends State<MainPage>
     try {
       _pluginService = Provider.of<PluginService>(context, listen: false);
       _pluginService?.addListener(_onDownloaderSettingsChanged);
+      PluginService.setBuildContext(context);
     } catch (_) {}
 
     // 构建初始页面列表

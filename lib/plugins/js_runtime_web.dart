@@ -8,4 +8,9 @@ class FlutterJsRuntimeAdapter implements PluginJsRuntime {
 
   @override
   void dispose() {}
+
+  @override
+  void setupBridge(String channelName, dynamic Function(dynamic args) fn) {
+    throw UnsupportedError('JS runtime is not supported on web yet.');
+  }
 }

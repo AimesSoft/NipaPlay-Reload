@@ -382,7 +382,7 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
           final showBottomButtons = currentEntries.any((e) => e.isTextInput);
 
           final listView = ListView.builder(
-            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
             itemCount: currentEntries.length,
             itemBuilder: (itemContext, index) {
               final entry = currentEntries[index];
@@ -463,8 +463,13 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
           if (!showBottomButtons) return listView;
 
           return Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(child: listView),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: listView,
+                ),
+              ),
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

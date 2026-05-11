@@ -195,7 +195,7 @@ function pluginOnEvent(event) {
   console.log('事件:', event.name, event.data);
   
   if (event.name === 'play') {
-    ui.showToast('视频开始播放');
+    ui.showSnackBar('视频开始播放');
   }
 }
 ```
@@ -209,9 +209,12 @@ function pluginOnEvent(event) {
 | `pause` | 暂停播放 | 视频信息对象 |
 | `seek` | 进度跳转 | `{ time: 当前时间, duration: 总时长 }` |
 | `danmakuShow` | 弹幕显示 | 弹幕对象 |
+| `danmakuLoaded` | 弹幕数据加载完成 | `{ danmaku: [{time, content, type, color}, ...] }` |
 | `settingsChanged` | 设置变更 | `{ key: 设置键, value: 新值 }` |
 | `appResumed` | 应用恢复 | 空对象 |
 | `appPaused` | 应用暂停 | 空对象 |
+
+> `danmakuLoaded` 事件中的 `danmaku` 数组为已解析格式，`time` 为秒（double），`content` 为弹幕文本，`type` 为弹幕类型（`scroll`/`top`/`bottom`），`color` 为颜色值。调用 `danmaku.replace()` 替换数据时应保持相同格式。
 
 ### 3.6 生命周期函数（可选）
 
@@ -220,12 +223,12 @@ function pluginOnEvent(event) {
 ```js
 function pluginOnInitialize() {
   // 插件启用时调用
-  ui.showToast('插件已启用');
+  ui.showSnackBar('插件已启用');
 }
 
 function pluginOnDestroy() {
   // 插件禁用时调用
-  ui.showToast('插件已禁用');
+  ui.showSnackBar('插件已禁用');
 }
 
 function pluginOnResume() {
@@ -271,14 +274,17 @@ player.play();
 // 暂停
 player.pause();
 
-// 跳转进度（秒）
-player.seek(120);
+// 跳转进度（秒，支持小数）
+player.seek(120.5);
 
-// 获取播放器状态
+// 获取播放器状态（返回 JSON 字符串解析后的对象，无视频时返回 null）
 const state = player.getState();
-console.log(state.playing);
-console.log(state.currentTime);
-console.log(state.duration);
+if (state) {
+  console.log(state.position);   // 当前播放位置（秒，double）
+  console.log(state.duration);   // 视频总时长（秒，double）
+  console.log(state.status);     // 播放状态: 'playing' | 'paused' | 'idle' | ...
+  console.log(state.hasVideo);   // 是否有视频加载（bool）
+}
 ```
 
 ### 4.3 `danmaku` 对象（需要 `danmaku.modify` 权限）
@@ -295,12 +301,20 @@ danmaku.hide();
 // 设置弹幕透明度（0.0 - 1.0）
 danmaku.setOpacity(0.8);
 
-// 添加弹幕过滤器
+// 添加弹幕过滤器（添加屏蔽词到弹幕屏蔽列表）
 danmaku.addFilter('myFilter', '屏蔽词1');
 danmaku.addFilter('myRegex', '规则名/正则表达式/');
 
-// 移除弹幕过滤器
-danmaku.removeFilter('myFilter');
+// 移除弹幕过滤器（从屏蔽列表移除该词）
+danmaku.removeFilter('屏蔽词1');
+
+// 替换弹幕数据（用于弹幕精选等场景）
+// 参数格式: { count: 弹幕数量, comments: 弹幕数组 }
+// 弹幕项格式: { time: 时间秒数(double), content: 弹幕内容, type: 弹幕类型, color: 颜色 }
+danmaku.replace({
+  count: filteredDanmaku.length,
+  comments: filteredDanmaku
+});
 ```
 
 ### 4.4 `ui` 对象（需要 `ui.dialog` 权限）
@@ -308,13 +322,13 @@ danmaku.removeFilter('myFilter');
 显示 UI 元素：
 
 ```js
-// 显示 Toast 提示
-ui.showToast('提示信息');
+// 显示提示（BlurSnackBar 底部浮条）
+ui.showSnackBar('提示信息');
 
-// 显示对话框
-const result = ui.showDialog('标题', '内容');
+// 显示对话框（当前版本暂不支持，调用返回 false）
+// const result = ui.showDialog('标题', '内容');
 
-// 显示加载提示
+// 显示加载提示（BlurSnackBar 底部浮条）
 ui.showLoading('加载中...');
 
 // 隐藏加载提示
@@ -323,39 +337,49 @@ ui.hideLoading();
 
 ### 4.5 `storage` 对象（需要 `storage` 权限）
 
-本地存储：
+本地持久化存储，数据按插件 ID 隔离。使用 SharedPreferences 实现。
 
 ```js
-// 存储数据
+// 存储数据（value 会自动 JSON 序列化）
 storage.set('key', 'value');
 storage.set('number', 123);
 storage.set('object', { a: 1 });
 
-// 读取数据
+// 读取数据（当前版本同步调用返回 null，异步写入已生效）
+// 推荐使用 settings.getText/setText 管理简单配置项
 const value = storage.get('key');
-const number = storage.get('number');
-const object = storage.get('object');
 
 // 删除数据
 storage.remove('key');
 
-// 清空所有数据
+// 清空当前插件的所有存储数据
 storage.clear();
 ```
 
+> **注意**：`storage.get()` 当前同步桥接限制返回 `null`，写入操作 (`set/remove/clear`) 正常工作。对于需要持久化的简单配置，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting` 实现。
+
 ### 4.6 `dev` 对象
 
-开发调试工具：
+开发调试工具（始终可用，无需权限）：
 
 ```js
-// 输出日志
+// 输出日志（输出到宿主调试日志）
 dev.log('调试信息');
 
-// 输出错误
+// 输出错误（输出到宿主调试日志）
 dev.logError('错误信息');
 ```
 
-### 4.7 `settings` 对象
+### 4.7 `system` 对象（需要 `system.override` 权限）
+
+系统级控制：
+
+```js
+// 启用/禁用内置下载器
+system.setDownloaderEnabled(true);
+```
+
+### 4.8 `settings` 对象
 
 读写插件的文本配置项（即 `pluginUIEntries` 中声明了 `textSetting` 的条目）。宿主自动持久化，插件无需自行存储。
 
@@ -389,13 +413,18 @@ settings.setText('api_url', 'https://new-api.example.com');
 
 ### 桥接 API 对象
 
-1. `plugin` - 插件元数据与权限检查
-2. `player` - 播放器控制
-3. `danmaku` - 弹幕控制
-4. `ui` - UI 交互
-5. `storage` - 本地存储
-6. `dev` - 开发调试
-7. `settings` - 读写插件文本配置项
+| 对象 | 功能 | 状态 |
+|------|------|------|
+| `plugin` | 插件元数据与权限检查 | 正常 |
+| `player` | 播放器控制（play/pause/seek/getState） | 正常 |
+| `danmaku` | 弹幕控制（show/hide/opacity/replace/addFilter/removeFilter） | 正常 |
+| `ui` | UI 交互（showSnackBar/showLoading 使用 BlurSnackBar，showDialog 暂不支持） | 部分支持 |
+| `storage` | 本地存储（set/remove/clear 正常，get 同步返回 null） | 部分支持 |
+| `dev` | 开发调试（log/logError） | 正常 |
+| `system` | 系统控制（setDownloaderEnabled） | 正常 |
+| `settings` | 读写插件文本配置项（getText/setText） | 正常 |
+
+所有桥接调用通过 `sendMessage('PluginBridge', JSON.stringify({method, args}))` 实现，宿主在插件加载时自动注册桥接通道。
 
 ## 6. 生命周期与状态
 
@@ -424,6 +453,9 @@ settings.setText('api_url', 'https://new-api.example.com');
 - 插件 UI 动作返回格式不符时会抛出格式错误（例如 `type` 不是 `text`）。
 - Web 平台插件运行时未实现。
 - 权限检查失败时 API 调用会返回 `false` 或 `null`。
+- `ui.showDialog` 当前版本暂不支持（需要 `BuildContext`）。
+- `storage.get()` 同步桥接限制返回 `null`，建议用 `settings.getText()` 替代简单配置读取。
+- 桥接方法调用中的参数通过 JSON 序列化传递，数值字段（如 `time`）可能被解析为 `int`，插件应注意类型兼容。
 
 ## 9. 最小可用插件模板
 
@@ -449,7 +481,7 @@ const pluginUIEntries = [
 ];
 
 function pluginOnInitialize() {
-  ui.showToast('插件已启用');
+  ui.showSnackBar('插件已启用');
 }
 
 function pluginHandleUIAction(actionId) {
@@ -565,10 +597,10 @@ function pluginOnEvent(event) {
       dev.log('视频已加载: ' + event.data.title);
       break;
     case 'play':
-      ui.showToast('开始播放');
+      ui.showSnackBar('开始播放');
       break;
     case 'pause':
-      ui.showToast('已暂停');
+      ui.showSnackBar('已暂停');
       break;
     case 'seek':
       dev.log('跳转至: ' + event.data.time);
@@ -577,31 +609,39 @@ function pluginOnEvent(event) {
 }
 ```
 
-## 12. 存储使用示例
+## 12. 存储与配置读写示例
+
+对于简单配置项，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting`，这是同步可用的：
 
 ```js
 const pluginManifest = {
-  id: 'com.example.storage_plugin',
-  name: '存储示例',
+  id: 'com.example.config_plugin',
+  name: '配置示例',
   version: '1.0.0',
   minHostVersion: '1.11.0',
-  description: '演示存储功能',
+  description: '使用 textSetting 持久化配置',
   author: 'You',
-  permissions: ['storage', 'ui.dialog']
+  permissions: ['ui.dialog']
 };
 
-let counter = 0;
+var pluginUIEntries = [
+  {
+    id: 'apiKey',
+    title: 'API 密钥',
+    description: '输入你的密钥',
+    textSetting: { hintText: 'sk-xxx', default: '' }
+  }
+];
 
 function pluginOnInitialize() {
-  const savedCounter = storage.get('counter');
-  if (savedCounter !== null) {
-    counter = savedCounter;
+  var key = settings.getText('apiKey');
+  if (key) {
+    dev.log('已配置 API 密钥');
   }
-  ui.showToast('已启动 ' + counter + ' 次');
-  counter++;
-  storage.set('counter', counter);
 }
 ```
+
+> `storage` 对象也可用于存储，但 `storage.get()` 当前同步桥接限制返回 `null`，写入操作正常。
 
 ## 13. 文本配置项示例
 
@@ -642,7 +682,7 @@ var pluginUIEntries = [
 function pluginOnInitialize() {
   var url = settings.getText('api_url');
   if (url) {
-    ui.showToast('API 地址已配置: ' + url);
+    ui.showSnackBar('API 地址已配置: ' + url);
   }
 }
 
@@ -662,3 +702,101 @@ function pluginHandleUIAction(actionId) {
 - 插件通过 `settings.getText(entryId)` 读取值，通过 `settings.setText(entryId, value)` 写入值。
 - `textSetting` 与 `enabled` 可以在同一份 `pluginUIEntries` 中混合使用，各自独立渲染为文本框或开关。
 - 底部会显示「保存并关闭」和「关闭」按钮，方便用户确认操作。
+
+## 14. 弹幕精选插件示例
+
+以下示例展示如何监听 `danmakuLoaded` 事件并使用 `danmaku.replace()` API 实现弹幕精选功能。
+
+```js
+const pluginManifest = {
+  id: 'custom.danmaku_filter',
+  name: '弹幕精选',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '智能精选弹幕，过滤低质量弹幕',
+  author: 'You',
+  permissions: ['danmaku.modify', 'ui.dialog']
+};
+
+var params = {
+  ratio: 30,
+  minLen: 3,
+  filterDuplicate: true,
+  filterSpam: true
+};
+
+function pluginOnInitialize() {
+  params.ratio = parseInt(settings.getText('ratio')) || 30;
+  params.minLen = parseInt(settings.getText('minLen')) || 3;
+  params.filterDuplicate = settings.getText('filterDuplicate') === 'true';
+  params.filterSpam = settings.getText('filterSpam') === 'true';
+}
+
+var pluginUIEntries = [
+  {
+    id: 'ratio',
+    title: '保留比例',
+    description: '保留弹幕百分比',
+    textSetting: { hintText: '30', default: '30' }
+  },
+  {
+    id: 'minLen',
+    title: '最短长度',
+    description: '弹幕最小字符数',
+    textSetting: { hintText: '3', default: '3' }
+  },
+  {
+    id: 'filterDuplicate',
+    title: '过滤重复',
+    description: '过滤相似弹幕',
+    enabled: params.filterDuplicate
+  },
+  {
+    id: 'filterSpam',
+    title: '过滤刷屏',
+    description: '过滤重复发送',
+    enabled: params.filterSpam
+  }
+];
+
+function filterDanmaku(danmaku) {
+  // 实现弹幕精选逻辑
+  // 返回精选后的弹幕数组
+  var ratio = params.ratio / 100;
+  var keepCount = Math.max(1, Math.round(danmaku.length * ratio));
+  var filtered = danmaku.filter(function(item) {
+    return item.content.length >= params.minLen;
+  });
+  // 按质量评分排序后取前 N 条
+  filtered.sort(function(a, b) { return b.content.length - a.content.length; });
+  return filtered.slice(0, keepCount);
+}
+
+function pluginOnEvent(event) {
+  if (event.name === 'danmakuLoaded') {
+    var originalDanmaku = event.data.danmaku; // [{time, content, type, color}, ...]
+    var filteredDanmaku = filterDanmaku(originalDanmaku);
+
+    // replace 参数必须是 { count, comments } 格式
+    danmaku.replace({
+      count: filteredDanmaku.length,
+      comments: filteredDanmaku
+    });
+
+    dev.log('弹幕精选: ' + originalDanmaku.length + ' -> ' + filteredDanmaku.length);
+  }
+}
+
+function pluginHandleUIAction(actionId) {
+  // 处理配置项变更
+  return { type: 'text', title: '弹幕精选', content: '配置已更新' };
+}
+```
+
+要点：
+
+- 监听 `danmakuLoaded` 事件获取弹幕数据（`event.data.danmaku` 为弹幕数组）
+- 使用 `danmaku.replace({ count, comments })` 替换弹幕数据，**参数必须是包含 `count` 和 `comments` 字段的对象**
+- `danmaku.replace()` 之后宿主会自动应用修改并刷新弹幕显示
+- 通过 `pluginUIEntries` 提供可配置的参数
+- 使用 `settings.getText()` 读取用户配置

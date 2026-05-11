@@ -277,12 +277,21 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         };
         _danmakuTrackEnabled['dandanplay'] = true;
 
+        // 触发弹幕加载完成事件，通知插件（在合并之前，以便插件可以修改数据）
+        if (!canContinue()) return;
+        _notifyPluginDanmakuLoaded(parsedDanmaku);
+
+        // 检查插件是否修改了弹幕数据
+        final pluginModified = _pluginService?.pendingDanmakuData;
+        if (pluginModified != null && pluginModified.isNotEmpty) {
+          _danmakuTracks['dandanplay']!['danmakuList'] = pluginModified;
+          _danmakuTracks['dandanplay']!['count'] = pluginModified.length;
+          _pluginService?.updateDanmakuData(null);
+        }
+
         // 重新计算合并后的弹幕列表
         if (!canContinue()) return;
         _updateMergedDanmakuList();
-
-        // 移除GPU弹幕字符集预构建调用
-        // await _prebuildGPUDanmakuCharsetIfNeeded();
 
         if (canContinue()) {
           _notifyListeners();
@@ -331,6 +340,18 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           'count': parsedDanmaku.length,
         };
         _danmakuTrackEnabled['dandanplay'] = true;
+
+        // 触发弹幕加载完成事件，通知插件（在合并之前，以便插件可以修改数据）
+        if (!canContinue()) return;
+        _notifyPluginDanmakuLoaded(parsedDanmaku);
+
+        // 检查插件是否修改了弹幕数据
+        final pluginModified = _pluginService?.pendingDanmakuData;
+        if (pluginModified != null && pluginModified.isNotEmpty) {
+          _danmakuTracks['dandanplay']!['danmakuList'] = pluginModified;
+          _danmakuTracks['dandanplay']!['count'] = pluginModified.length;
+          _pluginService?.updateDanmakuData(null);
+        }
 
         // 重新计算合并后的弹幕列表
         if (!canContinue()) return;
@@ -474,8 +495,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
     // 重新排序
     mergedList.sort((a, b) {
-      final timeA = (a['time'] as double?) ?? 0.0;
-      final timeB = (b['time'] as double?) ?? 0.0;
+      final timeA = (a['time'] as num?)?.toDouble() ?? 0.0;
+      final timeB = (b['time'] as num?)?.toDouble() ?? 0.0;
       return timeA.compareTo(timeB);
     });
 
@@ -1258,8 +1279,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       _danmakuList.add(_prepareDanmakuForDisplay(danmaku));
       // 按时间重新排序
       _danmakuList.sort((a, b) {
-        final timeA = (a['time'] as double?) ?? 0.0;
-        final timeB = (b['time'] as double?) ?? 0.0;
+        final timeA = (a['time'] as num?)?.toDouble() ?? 0.0;
+        final timeB = (b['time'] as num?)?.toDouble() ?? 0.0;
         return timeA.compareTo(timeB);
       });
       _notifyListeners();
@@ -1416,5 +1437,26 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
     _applyTimelineDanmakuTrackForCurrentVideo();
     _updateMergedDanmakuList();
     _notifyListeners();
+  }
+
+  // 通知插件弹幕已加载，使用解析后的弹幕数据
+  void _notifyPluginDanmakuLoaded(List<Map<String, dynamic>> parsedDanmaku) {
+    if (_pluginService != null) {
+      _pluginService!.eventBus.emitDanmakuLoaded({'danmaku': parsedDanmaku});
+    } else {
+      debugPrint('[DanmakuFilter] _pluginService 为 null，尝试重新获取...');
+      if (_context != null && _context!.mounted) {
+        try {
+          final pluginService = _context!.read<PluginService>();
+          _pluginService = pluginService;
+          debugPrint('[DanmakuFilter] 重新获取 PluginService 成功');
+          _pluginService!.eventBus.emitDanmakuLoaded({'danmaku': parsedDanmaku});
+        } catch (e) {
+          debugPrint('[DanmakuFilter] 重新获取 PluginService 失败: $e');
+        }
+      } else {
+        debugPrint('[DanmakuFilter] _context 无效，无法重新获取 PluginService');
+      }
+    }
   }
 }

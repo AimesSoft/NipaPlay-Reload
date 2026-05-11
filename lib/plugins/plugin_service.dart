@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nipaplay/plugins/js_runtime_factory.dart';
 import 'package:nipaplay/plugins/plugin_storage.dart';
@@ -15,6 +17,7 @@ import 'package:nipaplay/plugins/models/plugin_permission.dart';
 import 'package:nipaplay/plugins/models/plugin_index_entry.dart';
 import 'package:nipaplay/plugins/models/remote_plugin_info.dart';
 import 'package:nipaplay/plugins/plugin_event_bus.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
@@ -51,6 +54,16 @@ class PluginService extends ChangeNotifier {
     _forceEnableDownloader = prefs.getBool(_downloaderOverrideKey) ?? false;
   }
 
+  // 播放器状态引用，供插件桥接调用
+  static dynamic _playerState;
+  static void setPlayerState(dynamic state) => _playerState = state;
+  static void clearPlayerState() => _playerState = null;
+  static dynamic get playerState => _playerState;
+
+  // BuildContext 引用，供 UI 桥接（如 BlurSnackBar）使用
+  static BuildContext? _buildContext;
+  static void setBuildContext(BuildContext context) => _buildContext = context;
+
   static Future<void> _saveDownloaderOverride(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_downloaderOverrideKey, value);
@@ -67,6 +80,7 @@ class PluginService extends ChangeNotifier {
   bool _isLoaded = false;
   Map<String, PluginIndexEntry> _pluginIndex = {};
   Map<String, RemotePluginInfo> _remotePlugins = {};
+  List<Map<String, dynamic>>? _pendingDanmakuData;
 
   bool get isLoaded => _isLoaded;
 
@@ -75,6 +89,8 @@ class PluginService extends ChangeNotifier {
       );
 
   PluginEventBus get eventBus => _eventBus;
+
+  List<Map<String, dynamic>>? get pendingDanmakuData => _pendingDanmakuData;
 
   List<String> get activeDanmakuBlockWords {
     final merged = <String>[];
@@ -158,7 +174,6 @@ class PluginService extends ChangeNotifier {
   Future<void> addOrUpdatePluginIndex(PluginManifest manifest) async {
     final now = DateTime.now();
     if (_pluginIndex.containsKey(manifest.id)) {
-      // 更新现有插件
       final existing = _pluginIndex[manifest.id]!;
       _pluginIndex[manifest.id] = existing.copyWith(
         version: manifest.version,
@@ -169,7 +184,6 @@ class PluginService extends ChangeNotifier {
         lastUpdatedAt: now,
       );
     } else {
-      // 添加新插件
       _pluginIndex[manifest.id] = PluginIndexEntry(
         id: manifest.id,
         version: manifest.version,
@@ -216,9 +230,7 @@ class PluginService extends ChangeNotifier {
           for (final plugin in remotePlugins) plugin.id: plugin,
         };
       }
-    } catch (_) {
-      // 网络错误时保持原有数据
-    }
+    } catch (_) {}
   }
 
   String _applyProxyIfNeeded(String url, String? proxyUrl) {
@@ -231,7 +243,6 @@ class PluginService extends ChangeNotifier {
 
   String? getAvailableUpdateVersion(String pluginId) {
     RemotePluginInfo? remote = _remotePlugins[pluginId];
-    // 精确匹配失败时，尝试去掉 local 前缀（custom. / builtin.）再匹配
     if (remote == null) {
       final dotIndex = pluginId.indexOf('.');
       if (dotIndex >= 0 && dotIndex < pluginId.length - 1) {
@@ -265,6 +276,7 @@ class PluginService extends ChangeNotifier {
     _eventBus.on(PluginEventType.pause, _handleEvent);
     _eventBus.on(PluginEventType.seek, _handleEvent);
     _eventBus.on(PluginEventType.danmakuShow, _handleEvent);
+    _eventBus.on(PluginEventType.danmakuLoaded, _handleDanmakuLoadedEvent);
     _eventBus.on(PluginEventType.settingsChanged, _handleEvent);
     _eventBus.on(PluginEventType.appResumed, _handleEvent);
     _eventBus.on(PluginEventType.appPaused, _handleEvent);
@@ -289,6 +301,239 @@ class PluginService extends ChangeNotifier {
         );
       } catch (_) {}
     }
+  }
+
+  dynamic _handlePluginBridgeCall(String pluginId, dynamic args) {
+    if (args is! Map) return null;
+
+    final method = args['method'] as String? ?? '';
+    final callArgs = (args['args'] as List?)?.cast<dynamic>() ?? <dynamic>[];
+
+    switch (method) {
+      // ---- 播放器控制 ----
+      case 'playerPlay':
+        try { _playerState?.play(); } catch (_) {}
+        return null;
+      case 'playerPause':
+        try { _playerState?.pause(); } catch (_) {}
+        return null;
+      case 'playerSeek':
+        if (callArgs.isNotEmpty) {
+          final seconds = (callArgs[0] as num?)?.toDouble() ?? 0;
+          try { _playerState?.seekTo(Duration(milliseconds: (seconds * 1000).round())); } catch (_) {}
+        }
+        return null;
+      case 'playerGetState':
+        try {
+          final ps = _playerState;
+          if (ps == null) return null;
+          return json.encode({
+            'position': (ps.position as Duration).inMilliseconds / 1000.0,
+            'duration': (ps.duration as Duration).inMilliseconds / 1000.0,
+            'status': ps.status.toString().split('.').last,
+            'hasVideo': ps.hasVideo,
+          });
+        } catch (_) { return null; }
+
+      // ---- 弹幕控制 ----
+      case 'danmakuShow':
+        try { _playerState?.setDanmakuVisible(true); } catch (_) {}
+        return null;
+      case 'danmakuHide':
+        try { _playerState?.setDanmakuVisible(false); } catch (_) {}
+        return null;
+      case 'danmakuSetOpacity':
+        if (callArgs.isNotEmpty) {
+          final opacity = (callArgs[0] as num?)?.toDouble().clamp(0.0, 1.0) ?? 1.0;
+          try { _playerState?.setDanmakuOpacity(opacity); } catch (_) {}
+        }
+        return null;
+      case 'danmakuAddFilter':
+        if (callArgs.length >= 2) {
+          final word = callArgs[1]?.toString() ?? '';
+          if (word.isNotEmpty) {
+            try { unawaited(_playerState?.addDanmakuBlockWord(word)); } catch (_) {}
+          }
+        }
+        return null;
+      case 'danmakuRemoveFilter':
+        if (callArgs.isNotEmpty) {
+          final word = callArgs[0]?.toString() ?? '';
+          if (word.isNotEmpty) {
+            try { unawaited(_playerState?.removeDanmakuBlockWord(word)); } catch (_) {}
+          }
+        }
+        return null;
+      case 'danmakuReplace':
+        if (callArgs.isNotEmpty) {
+          try {
+            final decoded = json.decode(callArgs[0].toString());
+            if (decoded is Map) {
+              final data = Map<String, dynamic>.from(decoded as Map<String, dynamic>);
+              final comments = data['comments'];
+              if (comments is List) {
+                final normalized = comments.whereType<Map>().map((e) {
+                  final m = Map<String, dynamic>.from(e);
+                  if (m['time'] is num) {
+                    m['time'] = (m['time'] as num).toDouble();
+                  }
+                  return m;
+                }).toList();
+                updateDanmakuData(normalized);
+                return true;
+              }
+            }
+          } catch (_) {}
+        }
+        return false;
+
+      // ---- UI ----
+      case 'uiShowToast':
+        if (callArgs.isNotEmpty) {
+          final message = callArgs[0]?.toString() ?? '';
+          final ctx = _buildContext;
+          if (ctx != null && ctx.mounted) {
+            BlurSnackBar.show(ctx, message);
+          } else {
+            debugPrint('[Plugin:${pluginId}] $message');
+          }
+        }
+        return null;
+      case 'uiShowDialog':
+        // 需要 BuildContext，暂不支持
+        return false;
+      case 'uiShowLoading':
+        if (callArgs.isNotEmpty) {
+          final message = callArgs[0]?.toString() ?? '';
+          final ctx = _buildContext;
+          if (ctx != null && ctx.mounted) {
+            BlurSnackBar.show(ctx, message);
+          } else {
+            debugPrint('[Plugin:${pluginId}] $message');
+          }
+        }
+        return null;
+      case 'uiHideLoading':
+        return null;
+
+      // ---- 存储 ----
+      case 'storageSet':
+        if (callArgs.length >= 2) {
+          final key = 'plugin_${pluginId}_${callArgs[0]}';
+          final value = callArgs[1]?.toString() ?? '';
+          unawaited(SharedPreferences.getInstance().then(
+            (prefs) => prefs.setString(key, value),
+          ));
+          return true;
+        }
+        return false;
+      case 'storageGet':
+        if (callArgs.isNotEmpty) {
+          final key = 'plugin_${pluginId}_${callArgs[0]}';
+          // 同步桥接无法 await，用已缓存的值或返回 null
+          // 插件应仅在初始化时读取，此时值应已加载
+          return null;
+        }
+        return null;
+      case 'storageRemove':
+        if (callArgs.isNotEmpty) {
+          final key = 'plugin_${pluginId}_${callArgs[0]}';
+          unawaited(SharedPreferences.getInstance().then(
+            (prefs) => prefs.remove(key),
+          ));
+          return true;
+        }
+        return false;
+      case 'storageClear':
+        unawaited(SharedPreferences.getInstance().then((prefs) async {
+          final keys = prefs.getKeys()
+              .where((k) => k.startsWith('plugin_${pluginId}_'))
+              .toList();
+          for (final k in keys) {
+            await prefs.remove(k);
+          }
+        }));
+        return true;
+
+      // ---- 系统 ----
+      case 'systemSetDownloaderEnabled':
+        if (callArgs.isNotEmpty) {
+          final enabled = callArgs[0] == true || callArgs[0]?.toString() == 'true';
+          setForceEnableDownloader(enabled);
+          notifyListeners();
+        }
+        return null;
+
+      // ---- 插件设置 ----
+      case 'pluginGetTextSetting':
+        if (callArgs.isNotEmpty) {
+          return getTextSettingValue(pluginId, callArgs[0].toString());
+        }
+        return '';
+      case 'pluginSetTextSetting':
+        if (callArgs.length >= 2) {
+          unawaited(setTextSettingValue(
+            pluginId,
+            callArgs[0].toString(),
+            callArgs[1].toString(),
+          ));
+        }
+        return null;
+
+      // ---- 调试 ----
+      case 'devLog':
+        if (callArgs.isNotEmpty) {
+          debugPrint('[Plugin:${pluginId}] ${callArgs[0]}');
+        }
+        return null;
+      case 'devLogError':
+        if (callArgs.isNotEmpty) {
+          debugPrint('[Plugin:${pluginId}] ERROR: ${callArgs[0]}');
+        }
+        return null;
+
+      default:
+        debugPrint('[Plugin:${pluginId}] 未处理的桥接方法: $method');
+        return null;
+    }
+  }
+
+  void _handleDanmakuLoadedEvent(PluginEvent event) {
+    final rawDanmaku = event.data['danmaku'];
+    if (rawDanmaku is List) {
+      _pendingDanmakuData = rawDanmaku
+          .whereType<Map<String, dynamic>>()
+          .toList();
+    } else {
+      _pendingDanmakuData = null;
+    }
+    for (final plugin in _plugins) {
+      if (!plugin.enabled || !plugin.loaded) continue;
+      if (!plugin.manifest.permissions.any((p) => p.id == 'danmaku.modify')) {
+        continue;
+      }
+      final runtime = _runtimeByPluginId[plugin.manifest.id];
+      if (runtime == null) continue;
+
+      try {
+        final eventJson = event.toJson();
+        runtime.evaluate(
+          '''
+          if (typeof pluginOnEvent === "function") {
+            try {
+              pluginOnEvent($eventJson);
+            } catch(e) {}
+          }
+          ''',
+        );
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  void updateDanmakuData(List<Map<String, dynamic>>? newDanmaku) {
+    _pendingDanmakuData = newDanmaku;
+    notifyListeners();
   }
 
   Future<void> _reloadPlugins() async {
@@ -480,6 +725,10 @@ class PluginService extends ChangeNotifier {
 
       final runtime = createPluginRuntime();
 
+      runtime.setupBridge('PluginBridge', (args) {
+        return _handlePluginBridgeCall(pluginId, args);
+      });
+
       await _injectPluginApi(runtime, pluginId);
 
       runtime.evaluate(script);
@@ -511,6 +760,15 @@ class PluginService extends ChangeNotifier {
     );
 
     final apiCode = '''
+      function flutter_invokeMethod(method) {
+        var args = [];
+        for (var i = 1; i < arguments.length; i++) {
+          args.push(arguments[i]);
+        }
+        var result = sendMessage('PluginBridge', JSON.stringify({ method: method, args: args }));
+        return result;
+      }
+
       const plugin = {
         id: ${json.encode(plugin.manifest.id)},
         name: ${json.encode(plugin.manifest.name)},
@@ -524,106 +782,110 @@ class PluginService extends ChangeNotifier {
       const player = {
         play: function() {
           if (!plugin.hasPermission('player.control')) return false;
-          return window.flutter_invokeMethod('playerPlay');
+          return flutter_invokeMethod('playerPlay');
         },
         pause: function() {
           if (!plugin.hasPermission('player.control')) return false;
-          return window.flutter_invokeMethod('playerPause');
+          return flutter_invokeMethod('playerPause');
         },
         seek: function(time) {
           if (!plugin.hasPermission('player.control')) return false;
-          return window.flutter_invokeMethod('playerSeek', time);
+          return flutter_invokeMethod('playerSeek', time);
         },
         getState: function() {
           if (!plugin.hasPermission('player.control')) return null;
-          return JSON.parse(window.flutter_invokeMethod('playerGetState') || 'null');
+          return JSON.parse(flutter_invokeMethod('playerGetState') || 'null');
         },
       };
 
       const danmaku = {
         show: function() {
           if (!plugin.hasPermission('danmaku.modify')) return false;
-          return window.flutter_invokeMethod('danmakuShow');
+          return flutter_invokeMethod('danmakuShow');
         },
         hide: function() {
           if (!plugin.hasPermission('danmaku.modify')) return false;
-          return window.flutter_invokeMethod('danmakuHide');
+          return flutter_invokeMethod('danmakuHide');
         },
         setOpacity: function(opacity) {
           if (!plugin.hasPermission('danmaku.modify')) return false;
-          return window.flutter_invokeMethod('danmakuSetOpacity', opacity);
+          return flutter_invokeMethod('danmakuSetOpacity', opacity);
         },
         addFilter: function(filterId, pattern) {
           if (!plugin.hasPermission('danmaku.modify')) return false;
-          return window.flutter_invokeMethod('danmakuAddFilter', filterId, pattern);
+          return flutter_invokeMethod('danmakuAddFilter', filterId, pattern);
         },
         removeFilter: function(filterId) {
           if (!plugin.hasPermission('danmaku.modify')) return false;
-          return window.flutter_invokeMethod('danmakuRemoveFilter', filterId);
+          return flutter_invokeMethod('danmakuRemoveFilter', filterId);
+        },
+        replace: function(newDanmaku) {
+          if (!plugin.hasPermission('danmaku.modify')) return false;
+          return flutter_invokeMethod('danmakuReplace', JSON.stringify(newDanmaku));
         },
       };
 
       const ui = {
-        showToast: function(message) {
+        showSnackBar: function(message) {
           if (!plugin.hasPermission('ui.dialog')) return;
-          window.flutter_invokeMethod('uiShowToast', message);
+          flutter_invokeMethod('uiShowToast', message);
         },
         showDialog: function(title, content) {
           if (!plugin.hasPermission('ui.dialog')) return false;
-          return JSON.parse(window.flutter_invokeMethod('uiShowDialog', title, content) || 'false');
+          return JSON.parse(flutter_invokeMethod('uiShowDialog', title, content) || 'false');
         },
         showLoading: function(message) {
           if (!plugin.hasPermission('ui.dialog')) return;
-          window.flutter_invokeMethod('uiShowLoading', message);
+          flutter_invokeMethod('uiShowLoading', message);
         },
         hideLoading: function() {
           if (!plugin.hasPermission('ui.dialog')) return;
-          window.flutter_invokeMethod('uiHideLoading');
+          flutter_invokeMethod('uiHideLoading');
         },
       };
 
       const storage = {
         set: function(key, value) {
           if (!plugin.hasPermission('storage')) return false;
-          return window.flutter_invokeMethod('storageSet', key, JSON.stringify(value));
+          return flutter_invokeMethod('storageSet', key, JSON.stringify(value));
         },
         get: function(key) {
           if (!plugin.hasPermission('storage')) return null;
-          const result = window.flutter_invokeMethod('storageGet', key);
+          var result = flutter_invokeMethod('storageGet', key);
           return result ? JSON.parse(result) : null;
         },
         remove: function(key) {
           if (!plugin.hasPermission('storage')) return false;
-          return window.flutter_invokeMethod('storageRemove', key);
+          return flutter_invokeMethod('storageRemove', key);
         },
         clear: function() {
           if (!plugin.hasPermission('storage')) return false;
-          return window.flutter_invokeMethod('storageClear');
+          return flutter_invokeMethod('storageClear');
         },
       };
 
       const dev = {
         log: function(message) {
-          window.flutter_invokeMethod('devLog', message);
+          flutter_invokeMethod('devLog', message);
         },
         logError: function(error) {
-          window.flutter_invokeMethod('devLogError', error);
+          flutter_invokeMethod('devLogError', error);
         },
       };
 
       const system = {
         setDownloaderEnabled: function(enabled) {
           if (!plugin.hasPermission('system.override')) return false;
-          return window.flutter_invokeMethod('systemSetDownloaderEnabled', enabled);
+          return flutter_invokeMethod('systemSetDownloaderEnabled', enabled);
         },
       };
 
       const settings = {
         getText: function(entryId) {
-          return window.flutter_invokeMethod('pluginGetTextSetting', entryId) || '';
+          return flutter_invokeMethod('pluginGetTextSetting', entryId) || '';
         },
         setText: function(entryId, value) {
-          window.flutter_invokeMethod('pluginSetTextSetting', entryId, String(value));
+          flutter_invokeMethod('pluginSetTextSetting', entryId, String(value));
         },
       };
 
@@ -694,14 +956,12 @@ class PluginService extends ChangeNotifier {
       );
     }
 
-    // 查找已安装的同 ID 插件（支持 custom./builtin. 前缀匹配）
     String? existingLocalId;
     if (_pluginIndex.containsKey(manifest.id)) {
       existingLocalId = manifest.id;
     } else if (updateForId != null && _pluginIndex.containsKey(updateForId)) {
       existingLocalId = updateForId;
     } else {
-      // 尝试给 manifest.id 加前缀匹配
       for (final prefix in ['custom.', 'builtin.']) {
         final prefixedId = '$prefix${manifest.id}';
         if (_pluginIndex.containsKey(prefixedId)) {
@@ -718,7 +978,6 @@ class PluginService extends ChangeNotifier {
           '当前已安装版本 ${existing.version} 不低于插件版本 ${manifest.version}',
         );
       }
-      // 前缀不同时，删除旧文件并移除旧索引条目，迁移启用状态
       if (existingLocalId != manifest.id) {
         final pluginDir = await _pluginStorage.getPluginDirectoryPath();
         if (pluginDir != null) {
@@ -726,7 +985,6 @@ class PluginService extends ChangeNotifier {
               .deleteScript('$pluginDir/${existingLocalId}.js');
         }
         await removePluginFromIndex(existingLocalId);
-        // 迁移启用状态
         final enabledIds = await _loadEnabledIds();
         if (enabledIds.contains(existingLocalId)) {
           enabledIds.remove(existingLocalId);
@@ -782,7 +1040,6 @@ class PluginService extends ChangeNotifier {
 
     _plugins.removeAt(index);
 
-    // 从索引中移除插件
     await removePluginFromIndex(pluginId);
 
     final enabledIds = _plugins

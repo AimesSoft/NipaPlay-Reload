@@ -19,4 +19,9 @@ class FlutterJsRuntimeAdapter implements PluginJsRuntime {
   void dispose() {
     _runtime.dispose();
   }
+
+  @override
+  void setupBridge(String channelName, dynamic Function(dynamic args) fn) {
+    _runtime.setupBridge(channelName, fn);
+  }
 }

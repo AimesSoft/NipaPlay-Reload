@@ -228,6 +228,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
 
       _pluginService = Provider.of<PluginService>(context, listen: false);
       _pluginService?.addListener(_onDownloaderSettingsChanged);
+      PluginService.setBuildContext(context);
 
       if (mounted) {
         final dlProvider = _downloaderProvider;

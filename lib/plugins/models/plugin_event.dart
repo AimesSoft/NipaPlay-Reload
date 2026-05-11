@@ -31,6 +31,7 @@ class PluginEventType {
   static const String pause = 'pause';
   static const String seek = 'seek';
   static const String danmakuShow = 'danmakuShow';
+  static const String danmakuLoaded = 'danmakuLoaded';
   static const String settingsChanged = 'settingsChanged';
   static const String appResumed = 'appResumed';
   static const String appPaused = 'appPaused';

@@ -25,6 +25,9 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     };
     pluginService.addListener(_pluginServiceListener!);
     _syncPluginDanmakuBlockWords();
+
+    // 注册播放器状态引用，供插件桥接调用
+    PluginService.setPlayerState(this);
   }
 
   void _detachPluginDanmakuFilter() {
@@ -36,6 +39,9 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _pluginServiceListener = null;
     _pluginService = null;
     _pluginDanmakuBlockWords = [];
+
+    // 清除播放器状态引用
+    PluginService.clearPlayerState();
   }
 
   void _syncPluginDanmakuBlockWords() {
