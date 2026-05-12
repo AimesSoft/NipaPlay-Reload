@@ -252,14 +252,16 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
       );
       return;
     }
-    if (entries.length == 1 && entries.first.enabled == null) {
+    if (entries.length == 1 && entries.first.isAction) {
       await _invokePluginAction(context, plugin, entries.first);
       return;
     }
 
-    final hasSwitches = entries.any((e) => e.enabled != null);
+    final hasSwitches = entries.any((e) => e.isSwitch);
+    final hasTextInputs = entries.any((e) => e.isTextInput);
+    final hasInteractiveEntries = hasSwitches || hasTextInputs;
 
-    if (!hasSwitches) {
+    if (!hasInteractiveEntries) {
       final selected =
           await showCupertinoModalPopupWithBottomBar<PluginUiEntry>(
         context: context,
@@ -301,59 +303,148 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
       return;
     }
 
-    // 开关型入口
+    // 交互型入口（开关 / 文本框 / 动作）
     await CupertinoBottomSheet.show<void>(
       context: context,
       title: _pluginActionTitle(context, plugin),
       heightRatio: 0.56,
-      child: StatefulBuilder(
-        builder: (sheetContext, setSheetState) {
-          final currentEntries = plugin.uiEntries;
+      child: Consumer<PluginService>(
+        builder: (sheetContext, pluginService, _) {
+          final updatedPlugin = pluginService.plugins.firstWhere(
+            (p) => p.manifest.id == plugin.manifest.id,
+            orElse: () => plugin,
+          );
+          final currentEntries = updatedPlugin.uiEntries;
+          final showBottomButtons =
+              currentEntries.any((e) => e.isTextInput);
+
           return SafeArea(
             top: false,
-            child: CupertinoBottomSheetContentLayout(
-              sliversBuilder: (contentContext, topSpacing) => [
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(0, topSpacing, 0, 24),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final entry = currentEntries[index];
-                        if (entry.enabled != null) {
-                          return CupertinoListTile(
-                            title: Text(entry.title),
-                            subtitle: entry.description == null
-                                ? null
-                                : Text(entry.description!),
-                            trailing: CupertinoSwitch(
-                              value: entry.enabled!,
-                              onChanged: (_) async {
-                                await _invokePluginAction(
-                                    sheetContext, plugin, entry);
-                                if (!sheetContext.mounted) return;
-                                setSheetState(() {});
-                              },
-                            ),
-                          );
-                        }
-                        return CupertinoListTile(
-                          title: Text(entry.title),
-                          subtitle: entry.description == null
-                              ? null
-                              : Text(entry.description!),
-                          trailing: const CupertinoListTileChevron(),
-                          onTap: () async {
-                            Navigator.of(contentContext).pop();
-                            if (!context.mounted) return;
-                            await _invokePluginAction(
-                                context, plugin, entry);
-                          },
-                        );
-                      },
-                      childCount: currentEntries.length,
-                    ),
+            child: Column(
+              children: [
+                Expanded(
+                  child: CupertinoBottomSheetContentLayout(
+                    sliversBuilder: (contentContext, topSpacing) => [
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(0, topSpacing, 0, 24),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final entry = currentEntries[index];
+                              if (entry.isSwitch) {
+                                return CupertinoListTile(
+                                  title: Text(entry.title),
+                                  subtitle: entry.description == null
+                                      ? null
+                                      : Text(entry.description!),
+                                  trailing: CupertinoSwitch(
+                                    value: entry.enabled!,
+                                    onChanged: (_) async {
+                                      await _invokePluginAction(
+                                          sheetContext, updatedPlugin, entry,
+                                          showResult: false);
+                                    },
+                                  ),
+                                );
+                              }
+                              if (entry.isTextInput) {
+                                final currentValue =
+                                    pluginService.getTextSettingValue(
+                                        updatedPlugin.manifest.id, entry.id);
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        entry.title,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      if (entry.description != null) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          entry.description!,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: CupertinoColors.systemGrey,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 8),
+                                      CupertinoTextField(
+                                        controller: TextEditingController(
+                                            text: currentValue),
+                                        placeholder:
+                                            entry.textSetting?.hintText,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                        onChanged: (value) {
+                                          pluginService.setTextSettingValue(
+                                              updatedPlugin.manifest.id,
+                                              entry.id,
+                                              value);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                              return CupertinoListTile(
+                                title: Text(entry.title),
+                                subtitle: entry.description == null
+                                    ? null
+                                    : Text(entry.description!),
+                                trailing: const CupertinoListTileChevron(),
+                                onTap: () async {
+                                  Navigator.of(contentContext).pop();
+                                  if (!context.mounted) return;
+                                  await _invokePluginAction(
+                                      context, updatedPlugin, entry);
+                                },
+                              );
+                            },
+                            childCount: currentEntries.length,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                if (showBottomButtons)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: Text(
+                            context.l10n.localeName.startsWith('zh_Hant')
+                                ? '關閉'
+                                : '关闭',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CupertinoButton.filled(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: Text(
+                            context.l10n.localeName.startsWith('zh_Hant')
+                                ? '儲存並關閉'
+                                : '保存并关闭',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           );
@@ -365,8 +456,9 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
   Future<void> _invokePluginAction(
     BuildContext context,
     PluginDescriptor plugin,
-    PluginUiEntry entry,
-  ) async {
+    PluginUiEntry entry, {
+    bool showResult = true,
+  }) async {
     final pluginService = context.read<PluginService>();
     if (!plugin.enabled || !plugin.loaded) {
       AdaptiveSnackBar.show(
@@ -386,14 +478,18 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
         return;
       }
       if (result == null) {
-        AdaptiveSnackBar.show(
-          context,
-          message: _pluginActionEmpty(context),
-          type: AdaptiveSnackBarType.warning,
-        );
+        if (showResult) {
+          AdaptiveSnackBar.show(
+            context,
+            message: _pluginActionEmpty(context),
+            type: AdaptiveSnackBarType.warning,
+          );
+        }
         return;
       }
-      await _showPluginActionResult(context, result);
+      if (showResult) {
+        await _showPluginActionResult(context, result);
+      }
     } catch (error) {
       if (!context.mounted) return;
       AdaptiveSnackBar.show(

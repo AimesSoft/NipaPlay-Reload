@@ -9,11 +9,49 @@ import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/plugin_market_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 
-class PluginSettingsPage extends StatelessWidget {
+class PluginSettingsPage extends StatefulWidget {
   const PluginSettingsPage({super.key});
+
+  @override
+  State<PluginSettingsPage> createState() => _PluginSettingsPageState();
+}
+
+class _PluginSettingsPageState extends State<PluginSettingsPage> {
+  bool _isCheckingUpdates = false;
+  final TextEditingController _proxyController = TextEditingController();
+  String? _proxyUrlError;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPluginUpdates();
+  }
+
+  @override
+  void dispose() {
+    _proxyController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _checkPluginUpdates() async {
+    setState(() {
+      _isCheckingUpdates = true;
+    });
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
+    final pluginService = Provider.of<PluginService>(context, listen: false);
+    await pluginService.fetchRemotePlugins(
+      proxyUrl: settingsProvider.githubProxyUrl,
+    );
+    setState(() {
+      _isCheckingUpdates = false;
+    });
+  }
 
   String _pluginEnableToast(BuildContext context, String name) {
     final l10n = context.l10n;
@@ -77,7 +115,7 @@ class PluginSettingsPage extends StatelessWidget {
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
               context.l10n.localeName.startsWith('zh_Hant') ? '刪除' : '删除',
-              style: TextStyle(color: Colors.redAccent),
+              style: const TextStyle(color: Colors.redAccent),
             ),
           ),
         ],
@@ -180,6 +218,53 @@ class PluginSettingsPage extends StatelessWidget {
     return '已取消导入插件';
   }
 
+  String _pluginMarketButtonText(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '插件市場';
+    }
+    return '插件市场';
+  }
+
+  String _githubProxyLabel(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return 'GitHub 加速';
+    }
+    return 'Github 加速';
+  }
+
+  String _githubProxyHint(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '請輸入加速源的地址，留空不啟用';
+    }
+    return '请输入加速源的地址，留空不启用';
+  }
+
+  String? _validateProxyUrl(String? url) {
+    if (url == null || url.trim().isEmpty) {
+      return null;
+    }
+    final trimmed = url.trim();
+    if (!trimmed.startsWith('https://') && !trimmed.startsWith('http://')) {
+      return 'URL必须以 http:// 或 https:// 开头';
+    }
+    if (!trimmed.endsWith('/')) {
+      return 'URL必须以 / 结尾';
+    }
+    try {
+      final uri = Uri.parse(trimmed);
+      if (!uri.hasScheme || !uri.hasAuthority) {
+        return 'URL格式无效';
+      }
+    } catch (_) {
+      return 'URL格式无效';
+    }
+    return null;
+  }
+
+  void _openPluginMarket(BuildContext context) {
+    PluginMarketDialog.show(context);
+  }
+
   Future<void> _importPlugin(
     BuildContext context,
     PluginService pluginService,
@@ -250,20 +335,22 @@ class PluginSettingsPage extends StatelessWidget {
       BlurSnackBar.show(context, _pluginActionNotAvailable(context));
       return;
     }
-    if (entries.length == 1 && entries.first.enabled == null) {
+    if (entries.length == 1 && entries.first.isAction) {
       await _invokePluginAction(context, plugin, entries.first);
       return;
     }
 
-    final hasSwitches = entries.any((e) => e.enabled != null);
+    final hasSwitches = entries.any((e) => e.isSwitch);
+    final hasTextInputs = entries.any((e) => e.isTextInput);
+    final hasInteractiveEntries = hasSwitches || hasTextInputs;
 
-    if (!hasSwitches) {
-      // 无开关型入口，保持原有点击选择行为
+    if (!hasInteractiveEntries) {
       final selected = await GlassBottomSheet.show<PluginUiEntry>(
         context: context,
         title: _pluginActionTitle(context, plugin),
         height: MediaQuery.of(context).size.height * 0.56,
         child: ListView.builder(
+          physics: const NeverScrollableScrollPhysics(),
           itemCount: entries.length,
           itemBuilder: (itemContext, index) {
             final entry = entries[index];
@@ -271,7 +358,7 @@ class PluginSettingsPage extends StatelessWidget {
               title: Text(entry.title),
               subtitle:
                   entry.description == null ? null : Text(entry.description!),
-              trailing: Icon(Icons.chevron_right),
+              trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(itemContext).pop(entry),
             );
           },
@@ -282,7 +369,6 @@ class PluginSettingsPage extends StatelessWidget {
       return;
     }
 
-    // 开关型入口
     await GlassBottomSheet.show<void>(
       context: context,
       title: _pluginActionTitle(context, plugin),
@@ -293,11 +379,14 @@ class PluginSettingsPage extends StatelessWidget {
               (p) => p.manifest.id == plugin.manifest.id,
               orElse: () => plugin);
           final currentEntries = updatedPlugin.uiEntries;
-          return ListView.builder(
+          final showBottomButtons = currentEntries.any((e) => e.isTextInput);
+
+          final listView = ListView.builder(
+            shrinkWrap: true,
             itemCount: currentEntries.length,
             itemBuilder: (itemContext, index) {
               final entry = currentEntries[index];
-              if (entry.enabled != null) {
+              if (entry.isSwitch) {
                 return ListTile(
                   title: Text(entry.title),
                   subtitle: entry.description == null
@@ -307,8 +396,53 @@ class PluginSettingsPage extends StatelessWidget {
                     value: entry.enabled!,
                     onChanged: (_) async {
                       await _invokePluginAction(
-                          sheetContext, updatedPlugin, entry);
+                          sheetContext, updatedPlugin, entry,
+                          showResult: false);
                     },
+                  ),
+                );
+              }
+              if (entry.isTextInput) {
+                final currentValue = pluginService.getTextSettingValue(
+                    updatedPlugin.manifest.id, entry.id);
+                return Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      if (entry.description != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          entry.description!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      _PluginTextSettingField(
+                        key: ValueKey(
+                            '${updatedPlugin.manifest.id}_${entry.id}'),
+                        initialValue: currentValue,
+                        hintText: entry.textSetting?.hintText,
+                        onChanged: (value) {
+                          pluginService.setTextSettingValue(
+                              updatedPlugin.manifest.id, entry.id, value);
+                        },
+                      ),
+                    ],
                   ),
                 );
               }
@@ -316,7 +450,7 @@ class PluginSettingsPage extends StatelessWidget {
                 title: Text(entry.title),
                 subtitle:
                     entry.description == null ? null : Text(entry.description!),
-                trailing: Icon(Icons.chevron_right),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
                   Navigator.of(itemContext).pop();
                   if (!context.mounted) return;
@@ -324,6 +458,45 @@ class PluginSettingsPage extends StatelessWidget {
                 },
               );
             },
+          );
+
+          if (!showBottomButtons) return listView;
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: listView,
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      child: Text(
+                        context.l10n.localeName.startsWith('zh_Hant')
+                            ? '關閉'
+                            : '关闭',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      child: Text(
+                        context.l10n.localeName.startsWith('zh_Hant')
+                            ? '儲存並關閉'
+                            : '保存并关闭',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -333,8 +506,9 @@ class PluginSettingsPage extends StatelessWidget {
   Future<void> _invokePluginAction(
     BuildContext context,
     PluginDescriptor plugin,
-    PluginUiEntry entry,
-  ) async {
+    PluginUiEntry entry, {
+    bool showResult = true,
+  }) async {
     final pluginService = context.read<PluginService>();
     if (!plugin.enabled || !plugin.loaded) {
       BlurSnackBar.show(context, _pluginActionNotLoaded(context));
@@ -350,10 +524,14 @@ class PluginSettingsPage extends StatelessWidget {
         return;
       }
       if (result == null) {
-        BlurSnackBar.show(context, _pluginActionEmpty(context));
+        if (showResult) {
+          BlurSnackBar.show(context, _pluginActionEmpty(context));
+        }
         return;
       }
-      await _showPluginActionResult(context, result);
+      if (showResult) {
+        await _showPluginActionResult(context, result);
+      }
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -419,6 +597,23 @@ class PluginSettingsPage extends StatelessWidget {
     );
   }
 
+  Widget _buildUpdateBadge(String version) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.green,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        '有更新 v$version',
+        style: const TextStyle(
+          fontSize: 11,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -426,7 +621,7 @@ class PluginSettingsPage extends StatelessWidget {
     return Consumer<PluginService>(
       builder: (context, pluginService, child) {
         if (!pluginService.isLoaded) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
 
         final plugins = pluginService.plugins;
@@ -438,11 +633,84 @@ class PluginSettingsPage extends StatelessWidget {
                 child: Row(
                   children: [
                     _HoverScaleTextAction(
+                      icon: Ionicons.cloud_upload_outline,
                       text: _importPluginButtonText(context),
                       onPressed: () => _importPlugin(context, pluginService),
                     ),
+                    const SizedBox(width: 16),
+                    _HoverScaleTextAction(
+                      icon: Ionicons.storefront_outline,
+                      text: _pluginMarketButtonText(context),
+                      onPressed: () => _openPluginMarket(context),
+                    ),
                   ],
                 ),
+              ),
+              Consumer<SettingsProvider>(
+                builder: (context, settingsProvider, child) {
+                  if (_proxyController.text !=
+                      settingsProvider.githubProxyUrl) {
+                    _proxyController.text = settingsProvider.githubProxyUrl;
+                    _proxyController.selection = TextSelection.fromPosition(
+                      TextPosition(offset: _proxyController.text.length),
+                    );
+                    _proxyUrlError = null;
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          _githubProxyLabel(context),
+                          style: TextStyle(
+                            color:
+                                colorScheme.onSurface.withValues(alpha: 0.78),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _proxyController,
+                            cursorColor: AppAccentColors.current,
+                            decoration: InputDecoration(
+                              hintText: _githubProxyHint(context),
+                              hintStyle: TextStyle(
+                                  color: colorScheme.onSurface
+                                      .withValues(alpha: 0.38)),
+                              filled: true,
+                              fillColor:
+                                  colorScheme.onSurface.withValues(alpha: 0.1),
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide.none,
+                                borderRadius:
+                                    const BorderRadius.all(Radius.circular(8)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                    color: AppAccentColors.current, width: 2),
+                                borderRadius:
+                                    const BorderRadius.all(Radius.circular(8)),
+                              ),
+                              errorText: _proxyUrlError,
+                            ),
+                            style: TextStyle(color: colorScheme.onSurface),
+                            onChanged: (value) {
+                              final error = _validateProxyUrl(value);
+                              setState(() {
+                                _proxyUrlError = error;
+                              });
+                              if (error == null) {
+                                settingsProvider.setGithubProxyUrl(value);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
               Divider(
                 color: colorScheme.onSurface.withValues(alpha: 0.12),
@@ -464,6 +732,8 @@ class PluginSettingsPage extends StatelessWidget {
         final items = <Widget>[];
         for (var i = 0; i < plugins.length; i++) {
           final plugin = plugins[i];
+          final updateVersion =
+              pluginService.getAvailableUpdateVersion(plugin.manifest.id);
 
           items.add(
             ListTile(
@@ -471,12 +741,19 @@ class PluginSettingsPage extends StatelessWidget {
                 Ionicons.extension_puzzle_outline,
                 color: colorScheme.onSurface.withValues(alpha: 0.7),
               ),
-              title: Text(
-                plugin.manifest.name,
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.bold,
-                ),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      plugin.manifest.name,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (updateVersion != null) _buildUpdateBadge(updateVersion),
+                ],
               ),
               subtitle: Text(
                 _pluginSubtitle(context, plugin),
@@ -521,11 +798,94 @@ class PluginSettingsPage extends StatelessWidget {
               child: Row(
                 children: [
                   _HoverScaleTextAction(
+                    icon: Ionicons.cloud_upload_outline,
                     text: _importPluginButtonText(context),
                     onPressed: () => _importPlugin(context, pluginService),
                   ),
+                  const SizedBox(width: 16),
+                  _HoverScaleTextAction(
+                    icon: Ionicons.storefront_outline,
+                    text: _pluginMarketButtonText(context),
+                    onPressed: () => _openPluginMarket(context),
+                  ),
+                  if (_isCheckingUpdates)
+                    const SizedBox(width: 8)
+                  else
+                    const SizedBox(),
+                  if (_isCheckingUpdates)
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    const SizedBox(),
                 ],
               ),
+            ),
+            Consumer<SettingsProvider>(
+              builder: (context, settingsProvider, child) {
+                if (_proxyController.text != settingsProvider.githubProxyUrl) {
+                  _proxyController.text = settingsProvider.githubProxyUrl;
+                  _proxyController.selection = TextSelection.fromPosition(
+                    TextPosition(offset: _proxyController.text.length),
+                  );
+                  _proxyUrlError = null;
+                }
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        _githubProxyLabel(context),
+                        style: TextStyle(
+                          color: colorScheme.onSurface.withValues(alpha: 0.78),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _proxyController,
+                          cursorColor: AppAccentColors.current,
+                          decoration: InputDecoration(
+                            hintText: _githubProxyHint(context),
+                            hintStyle: TextStyle(
+                                color: colorScheme.onSurface
+                                    .withValues(alpha: 0.38)),
+                            filled: true,
+                            fillColor:
+                                colorScheme.onSurface.withValues(alpha: 0.1),
+                            border: OutlineInputBorder(
+                              borderSide: BorderSide.none,
+                              borderRadius:
+                                  const BorderRadius.all(Radius.circular(8)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                  color: AppAccentColors.current, width: 2),
+                              borderRadius:
+                                  const BorderRadius.all(Radius.circular(8)),
+                            ),
+                            errorText: _proxyUrlError,
+                          ),
+                          style: TextStyle(color: colorScheme.onSurface),
+                          onChanged: (value) {
+                            final error = _validateProxyUrl(value);
+                            setState(() {
+                              _proxyUrlError = error;
+                            });
+                            if (error == null) {
+                              settingsProvider.setGithubProxyUrl(value);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
             Divider(
               color: colorScheme.onSurface.withValues(alpha: 0.12),
@@ -543,10 +903,12 @@ class _HoverScaleTextAction extends StatefulWidget {
   const _HoverScaleTextAction({
     required this.text,
     required this.onPressed,
+    this.icon,
   });
 
   final String text;
   final VoidCallback onPressed;
+  final IconData? icon;
 
   @override
   State<_HoverScaleTextAction> createState() => _HoverScaleTextActionState();
@@ -560,6 +922,10 @@ class _HoverScaleTextActionState extends State<_HoverScaleTextAction> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textColor = _isHovered
+        ? _nipaAccentColor
+        : colorScheme.onSurface.withValues(alpha: 0.78);
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -573,14 +939,20 @@ class _HoverScaleTextActionState extends State<_HoverScaleTextAction> {
           curve: Curves.easeOutBack,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Text(
-              widget.text,
-              style: TextStyle(
-                color: _isHovered
-                    ? _nipaAccentColor
-                    : colorScheme.onSurface.withValues(alpha: 0.78),
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.icon != null)
+                  Icon(widget.icon, color: textColor, size: 20),
+                if (widget.icon != null) const SizedBox(width: 8),
+                Text(
+                  widget.text,
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -645,6 +1017,56 @@ class _HoverScaleIconButtonState extends State<_HoverScaleIconButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PluginTextSettingField extends StatefulWidget {
+  const _PluginTextSettingField({
+    super.key,
+    required this.initialValue,
+    this.hintText,
+    required this.onChanged,
+  });
+
+  final String initialValue;
+  final String? hintText;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_PluginTextSettingField> createState() =>
+      _PluginTextSettingFieldState();
+}
+
+class _PluginTextSettingFieldState extends State<_PluginTextSettingField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      decoration: InputDecoration(
+        hintText: widget.hintText,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        isDense: true,
+      ),
+      onChanged: widget.onChanged,
     );
   }
 }

@@ -24,6 +24,9 @@ class SettingsProvider with ChangeNotifier {
   // 外部播放器设置
   bool _useExternalPlayer = false;
   String _externalPlayerPath = '';
+
+  // GitHub 代理设置
+  String _githubProxyUrl = '';
   
   // --- Getters ---
   double get blurPower => _blurPower;
@@ -34,6 +37,7 @@ class SettingsProvider with ChangeNotifier {
   bool get autoMatchDanmakuOnPlay => _autoMatchDanmakuOnPlay;
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
+  String get githubProxyUrl => _githubProxyUrl;
 
   SettingsProvider() {
     _loadSettings();
@@ -66,6 +70,8 @@ class SettingsProvider with ChangeNotifier {
         _prefs.getBool(SettingsKeys.useExternalPlayer) ?? false;
     _externalPlayerPath =
         _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
+    _githubProxyUrl =
+        _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
     notifyListeners();
   }
 
@@ -128,6 +134,15 @@ class SettingsProvider with ChangeNotifier {
     await _prefs.setString(
       SettingsKeys.externalPlayerPath,
       _externalPlayerPath,
+    );
+    notifyListeners();
+  }
+
+  Future<void> setGithubProxyUrl(String url) async {
+    _githubProxyUrl = url.trim();
+    await _prefs.setString(
+      SettingsKeys.githubProxyUrl,
+      _githubProxyUrl,
     );
     notifyListeners();
   }

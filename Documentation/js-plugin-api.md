@@ -28,9 +28,11 @@ const pluginManifest = {
   id: 'builtin.cn_sensitive_danmaku_filter',
   name: '弹幕预设屏蔽词（中国大陆）',
   version: '1.1.0',
+  minHostVersion: '1.11.0',
   description: '内置常用敏感词与辱骂词，启用后自动屏蔽命中的弹幕。',
   author: 'NipaPlay Team',
-  github: 'https://github.com/xxx/xxx' // 可选
+  github: 'https://github.com/xxx/xxx', // 可选
+  permissions: ['danmaku.modify'] // 可选，权限声明
 };
 ```
 
@@ -39,11 +41,45 @@ const pluginManifest = {
 - `id`：必填，唯一标识，非空字符串。
 - `name`：必填，展示名，非空字符串。
 - `version`：必填，版本号，非空字符串。
+- `minHostVersion`：必填，插件要求的宿主（NipaPlay）最低版本，格式为 `主版本.次版本.修订号`（如 `1.11.0`）。若宿主版本低于此值，插件将被标记为不兼容。
 - `description`：选填，描述字符串。
 - `author`：选填，作者字符串。
 - `github`：选填，GitHub 链接字符串，可为空。
+- `permissions`：选填，权限字符串数组。
 
-若 `id/name/version` 任一为空，插件会被判定为无效。
+若 `id/name/version/minHostVersion` 任一为空，插件会被判定为无效。
+
+#### 权限列表
+
+| 权限 ID | 说明 |
+|---------|------|
+| `player.control` | 控制播放器（播放/暂停/跳转） |
+| `danmaku.modify` | 修改弹幕显示和过滤规则 |
+| `library.read` | 读取媒体库信息 |
+| `library.write` | 修改媒体库内容 |
+| `ui.dialog` | 显示弹窗和提示信息 |
+| `settings.read` | 读取应用设置 |
+| `settings.modify` | 修改应用设置 |
+| `storage` | 使用本地存储 |
+| `system.override` | 覆盖系统级设置（如解锁下载器） |
+
+权限声明示例：
+
+```js
+const pluginManifest = {
+  id: 'com.example.myplugin',
+  name: '我的插件',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '描述',
+  author: '作者',
+  permissions: [
+    'player.control',
+    'danmaku.modify',
+    'ui.dialog'
+  ]
+};
+```
 
 ### 3.2 `pluginBlockWords`（可选）
 
@@ -88,6 +124,31 @@ const pluginUIEntries = [
 - `title`：必填，非空。
 - `description`：可选。
 - `enabled`：可选，布尔值。当提供时，宿主在设置页中渲染开关（`Switch`）而非普通点击项，用户可通过开关切换状态。点击开关后宿主会调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换自身逻辑并返回结果。
+- `textSetting`：可选，对象。当提供时（且 `enabled` 未设置），宿主在设置页中渲染文本输入框，用于收集用户自由输入的配置项。输入值由宿主持久化存储，插件可通过 `settings.getText(entry.id)` 读取。
+
+`textSetting` 对象字段：
+
+- `hintText`：可选，文本框占位提示。
+- `default`：可选，字符串，默认值。用户首次看到文本框时的初始内容。
+
+```js
+const pluginUIEntries = [
+  {
+    id: 'api_url',
+    title: 'API 地址',
+    description: '输入远程接口地址',
+    textSetting: { hintText: 'https://example.com/api', default: '' }
+  },
+  {
+    id: 'max_retries',
+    title: '最大重试次数',
+    description: '请求失败时的重试次数（0-10）',
+    textSetting: { hintText: '3', default: '3' }
+  }
+];
+```
+
+> `enabled` 与 `textSetting` 同时存在时，`enabled` 优先（渲染为开关）。两者都不存在时渲染为普通点击项。
 
 无效 entry 会被跳过，不会导致整个插件失败。
 
@@ -125,57 +186,288 @@ function pluginHandleUIAction(actionId) {
 
 重要行为：`pluginHandleUIAction` 执行完毕后，宿主会自动重新读取 JS 运行时中的 `pluginBlockWords` 和 `pluginUIEntries` 变量。这意味着插件可以在回调中动态修改这两个变量（例如切换规则启用状态），宿主会即时同步更新弹幕过滤词库和 UI 入口列表。
 
-## 4. 宿主当前暴露能力（对 JS）
+### 3.5 `pluginOnEvent(event)`（可选）
 
-当前 JS 插件接口是“声明式变量 + action 回调”模型，不提供直接调用 Dart/Flutter API 的桥接对象。
+监听应用事件。
 
-即当前可用“接口”只有以下四项：
+```js
+function pluginOnEvent(event) {
+  console.log('事件:', event.name, event.data);
+  
+  if (event.name === 'play') {
+    ui.showSnackBar('视频开始播放');
+  }
+}
+```
 
-1. `pluginManifest`
-2. `pluginBlockWords`
-3. `pluginUIEntries`
-4. `pluginHandleUIAction(actionId)`
+支持的事件：
 
-未提供（当前版本）：
+| 事件名 | 说明 | `event.data` 内容 |
+|--------|------|------------------|
+| `videoLoaded` | 视频加载完成 | 视频信息对象 |
+| `play` | 开始播放 | 视频信息对象 |
+| `pause` | 暂停播放 | 视频信息对象 |
+| `seek` | 进度跳转 | `{ time: 当前时间, duration: 总时长 }` |
+| `danmakuShow` | 弹幕显示 | 弹幕对象 |
+| `danmakuLoaded` | 弹幕数据加载完成 | `{ danmaku: [{time, content, type, color}, ...] }` |
+| `settingsChanged` | 设置变更 | `{ key: 设置键, value: 新值 }` |
+| `appResumed` | 应用恢复 | 空对象 |
+| `appPaused` | 应用暂停 | 空对象 |
 
-- 任意 Dart 方法直调
-- 文件系统 API
-- 网络 API 专用桥接
-- 播放控制 API
-- 设置读写 API
+> `danmakuLoaded` 事件中的 `danmaku` 数组为已解析格式，`time` 为秒（double），`content` 为弹幕文本，`type` 为弹幕类型（`scroll`/`top`/`bottom`），`color` 为颜色值。调用 `danmaku.replace()` 替换数据时应保持相同格式。
 
-如果后续要做跨语言插件系统的“全量接口暴露”，建议新增一个受控桥接对象（例如 `pluginHost`），按 capability 白名单逐步开放。
+### 3.6 生命周期函数（可选）
 
-## 5. 生命周期与状态
+插件可以声明以下生命周期钩子：
+
+```js
+function pluginOnInitialize() {
+  // 插件启用时调用
+  ui.showSnackBar('插件已启用');
+}
+
+function pluginOnDestroy() {
+  // 插件禁用时调用
+  ui.showSnackBar('插件已禁用');
+}
+
+function pluginOnResume() {
+  // 应用恢复到前台时调用
+}
+
+function pluginOnSuspend() {
+  // 应用进入后台时调用
+}
+```
+
+## 4. 宿主暴露的 API 桥接对象
+
+宿主在插件运行时注入了以下全局桥接对象，插件可直接使用。
+
+### 4.1 `plugin` 对象
+
+包含插件元数据和权限检查：
+
+```js
+// 获取插件信息
+console.log(plugin.id);
+console.log(plugin.name);
+console.log(plugin.version);
+
+// 检查权限
+if (plugin.hasPermission('player.control')) {
+  // 有权限，执行操作
+}
+
+// 查看所有权限
+console.log(plugin.permissions);
+```
+
+### 4.2 `player` 对象（需要 `player.control` 权限）
+
+控制播放器：
+
+```js
+// 播放
+player.play();
+
+// 暂停
+player.pause();
+
+// 跳转进度（秒，支持小数）
+player.seek(120.5);
+
+// 获取播放器状态（返回 JSON 字符串解析后的对象，无视频时返回 null）
+const state = player.getState();
+if (state) {
+  console.log(state.position);   // 当前播放位置（秒，double）
+  console.log(state.duration);   // 视频总时长（秒，double）
+  console.log(state.status);     // 播放状态: 'playing' | 'paused' | 'idle' | ...
+  console.log(state.hasVideo);   // 是否有视频加载（bool）
+}
+```
+
+### 4.3 `danmaku` 对象（需要 `danmaku.modify` 权限）
+
+控制弹幕：
+
+```js
+// 显示弹幕
+danmaku.show();
+
+// 隐藏弹幕
+danmaku.hide();
+
+// 设置弹幕透明度（0.0 - 1.0）
+danmaku.setOpacity(0.8);
+
+// 添加弹幕过滤器（添加屏蔽词到弹幕屏蔽列表）
+danmaku.addFilter('myFilter', '屏蔽词1');
+danmaku.addFilter('myRegex', '规则名/正则表达式/');
+
+// 移除弹幕过滤器（从屏蔽列表移除该词）
+danmaku.removeFilter('屏蔽词1');
+
+// 替换弹幕数据（用于弹幕精选等场景）
+// 参数格式: { count: 弹幕数量, comments: 弹幕数组 }
+// 弹幕项格式: { time: 时间秒数(double), content: 弹幕内容, type: 弹幕类型, color: 颜色 }
+danmaku.replace({
+  count: filteredDanmaku.length,
+  comments: filteredDanmaku
+});
+```
+
+### 4.4 `ui` 对象（需要 `ui.dialog` 权限）
+
+显示 UI 元素：
+
+```js
+// 显示提示（BlurSnackBar 底部浮条）
+ui.showSnackBar('提示信息');
+
+// 显示对话框（当前版本暂不支持，调用返回 false）
+// const result = ui.showDialog('标题', '内容');
+
+// 显示加载提示（BlurSnackBar 底部浮条）
+ui.showLoading('加载中...');
+
+// 隐藏加载提示
+ui.hideLoading();
+```
+
+### 4.5 `storage` 对象（需要 `storage` 权限）
+
+本地持久化存储，数据按插件 ID 隔离。使用 SharedPreferences 实现。
+
+```js
+// 存储数据（value 会自动 JSON 序列化）
+storage.set('key', 'value');
+storage.set('number', 123);
+storage.set('object', { a: 1 });
+
+// 读取数据（当前版本同步调用返回 null，异步写入已生效）
+// 推荐使用 settings.getText/setText 管理简单配置项
+const value = storage.get('key');
+
+// 删除数据
+storage.remove('key');
+
+// 清空当前插件的所有存储数据
+storage.clear();
+```
+
+> **注意**：`storage.get()` 当前同步桥接限制返回 `null`，写入操作 (`set/remove/clear`) 正常工作。对于需要持久化的简单配置，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting` 实现。
+
+### 4.6 `dev` 对象
+
+开发调试工具（始终可用，无需权限）：
+
+```js
+// 输出日志（输出到宿主调试日志）
+dev.log('调试信息');
+
+// 输出错误（输出到宿主调试日志）
+dev.logError('错误信息');
+```
+
+### 4.7 `system` 对象（需要 `system.override` 权限）
+
+系统级控制：
+
+```js
+// 启用/禁用内置下载器
+system.setDownloaderEnabled(true);
+```
+
+### 4.8 `settings` 对象
+
+读写插件的文本配置项（即 `pluginUIEntries` 中声明了 `textSetting` 的条目）。宿主自动持久化，插件无需自行存储。
+
+```js
+// 读取配置值（返回字符串，未设置时返回空字符串 ''）
+const apiUrl = settings.getText('api_url');
+
+// 写入配置值（value 会自动转为字符串）
+settings.setText('api_url', 'https://new-api.example.com');
+```
+
+典型用法：在 `pluginOnInitialize` 中读取用户之前填写的配置值，或在 `pluginHandleUIAction` 中修改配置。
+
+> `settings` 对象不需要任何权限声明，始终可用。它仅操作插件自身的文本配置项，不同插件之间互不影响。
+
+## 5. 宿主当前暴露能力（对 JS）
+
+当前 JS 插件接口支持：
+
+### 声明式变量与回调
+
+1. `pluginManifest` - 插件元数据
+2. `pluginBlockWords` - 弹幕屏蔽词
+3. `pluginUIEntries` - UI 入口列表
+4. `pluginHandleUIAction(actionId)` - UI 动作处理
+5. `pluginOnEvent(event)` - 事件监听
+6. `pluginOnInitialize()` - 初始化钩子
+7. `pluginOnDestroy()` - 销毁钩子
+8. `pluginOnResume()` - 恢复钩子
+9. `pluginOnSuspend()` - 挂起钩子
+
+### 桥接 API 对象
+
+| 对象 | 功能 | 状态 |
+|------|------|------|
+| `plugin` | 插件元数据与权限检查 | 正常 |
+| `player` | 播放器控制（play/pause/seek/getState） | 正常 |
+| `danmaku` | 弹幕控制（show/hide/opacity/replace/addFilter/removeFilter） | 正常 |
+| `ui` | UI 交互（showSnackBar/showLoading 使用 BlurSnackBar，showDialog 暂不支持） | 部分支持 |
+| `storage` | 本地存储（set/remove/clear 正常，get 同步返回 null） | 部分支持 |
+| `dev` | 开发调试（log/logError） | 正常 |
+| `system` | 系统控制（setDownloaderEnabled） | 正常 |
+| `settings` | 读写插件文本配置项（getText/setText） | 正常 |
+
+所有桥接调用通过 `sendMessage('PluginBridge', JSON.stringify({method, args}))` 实现，宿主在插件加载时自动注册桥接通道。
+
+## 6. 生命周期与状态
 
 - 启动时扫描插件脚本并解析元数据。
 - 启动时会同时扫描资产插件和应用数据目录中的外部插件。
-- 插件启用后才会加载运行时并读取 `pluginBlockWords/pluginUIEntries`。
-- 禁用插件会卸载运行时并清空该插件的生效屏蔽词。
+- 插件启用后会：
+  - 加载运行时
+  - 调用 `pluginOnInitialize()`
+  - 读取 `pluginBlockWords/pluginUIEntries`
+- 禁用插件会：
+  - 调用 `pluginOnDestroy()`
+  - 卸载运行时
+  - 清空该插件的生效屏蔽词
 - 启用状态持久化在 `SharedPreferences`：`plugin_enabled_ids`。
 - 非内置插件（外部导入）可在设置页中删除，删除前会自动禁用并卸载运行时。
 
-## 6. 与弹幕过滤的集成
+## 7. 与弹幕过滤的集成
 
 - 所有已启用且已加载插件的 `pluginBlockWords` 会合并。
 - 合并结果用于弹幕文本过滤。
 - 同一词在多个插件重复出现时，当前实现不会去重（按合并结果原样参与匹配）。
 
-## 7. 错误与兼容性
+## 8. 错误与兼容性
 
 - 运行 JS 时报错会导致该插件 `loaded=false`，并记录错误信息到插件状态。
 - 插件 UI 动作返回格式不符时会抛出格式错误（例如 `type` 不是 `text`）。
 - Web 平台插件运行时未实现。
+- 权限检查失败时 API 调用会返回 `false` 或 `null`。
+- `ui.showDialog` 当前版本暂不支持（需要 `BuildContext`）。
+- `storage.get()` 同步桥接限制返回 `null`，建议用 `settings.getText()` 替代简单配置读取。
+- 桥接方法调用中的参数通过 JSON 序列化传递，数值字段（如 `time`）可能被解析为 `int`，插件应注意类型兼容。
 
-## 8. 最小可用插件模板
+## 9. 最小可用插件模板
 
 ```js
 const pluginManifest = {
   id: 'custom.example',
   name: '示例插件',
   version: '1.0.0',
+  minHostVersion: '1.11.0',
   description: '一个最小可用插件',
-  author: 'You'
+  author: 'You',
+  permissions: ['ui.dialog']
 };
 
 const pluginBlockWords = ['示例屏蔽词'];
@@ -187,6 +479,10 @@ const pluginUIEntries = [
     description: '点击后显示文本'
   }
 ];
+
+function pluginOnInitialize() {
+  ui.showSnackBar('插件已启用');
+}
 
 function pluginHandleUIAction(actionId) {
   if (actionId !== 'hello') {
@@ -200,7 +496,7 @@ function pluginHandleUIAction(actionId) {
 }
 ```
 
-## 9. 带开关切换的插件示例
+## 10. 带开关切换的插件示例
 
 以下示例展示如何使用 `enabled` 字段实现逐条规则的开关切换，以及动态更新 `pluginBlockWords` 和 `pluginUIEntries`。
 
@@ -209,8 +505,10 @@ const pluginManifest = {
   id: 'custom.regex_filter',
   name: '正则过滤规则',
   version: '1.0.0',
+  minHostVersion: '1.11.0',
   description: '可逐条开关的弹幕正则过滤规则',
-  author: 'You'
+  author: 'You',
+  permissions: ['danmaku.modify']
 };
 
 var rules = [
@@ -234,7 +532,6 @@ function buildBlockWords() {
   var result = [];
   for (var i = 0; i < rules.length; i++) {
     if (rules[i].enabled) {
-      // 正则格式：名称/正则表达式/
       result.push(rules[i].name + '/' + rules[i].pattern);
     }
   }
@@ -248,7 +545,7 @@ function buildUIEntries() {
       id: rules[i].id,
       title: rules[i].name,
       description: rules[i].desc,
-      enabled: rules[i].enabled  // 提供 enabled 字段，宿主渲染开关
+      enabled: rules[i].enabled
     });
   }
   return result;
@@ -261,7 +558,6 @@ function pluginHandleUIAction(actionId) {
   for (var i = 0; i < rules.length; i++) {
     if (rules[i].id === actionId) {
       rules[i].enabled = !rules[i].enabled;
-      // 修改后重建两个数组，宿主会在回调结束后自动重新读取
       pluginBlockWords = buildBlockWords();
       pluginUIEntries = buildUIEntries();
       return {
@@ -281,3 +577,226 @@ function pluginHandleUIAction(actionId) {
 - 开关切换时宿主调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换 `rules[i].enabled`，然后重建 `pluginBlockWords` 和 `pluginUIEntries`。
 - 回调执行完毕后宿主自动重新读取这两个变量，无需额外操作。
 - `pluginBlockWords` 中的正则格式项（`名称/正则表达式/`）会被宿主识别并按正则匹配弹幕。
+
+## 11. 事件监听插件示例
+
+```js
+const pluginManifest = {
+  id: 'com.example.event_plugin',
+  name: '事件监听插件',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '监听播放事件并提示',
+  author: 'You',
+  permissions: ['player.control', 'ui.dialog']
+};
+
+function pluginOnEvent(event) {
+  switch (event.name) {
+    case 'videoLoaded':
+      dev.log('视频已加载: ' + event.data.title);
+      break;
+    case 'play':
+      ui.showSnackBar('开始播放');
+      break;
+    case 'pause':
+      ui.showSnackBar('已暂停');
+      break;
+    case 'seek':
+      dev.log('跳转至: ' + event.data.time);
+      break;
+  }
+}
+```
+
+## 12. 存储与配置读写示例
+
+对于简单配置项，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting`，这是同步可用的：
+
+```js
+const pluginManifest = {
+  id: 'com.example.config_plugin',
+  name: '配置示例',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '使用 textSetting 持久化配置',
+  author: 'You',
+  permissions: ['ui.dialog']
+};
+
+var pluginUIEntries = [
+  {
+    id: 'apiKey',
+    title: 'API 密钥',
+    description: '输入你的密钥',
+    textSetting: { hintText: 'sk-xxx', default: '' }
+  }
+];
+
+function pluginOnInitialize() {
+  var key = settings.getText('apiKey');
+  if (key) {
+    dev.log('已配置 API 密钥');
+  }
+}
+```
+
+> `storage` 对象也可用于存储，但 `storage.get()` 当前同步桥接限制返回 `null`，写入操作正常。
+
+## 13. 文本配置项示例
+
+以下示例展示如何使用 `textSetting` 让用户在设置页填写配置，并在插件中读取。
+
+```js
+const pluginManifest = {
+  id: 'custom.api_proxy',
+  name: 'API 代理',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '通过配置的 API 地址获取弹幕数据',
+  author: 'You',
+  permissions: ['ui.dialog']
+};
+
+var pluginUIEntries = [
+  {
+    id: 'api_url',
+    title: 'API 地址',
+    description: '弹幕数据接口地址',
+    textSetting: { hintText: 'https://example.com/danmaku', default: '' }
+  },
+  {
+    id: 'token',
+    title: '访问令牌',
+    description: '接口鉴权令牌（可留空）',
+    textSetting: { hintText: '输入 token', default: '' }
+  },
+  {
+    id: 'enable_filter',
+    title: '启用过滤',
+    description: '是否过滤低质量弹幕',
+    enabled: true
+  }
+];
+
+function pluginOnInitialize() {
+  var url = settings.getText('api_url');
+  if (url) {
+    ui.showSnackBar('API 地址已配置: ' + url);
+  }
+}
+
+function pluginHandleUIAction(actionId) {
+  if (actionId === 'enable_filter') {
+    // 切换开关逻辑（同开关型示例）
+    // ...
+  }
+  return { type: 'text', title: 'API 代理', content: '操作完成' };
+}
+```
+
+要点：
+
+- `textSetting` 条目在设置页中渲染为标题 + 描述 + 文本输入框。
+- 用户输入的值由宿主持久化保存，关闭再打开设置页后依然存在。
+- 插件通过 `settings.getText(entryId)` 读取值，通过 `settings.setText(entryId, value)` 写入值。
+- `textSetting` 与 `enabled` 可以在同一份 `pluginUIEntries` 中混合使用，各自独立渲染为文本框或开关。
+- 底部会显示「保存并关闭」和「关闭」按钮，方便用户确认操作。
+
+## 14. 弹幕精选插件示例
+
+以下示例展示如何监听 `danmakuLoaded` 事件并使用 `danmaku.replace()` API 实现弹幕精选功能。
+
+```js
+const pluginManifest = {
+  id: 'custom.danmaku_filter',
+  name: '弹幕精选',
+  version: '1.0.0',
+  minHostVersion: '1.11.0',
+  description: '智能精选弹幕，过滤低质量弹幕',
+  author: 'You',
+  permissions: ['danmaku.modify', 'ui.dialog']
+};
+
+var params = {
+  ratio: 30,
+  minLen: 3,
+  filterDuplicate: true,
+  filterSpam: true
+};
+
+function pluginOnInitialize() {
+  params.ratio = parseInt(settings.getText('ratio')) || 30;
+  params.minLen = parseInt(settings.getText('minLen')) || 3;
+  params.filterDuplicate = settings.getText('filterDuplicate') === 'true';
+  params.filterSpam = settings.getText('filterSpam') === 'true';
+}
+
+var pluginUIEntries = [
+  {
+    id: 'ratio',
+    title: '保留比例',
+    description: '保留弹幕百分比',
+    textSetting: { hintText: '30', default: '30' }
+  },
+  {
+    id: 'minLen',
+    title: '最短长度',
+    description: '弹幕最小字符数',
+    textSetting: { hintText: '3', default: '3' }
+  },
+  {
+    id: 'filterDuplicate',
+    title: '过滤重复',
+    description: '过滤相似弹幕',
+    enabled: params.filterDuplicate
+  },
+  {
+    id: 'filterSpam',
+    title: '过滤刷屏',
+    description: '过滤重复发送',
+    enabled: params.filterSpam
+  }
+];
+
+function filterDanmaku(danmaku) {
+  // 实现弹幕精选逻辑
+  // 返回精选后的弹幕数组
+  var ratio = params.ratio / 100;
+  var keepCount = Math.max(1, Math.round(danmaku.length * ratio));
+  var filtered = danmaku.filter(function(item) {
+    return item.content.length >= params.minLen;
+  });
+  // 按质量评分排序后取前 N 条
+  filtered.sort(function(a, b) { return b.content.length - a.content.length; });
+  return filtered.slice(0, keepCount);
+}
+
+function pluginOnEvent(event) {
+  if (event.name === 'danmakuLoaded') {
+    var originalDanmaku = event.data.danmaku; // [{time, content, type, color}, ...]
+    var filteredDanmaku = filterDanmaku(originalDanmaku);
+
+    // replace 参数必须是 { count, comments } 格式
+    danmaku.replace({
+      count: filteredDanmaku.length,
+      comments: filteredDanmaku
+    });
+
+    dev.log('弹幕精选: ' + originalDanmaku.length + ' -> ' + filteredDanmaku.length);
+  }
+}
+
+function pluginHandleUIAction(actionId) {
+  // 处理配置项变更
+  return { type: 'text', title: '弹幕精选', content: '配置已更新' };
+}
+```
+
+要点：
+
+- 监听 `danmakuLoaded` 事件获取弹幕数据（`event.data.danmaku` 为弹幕数组）
+- 使用 `danmaku.replace({ count, comments })` 替换弹幕数据，**参数必须是包含 `count` 和 `comments` 字段的对象**
+- `danmaku.replace()` 之后宿主会自动应用修改并刷新弹幕显示
+- 通过 `pluginUIEntries` 提供可配置的参数
+- 使用 `settings.getText()` 读取用户配置

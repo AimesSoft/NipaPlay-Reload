@@ -6,6 +6,7 @@ import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 double get strokeWidth => isPhone ? 0.7 : 1.0;
@@ -157,7 +158,12 @@ bool get isIPad {
   return isTablet;
 }
 
-bool get isDownloaderSupportedPlatform => !isIPad;
+bool get isDownloaderSupportedPlatform {
+  if (!kIsWeb && Platform.isIOS) {
+    return PluginService.forceEnableDownloader;
+  }
+  return true;
+}
 
 bool get isTouch {
   //移动平台

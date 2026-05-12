@@ -1,3 +1,5 @@
+import 'package:nipaplay/plugins/models/plugin_permission.dart';
+
 class PluginManifest {
   const PluginManifest({
     required this.id,
@@ -6,6 +8,8 @@ class PluginManifest {
     required this.description,
     required this.author,
     this.github,
+    this.minHostVersion = '1.0.0',
+    this.permissions = const [],
   });
 
   final String id;
@@ -14,6 +18,8 @@ class PluginManifest {
   final String description;
   final String author;
   final String? github;
+  final String minHostVersion;
+  final List<PluginPermission> permissions;
 
   factory PluginManifest.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? '').toString().trim();
@@ -25,6 +31,18 @@ class PluginManifest {
     final description = (json['description'] ?? '').toString().trim();
     final author = (json['author'] ?? '').toString().trim();
     final githubRaw = json['github']?.toString().trim();
+    final minHostVersion =
+        (json['minHostVersion'] ?? '1.0.0').toString().trim();
+
+    final permissionsJson = json['permissions'] as List? ?? [];
+    final permissions = <PluginPermission>[];
+    for (final permissionId in permissionsJson) {
+      final permission = PluginPermission.fromId(permissionId.toString().trim());
+      if (permission != null) {
+        permissions.add(permission);
+      }
+    }
+
     return PluginManifest(
       id: id,
       name: name,
@@ -32,6 +50,8 @@ class PluginManifest {
       description: description,
       author: author,
       github: (githubRaw == null || githubRaw.isEmpty) ? null : githubRaw,
+      minHostVersion: minHostVersion,
+      permissions: permissions,
     );
   }
 }
