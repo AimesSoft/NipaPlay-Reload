@@ -28,6 +28,7 @@ class NipaPlayNextEngine {
 
   final List<_NextItem> _items = [];
   final List<double> _itemTimes = [];
+  final List<PositionedDanmakuItem> _positionedBuffer = [];
   bool _layoutDirty = true;
 
   void configure({
@@ -109,7 +110,7 @@ class NipaPlayNextEngine {
     final left = _lowerBound(windowStart);
     final right = _upperBound(currentTimeSeconds);
 
-    final List<PositionedDanmakuItem> positioned = [];
+    _positionedBuffer.clear();
 
     for (int i = left; i < right; i++) {
       final item = _items[i];
@@ -122,29 +123,23 @@ class NipaPlayNextEngine {
         case DanmakuItemType.scroll:
           if (elapsed > _scrollDurationSeconds) continue;
           final x = _size.width - item.scrollSpeed * elapsed;
-          positioned.add(
-            PositionedDanmakuItem(
-              content: item.content,
-              x: x,
-              y: item.yPosition,
-              offstageX: _size.width + item.width,
-              time: item.timeSeconds,
-            ),
-          );
+          _positionedBuffer.add(_toPositionedItem(
+            source: item,
+            x: x,
+            y: item.yPosition,
+            offstageX: _size.width + item.width,
+          ));
           break;
         case DanmakuItemType.top:
         case DanmakuItemType.bottom:
           if (elapsed > _staticDurationSeconds) continue;
           final x = (_size.width - item.width) / 2;
-          positioned.add(
-            PositionedDanmakuItem(
-              content: item.content,
-              x: x,
-              y: item.yPosition,
-              offstageX: _size.width,
-              time: item.timeSeconds,
-            ),
-          );
+          _positionedBuffer.add(_toPositionedItem(
+            source: item,
+            x: x,
+            y: item.yPosition,
+            offstageX: _size.width,
+          ));
           break;
       }
     }
@@ -152,10 +147,35 @@ class NipaPlayNextEngine {
     DanmakuNextLog.d(
       'Engine',
       'layout time=${currentTimeSeconds.toStringAsFixed(2)} window=[$windowStart..$currentTimeSeconds] '
-      'range=[$left,$right) out=${positioned.length}',
+          'range=[$left,$right) out=${_positionedBuffer.length}',
       throttle: const Duration(seconds: 1),
     );
-    return positioned;
+    return _positionedBuffer;
+  }
+
+  PositionedDanmakuItem _toPositionedItem({
+    required _NextItem source,
+    required double x,
+    required double y,
+    required double offstageX,
+  }) {
+    final existing = source.positionedItem;
+    if (existing == null) {
+      final created = PositionedDanmakuItem(
+        content: source.content,
+        x: x,
+        y: y,
+        offstageX: offstageX,
+        time: source.timeSeconds,
+      );
+      source.positionedItem = created;
+      return created;
+    }
+
+    existing.x = x;
+    existing.y = y;
+    existing.offstageX = offstageX;
+    return existing;
   }
 
   void _parseDanmakuList(List<Map<String, dynamic>> danmakuList) {
@@ -182,9 +202,8 @@ class NipaPlayNextEngine {
         type: type,
         color: color,
         isMe: isMe,
-        fontSizeMultiplier: isMerged
-            ? _calcMergedFontSizeMultiplier(mergeCount)
-            : 1.0,
+        fontSizeMultiplier:
+            isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
         countText: isMerged ? 'x$mergeCount' : null,
       );
 
@@ -246,7 +265,7 @@ class NipaPlayNextEngine {
     DanmakuNextLog.d(
       'Engine',
       'layout rebuild tracks=$trackCount font=${_fontSize.toStringAsFixed(1)} area=${_displayArea.toStringAsFixed(2)} '
-      'scroll=${_scrollDurationSeconds.toStringAsFixed(1)} stacking=$_allowStacking',
+          'scroll=${_scrollDurationSeconds.toStringAsFixed(1)} stacking=$_allowStacking',
       throttle: Duration.zero,
     );
 
@@ -334,8 +353,7 @@ class NipaPlayNextEngine {
 
     final List<double> scrollTrackOffsets =
         List<double>.filled(trackCount, 0.0);
-    final List<double> topTrackOffsets =
-        List<double>.filled(trackCount, 0.0);
+    final List<double> topTrackOffsets = List<double>.filled(trackCount, 0.0);
     final List<double> bottomTrackOffsets =
         List<double>.filled(trackCount, 0.0);
 
@@ -697,6 +715,7 @@ class _NextItem {
   final DanmakuContentItem content;
   final DanmakuItemType type;
 
+  PositionedDanmakuItem? positionedItem;
   int trackIndex = -1;
   double yPosition = 0.0;
   double width = 0.0;

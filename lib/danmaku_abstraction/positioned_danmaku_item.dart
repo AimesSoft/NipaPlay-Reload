@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
 import 'danmaku_content_item.dart';
 
-/// A data class that represents a danmaku item with its calculated position.
-/// This is used to pass layout information from the CPU logic (DanmakuContainer)
-/// to the GPU renderer (GPUDanmakuOverlay).
+/// Mutable layout result for a danmaku item.
+///
+/// x/y/offstageX are intentionally mutable so layout results can be reused
+/// across frames without creating new objects every tick.
 class PositionedDanmakuItem {
   final DanmakuContentItem content;
-  final double x;
-  final double y;
-  final double offstageX; // The starting X position when it's off-screen
+  double x;
+  double y;
+  double offstageX;
   final double time; // The original time of the danmaku
 
   PositionedDanmakuItem({
@@ -18,4 +18,4 @@ class PositionedDanmakuItem {
     required this.offstageX,
     required this.time,
   });
-} 
+}

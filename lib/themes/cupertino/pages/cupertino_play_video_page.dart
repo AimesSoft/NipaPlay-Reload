@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -90,6 +91,41 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     final focusedContext = FocusManager.instance.primaryFocus?.context;
     if (focusedContext == null) return false;
     return focusedContext.widget is EditableText;
+  }
+
+  Widget _buildDanmakuOverlay(VideoPlayerState videoState) {
+    final isNextKernel = DanmakuKernelFactory.getKernelType() ==
+        DanmakuRenderEngine.nipaplayNext;
+    return ValueListenableBuilder<double>(
+      valueListenable: videoState.playbackTimeMs,
+      child: DanmakuOverlay(
+        key: ValueKey(
+          'danmaku_${videoState.danmakuOverlayKey}',
+        ),
+        currentPosition: videoState.playbackTimeMs.value,
+        videoDuration: videoState.duration.inMilliseconds.toDouble(),
+        isPlaying: videoState.status == PlayerStatus.playing,
+        fontSize: videoState.actualDanmakuFontSize,
+        isVisible: videoState.danmakuVisible,
+        opacity: videoState.mappedDanmakuOpacity,
+      ),
+      builder: (context, posMs, child) {
+        if (isNextKernel && child != null) {
+          return child;
+        }
+        return DanmakuOverlay(
+          key: ValueKey(
+            'danmaku_${videoState.danmakuOverlayKey}',
+          ),
+          currentPosition: posMs,
+          videoDuration: videoState.duration.inMilliseconds.toDouble(),
+          isPlaying: videoState.status == PlayerStatus.playing,
+          fontSize: videoState.actualDanmakuFontSize,
+          isVisible: videoState.danmakuVisible,
+          opacity: videoState.mappedDanmakuOpacity,
+        );
+      },
+    );
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -337,9 +373,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
           AdaptiveSnackBar.show(
             context,
             message: ok ? '截图已保存到相册' : '截图失败',
-            type: ok
-                ? AdaptiveSnackBarType.success
-                : AdaptiveSnackBarType.error,
+            type:
+                ok ? AdaptiveSnackBarType.success : AdaptiveSnackBarType.error,
           );
           return;
         }
@@ -518,8 +553,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
             debugLabel: videoState.currentVideoPath?.split('/').last,
           )
         : null;
-    final hasVideo =
-        videoState.hasVideo &&
+    final hasVideo = videoState.hasVideo &&
         (kIsWeb ||
             videoState.player.prefersPlatformVideoSurface ||
             (textureId != null && textureId >= 0));
@@ -599,8 +633,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                             aspectRatio: videoState.aspectRatio,
                             child: kIsWeb
                                 ? (controller == null
-                                      ? const SizedBox.shrink()
-                                      : VideoPlayer(controller))
+                                    ? const SizedBox.shrink()
+                                    : VideoPlayer(controller))
                                 : (nativeVideoView ??
                                     (textureId == null
                                         ? const SizedBox.shrink()
@@ -614,23 +648,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                 Positioned.fill(
                   child: IgnorePointer(
                     ignoring: true,
-                    child: ValueListenableBuilder<double>(
-                      valueListenable: videoState.playbackTimeMs,
-                      builder: (context, posMs, __) {
-                        return DanmakuOverlay(
-                          key: ValueKey(
-                            'danmaku_${videoState.danmakuOverlayKey}',
-                          ),
-                          currentPosition: posMs,
-                          videoDuration:
-                              videoState.duration.inMilliseconds.toDouble(),
-                          isPlaying: videoState.status == PlayerStatus.playing,
-                          fontSize: videoState.actualDanmakuFontSize,
-                          isVisible: videoState.danmakuVisible,
-                          opacity: videoState.mappedDanmakuOpacity,
-                        );
-                      },
-                    ),
+                    child: _buildDanmakuOverlay(videoState),
                   ),
                 ),
               if (videoState.hasVideo)
@@ -640,7 +658,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                     child: ValueListenableBuilder<double>(
                       valueListenable: videoState.playbackTimeMs,
                       builder: (context, posMs, __) {
-                        return ExternalSubtitleOverlay(currentPositionMs: posMs);
+                        return ExternalSubtitleOverlay(
+                            currentPositionMs: posMs);
                       },
                     ),
                   ),
@@ -675,8 +694,7 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
   Widget _buildNipaplayControls(VideoPlayerState videoState) {
     final bool uiLocked = globals.isPhone ? _isUiLocked : false;
-    final bool showLockButton =
-        globals.isPhone &&
+    final bool showLockButton = globals.isPhone &&
         (videoState.showControls || (uiLocked && _showUiLockButton));
     final bool showShareButton =
         SystemShareService.isSupported && !globals.isDesktop;
@@ -818,14 +836,12 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                           if (showShareButton) ...[
                             const SizedBox(width: 12),
                             ShadowActionButton(
-                              tooltip:
-                                  (!kIsWeb &&
+                              tooltip: (!kIsWeb &&
                                       defaultTargetPlatform ==
                                           TargetPlatform.iOS)
                                   ? '分享 / AirDrop'
                                   : '分享',
-                              icon:
-                                  (!kIsWeb &&
+                              icon: (!kIsWeb &&
                                       defaultTargetPlatform ==
                                           TargetPlatform.iOS)
                                   ? Icons.ios_share_rounded
@@ -963,8 +979,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
 
     final TabController? tabController =
         context.findAncestorWidgetOfExactType<DefaultTabController>() != null
-        ? DefaultTabController.of(context)
-        : null;
+            ? DefaultTabController.of(context)
+            : null;
 
     if (tabController == null) {
       _horizontalDragDistance = 0.0;
@@ -1539,9 +1555,8 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
                   ),
                   SizedBox(height: isPhone ? 6 : 8),
                   AdaptiveSlider(
-                    value: totalMillis > 0
-                        ? progressValue.clamp(0.0, 1.0)
-                        : 0.0,
+                    value:
+                        totalMillis > 0 ? progressValue.clamp(0.0, 1.0) : 0.0,
                     min: 0.0,
                     max: 1.0,
                     activeColor: CupertinoColors.activeBlue,

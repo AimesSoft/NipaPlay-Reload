@@ -1,22 +1,28 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+
+import 'nipaplay_next_engine.dart';
 
 class NipaPlayNextCanvasPainter extends CustomPainter {
   NipaPlayNextCanvasPainter({
-    required this.items,
+    required this.engine,
+    required this.playbackTimeMs,
+    required this.timeOffsetSeconds,
     required this.fontSize,
     required this.fontFamily,
     required this.fontFamilyFallback,
     required this.locale,
     required this.outlineStyle,
     required this.shadowStyle,
-  });
+  }) : super(repaint: playbackTimeMs);
 
-  final List<PositionedDanmakuItem> items;
+  final NipaPlayNextEngine engine;
+  final ValueListenable<double> playbackTimeMs;
+  final double timeOffsetSeconds;
   final double fontSize;
   final String? fontFamily;
   final List<String>? fontFamilyFallback;
@@ -35,6 +41,8 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final items =
+        engine.layout(playbackTimeMs.value / 1000.0 + timeOffsetSeconds);
     if (items.isEmpty) return;
 
     for (final item in items) {
@@ -355,8 +363,8 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       fillPainter.width + expanded * 2,
       fillPainter.height + expanded * 2,
     );
-    final filterPaint =
-        Paint()..colorFilter = ColorFilter.mode(outlineColor, BlendMode.srcIn);
+    final filterPaint = Paint()
+      ..colorFilter = ColorFilter.mode(outlineColor, BlendMode.srcIn);
 
     for (final offset in _buildUniformOffsets(radius)) {
       canvas.saveLayer(baseBounds.shift(offset), filterPaint);
@@ -367,7 +375,8 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant NipaPlayNextCanvasPainter oldDelegate) {
-    return oldDelegate.items != items ||
+    return oldDelegate.engine != engine ||
+        oldDelegate.timeOffsetSeconds != timeOffsetSeconds ||
         oldDelegate.fontSize != fontSize ||
         oldDelegate.fontFamily != fontFamily ||
         oldDelegate.outlineStyle != outlineStyle ||
