@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -29,11 +30,19 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
   final Locale? locale;
   final DanmakuOutlineStyle outlineStyle;
   final DanmakuShadowStyle shadowStyle;
+  late final String? _fontFamilyFallbackKey =
+      fontFamilyFallback?.join('\u0000');
 
   static const int _cacheLimit = 2000;
-  static final Map<_TextCacheKey, TextPainter> _fillCache = {};
-  static final Map<_TextCacheKey, TextPainter> _strokeCache = {};
-  static final Map<_TextCacheKey, TextPainter> _shadowCache = {};
+  static const int _emojiCacheLimit = 4000;
+  static final LinkedHashMap<_TextCacheKey, TextPainter> _fillCache =
+      LinkedHashMap<_TextCacheKey, TextPainter>();
+  static final LinkedHashMap<_TextCacheKey, TextPainter> _strokeCache =
+      LinkedHashMap<_TextCacheKey, TextPainter>();
+  static final LinkedHashMap<_TextCacheKey, TextPainter> _shadowCache =
+      LinkedHashMap<_TextCacheKey, TextPainter>();
+  static final LinkedHashMap<String, bool> _emojiCache =
+      LinkedHashMap<String, bool>();
   static final Paint _selfSendPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5
@@ -48,15 +57,6 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     for (final item in items) {
       final content = item.content;
       final adjustedFontSize = fontSize * content.fontSizeMultiplier;
-      final containsEmoji = _containsEmoji(content.text);
-      final strokeColor = _getStrokeColor(
-        textColor: content.color,
-      );
-      final shadowConfig = _resolveShadowStyle(adjustedFontSize);
-      final strokeWidth = _resolveStrokeWidth(adjustedFontSize);
-      final uniformOutlineRadius =
-          _resolveUniformOutlineRadius(adjustedFontSize);
-
       final fillPainter = _getFillPainter(
         content: content,
         fontSize: adjustedFontSize,
@@ -64,20 +64,28 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       );
 
       final baseOffset = Offset(item.x, item.y);
-      if (shadowConfig != null) {
-        final shadowPainter = _getShadowPainter(
-          content: content,
-          fontSize: adjustedFontSize,
-          color: Color.fromRGBO(0, 0, 0, shadowConfig.opacity),
-          blurSigma: shadowConfig.blurSigma,
-        );
-        shadowPainter.paint(canvas, baseOffset + shadowConfig.offset);
+      if (shadowStyle != DanmakuShadowStyle.none) {
+        final shadowConfig = _resolveShadowStyle(adjustedFontSize);
+        if (shadowConfig != null) {
+          final shadowPainter = _getShadowPainter(
+            content: content,
+            fontSize: adjustedFontSize,
+            color: Color.fromRGBO(0, 0, 0, shadowConfig.opacity),
+            blurSigma: shadowConfig.blurSigma,
+          );
+          shadowPainter.paint(canvas, baseOffset + shadowConfig.offset);
+        }
       }
 
       switch (outlineStyle) {
         case DanmakuOutlineStyle.none:
           break;
         case DanmakuOutlineStyle.stroke:
+          final containsEmoji = _containsEmojiCached(content.text);
+          final strokeColor = _getStrokeColor(
+            textColor: content.color,
+          );
+          final strokeWidth = _resolveStrokeWidth(adjustedFontSize);
           if (containsEmoji) {
             _paintEmojiOutline(
               canvas: canvas,
@@ -97,6 +105,12 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
           }
           break;
         case DanmakuOutlineStyle.uniform:
+          final containsEmoji = _containsEmojiCached(content.text);
+          final strokeColor = _getStrokeColor(
+            textColor: content.color,
+          );
+          final uniformOutlineRadius =
+              _resolveUniformOutlineRadius(adjustedFontSize);
           if (containsEmoji) {
             _paintEmojiOutline(
               canvas: canvas,
@@ -111,9 +125,12 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
               fontSize: adjustedFontSize,
               color: strokeColor,
             );
-            for (final offset in _buildUniformOffsets(uniformOutlineRadius)) {
-              outlinePainter.paint(canvas, baseOffset + offset);
-            }
+            _paintUniformOutline(
+              canvas: canvas,
+              painter: outlinePainter,
+              baseOffset: baseOffset,
+              radius: uniformOutlineRadius,
+            );
           }
           break;
       }
@@ -181,7 +198,6 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     required _PainterVariant variant,
     double effectValue = 0.0,
   }) {
-    final fallbackKey = fontFamilyFallback?.join('\u0000');
     final key = _TextCacheKey(
       text: content.text,
       countText: content.countText,
@@ -190,7 +206,7 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       variant: variant,
       effectValue: effectValue,
       fontFamily: fontFamily,
-      fontFamilyFallbackKey: fallbackKey,
+      fontFamilyFallbackKey: _fontFamilyFallbackKey,
       locale: locale,
     );
 
@@ -200,7 +216,11 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       _PainterVariant.shadow => _shadowCache,
     };
     final cached = cache[key];
-    if (cached != null) return cached;
+    if (cached != null) {
+      cache.remove(key);
+      cache[key] = cached;
+      return cached;
+    }
 
     final paint = Paint()
       ..color = color
@@ -239,24 +259,20 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       locale: locale,
     )..layout(minWidth: 0, maxWidth: double.infinity);
 
-    if (cache.length > _cacheLimit) {
-      cache.clear();
-    }
-    cache[key] = painter;
+    _insertWithBound(cache, key, painter, _cacheLimit);
     return painter;
   }
 
-  List<Offset> _buildUniformOffsets(double radius) {
-    return <Offset>[
-      Offset(-radius, 0),
-      Offset(radius, 0),
-      Offset(0, -radius),
-      Offset(0, radius),
-      Offset(-radius, -radius),
-      Offset(radius, -radius),
-      Offset(-radius, radius),
-      Offset(radius, radius),
-    ];
+  static void _insertWithBound<K, V>(
+    LinkedHashMap<K, V> cache,
+    K key,
+    V value,
+    int limit,
+  ) {
+    if (cache.length >= limit && cache.isNotEmpty) {
+      cache.remove(cache.keys.first);
+    }
+    cache[key] = value;
   }
 
   _ShadowConfig? _resolveShadowStyle(double targetFontSize) {
@@ -334,6 +350,18 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     return color.r <= epsilon && color.g <= epsilon && color.b <= epsilon;
   }
 
+  bool _containsEmojiCached(String text) {
+    final cached = _emojiCache[text];
+    if (cached != null) {
+      _emojiCache.remove(text);
+      _emojiCache[text] = cached;
+      return cached;
+    }
+    final result = _containsEmoji(text);
+    _insertWithBound(_emojiCache, text, result, _emojiCacheLimit);
+    return result;
+  }
+
   bool _containsEmoji(String text) {
     for (final rune in text.runes) {
       if (_isEmojiRune(rune)) return true;
@@ -366,11 +394,121 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     final filterPaint = Paint()
       ..colorFilter = ColorFilter.mode(outlineColor, BlendMode.srcIn);
 
-    for (final offset in _buildUniformOffsets(radius)) {
-      canvas.saveLayer(baseBounds.shift(offset), filterPaint);
-      fillPainter.paint(canvas, baseOffset + offset);
-      canvas.restore();
-    }
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: -radius,
+      dy: 0,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: radius,
+      dy: 0,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: 0,
+      dy: -radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: 0,
+      dy: radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: -radius,
+      dy: -radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: radius,
+      dy: -radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: -radius,
+      dy: radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: radius,
+      dy: radius,
+    );
+  }
+
+  void _paintUniformOutline({
+    required Canvas canvas,
+    required TextPainter painter,
+    required Offset baseOffset,
+    required double radius,
+  }) {
+    painter.paint(canvas, Offset(baseOffset.dx - radius, baseOffset.dy));
+    painter.paint(canvas, Offset(baseOffset.dx + radius, baseOffset.dy));
+    painter.paint(canvas, Offset(baseOffset.dx, baseOffset.dy - radius));
+    painter.paint(canvas, Offset(baseOffset.dx, baseOffset.dy + radius));
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx - radius, baseOffset.dy - radius),
+    );
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx + radius, baseOffset.dy - radius),
+    );
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx - radius, baseOffset.dy + radius),
+    );
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx + radius, baseOffset.dy + radius),
+    );
+  }
+
+  void _paintEmojiOutlineDirection({
+    required Canvas canvas,
+    required TextPainter fillPainter,
+    required Offset baseOffset,
+    required Rect baseBounds,
+    required Paint filterPaint,
+    required double dx,
+    required double dy,
+  }) {
+    final shift = Offset(dx, dy);
+    canvas.saveLayer(baseBounds.shift(shift), filterPaint);
+    fillPainter.paint(canvas, baseOffset + shift);
+    canvas.restore();
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -20,7 +21,8 @@ class NipaPlayNextEngine {
   Locale? _locale;
   int _sourceListIdentity = 0;
 
-  final Map<String, double> _textWidthCache = {};
+  final LinkedHashMap<String, double> _textWidthCache =
+      LinkedHashMap<String, double>();
   static const int _textWidthCacheLimit = 5000;
   static const double _mergeWindowSeconds = 45.0;
   static const double _minTrackGap = 2.0;
@@ -633,7 +635,11 @@ class NipaPlayNextEngine {
   double _measureTextWidth(String text, double fontSize) {
     final key = '$fontSize|$text';
     final cached = _textWidthCache[key];
-    if (cached != null) return cached;
+    if (cached != null) {
+      _textWidthCache.remove(key);
+      _textWidthCache[key] = cached;
+      return cached;
+    }
 
     final tp = TextPainter(
       text: TextSpan(
@@ -650,8 +656,9 @@ class NipaPlayNextEngine {
     )..layout(minWidth: 0, maxWidth: double.infinity);
 
     final width = tp.size.width;
-    if (_textWidthCache.length > _textWidthCacheLimit) {
-      _textWidthCache.clear();
+    if (_textWidthCache.length >= _textWidthCacheLimit &&
+        _textWidthCache.isNotEmpty) {
+      _textWidthCache.remove(_textWidthCache.keys.first);
     }
     _textWidthCache[key] = width;
     return width;

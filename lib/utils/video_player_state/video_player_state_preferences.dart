@@ -1198,7 +1198,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   DanmakuOutlineStyle _resolveDanmakuOutlineStyle(int? index) {
-    const DanmakuOutlineStyle fallback = DanmakuOutlineStyle.uniform;
+    final DanmakuOutlineStyle fallback = globals.isMobilePlatform
+        ? DanmakuOutlineStyle.stroke
+        : DanmakuOutlineStyle.uniform;
     if (index == null ||
         index < 0 ||
         index >= DanmakuOutlineStyle.values.length) {
