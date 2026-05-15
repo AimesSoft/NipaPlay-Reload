@@ -32,6 +32,9 @@ class NipaPlayNextEngine {
   final List<double> _itemTimes = [];
   final List<PositionedDanmakuItem> _positionedBuffer = [];
   bool _layoutDirty = true;
+  int _layoutVersion = 0;
+
+  int get layoutVersion => _layoutVersion;
 
   void configure({
     required List<Map<String, dynamic>> danmakuList,
@@ -238,6 +241,7 @@ class NipaPlayNextEngine {
 
   void _rebuildLayout() {
     _layoutDirty = false;
+    _layoutVersion++;
 
     if (_items.isEmpty || _size.isEmpty) {
       DanmakuNextLog.d(

@@ -30,6 +30,7 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
   final Locale? locale;
   final DanmakuOutlineStyle outlineStyle;
   final DanmakuShadowStyle shadowStyle;
+  late final int _layoutVersion = engine.layoutVersion;
   late final String? _fontFamilyFallbackKey =
       fontFamilyFallback?.join('\u0000');
 
@@ -513,7 +514,8 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant NipaPlayNextCanvasPainter oldDelegate) {
-    return oldDelegate.engine != engine ||
+    return oldDelegate._layoutVersion != _layoutVersion ||
+        oldDelegate.engine != engine ||
         oldDelegate.timeOffsetSeconds != timeOffsetSeconds ||
         oldDelegate.fontSize != fontSize ||
         oldDelegate.fontFamily != fontFamily ||
