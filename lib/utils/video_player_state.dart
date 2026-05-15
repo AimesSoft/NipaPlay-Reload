@@ -460,7 +460,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _danmakuFontFamilyKey = 'danmaku_font_family';
   String _danmakuFontFamily = '';
   final String _danmakuOutlineStyleKey = 'danmaku_outline_style';
-  DanmakuOutlineStyle _danmakuOutlineStyle = DanmakuOutlineStyle.uniform;
+  DanmakuOutlineStyle _danmakuOutlineStyle = globals.isMobilePlatform
+      ? DanmakuOutlineStyle.stroke
+      : DanmakuOutlineStyle.uniform;
   final String _danmakuShadowStyleKey = 'danmaku_shadow_style';
   DanmakuShadowStyle _danmakuShadowStyle = globals.isMobilePlatform
       ? DanmakuShadowStyle.none

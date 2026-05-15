@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/platform_utils.dart';
@@ -88,6 +89,41 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     return kind == PointerDeviceKind.touch ||
         kind == PointerDeviceKind.stylus ||
         kind == PointerDeviceKind.invertedStylus;
+  }
+
+  Widget _buildDanmakuOverlay(VideoPlayerState videoState) {
+    final isNextKernel = DanmakuKernelFactory.getKernelType() ==
+        DanmakuRenderEngine.nipaplayNext;
+    return ValueListenableBuilder<double>(
+      valueListenable: videoState.playbackTimeMs,
+      child: DanmakuOverlay(
+        key: ValueKey(
+          'danmaku_${videoState.danmakuOverlayKey}',
+        ),
+        currentPosition: videoState.playbackTimeMs.value,
+        videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+        isPlaying: videoState.status == PlayerStatus.playing,
+        fontSize: getFontSize(videoState),
+        isVisible: videoState.danmakuVisible,
+        opacity: videoState.mappedDanmakuOpacity,
+      ),
+      builder: (context, posMs, child) {
+        if (isNextKernel && child != null) {
+          return child;
+        }
+        return DanmakuOverlay(
+          key: ValueKey(
+            'danmaku_${videoState.danmakuOverlayKey}',
+          ),
+          currentPosition: posMs,
+          videoDuration: videoState.videoDuration.inMilliseconds.toDouble(),
+          isPlaying: videoState.status == PlayerStatus.playing,
+          fontSize: getFontSize(videoState),
+          isVisible: videoState.danmakuVisible,
+          opacity: videoState.mappedDanmakuOpacity,
+        );
+      },
+    );
   }
 
   bool _isShiftPressed() {
@@ -898,33 +934,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ignoring: true,
                                           child: Consumer<VideoPlayerState>(
                                             builder: (context, videoState, _) {
-                                              // 使用高频时间轴驱动弹幕帧率
-                                              return ValueListenableBuilder<
-                                                  double>(
-                                                valueListenable:
-                                                    videoState.playbackTimeMs,
-                                                builder: (context, posMs, __) {
-                                                  return DanmakuOverlay(
-                                                    key: ValueKey(
-                                                      'danmaku_${videoState.danmakuOverlayKey}',
-                                                    ),
-                                                    currentPosition: posMs,
-                                                    videoDuration: videoState
-                                                        .videoDuration
-                                                        .inMilliseconds
-                                                        .toDouble(),
-                                                    isPlaying: videoState
-                                                            .status ==
-                                                        PlayerStatus.playing,
-                                                    fontSize: getFontSize(
-                                                      videoState,
-                                                    ),
-                                                    isVisible: videoState
-                                                        .danmakuVisible,
-                                                    opacity: videoState
-                                                        .mappedDanmakuOpacity,
-                                                  );
-                                                },
+                                              return _buildDanmakuOverlay(
+                                                videoState,
                                               );
                                             },
                                           ),
@@ -1006,34 +1017,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                             child: Consumer<VideoPlayerState>(
                                               builder:
                                                   (context, videoState, _) {
-                                                // 使用高频时间轴驱动弹幕帧率
-                                                return ValueListenableBuilder<
-                                                    double>(
-                                                  valueListenable:
-                                                      videoState.playbackTimeMs,
-                                                  builder:
-                                                      (context, posMs, __) {
-                                                    return DanmakuOverlay(
-                                                      key: ValueKey(
-                                                        'danmaku_${videoState.danmakuOverlayKey}',
-                                                      ),
-                                                      currentPosition: posMs,
-                                                      videoDuration: videoState
-                                                          .videoDuration
-                                                          .inMilliseconds
-                                                          .toDouble(),
-                                                      isPlaying: videoState
-                                                              .status ==
-                                                          PlayerStatus.playing,
-                                                      fontSize: getFontSize(
-                                                        videoState,
-                                                      ),
-                                                      isVisible: videoState
-                                                          .danmakuVisible,
-                                                      opacity: videoState
-                                                          .mappedDanmakuOpacity,
-                                                    );
-                                                  },
+                                                return _buildDanmakuOverlay(
+                                                  videoState,
                                                 );
                                               },
                                             ),

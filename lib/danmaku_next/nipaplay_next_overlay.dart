@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_canvas_painter.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_engine.dart';
@@ -13,6 +14,7 @@ const Locale _danmakuLocale = Locale.fromSubtags(
 
 class NipaPlayNextOverlay extends StatefulWidget {
   final List<Map<String, dynamic>> danmakuList;
+  final ValueListenable<double> playbackTimeMs;
   final double currentTimeSeconds;
   final double fontSize;
   final bool isVisible;
@@ -30,6 +32,7 @@ class NipaPlayNextOverlay extends StatefulWidget {
   const NipaPlayNextOverlay({
     super.key,
     required this.danmakuList,
+    required this.playbackTimeMs,
     required this.currentTimeSeconds,
     required this.fontSize,
     required this.isVisible,
@@ -52,11 +55,14 @@ class NipaPlayNextOverlay extends StatefulWidget {
 class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
   final NipaPlayNextEngine _engine = NipaPlayNextEngine();
   int _listIdentity = 0;
+  Size _lastConfiguredSize = Size.zero;
+  bool _layoutSnapshotPending = false;
 
   @override
   void initState() {
     super.initState();
     _listIdentity = identityHashCode(widget.danmakuList);
+    _layoutSnapshotPending = true;
     DanmakuNextLog.d(
       'Overlay',
       'init list=${widget.danmakuList.length} font=${widget.fontSize} visible=${widget.isVisible}',
@@ -79,6 +85,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
     final listIdentity = identityHashCode(widget.danmakuList);
     if (listIdentity != _listIdentity) {
       _listIdentity = listIdentity;
+      _layoutSnapshotPending = true;
       DanmakuNextLog.d(
         'Overlay',
         'danmaku list changed size=${widget.danmakuList.length}',
@@ -120,6 +127,9 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
           return const SizedBox.expand();
         }
 
+        final previousSize = _lastConfiguredSize;
+        _lastConfiguredSize = size;
+
         _engine.configure(
           danmakuList: widget.danmakuList,
           size: size,
@@ -133,18 +143,12 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
           locale: _danmakuLocale,
         );
 
-        final effectiveTime = widget.currentTimeSeconds + widget.timeOffset;
-        final positioned = _engine.layout(effectiveTime);
-
-        DanmakuNextLog.d(
-          'Overlay',
-          'build size=${size.width.toStringAsFixed(1)}x${size.height.toStringAsFixed(1)} '
-              'time=${effectiveTime.toStringAsFixed(2)} items=${positioned.length}',
-          throttle: const Duration(seconds: 1),
-        );
-
-        if (widget.onLayoutCalculated != null) {
-          final snapshot = positioned;
+        if (widget.onLayoutCalculated != null &&
+            (_layoutSnapshotPending || previousSize != size)) {
+          final snapshot = List<PositionedDanmakuItem>.from(
+            _engine.layout(widget.currentTimeSeconds + widget.timeOffset),
+          );
+          _layoutSnapshotPending = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             widget.onLayoutCalculated?.call(snapshot);
@@ -155,7 +159,9 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
           opacity: widget.opacity.clamp(0.0, 1.0),
           child: CustomPaint(
             painter: NipaPlayNextCanvasPainter(
-              items: positioned,
+              engine: _engine,
+              playbackTimeMs: widget.playbackTimeMs,
+              timeOffsetSeconds: widget.timeOffset,
               fontSize: widget.fontSize,
               fontFamily: fontFamily,
               fontFamilyFallback: fontFamilyFallback,
