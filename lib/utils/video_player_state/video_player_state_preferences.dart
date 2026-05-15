@@ -1928,6 +1928,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
       String? effectiveFontDir;
       String? localFontsFolder;
+      final hadPreviousFontDir = _subtitleFontDir.isNotEmpty;
 
       if (_currentVideoPath != null &&
           !_currentVideoPath!.startsWith('http') &&
@@ -1957,7 +1958,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', effectiveFontDir);
         }
-      } else {
+      } else if (hadPreviousFontDir) {
         player.setProperty('sub-fonts-dir', '');
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', '');
