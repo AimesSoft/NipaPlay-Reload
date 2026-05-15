@@ -2713,7 +2713,19 @@ class _CupertinoLibraryManagementSheetState
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
   _LibrarySource _selectedSource = _LibrarySource.local;
-  static const Set<String> _localVideoExtensions = {'.mp4', '.mkv'};
+  static const Set<String> _localVideoExtensions = {
+    '.mp4',
+    '.mkv',
+    '.avi',
+    '.mov',
+    '.wmv',
+    '.flv',
+    '.webm',
+    '.m4v',
+    '.3gp',
+    '.ts',
+    '.m2ts',
+  };
   final Map<String, List<FileSystemEntity>> _expandedLocalContents = {};
   final Set<String> _expandedLocalFolders = {};
   final Set<String> _loadingLocalFolders = {};

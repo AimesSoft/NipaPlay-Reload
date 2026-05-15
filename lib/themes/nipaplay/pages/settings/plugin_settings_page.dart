@@ -24,7 +24,6 @@ class PluginSettingsPage extends StatefulWidget {
 class _PluginSettingsPageState extends State<PluginSettingsPage> {
   bool _isCheckingUpdates = false;
   final TextEditingController _proxyController = TextEditingController();
-  String? _proxyUrlError;
 
   @override
   void initState() {
@@ -237,28 +236,6 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
       return '請輸入加速源的地址，留空不啟用';
     }
     return '请输入加速源的地址，留空不启用';
-  }
-
-  String? _validateProxyUrl(String? url) {
-    if (url == null || url.trim().isEmpty) {
-      return null;
-    }
-    final trimmed = url.trim();
-    if (!trimmed.startsWith('https://') && !trimmed.startsWith('http://')) {
-      return 'URL必须以 http:// 或 https:// 开头';
-    }
-    if (!trimmed.endsWith('/')) {
-      return 'URL必须以 / 结尾';
-    }
-    try {
-      final uri = Uri.parse(trimmed);
-      if (!uri.hasScheme || !uri.hasAuthority) {
-        return 'URL格式无效';
-      }
-    } catch (_) {
-      return 'URL格式无效';
-    }
-    return null;
   }
 
   void _openPluginMarket(BuildContext context) {
@@ -654,7 +631,6 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                     _proxyController.selection = TextSelection.fromPosition(
                       TextPosition(offset: _proxyController.text.length),
                     );
-                    _proxyUrlError = null;
                   }
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -693,17 +669,10 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                                 borderRadius:
                                     const BorderRadius.all(Radius.circular(8)),
                               ),
-                              errorText: _proxyUrlError,
                             ),
                             style: TextStyle(color: colorScheme.onSurface),
-                            onChanged: (value) {
-                              final error = _validateProxyUrl(value);
-                              setState(() {
-                                _proxyUrlError = error;
-                              });
-                              if (error == null) {
-                                settingsProvider.setGithubProxyUrl(value);
-                              }
+                            onSubmitted: (value) {
+                              settingsProvider.setGithubProxyUrl(value);
                             },
                           ),
                         ),
@@ -830,7 +799,6 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                   _proxyController.selection = TextSelection.fromPosition(
                     TextPosition(offset: _proxyController.text.length),
                   );
-                  _proxyUrlError = null;
                 }
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -868,17 +836,10 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                               borderRadius:
                                   const BorderRadius.all(Radius.circular(8)),
                             ),
-                            errorText: _proxyUrlError,
                           ),
                           style: TextStyle(color: colorScheme.onSurface),
-                          onChanged: (value) {
-                            final error = _validateProxyUrl(value);
-                            setState(() {
-                              _proxyUrlError = error;
-                            });
-                            if (error == null) {
-                              settingsProvider.setGithubProxyUrl(value);
-                            }
+                          onSubmitted: (value) {
+                            settingsProvider.setGithubProxyUrl(value);
                           },
                         ),
                       ),
