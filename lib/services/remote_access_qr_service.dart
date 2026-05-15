@@ -10,11 +10,39 @@ import 'package:zxing2/qrcode.dart';
 class RemoteAccessQrPayload {
   const RemoteAccessQrPayload({
     required this.baseUrl,
+    this.candidateBaseUrls = const <String>[],
     this.displayName,
   });
 
   final String baseUrl;
+  final List<String> candidateBaseUrls;
   final String? displayName;
+
+  List<String> get allCandidateBaseUrls {
+    final normalized = <String>[];
+    final seen = <String>{};
+
+    void add(String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      try {
+        final normalizedUrl = RemoteAccessQrService.normalizeRemoteAccessUrl(
+          trimmed,
+        );
+        if (seen.add(normalizedUrl)) {
+          normalized.add(normalizedUrl);
+        }
+      } catch (_) {
+        // ignore invalid candidate
+      }
+    }
+
+    add(baseUrl);
+    for (final url in candidateBaseUrls) {
+      add(url);
+    }
+    return normalized;
+  }
 }
 
 class RemoteAccessServerInfo {
@@ -40,8 +68,38 @@ class RemoteAccessQrService {
   static const String payloadType = 'nipaplay_remote_access';
   static const int defaultPort = 1180;
 
-  static String buildPayload({required String baseUrl}) {
-    return normalizeRemoteAccessUrl(baseUrl);
+  static String buildPayload({
+    required String baseUrl,
+    List<String> candidateBaseUrls = const <String>[],
+    String? displayName,
+  }) {
+    final normalizedBaseUrl = normalizeRemoteAccessUrl(baseUrl);
+    final normalizedCandidates = <String>[];
+    final seen = <String>{normalizedBaseUrl};
+
+    for (final candidate in candidateBaseUrls) {
+      try {
+        final normalized = normalizeRemoteAccessUrl(candidate);
+        if (seen.add(normalized)) {
+          normalizedCandidates.add(normalized);
+        }
+      } catch (_) {
+        // ignore invalid candidate
+      }
+    }
+
+    if (normalizedCandidates.isEmpty && (displayName?.trim().isEmpty ?? true)) {
+      return normalizedBaseUrl;
+    }
+
+    final payload = <String, dynamic>{
+      'type': payloadType,
+      'baseUrl': normalizedBaseUrl,
+      if (normalizedCandidates.isNotEmpty) 'urls': normalizedCandidates,
+      if (displayName?.trim().isNotEmpty == true)
+        'displayName': displayName!.trim(),
+    };
+    return json.encode(payload);
   }
 
   static RemoteAccessQrPayload parseScannedText(String text) {
@@ -60,8 +118,15 @@ class RemoteAccessQrService {
       final baseUrl =
           uri.queryParameters['baseUrl'] ?? uri.queryParameters['url'] ?? '';
       if (baseUrl.trim().isNotEmpty) {
+        final multiUrlsRaw = uri.queryParametersAll['url'];
+        final candidates = <String>[];
+        if (multiUrlsRaw != null && multiUrlsRaw.isNotEmpty) {
+          candidates
+              .addAll(multiUrlsRaw.where((item) => item.trim().isNotEmpty));
+        }
         return RemoteAccessQrPayload(
           baseUrl: normalizeRemoteAccessUrl(baseUrl),
+          candidateBaseUrls: candidates,
           displayName: uri.queryParameters['name'],
         );
       }
@@ -87,7 +152,7 @@ class RemoteAccessQrService {
       throw const FormatException('不是有效的访问地址');
     }
 
-    uri = uri.replace(path: '', query: '', fragment: '');
+    uri = uri.replace(path: '', query: null, fragment: null);
 
     if (!uri.hasPort && uri.scheme == 'http') {
       uri = uri.replace(port: defaultPort);
@@ -182,8 +247,21 @@ class RemoteAccessQrService {
       if (baseUrl.isEmpty) return null;
       final displayName =
           decoded['name']?.toString() ?? decoded['displayName']?.toString();
+      final candidateUrls = <String>[];
+      final rawUrls = decoded['urls'];
+      if (rawUrls is List) {
+        for (final value in rawUrls) {
+          final text = value?.toString().trim();
+          if (text != null && text.isNotEmpty) {
+            candidateUrls.add(text);
+          }
+        }
+      } else if (rawUrls is String && rawUrls.trim().isNotEmpty) {
+        candidateUrls.add(rawUrls.trim());
+      }
       return RemoteAccessQrPayload(
         baseUrl: normalizeRemoteAccessUrl(baseUrl),
+        candidateBaseUrls: candidateUrls,
         displayName: displayName,
       );
     } catch (_) {

@@ -272,7 +272,13 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
       final payload = await RemoteAccessQrCameraScanner.scan();
       if (payload == null) return;
 
-      final info = await RemoteAccessQrService.fetchServerInfo(payload.baseUrl);
+      final candidates = payload.allCandidateBaseUrls;
+      RemoteAccessServerInfo? info;
+      for (final candidate in candidates) {
+        info = await RemoteAccessQrService.fetchServerInfo(candidate);
+        if (info != null) break;
+      }
+
       if (info == null) {
         if (context.mounted) {
           BlurSnackBar.show(context, '未识别到可访问的 NipaPlay 远程访问服务');

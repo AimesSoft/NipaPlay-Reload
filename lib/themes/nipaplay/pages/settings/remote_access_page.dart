@@ -512,6 +512,25 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         (_accessUrls.isNotEmpty ? _accessUrls.first : null);
   }
 
+  List<String> get _qrCandidateUrls {
+    final ordered = <String>[];
+    final seen = <String>{};
+
+    for (final url in _accessUrls) {
+      if (seen.add(url)) {
+        ordered.add(url);
+      }
+    }
+
+    if (_publicIpUrl != null &&
+        _publicIpUrl!.isNotEmpty &&
+        seen.add(_publicIpUrl!)) {
+      ordered.add(_publicIpUrl!);
+    }
+
+    return ordered;
+  }
+
   Widget _buildAccessAddressSection() {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
@@ -597,6 +616,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   Widget _buildRemoteAccessQrSection() {
     final colorScheme = Theme.of(context).colorScheme;
     final qrUrl = _recommendedQrUrl;
+    final qrCandidateUrls = _qrCandidateUrls;
 
     return Padding(
       padding: const EdgeInsets.only(top: 14.0, bottom: 8.0),
@@ -623,7 +643,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                 ),
                 SizedBox(height: 6),
                 Text(
-                  '手机端在共享媒体库或远程访问页面点击扫码，拍摄此二维码后会同时连接共享媒体库与遥控器。',
+                  '手机端在共享媒体库或远程访问页面点击扫码，拍摄此二维码后会同时连接共享媒体库与遥控器；若网络环境复杂会自动按顺序尝试多个地址。',
                   style: TextStyle(
                     color: colorScheme.onSurface.withValues(alpha: 0.7),
                     fontSize: 13,
@@ -653,6 +673,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                         child: QrImageView(
                           data: RemoteAccessQrService.buildPayload(
                             baseUrl: qrUrl,
+                            candidateBaseUrls: qrCandidateUrls,
                           ),
                           version: QrVersions.auto,
                           size: 168,
@@ -681,6 +702,31 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
                                 colorScheme.onSurface.withValues(alpha: 0.75),
                               ).copyWith(fontSize: 13),
                             ),
+                            if (qrCandidateUrls.isNotEmpty) ...[
+                              SizedBox(height: 10),
+                              Text(
+                                '候选地址（扫码后将按顺序自动重试）',
+                                style: TextStyle(
+                                  color: colorScheme.onSurface
+                                      .withValues(alpha: 0.55),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              SizedBox(height: 6),
+                              ...qrCandidateUrls.map(
+                                (candidate) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 3),
+                                  child: SelectableText(
+                                    candidate,
+                                    style: _monospaceStyle(
+                                      context,
+                                      colorScheme.onSurface
+                                          .withValues(alpha: 0.72),
+                                    ).copyWith(fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                            ],
                             SizedBox(height: 8),
                             HoverScaleTextButton(
                               text: '复制地址',

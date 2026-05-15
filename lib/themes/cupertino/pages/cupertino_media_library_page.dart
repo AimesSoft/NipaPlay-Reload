@@ -1265,7 +1265,12 @@ class _CupertinoMediaLibraryPageState extends State<CupertinoMediaLibraryPage> {
       final payload = await RemoteAccessQrCameraScanner.scan();
       if (payload == null) return;
 
-      final info = await RemoteAccessQrService.fetchServerInfo(payload.baseUrl);
+      final candidates = payload.allCandidateBaseUrls;
+      RemoteAccessServerInfo? info;
+      for (final candidate in candidates) {
+        info = await RemoteAccessQrService.fetchServerInfo(candidate);
+        if (info != null) break;
+      }
       if (!mounted) return;
       if (info == null) {
         AdaptiveSnackBar.show(

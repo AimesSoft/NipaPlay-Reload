@@ -94,7 +94,12 @@ class _CupertinoRemoteControllerSettingsPageState
       final payload = await RemoteAccessQrCameraScanner.scan();
       if (payload == null) return;
 
-      final info = await RemoteAccessQrService.fetchServerInfo(payload.baseUrl);
+      final candidates = payload.allCandidateBaseUrls;
+      RemoteAccessServerInfo? info;
+      for (final candidate in candidates) {
+        info = await RemoteAccessQrService.fetchServerInfo(candidate);
+        if (info != null) break;
+      }
       if (!mounted) return;
       if (info == null) {
         AdaptiveSnackBar.show(
@@ -104,20 +109,22 @@ class _CupertinoRemoteControllerSettingsPageState
         return;
       }
 
+      final resolvedInfo = info;
       final hostname = payload.displayName?.trim().isNotEmpty == true
           ? payload.displayName!.trim()
-          : info.hostname;
+          : resolvedInfo.hostname;
+      final resolvedBaseUrl = resolvedInfo.baseUrl;
       await RemoteControlSettings.saveMatchedTarget(
-        baseUrl: info.baseUrl,
+        baseUrl: resolvedBaseUrl,
         hostname: hostname,
       );
       await _syncSharedLibraryTarget(
-        baseUrl: info.baseUrl,
+        baseUrl: resolvedBaseUrl,
         hostname: hostname,
       );
       if (!mounted) return;
       setState(() {
-        _matchedBaseUrl = info.baseUrl;
+        _matchedBaseUrl = resolvedBaseUrl;
         _matchedHostname = hostname;
       });
       await _refreshRemoteState();
