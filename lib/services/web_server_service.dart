@@ -15,7 +15,7 @@ class WebServerService {
   static const String _autoStartKey = 'web_server_auto_start';
   static const String _portKey = 'web_server_port';
   static const String _webAssetsRelativePath = 'assets/web';
-  
+
   HttpServer? _server;
   int _port = 1180;
   bool _isRunning = false;
@@ -31,6 +31,16 @@ class WebServerService {
   int get port => _port;
   bool get autoStart => _autoStart;
   String? get lastStartErrorMessage => _lastStartErrorMessage;
+
+  String _buildHttpUrlForHost(String host, int port) {
+    final normalizedHost = host.trim();
+    final parsed = InternetAddress.tryParse(normalizedHost);
+    if (parsed != null) {
+      final addressText = parsed.address;
+      return Uri(scheme: 'http', host: addressText, port: port).toString();
+    }
+    return Uri(scheme: 'http', host: normalizedHost, port: port).toString();
+  }
 
   Directory? _resolveWebUiRoot() {
     final candidates = <String>[
@@ -100,7 +110,8 @@ class WebServerService {
     final origin = request.requestedUri.origin;
     final updatedQuery = Map<String, String>.from(request.url.queryParameters);
     updatedQuery['api'] = origin;
-    final redirectUri = request.requestedUri.replace(queryParameters: updatedQuery);
+    final redirectUri =
+        request.requestedUri.replace(queryParameters: updatedQuery);
     return Response.found(redirectUri.toString());
   }
 
@@ -118,7 +129,8 @@ class WebServerService {
     if (patchedIndex != null) {
       return patchedIndex;
     }
-    final patchedBootstrap = await _tryServePatchedBootstrap(request, indexFile);
+    final patchedBootstrap =
+        await _tryServePatchedBootstrap(request, indexFile);
     if (patchedBootstrap != null) {
       return patchedBootstrap;
     }
@@ -203,8 +215,7 @@ class WebServerService {
 
   String _patchIndexForRemote(String original) {
     const bootstrapTag = '<script src="flutter_bootstrap.js" async></script>';
-    const patchedTag =
-        '<script>'
+    const patchedTag = '<script>'
         "if ('serviceWorker' in navigator) {"
         'navigator.serviceWorker.getRegistrations().then((regs) => {'
         'if (!regs.length) { return; }'
@@ -270,7 +281,8 @@ class WebServerService {
     );
   }
 
-  void _logStaticRouting(Request request, File indexFile, {required String prefix}) {
+  void _logStaticRouting(Request request, File indexFile,
+      {required String prefix}) {
     final pathValue = request.url.path;
     final accept = request.headers[HttpHeaders.acceptHeader] ?? '';
     final rootDir = indexFile.parent;
@@ -358,14 +370,14 @@ class WebServerService {
       final Handler rootHandler = (Request request) async {
         final path = request.url.path;
         //print('[WebServer] 收到请求: "$path", handlerPath: "${request.handlerPath}"');
-        
+
         if (path == 'api' || path.startsWith('api/')) {
           //print('[WebServer] 匹配到API路径，尝试分发...');
           try {
             final response = await apiRouter.call(request);
             //print('[WebServer] API路由器响应状态码: ${response.statusCode}');
             if (response.statusCode == 404) {
-               //print('[WebServer] 警告：API路由器返回404。请检查 web_api_service.dart 中的路由定义是否与请求路径匹配。');
+              //print('[WebServer] 警告：API路由器返回404。请检查 web_api_service.dart 中的路由定义是否与请求路径匹配。');
             }
             return response;
           } catch (e) {
@@ -383,8 +395,20 @@ class WebServerService {
           .addMiddleware(corsHeaders())
           .addMiddleware(logRequests())
           .addHandler(rootHandler);
-          
-      _server = await shelf_io.serve(handler, '0.0.0.0', _port);
+
+      try {
+        final v6Server = await HttpServer.bind(
+          InternetAddress.anyIPv6,
+          _port,
+          v6Only: false,
+        );
+        shelf_io.serveRequests(v6Server, handler);
+        _server = v6Server;
+      } on SocketException {
+        final v4Server = await HttpServer.bind(InternetAddress.anyIPv4, _port);
+        shelf_io.serveRequests(v4Server, handler);
+        _server = v4Server;
+      }
       _isRunning = true;
       _lastStartErrorMessage = null;
       print('Remote access server started on port ${_server!.port}');
@@ -418,7 +442,12 @@ class WebServerService {
       return 2;
     }
     final address = InternetAddress.tryParse(host);
-    if (address != null && address.type == InternetAddressType.IPv4) {
+    if (address == null) {
+      return 1;
+    }
+    if (address.isLoopback) return 2;
+
+    if (address.type == InternetAddressType.IPv4) {
       final bytes = address.rawAddress;
       if (bytes.length == 4) {
         final first = bytes[0];
@@ -426,39 +455,84 @@ class WebServerService {
         if (first == 10 ||
             (first == 172 && second >= 16 && second <= 31) ||
             (first == 192 && second == 168) ||
-            (first == 169 && second == 254)) {
+            (first == 169 && second == 254) ||
+            (first == 100 && second >= 64 && second <= 127)) {
           return 0;
         }
       }
+      return 1;
     }
+
+    if (address.type == InternetAddressType.IPv6) {
+      if (address.isLinkLocal || _isUniqueLocalIpv6(address)) {
+        return 0;
+      }
+      return 1;
+    }
+
     return 1;
   }
-  
+
+  bool _isUniqueLocalIpv6(InternetAddress address) {
+    if (address.type != InternetAddressType.IPv6 ||
+        address.rawAddress.isEmpty) {
+      return false;
+    }
+    return (address.rawAddress[0] & 0xfe) == 0xfc;
+  }
+
   Future<List<String>> getAccessUrls() async {
     if (!_isRunning || _server == null) return [];
 
-    final urls = <String>[];
+    final urls = <String>{};
+
+    void addUrl(String host) {
+      if (host.trim().isEmpty) return;
+      urls.add(_buildHttpUrlForHost(host, _server!.port));
+    }
 
     try {
-      for (var interface in await NetworkInterface.list()) {
+      for (var interface in await NetworkInterface.list(
+        includeLoopback: true,
+        includeLinkLocal: true,
+        type: InternetAddressType.any,
+      )) {
         for (var addr in interface.addresses) {
           if (addr.type == InternetAddressType.IPv4) {
-            urls.add('http://${addr.address}:${_server!.port}');
+            addUrl(addr.address);
+            continue;
           }
+
+          if (addr.type != InternetAddressType.IPv6) {
+            continue;
+          }
+
+          if (addr.isMulticast) {
+            continue;
+          }
+
+          // 链路本地地址依赖网卡 scope，跨设备扫码连接成功率低，默认不展示。
+          if (addr.isLinkLocal) {
+            continue;
+          }
+
+          addUrl(addr.address);
         }
       }
     } catch (e) {
       print('Error getting network interfaces: $e');
     }
-    urls.add('http://localhost:${_server!.port}');
-    urls.add('http://127.0.0.1:${_server!.port}');
-    urls.sort((a, b) {
+    addUrl('localhost');
+    addUrl('127.0.0.1');
+    addUrl('::1');
+    final urlList = urls.toList();
+    urlList.sort((a, b) {
       final weightCompare =
           _accessUrlSortWeight(a).compareTo(_accessUrlSortWeight(b));
       if (weightCompare != 0) return weightCompare;
       return a.compareTo(b);
     });
-    return urls;
+    return urlList;
   }
 
   Future<void> setPort(int newPort) async {
@@ -479,4 +553,4 @@ class WebServerService {
     // 写回旧Key，便于降级/旧版本读取
     await prefs.setBool(_legacyAutoStartKey, enabled);
   }
-} 
+}
