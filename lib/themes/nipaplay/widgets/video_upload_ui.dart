@@ -565,13 +565,13 @@ class _VideoUploadUIState extends State<VideoUploadUI>
               onPressed: () {
                 Navigator.of(context).pop('album');
               },
-              child: const Text('相册', style: TextStyle(color: Colors.white)),
+              child: const Text('相册'),
             ),
             HoverScaleTextButton(
               onPressed: () {
                 Navigator.of(context).pop('file'); // 先 pop
               },
-              child: const Text('文件管理器', style: TextStyle(color: Colors.white)),
+              child: const Text('文件管理器'),
             ),
           ],
         );
