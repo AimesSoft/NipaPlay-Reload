@@ -5,16 +5,16 @@ import 'package:nipaplay/plugins/models/plugin_descriptor.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_action_result.dart';
 import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
-import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/plugin_market_dialog.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 
 class CupertinoPluginSettingsPage extends StatefulWidget {
   const CupertinoPluginSettingsPage({super.key});
@@ -26,14 +26,10 @@ class CupertinoPluginSettingsPage extends StatefulWidget {
 
 class _CupertinoPluginSettingsPageState
     extends State<CupertinoPluginSettingsPage> {
-  bool _isCheckingUpdates = false;
   final TextEditingController _proxyController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _checkPluginUpdates();
-  }
+  String? _proxyUrlError;
+  bool _proxyInitialized = false;
+  bool _isProxySaving = false;
 
   @override
   void dispose() {
@@ -41,36 +37,118 @@ class _CupertinoPluginSettingsPageState
     super.dispose();
   }
 
-  Future<void> _checkPluginUpdates() async {
+  static const String _pluginsIndexUrl =
+      'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json';
+
+  Future<void> _applyProxyUrl() async {
+    if (_isProxySaving) return;
+    final value = _proxyController.text;
+    final error = _validateProxyUrl(value);
     setState(() {
-      _isCheckingUpdates = true;
+      _proxyUrlError = error;
     });
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-    final pluginService = Provider.of<PluginService>(context, listen: false);
-    await pluginService.fetchRemotePlugins(
-      proxyUrl: settingsProvider.githubProxyUrl,
-    );
+    if (error != null) return;
+
+    if (value.trim().isEmpty) {
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      settingsProvider.setGithubProxyUrl('');
+      return;
+    }
+
     setState(() {
-      _isCheckingUpdates = false;
+      _isProxySaving = true;
     });
+
+    final normalizedProxy =
+        value.trim().endsWith('/') ? value.trim() : '${value.trim()}/';
+    final testUrl = '$normalizedProxy$_pluginsIndexUrl';
+
+    try {
+      final response = await http
+          .get(Uri.parse(testUrl))
+          .timeout(const Duration(seconds: 10));
+      if (!context.mounted) return;
+      if (response.statusCode == 200) {
+        final settingsProvider =
+            Provider.of<SettingsProvider>(context, listen: false);
+        settingsProvider.setGithubProxyUrl(value.trim());
+        AdaptiveSnackBar.show(
+          context,
+          message: context.l10n.localeName.startsWith('zh_Hant')
+              ? '加速源驗證通過，已儲存'
+              : '加速源验证通过，已保存',
+          type: AdaptiveSnackBarType.success,
+        );
+      } else {
+        AdaptiveSnackBar.show(
+          context,
+          message: context.l10n.localeName.startsWith('zh_Hant')
+              ? '加速源請求失敗 (${response.statusCode})'
+              : '加速源请求失败 (${response.statusCode})',
+          type: AdaptiveSnackBarType.error,
+        );
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: context.l10n.localeName.startsWith('zh_Hant')
+            ? '加速源連接失敗，請檢查地址'
+            : '加速源连接失败，请检查地址',
+        type: AdaptiveSnackBarType.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProxySaving = false;
+        });
+      }
+    }
   }
 
-  Widget _buildUpdateBadge(String version) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemGreen,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        '有更新 v$version',
-        style: const TextStyle(
-          fontSize: 11,
-          color: CupertinoColors.white,
-        ),
-      ),
-    );
+  String? _validateProxyUrl(String? url) {
+    if (url == null || url.trim().isEmpty) {
+      return null;
+    }
+    final trimmed = url.trim();
+    if (!trimmed.startsWith('https://') && !trimmed.startsWith('http://')) {
+      return context.l10n.localeName.startsWith('zh_Hant')
+          ? 'URL必須以 http:// 或 https:// 開頭'
+          : 'URL必须以 http:// 或 https:// 开头';
+    }
+    if (!trimmed.endsWith('/')) {
+      return context.l10n.localeName.startsWith('zh_Hant')
+          ? 'URL必須以 / 結尾'
+          : 'URL必须以 / 结尾';
+    }
+    try {
+      final uri = Uri.parse(trimmed);
+      if (!uri.hasScheme || !uri.hasAuthority) {
+        return context.l10n.localeName.startsWith('zh_Hant')
+            ? 'URL格式無效'
+            : 'URL格式无效';
+      }
+    } catch (_) {
+      return context.l10n.localeName.startsWith('zh_Hant')
+          ? 'URL格式無效'
+          : 'URL格式无效';
+    }
+    return null;
+  }
+
+  String _githubProxyLabel(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return 'GitHub 加速';
+    }
+    return 'Github 加速';
+  }
+
+  String _githubProxyHint(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '請輸入加速源的地址，留空不啟用';
+    }
+    return '请输入加速源的地址，留空不启用';
   }
 
   String _pluginEnableToast(BuildContext context, String name) {
@@ -230,31 +308,6 @@ class _CupertinoPluginSettingsPageState
     return '导入插件失败：$error';
   }
 
-  String _pluginMarketTitle(BuildContext context) {
-    if (context.l10n.localeName.startsWith('zh_Hant')) {
-      return '插件市場';
-    }
-    return '插件市场';
-  }
-
-  String _githubProxyLabel(BuildContext context) {
-    if (context.l10n.localeName.startsWith('zh_Hant')) {
-      return 'GitHub 加速';
-    }
-    return 'Github 加速';
-  }
-
-  String _githubProxyHint(BuildContext context) {
-    if (context.l10n.localeName.startsWith('zh_Hant')) {
-      return '請輸入加速源的地址，留空不啟用';
-    }
-    return '请输入加速源的地址，留空不启用';
-  }
-
-  void _openPluginMarket(BuildContext context) {
-    PluginMarketDialog.show(context);
-  }
-
   Future<void> _importPlugin(
     BuildContext context,
     PluginService pluginService,
@@ -396,7 +449,8 @@ class _CupertinoPluginSettingsPageState
             orElse: () => plugin,
           );
           final currentEntries = updatedPlugin.uiEntries;
-          final showBottomButtons = currentEntries.any((e) => e.isTextInput);
+          final showBottomButtons =
+              currentEntries.any((e) => e.isTextInput);
 
           return SafeArea(
             top: false,
@@ -673,6 +727,75 @@ class _CupertinoPluginSettingsPageState
     );
   }
 
+  Widget _buildProxyUrlTile(BuildContext context) {
+    if (!_proxyInitialized) {
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      _proxyController.text = settingsProvider.githubProxyUrl;
+      _proxyInitialized = true;
+    }
+
+    return CupertinoSettingsTile(
+      leading: Icon(
+        CupertinoIcons.bolt_horizontal,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(_githubProxyLabel(context)),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: CupertinoTextField(
+                    controller: _proxyController,
+                    placeholder: _githubProxyHint(context),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    style: TextStyle(
+                      color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.label, context),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  minimumSize: const Size(0, 0),
+                  color: CupertinoTheme.of(context).primaryColor,
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: _isProxySaving ? null : _applyProxyUrl,
+                  child: _isProxySaving
+                      ? const CupertinoActivityIndicator(radius: 9)
+                      : Text(
+                          context.l10n.localeName.startsWith('zh_Hant')
+                              ? '儲存'
+                              : '保存',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                ),
+              ],
+            ),
+            if (_proxyUrlError != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _proxyUrlError!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: CupertinoColors.destructiveRed,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      backgroundColor: resolveSettingsTileBackground(context),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color backgroundColor = CupertinoDynamicColor.resolve(
@@ -723,86 +846,7 @@ class _CupertinoPluginSettingsPageState
                           backgroundColor:
                               resolveSettingsTileBackground(context),
                         ),
-                        CupertinoSettingsTile(
-                          leading: Icon(
-                            CupertinoIcons.bag,
-                            color: resolveSettingsIconColor(context),
-                          ),
-                          title: Row(
-                            children: [
-                              Text(_pluginMarketTitle(context)),
-                              if (_isCheckingUpdates)
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 8),
-                                  child: CupertinoActivityIndicator(
-                                    radius: 10,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          showChevron: true,
-                          onTap: () => _openPluginMarket(context),
-                          backgroundColor:
-                              resolveSettingsTileBackground(context),
-                        ),
-                      ],
-                    ),
-                    Consumer<SettingsProvider>(
-                      builder: (context, settingsProvider, child) {
-                        if (_proxyController.text !=
-                            settingsProvider.githubProxyUrl) {
-                          _proxyController.text =
-                              settingsProvider.githubProxyUrl;
-                          _proxyController.selection =
-                              TextSelection.fromPosition(
-                            TextPosition(offset: _proxyController.text.length),
-                          );
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Text(
-                                _githubProxyLabel(context),
-                                style: TextStyle(
-                                  color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.label,
-                                    context,
-                                  ).withValues(alpha: 0.78),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: CupertinoTextField(
-                                  controller: _proxyController,
-                                  placeholder: _githubProxyHint(context),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: CupertinoDynamicColor.resolve(
-                                      CupertinoColors.systemGrey5,
-                                      context,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  onSubmitted: (value) {
-                                    settingsProvider.setGithubProxyUrl(value);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                    CupertinoSettingsGroupCard(
-                      margin: const EdgeInsets.only(top: 12),
-                      backgroundColor:
-                          resolveSettingsSectionBackground(context),
-                      addDividers: true,
-                      children: [
+                        _buildProxyUrlTile(context),
                         CupertinoSettingsTile(
                           title: Text(_pluginsEmpty(context)),
                           backgroundColor:
@@ -836,101 +880,14 @@ class _CupertinoPluginSettingsPageState
                         onTap: () => _importPlugin(context, pluginService),
                         backgroundColor: resolveSettingsTileBackground(context),
                       ),
-                      CupertinoSettingsTile(
-                        leading: Icon(
-                          CupertinoIcons.bag,
-                          color: resolveSettingsIconColor(context),
-                        ),
-                        title: Row(
-                          children: [
-                            Text(_pluginMarketTitle(context)),
-                            if (_isCheckingUpdates)
-                              const Padding(
-                                padding: EdgeInsets.only(left: 8),
-                                child: CupertinoActivityIndicator(
-                                  radius: 10,
-                                ),
-                              ),
-                          ],
-                        ),
-                        showChevron: true,
-                        onTap: () => _openPluginMarket(context),
-                        backgroundColor: resolveSettingsTileBackground(context),
-                      ),
-                    ],
-                  ),
-                  Consumer<SettingsProvider>(
-                    builder: (context, settingsProvider, child) {
-                      if (_proxyController.text !=
-                          settingsProvider.githubProxyUrl) {
-                        _proxyController.text = settingsProvider.githubProxyUrl;
-                        _proxyController.selection = TextSelection.fromPosition(
-                          TextPosition(offset: _proxyController.text.length),
-                        );
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              _githubProxyLabel(context),
-                              style: TextStyle(
-                                color: CupertinoDynamicColor.resolve(
-                                  CupertinoColors.label,
-                                  context,
-                                ).withValues(alpha: 0.78),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: CupertinoTextField(
-                                controller: _proxyController,
-                                placeholder: _githubProxyHint(context),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: CupertinoDynamicColor.resolve(
-                                    CupertinoColors.systemGrey5,
-                                    context,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                onSubmitted: (value) {
-                                  settingsProvider.setGithubProxyUrl(value);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  CupertinoSettingsGroupCard(
-                    margin: const EdgeInsets.only(top: 12),
-                    backgroundColor: resolveSettingsSectionBackground(context),
-                    addDividers: true,
-                    children: [
+                      _buildProxyUrlTile(context),
                       for (final plugin in plugins)
                         CupertinoSettingsTile(
                           leading: Icon(
                             CupertinoIcons.cube_box,
                             color: resolveSettingsIconColor(context),
                           ),
-                          title: Row(
-                            children: [
-                              Expanded(
-                                child: Text(plugin.manifest.name),
-                              ),
-                              if (pluginService.getAvailableUpdateVersion(
-                                      plugin.manifest.id) !=
-                                  null)
-                                _buildUpdateBadge(
-                                    pluginService.getAvailableUpdateVersion(
-                                        plugin.manifest.id)!),
-                            ],
-                          ),
+                          title: Text(plugin.manifest.name),
                           subtitle: Text(
                             _pluginSubtitle(context, plugin),
                           ),

@@ -8,6 +8,7 @@ import 'package:nipaplay/plugins/models/plugin_ui_entry.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/fluent_settings_switch.dart';
+import 'package:http/http.dart' as http;
 import 'package:nipaplay/themes/nipaplay/widgets/glass_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/plugin_market_dialog.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +25,9 @@ class PluginSettingsPage extends StatefulWidget {
 class _PluginSettingsPageState extends State<PluginSettingsPage> {
   bool _isCheckingUpdates = false;
   final TextEditingController _proxyController = TextEditingController();
+  String? _proxyUrlError;
+  bool _proxyInitialized = false;
+  bool _isProxySaving = false;
 
   @override
   void initState() {
@@ -35,6 +39,73 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
   void dispose() {
     _proxyController.dispose();
     super.dispose();
+  }
+
+  static const String _pluginsIndexUrl =
+      'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json';
+
+  Future<void> _applyProxyUrl() async {
+    if (_isProxySaving) return;
+    final value = _proxyController.text;
+    final error = _validateProxyUrl(value);
+    setState(() {
+      _proxyUrlError = error;
+    });
+    if (error != null) return;
+
+    if (value.trim().isEmpty) {
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      settingsProvider.setGithubProxyUrl('');
+      return;
+    }
+
+    setState(() {
+      _isProxySaving = true;
+    });
+
+    final normalizedProxy =
+        value.trim().endsWith('/') ? value.trim() : '${value.trim()}/';
+    final testUrl = '$normalizedProxy$_pluginsIndexUrl';
+
+    try {
+      final response = await http
+          .get(Uri.parse(testUrl))
+          .timeout(const Duration(seconds: 10));
+      if (!context.mounted) return;
+      if (response.statusCode == 200) {
+        final settingsProvider =
+            Provider.of<SettingsProvider>(context, listen: false);
+        settingsProvider.setGithubProxyUrl(value.trim());
+        BlurSnackBar.show(
+          context,
+          context.l10n.localeName.startsWith('zh_Hant')
+              ? '加速源驗證通過，已儲存'
+              : '加速源验证通过，已保存',
+        );
+      } else {
+        BlurSnackBar.show(
+          context,
+          context.l10n.localeName.startsWith('zh_Hant')
+              ? '加速源請求失敗 (${response.statusCode})'
+              : '加速源请求失败 (${response.statusCode})',
+        );
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      BlurSnackBar.show(
+        context,
+        context.l10n.localeName.startsWith('zh_Hant')
+            ? '加速源連接失敗，請檢查地址'
+            : '加速源连接失败，请检查地址',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProxySaving = false;
+        });
+      }
+    }
   }
 
   Future<void> _checkPluginUpdates() async {
@@ -236,6 +307,28 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
       return '請輸入加速源的地址，留空不啟用';
     }
     return '请输入加速源的地址，留空不启用';
+  }
+
+  String? _validateProxyUrl(String? url) {
+    if (url == null || url.trim().isEmpty) {
+      return null;
+    }
+    final trimmed = url.trim();
+    if (!trimmed.startsWith('https://') && !trimmed.startsWith('http://')) {
+      return 'URL必须以 http:// 或 https:// 开头';
+    }
+    if (!trimmed.endsWith('/')) {
+      return 'URL必须以 / 结尾';
+    }
+    try {
+      final uri = Uri.parse(trimmed);
+      if (!uri.hasScheme || !uri.hasAuthority) {
+        return 'URL格式无效';
+      }
+    } catch (_) {
+      return 'URL格式无效';
+    }
+    return null;
   }
 
   void _openPluginMarket(BuildContext context) {
@@ -623,14 +716,13 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                   ],
                 ),
               ),
-              Consumer<SettingsProvider>(
-                builder: (context, settingsProvider, child) {
-                  if (_proxyController.text !=
-                      settingsProvider.githubProxyUrl) {
+              Builder(
+                builder: (context) {
+                  if (!_proxyInitialized) {
+                    final settingsProvider =
+                        Provider.of<SettingsProvider>(context, listen: false);
                     _proxyController.text = settingsProvider.githubProxyUrl;
-                    _proxyController.selection = TextSelection.fromPosition(
-                      TextPosition(offset: _proxyController.text.length),
-                    );
+                    _proxyInitialized = true;
                   }
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -669,11 +761,32 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                                 borderRadius:
                                     const BorderRadius.all(Radius.circular(8)),
                               ),
+                              errorText: _proxyUrlError,
                             ),
                             style: TextStyle(color: colorScheme.onSurface),
-                            onSubmitted: (value) {
-                              settingsProvider.setGithubProxyUrl(value);
-                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: _isProxySaving ? null : _applyProxyUrl,
+                          icon: _isProxySaving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Icon(Icons.check, size: 18),
+                          label: Text(
+                            context.l10n.localeName.startsWith('zh_Hant')
+                                ? '儲存'
+                                : '保存',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppAccentColors.current,
+                            side: BorderSide(color: AppAccentColors.current),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 12),
                           ),
                         ),
                       ],
@@ -792,13 +905,13 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                 ],
               ),
             ),
-            Consumer<SettingsProvider>(
-              builder: (context, settingsProvider, child) {
-                if (_proxyController.text != settingsProvider.githubProxyUrl) {
+            Builder(
+              builder: (context) {
+                if (!_proxyInitialized) {
+                  final settingsProvider =
+                      Provider.of<SettingsProvider>(context, listen: false);
                   _proxyController.text = settingsProvider.githubProxyUrl;
-                  _proxyController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: _proxyController.text.length),
-                  );
+                  _proxyInitialized = true;
                 }
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -836,11 +949,32 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
                               borderRadius:
                                   const BorderRadius.all(Radius.circular(8)),
                             ),
+                            errorText: _proxyUrlError,
                           ),
                           style: TextStyle(color: colorScheme.onSurface),
-                          onSubmitted: (value) {
-                            settingsProvider.setGithubProxyUrl(value);
-                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _isProxySaving ? null : _applyProxyUrl,
+                        icon: _isProxySaving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : const Icon(Icons.check, size: 18),
+                        label: Text(
+                          context.l10n.localeName.startsWith('zh_Hant')
+                              ? '儲存'
+                              : '保存',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppAccentColors.current,
+                          side: BorderSide(color: AppAccentColors.current),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
                         ),
                       ),
                     ],

@@ -1081,7 +1081,9 @@ class _CupertinoLibraryFolderBrowserSheetState
       return;
     }
 
-    final filePaths = candidateFiles.map((e) => e.path).toList();
+    final filePaths = candidateFiles
+        .map((e) => _historyKeyForEntry(e) ?? e.path)
+        .toList();
     final folderDisplayName =
         entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
 
