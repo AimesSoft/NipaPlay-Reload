@@ -773,6 +773,20 @@ class _CupertinoWebDAVQuickSettingsPageState
                   '最后一个捕获组应为数字，如 tmdbid=(\\d+) 或 tmdb-(\\d+)',
                   style: TextStyle(color: secondaryColor.withOpacity(0.7), fontSize: 10),
                 ),
+                SizedBox(height: 12),
+                CupertinoSettingsTile(
+                  leading: Icon(CupertinoIcons.arrow_right_arrow_left, color: iconColor),
+                  title: const Text('匹配弹幕自动剧集偏移（实验中）'),
+                  subtitle: const Text('自动计算跨季剧集编号偏移量'),
+                  backgroundColor: tileColor,
+                  trailing: CupertinoSwitch(
+                    value: provider.episodeOffsetEnabled,
+                    activeColor: CupertinoColors.activeBlue,
+                    onChanged: (value) {
+                      provider.setEpisodeOffsetEnabled(value);
+                    },
+                  ),
+                ),
               ],
             ),
           ),

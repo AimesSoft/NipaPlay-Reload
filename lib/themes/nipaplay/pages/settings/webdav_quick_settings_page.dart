@@ -678,6 +678,30 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                               fontSize: 10,
                             ),
                           ),
+                          SizedBox(height: 12),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              '匹配弹幕自动剧集偏移（实验中）',
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 14,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '自动计算跨季剧集编号偏移量，修复 SxEx 季内编号与弹幕库绝对编号不匹配的问题',
+                              style: TextStyle(
+                                color: secondaryTextColor,
+                                fontSize: 11,
+                              ),
+                            ),
+                            trailing: FluentSettingsSwitch(
+                              value: provider.episodeOffsetEnabled,
+                              onChanged: (value) {
+                                provider.setEpisodeOffsetEnabled(value);
+                              },
+                            ),
+                          ),
                         ],
                       ),
                     ),

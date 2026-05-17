@@ -275,12 +275,39 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               quickMatchAnimeTitle = bangumi['animeTitle'] as String?;
 
               final episodeNumber = _extractEpisodeNumber(file.name);
+              int targetNumber = episodeNumber ?? 0;
 
               if (episodes != null && episodeNumber != null) {
+
+                // 剧集漂移修正（实验功能）
+                if (provider.episodeOffsetEnabled) {
+                  final mainEps = episodes.where((ep) {
+                    final eid = ep['episodeId']?.toString() ?? '';
+                    return eid.length >= 4 && eid[eid.length - 4] == '0';
+                  }).toList();
+
+                  if (mainEps.isNotEmpty) {
+                    int minNum = 99999;
+                    for (final ep in mainEps) {
+                      final n = int.tryParse(
+                          ep['episodeNumber']?.toString() ?? '');
+                      if (n != null && n > 0 && n < minNum) {
+                        minNum = n;
+                      }
+                    }
+                    if (minNum != 99999) {
+                      final offset = minNum - 1;
+                      targetNumber = episodeNumber + offset;
+                      debugPrint(
+                          '[WebDAV] 剧集偏移: min=$minNum, offset=$offset, target=$targetNumber');
+                    }
+                  }
+                }
+
                 for (final ep in episodes) {
                   final epNum =
                       int.tryParse(ep['episodeNumber']?.toString() ?? '');
-                  if (epNum == episodeNumber) {
+                  if (epNum == targetNumber) {
                     quickMatchEpisodeId = ep['episodeId'] as int?;
                     break;
                   }
@@ -288,7 +315,7 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
               }
 
               debugPrint(
-                  '[WebDAV] tmdbId 快速匹配结果: tmdbId=$tmdbId, episodeNumber=$episodeNumber, episodeId=$quickMatchEpisodeId');
+                  '[WebDAV] tmdbId 快速匹配结果: tmdbId=$tmdbId, episodeNumber=$episodeNumber, targetNumber=$targetNumber, episodeId=$quickMatchEpisodeId');
             }
           }
         }
