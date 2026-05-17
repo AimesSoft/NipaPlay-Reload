@@ -30,6 +30,7 @@ const MSDF_RANGE: f64 = 4.0;
 const MAX_FONT_COLLECTION_FACES: u32 = 32;
 const EDGE_COLORING_CORNER_THRESHOLD: f64 = 0.03;
 const EDGE_COLORING_SEED: u64 = 69441337420;
+const ATLAS_GLYPH_PADDING: u32 = 2;
 const SHADOW_ALPHA_SCALE: f32 = 0.85;
 const MISSING_GLYPH_FALLBACK: char = '□';
 const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
@@ -539,8 +540,14 @@ impl Next2GlyphAtlas {
             return Some(());
         }
 
-        let padded_w = msdf.width.max(1);
-        let padded_h = msdf.height.max(1);
+        let padded_w = msdf
+            .width
+            .saturating_add(ATLAS_GLYPH_PADDING.saturating_mul(2))
+            .max(1);
+        let padded_h = msdf
+            .height
+            .saturating_add(ATLAS_GLYPH_PADDING.saturating_mul(2))
+            .max(1);
 
         if self.cursor_x + padded_w > self.width {
             self.cursor_x = 0;
@@ -556,6 +563,18 @@ impl Next2GlyphAtlas {
             return None;
         }
 
+        let mut padded_pixels = vec![0u8; (padded_w * padded_h * 4) as usize];
+        let src_row_bytes = (msdf.width * 4) as usize;
+        let dst_row_bytes = (padded_w * 4) as usize;
+        let pad_bytes = (ATLAS_GLYPH_PADDING * 4) as usize;
+        for row in 0..msdf.height as usize {
+            let src_start = row * src_row_bytes;
+            let src_end = src_start + src_row_bytes;
+            let dst_start = (row + ATLAS_GLYPH_PADDING as usize) * dst_row_bytes + pad_bytes;
+            let dst_end = dst_start + src_row_bytes;
+            padded_pixels[dst_start..dst_end].copy_from_slice(&msdf.pixels[src_start..src_end]);
+        }
+
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
@@ -567,7 +586,7 @@ impl Next2GlyphAtlas {
                 },
                 aspect: wgpu::TextureAspect::All,
             },
-            &msdf.pixels,
+            &padded_pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(padded_w * 4),
@@ -580,13 +599,15 @@ impl Next2GlyphAtlas {
             },
         );
 
+        let glyph_x = self.cursor_x + ATLAS_GLYPH_PADDING;
+        let glyph_y = self.cursor_y + ATLAS_GLYPH_PADDING;
         let uv_min = [
-            self.cursor_x as f32 / self.width as f32,
-            self.cursor_y as f32 / self.height as f32,
+            glyph_x as f32 / self.width as f32,
+            glyph_y as f32 / self.height as f32,
         ];
         let uv_max = [
-            (self.cursor_x + padded_w) as f32 / self.width as f32,
-            (self.cursor_y + padded_h) as f32 / self.height as f32,
+            (glyph_x + msdf.width) as f32 / self.width as f32,
+            (glyph_y + msdf.height) as f32 / self.height as f32,
         ];
 
         let entry = GlyphAtlasEntry {
@@ -730,9 +751,14 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
     let msdf_u8: RgbImage = msdf_f32.convert();
     let raw_rgb = msdf_u8.into_raw();
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-    for chunk in raw_rgb.chunks_exact(3) {
-        rgba.extend_from_slice(chunk);
-        rgba.push(255);
+    for y in 0..height {
+        let src_y = height - 1 - y;
+        let row_start = (src_y * width * 3) as usize;
+        let row_end = row_start + (width * 3) as usize;
+        for chunk in raw_rgb[row_start..row_end].chunks_exact(3) {
+            rgba.extend_from_slice(chunk);
+            rgba.push(255);
+        }
     }
 
     let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;
@@ -1337,9 +1363,12 @@ fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
 
     let d = (dist - 0.5) * spread;
     let px = fwidth(d);
-    let fill_alpha = smoothstep(-px, px, -d);
-    let outline_alpha = smoothstep(outline_px + px, outline_px - px, abs(d));
-    let stroke_alpha = max(outline_alpha - fill_alpha, 0.0);
+    let fill_alpha = smoothstep(-px, px, d);
+    var stroke_alpha = 0.0;
+    if (outline_px > 0.0) {
+        let outline_alpha = smoothstep(outline_px + px, outline_px - px, abs(d));
+        stroke_alpha = max(outline_alpha - fill_alpha, 0.0);
+    }
 
     let color = v.outline_color * stroke_alpha + v.color * fill_alpha;
     return vec4<f32>(color.rgb, color.a);
