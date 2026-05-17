@@ -9,6 +9,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/custom_media_info_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/batch_danmaku_dialog.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
@@ -21,6 +22,20 @@ import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+
+const Set<String> _batchMatchVideoExtensions = {
+  '.mp4',
+  '.mkv',
+  '.avi',
+  '.mov',
+  '.wmv',
+  '.flv',
+  '.webm',
+  '.m4v',
+  '.3gp',
+  '.ts',
+  '.m2ts',
+};
 
 enum CupertinoLibraryBrowserSource { local, webdav, smb, sharedRemote }
 
@@ -1052,6 +1067,99 @@ class _CupertinoLibraryFolderBrowserSheetState
     return results;
   }
 
+  Future<void> _showBatchDanmakuMatchDialog(_BrowserEntry entry) async {
+    if (!entry.isDirectory) return;
+
+    final videoFiles = await _collectVideoFiles(entry.path);
+    final candidateFiles = videoFiles
+        .where((e) => _batchMatchVideoExtensions
+            .contains(p.extension(e.name).toLowerCase()))
+        .toList();
+
+    if (candidateFiles.isEmpty) {
+      _showSnack('未找到可匹配的视频文件');
+      return;
+    }
+
+    final filePaths = candidateFiles
+        .map((e) => _historyKeyForEntry(e) ?? e.path)
+        .toList();
+    final folderDisplayName =
+        entry.name.isNotEmpty ? entry.name : p.basename(entry.path);
+
+    final result = await BatchDanmakuMatchDialog.show(
+      context,
+      filePaths: filePaths,
+      initialSearchKeyword: folderDisplayName,
+    );
+
+    if (!mounted || result == null) return;
+
+    final animeId = result['animeId'];
+    final animeTitle = result['animeTitle']?.toString() ?? '';
+    final rawMappings = result['mappings'];
+
+    if (animeId is! int || animeId <= 0 || rawMappings is! List) {
+      _showSnack('批量匹配结果无效');
+      return;
+    }
+
+    final mappings = rawMappings
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    if (mappings.isEmpty) {
+      _showSnack('未选择任何匹配项');
+      return;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final mapping in mappings) {
+      final filePath = mapping['filePath'] as String?;
+      final episodeId = mapping['episodeId'] as int?;
+
+      if (filePath == null || episodeId == null) continue;
+
+      try {
+        final existing = await WatchHistoryManager.getHistoryItem(filePath);
+        final fileName = p.basename(filePath);
+
+        final historyItem = WatchHistoryItem(
+          filePath: filePath,
+          animeName: animeTitle.isNotEmpty
+              ? animeTitle
+              : existing?.animeName ?? p.basenameWithoutExtension(fileName),
+          episodeTitle: mapping['episodeTitle'] as String?,
+          episodeId: episodeId,
+          animeId: animeId,
+          watchProgress: existing?.watchProgress ?? 0.0,
+          lastPosition: existing?.lastPosition ?? 0,
+          duration: existing?.duration ?? 0,
+          lastWatchTime: DateTime.now(),
+          thumbnailPath: existing?.thumbnailPath,
+          isFromScan: existing?.isFromScan ?? false,
+          videoHash: existing?.videoHash,
+        );
+
+        await WatchHistoryManager.addOrUpdateHistory(historyItem);
+        successCount++;
+      } catch (e) {
+        failCount++;
+      }
+    }
+
+    setState(() {});
+
+    if (successCount > 0) {
+      _showSnack('批量匹配成功：成功 $successCount 个，失败 $failCount 个');
+    } else {
+      _showSnack('批量匹配失败');
+    }
+  }
+
   Future<void> _scanFolder(_BrowserEntry entry) async {
     if (!entry.isDirectory) return;
     if (kIsWeb) {
@@ -1266,7 +1374,7 @@ class _CupertinoLibraryFolderBrowserSheetState
                             ),
                           ),
                           Container(height: 0.5, color: separatorColor),
-                          if (entry.isDirectory)
+                          if (entry.isDirectory) ...[
                             buildAction(
                               title: '自定义媒体信息（本文件夹）',
                               onPressed: () async {
@@ -1277,6 +1385,14 @@ class _CupertinoLibraryFolderBrowserSheetState
                                 );
                               },
                             ),
+                            buildAction(
+                              title: '批量匹配弹幕（本文件夹）',
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                await _showBatchDanmakuMatchDialog(entry);
+                              },
+                            ),
+                          ],
                           if (!entry.isDirectory)
                             buildAction(
                               title: '自定义媒体信息',

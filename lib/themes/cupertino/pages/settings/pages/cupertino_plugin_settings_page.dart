@@ -12,10 +12,144 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 
-class CupertinoPluginSettingsPage extends StatelessWidget {
+class CupertinoPluginSettingsPage extends StatefulWidget {
   const CupertinoPluginSettingsPage({super.key});
+
+  @override
+  State<CupertinoPluginSettingsPage> createState() =>
+      _CupertinoPluginSettingsPageState();
+}
+
+class _CupertinoPluginSettingsPageState
+    extends State<CupertinoPluginSettingsPage> {
+  final TextEditingController _proxyController = TextEditingController();
+  String? _proxyUrlError;
+  bool _proxyInitialized = false;
+  bool _isProxySaving = false;
+
+  @override
+  void dispose() {
+    _proxyController.dispose();
+    super.dispose();
+  }
+
+  static const String _pluginsIndexUrl =
+      'https://raw.githubusercontent.com/AimesSoft/Nipaplay-plugins/refs/heads/main/plugins.json';
+
+  Future<void> _applyProxyUrl() async {
+    if (_isProxySaving) return;
+    final value = _proxyController.text;
+    final error = _validateProxyUrl(value);
+    setState(() {
+      _proxyUrlError = error;
+    });
+    if (error != null) return;
+
+    if (value.trim().isEmpty) {
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      settingsProvider.setGithubProxyUrl('');
+      return;
+    }
+
+    setState(() {
+      _isProxySaving = true;
+    });
+
+    final normalizedProxy =
+        value.trim().endsWith('/') ? value.trim() : '${value.trim()}/';
+    final testUrl = '$normalizedProxy$_pluginsIndexUrl';
+
+    try {
+      final response = await http
+          .get(Uri.parse(testUrl))
+          .timeout(const Duration(seconds: 10));
+      if (!context.mounted) return;
+      if (response.statusCode == 200) {
+        final settingsProvider =
+            Provider.of<SettingsProvider>(context, listen: false);
+        settingsProvider.setGithubProxyUrl(value.trim());
+        AdaptiveSnackBar.show(
+          context,
+          message: context.l10n.localeName.startsWith('zh_Hant')
+              ? '加速源驗證通過，已儲存'
+              : '加速源验证通过，已保存',
+          type: AdaptiveSnackBarType.success,
+        );
+      } else {
+        AdaptiveSnackBar.show(
+          context,
+          message: context.l10n.localeName.startsWith('zh_Hant')
+              ? '加速源請求失敗 (${response.statusCode})'
+              : '加速源请求失败 (${response.statusCode})',
+          type: AdaptiveSnackBarType.error,
+        );
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      AdaptiveSnackBar.show(
+        context,
+        message: context.l10n.localeName.startsWith('zh_Hant')
+            ? '加速源連接失敗，請檢查地址'
+            : '加速源连接失败，请检查地址',
+        type: AdaptiveSnackBarType.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProxySaving = false;
+        });
+      }
+    }
+  }
+
+  String? _validateProxyUrl(String? url) {
+    if (url == null || url.trim().isEmpty) {
+      return null;
+    }
+    final trimmed = url.trim();
+    if (!trimmed.startsWith('https://') && !trimmed.startsWith('http://')) {
+      return context.l10n.localeName.startsWith('zh_Hant')
+          ? 'URL必須以 http:// 或 https:// 開頭'
+          : 'URL必须以 http:// 或 https:// 开头';
+    }
+    if (!trimmed.endsWith('/')) {
+      return context.l10n.localeName.startsWith('zh_Hant')
+          ? 'URL必須以 / 結尾'
+          : 'URL必须以 / 结尾';
+    }
+    try {
+      final uri = Uri.parse(trimmed);
+      if (!uri.hasScheme || !uri.hasAuthority) {
+        return context.l10n.localeName.startsWith('zh_Hant')
+            ? 'URL格式無效'
+            : 'URL格式无效';
+      }
+    } catch (_) {
+      return context.l10n.localeName.startsWith('zh_Hant')
+          ? 'URL格式無效'
+          : 'URL格式无效';
+    }
+    return null;
+  }
+
+  String _githubProxyLabel(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return 'GitHub 加速';
+    }
+    return 'Github 加速';
+  }
+
+  String _githubProxyHint(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '請輸入加速源的地址，留空不啟用';
+    }
+    return '请输入加速源的地址，留空不启用';
+  }
 
   String _pluginEnableToast(BuildContext context, String name) {
     if (context.l10n.localeName.startsWith('zh_Hant')) {
@@ -593,6 +727,75 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
     );
   }
 
+  Widget _buildProxyUrlTile(BuildContext context) {
+    if (!_proxyInitialized) {
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      _proxyController.text = settingsProvider.githubProxyUrl;
+      _proxyInitialized = true;
+    }
+
+    return CupertinoSettingsTile(
+      leading: Icon(
+        CupertinoIcons.bolt_horizontal,
+        color: resolveSettingsIconColor(context),
+      ),
+      title: Text(_githubProxyLabel(context)),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: CupertinoTextField(
+                    controller: _proxyController,
+                    placeholder: _githubProxyHint(context),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    style: TextStyle(
+                      color: CupertinoDynamicColor.resolve(
+                          CupertinoColors.label, context),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  minimumSize: const Size(0, 0),
+                  color: CupertinoTheme.of(context).primaryColor,
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: _isProxySaving ? null : _applyProxyUrl,
+                  child: _isProxySaving
+                      ? const CupertinoActivityIndicator(radius: 9)
+                      : Text(
+                          context.l10n.localeName.startsWith('zh_Hant')
+                              ? '儲存'
+                              : '保存',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                ),
+              ],
+            ),
+            if (_proxyUrlError != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _proxyUrlError!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: CupertinoColors.destructiveRed,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      backgroundColor: resolveSettingsTileBackground(context),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color backgroundColor = CupertinoDynamicColor.resolve(
@@ -643,6 +846,7 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
                           backgroundColor:
                               resolveSettingsTileBackground(context),
                         ),
+                        _buildProxyUrlTile(context),
                         CupertinoSettingsTile(
                           title: Text(_pluginsEmpty(context)),
                           backgroundColor:
@@ -676,6 +880,7 @@ class CupertinoPluginSettingsPage extends StatelessWidget {
                         onTap: () => _importPlugin(context, pluginService),
                         backgroundColor: resolveSettingsTileBackground(context),
                       ),
+                      _buildProxyUrlTile(context),
                       for (final plugin in plugins)
                         CupertinoSettingsTile(
                           leading: Icon(

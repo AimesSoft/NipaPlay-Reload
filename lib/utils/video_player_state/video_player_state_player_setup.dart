@@ -445,7 +445,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         }
       }
 
-      // 优先选择简体中文相关的字幕轨道
+      // 优先选择中文相关的字幕轨道，根据程序语言设置决定优先级
       if (player.mediaInfo.subtitle != null) {
         final subtitles = player.mediaInfo.subtitle!;
         int? preferredSubtitleIndex;
@@ -454,28 +454,55 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         const simplifiedKeywords = ['简体', '简中', 'chs', 'sc', 'simplified'];
         const traditionalKeywords = ['繁體', '繁体', 'cht', 'tc', 'traditional'];
 
-        // 优先级 1: 查找简体中文轨道
+        // 获取当前程序语言设置（从设置中读取）
+        bool isTraditionalChinese = false;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final languageMode =
+              prefs.getString(SettingsKeys.appLanguageMode) ?? 'auto';
+          if (languageMode == 'traditional') {
+            isTraditionalChinese = true;
+          } else if (languageMode == 'auto') {
+            // 如果是自动模式，根据系统语言判断
+            final systemLocale =
+                WidgetsBinding.instance.platformDispatcher.locale;
+            isTraditionalChinese =
+                AppLocaleUtils.isTraditionalChineseLocale(systemLocale);
+          }
+        } catch (e) {
+          debugPrint('VideoPlayerState: 获取语言设置失败: $e');
+        }
+
+        // 根据语言设置决定搜索顺序
+        final primaryKeywords =
+            isTraditionalChinese ? traditionalKeywords : simplifiedKeywords;
+        final secondaryKeywords =
+            isTraditionalChinese ? simplifiedKeywords : traditionalKeywords;
+        final primaryType = isTraditionalChinese ? '繁体' : '简体';
+        final secondaryType = isTraditionalChinese ? '简体' : '繁体';
+
+        // 优先级 1: 查找首选语言的字幕轨道
         for (var i = 0; i < subtitles.length; i++) {
           final track = subtitles[i];
           final fullString = track.toString().toLowerCase();
-          if (simplifiedKeywords.any((kw) => fullString.contains(kw))) {
+          if (primaryKeywords.any((kw) => fullString.contains(kw))) {
             preferredSubtitleIndex = i;
             debugPrint(
-              'VideoPlayerState: 自动选择简体中文字幕: ${track.title ?? fullString}',
+              'VideoPlayerState: 自动选择${primaryType}中文字幕: ${track.title ?? fullString}',
             );
-            break; // 找到最佳匹配，跳出循环
+            break;
           }
         }
 
-        // 优先级 2: 如果没有找到简体，则查找繁体中文轨道
+        // 优先级 2: 如果没有找到首选语言，则查找次选语言的字幕轨道
         if (preferredSubtitleIndex == null) {
           for (var i = 0; i < subtitles.length; i++) {
             final track = subtitles[i];
             final fullString = track.toString().toLowerCase();
-            if (traditionalKeywords.any((kw) => fullString.contains(kw))) {
+            if (secondaryKeywords.any((kw) => fullString.contains(kw))) {
               preferredSubtitleIndex = i;
               debugPrint(
-                'VideoPlayerState: 自动选择繁体中文字幕: ${track.title ?? fullString}',
+                'VideoPlayerState: 自动选择${secondaryType}中文字幕: ${track.title ?? fullString}',
               );
               break;
             }
