@@ -1,15 +1,24 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
-use fontdue::{Font, FontSettings};
+use fdsm::bezier::scanline::FillRule;
+use fdsm::correct_error::{correct_error_msdf, ErrorCorrectionConfig};
+use fdsm::generate::generate_msdf;
+use fdsm::render::correct_sign_msdf;
+use fdsm::shape::{Contour, Shape};
+use fdsm::transform::Transform;
+use image::{buffer::ConvertBuffer, Rgb32FImage, RgbImage};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use metal::foreign_types::ForeignType;
+use nalgebra::{Affine2, Similarity2, Vector2};
 use serde::Deserialize;
+use ttf_parser::{Face, GlyphId};
 
 use super::present::{attach_present_texture, signal_frame_ready, PresentTarget};
 
@@ -17,7 +26,10 @@ const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
 const BASE_ATLAS_SIZE: u32 = 2048;
-const MSDF_SPREAD: i32 = 8;
+const MSDF_RANGE: f64 = 4.0;
+const MAX_FONT_COLLECTION_FACES: u32 = 32;
+const EDGE_COLORING_CORNER_THRESHOLD: f64 = 0.03;
+const EDGE_COLORING_SEED: u64 = 69441337420;
 const SHADOW_ALPHA_SCALE: f32 = 0.85;
 const MISSING_GLYPH_FALLBACK: char = '□';
 const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
@@ -351,6 +363,22 @@ impl GlyphVertex {
 }
 
 #[derive(Clone)]
+struct FontFaceHandle {
+    face: Face<'static>,
+}
+
+#[derive(Clone)]
+struct GlyphMsdfData {
+    pixels: Vec<u8>,
+    width: u32,
+    height: u32,
+    spread: f32,
+    offset_x: f32,
+    offset_y: f32,
+    advance: f32,
+}
+
+#[derive(Clone)]
 struct GlyphAtlasEntry {
     uv_min: [f32; 2],
     uv_max: [f32; 2],
@@ -363,7 +391,7 @@ struct GlyphAtlasEntry {
 }
 
 struct Next2GlyphAtlas {
-    fonts: Vec<Font>,
+    fonts: Vec<FontFaceHandle>,
     texture: wgpu::Texture,
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
@@ -432,13 +460,13 @@ impl Next2GlyphAtlas {
         if let Some(cached) = self.line_ascent_cache.get(&quantized_size) {
             return *cached;
         }
+
         let px = quantized_size as f32;
         let mut ascent = (px * 0.82).max(1.0);
         for font in &self.fonts {
-            if let Some(metrics) = font.horizontal_line_metrics(px) {
-                ascent = ascent.max(metrics.ascent.ceil());
-            }
+            ascent = ascent.max(scale_metric_to_px(font.face.ascender() as f32, &font.face, px));
         }
+
         self.line_ascent_cache.insert(quantized_size, ascent);
         ascent
     }
@@ -458,9 +486,7 @@ impl Next2GlyphAtlas {
     }
 
     fn has_glyph(&self, ch: char) -> bool {
-        self.fonts
-            .iter()
-            .any(|font| font.lookup_glyph_index(ch) != 0)
+        self.fonts.iter().any(|font| font.face.glyph_index(ch).is_some())
     }
 
     fn resolve_char(&self, ch: char) -> char {
@@ -476,18 +502,13 @@ impl Next2GlyphAtlas {
         ch
     }
 
-    fn rasterize_from_fonts(
-        &self,
-        ch: char,
-        px: f32,
-    ) -> Option<(fontdue::Metrics, Vec<u8>)> {
+    fn glyph_from_fonts(&self, ch: char, px: f32) -> Option<GlyphMsdfData> {
         for font in &self.fonts {
-            let glyph_index = font.lookup_glyph_index(ch);
-            if glyph_index == 0 {
+            let Some(glyph_id) = font.face.glyph_index(ch) else {
                 continue;
-            }
-            let (metrics, bitmap) = font.rasterize_indexed(glyph_index, px);
-            return Some((metrics, bitmap));
+            };
+            let data = glyph_msdf_from_face(&font.face, glyph_id, px)?;
+            return Some(data);
         }
         None
     }
@@ -499,10 +520,9 @@ impl Next2GlyphAtlas {
         quantized_size: u32,
     ) -> Option<()> {
         let px = quantized_size as f32;
-        let (metrics, bitmap) = self.rasterize_from_fonts(ch, px)?;
-        let advance = metrics.advance_width.max(px * FALLBACK_GLYPH_ADVANCE_RATIO);
+        let msdf = self.glyph_from_fonts(ch, px)?;
 
-        if metrics.width == 0 || metrics.height == 0 || bitmap.is_empty() {
+        if msdf.width == 0 || msdf.height == 0 || msdf.pixels.is_empty() {
             self.entries.insert(
                 (ch, quantized_size),
                 GlyphAtlasEntry {
@@ -510,19 +530,17 @@ impl Next2GlyphAtlas {
                     uv_max: [0.0, 0.0],
                     width: 0,
                     height: 0,
-                    offset_x: metrics.xmin as f32,
+                    offset_x: msdf.offset_x,
                     offset_y: 0.0,
-                    advance,
+                    advance: msdf.advance,
                     spread: 0.0,
                 },
             );
             return Some(());
         }
 
-        let glyph_w = metrics.width as u32;
-        let glyph_h = metrics.height as u32;
-        let padded_w = glyph_w.saturating_add((MSDF_SPREAD as u32) * 2).max(1);
-        let padded_h = glyph_h.saturating_add((MSDF_SPREAD as u32) * 2).max(1);
+        let padded_w = msdf.width.max(1);
+        let padded_h = msdf.height.max(1);
 
         if self.cursor_x + padded_w > self.width {
             self.cursor_x = 0;
@@ -538,15 +556,6 @@ impl Next2GlyphAtlas {
             return None;
         }
 
-        let msdf = generate_msdf_from_alpha(
-            &bitmap,
-            glyph_w as usize,
-            glyph_h as usize,
-            padded_w as usize,
-            padded_h as usize,
-            MSDF_SPREAD,
-        );
-
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
@@ -558,7 +567,7 @@ impl Next2GlyphAtlas {
                 },
                 aspect: wgpu::TextureAspect::All,
             },
-            &msdf,
+            &msdf.pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(padded_w * 4),
@@ -585,11 +594,10 @@ impl Next2GlyphAtlas {
             uv_max,
             width: padded_w,
             height: padded_h,
-            offset_x: metrics.xmin as f32 - MSDF_SPREAD as f32,
-            // Align with fontdue PositiveYDown layout: y = -height - ymin.
-            offset_y: -(metrics.height as f32) - metrics.ymin as f32 - MSDF_SPREAD as f32,
-            advance,
-            spread: MSDF_SPREAD as f32,
+            offset_x: msdf.offset_x,
+            offset_y: msdf.offset_y,
+            advance: msdf.advance,
+            spread: msdf.spread,
         };
 
         self.entries.insert((ch, quantized_size), entry);
@@ -601,17 +609,29 @@ impl Next2GlyphAtlas {
     }
 }
 
-fn load_font_chain() -> Result<Vec<Font>, String> {
+fn scale_metric_to_px(units: f32, face: &Face<'static>, px: f32) -> f32 {
+    let units_per_em = face.units_per_em().max(1) as f32;
+    units * (px / units_per_em)
+}
+
+fn hash_font_bytes(bytes: &[u8], collection_index: u32) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    collection_index.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn load_font_chain() -> Result<Vec<FontFaceHandle>, String> {
     let mut fonts = Vec::new();
     let mut seen = HashSet::new();
 
-    let primary = Font::from_bytes(FONT_DATA, FontSettings::default())
-        .map_err(|err| format!("load primary font failed: {err}"))?;
-    seen.insert(primary.file_hash());
-    fonts.push(primary);
+    let primary_bytes = FONT_DATA.to_vec().into_boxed_slice();
+    load_faces_from_owned_bytes(primary_bytes, &mut seen, &mut fonts)?;
 
     for path in SYSTEM_FONT_FALLBACK_PATHS {
-        load_collection_fonts(path, &mut seen, &mut fonts);
+        if let Ok(bytes) = fs::read(path) {
+            let _ = load_faces_from_owned_bytes(bytes.into_boxed_slice(), &mut seen, &mut fonts);
+        }
     }
 
     if fonts.is_empty() {
@@ -620,587 +640,119 @@ fn load_font_chain() -> Result<Vec<Font>, String> {
     Ok(fonts)
 }
 
-fn load_collection_fonts(path: &str, seen: &mut HashSet<usize>, out: &mut Vec<Font>) {
-    let Ok(bytes) = fs::read(path) else {
-        return;
-    };
+fn load_faces_from_owned_bytes(
+    bytes: Box<[u8]>,
+    seen: &mut HashSet<u64>,
+    out: &mut Vec<FontFaceHandle>,
+) -> Result<(), String> {
+    let leaked: &'static [u8] = Box::leak(bytes);
+    let face_count = ttf_parser::fonts_in_collection(leaked).unwrap_or(1);
+    let face_limit = face_count.max(1).min(MAX_FONT_COLLECTION_FACES);
 
-    let mut loaded_any = false;
-    for collection_index in 0..16u32 {
-        let settings = FontSettings {
-            collection_index,
-            ..FontSettings::default()
-        };
-        match Font::from_bytes(bytes.clone(), settings) {
-            Ok(font) => {
-                loaded_any = true;
-                let hash = font.file_hash();
-                if seen.insert(hash) {
-                    out.push(font);
-                }
-            }
-            Err(err) => {
-                if is_face_index_out_of_bounds(err) {
-                    break;
-                }
+    for collection_index in 0..face_limit {
+        let face = match Face::parse(leaked, collection_index) {
+            Ok(face) => face,
+            Err(ttf_parser::FaceParsingError::FaceIndexOutOfBounds) => break,
+            Err(_) => {
                 if collection_index == 0 {
-                    break;
+                    return Err("load primary font failed: parse face failed".to_string());
                 }
+                break;
             }
-        }
-    }
-
-    if !loaded_any {
-        let _ = path;
-    }
-}
-
-fn is_face_index_out_of_bounds(err: &str) -> bool {
-    err.to_ascii_lowercase()
-        .contains("face index is larger than the number of faces")
-}
-
-#[derive(Clone)]
-struct MsdfEdgeSegment {
-    ax: f32,
-    ay: f32,
-    bx: f32,
-    by: f32,
-    color: usize,
-}
-
-#[derive(Copy, Clone)]
-struct ContourEdge {
-    index: usize,
-    reversed: bool,
-}
-
-struct Contour {
-    edges: Vec<ContourEdge>,
-    closed: bool,
-}
-
-fn generate_msdf_from_alpha(
-    alpha_bitmap: &[u8],
-    src_width: usize,
-    src_height: usize,
-    out_width: usize,
-    out_height: usize,
-    spread: i32,
-) -> Vec<u8> {
-    let mut out = vec![0u8; out_width * out_height * 4];
-    if src_width == 0 || src_height == 0 {
-        return out;
-    }
-
-    let count = out_width * out_height;
-    let mut alpha = vec![0u8; count];
-    let offset_x = ((out_width as i32 - src_width as i32) / 2).max(0) as usize;
-    let offset_y = ((out_height as i32 - src_height as i32) / 2).max(0) as usize;
-
-    for y in 0..src_height {
-        for x in 0..src_width {
-            let dst_x = x + offset_x;
-            let dst_y = y + offset_y;
-            if dst_x >= out_width || dst_y >= out_height {
-                continue;
-            }
-            alpha[dst_y * out_width + dst_x] = alpha_bitmap[y * src_width + x];
-        }
-    }
-
-    let inside: Vec<u8> = alpha
-        .iter()
-        .map(|a| if *a > 127 { 1u8 } else { 0u8 })
-        .collect();
-
-    let mut segments = build_segments(&alpha, out_width, out_height);
-    if segments.is_empty() {
-        for i in 0..count {
-            let dst = i * 4;
-            out[dst + 3] = 255;
-        }
-        return out;
-    }
-
-    color_segments(&mut segments);
-
-    let mut edge_all = vec![0u8; count];
-    let mut edge_r = vec![0u8; count];
-    let mut edge_g = vec![0u8; count];
-    let mut edge_b = vec![0u8; count];
-
-    let mut has_r = false;
-    let mut has_g = false;
-    let mut has_b = false;
-
-    for seg in &segments {
-        match seg.color {
-            0 => {
-                rasterize_segment(seg, &mut edge_r, &mut edge_all, out_width, out_height);
-                has_r = true;
-            }
-            1 => {
-                rasterize_segment(seg, &mut edge_g, &mut edge_all, out_width, out_height);
-                has_g = true;
-            }
-            _ => {
-                rasterize_segment(seg, &mut edge_b, &mut edge_all, out_width, out_height);
-                has_b = true;
-            }
-        }
-    }
-
-    let dist_all = edt(&edge_all, out_width, out_height);
-    let dist_r = if has_r {
-        edt(&edge_r, out_width, out_height)
-    } else {
-        dist_all.clone()
-    };
-    let dist_g = if has_g {
-        edt(&edge_g, out_width, out_height)
-    } else {
-        dist_all.clone()
-    };
-    let dist_b = if has_b {
-        edt(&edge_b, out_width, out_height)
-    } else {
-        dist_all
-    };
-
-    let spread_value = spread.max(1) as f32;
-    for i in 0..count {
-        let sign = if inside[i] == 1 { -1.0 } else { 1.0 };
-
-        let mut r = 0.5 + sign * dist_r[i].sqrt() / spread_value;
-        let mut g = 0.5 + sign * dist_g[i].sqrt() / spread_value;
-        let mut b = 0.5 + sign * dist_b[i].sqrt() / spread_value;
-
-        r = r.clamp(0.0, 1.0);
-        g = g.clamp(0.0, 1.0);
-        b = b.clamp(0.0, 1.0);
-
-        let dst = i * 4;
-        out[dst] = (r * 255.0).round() as u8;
-        out[dst + 1] = (g * 255.0).round() as u8;
-        out[dst + 2] = (b * 255.0).round() as u8;
-        out[dst + 3] = 255;
-    }
-
-    out
-}
-
-fn build_segments(alpha: &[u8], width: usize, height: usize) -> Vec<MsdfEdgeSegment> {
-    if width == 0 || height == 0 {
-        return Vec::new();
-    }
-
-    let grid_w = width + 1;
-    let mut corners = vec![0.0f32; grid_w * (height + 1)];
-
-    for y in 0..=height {
-        for x in 0..=width {
-            let mut sum = 0.0f32;
-            let mut count = 0usize;
-
-            for dy in -1..=0 {
-                let py = y as i32 + dy;
-                if py < 0 || py >= height as i32 {
-                    continue;
-                }
-                let row = py as usize * width;
-                for dx in -1..=0 {
-                    let px = x as i32 + dx;
-                    if px < 0 || px >= width as i32 {
-                        continue;
-                    }
-                    sum += alpha[row + px as usize] as f32 / 255.0;
-                    count += 1;
-                }
-            }
-
-            corners[y * grid_w + x] = if count == 0 { 0.0 } else { sum / count as f32 };
-        }
-    }
-
-    let iso = 0.5f32;
-    let mut segments = Vec::new();
-
-    for y in 0..height {
-        for x in 0..width {
-            let corner_idx = y * grid_w + x;
-            let c0 = corners[corner_idx];
-            let c1 = corners[corner_idx + 1];
-            let c3 = corners[corner_idx + grid_w];
-            let c2 = corners[corner_idx + grid_w + 1];
-
-            let mut mask = 0u8;
-            if c0 >= iso {
-                mask |= 1;
-            }
-            if c1 >= iso {
-                mask |= 2;
-            }
-            if c2 >= iso {
-                mask |= 4;
-            }
-            if c3 >= iso {
-                mask |= 8;
-            }
-            if mask == 0 || mask == 15 {
-                continue;
-            }
-
-            let center = (c0 + c1 + c2 + c3) * 0.25;
-            let e0 = edge_point(x as f32, y as f32, c0, c1, iso, 0);
-            let e1 = edge_point(x as f32, y as f32, c1, c2, iso, 1);
-            let e2 = edge_point(x as f32, y as f32, c2, c3, iso, 2);
-            let e3 = edge_point(x as f32, y as f32, c3, c0, iso, 3);
-
-            let mut add_seg = |a: (f32, f32), b: (f32, f32)| {
-                let dx = a.0 - b.0;
-                let dy = a.1 - b.1;
-                if dx * dx + dy * dy < 1e-6 {
-                    return;
-                }
-                segments.push(MsdfEdgeSegment {
-                    ax: a.0,
-                    ay: a.1,
-                    bx: b.0,
-                    by: b.1,
-                    color: 0,
-                });
-            };
-
-            match mask {
-                1 => add_seg(e3, e0),
-                2 => add_seg(e0, e1),
-                3 => add_seg(e3, e1),
-                4 => add_seg(e1, e2),
-                5 => {
-                    if center >= iso {
-                        add_seg(e0, e1);
-                        add_seg(e2, e3);
-                    } else {
-                        add_seg(e3, e0);
-                        add_seg(e1, e2);
-                    }
-                }
-                6 => add_seg(e0, e2),
-                7 => add_seg(e3, e2),
-                8 => add_seg(e2, e3),
-                9 => add_seg(e0, e2),
-                10 => {
-                    if center >= iso {
-                        add_seg(e3, e0);
-                        add_seg(e1, e2);
-                    } else {
-                        add_seg(e0, e1);
-                        add_seg(e2, e3);
-                    }
-                }
-                11 => add_seg(e1, e2),
-                12 => add_seg(e1, e3),
-                13 => add_seg(e0, e1),
-                14 => add_seg(e0, e3),
-                _ => {}
-            }
-        }
-    }
-
-    segments
-}
-
-fn edge_point(x: f32, y: f32, v0: f32, v1: f32, iso: f32, edge: u8) -> (f32, f32) {
-    let denom = v1 - v0;
-    let mut t = if denom.abs() < 1e-6 {
-        0.5
-    } else {
-        (iso - v0) / denom
-    };
-    t = t.clamp(0.0, 1.0);
-
-    match edge {
-        0 => (x + t, y),
-        1 => (x + 1.0, y + t),
-        2 => (x + 1.0 - t, y + 1.0),
-        3 => (x, y + 1.0 - t),
-        _ => (x, y),
-    }
-}
-
-fn point_key(x: f32, y: f32) -> i64 {
-    let qx = (x * 1024.0).round() as i64;
-    let qy = (y * 1024.0).round() as i64;
-    (qx << 32) ^ (qy & 0xffff_ffff)
-}
-
-fn color_segments(segments: &mut [MsdfEdgeSegment]) {
-    let mut adjacency: HashMap<i64, Vec<usize>> = HashMap::new();
-    for (i, seg) in segments.iter().enumerate() {
-        let key_a = point_key(seg.ax, seg.ay);
-        let key_b = point_key(seg.bx, seg.by);
-        adjacency.entry(key_a).or_default().push(i);
-        adjacency.entry(key_b).or_default().push(i);
-    }
-
-    let mut visited = vec![false; segments.len()];
-    for i in 0..segments.len() {
-        if visited[i] {
-            continue;
-        }
-        let contour = trace_contour(i, segments, &adjacency, &mut visited);
-        assign_contour_colors(&contour, segments);
-    }
-}
-
-fn trace_contour(
-    start_index: usize,
-    segments: &[MsdfEdgeSegment],
-    adjacency: &HashMap<i64, Vec<usize>>,
-    visited: &mut [bool],
-) -> Contour {
-    let mut edges = Vec::new();
-    let start = &segments[start_index];
-
-    visited[start_index] = true;
-    edges.push(ContourEdge {
-        index: start_index,
-        reversed: false,
-    });
-
-    let start_key = point_key(start.ax, start.ay);
-    let mut current_key = point_key(start.bx, start.by);
-    let mut closed = false;
-
-    loop {
-        if current_key == start_key {
-            closed = true;
-            break;
-        }
-
-        let Some(candidates) = adjacency.get(&current_key) else {
-            break;
         };
 
-        let Some(&next_index) = candidates.iter().find(|idx| !visited[**idx]) else {
-            break;
-        };
+        let hash = hash_font_bytes(leaked, collection_index);
+        if seen.insert(hash) {
+            out.push(FontFaceHandle { face });
+        }
+    }
 
-        let next = &segments[next_index];
-        let key_a = point_key(next.ax, next.ay);
-        let key_b = point_key(next.bx, next.by);
-        let (reversed, next_key) = if key_a == current_key {
-            (false, key_b)
-        } else if key_b == current_key {
-            (true, key_a)
-        } else {
-            break;
-        };
+    Ok(())
+}
 
-        visited[next_index] = true;
-        edges.push(ContourEdge {
-            index: next_index,
-            reversed,
+fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Option<GlyphMsdfData> {
+    let bbox = face.glyph_bounding_box(glyph_id)?;
+
+    let advance_units = face
+        .glyph_hor_advance(glyph_id)
+        .map(|v| v as f32)
+        .unwrap_or_else(|| face.units_per_em() as f32 * FALLBACK_GLYPH_ADVANCE_RATIO);
+    let advance = scale_metric_to_px(advance_units, face, px)
+        .max(px * FALLBACK_GLYPH_ADVANCE_RATIO);
+
+    let width_units = (bbox.x_max - bbox.x_min).max(0) as f64;
+    let height_units = (bbox.y_max - bbox.y_min).max(0) as f64;
+    if width_units <= 0.0 || height_units <= 0.0 {
+        let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;
+        return Some(GlyphMsdfData {
+            pixels: Vec::new(),
+            width: 0,
+            height: 0,
+            spread: 0.0,
+            offset_x: scale_metric_to_px(side_bearing, face, px),
+            offset_y: 0.0,
+            advance,
         });
-        current_key = next_key;
     }
 
-    Contour { edges, closed }
+    let units_per_em = face.units_per_em().max(1) as f64;
+    let px_scale = px as f64 / units_per_em;
+
+    let translated_x = MSDF_RANGE - (bbox.x_min as f64) * px_scale;
+    let translated_y = MSDF_RANGE - (bbox.y_min as f64) * px_scale;
+    let transform = nalgebra::convert::<_, Affine2<f64>>(Similarity2::new(
+        Vector2::new(translated_x, translated_y),
+        0.0,
+        px_scale,
+    ));
+
+    let mut shape: Shape<Contour> = fdsm_ttf_parser::load_shape_from_face(face, glyph_id)?;
+    shape.transform(&transform);
+
+    let width = (width_units * px_scale + 2.0 * MSDF_RANGE).ceil().max(1.0) as u32;
+    let height = (height_units * px_scale + 2.0 * MSDF_RANGE).ceil().max(1.0) as u32;
+
+    let colored_shape =
+        Shape::edge_coloring_simple(shape, EDGE_COLORING_CORNER_THRESHOLD, EDGE_COLORING_SEED);
+    let prepared_colored_shape = colored_shape.prepare();
+
+    let mut msdf_f32 = Rgb32FImage::new(width, height);
+    generate_msdf(&prepared_colored_shape, MSDF_RANGE, &mut msdf_f32);
+    correct_error_msdf(
+        &mut msdf_f32,
+        &colored_shape,
+        &prepared_colored_shape,
+        MSDF_RANGE,
+        &ErrorCorrectionConfig::default(),
+    );
+    correct_sign_msdf(&mut msdf_f32, &prepared_colored_shape, FillRule::Nonzero);
+
+    let msdf_u8: RgbImage = msdf_f32.convert();
+    let raw_rgb = msdf_u8.into_raw();
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    for chunk in raw_rgb.chunks_exact(3) {
+        rgba.extend_from_slice(chunk);
+        rgba.push(255);
+    }
+
+    let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;
+    let offset_x = scale_metric_to_px(side_bearing, face, px) - MSDF_RANGE as f32;
+
+    let ymin = bbox.y_min as f32;
+    let height_px = height as f32;
+    let offset_y = -height_px + MSDF_RANGE as f32 - scale_metric_to_px(ymin, face, px);
+
+    Some(GlyphMsdfData {
+        pixels: rgba,
+        width,
+        height,
+        spread: MSDF_RANGE as f32,
+        offset_x,
+        offset_y,
+        advance,
+    })
 }
 
-fn assign_contour_colors(contour: &Contour, segments: &mut [MsdfEdgeSegment]) {
-    if contour.edges.is_empty() {
-        return;
-    }
-    let corner_threshold = std::f32::consts::PI / 3.0;
-
-    let mut dirs = Vec::with_capacity(contour.edges.len());
-    for edge in &contour.edges {
-        let seg = &segments[edge.index];
-        let (dx, dy) = if edge.reversed {
-            (seg.ax - seg.bx, seg.ay - seg.by)
-        } else {
-            (seg.bx - seg.ax, seg.by - seg.ay)
-        };
-        dirs.push((dx, dy));
-    }
-
-    let mut best_colors = Vec::new();
-    let mut best_conflicts = usize::MAX;
-    for start_color in 0..3usize {
-        let colors = assign_colors(&dirs, corner_threshold, start_color);
-        let conflicts = count_conflicts(&colors, &dirs, corner_threshold, contour.closed);
-        if conflicts < best_conflicts {
-            best_conflicts = conflicts;
-            best_colors = colors;
-        }
-    }
-
-    if best_colors.is_empty() {
-        best_colors = assign_colors(&dirs, corner_threshold, 0);
-    }
-
-    for (i, edge) in contour.edges.iter().enumerate() {
-        segments[edge.index].color = best_colors[i];
-    }
-}
-
-fn assign_colors(dirs: &[(f32, f32)], threshold: f32, start_color: usize) -> Vec<usize> {
-    let mut colors = vec![start_color; dirs.len()];
-    let mut color = start_color;
-    for i in 1..dirs.len() {
-        if angle_between(dirs[i - 1], dirs[i]) > threshold {
-            color = (color + 1) % 3;
-        }
-        colors[i] = color;
-    }
-    colors
-}
-
-fn count_conflicts(
-    colors: &[usize],
-    dirs: &[(f32, f32)],
-    threshold: f32,
-    closed: bool,
-) -> usize {
-    let mut conflicts = 0usize;
-    for i in 1..dirs.len() {
-        if angle_between(dirs[i - 1], dirs[i]) > threshold && colors[i] == colors[i - 1] {
-            conflicts += 1;
-        }
-    }
-    if closed && dirs.len() > 1 {
-        if angle_between(dirs[dirs.len() - 1], dirs[0]) > threshold
-            && colors[colors.len() - 1] == colors[0]
-        {
-            conflicts += 1;
-        }
-    }
-    conflicts
-}
-
-fn angle_between(a: (f32, f32), b: (f32, f32)) -> f32 {
-    let mag_a = (a.0 * a.0 + a.1 * a.1).sqrt();
-    let mag_b = (b.0 * b.0 + b.1 * b.1).sqrt();
-    if mag_a <= f32::EPSILON || mag_b <= f32::EPSILON {
-        return 0.0;
-    }
-    let dot = (a.0 * b.0 + a.1 * b.1) / (mag_a * mag_b);
-    dot.clamp(-1.0, 1.0).acos()
-}
-
-fn rasterize_segment(
-    seg: &MsdfEdgeSegment,
-    map: &mut [u8],
-    all: &mut [u8],
-    width: usize,
-    height: usize,
-) {
-    let dx = seg.bx - seg.ax;
-    let dy = seg.by - seg.ay;
-    let steps = dx.abs().max(dy.abs()).ceil() as i32;
-
-    let mut mark = |px: f32, py: f32| {
-        let ix = px.round() as i32;
-        let iy = py.round() as i32;
-        if ix < 0 || iy < 0 || ix >= width as i32 || iy >= height as i32 {
-            return;
-        }
-        let idx = iy as usize * width + ix as usize;
-        map[idx] = 1;
-        all[idx] = 1;
-    };
-
-    if steps <= 0 {
-        mark(seg.ax, seg.ay);
-        return;
-    }
-
-    for i in 0..=steps {
-        let t = i as f32 / steps as f32;
-        mark(seg.ax + dx * t, seg.ay + dy * t);
-    }
-}
-
-fn edt(binary: &[u8], width: usize, height: usize) -> Vec<f32> {
-    let count = width * height;
-    let inf = 1.0e20f32;
-    let mut data = vec![0.0f32; count];
-    for i in 0..count {
-        data[i] = if binary[i] == 1 { 0.0 } else { inf };
-    }
-
-    let max_dim = width.max(height);
-    let mut f = vec![0.0f32; max_dim];
-    let mut d = vec![0.0f32; max_dim];
-
-    for x in 0..width {
-        for y in 0..height {
-            f[y] = data[y * width + x];
-        }
-        edt1d(&f, height, &mut d);
-        for y in 0..height {
-            data[y * width + x] = d[y];
-        }
-    }
-
-    for y in 0..height {
-        let row = y * width;
-        for x in 0..width {
-            f[x] = data[row + x];
-        }
-        edt1d(&f, width, &mut d);
-        for x in 0..width {
-            data[row + x] = d[x];
-        }
-    }
-
-    data
-}
-
-fn edt1d(f: &[f32], n: usize, d: &mut [f32]) {
-    if n == 0 {
-        return;
-    }
-
-    let mut v = vec![0usize; n];
-    let mut z = vec![0.0f32; n + 1];
-    let mut k = 0usize;
-
-    v[0] = 0;
-    z[0] = -1.0e20;
-    z[1] = 1.0e20;
-
-    for q in 1..n {
-        let mut s;
-        while {
-            let p = v[k];
-            s = ((f[q] + (q * q) as f32) - (f[p] + (p * p) as f32))
-                / (2.0 * (q as f32 - p as f32));
-            s <= z[k] && k > 0
-        } {
-            k -= 1;
-        }
-
-        let p = v[k];
-        s = ((f[q] + (q * q) as f32) - (f[p] + (p * p) as f32))
-            / (2.0 * (q as f32 - p as f32));
-        k += 1;
-        v[k] = q;
-        z[k] = s;
-        z[k + 1] = 1.0e20;
-    }
-
-    k = 0;
-    for q in 0..n {
-        while z[k + 1] < q as f32 {
-            k += 1;
-        }
-        let p = v[k];
-        d[q] = (q as f32 - p as f32) * (q as f32 - p as f32) + f[p];
-    }
-}
 
 struct Next2Renderer {
     ctx: Arc<EngineDeviceContext>,

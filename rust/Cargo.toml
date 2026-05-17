@@ -18,7 +18,11 @@ bytemuck = { version = "1.24.0", features = ["derive"] }
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 wgpu = "27.0.1"
 pollster = "0.4.0"
-fontdue = "0.9.3"
+fdsm = { version = "0.8.0", default-features = false }
+fdsm-ttf-parser = "0.2.0"
+ttf-parser = "0.25.1"
+image = { version = "0.25.6", default-features = false }
+nalgebra = { version = "0.34.1", default-features = false, features = ["std"] }
 wgpu-hal = { version = "27.0.4", features = ["metal"] }
 metal = "0.32.0"
 
