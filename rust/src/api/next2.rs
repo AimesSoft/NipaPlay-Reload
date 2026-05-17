@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 const MERGE_WINDOW_SECONDS: f64 = 45.0;
-const MIN_TRACK_GAP: f64 = 2.0;
-const TRACK_GAP_RATIO: f64 = 0.20;
+const TRACK_GAP_RATIO: f64 = 0.25;
 
 pub const NEXT2_TYPE_SCROLL: i32 = 0;
 pub const NEXT2_TYPE_TOP: i32 = 1;
@@ -638,8 +637,8 @@ fn measure_text_height(font_size: f64) -> f64 {
     (font_size * 1.2).max(font_size)
 }
 
-fn resolve_base_track_height(font_size: f64, base_danmaku_height: f64) -> f64 {
-    let gap = (font_size * TRACK_GAP_RATIO).max(MIN_TRACK_GAP);
+fn resolve_base_track_height(_font_size: f64, base_danmaku_height: f64) -> f64 {
+    let gap = base_danmaku_height * TRACK_GAP_RATIO;
     base_danmaku_height + gap
 }
 

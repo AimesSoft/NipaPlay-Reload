@@ -8,12 +8,12 @@ use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
 use fdsm::bezier::scanline::FillRule;
-use fdsm::correct_error::{correct_error_msdf, ErrorCorrectionConfig};
-use fdsm::generate::generate_msdf;
-use fdsm::render::correct_sign_msdf;
+use fdsm::correct_error::{correct_error_mtsdf, ErrorCorrectionConfig};
+use fdsm::generate::generate_mtsdf;
+use fdsm::render::correct_sign_mtsdf;
 use fdsm::shape::{Contour, Shape};
 use fdsm::transform::Transform;
-use image::{buffer::ConvertBuffer, Rgb32FImage, RgbImage};
+use image::{buffer::ConvertBuffer, Rgba32FImage, RgbaImage};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use metal::foreign_types::ForeignType;
 use nalgebra::{Affine2, Similarity2, Vector2};
@@ -26,7 +26,7 @@ const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
 const BASE_ATLAS_SIZE: u32 = 2048;
-const MSDF_RANGE: f64 = 4.0;
+const MSDF_RANGE: f64 = 6.0;
 const MAX_FONT_COLLECTION_FACES: u32 = 32;
 const EDGE_COLORING_CORNER_THRESHOLD: f64 = 0.03;
 const EDGE_COLORING_SEED: u64 = 69441337420;
@@ -601,13 +601,15 @@ impl Next2GlyphAtlas {
 
         let glyph_x = self.cursor_x + ATLAS_GLYPH_PADDING;
         let glyph_y = self.cursor_y + ATLAS_GLYPH_PADDING;
+        let half_texel_u = 0.5 / self.width as f32;
+        let half_texel_v = 0.5 / self.height as f32;
         let uv_min = [
-            glyph_x as f32 / self.width as f32,
-            glyph_y as f32 / self.height as f32,
+            glyph_x as f32 / self.width as f32 + half_texel_u,
+            glyph_y as f32 / self.height as f32 + half_texel_v,
         ];
         let uv_max = [
-            (glyph_x + msdf.width) as f32 / self.width as f32,
-            (glyph_y + msdf.height) as f32 / self.height as f32,
+            (glyph_x + msdf.width) as f32 / self.width as f32 - half_texel_u,
+            (glyph_y + msdf.height) as f32 / self.height as f32 - half_texel_v,
         ];
 
         let entry = GlyphAtlasEntry {
@@ -737,27 +739,26 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
         Shape::edge_coloring_simple(shape, EDGE_COLORING_CORNER_THRESHOLD, EDGE_COLORING_SEED);
     let prepared_colored_shape = colored_shape.prepare();
 
-    let mut msdf_f32 = Rgb32FImage::new(width, height);
-    generate_msdf(&prepared_colored_shape, MSDF_RANGE, &mut msdf_f32);
-    correct_error_msdf(
-        &mut msdf_f32,
+    let mut mtsdf_f32 = Rgba32FImage::new(width, height);
+    generate_mtsdf(&prepared_colored_shape, MSDF_RANGE, &mut mtsdf_f32);
+    correct_error_mtsdf(
+        &mut mtsdf_f32,
         &colored_shape,
         &prepared_colored_shape,
         MSDF_RANGE,
         &ErrorCorrectionConfig::default(),
     );
-    correct_sign_msdf(&mut msdf_f32, &prepared_colored_shape, FillRule::Nonzero);
+    correct_sign_mtsdf(&mut mtsdf_f32, &prepared_colored_shape, FillRule::Nonzero);
 
-    let msdf_u8: RgbImage = msdf_f32.convert();
-    let raw_rgb = msdf_u8.into_raw();
+    let mtsdf_u8: RgbaImage = mtsdf_f32.convert();
+    let raw_rgba = mtsdf_u8.into_raw();
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
     for y in 0..height {
         let src_y = height - 1 - y;
-        let row_start = (src_y * width * 3) as usize;
-        let row_end = row_start + (width * 3) as usize;
-        for chunk in raw_rgb[row_start..row_end].chunks_exact(3) {
+        let row_start = (src_y * width * 4) as usize;
+        let row_end = row_start + (width * 4) as usize;
+        for chunk in raw_rgba[row_start..row_end].chunks_exact(4) {
             rgba.extend_from_slice(chunk);
-            rgba.push(255);
         }
     }
 
@@ -1277,8 +1278,11 @@ fn argb_to_linear(color_argb: i32, opacity: f32) -> [f32; 4] {
 }
 
 fn stroke_color(fill: [f32; 4]) -> [f32; 4] {
-    let luminance = 0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2];
-    if luminance < 0.45 {
+    let r = (fill[0] * 255.0).round() as i32;
+    let g = (fill[1] * 255.0).round() as i32;
+    let b = (fill[2] * 255.0).round() as i32;
+    let is_black = r <= 8 && g <= 8 && b <= 8;
+    if is_black {
         [1.0, 1.0, 1.0, fill[3]]
     } else {
         [0.0, 0.0, 0.0, fill[3]]
@@ -1356,17 +1360,22 @@ fn median3(r: f32, g: f32, b: f32) -> f32 {
 
 @fragment
 fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
-    let texel = textureSample(atlas_tex, atlas_sampler, v.uv).rgb;
-    let dist = median3(texel.r, texel.g, texel.b);
+    let texel = textureSample(atlas_tex, atlas_sampler, v.uv);
+    let dist_fill = median3(texel.r, texel.g, texel.b);
+    let dist_stroke = texel.a;
     let spread = max(v.params.x, 0.001);
     let outline_px = max(v.params.y, 0.0);
 
-    let d = (dist - 0.5) * spread;
-    let px = fwidth(d);
-    let fill_alpha = smoothstep(-px, px, d);
+    let d_fill = (dist_fill - 0.5) * spread;
+    let px_fill = fwidth(d_fill);
+    let fill_alpha = smoothstep(-px_fill, px_fill, d_fill);
     var stroke_alpha = 0.0;
     if (outline_px > 0.0) {
-        let outline_alpha = smoothstep(outline_px + px, outline_px - px, abs(d));
+        let d_stroke = (dist_stroke - 0.5) * spread;
+        let px_stroke = fwidth(d_stroke);
+        let outer_alpha = smoothstep(-outline_px - px_stroke, -outline_px + px_stroke, d_stroke);
+        let inner_alpha = smoothstep(-px_stroke, px_stroke, d_stroke);
+        let outline_alpha = max(outer_alpha - inner_alpha, 0.0);
         stroke_alpha = max(outline_alpha - fill_alpha, 0.0);
     }
 
