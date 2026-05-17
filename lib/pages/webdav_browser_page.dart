@@ -253,6 +253,51 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       }
     }
 
+    // ========== tmdbId 快速匹配（bgmid 未匹配成功时尝试） ==========
+    if (quickMatchEpisodeId == null && provider.tmdbIdQuickMatch) {
+      try {
+        final tmdbRegex = RegExp(provider.tmdbIdMatchPattern);
+        final tmdbMatch = tmdbRegex.firstMatch(videoUrl);
+
+        if (tmdbMatch != null && tmdbMatch.groupCount >= 1) {
+          final lastGroup = tmdbMatch.group(tmdbMatch.groupCount);
+          final tmdbId = int.tryParse(lastGroup ?? '');
+
+          if (tmdbId != null) {
+            final seasonNumber = _extractSeasonNumber(file.name);
+            final result = await DandanplayService.getBangumiByTmdbId(tmdbId, seasonNumber: seasonNumber);
+
+            if (result != null && result['bangumi'] != null) {
+              final bangumi = result['bangumi'] as Map<String, dynamic>;
+              final episodes = bangumi['episodes'] as List<dynamic>?;
+
+              quickMatchAnimeId = bangumi['animeId'] as int?;
+              quickMatchAnimeTitle = bangumi['animeTitle'] as String?;
+
+              final episodeNumber = _extractEpisodeNumber(file.name);
+
+              if (episodes != null && episodeNumber != null) {
+                for (final ep in episodes) {
+                  final epNum =
+                      int.tryParse(ep['episodeNumber']?.toString() ?? '');
+                  if (epNum == episodeNumber) {
+                    quickMatchEpisodeId = ep['episodeId'] as int?;
+                    break;
+                  }
+                }
+              }
+
+              debugPrint(
+                  '[WebDAV] tmdbId 快速匹配结果: tmdbId=$tmdbId, episodeNumber=$episodeNumber, episodeId=$quickMatchEpisodeId');
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint(
+            '[WebDAV] tmdbId 快速匹配失败（使用规则: ${provider.tmdbIdMatchPattern}）: $e');
+      }
+    }
+
     // 创建观看历史项用于播放
     final historyItem = WatchHistoryItem(
       animeName: quickMatchAnimeTitle ??
@@ -312,6 +357,15 @@ class _WebDAVBrowserPageState extends State<WebDAVBrowserPage> {
       return int.tryParse(delimiterMatch.group(1)!);
     }
 
+    return null;
+  }
+
+  /// 从文件名中提取 Season 数字 (S01 → 1, S2 → 2)
+  int? _extractSeasonNumber(String fileName) {
+    final match = _seasonEpisodeRegex.firstMatch(fileName);
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
     return null;
   }
 

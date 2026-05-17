@@ -18,16 +18,19 @@ class WebDAVQuickSettingsPage extends StatefulWidget {
 
 class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
   late TextEditingController _patternController;
+  late TextEditingController _tmdbPatternController;
 
   @override
   void initState() {
     super.initState();
     _patternController = TextEditingController();
+    _tmdbPatternController = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider =
           Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
       provider.loadSettings().then((_) {
         _patternController.text = provider.bgmIdMatchPattern;
+        _tmdbPatternController.text = provider.tmdbIdMatchPattern;
       });
     });
   }
@@ -35,6 +38,7 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
   @override
   void dispose() {
     _patternController.dispose();
+    _tmdbPatternController.dispose();
     super.dispose();
   }
 
@@ -522,9 +526,6 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                         provider.setBgmIdQuickMatch(value);
                       },
                     ),
-                    onTap: () {
-                      provider.setBgmIdQuickMatch(!provider.bgmIdQuickMatch);
-                    },
                   ),
                   if (provider.bgmIdQuickMatch) ...[
                     Divider(height: 1, color: secondaryTextColor.withOpacity(0.2)),
@@ -578,6 +579,100 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
                           SizedBox(height: 4),
                           Text(
                             '最后一个捕获组应为数字，如 bgmid=(\\d+) 或 bgm-(\\d+)',
+                            style: TextStyle(
+                              color: secondaryTextColor.withOpacity(0.7),
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            SizedBox(height: 16),
+
+            // tmdbId 快速匹配开关
+            _buildSettingsCard(
+              cardColor: cardColor,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Ionicons.film_outline, color: textColor.withOpacity(0.7)),
+                    title: Text(
+                      'tmdbId 快速匹配',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '从 URL 中提取 tmdbId，通过 TMDB ID 直接获取番剧信息',
+                      style: TextStyle(
+                        color: secondaryTextColor,
+                      ),
+                    ),
+                    trailing: FluentSettingsSwitch(
+                      value: provider.tmdbIdQuickMatch,
+                      onChanged: (value) {
+                        provider.setTmdbIdQuickMatch(value);
+                      },
+                    ),
+                  ),
+                  if (provider.tmdbIdQuickMatch) ...[
+                    Divider(height: 1, color: secondaryTextColor.withOpacity(0.2)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '匹配规则（正则表达式）',
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '从完整 URL 中匹配 tmdbId 数字，支持 tmdbid=123 或 tmdb-123 格式',
+                            style: TextStyle(
+                              color: secondaryTextColor,
+                              fontSize: 11,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          TextField(
+                            controller: _tmdbPatternController,
+                            style: TextStyle(color: textColor, fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'tmdb(id)?[=-](\\d+)',
+                              hintStyle: TextStyle(color: secondaryTextColor.withOpacity(0.5)),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: secondaryTextColor.withOpacity(0.3)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: accentColor),
+                              ),
+                              isDense: true,
+                            ),
+                            onSubmitted: (value) {
+                              if (value.isNotEmpty) {
+                                provider.setTmdbIdMatchPattern(value);
+                              }
+                            },
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '最后一个捕获组应为数字，如 tmdbid=(\\d+) 或 tmdb-(\\d+)',
                             style: TextStyle(
                               color: secondaryTextColor.withOpacity(0.7),
                               fontSize: 10,
