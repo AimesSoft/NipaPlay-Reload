@@ -14,6 +14,9 @@ enum DanmakuRenderEngine {
 
   /// NipaPlay Next 弹幕逻辑内核
   nipaplayNext,
+
+  /// NipaPlay Next2 弹幕逻辑 + Rust 渲染内核
+  next2,
 }
 
 /// 负责读写弹幕渲染引擎设置的工厂类
@@ -24,8 +27,10 @@ class DanmakuKernelFactory {
   static bool _initialized = false;
 
   // 添加StreamController用于广播内核切换事件
-  static final StreamController<DanmakuRenderEngine> _kernelChangeController = StreamController<DanmakuRenderEngine>.broadcast();
-  static Stream<DanmakuRenderEngine> get onKernelChanged => _kernelChangeController.stream;
+  static final StreamController<DanmakuRenderEngine> _kernelChangeController =
+      StreamController<DanmakuRenderEngine>.broadcast();
+  static Stream<DanmakuRenderEngine> get onKernelChanged =>
+      _kernelChangeController.stream;
 
   /// 初始化方法，在应用启动时尽早调用
   static Future<void> initialize() async {
@@ -35,12 +40,14 @@ class DanmakuKernelFactory {
   /// 预加载设置并缓存
   static Future<void> _preloadSettings() async {
     if (_initialized) return;
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final engineIndex = prefs.getInt(_danmakuRenderEngineKey);
-      
-      if (engineIndex != null && engineIndex >= 0 && engineIndex < DanmakuRenderEngine.values.length) {
+
+      if (engineIndex != null &&
+          engineIndex >= 0 &&
+          engineIndex < DanmakuRenderEngine.values.length) {
         _cachedEngine = DanmakuRenderEngine.values[engineIndex];
       } else {
         _cachedEngine = DanmakuRenderEngine.nipaplayNext; // 默认使用 NipaPlay Next
@@ -48,7 +55,7 @@ class DanmakuKernelFactory {
     } catch (e) {
       _cachedEngine = DanmakuRenderEngine.nipaplayNext;
     }
-    
+
     _initialized = true;
   }
 
@@ -72,4 +79,4 @@ class DanmakuKernelFactory {
       // ignore
     }
   }
-} 
+}

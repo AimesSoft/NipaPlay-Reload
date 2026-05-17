@@ -5,6 +5,7 @@ import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:danmaku_canvas/canvas_danmaku_renderer.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_overlay.dart';
+import 'package:nipaplay/danmaku_next/nipaplay_next2_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -121,6 +122,25 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
 
         if (kernelType == DanmakuRenderEngine.nipaplayNext) {
           return NipaPlayNextOverlay(
+            danmakuList: activeDanmakuList,
+            playbackTimeMs: videoState.playbackTimeMs,
+            currentTimeSeconds: widget.currentPosition / 1000,
+            fontSize: widget.fontSize,
+            isVisible: widget.isVisible,
+            opacity: widget.opacity,
+            displayArea: videoState.danmakuDisplayArea,
+            timeOffset: combinedTimeOffset,
+            scrollDurationSeconds: scrollDuration,
+            allowStacking: false,
+            mergeDanmaku: widget.isVisible && videoState.mergeDanmaku,
+            customFontFamily: videoState.danmakuFontFamily,
+            outlineStyle: videoState.danmakuOutlineStyle,
+            shadowStyle: videoState.danmakuShadowStyle,
+          );
+        }
+
+        if (kernelType == DanmakuRenderEngine.next2) {
+          return NipaPlayNext2Overlay(
             danmakuList: activeDanmakuList,
             playbackTimeMs: videoState.playbackTimeMs,
             currentTimeSeconds: widget.currentPosition / 1000,

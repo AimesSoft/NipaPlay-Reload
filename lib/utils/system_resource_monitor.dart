@@ -219,8 +219,8 @@ class SystemResourceMonitor {
         if (wallDeltaMs > 0 && cpuDeltaMicros >= 0) {
           final normalizedDenominatorMicros = wallDeltaMs * 1000 * logicalCpus;
           if (normalizedDenominatorMicros > 0) {
-            _cpuUsage =
-                (cpuDeltaMicros / normalizedDenominatorMicros * 100).clamp(0.0, 100.0);
+            _cpuUsage = (cpuDeltaMicros / normalizedDenominatorMicros * 100)
+                .clamp(0.0, 100.0);
           }
         }
       }
@@ -240,7 +240,8 @@ class SystemResourceMonitor {
 
     try {
       final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (_gpuUsage != null && nowMs - _lastGpuSampleMillis < _gpuSampleIntervalMs) {
+      if (_gpuUsage != null &&
+          nowMs - _lastGpuSampleMillis < _gpuSampleIntervalMs) {
         return;
       }
 
@@ -290,6 +291,9 @@ class SystemResourceMonitor {
           break;
         case DanmakuRenderEngine.nipaplayNext:
           _danmakuKernelType = 'NipaPlay Next';
+          break;
+        case DanmakuRenderEngine.next2:
+          _danmakuKernelType = 'NipaPlay Next2';
           break;
       }
     } catch (e) {

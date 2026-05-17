@@ -410,6 +410,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         return 'Canvas 弹幕渲染引擎\n来自软件kazumi的开发者\n使用Canvas绘制弹幕，高性能，低功耗，支持大量弹幕同时显示。';
       case DanmakuRenderEngine.nipaplayNext:
         return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
+      case DanmakuRenderEngine.next2:
+        return 'NipaPlay Next2\n轨道分配与渲染核心迁移至 Rust，目标是高弹幕密度下更稳定的帧率和更低功耗。';
     }
   }
 

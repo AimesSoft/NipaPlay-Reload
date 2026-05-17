@@ -104,7 +104,7 @@ dependencies:
   pinyin: ^3.3.0
   rust_lib_nipaplay:
     path: rust_builder
-  flutter_rust_bridge: 2.11.1
+  flutter_rust_bridge: 2.12.0
   flutter_js: ^0.8.0
 
 dev_dependencies:

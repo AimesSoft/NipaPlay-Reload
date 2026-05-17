@@ -159,6 +159,8 @@ class _CupertinoDanmakuSettingsPageState
         return context.l10n.danmakuRenderEngineDescriptionCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
         return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
+      case DanmakuRenderEngine.next2:
+        return 'NipaPlay Next2：轨道分配与渲染核心迁移至 Rust，使用 wgpu + 距离场渲染路径。';
     }
   }
 
@@ -172,6 +174,8 @@ class _CupertinoDanmakuSettingsPageState
         return context.l10n.danmakuRenderEngineTitleCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
         return context.l10n.danmakuRenderEngineTitleNipaplayNext;
+      case DanmakuRenderEngine.next2:
+        return 'NipaPlay Next2';
     }
   }
 
