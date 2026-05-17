@@ -70,6 +70,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
   int? _textureId;
   bool _textureReady = false;
   String _surfaceId = 'next2-default';
+  double _lastDevicePixelRatio = 1.0;
 
   @override
   void initState() {
@@ -111,6 +112,13 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
           _queueUpdate();
         }
 
+        final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
+            View.of(context).devicePixelRatio;
+        if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
+          _lastDevicePixelRatio = dpr;
+          _queueUpdate();
+        }
+
         return ValueListenableBuilder<double>(
           valueListenable: widget.playbackTimeMs,
           builder: (context, _, __) {
@@ -122,7 +130,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
                 Next2TextureBridge.isSupported) {
               content = Texture(
                 textureId: _textureId!,
-                filterQuality: FilterQuality.medium,
+                filterQuality: FilterQuality.none,
               );
             } else {
               content = CustomPaint(
@@ -211,10 +219,20 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       return false;
     }
 
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    final dpr = views.isNotEmpty
+        ? views.first.devicePixelRatio
+        : _lastDevicePixelRatio;
+    final pixelRatio = dpr.isFinite ? dpr.clamp(1.0, 4.0) : 1.0;
+    final pixelWidth =
+        (_layoutSize.width * pixelRatio).round().clamp(1, 16384);
+    final pixelHeight =
+        (_layoutSize.height * pixelRatio).round().clamp(1, 16384);
+
     final info = await _textureBridge.ensureTexture(
       surfaceId: _surfaceId,
-      width: _layoutSize.width.ceil().clamp(1, 16384),
-      height: _layoutSize.height.ceil().clamp(1, 16384),
+      width: pixelWidth,
+      height: pixelHeight,
     );
 
     if (info == null) {
@@ -236,12 +254,19 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       await _textureBridge.resetScene();
     }
 
+    final widthScale = info.width > 0 ? info.width / _layoutSize.width : 1.0;
+    final heightScale = info.height > 0 ? info.height / _layoutSize.height : 1.0;
+    final fontScale = ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0);
+
     final pushed = await _textureBridge.setFrame(
       items: frame,
       fontSize: widget.fontSize,
       outlineStyle: widget.outlineStyle,
       shadowStyle: widget.shadowStyle,
       opacity: widget.opacity,
+      scaleX: widthScale,
+      scaleY: heightScale,
+      fontScale: fontScale,
     );
 
     return pushed;

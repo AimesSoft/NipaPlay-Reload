@@ -80,6 +80,9 @@ class Next2TextureBridge {
     required DanmakuOutlineStyle outlineStyle,
     required DanmakuShadowStyle shadowStyle,
     required double opacity,
+    double scaleX = 1.0,
+    double scaleY = 1.0,
+    double fontScale = 1.0,
   }) async {
     if (!isSupported) {
       return false;
@@ -91,7 +94,15 @@ class Next2TextureBridge {
     }
 
     final payload = <String, dynamic>{
-      'items': items.map(_itemToJson).toList(growable: false),
+      'items': items
+          .map(
+            (item) => _itemToJson(
+              item,
+              scaleX: scaleX,
+              scaleY: scaleY,
+            ),
+          )
+          .toList(growable: false),
     };
 
     final ok = await _channel.invokeMethod<bool>(
@@ -99,7 +110,7 @@ class Next2TextureBridge {
       <String, dynamic>{
         'engineHandle': engineHandle,
         'frameJson': jsonEncode(payload),
-        'fontSize': fontSize,
+        'fontSize': fontSize * fontScale,
         'outlineStyle': _outlineStyleCode(outlineStyle),
         'shadowStyle': _shadowStyleCode(shadowStyle),
         'opacity': opacity,
@@ -148,12 +159,16 @@ class Next2TextureBridge {
     }
   }
 
-  Map<String, dynamic> _itemToJson(PositionedDanmakuItem item) {
+  Map<String, dynamic> _itemToJson(
+    PositionedDanmakuItem item, {
+    required double scaleX,
+    required double scaleY,
+  }) {
     return <String, dynamic>{
       'text': item.content.text,
       'count_text': item.content.countText,
-      'x': item.x,
-      'y': item.y,
+      'x': item.x * scaleX,
+      'y': item.y * scaleY,
       'color_argb': item.content.color.toARGB32().toSigned(32),
       'font_size_multiplier': item.content.fontSizeMultiplier,
     };
