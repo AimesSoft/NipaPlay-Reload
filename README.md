@@ -134,7 +134,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 ```bash
 # 克隆仓库（必须包含 submodule）
-git clone --recurse-submodules https://github.com/AimesSoft/NipaPlay-Reload.git
+git clone --recurse-submodules https://github.com/itsmyowninvention/NipaPlay-Reload.git
 cd NipaPlay-Reload
 
 # 构建（完全离线，沙箱内编译，无需手动安装任何依赖）
