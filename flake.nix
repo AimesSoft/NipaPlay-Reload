@@ -94,7 +94,7 @@
 
             packageRoot = ".";
 
-            pubspecLock = pkgs.lib.importJSON ./pubspec.lock.json;
+            autoPubspecLock = "${self}/pubspec.lock";
 
             targetFlutterPlatform = "linux";
 
@@ -157,7 +157,6 @@
             echo "CMake:   $(cmake --version 2>/dev/null | head -1 || echo 'unknown')"
             echo ""
             echo "Build:  flutter build linux --release"
-            echo "Server: cd server && python3 server.py"
           '';
         };
       }
