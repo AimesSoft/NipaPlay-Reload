@@ -615,8 +615,10 @@ impl Next2GlyphAtlas {
         let entry = GlyphAtlasEntry {
             uv_min,
             uv_max,
-            width: padded_w,
-            height: padded_h,
+            // Geometry must use real MTSDF bounds. Atlas padding is for sampling
+            // isolation only and should not be drawn, otherwise glyph edges blur.
+            width: msdf.width,
+            height: msdf.height,
             offset_x: msdf.offset_x,
             offset_y: msdf.offset_y,
             advance: msdf.advance,
@@ -882,7 +884,7 @@ impl Next2Renderer {
                         compilation_options: wgpu::PipelineCompilationOptions::default(),
                         targets: &[Some(wgpu::ColorTargetState {
                             format: wgpu::TextureFormat::Bgra8Unorm,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                             write_mask: wgpu::ColorWrites::ALL,
                         })],
                     }),
@@ -1361,25 +1363,38 @@ fn median3(r: f32, g: f32, b: f32) -> f32 {
 @fragment
 fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
     let texel = textureSample(atlas_tex, atlas_sampler, v.uv);
-    let dist_fill = median3(texel.r, texel.g, texel.b);
-    let dist_stroke = texel.a;
+    let dist_msdf = median3(texel.r, texel.g, texel.b);
+    let dist_sdf = texel.a;
     let spread = max(v.params.x, 0.001);
     let outline_px = max(v.params.y, 0.0);
 
-    let d_fill = (dist_fill - 0.5) * spread;
-    let px_fill = fwidth(d_fill);
-    let fill_alpha = smoothstep(-px_fill, px_fill, d_fill);
-    var stroke_alpha = 0.0;
+    let d_fill = (dist_msdf - 0.5) * spread;
+    let px_fill = max(fwidth(d_fill), 0.0001);
+    let fill_coverage_aa = smoothstep(-px_fill, px_fill, d_fill);
+
+    let d_outline = (dist_sdf - 0.5) * spread;
+    let px_outline = max(fwidth(d_outline), 0.0001);
+
+    let fill_coverage_sdf = smoothstep(-px_outline, px_outline, d_outline);
+    var outline_coverage = 0.0;
     if (outline_px > 0.0) {
-        let d_stroke = (dist_stroke - 0.5) * spread;
-        let px_stroke = fwidth(d_stroke);
-        let outer_alpha = smoothstep(-outline_px - px_stroke, -outline_px + px_stroke, d_stroke);
-        let inner_alpha = smoothstep(-px_stroke, px_stroke, d_stroke);
-        let outline_alpha = max(outer_alpha - inner_alpha, 0.0);
-        stroke_alpha = max(outline_alpha - fill_alpha, 0.0);
+        let outer_alpha = smoothstep(
+            -outline_px - px_outline,
+            -outline_px + px_outline,
+            d_outline,
+        );
+        outline_coverage = max(outer_alpha - fill_coverage_sdf, 0.0);
     }
 
-    let color = v.outline_color * stroke_alpha + v.color * fill_alpha;
-    return vec4<f32>(color.rgb, color.a);
+    let fill_alpha = fill_coverage_aa * v.color.a;
+    let outline_alpha = outline_coverage * v.outline_color.a;
+
+    // Premultiplied "fill over outline" composition avoids a bright seam at
+    // the inner stroke boundary while keeping anti-aliased edges.
+    let fill_rgb = v.color.rgb * fill_alpha;
+    let outline_rgb = v.outline_color.rgb * outline_alpha;
+    let out_rgb = fill_rgb + outline_rgb * (1.0 - fill_alpha);
+    let out_alpha = fill_alpha + outline_alpha * (1.0 - fill_alpha);
+    return vec4<f32>(out_rgb, out_alpha);
 }
 "#;

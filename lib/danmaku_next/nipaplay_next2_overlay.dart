@@ -263,7 +263,9 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       fontSize: widget.fontSize,
       outlineStyle: widget.outlineStyle,
       shadowStyle: widget.shadowStyle,
-      opacity: widget.opacity,
+      // Overall opacity is applied by the outer Flutter Opacity widget.
+      // Keep Rust-side glyph compositing at full alpha to avoid edge fringe.
+      opacity: 1.0,
       scaleX: widthScale,
       scaleY: heightScale,
       fontScale: fontScale,
