@@ -117,6 +117,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   static const String _keyShowPathBreadcrumb = 'webdav_show_path_breadcrumb';
   static const String _keyBgmIdQuickMatch = 'webdav_bgmid_quick_match';
   static const String _keyBgmIdMatchPattern = 'webdav_bgmid_match_pattern';
+  static const String _keyTmdbIdQuickMatch = 'webdav_tmdbid_quick_match';
+  static const String _keyTmdbIdMatchPattern = 'webdav_tmdbid_match_pattern';
+  static const String _keyEpisodeOffset = 'webdav_episode_offset';
   static const String _legacyDefaultPageIndexKey = 'default_page_index';
 
   // 搜索功能相关存储键名
@@ -157,6 +160,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   bool _showPathBreadcrumb = true;
   bool _bgmIdQuickMatch = false; // 默认关闭，用户需明确启用
   String _bgmIdMatchPattern = 'bgm(id)?[=-](\\d+)'; // 默认正则规则
+  bool _tmdbIdQuickMatch = false; // 默认关闭
+  String _tmdbIdMatchPattern = 'tmdb(id)?[=-](\\d+)'; // 默认正则规则
+  bool _episodeOffsetEnabled = false; // 默认关闭，实验功能
   bool _isLoaded = false;
 
   // 搜索功能相关状态
@@ -179,6 +185,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   bool get showPathBreadcrumb => _showPathBreadcrumb;
   bool get bgmIdQuickMatch => _bgmIdQuickMatch;
   String get bgmIdMatchPattern => _bgmIdMatchPattern;
+  bool get tmdbIdQuickMatch => _tmdbIdQuickMatch;
+  String get tmdbIdMatchPattern => _tmdbIdMatchPattern;
+  bool get episodeOffsetEnabled => _episodeOffsetEnabled;
   bool get isLoaded => _isLoaded;
 
   // 搜索功能相关 Getters
@@ -292,6 +301,10 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       _bgmIdQuickMatch = prefs.getBool(_keyBgmIdQuickMatch) ?? false;
       _bgmIdMatchPattern =
           prefs.getString(_keyBgmIdMatchPattern) ?? 'bgm(id)?[=-](\\d+)';
+      _tmdbIdQuickMatch = prefs.getBool(_keyTmdbIdQuickMatch) ?? false;
+      _tmdbIdMatchPattern =
+          prefs.getString(_keyTmdbIdMatchPattern) ?? 'tmdb(id)?[=-](\\d+)';
+      _episodeOffsetEnabled = prefs.getBool(_keyEpisodeOffset) ?? false;
 
       // 加载搜索功能相关设置
       _enableSearch = prefs.getBool(_keyEnableSearch) ?? true;
@@ -493,11 +506,22 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
   Future<void> setBgmIdMatchPattern(String pattern) async {
     if (_bgmIdMatchPattern == pattern) return;
 
-    // 验证正则是否有效
     try {
       RegExp(pattern);
     } catch (e) {
       debugPrint('无效的正则表达式: $pattern, 错误: $e');
+      return;
+    }
+
+    // 统计未转义的左括号来验证至少有 1 个捕获组
+    int groupCount = 0;
+    for (int i = 0; i < pattern.length; i++) {
+      if (pattern[i] == '(' && (i == 0 || pattern[i - 1] != '\\')) {
+        groupCount++;
+      }
+    }
+    if (groupCount < 1) {
+      debugPrint('正则表达式缺少捕获组: $pattern（需要用括号捕获数字，如 bgmid=(\\d+)）');
       return;
     }
 
@@ -509,6 +533,69 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('保存 bgmid 匹配规则失败: $e');
+    }
+  }
+
+  /// 设置是否启用 tmdbId 快速匹配
+  Future<void> setTmdbIdQuickMatch(bool value) async {
+    if (_tmdbIdQuickMatch == value) return;
+
+    _tmdbIdQuickMatch = value;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyTmdbIdQuickMatch, value);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存 tmdbId 快速匹配设置失败: $e');
+    }
+  }
+
+  /// 设置 tmdbId 匹配正则表达式
+  Future<void> setTmdbIdMatchPattern(String pattern) async {
+    if (_tmdbIdMatchPattern == pattern) return;
+
+    try {
+      RegExp(pattern);
+    } catch (e) {
+      debugPrint('无效的正则表达式: $pattern, 错误: $e');
+      return;
+    }
+
+    int groupCount = 0;
+    for (int i = 0; i < pattern.length; i++) {
+      if (pattern[i] == '(' && (i == 0 || pattern[i - 1] != '\\')) {
+        groupCount++;
+      }
+    }
+    if (groupCount < 1) {
+      debugPrint('正则表达式缺少捕获组: $pattern（需要用括号捕获数字，如 tmdbid=(\\d+)）');
+      return;
+    }
+
+    _tmdbIdMatchPattern = pattern;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyTmdbIdMatchPattern, pattern);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存 tmdbId 匹配规则失败: $e');
+    }
+  }
+
+  /// 设置是否启用剧集偏移（实验功能）
+  Future<void> setEpisodeOffsetEnabled(bool value) async {
+    if (_episodeOffsetEnabled == value) return;
+
+    _episodeOffsetEnabled = value;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyEpisodeOffset, value);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('保存剧集偏移设置失败: $e');
     }
   }
 
@@ -719,6 +806,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     _showPathBreadcrumb = true;
     _bgmIdQuickMatch = false;
     _bgmIdMatchPattern = 'bgm(id)?[=-](\\d+)';
+    _tmdbIdQuickMatch = false;
+    _tmdbIdMatchPattern = 'tmdb(id)?[=-](\\d+)';
+    _episodeOffsetEnabled = false;
 
     // 重置搜索功能相关设置
     _enableSearch = true;
@@ -741,6 +831,9 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
       await prefs.remove(_keyShowPathBreadcrumb);
       await prefs.remove(_keyBgmIdQuickMatch);
       await prefs.remove(_keyBgmIdMatchPattern);
+      await prefs.remove(_keyTmdbIdQuickMatch);
+      await prefs.remove(_keyTmdbIdMatchPattern);
+      await prefs.remove(_keyEpisodeOffset);
       // 清除搜索功能相关设置
       await prefs.remove(_keyEnableSearch);
       await prefs.remove(_keySearchScope);

@@ -1874,6 +1874,109 @@ class DandanplayService {
     }
   }
 
+  /// 通过 TMDB ID 获取番剧详情（两步调用）
+  ///
+  /// 1. /api/v2/search/episodes?tmdbId={tmdbId} → 获取正确的 animeId
+  /// 2. /api/v2/bangumi/{animeId} → 获取含 episodeNumber 的剧集列表
+  ///
+  /// [seasonNumber] 可选，用于多 anime 结果时按季度选择（S1→第1个, S2→第2个）
+  /// 返回与 bgmid API 结构一致的 bangumi 数据
+  static Future<Map<String, dynamic>?> getBangumiByTmdbId(int tmdbId, {int? seasonNumber}) async {
+    try {
+      final appSecret = await getAppSecret();
+      final baseUrl = await getApiBaseUrl();
+
+      // 第一步：通过 tmdbId 搜索正确的 animeId
+      final timestamp1 = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      const searchApiPath = '/api/v2/search/episodes';
+      final searchQuery = Uri(queryParameters: {'tmdbId': tmdbId.toString()}).query;
+      final searchUrl = '$baseUrl$searchApiPath?$searchQuery';
+
+      debugPrint('[弹弹play服务] 通过 tmdbId 搜索剧集: $tmdbId');
+
+      final searchResponse = await http.get(
+        Uri.parse(searchUrl),
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp1, searchApiPath, appSecret),
+          'X-Timestamp': '$timestamp1',
+          if (_isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (searchResponse.statusCode != 200) {
+        debugPrint('[弹弹play服务] tmdbId 搜索失败: HTTP ${searchResponse.statusCode}');
+        return null;
+      }
+
+      final searchData = json.decode(searchResponse.body);
+      if (searchData['success'] != true || searchData['animes'] == null) {
+        debugPrint('[弹弹play服务] tmdbId 搜索未找到对应番剧');
+        return null;
+      }
+
+      final animes = searchData['animes'] as List<dynamic>;
+      if (animes.isEmpty) {
+        debugPrint('[弹弹play服务] tmdbId 搜索结果为空');
+        return null;
+      }
+
+      final candidates = animes.cast<Map<String, dynamic>>().toList();
+      int selectedIndex = 0;
+      if (candidates.length > 1) {
+        candidates.sort((a, b) => (a['animeId'] as int).compareTo(b['animeId'] as int));
+        selectedIndex = seasonNumber != null &&
+                seasonNumber >= 1 &&
+                seasonNumber <= candidates.length
+            ? seasonNumber! - 1
+            : 0;
+        debugPrint('[弹弹play服务] tmdbId 搜索到 ${candidates.length} 个番剧，选择第 ${selectedIndex + 1} 个');
+      }
+
+      final animeId = candidates[selectedIndex]['animeId'] as int?;
+      if (animeId == null) {
+        debugPrint('[弹弹play服务] tmdbId 搜索结果中缺少 animeId');
+        return null;
+      }
+
+      debugPrint('[弹弹play服务] tmdbId 搜索到 animeId: $animeId');
+
+      // 第二步：通过 animeId 获取完整番剧详情（含 episodeNumber）
+      final timestamp2 = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final detailApiPath = '/api/v2/bangumi/$animeId';
+
+      final detailResponse = await http.get(
+        Uri.parse('$baseUrl$detailApiPath'),
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature': generateSignature(appId, timestamp2, detailApiPath, appSecret),
+          'X-Timestamp': '$timestamp2',
+          if (_isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (detailResponse.statusCode == 200) {
+        final data = json.decode(detailResponse.body);
+        if (data['success'] == true && data['bangumi'] != null) {
+          return data;
+        }
+      }
+
+      debugPrint('[弹弹play服务] tmdbId 获取番剧详情失败: HTTP ${detailResponse.statusCode}');
+      return null;
+    } on TimeoutException {
+      debugPrint('[弹弹play服务] tmdbId 匹配超时');
+      return null;
+    } catch (e) {
+      debugPrint('[弹弹play服务] 通过 tmdbId 获取番剧详情出错: $e');
+      return null;
+    }
+  }
+
   // 获取用户对特定剧集的观看状态
   static Future<Map<int, bool>> getEpisodesWatchStatus(
     List<int> episodeIds,

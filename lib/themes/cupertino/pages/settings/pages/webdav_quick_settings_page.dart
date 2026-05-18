@@ -21,17 +21,20 @@ class _CupertinoWebDAVQuickSettingsPageState
     extends State<CupertinoWebDAVQuickSettingsPage> {
   late final TextEditingController _directoryController;
   late final TextEditingController _patternController;
+  late final TextEditingController _tmdbPatternController;
 
   @override
   void initState() {
     super.initState();
     _directoryController = TextEditingController();
     _patternController = TextEditingController();
+    _tmdbPatternController = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider =
           Provider.of<WebDAVQuickAccessProvider>(context, listen: false);
       provider.loadSettings().then((_) {
         _patternController.text = provider.bgmIdMatchPattern;
+        _tmdbPatternController.text = provider.tmdbIdMatchPattern;
       });
     });
   }
@@ -40,6 +43,7 @@ class _CupertinoWebDAVQuickSettingsPageState
   void dispose() {
     _directoryController.dispose();
     _patternController.dispose();
+    _tmdbPatternController.dispose();
     super.dispose();
   }
 
@@ -90,6 +94,8 @@ class _CupertinoWebDAVQuickSettingsPageState
                   _buildAutoEnterSeasonCard(context, provider),
                   const SizedBox(height: 24),
                   _buildBgmIdQuickMatchCard(context, provider),
+                  const SizedBox(height: 24),
+                  _buildTmdbIdQuickMatchCard(context, provider),
                   const SizedBox(height: 24),
                   _buildSearchConfigCard(context, provider),
                   const SizedBox(height: 24),
@@ -698,6 +704,88 @@ class _CupertinoWebDAVQuickSettingsPageState
                 Text(
                   '最后一个捕获组应为数字，如 bgmid=(\\d+) 或 bgm-(\\d+)',
                   style: TextStyle(color: secondaryColor.withOpacity(0.7), fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTmdbIdQuickMatchCard(BuildContext context, WebDAVQuickAccessProvider provider) {
+    final Color tileColor = resolveSettingsTileBackground(context);
+    final Color sectionColor = resolveSettingsSectionBackground(context);
+    final Color iconColor = resolveSettingsIconColor(context);
+    final Color textColor = resolveSettingsPrimaryTextColor(context);
+    final Color secondaryColor = resolveSettingsSecondaryTextColor(context);
+
+    return CupertinoSettingsGroupCard(
+      margin: EdgeInsets.zero,
+      backgroundColor: sectionColor,
+      children: [
+        CupertinoSettingsTile(
+          leading: Icon(CupertinoIcons.film_fill, color: iconColor),
+          title: const Text('tmdbId 快速匹配'),
+          subtitle: const Text('从 URL 中提取 tmdbId，通过 TMDB ID 直接获取番剧信息'),
+          backgroundColor: tileColor,
+          trailing: CupertinoSwitch(
+            value: provider.tmdbIdQuickMatch,
+            activeColor: CupertinoColors.activeBlue,
+            onChanged: (value) {
+              provider.setTmdbIdQuickMatch(value);
+            },
+          ),
+        ),
+        if (provider.tmdbIdQuickMatch)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '匹配规则（正则表达式）',
+                  style: TextStyle(color: textColor, fontSize: 13),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '从完整 URL 中匹配 tmdbId 数字，支持 tmdbid=123 或 tmdb-123 格式',
+                  style: TextStyle(color: secondaryColor, fontSize: 11),
+                ),
+                SizedBox(height: 8),
+                CupertinoTextField(
+                  controller: _tmdbPatternController,
+                  placeholder: 'tmdb(id)?[=-](\\d+)',
+                  style: TextStyle(color: textColor, fontSize: 13),
+                  decoration: BoxDecoration(
+                    color: tileColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: secondaryColor.withOpacity(0.3)),
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  onSubmitted: (value) {
+                    if (value.isNotEmpty) {
+                      provider.setTmdbIdMatchPattern(value);
+                    }
+                  },
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '最后一个捕获组应为数字，如 tmdbid=(\\d+) 或 tmdb-(\\d+)',
+                  style: TextStyle(color: secondaryColor.withOpacity(0.7), fontSize: 10),
+                ),
+                SizedBox(height: 12),
+                CupertinoSettingsTile(
+                  leading: Icon(CupertinoIcons.arrow_right_arrow_left, color: iconColor),
+                  title: const Text('匹配弹幕自动剧集偏移（实验中）'),
+                  subtitle: const Text('自动计算跨季剧集编号偏移量'),
+                  backgroundColor: tileColor,
+                  trailing: CupertinoSwitch(
+                    value: provider.episodeOffsetEnabled,
+                    activeColor: CupertinoColors.activeBlue,
+                    onChanged: (value) {
+                      provider.setEpisodeOffsetEnabled(value);
+                    },
+                  ),
                 ),
               ],
             ),

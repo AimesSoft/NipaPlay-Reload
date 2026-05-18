@@ -1307,6 +1307,12 @@ class DandanplayService {
     return null;
   }
 
+  /// 通过 TMDB ID 获取番剧详情（Web stub — 不支持）
+  static Future<Map<String, dynamic>?> getBangumiByTmdbId(int tmdbId, {int? seasonNumber}) async {
+    debugPrint('[弹弹play服务-Web] getBangumiByTmdbId not supported on web');
+    return null;
+  }
+
   static Future<Map<int, bool>> getEpisodesWatchStatus(
       List<int> episodeIds) async {
     try {
