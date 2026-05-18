@@ -1,6 +1,7 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -179,8 +180,13 @@ class _CupertinoDanmakuSettingsPageState
     }
   }
 
-  List<AdaptivePopupMenuEntry> _danmakuMenuItems() {
-    return DanmakuRenderEngine.values
+  List<AdaptivePopupMenuEntry> _danmakuMenuItems({required bool showNext2}) {
+    final engines = DanmakuRenderEngine.values
+        .where(
+          (engine) => showNext2 || engine != DanmakuRenderEngine.next2,
+        )
+        .toList();
+    return engines
         .map(
           (engine) => AdaptivePopupMenuItem<DanmakuRenderEngine>(
             label: _danmakuTitle(engine),
@@ -253,6 +259,14 @@ class _CupertinoDanmakuSettingsPageState
     final Color sectionBackground = resolveSettingsSectionBackground(context);
     final Color tileBackground = resolveSettingsTileBackground(context);
     final double topPadding = MediaQuery.of(context).padding.top + 64;
+    final showNext2 =
+        context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
+    final danmakuEngines = DanmakuRenderEngine.values
+        .where(
+          (engine) => showNext2 || engine != DanmakuRenderEngine.next2,
+        )
+        .toList();
+    final danmakuMenuItems = _danmakuMenuItems(showNext2: showNext2);
 
     final sections = <Widget>[
       CupertinoSettingsGroupCard(
@@ -271,14 +285,17 @@ class _CupertinoDanmakuSettingsPageState
               _getDanmakuRenderEngineDescription(_selectedDanmakuRenderEngine),
             ),
             trailing: AdaptivePopupMenuButton.widget<DanmakuRenderEngine>(
-              items: _danmakuMenuItems(),
+              items: danmakuMenuItems,
               buttonStyle: PopupButtonStyle.gray,
               child: _buildMenuChip(
                 context,
                 _danmakuTitle(_selectedDanmakuRenderEngine),
               ),
               onSelected: (index, entry) {
-                final engine = entry.value ?? DanmakuRenderEngine.values[index];
+                final engine = entry.value ??
+                    (index >= 0 && index < danmakuEngines.length
+                        ? danmakuEngines[index]
+                        : _selectedDanmakuRenderEngine);
                 if (engine != _selectedDanmakuRenderEngine) {
                   _saveDanmakuRenderEngineSettings(engine);
                 }

@@ -27,6 +27,9 @@ class SettingsKeys {
   static const String labsShowRemoteAccessQrCode =
       'labs_show_remote_access_qr_code';
 
+  static const String labsEnableNext2DanmakuKernel =
+      'labs_enable_next2_danmaku_kernel';
+
   static const String torrentDownloadDirectory = 'torrent_download_directory';
 
   static const String downloaderEnabled = 'downloader_enabled';

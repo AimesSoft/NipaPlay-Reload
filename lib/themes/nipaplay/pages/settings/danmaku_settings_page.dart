@@ -4,6 +4,7 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -149,9 +150,65 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
     }
   }
 
+  List<DropdownMenuItemData<DanmakuRenderEngine>>
+      _buildDanmakuRenderEngineItems({
+    required bool showNext2,
+  }) {
+    final items = <DropdownMenuItemData<DanmakuRenderEngine>>[
+      DropdownMenuItemData(
+        title: 'CPU 渲染',
+        value: DanmakuRenderEngine.cpu,
+        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
+        description:
+            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
+      ),
+      DropdownMenuItemData(
+        title: 'GPU 渲染 (实验性)',
+        value: DanmakuRenderEngine.gpu,
+        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
+        description:
+            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
+      ),
+      DropdownMenuItemData(
+        title: 'Canvas 弹幕 (实验性)',
+        value: DanmakuRenderEngine.canvas,
+        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
+        description:
+            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.canvas),
+      ),
+      DropdownMenuItemData(
+        title: 'NipaPlay Next',
+        value: DanmakuRenderEngine.nipaplayNext,
+        isSelected:
+            _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext,
+        description:
+            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.nipaplayNext),
+      ),
+    ];
+
+    if (showNext2) {
+      items.add(
+        DropdownMenuItemData(
+          title: 'NipaPlay Next2',
+          value: DanmakuRenderEngine.next2,
+          isSelected:
+              _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
+          description:
+              _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
+        ),
+      );
+    }
+
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final showNext2 =
+        context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
+    final renderEngineItems =
+        _buildDanmakuRenderEngineItems(showNext2: showNext2);
 
     return ListView(
       children: [
@@ -159,51 +216,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
           title: '弹幕渲染引擎',
           subtitle: '选择弹幕的渲染方式',
           icon: Ionicons.hardware_chip_outline,
-          items: [
-            DropdownMenuItemData(
-              title: 'CPU 渲染',
-              value: DanmakuRenderEngine.cpu,
-              isSelected:
-                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
-              description:
-                  _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
-            ),
-            DropdownMenuItemData(
-              title: 'GPU 渲染 (实验性)',
-              value: DanmakuRenderEngine.gpu,
-              isSelected:
-                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
-              description:
-                  _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
-            ),
-            DropdownMenuItemData(
-              title: 'Canvas 弹幕 (实验性)',
-              value: DanmakuRenderEngine.canvas,
-              isSelected:
-                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
-              description: _getDanmakuRenderEngineDescription(
-                DanmakuRenderEngine.canvas,
-              ),
-            ),
-            DropdownMenuItemData(
-              title: 'NipaPlay Next',
-              value: DanmakuRenderEngine.nipaplayNext,
-              isSelected: _selectedDanmakuRenderEngine ==
-                  DanmakuRenderEngine.nipaplayNext,
-              description: _getDanmakuRenderEngineDescription(
-                DanmakuRenderEngine.nipaplayNext,
-              ),
-            ),
-            DropdownMenuItemData(
-              title: 'NipaPlay Next2',
-              value: DanmakuRenderEngine.next2,
-              isSelected:
-                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
-              description: _getDanmakuRenderEngineDescription(
-                DanmakuRenderEngine.next2,
-              ),
-            ),
-          ],
+          items: renderEngineItems,
           onChanged: (dynamic value) {
             if (value is! DanmakuRenderEngine) return;
             _saveDanmakuRenderEngineSettings(value);

@@ -42,6 +42,19 @@ class LabsPage extends StatelessWidget {
               color: colorScheme.onSurface.withValues(alpha: 0.12),
               height: 1,
             ),
+            SettingsItem.toggle(
+              title: '显示 Next2 弹幕内核',
+              subtitle: '开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2',
+              icon: Ionicons.flask_outline,
+              value: labsSettings.enableNext2DanmakuKernel,
+              onChanged: (bool value) {
+                labsSettings.setEnableNext2DanmakuKernel(value);
+              },
+            ),
+            Divider(
+              color: colorScheme.onSurface.withValues(alpha: 0.12),
+              height: 1,
+            ),
             SettingsItem.button(
               title: 'WebDAV 快捷设置',
               subtitle: '配置底部 WebDAV 快捷 Tab，快速访问 WebDAV 服务器',

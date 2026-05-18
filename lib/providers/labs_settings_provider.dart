@@ -9,10 +9,12 @@ class LabsSettingsProvider extends ChangeNotifier {
 
   bool _enableLargeScreenMode = false;
   bool _showRemoteAccessQrCode = false;
+  bool _enableNext2DanmakuKernel = false;
   bool _isLoaded = false;
 
   bool get enableLargeScreenMode => _enableLargeScreenMode;
   bool get showRemoteAccessQrCode => _showRemoteAccessQrCode;
+  bool get enableNext2DanmakuKernel => _enableNext2DanmakuKernel;
   bool get isLoaded => _isLoaded;
 
   Future<void> _loadSettings() async {
@@ -22,6 +24,10 @@ class LabsSettingsProvider extends ChangeNotifier {
     );
     _showRemoteAccessQrCode = await SettingsStorage.loadBool(
       SettingsKeys.labsShowRemoteAccessQrCode,
+      defaultValue: false,
+    );
+    _enableNext2DanmakuKernel = await SettingsStorage.loadBool(
+      SettingsKeys.labsEnableNext2DanmakuKernel,
       defaultValue: false,
     );
     _isLoaded = true;
@@ -44,6 +50,16 @@ class LabsSettingsProvider extends ChangeNotifier {
     notifyListeners();
     await SettingsStorage.saveBool(
       SettingsKeys.labsShowRemoteAccessQrCode,
+      enabled,
+    );
+  }
+
+  Future<void> setEnableNext2DanmakuKernel(bool enabled) async {
+    if (_enableNext2DanmakuKernel == enabled) return;
+    _enableNext2DanmakuKernel = enabled;
+    notifyListeners();
+    await SettingsStorage.saveBool(
+      SettingsKeys.labsEnableNext2DanmakuKernel,
       enabled,
     );
   }
