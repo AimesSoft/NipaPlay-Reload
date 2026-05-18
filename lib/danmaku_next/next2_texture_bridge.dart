@@ -77,7 +77,7 @@ class Next2TextureBridge {
   Future<bool> setFrame({
     required List<PositionedDanmakuItem> items,
     required double fontSize,
-    required DanmakuOutlineStyle outlineStyle,
+    required double outlineWidth,
     required DanmakuShadowStyle shadowStyle,
     required double opacity,
     double scaleX = 1.0,
@@ -111,7 +111,7 @@ class Next2TextureBridge {
         'engineHandle': engineHandle,
         'frameJson': jsonEncode(payload),
         'fontSize': fontSize * fontScale,
-        'outlineStyle': _outlineStyleCode(outlineStyle),
+        'outlineWidth': outlineWidth,
         'shadowStyle': _shadowStyleCode(shadowStyle),
         'opacity': opacity,
       },
@@ -172,17 +172,6 @@ class Next2TextureBridge {
       'color_argb': item.content.color.toARGB32().toSigned(32),
       'font_size_multiplier': item.content.fontSizeMultiplier,
     };
-  }
-
-  int _outlineStyleCode(DanmakuOutlineStyle style) {
-    switch (style) {
-      case DanmakuOutlineStyle.none:
-        return 0;
-      case DanmakuOutlineStyle.stroke:
-        return 1;
-      case DanmakuOutlineStyle.uniform:
-        return 2;
-    }
   }
 
   int _shadowStyleCode(DanmakuShadowStyle style) {

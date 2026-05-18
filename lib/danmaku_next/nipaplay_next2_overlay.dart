@@ -29,7 +29,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
     required this.allowStacking,
     required this.mergeDanmaku,
     required this.customFontFamily,
-    required this.outlineStyle,
+    required this.outlineWidth,
     required this.shadowStyle,
     this.onLayoutCalculated,
   });
@@ -46,7 +46,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
   final bool allowStacking;
   final bool mergeDanmaku;
   final String customFontFamily;
-  final DanmakuOutlineStyle outlineStyle;
+  final double outlineWidth;
   final DanmakuShadowStyle shadowStyle;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
 
@@ -139,7 +139,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
                   fontSize: widget.fontSize,
                   fontFamily: _fontFamily,
                   fontFamilyFallback: _fontFamilyFallback,
-                  outlineStyle: widget.outlineStyle,
+                  outlineWidth: widget.outlineWidth.clamp(0.0, 4.0).toDouble(),
                   shadowStyle: widget.shadowStyle,
                 ),
                 size: _layoutSize,
@@ -147,7 +147,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
             }
 
             return Opacity(
-              opacity: widget.opacity.clamp(0.0, 1.0),
+              opacity: widget.opacity.clamp(0.0, 1.0).toDouble(),
               child: SizedBox.expand(child: content),
             );
           },
@@ -220,14 +220,14 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     }
 
     final views = WidgetsBinding.instance.platformDispatcher.views;
-    final dpr = views.isNotEmpty
-        ? views.first.devicePixelRatio
-        : _lastDevicePixelRatio;
-    final pixelRatio = dpr.isFinite ? dpr.clamp(1.0, 4.0) : 1.0;
-    final pixelWidth =
-        (_layoutSize.width * pixelRatio).round().clamp(1, 16384);
-    final pixelHeight =
-        (_layoutSize.height * pixelRatio).round().clamp(1, 16384);
+    final dpr =
+        views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
+    final double pixelRatio =
+        dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0;
+    final int pixelWidth =
+        (_layoutSize.width * pixelRatio).round().clamp(1, 16384).toInt();
+    final int pixelHeight =
+        (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
 
     final info = await _textureBridge.ensureTexture(
       surfaceId: _surfaceId,
@@ -255,13 +255,15 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     }
 
     final widthScale = info.width > 0 ? info.width / _layoutSize.width : 1.0;
-    final heightScale = info.height > 0 ? info.height / _layoutSize.height : 1.0;
-    final fontScale = ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0);
+    final heightScale =
+        info.height > 0 ? info.height / _layoutSize.height : 1.0;
+    final fontScale =
+        ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
 
     final pushed = await _textureBridge.setFrame(
       items: frame,
       fontSize: widget.fontSize,
-      outlineStyle: widget.outlineStyle,
+      outlineWidth: widget.outlineWidth,
       shadowStyle: widget.shadowStyle,
       // Overall opacity is applied by the outer Flutter Opacity widget.
       // Keep Rust-side glyph compositing at full alpha to avoid edge fringe.
@@ -281,7 +283,7 @@ class _Next2CanvasPainter extends CustomPainter {
     required this.fontSize,
     required this.fontFamily,
     required this.fontFamilyFallback,
-    required this.outlineStyle,
+    required this.outlineWidth,
     required this.shadowStyle,
   });
 
@@ -289,7 +291,7 @@ class _Next2CanvasPainter extends CustomPainter {
   final double fontSize;
   final String? fontFamily;
   final List<String>? fontFamilyFallback;
-  final DanmakuOutlineStyle outlineStyle;
+  final double outlineWidth;
   final DanmakuShadowStyle shadowStyle;
 
   static final Paint _selfSendPaint = Paint()
@@ -320,19 +322,17 @@ class _Next2CanvasPainter extends CustomPainter {
       }
 
       final outlineColor = _strokeColorFor(content.color);
-      final outlineRadius = outlineStyle == DanmakuOutlineStyle.stroke
-          ? _resolveStrokeWidth(targetFontSize)
-          : _resolveUniformOutlineRadius(targetFontSize);
+      final outlineRadius = _resolveStrokeWidth(targetFontSize);
 
-      if (outlineStyle != DanmakuOutlineStyle.none) {
+      if (outlineWidth > 0) {
         _paintOutline(
           canvas,
           text: text,
           baseOffset: Offset(item.x, item.y),
           fontSize: targetFontSize,
           color: outlineColor,
-          radius: outlineRadius,
-          fullRing: outlineStyle == DanmakuOutlineStyle.uniform,
+          radius: outlineRadius * outlineWidth,
+          fullRing: true,
         );
       }
 
@@ -439,7 +439,7 @@ class _Next2CanvasPainter extends CustomPainter {
   }
 
   _ShadowConfig? _resolveShadowStyle(double targetFontSize) {
-    final unit = _resolveUniformOutlineRadius(targetFontSize);
+    final unit = _resolveShadowUnit(targetFontSize);
     switch (shadowStyle) {
       case DanmakuShadowStyle.none:
         return null;
@@ -463,12 +463,12 @@ class _Next2CanvasPainter extends CustomPainter {
 
   double _resolveStrokeWidth(double targetFontSize) {
     final width = targetFontSize * 0.06;
-    return width.clamp(1.0, 2.6);
+    return width.clamp(1.0, 2.6).toDouble();
   }
 
-  double _resolveUniformOutlineRadius(double targetFontSize) {
+  double _resolveShadowUnit(double targetFontSize) {
     final radius = targetFontSize * 0.045;
-    return math.max(0.8, radius.clamp(0.8, 2.0));
+    return math.max(0.8, radius.clamp(0.8, 2.0).toDouble());
   }
 
   @override
@@ -477,7 +477,7 @@ class _Next2CanvasPainter extends CustomPainter {
         oldDelegate.fontSize != fontSize ||
         oldDelegate.fontFamily != fontFamily ||
         !listEquals(oldDelegate.fontFamilyFallback, fontFamilyFallback) ||
-        oldDelegate.outlineStyle != outlineStyle ||
+        oldDelegate.outlineWidth != outlineWidth ||
         oldDelegate.shadowStyle != shadowStyle;
   }
 }

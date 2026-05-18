@@ -137,7 +137,7 @@ pub extern "C" fn next2_engine_set_frame(
     handle: u64,
     frame_json: *const c_char,
     font_size: f32,
-    outline_style: u8,
+    outline_width: f32,
     shadow_style: u8,
     opacity: f32,
 ) -> u8 {
@@ -155,7 +155,7 @@ pub extern "C" fn next2_engine_set_frame(
             input: RenderFrameInput {
                 frame_json: json,
                 font_size,
-                outline_style,
+                outline_width,
                 shadow_style,
                 opacity,
             },
@@ -177,7 +177,7 @@ pub extern "C" fn next2_engine_set_frame(
     _handle: u64,
     _frame_json: *const c_char,
     _font_size: f32,
-    _outline_style: u8,
+    _outline_width: f32,
     _shadow_style: u8,
     _opacity: f32,
 ) -> u8 {

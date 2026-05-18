@@ -31,7 +31,7 @@ private func next2_engine_set_frame(
   _ engineHandle: UInt64,
   _ frameJson: UnsafePointer<CChar>?,
   _ fontSize: Float,
-  _ outlineStyle: UInt8,
+  _ outlineWidth: Float,
   _ shadowStyle: UInt8,
   _ opacity: Float
 ) -> UInt8
@@ -454,12 +454,12 @@ private final class Next2SurfaceState {
     }
 
     let fontSize = (dict["fontSize"] as? NSNumber)?.floatValue ?? 24.0
-    let outlineStyle = (dict["outlineStyle"] as? NSNumber)?.uint8Value ?? 1
+    let outlineWidth = (dict["outlineWidth"] as? NSNumber)?.floatValue ?? 1.0
     let shadowStyle = (dict["shadowStyle"] as? NSNumber)?.uint8Value ?? 1
     let opacity = (dict["opacity"] as? NSNumber)?.floatValue ?? 1.0
 
     let ok = frameJson.withCString { ptr in
-      next2_engine_set_frame(handle, ptr, fontSize, outlineStyle, shadowStyle, opacity) != 0
+      next2_engine_set_frame(handle, ptr, fontSize, outlineWidth, shadowStyle, opacity) != 0
     }
     result(ok)
   }

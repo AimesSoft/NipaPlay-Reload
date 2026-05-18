@@ -48,7 +48,7 @@ static FONT_DATA: &[u8] = include_bytes!("../../../assets/subfont.ttf");
 pub struct RenderFrameInput {
     pub frame_json: String,
     pub font_size: f32,
-    pub outline_style: u8,
+    pub outline_width: f32,
     pub shadow_style: u8,
     pub opacity: f32,
 }
@@ -937,7 +937,11 @@ impl Next2Renderer {
         self.frame_items.reserve(parsed.items.len());
 
         let opacity = input.opacity.clamp(0.0, 1.0);
-        let outline_style = input.outline_style;
+        let outline_width = if input.outline_width.is_finite() {
+            input.outline_width.clamp(0.0, 4.0)
+        } else {
+            0.0
+        };
         let shadow_style = input.shadow_style;
         let font_size = input.font_size.max(1.0);
 
@@ -949,7 +953,7 @@ impl Next2Renderer {
                 y: item.y,
                 color_argb: item.color_argb,
                 font_size: (font_size as f64 * item.font_size_multiplier.max(0.5)) as f32,
-                outline_style,
+                outline_width,
                 shadow_style,
                 opacity,
             });
@@ -1087,7 +1091,7 @@ impl Next2Renderer {
                 text.push_str(count_text);
             }
 
-            let outline_px = resolve_outline_px(item.font_size, item.outline_style);
+            let outline_px = resolve_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);
             let outline_color = stroke_color(fill_color);
@@ -1229,12 +1233,15 @@ fn to_ndc(x: f32, y: f32, width: f32, height: f32) -> [f32; 2] {
     [nx, ny]
 }
 
-fn resolve_outline_px(font_size: f32, style: u8) -> f32 {
-    match style {
-        1 => (font_size * 0.06).clamp(1.0, 2.6),
-        2 => (font_size * 0.045).clamp(0.8, 2.0),
-        _ => 0.0,
+fn resolve_outline_px(font_size: f32, width_multiplier: f32) -> f32 {
+    if !width_multiplier.is_finite() {
+        return 0.0;
     }
+    let width_multiplier = width_multiplier.clamp(0.0, 4.0);
+    if width_multiplier <= 0.0 {
+        return 0.0;
+    }
+    (font_size * 0.06).clamp(1.0, 2.6) * width_multiplier
 }
 
 #[derive(Copy, Clone)]
@@ -1320,7 +1327,7 @@ struct FrameItem {
     y: f64,
     color_argb: i32,
     font_size: f32,
-    outline_style: u8,
+    outline_width: f32,
     shadow_style: u8,
     opacity: f32,
 }

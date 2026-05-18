@@ -1220,6 +1220,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     return DanmakuShadowStyle.values[index];
   }
 
+  double _sanitizeNext2DanmakuOutlineWidth(double? value) {
+    if (value == null || !value.isFinite) {
+      return 1.0;
+    }
+    return value.clamp(0.0, 4.0).toDouble();
+  }
+
   bool _isSupportedDanmakuFontExtension(String path) {
     final ext = p.extension(path).toLowerCase();
     return ext == '.ttf' || ext == '.otf' || ext == '.ttc' || ext == '.otc';
@@ -1306,6 +1313,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final loadedShadowStyle = _resolveDanmakuShadowStyle(
       prefs.getInt(_danmakuShadowStyleKey),
     );
+    final loadedNext2OutlineWidth = _sanitizeNext2DanmakuOutlineWidth(
+      prefs.getDouble(_next2DanmakuOutlineWidthKey),
+    );
 
     var effectiveFontPath = loadedFontFilePath;
     if (effectiveFontPath.isNotEmpty) {
@@ -1328,12 +1338,14 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final changed = _danmakuFontFilePath != effectiveFontPath ||
         _danmakuFontFamily != loadedFontFamily ||
         _danmakuOutlineStyle != loadedOutlineStyle ||
-        _danmakuShadowStyle != loadedShadowStyle;
+        _danmakuShadowStyle != loadedShadowStyle ||
+        _next2DanmakuOutlineWidth != loadedNext2OutlineWidth;
 
     _danmakuFontFilePath = effectiveFontPath;
     _danmakuFontFamily = loadedFontFamily;
     _danmakuOutlineStyle = loadedOutlineStyle;
     _danmakuShadowStyle = loadedShadowStyle;
+    _next2DanmakuOutlineWidth = loadedNext2OutlineWidth;
 
     if (loadedFontFilePath != effectiveFontPath) {
       await prefs.setString(_danmakuFontFilePathKey, effectiveFontPath);
@@ -1341,6 +1353,13 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if ((prefs.getString(_danmakuFontFamilyKey) ?? '').trim() !=
         loadedFontFamily) {
       await prefs.setString(_danmakuFontFamilyKey, loadedFontFamily);
+    }
+    if ((prefs.getDouble(_next2DanmakuOutlineWidthKey) ?? -1.0) !=
+        loadedNext2OutlineWidth) {
+      await prefs.setDouble(
+        _next2DanmakuOutlineWidthKey,
+        loadedNext2OutlineWidth,
+      );
     }
 
     if (changed) {
@@ -1416,6 +1435,17 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuShadowStyle = style;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_danmakuShadowStyleKey, style.index);
+    _notifyListeners();
+  }
+
+  Future<void> setNext2DanmakuOutlineWidth(double value) async {
+    final sanitized = _sanitizeNext2DanmakuOutlineWidth(value);
+    if ((_next2DanmakuOutlineWidth - sanitized).abs() < 0.0001) {
+      return;
+    }
+    _next2DanmakuOutlineWidth = sanitized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_next2DanmakuOutlineWidthKey, sanitized);
     _notifyListeners();
   }
 
