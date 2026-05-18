@@ -19,6 +19,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   static bool _disableMpvLogs = false;
   static int? _cachedMacosMajor;
   static bool _macOSNativeVideoPreference = false;
+  final String? _androidAudioOutput;
   static const int _defaultBufferSize = 32 * 1024 * 1024;
   static const String _hdrValidationFlag = 'NIPAPLAY_MACOS_HDR_VALIDATE';
   static const MethodChannel _macOSNativeVideoChannel =
@@ -225,10 +226,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   int _platformVideoSurfaceBindingGeneration = 0;
   Media? _pendingPlatformMedia;
 
-  MediaKitPlayerAdapter({int? bufferSize})
+  MediaKitPlayerAdapter({int? bufferSize, String? androidAudioOutput})
       : _mpvDiagnosticsEnabled = _shouldEnableMpvDiagnostics(),
         _enableHardwareAcceleration = !_shouldDisableHardwareAcceleration(),
         _prefersPlatformVideoSurface = _shouldUseMacOSNativeVideoSurface(),
+        _androidAudioOutput = androidAudioOutput,
         _player = Player(
           configuration: PlayerConfiguration(
             libass: true,
@@ -247,6 +249,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _applyMpvLogLevelOverride();
     _applyMacOSHdrOutputOptions();
     _applyMpvDiagnosticOptions();
+    _applyAndroidAudioOutput();
     _bootstrapMacOSPlatformVideoSurface();
     if (!_prefersPlatformVideoSurface) {
       _controller = VideoController(
@@ -278,6 +281,15 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     } catch (e) {
       debugPrint('MediaKit: 设置MPV日志级别为none失败: $e');
     }
+  }
+
+  void _applyAndroidAudioOutput() {
+    if (_androidAudioOutput == null ||
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    _setMpvPropertyOption('ao', _androidAudioOutput!);
+    debugPrint('MediaKit: Android 音频后端设置为 $_androidAudioOutput');
   }
 
   void _applyMpvDiagnosticOptions() {

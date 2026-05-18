@@ -55,6 +55,7 @@ class _CupertinoPlayerSettingsPageState
   double _spoilerAiTemperatureDraft = 0.5;
   Anime4KProfile? _anime4kSelectionOverride;
   CrtProfile? _crtSelectionOverride;
+  String _androidAudioOutput = 'opensles';
 
   @override
   void didChangeDependencies() {
@@ -92,6 +93,7 @@ class _CupertinoPlayerSettingsPageState
     }
     await _loadPlayerKernelSettings();
     await _loadDanmakuRenderEngineSettings();
+    await _loadAndroidAudioOutputSettings();
 
     if (mounted) {
       setState(() {
@@ -117,6 +119,28 @@ class _CupertinoPlayerSettingsPageState
     setState(() {
       _selectedKernelType = kernelType;
     });
+  }
+
+  Future<void> _loadAndroidAudioOutputSettings() async {
+    final output = PlayerFactory.getAndroidAudioOutput();
+    if (!mounted) return;
+    setState(() {
+      _androidAudioOutput = output;
+    });
+  }
+
+  Future<void> _saveAndroidAudioOutputSettings(String output) async {
+    await PlayerFactory.saveAndroidAudioOutput(output);
+    if (!mounted) return;
+    setState(() {
+      _androidAudioOutput = output;
+    });
+    final displayName = output == 'audiotrack' ? 'AudioTrack' : 'OpenSL ES';
+    AdaptiveSnackBar.show(
+      context,
+      message: 'Android 音频后端已切换为 $displayName，需重启APP生效',
+      type: AdaptiveSnackBarType.success,
+    );
   }
 
   Future<void> _loadDecoderSettings() async {
@@ -794,6 +818,50 @@ class _CupertinoPlayerSettingsPageState
               ],
             );
           },
+        ),
+      ],
+      if (!kIsWeb &&
+          Platform.isAndroid &&
+          _selectedKernelType == PlayerKernelType.mediaKit) ...[
+        const SizedBox(height: 16),
+        CupertinoSettingsGroupCard(
+          margin: EdgeInsets.zero,
+          backgroundColor: sectionBackground,
+          addDividers: true,
+          dividerIndent: 16,
+          children: [
+            CupertinoSettingsTile(
+              leading: Icon(
+                CupertinoIcons.music_note,
+                color: resolveSettingsIconColor(context),
+              ),
+              title: const Text('Android 音频后端'),
+              subtitle: const Text(
+                  '音频后端切换为 AudioTrack 可支持某些Android机型杜比全景声等系统音效（实验性，需重启APP生效）'),
+              trailing: AdaptivePopupMenuButton.widget<String>(
+                items: [
+                  AdaptivePopupMenuItem<String>(
+                    value: 'opensles',
+                    label: 'OpenSL ES',
+                  ),
+                  AdaptivePopupMenuItem<String>(
+                    value: 'audiotrack',
+                    label: 'AudioTrack',
+                  ),
+                ],
+                buttonStyle: PopupButtonStyle.gray,
+                child: _buildMenuChip(context,
+                    _androidAudioOutput == 'audiotrack' ? 'AudioTrack' : 'OpenSL ES'),
+                onSelected: (index, entry) {
+                  final output = entry.value!;
+                  if (output != _androidAudioOutput) {
+                    _saveAndroidAudioOutputSettings(output);
+                  }
+                },
+              ),
+              backgroundColor: tileBackground,
+            ),
+          ],
         ),
       ],
       if (globals.isPhone) ...[
