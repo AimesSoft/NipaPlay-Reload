@@ -130,6 +130,32 @@ yay -S nipaplay-reload-bin
 ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ```
 
+#### Nix / NixOS
+
+```bash
+# 克隆仓库（必须包含 submodule）
+git clone --recurse-submodules https://github.com/AimesSoft/NipaPlay-Reload.git
+cd NipaPlay-Reload
+
+# 构建（完全离线，沙箱内编译，无需手动安装任何依赖）
+nix build path:.
+
+# 运行
+./result/bin/NipaPlay
+```
+
+> **注意**：必须使用 `path:.` 而非直接 `nix build`。默认的 `git+file://` 源不包含 git submodule（`third_party/media-kit-upstream` 等），`path:` 直接从文件系统读取，包含已 checkout 的 submodule。
+
+开发环境：
+
+```bash
+# 进入含 Flutter、Rust、CMake 及全部系统依赖的开发 Shell
+nix develop path:.
+
+# 手动构建
+flutter build linux --release
+```
+
 ## 功能列表
 
 ### 播放体验
