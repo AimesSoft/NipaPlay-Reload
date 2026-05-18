@@ -507,15 +507,21 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     if (_bgmIdMatchPattern == pattern) return;
 
     try {
-      final regex = RegExp(pattern);
-      // 用测试字符串验证至少有一个捕获组
-      final testMatch = regex.firstMatch('bgmid=123');
-      if (testMatch == null || testMatch.groupCount < 1) {
-        debugPrint('正则表达式缺少捕获组: $pattern（需要用括号捕获数字，如 bgmid=(\\d+)）');
-        return;
-      }
+      RegExp(pattern);
     } catch (e) {
       debugPrint('无效的正则表达式: $pattern, 错误: $e');
+      return;
+    }
+
+    // 统计未转义的左括号来验证至少有 1 个捕获组
+    int groupCount = 0;
+    for (int i = 0; i < pattern.length; i++) {
+      if (pattern[i] == '(' && (i == 0 || pattern[i - 1] != '\\')) {
+        groupCount++;
+      }
+    }
+    if (groupCount < 1) {
+      debugPrint('正则表达式缺少捕获组: $pattern（需要用括号捕获数字，如 bgmid=(\\d+)）');
       return;
     }
 
@@ -550,14 +556,20 @@ class WebDAVQuickAccessProvider extends ChangeNotifier {
     if (_tmdbIdMatchPattern == pattern) return;
 
     try {
-      final regex = RegExp(pattern);
-      final testMatch = regex.firstMatch('tmdbid=123');
-      if (testMatch == null || testMatch.groupCount < 1) {
-        debugPrint('正则表达式缺少捕获组: $pattern（需要用括号捕获数字，如 tmdbid=(\\d+)）');
-        return;
-      }
+      RegExp(pattern);
     } catch (e) {
       debugPrint('无效的正则表达式: $pattern, 错误: $e');
+      return;
+    }
+
+    int groupCount = 0;
+    for (int i = 0; i < pattern.length; i++) {
+      if (pattern[i] == '(' && (i == 0 || pattern[i - 1] != '\\')) {
+        groupCount++;
+      }
+    }
+    if (groupCount < 1) {
+      debugPrint('正则表达式缺少捕获组: $pattern（需要用括号捕获数字，如 tmdbid=(\\d+)）');
       return;
     }
 
