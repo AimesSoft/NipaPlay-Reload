@@ -24,12 +24,14 @@ class PlayerFactory {
   static const String _precacheBufferSizeKey = 'player_precache_buffer_size_mb';
   static const String _macOSNativeVideoEnabledKey =
       'macos_native_video_enabled';
+  static const String _androidAudioOutputKey = 'android_audio_output';
   static const int defaultPrecacheBufferSizeMb = 32;
   static const int minPrecacheBufferSizeMb = 4;
   static const int maxPrecacheBufferSizeMb = 512;
   static PlayerKernelType? _cachedKernelType;
   static int _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
   static bool _cachedMacOSNativeVideoEnabled = false;
+  static String _cachedAndroidAudioOutput = 'opensles';
   static bool _hasLoadedSettings = false;
 
   // 添加一个StreamController来广播内核切换事件
@@ -53,6 +55,8 @@ class PlayerFactory {
       final bufferSizeMb = prefs.getInt(_precacheBufferSizeKey);
       final macOSNativeVideoEnabled =
           prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
+      final androidAudioOutput =
+          prefs.getString(_androidAudioOutputKey) ?? 'opensles';
 
       if (kernelTypeIndex != null &&
           kernelTypeIndex < PlayerKernelType.values.length) {
@@ -69,6 +73,7 @@ class PlayerFactory {
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(
         _cachedMacOSNativeVideoEnabled,
       );
+      _cachedAndroidAudioOutput = androidAudioOutput;
 
       _hasLoadedSettings = true;
     } catch (e) {
@@ -76,6 +81,7 @@ class PlayerFactory {
       _cachedKernelType = PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
+      _cachedAndroidAudioOutput = 'opensles';
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
     }
@@ -88,6 +94,7 @@ class PlayerFactory {
       _cachedKernelType = PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
       _cachedMacOSNativeVideoEnabled = false;
+      _cachedAndroidAudioOutput = 'opensles';
       MediaKitPlayerAdapter.setMacOSNativeVideoPreference(false);
       _hasLoadedSettings = true;
 
@@ -97,6 +104,8 @@ class PlayerFactory {
         final bufferSizeMb = prefs.getInt(_precacheBufferSizeKey);
         final macOSNativeVideoEnabled =
             prefs.getBool(_macOSNativeVideoEnabledKey) ?? false;
+        final androidAudioOutput =
+            prefs.getString(_androidAudioOutputKey) ?? 'opensles';
         if (kernelTypeIndex != null &&
             kernelTypeIndex < PlayerKernelType.values.length) {
           _cachedKernelType = PlayerKernelType.values[kernelTypeIndex];
@@ -111,6 +120,7 @@ class PlayerFactory {
         MediaKitPlayerAdapter.setMacOSNativeVideoPreference(
           _cachedMacOSNativeVideoEnabled,
         );
+        _cachedAndroidAudioOutput = androidAudioOutput;
       });
 
       debugPrint('[PlayerFactory] 同步设置临时默认值: MDK');
@@ -118,6 +128,7 @@ class PlayerFactory {
       debugPrint('[PlayerFactory] 同步加载设置出错: $e');
       _cachedKernelType = PlayerKernelType.mdk;
       _cachedPrecacheBufferSizeMb = defaultPrecacheBufferSizeMb;
+      _cachedAndroidAudioOutput = 'opensles';
     }
   }
 
@@ -180,6 +191,24 @@ class PlayerFactory {
     }
   }
 
+  static String getAndroidAudioOutput() {
+    if (!_hasLoadedSettings) {
+      _loadSettingsSync();
+    }
+    return _cachedAndroidAudioOutput;
+  }
+
+  static Future<void> saveAndroidAudioOutput(String output) async {
+    final resolved = (output == 'audiotrack') ? 'audiotrack' : 'opensles';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_androidAudioOutputKey, resolved);
+      _cachedAndroidAudioOutput = resolved;
+    } catch (e) {
+      debugPrint('[PlayerFactory] 保存 Android 音频后端设置出错: $e');
+    }
+  }
+
   // 创建播放器实例
   AbstractPlayer createPlayer({PlayerKernelType? kernelType}) {
     // 如果是Web平台，强制使用VideoPlayer
@@ -201,6 +230,7 @@ class PlayerFactory {
       case PlayerKernelType.mediaKit:
         return MediaKitPlayerAdapter(
           bufferSize: getPrecacheBufferSizeBytes(),
+          androidAudioOutput: getAndroidAudioOutput(),
         );
       // case PlayerKernelType.otherPlayer:
       //   // return OtherPlayerAdapter(ThirdPartyPlayerApi());
@@ -210,6 +240,7 @@ class PlayerFactory {
         debugPrint('[PlayerFactory] 未知播放器内核类型，默认使用 MediaKit');
         return MediaKitPlayerAdapter(
           bufferSize: getPrecacheBufferSizeBytes(),
+          androidAudioOutput: getAndroidAudioOutput(),
         );
     }
   }

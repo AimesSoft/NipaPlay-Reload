@@ -48,11 +48,13 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   PlayerKernelType _selectedKernelType = PlayerKernelType.mdk;
   DanmakuRenderEngine _selectedDanmakuRenderEngine = DanmakuRenderEngine.canvas;
   bool _macOSNativeVideoEnabled = false;
+  String _androidAudioOutput = 'opensles';
 
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
   final GlobalKey _danmakuRenderEngineDropdownKey = GlobalKey();
   final GlobalKey _spoilerAiApiFormatDropdownKey = GlobalKey();
+  final GlobalKey _androidAudioOutputDropdownKey = GlobalKey();
 
   final TextEditingController _spoilerAiUrlController = TextEditingController();
   final TextEditingController _spoilerAiModelController =
@@ -92,6 +94,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     _loadPlayerKernelSettings();
     _loadDanmakuRenderEngineSettings();
     _loadMacOSNativeVideoSettings();
+    _loadAndroidAudioOutputSettings();
 
     if (!_spoilerAiControllersInitialized) {
       _spoilerAiApiFormatDraft = playerState.spoilerAiApiFormat;
@@ -167,6 +170,24 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       context,
       enabled ? '已开启实验性 HDR 原生视频输出' : '已切回 Flutter 纹理视频输出',
     );
+  }
+
+  Future<void> _loadAndroidAudioOutputSettings() async {
+    final output = PlayerFactory.getAndroidAudioOutput();
+    if (!mounted) return;
+    setState(() {
+      _androidAudioOutput = output;
+    });
+  }
+
+  Future<void> _saveAndroidAudioOutputSettings(String output) async {
+    await PlayerFactory.saveAndroidAudioOutput(output);
+    if (!mounted) return;
+    setState(() {
+      _androidAudioOutput = output;
+    });
+    final displayName = output == 'audiotrack' ? 'AudioTrack' : 'OpenSL ES';
+    BlurSnackBar.show(context, 'Android 音频后端已切换为 $displayName，需重启APP生效');
   }
 
   void _showRestartDialog() {
@@ -524,6 +545,36 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 },
               );
             },
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
+        if (!kIsWeb &&
+            Platform.isAndroid &&
+            _selectedKernelType == PlayerKernelType.mediaKit) ...[
+          SettingsItem.dropdown(
+            title: 'Android 音频后端',
+            subtitle: '音频后端切换为 AudioTrack 可支持某些Android机型杜比全景声等系统音效（实验性，需重启APP生效）',
+            icon: Ionicons.musical_notes_outline,
+            items: [
+              DropdownMenuItemData(
+                title: 'OpenSL ES',
+                value: 'opensles',
+                isSelected: _androidAudioOutput == 'opensles',
+                description: '默认，兼容性较好',
+              ),
+              DropdownMenuItemData(
+                title: 'AudioTrack',
+                value: 'audiotrack',
+                isSelected: _androidAudioOutput == 'audiotrack',
+                description: '支持系统音效（如杜比全景声）',
+              ),
+            ],
+            onChanged: (output) {
+              if (output is String) {
+                _saveAndroidAudioOutputSettings(output);
+              }
+            },
+            dropdownKey: _androidAudioOutputDropdownKey,
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ],
