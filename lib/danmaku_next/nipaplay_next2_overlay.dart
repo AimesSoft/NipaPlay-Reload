@@ -18,6 +18,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
   const NipaPlayNext2Overlay({
     super.key,
     required this.danmakuList,
+    required this.danmakuListVersion,
     required this.playbackTimeMs,
     required this.currentTimeSeconds,
     required this.fontSize,
@@ -35,6 +36,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
   });
 
   final List<Map<String, dynamic>> danmakuList;
+  final int danmakuListVersion;
   final ValueListenable<double> playbackTimeMs;
   final double currentTimeSeconds;
   final double fontSize;
@@ -82,6 +84,25 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
   void dispose() {
     _textureBridge.disposeSurface(_surfaceId);
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant NipaPlayNext2Overlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.danmakuListVersion != widget.danmakuListVersion ||
+        oldWidget.danmakuList != widget.danmakuList ||
+        oldWidget.allowStacking != widget.allowStacking ||
+        oldWidget.mergeDanmaku != widget.mergeDanmaku ||
+        oldWidget.fontSize != widget.fontSize ||
+        oldWidget.displayArea != widget.displayArea ||
+        oldWidget.scrollDurationSeconds != widget.scrollDurationSeconds ||
+        oldWidget.customFontFamily != widget.customFontFamily ||
+        oldWidget.outlineWidth != widget.outlineWidth ||
+        oldWidget.shadowStyle != widget.shadowStyle ||
+        oldWidget.opacity != widget.opacity ||
+        oldWidget.isVisible != widget.isVisible) {
+      _queueUpdate();
+    }
   }
 
   @override
@@ -182,6 +203,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
         await _bridge.configure(
           danmakuList: widget.danmakuList,
+          danmakuListVersion: widget.danmakuListVersion,
           size: _layoutSize,
           fontSize: widget.fontSize,
           displayArea: widget.displayArea,

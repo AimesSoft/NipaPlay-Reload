@@ -181,8 +181,8 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         value: DanmakuRenderEngine.nipaplayNext,
         isSelected:
             _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext,
-        description:
-            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.nipaplayNext),
+        description: _getDanmakuRenderEngineDescription(
+            DanmakuRenderEngine.nipaplayNext),
       ),
     ];
 
@@ -191,8 +191,18 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         DropdownMenuItemData(
           title: 'NipaPlay Next2',
           value: DanmakuRenderEngine.next2,
-          isSelected:
-              _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
+          isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
+          description:
+              _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
+        ),
+      );
+    } else if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2) {
+      items.add(
+        DropdownMenuItemData(
+          title: 'NipaPlay Next2 (实验室关闭)',
+          value: DanmakuRenderEngine.next2,
+          isSelected: true,
+          enabled: false,
           description:
               _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
         ),
@@ -219,6 +229,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
           items: renderEngineItems,
           onChanged: (dynamic value) {
             if (value is! DanmakuRenderEngine) return;
+            if (!showNext2 && value == DanmakuRenderEngine.next2) return;
             _saveDanmakuRenderEngineSettings(value);
           },
           dropdownKey: _danmakuRenderEngineDropdownKey,

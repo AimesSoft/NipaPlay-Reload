@@ -7,6 +7,7 @@ import 'package:nipaplay/src/rust/rust_init.dart';
 class Next2LayoutBridge {
   rust_next2.RustNext2PreparedLayout? _prepared;
   int _sourceListIdentity = 0;
+  int _sourceListVersion = -1;
   double _lastFontSize = -1;
   double _lastDisplayArea = -1;
   bool _lastAllowStacking = false;
@@ -14,6 +15,7 @@ class Next2LayoutBridge {
 
   Future<void> configure({
     required List<Map<String, dynamic>> danmakuList,
+    required int danmakuListVersion,
     required Size size,
     required double fontSize,
     required double displayArea,
@@ -23,6 +25,7 @@ class Next2LayoutBridge {
   }) async {
     final listIdentity = identityHashCode(danmakuList);
     final changed = listIdentity != _sourceListIdentity ||
+        danmakuListVersion != _sourceListVersion ||
         _prepared == null ||
         (_lastFontSize - fontSize).abs() > 0.001 ||
         (_lastDisplayArea - displayArea).abs() > 0.0001 ||
@@ -74,6 +77,7 @@ class Next2LayoutBridge {
       ),
     );
     _sourceListIdentity = listIdentity;
+    _sourceListVersion = danmakuListVersion;
     _lastFontSize = fontSize;
     _lastDisplayArea = displayArea;
     _lastAllowStacking = allowStacking;

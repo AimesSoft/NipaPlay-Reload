@@ -183,13 +183,19 @@ class _CupertinoDanmakuSettingsPageState
   List<AdaptivePopupMenuEntry> _danmakuMenuItems({required bool showNext2}) {
     final engines = DanmakuRenderEngine.values
         .where(
-          (engine) => showNext2 || engine != DanmakuRenderEngine.next2,
+          (engine) =>
+              showNext2 ||
+              engine != DanmakuRenderEngine.next2 ||
+              _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
         )
         .toList();
     return engines
         .map(
           (engine) => AdaptivePopupMenuItem<DanmakuRenderEngine>(
-            label: _danmakuTitle(engine),
+            label: !showNext2 && engine == DanmakuRenderEngine.next2
+                ? 'NipaPlay Next2 (实验室关闭)'
+                : _danmakuTitle(engine),
+            enabled: showNext2 || engine != DanmakuRenderEngine.next2,
             value: engine,
           ),
         )
@@ -263,7 +269,10 @@ class _CupertinoDanmakuSettingsPageState
         context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
     final danmakuEngines = DanmakuRenderEngine.values
         .where(
-          (engine) => showNext2 || engine != DanmakuRenderEngine.next2,
+          (engine) =>
+              showNext2 ||
+              engine != DanmakuRenderEngine.next2 ||
+              _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
         )
         .toList();
     final danmakuMenuItems = _danmakuMenuItems(showNext2: showNext2);
@@ -296,6 +305,9 @@ class _CupertinoDanmakuSettingsPageState
                     (index >= 0 && index < danmakuEngines.length
                         ? danmakuEngines[index]
                         : _selectedDanmakuRenderEngine);
+                if (!showNext2 && engine == DanmakuRenderEngine.next2) {
+                  return;
+                }
                 if (engine != _selectedDanmakuRenderEngine) {
                   _saveDanmakuRenderEngineSettings(engine);
                 }

@@ -142,6 +142,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
         if (kernelType == DanmakuRenderEngine.next2) {
           return NipaPlayNext2Overlay(
             danmakuList: activeDanmakuList,
+            danmakuListVersion: videoState.danmakuListVersion,
             playbackTimeMs: videoState.playbackTimeMs,
             currentTimeSeconds: widget.currentPosition / 1000,
             fontSize: widget.fontSize,
@@ -150,7 +151,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             displayArea: videoState.danmakuDisplayArea,
             timeOffset: combinedTimeOffset,
             scrollDurationSeconds: scrollDuration,
-            allowStacking: false,
+            allowStacking: videoState.danmakuStacking,
             mergeDanmaku: widget.isVisible && videoState.mergeDanmaku,
             customFontFamily: videoState.danmakuFontFamily,
             outlineWidth: videoState.next2DanmakuOutlineWidth,

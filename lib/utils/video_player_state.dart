@@ -318,6 +318,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _autoNextCountdownSeconds =
       AutoNextEpisodeService.defaultCountdownSeconds;
   List<Map<String, dynamic>> _danmakuList = [];
+  int _danmakuListVersion = 0;
 
   // 多轨道弹幕系统
   final Map<String, Map<String, dynamic>> _danmakuTracks = {};
@@ -847,6 +848,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
+  int get danmakuListVersion => _danmakuListVersion;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
   double get controlBarHeight => _controlBarHeight;

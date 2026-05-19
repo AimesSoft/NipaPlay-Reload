@@ -224,6 +224,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       // 清除之前的弹幕数据
       debugPrint('清除之前的弹幕数据');
       _danmakuList.clear();
+      _danmakuListVersion++;
       danmakuController?.clearDanmaku();
       if (canContinue()) {
         _notifyListeners();
@@ -507,6 +508,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         .map(_prepareDanmakuForDisplay)
         .toList();
     _danmakuList = filteredList;
+    _danmakuListVersion++;
 
     danmakuController?.clearDanmaku();
     danmakuController?.loadDanmaku(filteredList);
@@ -1283,6 +1285,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         final timeB = (b['time'] as num?)?.toDouble() ?? 0.0;
         return timeA.compareTo(timeB);
       });
+      _danmakuListVersion++;
       _notifyListeners();
       debugPrint('已添加新弹幕到列表: ${danmaku['content']}');
     }
@@ -1450,7 +1453,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           final pluginService = _context!.read<PluginService>();
           _pluginService = pluginService;
           debugPrint('[DanmakuFilter] 重新获取 PluginService 成功');
-          _pluginService!.eventBus.emitDanmakuLoaded({'danmaku': parsedDanmaku});
+          _pluginService!.eventBus
+              .emitDanmakuLoaded({'danmaku': parsedDanmaku});
         } catch (e) {
           debugPrint('[DanmakuFilter] 重新获取 PluginService 失败: $e');
         }

@@ -309,8 +309,12 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
 
   Future<void> _handleItemSelected(
     T value, {
+    bool enabled = true,
     bool restoreControlFocus = false,
   }) async {
+    if (!enabled) {
+      return;
+    }
     if (_isSelecting) {
       return;
     }
@@ -405,7 +409,16 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
         return KeyEventResult.handled;
       }
       final item = widget.items[_keyboardHighlightedIndex];
-      unawaited(_handleItemSelected(item.value, restoreControlFocus: true));
+      if (!item.enabled) {
+        return KeyEventResult.handled;
+      }
+      unawaited(
+        _handleItemSelected(
+          item.value,
+          enabled: item.enabled,
+          restoreControlFocus: true,
+        ),
+      );
       return KeyEventResult.handled;
     }
 
@@ -529,11 +542,12 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                                     : Colors.transparent);
 
                             return InkWell(
-                              onTap: _isSelecting
+                              onTap: _isSelecting || !item.enabled
                                   ? null
                                   : () async {
                                       await _handleItemSelected(
                                         item.value,
+                                        enabled: item.enabled,
                                         restoreControlFocus: true,
                                       );
                                     },
@@ -557,7 +571,13 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                                 ),
                                 child: Text(
                                   item.title,
-                                  style: getTitleTextStyle(context),
+                                  style: item.enabled
+                                      ? getTitleTextStyle(context)
+                                      : getTitleTextStyle(context).copyWith(
+                                          color: getTitleTextStyle(context)
+                                              .color
+                                              ?.withValues(alpha: 0.45),
+                                        ),
                                 ),
                               ),
                             );
@@ -621,12 +641,14 @@ class DropdownMenuItemData<T> {
   final T value;
   final bool isSelected;
   final String? description;
+  final bool enabled;
 
   DropdownMenuItemData({
     required this.title,
     required this.value,
     this.isSelected = false,
     this.description,
+    this.enabled = true,
   });
 
   @override
