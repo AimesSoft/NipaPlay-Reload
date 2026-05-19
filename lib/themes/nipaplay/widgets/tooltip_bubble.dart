@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
@@ -39,26 +40,21 @@ class _TooltipBubbleState extends State<TooltipBubble> {
   OverlayEntry? _overlayEntry;
   Offset? _mousePosition;
 
-  void _updateOverlay(BuildContext context, [Offset? newMousePosition]) {
-    if (newMousePosition != null) {
-      _mousePosition = newMousePosition;
-    }
-    _hideOverlay();
-    if (_isHovered && widget.text.isNotEmpty) {
-      _showOverlay(context);
-    }
-  }
+  // Cached overlay position for in-place updates
+  Offset _overlayOffset = Offset.zero;
+  double _overlayWidth = 0;
 
-  void _showOverlay(BuildContext context) {
+  // Debounce timers for filtering spurious enter/exit events on Windows
+  Timer? _enterTimer;
+  Timer? _exitTimer;
+
+  void _recalculatePosition() {
     final RenderBox renderBox =
         _childKey.currentContext?.findRenderObject() as RenderBox;
     final position = renderBox.localToGlobal(Offset.zero);
     final size = renderBox.size;
     final bubbleWidth = _getBubbleWidth();
     final bubbleHeight = _getBubbleHeight();
-
-    // 添加调试日志
-    //debugPrint('[TooltipBubble] 显示气泡，文本: "${widget.text}", 宽度: $bubbleWidth');
 
     double left;
     double top;
@@ -97,18 +93,38 @@ class _TooltipBubbleState extends State<TooltipBubble> {
       top = top.clamp(10.0, maxTop);
     }
 
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        left: left,
-        top: top,
-        child: Material(
-          color: Colors.transparent,
-          child: _buildBubble(bubbleWidth),
-        ),
-      ),
-    );
+    _overlayOffset = Offset(left, top);
+    _overlayWidth = bubbleWidth;
+  }
 
-    Overlay.of(context).insert(_overlayEntry!);
+  void _updateOverlay(BuildContext context, [Offset? newMousePosition]) {
+    if (newMousePosition != null) {
+      _mousePosition = newMousePosition;
+    }
+
+    if (!_isHovered || widget.text.isEmpty) {
+      _hideOverlay();
+      return;
+    }
+
+    _recalculatePosition();
+
+    if (_overlayEntry != null) {
+      // Overlay already exists — update in place without removing/reinserting
+      _overlayEntry!.markNeedsBuild();
+    } else {
+      _overlayEntry = OverlayEntry(
+        builder: (context) => Positioned(
+          left: _overlayOffset.dx,
+          top: _overlayOffset.dy,
+          child: Material(
+            color: Colors.transparent,
+            child: _buildBubble(_overlayWidth),
+          ),
+        ),
+      );
+      Overlay.of(context).insert(_overlayEntry!);
+    }
   }
 
   double _getBubbleWidth() {
@@ -172,6 +188,8 @@ class _TooltipBubbleState extends State<TooltipBubble> {
 
   @override
   void dispose() {
+    _enterTimer?.cancel();
+    _exitTimer?.cancel();
     _hideOverlay();
     super.dispose();
   }
@@ -196,12 +214,20 @@ class _TooltipBubbleState extends State<TooltipBubble> {
         }
       },
       onEnter: (event) {
-        setState(() => _isHovered = true);
-        _updateOverlay(context, event.position);
+        _exitTimer?.cancel();
+        _enterTimer = Timer(const Duration(milliseconds: 80), () {
+          if (!mounted) return;
+          setState(() => _isHovered = true);
+          _updateOverlay(context, event.position);
+        });
       },
       onExit: (_) {
-        setState(() => _isHovered = false);
-        _hideOverlay();
+        _enterTimer?.cancel();
+        _exitTimer = Timer(const Duration(milliseconds: 50), () {
+          if (!mounted) return;
+          setState(() => _isHovered = false);
+          _hideOverlay();
+        });
       },
       child: KeyedSubtree(
         key: _childKey,
