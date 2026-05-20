@@ -10,6 +10,7 @@ class PluginManifest {
     this.github,
     this.minHostVersion = '1.0.0',
     this.permissions = const [],
+    this.priority = 50,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class PluginManifest {
   final String? github;
   final String minHostVersion;
   final List<PluginPermission> permissions;
+  final int priority;
 
   factory PluginManifest.fromJson(Map<String, dynamic> json) {
     final id = (json['id'] ?? '').toString().trim();
@@ -43,6 +45,9 @@ class PluginManifest {
       }
     }
 
+    final priority = json['priority'];
+    final priorityValue = priority is num ? priority.toInt() : 50;
+
     return PluginManifest(
       id: id,
       name: name,
@@ -52,6 +57,7 @@ class PluginManifest {
       github: (githubRaw == null || githubRaw.isEmpty) ? null : githubRaw,
       minHostVersion: minHostVersion,
       permissions: permissions,
+      priority: priorityValue,
     );
   }
 }

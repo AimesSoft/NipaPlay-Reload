@@ -507,13 +507,23 @@ class PluginService extends ChangeNotifier {
     } else {
       _pendingDanmakuData = null;
     }
-    for (final plugin in _plugins) {
-      if (!plugin.enabled || !plugin.loaded) continue;
-      if (!plugin.manifest.permissions.any((p) => p.id == 'danmaku.modify')) {
-        continue;
+    // 按 priority 升序排列插件，低优先级先执行
+    final sortedPlugins = _plugins
+        .where((p) =>
+            p.enabled &&
+            p.loaded &&
+            p.manifest.permissions.any((perm) => perm.id == 'danmaku.modify') &&
+            _runtimeByPluginId[p.manifest.id] != null)
+        .toList()
+      ..sort((a, b) => a.manifest.priority.compareTo(b.manifest.priority));
+
+    for (final plugin in sortedPlugins) {
+      final runtime = _runtimeByPluginId[plugin.manifest.id]!;
+
+      // 链式管道：将前序插件的累积结果作为本次事件数据传递
+      if (_pendingDanmakuData != null) {
+        event.data['danmaku'] = _pendingDanmakuData;
       }
-      final runtime = _runtimeByPluginId[plugin.manifest.id];
-      if (runtime == null) continue;
 
       try {
         final eventJson = event.toJson();

@@ -32,7 +32,8 @@ const pluginManifest = {
   description: '内置常用敏感词与辱骂词，启用后自动屏蔽命中的弹幕。',
   author: 'NipaPlay Team',
   github: 'https://github.com/xxx/xxx', // 可选
-  permissions: ['danmaku.modify'] // 可选，权限声明
+  permissions: ['danmaku.modify'], // 可选，权限声明
+  priority: 50 // 可选，插件处理顺序，默认 50
 };
 ```
 
@@ -46,6 +47,7 @@ const pluginManifest = {
 - `author`：选填，作者字符串。
 - `github`：选填，GitHub 链接字符串，可为空。
 - `permissions`：选填，权限字符串数组。
+- `priority`：选填，整数，默认 `50`。用于控制插件在 `danmakuLoaded` 事件链式处理中的执行顺序。数值越小越先执行。建议范围 `0-100`，`0` 为最先执行，`100` 为最后执行。
 
 若 `id/name/version/minHostVersion` 任一为空，插件会被判定为无效。
 
@@ -215,6 +217,22 @@ function pluginOnEvent(event) {
 | `appPaused` | 应用暂停 | 空对象 |
 
 > `danmakuLoaded` 事件中的 `danmaku` 数组为已解析格式，`time` 为秒（double），`content` 为弹幕文本，`type` 为弹幕类型（`scroll`/`top`/`bottom`），`color` 为颜色值。调用 `danmaku.replace()` 替换数据时应保持相同格式。
+
+#### 弹幕事件链式处理（Pipeline）
+
+当启用多个具有 `danmaku.modify` 权限的插件时，`danmakuLoaded` 事件会按 `manifest.priority` 升序依次触发每个插件的 `pluginOnEvent`，并以**链式管道**方式传递弹幕数据：
+
+1. 宿主加载原始弹幕数据
+2. 按 `priority` 从低到高排序所有拥有 `danmaku.modify` 权限的已启用插件
+3. 依次触发每个插件的 `pluginOnEvent`，`event.data.danmaku` 始终为**当前累积结果**（即前序插件处理后的数据）
+4. 如果插件调用了 `danmaku.replace()`，替换后的数据将作为下一个插件的输入
+5. 如果插件未调用 `danmaku.replace()`，当前数据透传给下一个插件
+
+这意味着：
+
+- 低 `priority` 的插件（如基础过滤）先执行，高 `priority` 的插件（如精选/定制）后执行
+- 每个插件拿到的 `event.data.danmaku` 是前序插件处理后的结果，**而非原始弹幕**
+- 不调用 `danmaku.replace()` 的插件不影响数据流，行为与之前完全一致
 
 ### 3.6 生命周期函数（可选）
 
@@ -467,7 +485,8 @@ const pluginManifest = {
   minHostVersion: '1.11.0',
   description: '一个最小可用插件',
   author: 'You',
-  permissions: ['ui.dialog']
+  permissions: ['ui.dialog'],
+  priority: 50 // 可选，处理顺序，默认 50
 };
 
 const pluginBlockWords = ['示例屏蔽词'];
@@ -715,7 +734,8 @@ const pluginManifest = {
   minHostVersion: '1.11.0',
   description: '智能精选弹幕，过滤低质量弹幕',
   author: 'You',
-  permissions: ['danmaku.modify', 'ui.dialog']
+  permissions: ['danmaku.modify', 'ui.dialog'],
+  priority: 80 // 高优先级（后执行），基于基础过滤后的结果做精选
 };
 
 var params = {
@@ -774,8 +794,9 @@ function filterDanmaku(danmaku) {
 
 function pluginOnEvent(event) {
   if (event.name === 'danmakuLoaded') {
-    var originalDanmaku = event.data.danmaku; // [{time, content, type, color}, ...]
-    var filteredDanmaku = filterDanmaku(originalDanmaku);
+    // event.data.danmaku 是链式处理的当前结果（前序插件处理后的数据）
+    var currentDanmaku = event.data.danmaku; // [{time, content, type, color}, ...]
+    var filteredDanmaku = filterDanmaku(currentDanmaku);
 
     // replace 参数必须是 { count, comments } 格式
     danmaku.replace({
@@ -783,7 +804,7 @@ function pluginOnEvent(event) {
       comments: filteredDanmaku
     });
 
-    dev.log('弹幕精选: ' + originalDanmaku.length + ' -> ' + filteredDanmaku.length);
+    dev.log('弹幕精选: ' + currentDanmaku.length + ' -> ' + filteredDanmaku.length);
   }
 }
 
@@ -795,8 +816,9 @@ function pluginHandleUIAction(actionId) {
 
 要点：
 
-- 监听 `danmakuLoaded` 事件获取弹幕数据（`event.data.danmaku` 为弹幕数组）
+- 监听 `danmakuLoaded` 事件获取弹幕数据（`event.data.danmaku` 为当前链式处理结果）
 - 使用 `danmaku.replace({ count, comments })` 替换弹幕数据，**参数必须是包含 `count` 和 `comments` 字段的对象**
 - `danmaku.replace()` 之后宿主会自动应用修改并刷新弹幕显示
 - 通过 `pluginUIEntries` 提供可配置的参数
 - 使用 `settings.getText()` 读取用户配置
+- 通过 `priority` 控制处理顺序：低值先执行（如基础过滤 `priority: 30`），高值后执行（如精选 `priority: 80`）
