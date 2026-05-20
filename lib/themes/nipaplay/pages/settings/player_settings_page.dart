@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/l10n/l10n.dart';
@@ -305,7 +306,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
 
     setState(() {
-      _selectedDanmakuRenderEngine = engine;
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
   }
 
@@ -411,7 +412,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
       case DanmakuRenderEngine.nipaplayNext:
         return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
       case DanmakuRenderEngine.next2:
-        return 'NipaPlay Next2\n轨道分配与渲染核心迁移至 Rust，目标是高弹幕密度下更稳定的帧率和更低功耗。';
+        return Next2PlatformSupport.description;
     }
   }
 

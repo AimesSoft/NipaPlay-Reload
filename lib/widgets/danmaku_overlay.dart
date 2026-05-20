@@ -6,6 +6,7 @@ import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:danmaku_canvas/canvas_danmaku_renderer.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_overlay.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next2_overlay.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
@@ -139,7 +140,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
           );
         }
 
-        if (kernelType == DanmakuRenderEngine.next2) {
+        if (kernelType == DanmakuRenderEngine.next2 &&
+            Next2PlatformSupport.isKernelSupported) {
           return NipaPlayNext2Overlay(
             danmakuList: activeDanmakuList,
             danmakuListVersion: videoState.danmakuListVersion,

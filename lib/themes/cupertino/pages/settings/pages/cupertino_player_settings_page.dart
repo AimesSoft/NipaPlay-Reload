@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
@@ -188,7 +189,7 @@ class _CupertinoPlayerSettingsPageState
       type: AdaptiveSnackBarType.success,
     );
     setState(() {
-      _selectedDanmakuRenderEngine = engine;
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
   }
 
@@ -292,7 +293,7 @@ class _CupertinoPlayerSettingsPageState
       case DanmakuRenderEngine.nipaplayNext:
         return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
       case DanmakuRenderEngine.next2:
-        return 'NipaPlay Next2：轨道分配与渲染核心迁移至 Rust，使用 wgpu + 距离场渲染路径。';
+        return Next2PlatformSupport.description;
     }
   }
 

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
@@ -7,12 +5,6 @@ import 'package:nipaplay/utils/video_player_state.dart';
 
 import 'next2_layout_bridge.dart';
 import 'next2_texture_bridge.dart';
-
-const Locale _danmakuLocale = Locale.fromSubtags(
-  languageCode: 'zh',
-  scriptCode: 'Hans',
-  countryCode: 'CN',
-);
 
 class NipaPlayNext2Overlay extends StatefulWidget {
   const NipaPlayNext2Overlay({
@@ -61,9 +53,6 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
   final Next2TextureBridge _textureBridge = Next2TextureBridge();
 
   Size _layoutSize = Size.zero;
-  List<PositionedDanmakuItem> _frameItems = const [];
-  String? _fontFamily;
-  List<String>? _fontFamilyFallback;
 
   bool _updateScheduled = false;
   bool _updateInFlight = false;
@@ -118,16 +107,6 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
           return const SizedBox.expand();
         }
 
-        final textStyle = DefaultTextStyle.of(context).style;
-        final theme = Theme.of(context);
-        final themeFontFamily = theme.textTheme.bodyMedium?.fontFamily ??
-            theme.textTheme.bodyLarge?.fontFamily;
-        final customFontFamily = widget.customFontFamily.trim();
-        _fontFamily = customFontFamily.isNotEmpty
-            ? customFontFamily
-            : (textStyle.fontFamily ?? themeFontFamily);
-        _fontFamilyFallback = textStyle.fontFamilyFallback;
-
         if (_layoutSize != size) {
           _layoutSize = size;
           _queueUpdate();
@@ -145,27 +124,16 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
           builder: (context, _, __) {
             _queueUpdate();
 
-            Widget content;
-            if (_textureReady &&
+            final hasTexture = _textureReady &&
                 _textureId != null &&
-                Next2TextureBridge.isSupported) {
-              content = Texture(
-                textureId: _textureId!,
-                filterQuality: FilterQuality.none,
-              );
-            } else {
-              content = CustomPaint(
-                painter: _Next2CanvasPainter(
-                  items: _frameItems,
-                  fontSize: widget.fontSize,
-                  fontFamily: _fontFamily,
-                  fontFamilyFallback: _fontFamilyFallback,
-                  outlineWidth: widget.outlineWidth.clamp(0.0, 4.0).toDouble(),
-                  shadowStyle: widget.shadowStyle,
-                ),
-                size: _layoutSize,
-              );
-            }
+                Next2TextureBridge.isSupported;
+
+            final Widget content = hasTexture
+                ? Texture(
+                    textureId: _textureId!,
+                    filterQuality: FilterQuality.none,
+                  )
+                : const SizedBox.expand();
 
             return Opacity(
               opacity: widget.opacity.clamp(0.0, 1.0).toDouble(),
@@ -216,21 +184,11 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
           widget.playbackTimeMs.value / 1000.0 + widget.timeOffset,
         );
 
-        final renderedByTexture = await _tryUpdateTexture(frame);
-
-        if (!mounted) {
-          return;
-        }
-
-        if (!renderedByTexture) {
-          setState(() {
-            _frameItems = frame;
-          });
-        }
+        await _tryUpdateTexture(frame);
         widget.onLayoutCalculated?.call(frame);
       }
     } catch (_) {
-      // Keep overlay alive and allow fallback on next frame.
+      // Keep overlay alive and retry on next frame.
     } finally {
       _updateInFlight = false;
     }
@@ -297,216 +255,4 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
     return pushed;
   }
-}
-
-class _Next2CanvasPainter extends CustomPainter {
-  _Next2CanvasPainter({
-    required this.items,
-    required this.fontSize,
-    required this.fontFamily,
-    required this.fontFamilyFallback,
-    required this.outlineWidth,
-    required this.shadowStyle,
-  });
-
-  final List<PositionedDanmakuItem> items;
-  final double fontSize;
-  final String? fontFamily;
-  final List<String>? fontFamilyFallback;
-  final double outlineWidth;
-  final DanmakuShadowStyle shadowStyle;
-
-  static final Paint _selfSendPaint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 1.5
-    ..color = Colors.white;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (items.isEmpty) return;
-
-    for (final item in items) {
-      final content = item.content;
-      final targetFontSize = fontSize * content.fontSizeMultiplier;
-      final shadowConfig = _resolveShadowStyle(targetFontSize);
-      final text = content.countText == null
-          ? content.text
-          : '${content.text} ${content.countText}';
-
-      if (shadowConfig != null) {
-        _paintText(
-          canvas,
-          text: text,
-          offset: Offset(item.x, item.y) + shadowConfig.offset,
-          fontSize: targetFontSize,
-          color: Color.fromRGBO(0, 0, 0, shadowConfig.opacity),
-        );
-      }
-
-      final outlineColor = _strokeColorFor(content.color);
-      final outlineRadius = _resolveStrokeWidth(targetFontSize);
-
-      if (outlineWidth > 0) {
-        _paintOutline(
-          canvas,
-          text: text,
-          baseOffset: Offset(item.x, item.y),
-          fontSize: targetFontSize,
-          color: outlineColor,
-          radius: outlineRadius * outlineWidth,
-          fullRing: true,
-        );
-      }
-
-      _paintText(
-        canvas,
-        text: text,
-        offset: Offset(item.x, item.y),
-        fontSize: targetFontSize,
-        color: content.color,
-      );
-
-      if (content.isMe) {
-        final tp = _buildPainter(
-          text: text,
-          fontSize: targetFontSize,
-          color: content.color,
-        );
-        final rect = Rect.fromLTWH(
-          item.x - 2,
-          item.y - 2,
-          tp.width + 4,
-          tp.height + 4,
-        );
-        canvas.drawRect(rect, _selfSendPaint);
-      }
-    }
-  }
-
-  void _paintText(
-    Canvas canvas, {
-    required String text,
-    required Offset offset,
-    required double fontSize,
-    required Color color,
-  }) {
-    final tp = _buildPainter(
-      text: text,
-      fontSize: fontSize,
-      color: color,
-    );
-    tp.paint(canvas, offset);
-  }
-
-  TextPainter _buildPainter({
-    required String text,
-    required double fontSize,
-    required Color color,
-  }) {
-    return TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          fontSize: fontSize,
-          color: color,
-          fontWeight: FontWeight.normal,
-          fontFamily: fontFamily,
-          fontFamilyFallback: fontFamilyFallback,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      locale: _danmakuLocale,
-    )..layout(minWidth: 0, maxWidth: double.infinity);
-  }
-
-  void _paintOutline(
-    Canvas canvas, {
-    required String text,
-    required Offset baseOffset,
-    required double fontSize,
-    required Color color,
-    required double radius,
-    required bool fullRing,
-  }) {
-    final offsets = <Offset>[];
-
-    if (fullRing) {
-      for (int i = 0; i < 8; i++) {
-        final angle = (math.pi * 2 / 8) * i;
-        offsets.add(Offset(math.cos(angle) * radius, math.sin(angle) * radius));
-      }
-    } else {
-      offsets.addAll(<Offset>[
-        Offset(-radius, 0),
-        Offset(radius, 0),
-        Offset(0, -radius),
-        Offset(0, radius),
-      ]);
-    }
-
-    for (final delta in offsets) {
-      _paintText(
-        canvas,
-        text: text,
-        offset: baseOffset + delta,
-        fontSize: fontSize,
-        color: color,
-      );
-    }
-  }
-
-  Color _strokeColorFor(Color textColor) {
-    final luminance = textColor.computeLuminance();
-    return luminance < 0.45 ? Colors.white : Colors.black;
-  }
-
-  _ShadowConfig? _resolveShadowStyle(double targetFontSize) {
-    final unit = _resolveShadowUnit(targetFontSize);
-    switch (shadowStyle) {
-      case DanmakuShadowStyle.none:
-        return null;
-      case DanmakuShadowStyle.soft:
-        return _ShadowConfig(
-          offset: Offset(unit * 0.8, unit * 0.8),
-          opacity: 0.34,
-        );
-      case DanmakuShadowStyle.medium:
-        return _ShadowConfig(
-          offset: Offset(unit, unit),
-          opacity: 0.44,
-        );
-      case DanmakuShadowStyle.strong:
-        return _ShadowConfig(
-          offset: Offset(unit * 1.2, unit * 1.2),
-          opacity: 0.55,
-        );
-    }
-  }
-
-  double _resolveStrokeWidth(double targetFontSize) {
-    final width = targetFontSize * 0.06;
-    return width.clamp(1.0, 2.6).toDouble();
-  }
-
-  double _resolveShadowUnit(double targetFontSize) {
-    final radius = targetFontSize * 0.045;
-    return math.max(0.8, radius.clamp(0.8, 2.0).toDouble());
-  }
-
-  @override
-  bool shouldRepaint(covariant _Next2CanvasPainter oldDelegate) {
-    return !listEquals(oldDelegate.items, items) ||
-        oldDelegate.fontSize != fontSize ||
-        oldDelegate.fontFamily != fontFamily ||
-        !listEquals(oldDelegate.fontFamilyFallback, fontFamilyFallback) ||
-        oldDelegate.outlineWidth != outlineWidth ||
-        oldDelegate.shadowStyle != shadowStyle;
-  }
-}
-
-class _ShadowConfig {
-  const _ShadowConfig({required this.offset, required this.opacity});
-
-  final Offset offset;
-  final double opacity;
 }

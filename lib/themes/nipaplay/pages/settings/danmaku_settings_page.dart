@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -84,7 +85,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
     BlurSnackBar.show(context, '弹幕渲染引擎已切换');
 
     setState(() {
-      _selectedDanmakuRenderEngine = engine;
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
   }
 
@@ -146,13 +147,14 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
       case DanmakuRenderEngine.nipaplayNext:
         return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
       case DanmakuRenderEngine.next2:
-        return 'NipaPlay Next2\n轨道分配与渲染核心迁移至 Rust，目标是高弹幕密度下更稳定的帧率和更低功耗。';
+        return Next2PlatformSupport.description;
     }
   }
 
   List<DropdownMenuItemData<DanmakuRenderEngine>>
       _buildDanmakuRenderEngineItems({
     required bool showNext2,
+    required bool next2Supported,
   }) {
     final items = <DropdownMenuItemData<DanmakuRenderEngine>>[
       DropdownMenuItemData(
@@ -199,7 +201,9 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
     } else if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2) {
       items.add(
         DropdownMenuItemData(
-          title: 'NipaPlay Next2 (实验室关闭)',
+          title: next2Supported
+              ? 'NipaPlay Next2 (实验室关闭)'
+              : 'NipaPlay Next2 (当前平台不支持)',
           value: DanmakuRenderEngine.next2,
           isSelected: true,
           enabled: false,
@@ -215,10 +219,13 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final showNext2 =
+    final next2Supported = Next2PlatformSupport.isKernelSupported;
+    final showNext2 = next2Supported &&
         context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
-    final renderEngineItems =
-        _buildDanmakuRenderEngineItems(showNext2: showNext2);
+    final renderEngineItems = _buildDanmakuRenderEngineItems(
+      showNext2: showNext2,
+      next2Supported: next2Supported,
+    );
 
     return ListView(
       children: [
@@ -229,7 +236,10 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
           items: renderEngineItems,
           onChanged: (dynamic value) {
             if (value is! DanmakuRenderEngine) return;
-            if (!showNext2 && value == DanmakuRenderEngine.next2) return;
+            if ((!showNext2 || !next2Supported) &&
+                value == DanmakuRenderEngine.next2) {
+              return;
+            }
             _saveDanmakuRenderEngineSettings(value);
           },
           dropdownKey: _danmakuRenderEngineDropdownKey,

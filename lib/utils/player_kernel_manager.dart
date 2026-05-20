@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../player_abstraction/player_factory.dart';
 import '../player_abstraction/player_abstraction.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
+import '../danmaku_next/next2_platform_support.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'video_player_state.dart';
 import '../models/watch_history_model.dart';
@@ -187,7 +188,11 @@ class PlayerKernelManager {
 
   /// 获取支持的弹幕内核列表
   static List<String> getSupportedDanmakuKernels() {
-    return ['Canvas 弹幕', 'GPU渲染', 'CPU渲染', 'NipaPlay Next', 'NipaPlay Next2'];
+    final kernels = <String>['Canvas 弹幕', 'GPU渲染', 'CPU渲染', 'NipaPlay Next'];
+    if (Next2PlatformSupport.isKernelSupported) {
+      kernels.add('NipaPlay Next2');
+    }
+    return kernels;
   }
 
   /// 获取当前弹幕内核
@@ -224,6 +229,11 @@ class PlayerKernelManager {
         break;
       default:
         engine = DanmakuRenderEngine.canvas;
+    }
+
+    if (engine == DanmakuRenderEngine.next2 &&
+        !Next2PlatformSupport.isKernelSupported) {
+      engine = DanmakuRenderEngine.canvas;
     }
 
     // 通知DanmakuKernelFactory内核已改变

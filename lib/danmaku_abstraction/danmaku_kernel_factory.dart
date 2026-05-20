@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 
 /// 弹幕渲染引擎枚举
 enum DanmakuRenderEngine {
@@ -48,7 +49,8 @@ class DanmakuKernelFactory {
       if (engineIndex != null &&
           engineIndex >= 0 &&
           engineIndex < DanmakuRenderEngine.values.length) {
-        _cachedEngine = DanmakuRenderEngine.values[engineIndex];
+        _cachedEngine =
+            _sanitizeEngine(DanmakuRenderEngine.values[engineIndex]);
       } else {
         _cachedEngine = DanmakuRenderEngine.nipaplayNext; // 默认使用 NipaPlay Next
       }
@@ -67,16 +69,25 @@ class DanmakuKernelFactory {
   /// 保存弹幕渲染引擎设置
   static Future<void> saveKernelType(DanmakuRenderEngine engine) async {
     try {
+      final sanitizedEngine = _sanitizeEngine(engine);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_danmakuRenderEngineKey, engine.index);
+      await prefs.setInt(_danmakuRenderEngineKey, sanitizedEngine.index);
       final oldEngine = _cachedEngine;
-      _cachedEngine = engine;
+      _cachedEngine = sanitizedEngine;
 
-      if (oldEngine != engine) {
-        _kernelChangeController.add(engine);
+      if (oldEngine != sanitizedEngine) {
+        _kernelChangeController.add(sanitizedEngine);
       }
     } catch (e) {
       // ignore
     }
+  }
+
+  static DanmakuRenderEngine _sanitizeEngine(DanmakuRenderEngine engine) {
+    if (engine == DanmakuRenderEngine.next2 &&
+        !Next2PlatformSupport.isKernelSupported) {
+      return DanmakuRenderEngine.nipaplayNext;
+    }
+    return engine;
   }
 }

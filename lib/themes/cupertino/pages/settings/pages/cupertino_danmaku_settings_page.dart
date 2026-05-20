@@ -5,6 +5,7 @@ import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -79,7 +80,7 @@ class _CupertinoDanmakuSettingsPageState
       type: AdaptiveSnackBarType.success,
     );
     setState(() {
-      _selectedDanmakuRenderEngine = engine;
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
   }
 
@@ -161,7 +162,7 @@ class _CupertinoDanmakuSettingsPageState
       case DanmakuRenderEngine.nipaplayNext:
         return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
       case DanmakuRenderEngine.next2:
-        return 'NipaPlay Next2：轨道分配与渲染核心迁移至 Rust，使用 wgpu + 距离场渲染路径。';
+        return Next2PlatformSupport.description;
     }
   }
 
@@ -180,11 +181,14 @@ class _CupertinoDanmakuSettingsPageState
     }
   }
 
-  List<AdaptivePopupMenuEntry> _danmakuMenuItems({required bool showNext2}) {
+  List<AdaptivePopupMenuEntry> _danmakuMenuItems({
+    required bool showNext2,
+    required bool next2Supported,
+  }) {
     final engines = DanmakuRenderEngine.values
         .where(
           (engine) =>
-              showNext2 ||
+              (showNext2 && next2Supported) ||
               engine != DanmakuRenderEngine.next2 ||
               _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
         )
@@ -193,9 +197,12 @@ class _CupertinoDanmakuSettingsPageState
         .map(
           (engine) => AdaptivePopupMenuItem<DanmakuRenderEngine>(
             label: !showNext2 && engine == DanmakuRenderEngine.next2
-                ? 'NipaPlay Next2 (实验室关闭)'
+                ? (next2Supported
+                    ? 'NipaPlay Next2 (实验室关闭)'
+                    : 'NipaPlay Next2 (当前平台不支持)')
                 : _danmakuTitle(engine),
-            enabled: showNext2 || engine != DanmakuRenderEngine.next2,
+            enabled: (showNext2 && next2Supported) ||
+                engine != DanmakuRenderEngine.next2,
             value: engine,
           ),
         )
@@ -265,17 +272,21 @@ class _CupertinoDanmakuSettingsPageState
     final Color sectionBackground = resolveSettingsSectionBackground(context);
     final Color tileBackground = resolveSettingsTileBackground(context);
     final double topPadding = MediaQuery.of(context).padding.top + 64;
-    final showNext2 =
+    final next2Supported = Next2PlatformSupport.isKernelSupported;
+    final showNext2 = next2Supported &&
         context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
     final danmakuEngines = DanmakuRenderEngine.values
         .where(
           (engine) =>
-              showNext2 ||
+              (showNext2 && next2Supported) ||
               engine != DanmakuRenderEngine.next2 ||
               _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
         )
         .toList();
-    final danmakuMenuItems = _danmakuMenuItems(showNext2: showNext2);
+    final danmakuMenuItems = _danmakuMenuItems(
+      showNext2: showNext2,
+      next2Supported: next2Supported,
+    );
 
     final sections = <Widget>[
       CupertinoSettingsGroupCard(
@@ -305,7 +316,8 @@ class _CupertinoDanmakuSettingsPageState
                     (index >= 0 && index < danmakuEngines.length
                         ? danmakuEngines[index]
                         : _selectedDanmakuRenderEngine);
-                if (!showNext2 && engine == DanmakuRenderEngine.next2) {
+                if ((!showNext2 || !next2Supported) &&
+                    engine == DanmakuRenderEngine.next2) {
                   return;
                 }
                 if (engine != _selectedDanmakuRenderEngine) {

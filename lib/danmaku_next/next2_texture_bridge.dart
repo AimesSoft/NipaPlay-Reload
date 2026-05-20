@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 class Next2TextureInfo {
@@ -24,10 +24,7 @@ class Next2TextureInfo {
 class Next2TextureBridge {
   static const MethodChannel _channel = MethodChannel('nipaplay/next2_texture');
 
-  static bool get isSupported =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.macOS);
+  static bool get isSupported => Next2PlatformSupport.isNativeTextureSupported;
 
   int? _engineHandle;
 
