@@ -417,8 +417,7 @@ class NipaplayWindow {
     final bool useLargeScreenSubPage =
         NipaplayLargeScreenModeScope.isActiveOf(context);
 
-    HotkeyService.incrementOverlay();
-    HotkeyService().unregisterHotkeys();
+    HotkeyService.overlayPush();
 
     Future<T?> result;
     if (useLargeScreenSubPage) {
@@ -461,9 +460,6 @@ class NipaplayWindow {
       );
     }
 
-    return result.whenComplete(() {
-      HotkeyService.decrementOverlay();
-      HotkeyService().registerHotkeys();
-    });
+    return result.whenComplete(() => HotkeyService.overlayPop());
   }
 }

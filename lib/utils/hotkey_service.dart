@@ -48,9 +48,21 @@ class HotkeyService extends ChangeNotifier {
 
   // overlay 计数器，>0 时表示有对话框/overlay 在视频播放界面上方
   static int _overlayCount = 0;
-  static void incrementOverlay() => _overlayCount++;
-  static void decrementOverlay() {
+
+  /// overlay 打开时调用：0→1 时注销热键
+  static void overlayPush() {
+    _overlayCount++;
+    if (_overlayCount == 1) {
+      HotkeyService().unregisterHotkeys();
+    }
+  }
+
+  /// overlay 关闭时调用：1→0 时恢复热键
+  static void overlayPop() {
     if (_overlayCount > 0) _overlayCount--;
+    if (_overlayCount == 0) {
+      HotkeyService().registerHotkeys();
+    }
   }
 
   // 长按检测
