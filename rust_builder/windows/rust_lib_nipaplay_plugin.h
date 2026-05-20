@@ -33,6 +33,8 @@ class RustLibNipaplayPlugin : public flutter::Plugin {
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
+  void EnsureTickTimerLocked(HWND hwnd);
+  void StopTickTimerLocked(HWND hwnd);
   void DisposeSurface(const std::string& surface_id);
   void Tick();
   static std::optional<LRESULT> WindowProc(
@@ -48,6 +50,7 @@ class RustLibNipaplayPlugin : public flutter::Plugin {
   std::unordered_map<std::string, std::unique_ptr<SurfaceState>> surfaces_;
   std::mutex mutex_;
   int window_proc_delegate_id_ = -1;
+  bool tick_timer_active_ = false;
 };
 
 }  // namespace rust_lib_nipaplay

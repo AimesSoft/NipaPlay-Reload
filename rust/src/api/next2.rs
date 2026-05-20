@@ -481,10 +481,17 @@ fn prepare_merged_items(items: Vec<RustNext2DanmakuItem>) -> Vec<RawNext2Item> {
         };
 
         if processed_item.count_text.is_some() {
-            let entry = emitted_first.entry(item.text.clone()).or_insert(item.time_seconds);
-            if (item.time_seconds - *entry).abs() > f64::EPSILON {
+            let should_emit = match emitted_first.get(&item.text).copied() {
+                Some(first_time) => {
+                    let delta = item.time_seconds - first_time;
+                    delta > MERGE_WINDOW_SECONDS || delta.abs() <= f64::EPSILON
+                }
+                None => true,
+            };
+            if !should_emit {
                 continue;
             }
+            emitted_first.insert(item.text.clone(), item.time_seconds);
         }
 
         out.push(processed_item);
@@ -715,4 +722,35 @@ fn simple_text_hash(value: &str) -> u64 {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mk_item(time_seconds: f64, text: &str) -> RustNext2DanmakuItem {
+        RustNext2DanmakuItem {
+            time_seconds,
+            text: text.to_string(),
+            type_code: NEXT2_TYPE_SCROLL,
+            color_argb: 0x00FF_FFFFu32 as i32,
+            is_me: false,
+        }
+    }
+
+    #[test]
+    fn merged_deduplication_is_scoped_per_window() {
+        let merged = prepare_merged_items(vec![
+            mk_item(0.0, "same"),
+            mk_item(1.0, "same"),
+            mk_item(60.0, "same"),
+            mk_item(61.0, "same"),
+        ]);
+
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].time_seconds, 0.0);
+        assert_eq!(merged[0].count_text.as_deref(), Some("x2"));
+        assert_eq!(merged[1].time_seconds, 60.0);
+        assert_eq!(merged[1].count_text.as_deref(), Some("x2"));
+    }
 }
