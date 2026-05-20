@@ -89,6 +89,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       // 对于自定义媒体（animeId为负数），禁用自动匹配弹幕和手动匹配弹幕
       if (_animeId != null && _animeId! < 0) {
         _danmakuList = [];
+        _danmakuListVersion++;
         _danmakuTracks.clear();
         _danmakuTrackEnabled.clear();
         _setStatus(PlayerStatus.recognizing, message: '自定义媒体，跳过弹幕匹配');
@@ -100,6 +101,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
           prefs.getBool(SettingsKeys.autoMatchDanmakuOnPlay) ?? true;
       if (!autoMatchEnabled) {
         _danmakuList = [];
+        _danmakuListVersion++;
         _danmakuTracks.clear();
         _danmakuTrackEnabled.clear();
         final handled =
@@ -165,6 +167,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                     parseDanmakuListInBackground,
                     cachedDanmakuRaw as List<dynamic>?,
                   );
+                  _danmakuListVersion++;
 
                   // Sort the list immediately after parsing
                   _danmakuList.sort((a, b) {
@@ -212,6 +215,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                     parseDanmakuListInBackground,
                     danmakuData['comments'] as List<dynamic>?,
                   );
+                  _danmakuListVersion++;
 
                   // Sort the list immediately after parsing
                   _danmakuList.sort((a, b) {
@@ -233,6 +237,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                   _danmakuTrackEnabled['dandanplay'] = true;
                 } else {
                   _danmakuList = [];
+                  _danmakuListVersion++;
                   _danmakuTracks.clear();
                   _danmakuTrackEnabled.clear();
                 }
@@ -246,6 +251,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
               } catch (e) {
                 //debugPrint('弹幕加载/解析错误: $e\n$s');
                 _danmakuList = [];
+                _danmakuListVersion++;
                 _danmakuTracks.clear();
                 _danmakuTrackEnabled.clear();
                 _setStatus(PlayerStatus.recognizing, message: '弹幕加载失败，跳过');
@@ -254,6 +260,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
           } else {
             //debugPrint('视频未匹配到信息');
             _danmakuList = [];
+            _danmakuListVersion++;
             _danmakuTracks.clear();
             _danmakuTrackEnabled.clear();
             final handled = await _tryManualMatchDanmaku(
@@ -270,6 +277,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
       } catch (e) {
         //debugPrint('视频识别网络错误: $e\n$s');
         _danmakuList = [];
+        _danmakuListVersion++;
         _danmakuTracks.clear();
         _danmakuTrackEnabled.clear();
         _setStatus(PlayerStatus.recognizing, message: '无法连接服务器，跳过加载弹幕');

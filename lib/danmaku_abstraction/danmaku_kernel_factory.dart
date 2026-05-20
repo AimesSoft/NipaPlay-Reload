@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 
 /// 弹幕渲染引擎枚举
 enum DanmakuRenderEngine {
@@ -14,6 +15,9 @@ enum DanmakuRenderEngine {
 
   /// NipaPlay Next 弹幕逻辑内核
   nipaplayNext,
+
+  /// NipaPlay Next2 弹幕逻辑 + Rust 渲染内核
+  next2,
 }
 
 /// 负责读写弹幕渲染引擎设置的工厂类
@@ -24,8 +28,10 @@ class DanmakuKernelFactory {
   static bool _initialized = false;
 
   // 添加StreamController用于广播内核切换事件
-  static final StreamController<DanmakuRenderEngine> _kernelChangeController = StreamController<DanmakuRenderEngine>.broadcast();
-  static Stream<DanmakuRenderEngine> get onKernelChanged => _kernelChangeController.stream;
+  static final StreamController<DanmakuRenderEngine> _kernelChangeController =
+      StreamController<DanmakuRenderEngine>.broadcast();
+  static Stream<DanmakuRenderEngine> get onKernelChanged =>
+      _kernelChangeController.stream;
 
   /// 初始化方法，在应用启动时尽早调用
   static Future<void> initialize() async {
@@ -35,20 +41,23 @@ class DanmakuKernelFactory {
   /// 预加载设置并缓存
   static Future<void> _preloadSettings() async {
     if (_initialized) return;
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final engineIndex = prefs.getInt(_danmakuRenderEngineKey);
-      
-      if (engineIndex != null && engineIndex >= 0 && engineIndex < DanmakuRenderEngine.values.length) {
-        _cachedEngine = DanmakuRenderEngine.values[engineIndex];
+
+      if (engineIndex != null &&
+          engineIndex >= 0 &&
+          engineIndex < DanmakuRenderEngine.values.length) {
+        _cachedEngine =
+            _sanitizeEngine(DanmakuRenderEngine.values[engineIndex]);
       } else {
         _cachedEngine = DanmakuRenderEngine.nipaplayNext; // 默认使用 NipaPlay Next
       }
     } catch (e) {
       _cachedEngine = DanmakuRenderEngine.nipaplayNext;
     }
-    
+
     _initialized = true;
   }
 
@@ -60,16 +69,25 @@ class DanmakuKernelFactory {
   /// 保存弹幕渲染引擎设置
   static Future<void> saveKernelType(DanmakuRenderEngine engine) async {
     try {
+      final sanitizedEngine = _sanitizeEngine(engine);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_danmakuRenderEngineKey, engine.index);
+      await prefs.setInt(_danmakuRenderEngineKey, sanitizedEngine.index);
       final oldEngine = _cachedEngine;
-      _cachedEngine = engine;
+      _cachedEngine = sanitizedEngine;
 
-      if (oldEngine != engine) {
-        _kernelChangeController.add(engine);
+      if (oldEngine != sanitizedEngine) {
+        _kernelChangeController.add(sanitizedEngine);
       }
     } catch (e) {
       // ignore
     }
   }
-} 
+
+  static DanmakuRenderEngine _sanitizeEngine(DanmakuRenderEngine engine) {
+    if (engine == DanmakuRenderEngine.next2 &&
+        !Next2PlatformSupport.isKernelSupported) {
+      return DanmakuRenderEngine.nipaplayNext;
+    }
+    return engine;
+  }
+}

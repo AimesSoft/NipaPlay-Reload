@@ -123,6 +123,9 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
     }
   }
 
+  bool get _isNext2Kernel =>
+      DanmakuKernelFactory.getKernelType() == DanmakuRenderEngine.next2;
+
   List<String> _splitBlockWords(String input) {
     final result = <String>[];
     final current = StringBuffer();
@@ -714,35 +717,50 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      '描边样式',
-                      style: TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: DanmakuOutlineStyle.values.map((style) {
-                        final selected =
-                            videoState.danmakuOutlineStyle == style;
-                        return BlurButton(
-                          text: _outlineStyleLabel(style),
-                          icon: selected
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                          fontSize: 12,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          foregroundColor: selected
-                              ? Colors.white
-                              : Colors.white.withOpacity(0.75),
-                          onTap: () => videoState.setDanmakuOutlineStyle(style),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 12),
+                    if (_isNext2Kernel) ...[
+                      SettingsSlider(
+                        value: videoState.next2DanmakuOutlineWidth,
+                        onChanged: videoState.setNext2DanmakuOutlineWidth,
+                        label: '描边粗细',
+                        displayTextBuilder: (v) =>
+                            v <= 0 ? '关闭' : '${v.toStringAsFixed(2)}x',
+                        min: 0.0,
+                        max: 4.0,
+                        step: 0.05,
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      const Text(
+                        '描边样式',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DanmakuOutlineStyle.values.map((style) {
+                          final selected =
+                              videoState.danmakuOutlineStyle == style;
+                          return BlurButton(
+                            text: _outlineStyleLabel(style),
+                            icon: selected
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
+                            fontSize: 12,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            foregroundColor: selected
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.75),
+                            onTap: () =>
+                                videoState.setDanmakuOutlineStyle(style),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     const Text(
                       '阴影样式',
                       style: TextStyle(color: Colors.white, fontSize: 13),
@@ -772,7 +790,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                     const SizedBox(height: 4),
                     const SettingsHintText(
-                      '通过文件选择字体，样式可直接按钮切换。若 Windows 下描边粗细不均，建议选择“均匀描边”。',
+                      'Next2 使用描边粗细滑块；阴影可单独切换。',
                     ),
                   ],
                 ),

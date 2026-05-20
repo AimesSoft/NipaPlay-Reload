@@ -83,6 +83,27 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                       ),
                       CupertinoSettingsTile(
                         leading: Icon(
+                          CupertinoIcons.lab_flask,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('显示 Next2 弹幕内核'),
+                        subtitle:
+                            const Text('开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2'),
+                        trailing: AdaptiveSwitch(
+                          value: labsSettings.enableNext2DanmakuKernel,
+                          onChanged: (value) {
+                            labsSettings.setEnableNext2DanmakuKernel(value);
+                          },
+                        ),
+                        onTap: () {
+                          labsSettings.setEnableNext2DanmakuKernel(
+                            !labsSettings.enableNext2DanmakuKernel,
+                          );
+                        },
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
                           CupertinoIcons.cloud,
                           color: resolveSettingsIconColor(context),
                         ),

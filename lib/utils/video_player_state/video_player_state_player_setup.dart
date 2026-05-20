@@ -665,6 +665,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             debugPrint('加载手动匹配的弹幕失败: $e');
             // 如果手动匹配的弹幕加载失败，清空弹幕列表但不重新识别
             _danmakuList = [];
+            _danmakuListVersion++;
             _danmakuTracks.clear();
             _danmakuTrackEnabled.clear();
             _addStatusMessage('手动匹配的弹幕加载失败');
@@ -677,6 +678,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             //debugPrint('弹幕加载失败: $e');
             // 设置空弹幕列表，确保播放不受影响
             _danmakuList = [];
+            _danmakuListVersion++;
             _danmakuTracks.clear();
             _danmakuTrackEnabled.clear();
             _addStatusMessage('无法连接服务器，跳过加载弹幕');
@@ -946,7 +948,8 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         );
 
         // 将历史记录中的弹幕ID赋值给实例变量，避免重复识别
-        _episodeId ??= existingHistory.episodeId ?? _initialHistoryItem?.episodeId;
+        _episodeId ??=
+            existingHistory.episodeId ?? _initialHistoryItem?.episodeId;
         _animeId ??= existingHistory.animeId ?? _initialHistoryItem?.animeId;
 
         final updatedHistory = WatchHistoryItem(

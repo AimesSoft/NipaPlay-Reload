@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/l10n/l10n.dart';
@@ -326,7 +327,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
 
     setState(() {
-      _selectedDanmakuRenderEngine = engine;
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
   }
 
@@ -431,6 +432,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         return 'Canvas 弹幕渲染引擎\n来自软件kazumi的开发者\n使用Canvas绘制弹幕，高性能，低功耗，支持大量弹幕同时显示。';
       case DanmakuRenderEngine.nipaplayNext:
         return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
+      case DanmakuRenderEngine.next2:
+        return Next2PlatformSupport.description;
     }
   }
 

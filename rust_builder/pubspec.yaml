@@ -23,12 +23,15 @@ flutter:
   plugin:
     platforms:
       android:
-        ffiPlugin: true
+        package: com.flutter_rust_bridge.rust_lib_nipaplay
+        pluginClass: RustLibNipaplayPlugin
       ios:
-        ffiPlugin: true
+        pluginClass: RustLibNipaplayPlugin
       linux:
-        ffiPlugin: true
+        pluginClass: RustLibNipaplayPlugin
+        fileName: rust_lib_nipaplay_plugin.cc
       macos:
-        ffiPlugin: true
+        pluginClass: RustLibNipaplayPlugin
       windows:
-        ffiPlugin: true
+        pluginClass: RustLibNipaplayPluginCApi
+        fileName: rust_lib_nipaplay_plugin_c_api.cpp

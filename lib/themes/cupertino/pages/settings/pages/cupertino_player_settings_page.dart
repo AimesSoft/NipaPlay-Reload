@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
@@ -212,7 +213,7 @@ class _CupertinoPlayerSettingsPageState
       type: AdaptiveSnackBarType.success,
     );
     setState(() {
-      _selectedDanmakuRenderEngine = engine;
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
   }
 
@@ -315,6 +316,8 @@ class _CupertinoPlayerSettingsPageState
         return context.l10n.danmakuRenderEngineDescriptionCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
         return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
+      case DanmakuRenderEngine.next2:
+        return Next2PlatformSupport.description;
     }
   }
 
@@ -380,6 +383,8 @@ class _CupertinoPlayerSettingsPageState
         return context.l10n.danmakuRenderEngineTitleCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
         return context.l10n.danmakuRenderEngineTitleNipaplayNext;
+      case DanmakuRenderEngine.next2:
+        return 'NipaPlay Next2';
     }
   }
 

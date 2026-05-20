@@ -150,6 +150,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _animeTitle = null; // 清除动画标题
       _episodeTitle = null; // 清除集数标题
       _danmakuList = []; // 清除弹幕列表
+      _danmakuListVersion++;
       _danmakuTracks.clear();
       _danmakuTrackEnabled.clear();
       _isSpoilerDanmakuAnalyzing = false;
@@ -538,6 +539,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _animeId = null; // 清除弹幕ID
     _initialHistoryItem = null;
     _danmakuList.clear();
+    _danmakuListVersion++;
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
     _isSpoilerDanmakuAnalyzing = false;
@@ -598,6 +600,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _animeId = null; // 清除弹幕ID
     _initialHistoryItem = null;
     _danmakuList.clear();
+    _danmakuListVersion++;
     _danmakuTracks.clear();
     _danmakuTrackEnabled.clear();
     _isSpoilerDanmakuAnalyzing = false;

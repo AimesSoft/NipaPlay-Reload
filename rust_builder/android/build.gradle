@@ -49,6 +49,10 @@ android {
     }
 }
 
+dependencies {
+    implementation 'androidx.annotation:annotation:1.7.1'
+}
+
 apply from: "../cargokit/gradle/plugin.gradle"
 cargokit {
     manifestDir = "../../rust"

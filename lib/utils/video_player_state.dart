@@ -319,6 +319,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _autoNextCountdownSeconds =
       AutoNextEpisodeService.defaultCountdownSeconds;
   List<Map<String, dynamic>> _danmakuList = [];
+  int _danmakuListVersion = 0;
 
   // 多轨道弹幕系统
   final Map<String, Map<String, dynamic>> _danmakuTracks = {};
@@ -468,6 +469,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   DanmakuShadowStyle _danmakuShadowStyle = globals.isMobilePlatform
       ? DanmakuShadowStyle.none
       : DanmakuShadowStyle.strong;
+  final String _next2DanmakuOutlineWidthKey = 'next2_danmaku_outline_width';
+  double _next2DanmakuOutlineWidth = 1.0;
   static const double minSubtitleScale = 0.5;
   static const double maxSubtitleScale = 2.5;
   static const double defaultSubtitleScale = 1.0;
@@ -846,6 +849,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
+  int get danmakuListVersion => _danmakuListVersion;
   Map<String, Map<String, dynamic>> get danmakuTracks => _danmakuTracks;
   Map<String, bool> get danmakuTrackEnabled => _danmakuTrackEnabled;
   double get controlBarHeight => _controlBarHeight;
@@ -862,6 +866,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String get danmakuFontFamily => _danmakuFontFamily;
   DanmakuOutlineStyle get danmakuOutlineStyle => _danmakuOutlineStyle;
   DanmakuShadowStyle get danmakuShadowStyle => _danmakuShadowStyle;
+  double get next2DanmakuOutlineWidth => _next2DanmakuOutlineWidth;
   double get subtitleScale => _subtitleScale;
   double get subtitleDelayCustomLimitSeconds {
     final durationSeconds = _duration.inMilliseconds / 1000;

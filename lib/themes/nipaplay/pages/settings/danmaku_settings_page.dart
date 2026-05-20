@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/danmaku_spoiler_filter_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
@@ -83,7 +85,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
     BlurSnackBar.show(context, '弹幕渲染引擎已切换');
 
     setState(() {
-      _selectedDanmakuRenderEngine = engine;
+      _selectedDanmakuRenderEngine = DanmakuKernelFactory.getKernelType();
     });
   }
 
@@ -144,12 +146,86 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         return 'Canvas 弹幕渲染引擎\n来自软件kazumi的开发者\n使用Canvas绘制弹幕，高性能，低功耗，支持大量弹幕同时显示。';
       case DanmakuRenderEngine.nipaplayNext:
         return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
+      case DanmakuRenderEngine.next2:
+        return Next2PlatformSupport.description;
     }
+  }
+
+  List<DropdownMenuItemData<DanmakuRenderEngine>>
+      _buildDanmakuRenderEngineItems({
+    required bool showNext2,
+    required bool next2Supported,
+  }) {
+    final items = <DropdownMenuItemData<DanmakuRenderEngine>>[
+      DropdownMenuItemData(
+        title: 'CPU 渲染',
+        value: DanmakuRenderEngine.cpu,
+        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
+        description:
+            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
+      ),
+      DropdownMenuItemData(
+        title: 'GPU 渲染 (实验性)',
+        value: DanmakuRenderEngine.gpu,
+        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
+        description:
+            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
+      ),
+      DropdownMenuItemData(
+        title: 'Canvas 弹幕 (实验性)',
+        value: DanmakuRenderEngine.canvas,
+        isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
+        description:
+            _getDanmakuRenderEngineDescription(DanmakuRenderEngine.canvas),
+      ),
+      DropdownMenuItemData(
+        title: 'NipaPlay Next',
+        value: DanmakuRenderEngine.nipaplayNext,
+        isSelected:
+            _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext,
+        description: _getDanmakuRenderEngineDescription(
+            DanmakuRenderEngine.nipaplayNext),
+      ),
+    ];
+
+    if (showNext2) {
+      items.add(
+        DropdownMenuItemData(
+          title: 'NipaPlay Next2',
+          value: DanmakuRenderEngine.next2,
+          isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
+          description:
+              _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
+        ),
+      );
+    } else if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2) {
+      items.add(
+        DropdownMenuItemData(
+          title: next2Supported
+              ? 'NipaPlay Next2 (实验室关闭)'
+              : 'NipaPlay Next2 (当前平台不支持)',
+          value: DanmakuRenderEngine.next2,
+          isSelected: true,
+          enabled: false,
+          description:
+              _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
+        ),
+      );
+    }
+
+    return items;
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final next2Supported = Next2PlatformSupport.isKernelSupported;
+    final showNext2 = next2Supported &&
+        context.watch<LabsSettingsProvider>().enableNext2DanmakuKernel;
+    final renderEngineItems = _buildDanmakuRenderEngineItems(
+      showNext2: showNext2,
+      next2Supported: next2Supported,
+    );
 
     return ListView(
       children: [
@@ -157,44 +233,13 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
           title: '弹幕渲染引擎',
           subtitle: '选择弹幕的渲染方式',
           icon: Ionicons.hardware_chip_outline,
-          items: [
-            DropdownMenuItemData(
-              title: 'CPU 渲染',
-              value: DanmakuRenderEngine.cpu,
-              isSelected:
-                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.cpu,
-              description:
-                  _getDanmakuRenderEngineDescription(DanmakuRenderEngine.cpu),
-            ),
-            DropdownMenuItemData(
-              title: 'GPU 渲染 (实验性)',
-              value: DanmakuRenderEngine.gpu,
-              isSelected:
-                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.gpu,
-              description:
-                  _getDanmakuRenderEngineDescription(DanmakuRenderEngine.gpu),
-            ),
-            DropdownMenuItemData(
-              title: 'Canvas 弹幕 (实验性)',
-              value: DanmakuRenderEngine.canvas,
-              isSelected:
-                  _selectedDanmakuRenderEngine == DanmakuRenderEngine.canvas,
-              description: _getDanmakuRenderEngineDescription(
-                DanmakuRenderEngine.canvas,
-              ),
-            ),
-            DropdownMenuItemData(
-              title: 'NipaPlay Next',
-              value: DanmakuRenderEngine.nipaplayNext,
-              isSelected: _selectedDanmakuRenderEngine ==
-                  DanmakuRenderEngine.nipaplayNext,
-              description: _getDanmakuRenderEngineDescription(
-                DanmakuRenderEngine.nipaplayNext,
-              ),
-            ),
-          ],
+          items: renderEngineItems,
           onChanged: (dynamic value) {
             if (value is! DanmakuRenderEngine) return;
+            if ((!showNext2 || !next2Supported) &&
+                value == DanmakuRenderEngine.next2) {
+              return;
+            }
             _saveDanmakuRenderEngineSettings(value);
           },
           dropdownKey: _danmakuRenderEngineDropdownKey,
