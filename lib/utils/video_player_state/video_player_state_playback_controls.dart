@@ -784,6 +784,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _notifyListeners();
   }
 
+  bool get hotkeysSuppressed => _controlsVisibilityLocked;
+
   void setControlsVisibilityLocked(bool value) {
     if (_controlsVisibilityLocked == value) {
       return;

@@ -46,6 +46,13 @@ class HotkeyService extends ChangeNotifier {
   // 上下文，用于访问Provider
   BuildContext? _context;
 
+  // overlay 计数器，>0 时表示有对话框/overlay 在视频播放界面上方
+  static int _overlayCount = 0;
+  static void incrementOverlay() => _overlayCount++;
+  static void decrementOverlay() {
+    if (_overlayCount > 0) _overlayCount--;
+  }
+
   // 长按检测
   Timer? _longPressTimer;
   bool _isForwardKeyPressed = false;
@@ -253,6 +260,11 @@ class HotkeyService extends ChangeNotifier {
 
   bool _shouldBlockHotkeyInTextInput() {
     if (_isEditableTextFocused()) {
+      return true;
+    }
+    // 播放器内菜单打开时禁用热键
+    final videoState = _getVideoPlayerState();
+    if (videoState != null && videoState.hotkeysSuppressed) {
       return true;
     }
     return false;

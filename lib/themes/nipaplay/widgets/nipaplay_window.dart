@@ -7,6 +7,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dar
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:provider/provider.dart';
 
 /// 一个通用的窗口脚手架，提供 Nipaplay 风格的视觉外观。
@@ -415,44 +416,54 @@ class NipaplayWindow {
   }) {
     final bool useLargeScreenSubPage =
         NipaplayLargeScreenModeScope.isActiveOf(context);
+
+    HotkeyService.incrementOverlay();
+    HotkeyService().unregisterHotkeys();
+
+    Future<T?> result;
     if (useLargeScreenSubPage) {
-      return Navigator.of(context).push<T>(
+      result = Navigator.of(context).push<T>(
         NipaplayLargeScreenWindowPageRoute<T>(
           builder: (_) => child,
           enableAnimation: enableAnimation,
           dismissible: barrierDismissible,
         ),
       );
+    } else {
+      result = showGeneralDialog<T>(
+        context: context,
+        barrierDismissible: barrierDismissible,
+        barrierColor: barrierColor,
+        barrierLabel: 'Close',
+        transitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (context, animation, secondaryAnimation) => child,
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          if (!enableAnimation) {
+            return FadeTransition(
+              opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOut),
+              ),
+              child: child,
+            );
+          }
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+          );
+          return ScaleTransition(
+            scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
+            child: FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+          );
+        },
+      );
     }
 
-    return showGeneralDialog<T>(
-      context: context,
-      barrierDismissible: barrierDismissible,
-      barrierColor: barrierColor,
-      barrierLabel: 'Close',
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (context, animation, secondaryAnimation) => child,
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        if (!enableAnimation) {
-          return FadeTransition(
-            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOut),
-            ),
-            child: child,
-          );
-        }
-        final curvedAnimation = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutBack,
-        );
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.0).animate(curvedAnimation),
-          child: FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-        );
-      },
-    );
+    return result.whenComplete(() {
+      HotkeyService.decrementOverlay();
+      HotkeyService().registerHotkeys();
+    });
   }
 }
