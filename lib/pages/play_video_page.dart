@@ -564,7 +564,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         ),
-        if (globals.isMobilePlatform)
+        if (globals.isMobilePlatform && (!globals.isTablet || videoState.isFullscreen))
           Positioned(
             top: 0,
             right: 0,
