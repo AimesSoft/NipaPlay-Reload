@@ -52,12 +52,16 @@ target_include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
+add_dependencies(${PLUGIN_NAME} "${PROJECT_NAME}_cargokit")
+
+set(_RUST_CARGOKIT_IMPORT_LIB "${${PROJECT_NAME}_cargokit_lib}.lib")
+
 target_link_libraries(
   ${PLUGIN_NAME} PRIVATE
   flutter
   flutter_wrapper_plugin
   dwmapi
-  "${${PROJECT_NAME}_cargokit_lib}"
+  "${_RUST_CARGOKIT_IMPORT_LIB}"
 )
 
 # List of absolute paths to libraries that should be bundled with the plugin.
