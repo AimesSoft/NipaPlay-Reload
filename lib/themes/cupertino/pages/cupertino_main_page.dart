@@ -95,8 +95,8 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     ));
     if (_showDownloaderTab) {
       items.add(BottomNavigationBarItem(
-        icon: Icon(CupertinoIcons.arrow_down_square),
-        activeIcon: Icon(CupertinoIcons.arrow_down_square_fill),
+        icon: const Icon(CupertinoIcons.arrow_down_circle),
+        activeIcon: const Icon(CupertinoIcons.arrow_down_circle_fill),
         label: l10n.tabTorrentDownload,
       ));
     }
