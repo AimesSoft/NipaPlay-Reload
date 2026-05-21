@@ -12,21 +12,12 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
 include("../cargokit/cmake/cargokit.cmake")
-set(_RUST_MANIFEST_DIR "")
-set(_RUST_MANIFEST_CANDIDATES
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../rust"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../rust"
-)
-foreach(_candidate IN LISTS _RUST_MANIFEST_CANDIDATES)
-  if (EXISTS "${_candidate}/Cargo.toml")
-    get_filename_component(_RUST_MANIFEST_DIR "${_candidate}" ABSOLUTE)
-    break()
-  endif()
-endforeach()
-if (NOT _RUST_MANIFEST_DIR)
-  message(FATAL_ERROR "Failed to locate rust/Cargo.toml from ${CMAKE_CURRENT_SOURCE_DIR}")
+set(_RUST_MANIFEST_REL "../../rust")
+if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_RUST_MANIFEST_REL}/Cargo.toml")
+  message(FATAL_ERROR
+    "Failed to locate rust/Cargo.toml at ${CMAKE_CURRENT_SOURCE_DIR}/${_RUST_MANIFEST_REL}")
 endif()
-apply_cargokit(${PROJECT_NAME} "${_RUST_MANIFEST_DIR}" rust_lib_nipaplay "")
+apply_cargokit(${PROJECT_NAME} "${_RUST_MANIFEST_REL}" rust_lib_nipaplay "")
 
 add_library(
   ${PLUGIN_NAME} SHARED
