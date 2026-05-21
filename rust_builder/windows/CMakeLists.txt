@@ -57,7 +57,6 @@ target_link_libraries(
   flutter
   flutter_wrapper_plugin
   dwmapi
-  "${${PROJECT_NAME}_cargokit_lib}"
 )
 
 # List of absolute paths to libraries that should be bundled with the plugin.
