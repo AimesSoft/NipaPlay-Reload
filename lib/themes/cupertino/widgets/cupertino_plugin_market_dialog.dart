@@ -97,6 +97,7 @@ class _CupertinoPluginMarketDialogState
       final url = _applyProxyIfNeeded(
           _pluginsIndexUrl, _pluginsIndexUrlForProxy, proxyUrl);
       final response = await http.get(Uri.parse(url));
+      if (!mounted) return;
       if (response.statusCode == 200) {
         final dynamic jsonData = json.decode(response.body);
         List<dynamic> data;
@@ -124,11 +125,12 @@ class _CupertinoPluginMarketDialogState
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = '网络错误: ${e.toString()}';
       });
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -213,15 +215,17 @@ class _CupertinoPluginMarketDialogState
 
     try {
       final response = await http.get(Uri.parse(url));
+      if (!mounted) return;
       if (response.statusCode == 200) {
         setState(() => _readmeContent = response.body);
       } else {
         setState(() => _readmeContent = '暂无文档');
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _readmeContent = '文档加载失败: ${e.toString()}');
     } finally {
-      setState(() => _isLoadingReadme = false);
+      if (mounted) setState(() => _isLoadingReadme = false);
     }
   }
 
@@ -294,7 +298,7 @@ class _CupertinoPluginMarketDialogState
         type: AdaptiveSnackBarType.error,
       );
     } finally {
-      setState(() => plugin.isInstalling = false);
+      if (mounted) setState(() => plugin.isInstalling = false);
     }
   }
 
