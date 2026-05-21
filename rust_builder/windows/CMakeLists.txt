@@ -34,6 +34,7 @@ add_library(
   "rust_lib_nipaplay_plugin.cpp"
   "rust_lib_nipaplay_plugin_c_api.cpp"
 )
+add_dependencies(${PLUGIN_NAME} "${PROJECT_NAME}_cargokit")
 
 apply_standard_settings(${PLUGIN_NAME})
 
@@ -57,7 +58,7 @@ target_link_libraries(
   flutter
   flutter_wrapper_plugin
   dwmapi
-  "${${PROJECT_NAME}_cargokit_lib}"
+  "${${PROJECT_NAME}_cargokit_import_lib}"
 )
 
 # List of absolute paths to libraries that should be bundled with the plugin.

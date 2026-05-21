@@ -25,6 +25,13 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
         set(CARGOKIT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
         set(OUTPUT_LIB "${CMAKE_CURRENT_BINARY_DIR}/${CARGOKIT_LIB_FULL_NAME}")
     endif()
+    if (WIN32)
+        set(OUTPUT_IMPORT_LIB "${OUTPUT_LIB}.lib")
+        set(OUTPUT_IMPORT_LIB_OUTPUTS "${OUTPUT_IMPORT_LIB}")
+    else()
+        set(OUTPUT_IMPORT_LIB "${OUTPUT_LIB}")
+        set(OUTPUT_IMPORT_LIB_OUTPUTS)
+    endif()
     set(CARGOKIT_TEMP_DIR "${CMAKE_CURRENT_BINARY_DIR}/cargokit_build")
 
     if (FLUTTER_TARGET_PLATFORM)
@@ -63,9 +70,17 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     # Using generators in custom command is only supported in CMake 3.20+
     if (CMAKE_CONFIGURATION_TYPES AND ${CMAKE_VERSION} VERSION_LESS "3.20.0")
         foreach(CONFIG IN LISTS CMAKE_CONFIGURATION_TYPES)
+            if (WIN32)
+                set(CONFIG_OUTPUT_IMPORT_LIB "${CMAKE_CURRENT_BINARY_DIR}/${CONFIG}/${CARGOKIT_LIB_FULL_NAME}.lib")
+                set(CONFIG_OUTPUT_IMPORT_LIB_OUTPUTS "${CONFIG_OUTPUT_IMPORT_LIB}")
+            else()
+                set(CONFIG_OUTPUT_IMPORT_LIB "${CMAKE_CURRENT_BINARY_DIR}/${CONFIG}/${CARGOKIT_LIB_FULL_NAME}")
+                set(CONFIG_OUTPUT_IMPORT_LIB_OUTPUTS)
+            endif()
             add_custom_command(
                 OUTPUT
                 "${CMAKE_CURRENT_BINARY_DIR}/${CONFIG}/${CARGOKIT_LIB_FULL_NAME}"
+                ${CONFIG_OUTPUT_IMPORT_LIB_OUTPUTS}
                 "${CMAKE_CURRENT_BINARY_DIR}/_phony_"
                 COMMAND ${CMAKE_COMMAND} -E env ${CARGOKIT_ENV}
                 "${cargokit_cmake_root}/run_build_tool${SCRIPT_EXTENSION}" build-cmake
@@ -76,6 +91,7 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
         add_custom_command(
             OUTPUT
             ${OUTPUT_LIB}
+            ${OUTPUT_IMPORT_LIB_OUTPUTS}
             "${CMAKE_CURRENT_BINARY_DIR}/_phony_"
             COMMAND ${CMAKE_COMMAND} -E env ${CARGOKIT_ENV}
             "${cargokit_cmake_root}/run_build_tool${SCRIPT_EXTENSION}" build-cmake
@@ -89,18 +105,19 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     if (TARGET ${target})
         # If we have actual cmake target provided create target and make existing
         # target depend on it
-        add_custom_target("${target}_cargokit" DEPENDS ${OUTPUT_LIB})
+        add_custom_target("${target}_cargokit" DEPENDS ${OUTPUT_LIB} ${OUTPUT_IMPORT_LIB_OUTPUTS})
         add_dependencies("${target}" "${target}_cargokit")
-        target_link_libraries("${target}" PRIVATE "${OUTPUT_LIB}${IMPORT_LIB_EXTENSION}")
-        if(WIN32)
+        target_link_libraries("${target}" PRIVATE "${OUTPUT_IMPORT_LIB}")
+        if(WIN32 AND NOT "${any_symbol_name}" STREQUAL "")
             target_link_options(${target} PRIVATE "/INCLUDE:${any_symbol_name}")
         endif()
     else()
         # Otherwise (FFI) just use ALL to force building always
-        add_custom_target("${target}_cargokit" ALL DEPENDS ${OUTPUT_LIB})
+        add_custom_target("${target}_cargokit" ALL DEPENDS ${OUTPUT_LIB} ${OUTPUT_IMPORT_LIB_OUTPUTS})
     endif()
 
     # Allow adding the output library to plugin bundled libraries
     set("${target}_cargokit_lib" ${OUTPUT_LIB} PARENT_SCOPE)
+    set("${target}_cargokit_import_lib" ${OUTPUT_IMPORT_LIB} PARENT_SCOPE)
 
 endfunction()

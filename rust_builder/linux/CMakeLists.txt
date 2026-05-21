@@ -23,8 +23,10 @@ add_library(
   ${PLUGIN_NAME} SHARED
   "rust_lib_nipaplay_plugin.cc"
 )
+add_dependencies(${PLUGIN_NAME} "${PROJECT_NAME}_cargokit")
 
 apply_standard_settings(${PLUGIN_NAME})
+target_compile_features(${PLUGIN_NAME} PRIVATE cxx_std_17)
 set_target_properties(${PLUGIN_NAME} PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
