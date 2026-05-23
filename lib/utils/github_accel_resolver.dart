@@ -12,7 +12,7 @@ class GithubAccelResolver {
       try {
         final normalized = source.endsWith('/') ? source : '${source}/';
         final url = '${normalized}$rawUrl';
-        final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+        final response = await http.head(Uri.parse(url)).timeout(const Duration(seconds: 5));
         if (response.statusCode == 200) return url;
       } catch (_) {}
     }
