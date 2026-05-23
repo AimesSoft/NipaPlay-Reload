@@ -208,59 +208,37 @@ class PluginService extends ChangeNotifier {
 
   Future<void> fetchRemotePlugins({String? proxyUrl}) async {
     try {
-      if (proxyUrl != null && proxyUrl.trim().isNotEmpty) {
-        final url = _applyProxyIfNeeded(_pluginsIndexUrl, proxyUrl);
-        await _fetchPluginsFromUrl(url);
-        return;
+      late final String url;
+      if (proxyUrl == null || proxyUrl.trim().isEmpty) {
+        final resolved =
+            await GithubAccelResolver.resolveFirstReachable(_pluginsIndexUrl);
+        url = resolved ?? _pluginsIndexUrl;
+      } else {
+        url = _applyProxyIfNeeded(_pluginsIndexUrl, proxyUrl);
       }
-
-      // Try canonical URL first, fall back to mirrors.
-      try {
-        final response =
-            await http.get(Uri.parse(_pluginsIndexUrl)).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
-          _processPluginIndexResponse(response);
-          return;
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final dynamic jsonData = json.decode(response.body);
+        List<dynamic> data;
+        if (jsonData is List) {
+          data = jsonData;
+        } else if (jsonData is Map) {
+          if (jsonData.containsKey('plugins')) {
+            data = jsonData['plugins'] as List;
+          } else if (jsonData.containsKey('data')) {
+            data = jsonData['data'] as List;
+          } else {
+            data = [];
+          }
+        } else {
+          data = [];
         }
-      } catch (_) {
-        // Direct fetch failed, try mirrors below.
-      }
-
-      final mirrorUrl =
-          await GithubAccelResolver.resolveFirstReachable(_pluginsIndexUrl);
-      if (mirrorUrl != null) {
-        await _fetchPluginsFromUrl(mirrorUrl);
+        final remotePlugins = RemotePluginInfo.fromJsonList(data);
+        _remotePlugins = {
+          for (final plugin in remotePlugins) plugin.id: plugin,
+        };
       }
     } catch (_) {}
-  }
-
-  Future<void> _fetchPluginsFromUrl(String url) async {
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode == 200) {
-      _processPluginIndexResponse(response);
-    }
-  }
-
-  void _processPluginIndexResponse(http.Response response) {
-    final dynamic jsonData = json.decode(response.body);
-    List<dynamic> data;
-    if (jsonData is List) {
-      data = jsonData;
-    } else if (jsonData is Map) {
-      if (jsonData.containsKey('plugins')) {
-        data = jsonData['plugins'] as List;
-      } else if (jsonData.containsKey('data')) {
-        data = jsonData['data'] as List;
-      } else {
-        data = [];
-      }
-    } else {
-      data = [];
-    }
-    final remotePlugins = RemotePluginInfo.fromJsonList(data);
-    _remotePlugins = {
-      for (final plugin in remotePlugins) plugin.id: plugin,
-    };
   }
 
   String _applyProxyIfNeeded(String url, String? proxyUrl) {
