@@ -11,6 +11,7 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_modal_popup.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_plugin_market_dialog.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -285,6 +286,13 @@ class _CupertinoPluginSettingsPageState
       return '導入插件';
     }
     return '导入插件';
+  }
+
+  String _pluginMarketTitle(BuildContext context) {
+    if (context.l10n.localeName.startsWith('zh_Hant')) {
+      return '插件市場';
+    }
+    return '插件市场';
   }
 
   String _importPluginHint(BuildContext context) {
@@ -761,20 +769,22 @@ class _CupertinoPluginSettingsPageState
                   ),
                 ),
                 const SizedBox(width: 8),
-                CupertinoButton(
+                CupertinoButton.filled(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   minimumSize: const Size(0, 0),
-                  color: CupertinoTheme.of(context).primaryColor,
                   borderRadius: BorderRadius.circular(8),
-                  onPressed: _isProxySaving ? null : _applyProxyUrl,
+                  onPressed: _isProxySaving
+                      ? null
+                      : () {
+                          FocusScope.of(context).unfocus();
+                          _applyProxyUrl();
+                        },
                   child: _isProxySaving
                       ? const CupertinoActivityIndicator(radius: 9)
-                      : Text(
-                          context.l10n.localeName.startsWith('zh_Hant')
-                              ? '儲存'
-                              : '保存',
-                          style: const TextStyle(fontSize: 14),
+                      : const Text(
+                          '✓',
+                          style: TextStyle(fontSize: 16),
                         ),
                 ),
               ],
@@ -846,6 +856,20 @@ class _CupertinoPluginSettingsPageState
                           backgroundColor:
                               resolveSettingsTileBackground(context),
                         ),
+                        CupertinoSettingsTile(
+                          leading: Icon(
+                            CupertinoIcons.bag,
+                            color: resolveSettingsIconColor(context),
+                          ),
+                          title: Text(_pluginMarketTitle(context)),
+                          showChevron: true,
+                          onTap: () {
+                            FocusScope.of(context).unfocus();
+                            CupertinoPluginMarketDialog.show(context);
+                          },
+                          backgroundColor:
+                              resolveSettingsTileBackground(context),
+                        ),
                         _buildProxyUrlTile(context),
                         CupertinoSettingsTile(
                           title: Text(_pluginsEmpty(context)),
@@ -878,6 +902,19 @@ class _CupertinoPluginSettingsPageState
                         subtitle: Text(_importPluginHint(context)),
                         showChevron: true,
                         onTap: () => _importPlugin(context, pluginService),
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
+                          CupertinoIcons.bag,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: Text(_pluginMarketTitle(context)),
+                        showChevron: true,
+                        onTap: () {
+                          FocusScope.of(context).unfocus();
+                          CupertinoPluginMarketDialog.show(context);
+                        },
                         backgroundColor: resolveSettingsTileBackground(context),
                       ),
                       _buildProxyUrlTile(context),

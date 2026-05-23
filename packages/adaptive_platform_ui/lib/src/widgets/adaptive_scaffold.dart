@@ -620,6 +620,10 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       'plus.circle': CupertinoIcons.add_circled,
       'plus': CupertinoIcons.add,
       'checkmark.circle': CupertinoIcons.checkmark_circle,
+      'arrow.down.circle': CupertinoIcons.arrow_down_circle,
+      'arrow.down.circle.fill': CupertinoIcons.arrow_down_circle_fill,
+      'arrow.down.square': CupertinoIcons.arrow_down_square,
+      'arrow.down.square.fill': CupertinoIcons.arrow_down_square_fill,
     };
     return iconMap[sfSymbol] ?? CupertinoIcons.circle;
   }
@@ -665,6 +669,10 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       'checkmark.circle.fill': Icons.check_circle,
       'play.rectangle': Icons.play_circle_outline,
       'play.rectangle.fill': Icons.play_circle,
+      'arrow.down.circle': Icons.arrow_circle_down_outlined,
+      'arrow.down.circle.fill': Icons.arrow_circle_down,
+      'arrow.down.square': Icons.download_outlined,
+      'arrow.down.square.fill': Icons.download,
     };
     return iconMap[sfSymbol] ?? Icons.circle;
   }
