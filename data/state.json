@@ -1,0 +1,40 @@
+{
+  "conversations": {},
+  "recent_group_messages": {},
+  "ambient_unread_group_messages": {},
+  "last_bot_message_ids": {},
+  "group_overrides": {},
+  "group_reply_times": {},
+  "agent_runs": {
+    "51d6eb6d16054fffb776f7ef69a420ae": {
+      "run_id": "51d6eb6d16054fffb776f7ef69a420ae",
+      "mode": "system",
+      "group_id": null,
+      "user_id": null,
+      "trigger_message_id": null,
+      "allowed_tools": [
+        "qq.send_private_message",
+        "qq.send_message",
+        "qq.reply_message",
+        "qq.send_face",
+        "qq.extend_group_attention",
+        "qq.get_group_info",
+        "qq.get_group_member_info",
+        "qq.get_group_member_list",
+        "github.list_prs",
+        "github.get_pr",
+        "github.get_issue",
+        "github.get_workflow_status"
+      ],
+      "allowed_repos": [],
+      "expires_at": 1778097069,
+      "created_at": 1778010669,
+      "max_tool_calls": 10000,
+      "tool_calls": 1
+    }
+  },
+  "runtime_settings": {},
+  "hermes_session_generations": {},
+  "hermes_session_meta": {},
+  "active_group_attentions": {}
+}
