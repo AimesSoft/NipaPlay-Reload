@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/widgets/adaptive_markdown.dart';
+import 'package:nipaplay/utils/github_accel_resolver.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -54,9 +55,9 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  String _applyProxyIfNeeded(String rawUrl, String proxyUrl, String? proxy) {
-    if (proxy == null || proxy.isEmpty) {
-      return rawUrl;
+  Future<String> _applyProxyIfNeeded(String rawUrl, String proxyUrl, String? proxy) async {
+    if (proxy == null || proxy.trim().isEmpty) {
+      return await GithubAccelResolver.resolveFirstReachable(rawUrl) ?? rawUrl;
     }
     final normalizedProxy = proxy.endsWith('/') ? proxy : '$proxy/';
     return '$normalizedProxy$proxyUrl';
@@ -109,7 +110,7 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
       final settingsProvider =
           Provider.of<SettingsProvider>(context, listen: false);
       final proxyUrl = settingsProvider.githubProxyUrl;
-      final url = _applyProxyIfNeeded(
+      final url = await _applyProxyIfNeeded(
           _pluginsIndexUrl, _pluginsIndexUrlForProxy, proxyUrl);
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
@@ -229,7 +230,7 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
     final proxyUrl = settingsProvider.githubProxyUrl;
     final rawReadmeUrl = '$_readmeBaseUrl/${plugin.id}/README.md';
     final proxyReadmeUrl = '${_repoBaseUrlForProxy}/plugins/${plugin.id}/README.md';
-    final url = _applyProxyIfNeeded(rawReadmeUrl, proxyReadmeUrl, proxyUrl);
+    final url = await _applyProxyIfNeeded(rawReadmeUrl, proxyReadmeUrl, proxyUrl);
 
     try {
       final response = await http.get(Uri.parse(url));
@@ -281,7 +282,7 @@ class _PluginMarketDialogState extends State<PluginMarketDialog> {
       final settingsProvider =
           Provider.of<SettingsProvider>(context, listen: false);
       final proxyUrl = settingsProvider.githubProxyUrl;
-      final url = _applyProxyIfNeeded(
+      final url = await _applyProxyIfNeeded(
           plugin.downloadUrl, plugin.proxyDownloadUrl, proxyUrl);
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {

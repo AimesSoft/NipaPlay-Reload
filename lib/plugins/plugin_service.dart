@@ -19,6 +19,7 @@ import 'package:nipaplay/plugins/models/remote_plugin_info.dart';
 import 'package:nipaplay/plugins/plugin_event_bus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/utils/github_accel_resolver.dart';
 import 'package:http/http.dart' as http;
 
 class PluginService extends ChangeNotifier {
@@ -207,7 +208,14 @@ class PluginService extends ChangeNotifier {
 
   Future<void> fetchRemotePlugins({String? proxyUrl}) async {
     try {
-      final url = _applyProxyIfNeeded(_pluginsIndexUrl, proxyUrl);
+      late final String url;
+      if (proxyUrl == null || proxyUrl.trim().isEmpty) {
+        final resolved =
+            await GithubAccelResolver.resolveFirstReachable(_pluginsIndexUrl);
+        url = resolved ?? _pluginsIndexUrl;
+      } else {
+        url = _applyProxyIfNeeded(_pluginsIndexUrl, proxyUrl);
+      }
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final dynamic jsonData = json.decode(response.body);
@@ -234,7 +242,7 @@ class PluginService extends ChangeNotifier {
   }
 
   String _applyProxyIfNeeded(String url, String? proxyUrl) {
-    if (proxyUrl == null || proxyUrl.isEmpty) {
+    if (proxyUrl == null || proxyUrl.trim().isEmpty) {
       return url;
     }
     final normalizedProxy = proxyUrl.endsWith('/') ? proxyUrl : '$proxyUrl/';
