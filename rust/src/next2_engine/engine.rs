@@ -47,7 +47,8 @@ const EMOJI_OUTLINE_SCALE: f32 = 0.58;
 const EMOJI_SIDE_BEARING_RATIO: f32 = 0.08;
 const GLYPH_MODE_TEXT: f32 = 0.0;
 const GLYPH_MODE_EMOJI: f32 = 1.0;
-const SHADOW_ALPHA_SCALE: f32 = 0.85;
+const SHADOW_ALPHA_SCALE: f32 = 1.0;
+const SHADOW_RENDER_SCALE: u32 = 2;
 const MISSING_GLYPH_FALLBACK: char = '□';
 const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
 
@@ -1184,20 +1185,34 @@ struct Next2Renderer {
     #[cfg(target_os = "android")]
     surface_pipeline: Option<wgpu::RenderPipeline>,
     offscreen_pipeline: wgpu::RenderPipeline,
+    blur_pipeline_horizontal: wgpu::RenderPipeline,
+    blur_pipeline_vertical: wgpu::RenderPipeline,
+    screen_pipeline: wgpu::RenderPipeline,
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: wgpu::BindGroup,
+    screen_bind_group_layout: wgpu::BindGroupLayout,
+    screen_sampler: wgpu::Sampler,
     atlas: Next2GlyphAtlas,
     emoji_atlas: Next2EmojiAtlas,
     vertex_buffer: wgpu::Buffer,
     vertex_capacity_bytes: usize,
+    shadow_vertex_buffer: wgpu::Buffer,
+    shadow_vertex_capacity_bytes: usize,
     vertices: Vec<GlyphVertex>,
+    shadow_vertices: Vec<GlyphVertex>,
     frame_items: Vec<FrameItem>,
     clear_color: [f64; 4],
     width: u32,
     height: u32,
     offscreen_texture: wgpu::Texture,
+    shadow_mask_texture: wgpu::Texture,
+    shadow_blur_texture: wgpu::Texture,
+    shadow_width: u32,
+    shadow_height: u32,
     #[cfg(target_os = "android")]
     surface_format: Option<wgpu::TextureFormat>,
+    #[cfg(target_os = "android")]
+    surface_screen_pipeline: Option<wgpu::RenderPipeline>,
 }
 
 impl Next2Renderer {
@@ -1224,6 +1239,57 @@ impl Next2Renderer {
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[GlyphVertex::layout()],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+            cache: None,
+        })
+    }
+
+    fn create_screen_pipeline(
+        device: &wgpu::Device,
+        screen_bind_group_layout: &wgpu::BindGroupLayout,
+        target_format: wgpu::TextureFormat,
+        source: &'static str,
+        label: &'static str,
+    ) -> wgpu::RenderPipeline {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(label),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(source)),
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("next2 screen pipeline layout"),
+            bind_group_layouts: &[screen_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -1304,6 +1370,30 @@ impl Next2Renderer {
                     ],
                 });
 
+        let screen_bind_group_layout =
+            ctx.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("next2 screen bgl"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                });
+
         let emoji_atlas = Next2EmojiAtlas::new(ctx.device.as_ref());
 
         let atlas_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1340,9 +1430,52 @@ impl Next2Renderer {
             "next2 render pipeline",
         );
 
+        let blur_pipeline_horizontal = Self::create_screen_pipeline(
+            ctx.device.as_ref(),
+            &screen_bind_group_layout,
+            wgpu::TextureFormat::Bgra8Unorm,
+            NEXT2_SHADOW_BLUR_HORIZONTAL_WGSL,
+            "next2 shadow blur horizontal pipeline",
+        );
+        let blur_pipeline_vertical = Self::create_screen_pipeline(
+            ctx.device.as_ref(),
+            &screen_bind_group_layout,
+            wgpu::TextureFormat::Bgra8Unorm,
+            NEXT2_SHADOW_BLUR_VERTICAL_WGSL,
+            "next2 shadow blur vertical pipeline",
+        );
+        let screen_pipeline = Self::create_screen_pipeline(
+            ctx.device.as_ref(),
+            &screen_bind_group_layout,
+            wgpu::TextureFormat::Bgra8Unorm,
+            NEXT2_SCREEN_COPY_WGSL,
+            "next2 shadow composite pipeline",
+        );
+
+        let screen_sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("next2 screen sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 0.0,
+            compare: None,
+            anisotropy_clamp: 1,
+            border_color: None,
+        });
+
         let vertex_capacity = 4096usize * std::mem::size_of::<GlyphVertex>();
         let vertex_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("next2 vertex buffer"),
+            size: vertex_capacity as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let shadow_vertex_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("next2 shadow vertex buffer"),
             size: vertex_capacity as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -1354,26 +1487,56 @@ impl Next2Renderer {
             height.max(1),
             Some("next2 offscreen texture"),
         );
+        let shadow_width = width.max(1).saturating_mul(SHADOW_RENDER_SCALE);
+        let shadow_height = height.max(1).saturating_mul(SHADOW_RENDER_SCALE);
+        let shadow_mask_texture = create_render_texture_with_usage(
+            ctx.device.as_ref(),
+            shadow_width,
+            shadow_height,
+            Some("next2 shadow mask texture"),
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        let shadow_blur_texture = create_render_texture_with_usage(
+            ctx.device.as_ref(),
+            shadow_width,
+            shadow_height,
+            Some("next2 shadow blur texture"),
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
 
         Ok(Self {
             ctx,
             #[cfg(target_os = "android")]
             surface_pipeline: None,
             offscreen_pipeline,
+            blur_pipeline_horizontal,
+            blur_pipeline_vertical,
+            screen_pipeline,
             atlas_bind_group_layout,
             atlas_bind_group,
+            screen_bind_group_layout,
+            screen_sampler,
             atlas,
             emoji_atlas,
             vertex_buffer,
             vertex_capacity_bytes: vertex_capacity,
+            shadow_vertex_buffer,
+            shadow_vertex_capacity_bytes: vertex_capacity,
             vertices: Vec::new(),
+            shadow_vertices: Vec::new(),
             frame_items: Vec::new(),
             clear_color: [0.0, 0.0, 0.0, 0.0],
             width: width.max(1),
             height: height.max(1),
             offscreen_texture,
+            shadow_mask_texture,
+            shadow_blur_texture,
+            shadow_width,
+            shadow_height,
             #[cfg(target_os = "android")]
             surface_format: None,
+            #[cfg(target_os = "android")]
+            surface_screen_pipeline: None,
         })
     }
 
@@ -1386,12 +1549,29 @@ impl Next2Renderer {
             self.height,
             Some("next2 offscreen texture"),
         );
+        self.shadow_width = self.width.saturating_mul(SHADOW_RENDER_SCALE);
+        self.shadow_height = self.height.saturating_mul(SHADOW_RENDER_SCALE);
+        self.shadow_mask_texture = create_render_texture_with_usage(
+            self.ctx.device.as_ref(),
+            self.shadow_width,
+            self.shadow_height,
+            Some("next2 shadow mask texture"),
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        self.shadow_blur_texture = create_render_texture_with_usage(
+            self.ctx.device.as_ref(),
+            self.shadow_width,
+            self.shadow_height,
+            Some("next2 shadow blur texture"),
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
         true
     }
 
     fn reset_scene(&mut self) {
         self.frame_items.clear();
         self.vertices.clear();
+        self.shadow_vertices.clear();
         self.atlas.clear();
         self.emoji_atlas.clear();
     }
@@ -1450,11 +1630,17 @@ impl Next2Renderer {
                         surface_format,
                         "next2 android surface render pipeline",
                     ));
+                    self.surface_screen_pipeline = Some(Self::create_screen_pipeline(
+                        self.ctx.device.as_ref(),
+                        &self.screen_bind_group_layout,
+                        surface_format,
+                        NEXT2_SCREEN_COPY_WGSL,
+                        "next2 android surface composite pipeline",
+                    ));
                     self.surface_format = Some(surface_format);
                 }
                 self.width = surface.width().max(1);
                 self.height = surface.height().max(1);
-                self.build_vertices();
                 let frame = match surface.surface().get_current_texture() {
                     Ok(frame) => frame,
                     Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
@@ -1468,70 +1654,14 @@ impl Next2Renderer {
                 let view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
-                let mut encoder =
-                    self.ctx
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("next2 android surface render encoder"),
-                        });
-                if self.vertices.is_empty() {
-                    let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("next2 android surface clear pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                    });
-                } else {
-                    self.ensure_vertex_capacity();
-                    let bytes = bytemuck::cast_slice(self.vertices.as_slice());
-                    self.ctx.queue.write_buffer(&self.vertex_buffer, 0, bytes);
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("next2 android surface render pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                    });
-                    pass.set_pipeline(self.surface_pipeline.as_ref().unwrap());
-                    pass.set_bind_group(0, &self.atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                    pass.draw(0..self.vertices.len() as u32, 0..1);
-                }
-                self.ctx.queue.submit(std::iter::once(encoder.finish()));
+                let glyph_pipeline = self.surface_pipeline.as_ref().unwrap().clone();
+                let screen_pipeline = self.surface_screen_pipeline.as_ref().unwrap().clone();
+                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
                 frame.present();
             }
             PresentTarget::Texture(texture_target) => {
                 self.width = texture_target.width.max(1);
                 self.height = texture_target.height.max(1);
-                self.build_vertices();
-
-                if self.vertices.is_empty() {
-                    self.clear_only(texture_target);
-                    return;
-                }
-
-                self.ensure_vertex_capacity();
-
-                let bytes = bytemuck::cast_slice(self.vertices.as_slice());
-                self.ctx.queue.write_buffer(&self.vertex_buffer, 0, bytes);
-
                 let view =
                     texture_target
                         .render_texture()
@@ -1539,87 +1669,172 @@ impl Next2Renderer {
                             format: Some(wgpu::TextureFormat::Bgra8Unorm),
                             ..Default::default()
                         });
-
-                let mut encoder =
-                    self.ctx
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("next2 render encoder"),
-                        });
-
-                {
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("next2 render pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: self.clear_color[0],
-                                    g: self.clear_color[1],
-                                    b: self.clear_color[2],
-                                    a: self.clear_color[3],
-                                }),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                    });
-
-                    pass.set_pipeline(&self.offscreen_pipeline);
-                    pass.set_bind_group(0, &self.atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                    pass.draw(0..self.vertices.len() as u32, 0..1);
-                }
-
-                self.ctx.queue.submit(std::iter::once(encoder.finish()));
+                let glyph_pipeline = self.offscreen_pipeline.clone();
+                let screen_pipeline = self.screen_pipeline.clone();
+                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
             }
         }
     }
 
     fn draw_to_offscreen(&mut self) {
-        self.build_vertices();
-        if self.vertices.is_empty() {
-            self.clear_offscreen();
-            return;
-        }
-
-        self.ensure_vertex_capacity();
-
-        let bytes = bytemuck::cast_slice(self.vertices.as_slice());
-        self.ctx.queue.write_buffer(&self.vertex_buffer, 0, bytes);
-
         let view = self
             .offscreen_texture
             .create_view(&wgpu::TextureViewDescriptor {
                 format: Some(wgpu::TextureFormat::Bgra8Unorm),
                 ..Default::default()
             });
+        let glyph_pipeline = self.offscreen_pipeline.clone();
+        let screen_pipeline = self.screen_pipeline.clone();
+        self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
+    }
+
+    fn draw_to_view(
+        &mut self,
+        target_view: &wgpu::TextureView,
+        glyph_pipeline: &wgpu::RenderPipeline,
+        screen_pipeline: &wgpu::RenderPipeline,
+    ) {
+        if self.shadow_mask_texture.size().width != self.shadow_width
+            || self.shadow_mask_texture.size().height != self.shadow_height
+            || self.shadow_blur_texture.size().width != self.shadow_width
+            || self.shadow_blur_texture.size().height != self.shadow_height
+        {
+            let _ = self.resize(self.width, self.height);
+        }
+
+        self.build_vertices();
+
+        if self.vertices.is_empty() {
+            self.clear_target_view(target_view);
+            return;
+        }
+
+        self.ensure_vertex_capacity();
 
         let mut encoder = self
             .ctx
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("next2 offscreen render encoder"),
+                label: Some("next2 frame render encoder"),
             });
 
+        if !self.shadow_vertices.is_empty() {
+            let shadow_mask_view = self
+                .shadow_mask_texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            let shadow_blur_view = self
+                .shadow_blur_texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+
+            let shadow_bytes = bytemuck::cast_slice(self.shadow_vertices.as_slice());
+            self.ctx
+                .queue
+                .write_buffer(&self.shadow_vertex_buffer, 0, shadow_bytes);
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("next2 shadow mask pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &shadow_mask_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                pass.set_pipeline(glyph_pipeline);
+                pass.set_bind_group(0, &self.atlas_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.shadow_vertex_buffer.slice(..));
+                pass.draw(0..self.shadow_vertices.len() as u32, 0..1);
+            }
+
+            let blur_pipeline_horizontal = self.blur_pipeline_horizontal.clone();
+            let blur_pipeline_vertical = self.blur_pipeline_vertical.clone();
+            Self::blit_screen_texture(
+                self.ctx.device.as_ref(),
+                &self.screen_bind_group_layout,
+                &self.screen_sampler,
+                &mut encoder,
+                &shadow_mask_view,
+                &shadow_blur_view,
+                &blur_pipeline_horizontal,
+            );
+            Self::blit_screen_texture(
+                self.ctx.device.as_ref(),
+                &self.screen_bind_group_layout,
+                &self.screen_sampler,
+                &mut encoder,
+                &shadow_blur_view,
+                &shadow_mask_view,
+                &blur_pipeline_vertical,
+            );
+
+            {
+                let blur_bind_group =
+                    self.ctx
+                        .device
+                        .create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("next2 shadow composite bg"),
+                            layout: &self.screen_bind_group_layout,
+                            entries: &[
+                                wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: wgpu::BindingResource::TextureView(&shadow_mask_view),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 1,
+                                    resource: wgpu::BindingResource::Sampler(&self.screen_sampler),
+                                },
+                            ],
+                        });
+
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("next2 shadow composite pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: target_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: self.clear_color[0],
+                                g: self.clear_color[1],
+                                b: self.clear_color[2],
+                                a: self.clear_color[3],
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                pass.set_pipeline(screen_pipeline);
+                pass.set_bind_group(0, &blur_bind_group, &[]);
+                pass.draw(0..3, 0..1);
+            }
+        } else {
+            self.clear_target_view(target_view);
+        }
+
+        let main_bytes = bytemuck::cast_slice(self.vertices.as_slice());
+        self.ctx
+            .queue
+            .write_buffer(&self.vertex_buffer, 0, main_bytes);
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("next2 offscreen render pass"),
+                label: Some("next2 main glyph pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: target_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.clear_color[0],
-                            g: self.clear_color[1],
-                            b: self.clear_color[2],
-                            a: self.clear_color[3],
-                        }),
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -1628,7 +1843,7 @@ impl Next2Renderer {
                 occlusion_query_set: None,
             });
 
-            pass.set_pipeline(&self.offscreen_pipeline);
+            pass.set_pipeline(glyph_pipeline);
             pass.set_bind_group(0, &self.atlas_bind_group, &[]);
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             pass.draw(0..self.vertices.len() as u32, 0..1);
@@ -1637,67 +1852,64 @@ impl Next2Renderer {
         self.ctx.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn clear_only(&self, texture_target: &super::present::PresentTextureTarget) {
-        let view = texture_target
-            .render_texture()
-            .create_view(&wgpu::TextureViewDescriptor {
-                format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                ..Default::default()
-            });
+    fn blit_screen_texture(
+        device: &wgpu::Device,
+        screen_bind_group_layout: &wgpu::BindGroupLayout,
+        screen_sampler: &wgpu::Sampler,
+        encoder: &mut wgpu::CommandEncoder,
+        source_view: &wgpu::TextureView,
+        target_view: &wgpu::TextureView,
+        pipeline: &wgpu::RenderPipeline,
+    ) {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("next2 screen bg"),
+            layout: screen_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(source_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(screen_sampler),
+                },
+            ],
+        });
 
-        let mut encoder = self
-            .ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("next2 clear encoder"),
-            });
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("next2 screen blit pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
 
-        {
-            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("next2 clear pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.clear_color[0],
-                            g: self.clear_color[1],
-                            b: self.clear_color[2],
-                            a: self.clear_color[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-        }
-
-        self.ctx.queue.submit(std::iter::once(encoder.finish()));
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &bind_group, &[]);
+        pass.draw(0..3, 0..1);
     }
 
-    fn clear_offscreen(&self) {
-        let view = self
-            .offscreen_texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                ..Default::default()
-            });
-
+    fn clear_target_view(&self, target_view: &wgpu::TextureView) {
         let mut encoder = self
             .ctx
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("next2 offscreen clear encoder"),
+                label: Some("next2 target clear encoder"),
             });
 
         {
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("next2 offscreen clear pass"),
+                label: Some("next2 target clear pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: target_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -1720,8 +1932,9 @@ impl Next2Renderer {
     }
 
     fn ensure_vertex_capacity(&mut self) {
-        let required = self.vertices.len() * std::mem::size_of::<GlyphVertex>();
-        if required <= self.vertex_capacity_bytes {
+        let required = self.vertices.len().max(self.shadow_vertices.len())
+            * std::mem::size_of::<GlyphVertex>();
+        if required <= self.vertex_capacity_bytes && required <= self.shadow_vertex_capacity_bytes {
             return;
         }
 
@@ -1733,10 +1946,18 @@ impl Next2Renderer {
             mapped_at_creation: false,
         });
         self.vertex_capacity_bytes = next_capacity;
+        self.shadow_vertex_buffer = self.ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("next2 shadow vertex buffer resize"),
+            size: next_capacity as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.shadow_vertex_capacity_bytes = next_capacity;
     }
 
     fn build_vertices(&mut self) {
         self.vertices.clear();
+        self.shadow_vertices.clear();
 
         for item in self.frame_items.clone() {
             let outline_px = resolve_outline_px(item.font_size, item.outline_width);
@@ -1778,18 +1999,17 @@ impl Next2Renderer {
                             let glyph_bottom = glyph_top + entry.height as f32;
 
                             if shadow.opacity > 0.0 {
-                                self.push_quad(
-                                    glyph_left + shadow.offset_x,
-                                    glyph_top + shadow.offset_y,
-                                    glyph_right + shadow.offset_x,
-                                    glyph_bottom + shadow.offset_y,
+                                self.push_shadow_quad(
+                                    (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
+                                    (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
+                                    (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
+                                    (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
                                     entry.uv_min,
                                     entry.uv_max,
                                     entry.uv_min,
                                     entry.uv_max,
                                     shadow_color,
-                                    shadow_color,
-                                    [entry.spread, 0.0, GLYPH_MODE_TEXT, 0.0],
+                                    [entry.spread, 0.0, GLYPH_MODE_TEXT, 1.0],
                                 );
                             }
 
@@ -1825,16 +2045,15 @@ impl Next2Renderer {
                         let glyph_bottom = glyph_top + entry.height as f32;
 
                         if shadow.opacity > 0.0 {
-                            self.push_quad(
-                                glyph_left + shadow.offset_x,
-                                glyph_top + shadow.offset_y,
-                                glyph_right + shadow.offset_x,
-                                glyph_bottom + shadow.offset_y,
+                            self.push_shadow_quad(
+                                (glyph_left + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
+                                (glyph_top + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
+                                (glyph_right + shadow.offset_x) * SHADOW_RENDER_SCALE as f32,
+                                (glyph_bottom + shadow.offset_y) * SHADOW_RENDER_SCALE as f32,
                                 entry.uv_min,
                                 entry.uv_max,
                                 entry.mask_uv_min,
                                 entry.mask_uv_max,
-                                shadow_color,
                                 shadow_color,
                                 [EMOJI_SDF_SPREAD, 0.0, GLYPH_MODE_EMOJI, 1.0],
                             );
@@ -1895,6 +2114,71 @@ impl Next2Renderer {
                     ],
                 });
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn push_shadow_quad(
+        &mut self,
+        left: f32,
+        top: f32,
+        right: f32,
+        bottom: f32,
+        uv_min: [f32; 2],
+        uv_max: [f32; 2],
+        uv_aux_min: [f32; 2],
+        uv_aux_max: [f32; 2],
+        color: [f32; 4],
+        params: [f32; 4],
+    ) {
+        let p0 = to_ndc(left, top, self.shadow_width as f32, self.shadow_height as f32);
+        let p1 = to_ndc(right, top, self.shadow_width as f32, self.shadow_height as f32);
+        let p2 = to_ndc(right, bottom, self.shadow_width as f32, self.shadow_height as f32);
+        let p3 = to_ndc(left, bottom, self.shadow_width as f32, self.shadow_height as f32);
+
+        let uv0 = [uv_min[0], uv_min[1]];
+        let uv1 = [uv_max[0], uv_min[1]];
+        let uv2 = [uv_max[0], uv_max[1]];
+        let uv3 = [uv_min[0], uv_max[1]];
+        let uv_aux0 = [uv_aux_min[0], uv_aux_min[1]];
+        let uv_aux1 = [uv_aux_max[0], uv_aux_min[1]];
+        let uv_aux2 = [uv_aux_max[0], uv_aux_max[1]];
+        let uv_aux3 = [uv_aux_min[0], uv_aux_max[1]];
+
+        let v0 = GlyphVertex {
+            position: p0,
+            uv: uv0,
+            uv_aux: uv_aux0,
+            color,
+            outline_color: color,
+            params,
+        };
+        let v1 = GlyphVertex {
+            position: p1,
+            uv: uv1,
+            uv_aux: uv_aux1,
+            color,
+            outline_color: color,
+            params,
+        };
+        let v2 = GlyphVertex {
+            position: p2,
+            uv: uv2,
+            uv_aux: uv_aux2,
+            color,
+            outline_color: color,
+            params,
+        };
+        let v3 = GlyphVertex {
+            position: p3,
+            uv: uv3,
+            uv_aux: uv_aux3,
+            color,
+            outline_color: color,
+            params,
+        };
+
+        self.shadow_vertices
+            .extend_from_slice(&[v0, v1, v2, v0, v2, v3]);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1969,6 +2253,22 @@ fn create_render_texture(
     height: u32,
     label: Option<&'static str>,
 ) -> wgpu::Texture {
+    create_render_texture_with_usage(
+        device,
+        width,
+        height,
+        label,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+    )
+}
+
+fn create_render_texture_with_usage(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    label: Option<&'static str>,
+    usage: wgpu::TextureUsages,
+) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label,
         size: wgpu::Extent3d {
@@ -1980,7 +2280,7 @@ fn create_render_texture(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Bgra8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        usage,
         view_formats: &[],
     })
 }
@@ -2010,22 +2310,22 @@ struct ShadowStyle {
 }
 
 fn resolve_shadow(font_size: f32, style: u8) -> ShadowStyle {
-    let unit = (font_size * 0.045).clamp(0.8, 2.0);
+    let unit = (font_size * 0.06).clamp(1.0, 3.2);
     match style {
         1 => ShadowStyle {
-            offset_x: unit * 0.8,
-            offset_y: unit * 0.8,
-            opacity: 0.34,
+            offset_x: unit * 0.7,
+            offset_y: unit * 0.7,
+            opacity: 0.30,
         },
         2 => ShadowStyle {
-            offset_x: unit,
-            offset_y: unit,
-            opacity: 0.44,
+            offset_x: unit * 1.0,
+            offset_y: unit * 1.0,
+            opacity: 0.40,
         },
         3 => ShadowStyle {
-            offset_x: unit * 1.2,
-            offset_y: unit * 1.2,
-            opacity: 0.55,
+            offset_x: unit * 1.25,
+            offset_y: unit * 1.25,
+            opacity: 0.72,
         },
         _ => ShadowStyle {
             offset_x: 0.0,
@@ -2346,6 +2646,131 @@ fn decode_emoji_rasters(payloads: &[FrameEmojiGlyphPayload]) -> Vec<EmojiRasterD
     out
 }
 
+const NEXT2_SCREEN_COPY_WGSL: &str = r#"
+struct VsOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@group(0) @binding(0) var source_tex: texture_2d<f32>;
+@group(0) @binding(1) var source_sampler: sampler;
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
+    var positions = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -3.0),
+        vec2<f32>(3.0, 1.0),
+        vec2<f32>(-1.0, 1.0),
+    );
+    var uvs = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 2.0),
+        vec2<f32>(2.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+    );
+    var o: VsOut;
+    o.pos = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    o.uv = uvs[vertex_index];
+    return o;
+}
+
+@fragment
+fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
+    return textureSample(source_tex, source_sampler, v.uv);
+}
+"#;
+
+const NEXT2_SHADOW_BLUR_HORIZONTAL_WGSL: &str = r#"
+struct VsOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@group(0) @binding(0) var source_tex: texture_2d<f32>;
+@group(0) @binding(1) var source_sampler: sampler;
+
+const BLUR_SCALE: f32 = 2.4;
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
+    var positions = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -3.0),
+        vec2<f32>(3.0, 1.0),
+        vec2<f32>(-1.0, 1.0),
+    );
+    var uvs = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 2.0),
+        vec2<f32>(2.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+    );
+    var o: VsOut;
+    o.pos = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    o.uv = uvs[vertex_index];
+    return o;
+}
+
+@fragment
+fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
+    let dims = vec2<f32>(textureDimensions(source_tex));
+    let step = vec2<f32>(BLUR_SCALE / max(dims.x, 1.0), 0.0);
+    var color = textureSample(source_tex, source_sampler, v.uv) * 0.2270270270;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 1.3846154) * 0.194594595;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 1.3846154) * 0.194594595;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 3.2307692) * 0.121621622;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 3.2307692) * 0.121621622;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 5.0769231) * 0.054054055;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 5.0769231) * 0.054054055;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 6.9230769) * 0.016216217;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 6.9230769) * 0.016216217;
+    return color;
+}
+"#;
+
+const NEXT2_SHADOW_BLUR_VERTICAL_WGSL: &str = r#"
+struct VsOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@group(0) @binding(0) var source_tex: texture_2d<f32>;
+@group(0) @binding(1) var source_sampler: sampler;
+
+const BLUR_SCALE: f32 = 2.4;
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
+    var positions = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -3.0),
+        vec2<f32>(3.0, 1.0),
+        vec2<f32>(-1.0, 1.0),
+    );
+    var uvs = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, 2.0),
+        vec2<f32>(2.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+    );
+    var o: VsOut;
+    o.pos = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    o.uv = uvs[vertex_index];
+    return o;
+}
+
+@fragment
+fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
+    let dims = vec2<f32>(textureDimensions(source_tex));
+    let step = vec2<f32>(0.0, BLUR_SCALE / max(dims.y, 1.0));
+    var color = textureSample(source_tex, source_sampler, v.uv) * 0.2270270270;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 1.3846154) * 0.194594595;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 1.3846154) * 0.194594595;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 3.2307692) * 0.121621622;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 3.2307692) * 0.121621622;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 5.0769231) * 0.054054055;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 5.0769231) * 0.054054055;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 6.9230769) * 0.016216217;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 6.9230769) * 0.016216217;
+    return color;
+}
+"#;
+
 const NEXT2_WGSL: &str = r#"
 struct VsIn {
     @location(0) pos: vec2<f32>,
@@ -2391,6 +2816,7 @@ fn median3(r: f32, g: f32, b: f32) -> f32 {
 fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
     let mode = v.params.z;
     let is_emoji = mode > 0.5;
+    let is_shadow = v.params.w > 0.5;
     let spread = max(v.params.x, 0.001);
     let outline_px = max(v.params.y, 0.0);
 
@@ -2399,6 +2825,13 @@ fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
         let sdf_texel = textureSample(emoji_mask_tex, emoji_sampler, v.uv_aux).r;
         let d = (sdf_texel - 0.5) * spread;
         let px = max(fwidth(d), 0.0001);
+
+        if (is_shadow) {
+            let shadow_coverage = smoothstep(-px, px, d);
+            let shadow_alpha = shadow_coverage * color_texel.a * v.color.a;
+            return vec4<f32>(v.color.rgb * shadow_alpha, shadow_alpha);
+        }
+
         let fill_coverage = smoothstep(-px, px, d);
 
         var outline_coverage = 0.0;
@@ -2430,6 +2863,12 @@ fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
 
     let d_outline = (dist_sdf - 0.5) * spread;
     let px_outline = max(fwidth(d_outline), 0.0001);
+
+    if (is_shadow) {
+        let shadow_coverage = smoothstep(-px_outline, px_outline, d_outline);
+        let shadow_alpha = shadow_coverage * v.color.a;
+        return vec4<f32>(v.color.rgb * shadow_alpha, shadow_alpha);
+    }
 
     let fill_coverage_sdf = smoothstep(-px_outline, px_outline, d_outline);
     var outline_coverage = 0.0;
