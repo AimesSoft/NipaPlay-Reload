@@ -47,5 +47,5 @@ docs/error.txt
 /packages/nipaplay_smb2/android/.cxx
 /packages/nipaplay_smb2/android/.cxx/Debug/6r64695b
 /rust/target
-/packages/nipaplay_smb2/android/.cxx
-/packages/nipaplay_smb2/android/.cxx
+/node_modules/
+/data/
