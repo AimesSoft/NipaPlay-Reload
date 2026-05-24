@@ -474,14 +474,21 @@ class _CupertinoPluginSettingsPageState
                             (context, index) {
                               final entry = currentEntries[index];
                               if (entry.isSwitch) {
+                                final switchValue =
+                                    pluginService.getSwitchSettingValue(
+                                        updatedPlugin.manifest.id, entry.id);
                                 return CupertinoListTile(
                                   title: Text(entry.title),
                                   subtitle: entry.description == null
                                       ? null
                                       : Text(entry.description!),
                                   trailing: CupertinoSwitch(
-                                    value: entry.enabled!,
+                                    value: switchValue,
                                     onChanged: (_) async {
+                                      await pluginService.setSwitchSettingValue(
+                                          updatedPlugin.manifest.id,
+                                          entry.id,
+                                          !switchValue);
                                       await _invokePluginAction(
                                           sheetContext, updatedPlugin, entry,
                                           showResult: false);
