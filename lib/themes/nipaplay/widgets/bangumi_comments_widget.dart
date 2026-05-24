@@ -65,6 +65,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.subjectId != widget.subjectId ||
         oldWidget.commentsVersion != widget.commentsVersion) {
+      _isLoading = false;
       _comments.clear();
       _currentOffset = 0;
       _hasMore = true;
@@ -87,14 +88,16 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
         debugPrint('[Bangumi Comments Widget] subjectId为null，跳过加载');
         return;
       }
-      debugPrint('[Bangumi Comments Widget] 开始加载 subjectId=${widget.subjectId}, offset=$_currentOffset');
+      final int requestedSubjectId = widget.subjectId!;
+      debugPrint('[Bangumi Comments Widget] 开始加载 subjectId=$requestedSubjectId, offset=$_currentOffset');
       final result = await BangumiApiService.getSubjectComments(
-        widget.subjectId!,
+        requestedSubjectId,
         offset: _currentOffset,
       );
       debugPrint('[Bangumi Comments Widget] API返回 success=${result['success']}, message=${result['message']}');
 
       if (!mounted) return;
+      if (widget.subjectId != requestedSubjectId) return;
 
       if (result['success'] == true) {
         final data = result['data'];
@@ -120,7 +123,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
 
         setState(() {
           _comments.addAll(newComments);
-          _currentOffset += newComments.length;
+          _currentOffset += list.length;
           _hasMore = _currentOffset < total;
           _isLoading = false;
         });
@@ -140,6 +143,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
   }
 
   void loadMore() {
+    if (!_hasMore || _isLoading) return;
     _loadComments();
   }
 
