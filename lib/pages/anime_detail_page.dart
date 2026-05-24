@@ -21,6 +21,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart'; // 添
 import 'package:nipaplay/themes/nipaplay/widgets/rating_dialog.dart'; // 添加评分对话框
 import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_collection_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comment_dialog.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'dart:convert';
@@ -40,6 +41,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_window_page.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 
 enum _EpisodeCleanupAction {
   clearScanResults,
@@ -120,7 +122,7 @@ class AnimeDetailPage extends StatefulWidget {
 }
 
 class _AnimeDetailPageState extends State<AnimeDetailPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static BuildContext? _openPageContext;
   final BangumiService _bangumiService = BangumiService.instance;
   BangumiAnime? _detailedAnime;
@@ -136,6 +138,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   bool _isLoading = true;
   String? _error;
   TabController? _tabController;
+  TabController? _detailTabController;
   // 添加外观设置
   AppearanceSettingsProvider? _appearanceSettings;
   bool _isEpisodeListReversed = false;
@@ -180,6 +183,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   int _bangumiCollectionType = 0;
   int _bangumiEpisodeStatus = 0;
   bool _isSavingBangumiCollection = false;
+  int _commentsVersion = 0;
+  final GlobalKey _commentsWidgetKey = GlobalKey();
+  int _myCommentTimestamp = 0;
 
   // 上次观看的剧集信息
   WatchHistoryItem? _lastWatchedEpisode;
@@ -257,6 +263,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     // 添加TabController监听
     _tabController!.addListener(_handleTabChange);
 
+    _detailTabController = TabController(length: 2, vsync: this);
+
     // 添加Bangumi登录状态监听
     BangumiApiService.loginStatusNotifier
         .addListener(_onBangumiLoginStatusChanged);
@@ -328,6 +336,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         .removeListener(_onBangumiLoginStatusChanged);
     _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
+    _detailTabController?.dispose();
     _largeScreenDetailsFocusNode.dispose();
     super.dispose();
   }
@@ -373,6 +382,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       _bangumiCollectionType = 0;
       _bangumiEpisodeStatus = 0;
       _isSavingBangumiCollection = false;
+      _myCommentTimestamp = 0;
     });
     try {
       BangumiAnime anime;
@@ -526,30 +536,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   }
 
   Future<void> _loadBangumiUserData(BangumiAnime anime) async {
-    if (!BangumiApiService.isLoggedIn) {
-      try {
-        await BangumiApiService.initialize();
-      } catch (e) {
-        debugPrint('[番剧详情] 初始化Bangumi API失败: $e');
-      }
-    }
-
-    if (!BangumiApiService.isLoggedIn) {
-      if (mounted) {
-        setState(() {
-          _bangumiSubjectId = null;
-          _bangumiComment = null;
-          _isLoadingBangumiCollection = false;
-          _hasBangumiCollection = false;
-          _bangumiUserRating = 0;
-          _bangumiCollectionType = 0;
-          _bangumiEpisodeStatus = 0;
-        });
-      }
-      return;
-    }
-
+    // 先提取Bangumi subject ID（评论功能不需要登录）
     final subjectId = _extractBangumiSubjectId(anime);
+    debugPrint('[番剧详情] Bangumi subjectId=$subjectId, bangumiUrl=${anime.bangumiUrl}');
+
     if (subjectId == null) {
       if (mounted) {
         setState(() {
@@ -563,6 +553,36 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         });
       }
       debugPrint('[番剧详情] 未能解析Bangumi条目ID: ${anime.bangumiUrl}');
+      return;
+    }
+
+    // 设置 subjectId（评论功能可用）
+    if (mounted) {
+      setState(() {
+        _bangumiSubjectId = subjectId;
+      });
+    }
+
+    // 以下收藏相关功能需要登录
+    if (!BangumiApiService.isLoggedIn) {
+      try {
+        await BangumiApiService.initialize();
+      } catch (e) {
+        debugPrint('[番剧详情] 初始化Bangumi API失败: $e');
+      }
+    }
+
+    if (!BangumiApiService.isLoggedIn) {
+      if (mounted) {
+        setState(() {
+          _bangumiComment = null;
+          _isLoadingBangumiCollection = false;
+          _hasBangumiCollection = false;
+          _bangumiUserRating = 0;
+          _bangumiCollectionType = 0;
+          _bangumiEpisodeStatus = 0;
+        });
+      }
       return;
     }
 
@@ -644,6 +664,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _bangumiCollectionType = collectionType;
           _bangumiEpisodeStatus = episodeStatus;
           _isLoadingBangumiCollection = false;
+          if (_myCommentTimestamp == 0 &&
+              (userRating > 0 || (comment != null && comment.isNotEmpty))) {
+            _myCommentTimestamp =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          }
         });
       } else {
         setState(() {
@@ -827,6 +852,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             if (ratingPayload != null) {
               _bangumiUserRating = ratingPayload;
             }
+            _myCommentTimestamp =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
           });
         }
         if (episodeStatus != null) {
@@ -1129,7 +1156,17 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       }
     }
 
-    return SingleChildScrollView(
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollEndNotification) {
+          final metrics = notification.metrics;
+          if (metrics.pixels >= metrics.maxScrollExtent) {
+            (_commentsWidgetKey.currentState as dynamic)?.loadMore();
+          }
+        }
+        return false;
+      },
+      child: SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1166,386 +1203,501 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           SizedBox(height: 16),
           Divider(color: textColor.withOpacity(0.15)),
           SizedBox(height: 8),
-          if (bangumiRatingValue is num && bangumiRatingValue > 0) ...[
-            RichText(
-                text: TextSpan(
-                    style: valueStyle, // 基础样式
-                    children: [
-                  TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
-                  WidgetSpan(
-                      child: _buildRatingStars(bangumiRatingValue.toDouble())),
-                  TextSpan(
-                      text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
-                      locale: const Locale("zh-Hans", "zh"),
-                      style: TextStyle(
-                          color: AppAccentColors.current,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14)),
-                  TextSpan(
-                      text: bangumiEvaluationText,
-                      locale: const Locale("zh-Hans", "zh"),
-                      style: TextStyle(color: secondaryTextColor, fontSize: 12))
-                ])),
-            SizedBox(height: 6),
-          ],
 
-          // Bangumi云端收藏信息
-          if (BangumiApiService.isLoggedIn) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (_isLoadingBangumiCollection)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(secondaryTextColor),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '正在加载Bangumi收藏信息...',
-                        style: valueStyle.copyWith(fontSize: 12),
-                      ),
-                    ],
-                  )
-                else
-                  RichText(
-                    text: TextSpan(
-                      style: valueStyle.copyWith(fontSize: 12),
-                      children: [
-                        TextSpan(
-                          text: '我的Bangumi评分: ',
-                          style: TextStyle(
-                              color: AppAccentColors.current,
-                              fontWeight: FontWeight.bold),
-                        ),
-                        if (_bangumiUserRating > 0) ...[
-                          TextSpan(
-                            text: '$_bangumiUserRating 分',
-                            style: TextStyle(
-                              color: AppAccentColors.current,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          TextSpan(
-                            text: _ratingEvaluationMap[_bangumiUserRating] !=
-                                    null
-                                ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
-                                : '',
-                            style: TextStyle(
-                              color: AppAccentColors.current.withOpacity(0.75),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ] else
-                          TextSpan(
-                            text: '未评分',
-                            style: TextStyle(color: secondaryTextColor),
-                          ),
-                      ],
-                    ),
-                  ),
-                SizedBox(width: 12),
-                Builder(
-                  builder: (context) {
-                    final bool isBangumiActionEnabled =
-                        !_isLoadingBangumiCollection &&
-                            !_isSavingBangumiCollection;
-                    final bool enableBangumiHover =
-                        isBangumiActionEnabled && !globals.isTouch;
-                    final bool isBangumiHovered =
-                        enableBangumiHover && _isBangumiRatingButtonHovered;
-                    final Color bangumiActionColor = isBangumiActionEnabled
-                        ? (isBangumiHovered
-                            ? AppAccentColors.current
-                            : textColor.withOpacity(0.9))
-                        : textColor.withOpacity(0.45);
-
-                    final button = MouseRegion(
-                      cursor: enableBangumiHover
-                          ? SystemMouseCursors.click
-                          : SystemMouseCursors.basic,
-                      onEnter: enableBangumiHover
-                          ? (_) => setState(
-                              () => _isBangumiRatingButtonHovered = true)
-                          : null,
-                      onExit: enableBangumiHover
-                          ? (_) => setState(
-                              () => _isBangumiRatingButtonHovered = false)
-                          : null,
-                      child: GestureDetector(
-                        onTap:
-                            isBangumiActionEnabled ? _showRatingDialog : null,
-                        behavior: HitTestBehavior.opaque,
-                        child: AnimatedScale(
-                          scale: isBangumiHovered ? 1.1 : 1.0,
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 180),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: bangumiActionColor,
-                            ),
-                            child: IconTheme(
-                              data: IconThemeData(
-                                color: bangumiActionColor,
-                                size: 16,
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 4,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (_isSavingBangumiCollection)
-                                      SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 1.5,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                  bangumiActionColor),
-                                        ),
-                                      )
-                                    else
-                                      Icon(Icons.edit),
-                                    SizedBox(width: 4),
-                                    const Text('编辑Bangumi评分'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                    return _wrapLargeScreenFocusable(
-                      child: button,
-                      onActivate:
-                          isBangumiActionEnabled ? _showRatingDialog : null,
-                      borderRadius: BorderRadius.circular(6),
-                    );
-                  },
-                ),
-              ],
-            ),
-            SizedBox(height: 6),
-            if (!_isLoadingBangumiCollection && _hasBangumiCollection) ...[
-              Wrap(
-                spacing: 12,
-                runSpacing: 4,
+          // 详情 / 评论 切换导航栏
+          AnimatedBuilder(
+            animation: _detailTabController!,
+            builder: (context, _) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '收藏状态: ${_collectionTypeLabel(_bangumiCollectionType)}',
-                    style: valueStyle.copyWith(fontSize: 12),
+                  TabBar(
+                    controller: _detailTabController,
+                    labelColor: AppAccentColors.current,
+                    unselectedLabelColor: secondaryTextColor,
+                    indicatorColor: AppAccentColors.current,
+                    labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14),
+                    unselectedLabelStyle: const TextStyle(fontSize: 14),
+                    tabAlignment: TabAlignment.start,
+                    isScrollable: true,
+                    dividerHeight: 0,
+                    tabs: const [
+                      Tab(text: '详情'),
+                      Tab(text: '评论'),
+                    ],
                   ),
-                  Text(
-                    '观看进度: ${_bangumiEpisodeStatus}/${_formatEpisodeTotal(anime)}',
-                    style: valueStyle.copyWith(fontSize: 12),
-                  ),
-                ],
-              ),
-              SizedBox(height: 6),
-            ] else if (!_isLoadingBangumiCollection) ...[
-              Text(
-                '尚未在Bangumi收藏此番剧',
-                style: valueStyle.copyWith(
-                    fontSize: 12, color: secondaryTextColor),
-              ),
-              SizedBox(height: 6),
-            ],
-            if (!_isLoadingBangumiCollection)
-              Builder(builder: (context) {
-                if (_bangumiComment != null && _bangumiComment!.isNotEmpty) {
-                  return Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 6.0),
-                    padding: const EdgeInsets.all(8.0),
-                    decoration: BoxDecoration(
-                      color: textColor.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: textColor.withOpacity(0.15),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '我的Bangumi短评',
-                          style: boldWhiteKeyStyle.copyWith(
-                              fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          _bangumiComment!,
-                          style: valueStyle.copyWith(fontSize: 12, height: 1.4),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                if (_hasBangumiCollection) {
-                  return Text(
-                    '暂无Bangumi短评',
-                    style: valueStyle.copyWith(
-                        fontSize: 12, color: secondaryTextColor),
-                  );
-                }
-                return const SizedBox.shrink();
-              }),
-          ],
-          if (anime.ratingDetails != null &&
-              anime.ratingDetails!.entries.any((entry) =>
-                  entry.key != 'Bangumi评分' &&
-                  entry.value is num &&
-                  (entry.value as num) > 0))
-            Padding(
-                padding: const EdgeInsets.only(bottom: 4.0, top: 2.0),
-                child: Wrap(
-                    spacing: 12.0,
-                    runSpacing: 4.0,
-                    children: anime.ratingDetails!.entries
-                        .where((entry) =>
-                            entry.key != 'Bangumi评分' &&
-                            entry.value is num &&
-                            (entry.value as num) > 0)
-                        .map((entry) {
-                      String siteName = entry.key;
-                      if (siteName.endsWith('评分')) {
-                        siteName = siteName.substring(0, siteName.length - 2);
+                  const SizedBox(height: 12),
+                  if (_detailTabController!.index == 0)
+                    _buildDetailContent(
+                        anime,
+                        valueStyle,
+                        boldWhiteKeyStyle,
+                        sectionTitleStyle,
+                        textColor,
+                        secondaryTextColor,
+                        bangumiRatingValue,
+                        bangumiEvaluationText,
+                        metadataWidgets,
+                        titlesWidgets)
+                  else
+                    Builder(builder: (context) {
+                      debugPrint('[AnimeDetail] 评论tab: _bangumiSubjectId=$_bangumiSubjectId, anime.id=${anime.id}');
+                      final userInfo = BangumiApiService.userInfo;
+                      final int currentUserId = userInfo != null
+                          ? (userInfo['id'] as int? ?? 0)
+                          : 0;
+                      String userAvatar = '';
+                      if (userInfo != null) {
+                        final raw = userInfo['avatar'];
+                        if (raw is String) {
+                          userAvatar = raw;
+                        } else if (raw is Map<String, dynamic>) {
+                          userAvatar = (raw['large'] as String?) ??
+                              (raw['medium'] as String?) ??
+                              '';
+                        }
                       }
-                      final score = entry.value as num;
-                      return RichText(
-                          text: TextSpan(
-                              style: valueStyle.copyWith(fontSize: 12),
-                              children: [
-                            TextSpan(
-                                text: '$siteName: ',
-                                style: boldWhiteKeyStyle.copyWith(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.normal)),
-                            TextSpan(
-                                text: score.toStringAsFixed(1),
-                                locale: const Locale("zh-Hans", "zh"),
-                                style: TextStyle(
-                                    color: textColor.withOpacity(0.95)))
-                          ]));
-                    }).toList())),
-          RichText(
-            text: TextSpan(
-              style: valueStyle,
-              children: [
-                TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
-                TextSpan(
-                    text: (anime.airDate ?? '未知').split('T').first,
-                    style: valueStyle),
-              ],
-            ),
+                      final String userNickname = userInfo != null
+                          ? ((userInfo['nickname'] as String?) ??
+                              (userInfo['username'] as String?) ??
+                              '')
+                          : '';
+                      final BangumiMyCommentData? myComment =
+                          BangumiApiService.isLoggedIn
+                              ? BangumiMyCommentData(
+                                  nickname: userNickname,
+                                  avatarUrl: userAvatar,
+                                  rate: _bangumiUserRating,
+                                  comment: _bangumiComment ?? '',
+                                  updatedAt: _myCommentTimestamp > 0
+                                      ? _myCommentTimestamp
+                                      : DateTime.now().millisecondsSinceEpoch ~/
+                                          1000,
+                                )
+                              : null;
+                      return BangumiCommentsWidget(
+                        key: _commentsWidgetKey,
+                        subjectId: _bangumiSubjectId,
+                        onEditRating: BangumiApiService.isLoggedIn
+                            ? _showCommentDialog
+                            : null,
+                        myComment: myComment,
+                        currentUserId: currentUserId,
+                        commentsVersion: _commentsVersion,
+                        onMyCommentTimestamp: (timestamp) {
+                          if (mounted && timestamp != _myCommentTimestamp) {
+                            setState(() {
+                              _myCommentTimestamp = timestamp;
+                            });
+                          }
+                        },
+                      );
+                    }),
+                ],
+              );
+            },
           ),
-          if (anime.typeDescription != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: RichText(
-                text: TextSpan(
-                  style: valueStyle,
-                  children: [
-                    TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
-                    TextSpan(text: anime.typeDescription!),
-                  ],
-                ),
-              ),
-            ),
-          if (anime.totalEpisodes != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: RichText(
-                text: TextSpan(
-                  style: valueStyle,
-                  children: [
-                    TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
-                    TextSpan(text: '${anime.totalEpisodes}'),
-                  ],
-                ),
-              ),
-            ),
-          if (anime.isOnAir != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: RichText(
-                text: TextSpan(
-                  style: valueStyle,
-                  children: [
-                    TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
-                    TextSpan(text: anime.isOnAir! ? '正连载' : '已完结'),
-                  ],
-                ),
-              ),
-            ),
-
-          if (anime.isNSFW == true)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: RichText(
-                  text: TextSpan(style: valueStyle, children: [
-                TextSpan(
-                    text: '限制内容: ',
-                    style: boldWhiteKeyStyle.copyWith(color: Colors.redAccent)),
-                TextSpan(
-                    text: '是',
-                    style: TextStyle(color: Colors.redAccent.withOpacity(0.85)))
-              ])),
-            ),
-          ...metadataWidgets,
-          ...titlesWidgets,
-          if (anime.tags != null && anime.tags!.isNotEmpty) ...[
-            SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('标签:', style: sectionTitleStyle),
-                _wrapLargeScreenFocusable(
-                  onActivate: _openTagSearch,
-                  borderRadius: BorderRadius.circular(6),
-                  child: IconButton(
-                    onPressed: _isLargeScreenModeActive ? null : _openTagSearch,
-                    icon: Icon(
-                      Ionicons.search,
-                      color: secondaryTextColor,
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Wrap(
-                spacing: 8.0,
-                runSpacing: 4.0,
-                children: anime.tags!
-                    .map((tag) => _HoverableTag(
-                          tag: tag,
-                          onTap: () => _searchByTag(tag),
-                          isLargeScreenMode: _isLargeScreenModeActive,
-                        ))
-                    .toList())
-          ],
           SizedBox(height: 20),
         ],
       ),
+      ),
+    );
+  }
+
+  Widget _buildDetailContent(
+    BangumiAnime anime,
+    TextStyle valueStyle,
+    TextStyle boldWhiteKeyStyle,
+    TextStyle? sectionTitleStyle,
+    Color textColor,
+    Color secondaryTextColor,
+    dynamic bangumiRatingValue,
+    String bangumiEvaluationText,
+    List<Widget> metadataWidgets,
+    List<Widget> titlesWidgets,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (bangumiRatingValue is num && bangumiRatingValue > 0) ...[
+          RichText(
+              text: TextSpan(
+                  style: valueStyle,
+                  children: [
+                TextSpan(text: 'Bangumi评分: ', style: boldWhiteKeyStyle),
+                WidgetSpan(
+                    child: _buildRatingStars(bangumiRatingValue.toDouble())),
+                TextSpan(
+                    text: ' ${bangumiRatingValue.toStringAsFixed(1)} ',
+                    locale: const Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                        color: AppAccentColors.current,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14)),
+                TextSpan(
+                    text: bangumiEvaluationText,
+                    locale: const Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: secondaryTextColor, fontSize: 12))
+              ])),
+          SizedBox(height: 6),
+        ],
+
+        // Bangumi云端收藏信息
+        if (BangumiApiService.isLoggedIn) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (_isLoadingBangumiCollection)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(secondaryTextColor),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      '正在加载Bangumi收藏信息...',
+                      style: valueStyle.copyWith(fontSize: 12),
+                    ),
+                  ],
+                )
+              else
+                RichText(
+                  text: TextSpan(
+                    style: valueStyle.copyWith(fontSize: 12),
+                    children: [
+                      TextSpan(
+                        text: '我的Bangumi评分: ',
+                        style: TextStyle(
+                            color: AppAccentColors.current,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      if (_bangumiUserRating > 0) ...[
+                        TextSpan(
+                          text: '$_bangumiUserRating 分',
+                          style: TextStyle(
+                            color: AppAccentColors.current,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        TextSpan(
+                          text: _ratingEvaluationMap[_bangumiUserRating] !=
+                                  null
+                              ? ' (${_ratingEvaluationMap[_bangumiUserRating]})'
+                              : '',
+                          style: TextStyle(
+                            color: AppAccentColors.current.withOpacity(0.75),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ] else
+                        TextSpan(
+                          text: '未评分',
+                          style: TextStyle(color: secondaryTextColor),
+                        ),
+                    ],
+                  ),
+                ),
+              SizedBox(width: 12),
+              Builder(
+                builder: (context) {
+                  final bool isBangumiActionEnabled =
+                      !_isLoadingBangumiCollection &&
+                          !_isSavingBangumiCollection;
+                  final bool enableBangumiHover =
+                      isBangumiActionEnabled && !globals.isTouch;
+                  final bool isBangumiHovered =
+                      enableBangumiHover && _isBangumiRatingButtonHovered;
+                  final Color bangumiActionColor = isBangumiActionEnabled
+                      ? (isBangumiHovered
+                          ? AppAccentColors.current
+                          : textColor.withOpacity(0.9))
+                      : textColor.withOpacity(0.45);
+
+                  final button = MouseRegion(
+                    cursor: enableBangumiHover
+                        ? SystemMouseCursors.click
+                        : SystemMouseCursors.basic,
+                    onEnter: enableBangumiHover
+                        ? (_) => setState(
+                            () => _isBangumiRatingButtonHovered = true)
+                        : null,
+                    onExit: enableBangumiHover
+                        ? (_) => setState(
+                            () => _isBangumiRatingButtonHovered = false)
+                        : null,
+                    child: GestureDetector(
+                      onTap:
+                          isBangumiActionEnabled ? _showRatingDialog : null,
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedScale(
+                        scale: isBangumiHovered ? 1.1 : 1.0,
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutCubic,
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 180),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: bangumiActionColor,
+                          ),
+                          child: IconTheme(
+                            data: IconThemeData(
+                              color: bangumiActionColor,
+                              size: 16,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isSavingBangumiCollection)
+                                    SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                bangumiActionColor),
+                                      ),
+                                    )
+                                  else
+                                    Icon(Icons.edit),
+                                  SizedBox(width: 4),
+                                  const Text('编辑Bangumi评分'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                  return _wrapLargeScreenFocusable(
+                    child: button,
+                    onActivate:
+                        isBangumiActionEnabled ? _showRatingDialog : null,
+                    borderRadius: BorderRadius.circular(6),
+                  );
+                },
+              ),
+            ],
+          ),
+          SizedBox(height: 6),
+          if (!_isLoadingBangumiCollection && _hasBangumiCollection) ...[
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                Text(
+                  '收藏状态: ${_collectionTypeLabel(_bangumiCollectionType)}',
+                  style: valueStyle.copyWith(fontSize: 12),
+                ),
+                Text(
+                  '观看进度: ${_bangumiEpisodeStatus}/${_formatEpisodeTotal(anime)}',
+                  style: valueStyle.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+            SizedBox(height: 6),
+          ] else if (!_isLoadingBangumiCollection) ...[
+            Text(
+              '尚未在Bangumi收藏此番剧',
+              style: valueStyle.copyWith(
+                  fontSize: 12, color: secondaryTextColor),
+            ),
+            SizedBox(height: 6),
+          ],
+          if (!_isLoadingBangumiCollection)
+            Builder(builder: (context) {
+              if (_bangumiComment != null && _bangumiComment!.isNotEmpty) {
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 6.0),
+                  padding: const EdgeInsets.all(8.0),
+                  decoration: BoxDecoration(
+                    color: textColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: textColor.withOpacity(0.15),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '我的Bangumi短评',
+                        style: boldWhiteKeyStyle.copyWith(
+                            fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        _bangumiComment!,
+                        style: valueStyle.copyWith(fontSize: 12, height: 1.4),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              if (_hasBangumiCollection) {
+                return Text(
+                  '暂无Bangumi短评',
+                  style: valueStyle.copyWith(
+                      fontSize: 12, color: secondaryTextColor),
+                );
+              }
+              return const SizedBox.shrink();
+            }),
+        ],
+        if (anime.ratingDetails != null &&
+            anime.ratingDetails!.entries.any((entry) =>
+                entry.key != 'Bangumi评分' &&
+                entry.value is num &&
+                (entry.value as num) > 0))
+          Padding(
+              padding: const EdgeInsets.only(bottom: 4.0, top: 2.0),
+              child: Wrap(
+                  spacing: 12.0,
+                  runSpacing: 4.0,
+                  children: anime.ratingDetails!.entries
+                      .where((entry) =>
+                          entry.key != 'Bangumi评分' &&
+                          entry.value is num &&
+                          (entry.value as num) > 0)
+                      .map((entry) {
+                    String siteName = entry.key;
+                    if (siteName.endsWith('评分')) {
+                      siteName = siteName.substring(0, siteName.length - 2);
+                    }
+                    final score = entry.value as num;
+                    return RichText(
+                        text: TextSpan(
+                            style: valueStyle.copyWith(fontSize: 12),
+                            children: [
+                          TextSpan(
+                              text: '$siteName: ',
+                              style: boldWhiteKeyStyle.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal)),
+                          TextSpan(
+                              text: score.toStringAsFixed(1),
+                              locale: const Locale("zh-Hans", "zh"),
+                              style: TextStyle(
+                                  color: textColor.withOpacity(0.95)))
+                        ]));
+                  }).toList())),
+        RichText(
+          text: TextSpan(
+            style: valueStyle,
+            children: [
+              TextSpan(text: '开播: ', style: boldWhiteKeyStyle),
+              TextSpan(
+                  text: (anime.airDate ?? '未知').split('T').first,
+                  style: valueStyle),
+            ],
+          ),
+        ),
+        if (anime.typeDescription != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: RichText(
+              text: TextSpan(
+                style: valueStyle,
+                children: [
+                  TextSpan(text: '类型: ', style: boldWhiteKeyStyle),
+                  TextSpan(text: anime.typeDescription!),
+                ],
+              ),
+            ),
+          ),
+        if (anime.totalEpisodes != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: RichText(
+              text: TextSpan(
+                style: valueStyle,
+                children: [
+                  TextSpan(text: '话数: ', style: boldWhiteKeyStyle),
+                  TextSpan(text: '${anime.totalEpisodes}'),
+                ],
+              ),
+            ),
+          ),
+        if (anime.isOnAir != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: RichText(
+              text: TextSpan(
+                style: valueStyle,
+                children: [
+                  TextSpan(text: '状态: ', style: boldWhiteKeyStyle),
+                  TextSpan(text: anime.isOnAir! ? '正连载' : '已完结'),
+                ],
+              ),
+            ),
+          ),
+
+        if (anime.isNSFW == true)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: RichText(
+                text: TextSpan(style: valueStyle, children: [
+              TextSpan(
+                  text: '限制内容: ',
+                  style: boldWhiteKeyStyle.copyWith(color: Colors.redAccent)),
+              TextSpan(
+                  text: '是',
+                  style: TextStyle(color: Colors.redAccent.withOpacity(0.85)))
+            ])),
+          ),
+        ...metadataWidgets,
+        ...titlesWidgets,
+        if (anime.tags != null && anime.tags!.isNotEmpty) ...[
+          SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('标签:', style: sectionTitleStyle),
+              _wrapLargeScreenFocusable(
+                onActivate: _openTagSearch,
+                borderRadius: BorderRadius.circular(6),
+                child: IconButton(
+                  onPressed: _isLargeScreenModeActive ? null : _openTagSearch,
+                  icon: Icon(
+                    Ionicons.search,
+                    color: secondaryTextColor,
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Wrap(
+              spacing: 8.0,
+              runSpacing: 4.0,
+              children: anime.tags!
+                  .map((tag) => _HoverableTag(
+                        tag: tag,
+                        onTap: () => _searchByTag(tag),
+                        isLargeScreenMode: _isLargeScreenModeActive,
+                      ))
+                  .toList())
+        ],
+      ],
     );
   }
 
@@ -2452,6 +2604,23 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     }
   }
 
+  // 显示轻量版短评对话框
+  void _showCommentDialog() {
+    if (_detailedAnime == null || !BangumiApiService.isLoggedIn) return;
+
+    final int effectiveCollectionType =
+        _bangumiCollectionType != 0 ? _bangumiCollectionType : 3;
+
+    BangumiCommentDialog.show(
+      context: context,
+      animeTitle: _detailedAnime!.nameCn,
+      initialRating: _bangumiUserRating > 0 ? _bangumiUserRating : _userRating,
+      initialComment: _bangumiComment,
+      collectionType: effectiveCollectionType,
+      onSubmit: _handleBangumiCollectionSubmitted,
+    );
+  }
+
   Future<void> _handleBangumiCollectionSubmitted(
     BangumiCollectionSubmitResult result,
   ) async {
@@ -2512,6 +2681,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     if (mounted) {
       setState(() {
         _isSavingBangumiCollection = false;
+        if (bangumiSuccess) {
+          _commentsVersion++;
+        }
       });
 
       if (bangumiSuccess && dandanSuccess) {

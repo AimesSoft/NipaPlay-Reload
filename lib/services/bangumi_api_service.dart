@@ -741,4 +741,48 @@ class BangumiApiService {
 
     return result;
   }
+
+  /// 获取条目的短评列表（公开接口，无需登录）
+  static Future<Map<String, dynamic>> getSubjectComments(
+    int subjectId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final targetUri = Uri.parse(
+              'https://next.bgm.tv/p1/subjects/$subjectId/comments')
+          .replace(queryParameters: {
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      });
+      debugPrint('[Bangumi Comments] 原始URI: $targetUri');
+      final uri = WebRemoteAccessService.proxyUri(targetUri);
+      debugPrint('[Bangumi Comments] 代理后URI: $uri');
+
+      final response = await http.get(uri, headers: {
+        'User-Agent': _userAgent,
+        'Accept': 'application/json',
+      });
+      debugPrint('[Bangumi Comments] 状态码: ${response.statusCode}');
+      debugPrint('[Bangumi Comments] 响应体前200字符: ${response.body.length > 200 ? response.body.substring(0, 200) : response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = json.decode(response.body);
+        debugPrint('[Bangumi Comments] 解析成功, data类型: ${data.runtimeType}');
+        if (data is Map && data['data'] is List) {
+          debugPrint('[Bangumi Comments] data.data 列表长度: ${(data['data'] as List).length}, total: ${data['total']}');
+        }
+        return {'success': true, 'data': data};
+      } else {
+        debugPrint('[Bangumi Comments] 请求失败: ${response.statusCode} - ${response.body}');
+        return {
+          'success': false,
+          'message': '获取评论失败: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      debugPrint('[Bangumi Comments] 获取评论异常: $e');
+      return {'success': false, 'message': '网络错误: $e'};
+    }
+  }
 }
