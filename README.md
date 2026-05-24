@@ -9,7 +9,7 @@
 <img src="https://count.getloli.com/get/@nipaplay?theme=moebooru" alt="访问统计" />
 
 <br>
- 
+
 ![GitHub release](https://img.shields.io/github/v/release/aimessoft/nipaplay-reload?style=flat-square&color=blue)
 ![GitHub downloads](https://img.shields.io/github/downloads/aimessoft/nipaplay-reload/total?style=flat-square&color=green)
 ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey?style=flat-square)
@@ -176,11 +176,11 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 ## 开发计划 (Roadmap)
 
-- [ ] 评论区功能完善
+- [x] 评论区功能完善
 - [ ] 云媒体库挂载 (FTP)
 - [ ] 视频片段导出 (GIF)
-- [ ] 内置下载器及远程控制
-- [ ] 在线 URL 播放优化
+- [x] 内置下载器及远程控制
+- [x] 在线 URL 播放优化
 - [ ] Webview 弹幕刮削
 - [ ] 补帧功能 (SVP/Other)
 - [ ] HDR 和杜比视界支持

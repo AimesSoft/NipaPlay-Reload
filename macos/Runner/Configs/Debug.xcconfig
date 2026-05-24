@@ -1,4 +1,5 @@
 #include "../../Flutter/Flutter-Debug.xcconfig"
+#include "../../Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Warnings.xcconfig"
 
 ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES
