@@ -125,7 +125,7 @@ const pluginUIEntries = [
 - `id`：必填，非空。
 - `title`：必填，非空。
 - `description`：可选。
-- `enabled`：可选，布尔值。当提供时，宿主在设置页中渲染开关（`Switch`）而非普通点击项，用户可通过开关切换状态。点击开关后宿主会调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换自身逻辑并返回结果。
+- `enabled`：可选，布尔值。当提供时，宿主在设置页中渲染开关（`Switch`）而非普通点击项，用户可通过开关切换状态。开关值由宿主自动持久化，重启后保持用户上次的选择。点击开关后宿主会调用 `pluginHandleUIAction(entry.id)`，插件在回调中切换自身逻辑并返回结果。插件可通过 `settings.getSwitch(entry.id)` 读取开关的持久化值。
 - `textSetting`：可选，对象。当提供时（且 `enabled` 未设置），宿主在设置页中渲染文本输入框，用于收集用户自由输入的配置项。输入值由宿主持久化存储，插件可通过 `settings.getText(entry.id)` 读取。
 
 `textSetting` 对象字段：
@@ -374,7 +374,7 @@ storage.remove('key');
 storage.clear();
 ```
 
-> **注意**：`storage.get()` 当前同步桥接限制返回 `null`，写入操作 (`set/remove/clear`) 正常工作。对于需要持久化的简单配置，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting` 实现。
+> **注意**：`storage.get()` 当前同步桥接限制返回 `null`，写入操作 (`set/remove/clear`) 正常工作。对于需要持久化的简单配置，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting`，或 `settings.getSwitch()` / `settings.setSwitch()` 配合 `enabled` 实现。
 
 ### 4.6 `dev` 对象
 
@@ -399,19 +399,27 @@ system.setDownloaderEnabled(true);
 
 ### 4.8 `settings` 对象
 
-读写插件的文本配置项（即 `pluginUIEntries` 中声明了 `textSetting` 的条目）。宿主自动持久化，插件无需自行存储。
+读写插件的配置项（即 `pluginUIEntries` 中声明了 `textSetting` 或 `enabled` 的条目）。宿主自动持久化，插件无需自行存储。
 
 ```js
-// 读取配置值（返回字符串，未设置时返回空字符串 ''）
+// 读取文本配置值（返回字符串，未设置时返回空字符串 ''）
 const apiUrl = settings.getText('api_url');
 
-// 写入配置值（value 会自动转为字符串）
+// 写入文本配置值（value 会自动转为字符串）
 settings.setText('api_url', 'https://new-api.example.com');
+
+// 读取开关配置值（返回布尔值，未设置时返回 false）
+const filterEnabled = settings.getSwitch('enable_filter');
+
+// 写入开关配置值（value 会被转为布尔值）
+settings.setSwitch('enable_filter', true);
 ```
 
 典型用法：在 `pluginOnInitialize` 中读取用户之前填写的配置值，或在 `pluginHandleUIAction` 中修改配置。
 
-> `settings` 对象不需要任何权限声明，始终可用。它仅操作插件自身的文本配置项，不同插件之间互不影响。
+> ⚠️ **时序注意**：由于设置值在插件初始化完成后才加载到内存，`pluginOnInitialize` 中调用 `getSwitch` 将返回 `false`，`getText` 将返回空字符串 `''`，均非持久化值。建议使用 `||` 或条件判断提供默认值，或在 `pluginHandleUIAction` 中读取已加载的配置。
+
+> `settings` 对象不需要任何权限声明，始终可用。它仅操作插件自身的配置项（文本与开关），不同插件之间互不影响。
 
 ## 5. 宿主当前暴露能力（对 JS）
 
@@ -440,7 +448,7 @@ settings.setText('api_url', 'https://new-api.example.com');
 | `storage` | 本地存储（set/remove/clear 正常，get 同步返回 null） | 部分支持 |
 | `dev` | 开发调试（log/logError） | 正常 |
 | `system` | 系统控制（setDownloaderEnabled） | 正常 |
-| `settings` | 读写插件文本配置项（getText/setText） | 正常 |
+| `settings` | 读写插件配置项（getText/setText/getSwitch/setSwitch） | 正常 |
 
 所有桥接调用通过 `sendMessage('PluginBridge', JSON.stringify({method, args}))` 实现，宿主在插件加载时自动注册桥接通道。
 
@@ -472,7 +480,7 @@ settings.setText('api_url', 'https://new-api.example.com');
 - Web 平台插件运行时未实现。
 - 权限检查失败时 API 调用会返回 `false` 或 `null`。
 - `ui.showDialog` 当前版本暂不支持（需要 `BuildContext`）。
-- `storage.get()` 同步桥接限制返回 `null`，建议用 `settings.getText()` 替代简单配置读取。
+- `storage.get()` 同步桥接限制返回 `null`，建议用 `settings.getText()`/`settings.getSwitch()` 替代简单配置读取。
 - 桥接方法调用中的参数通过 JSON 序列化传递，数值字段（如 `time`）可能被解析为 `int`，插件应注意类型兼容。
 
 ## 9. 最小可用插件模板
@@ -630,7 +638,7 @@ function pluginOnEvent(event) {
 
 ## 12. 存储与配置读写示例
 
-对于简单配置项，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting`，这是同步可用的：
+对于简单配置项，推荐使用 `settings.getText()` / `settings.setText()` 配合 `textSetting`，或 `settings.getSwitch()` / `settings.setSwitch()` 配合 `enabled`，这些都是同步可用的：
 
 ```js
 const pluginManifest = {
@@ -719,7 +727,7 @@ function pluginHandleUIAction(actionId) {
 - `textSetting` 条目在设置页中渲染为标题 + 描述 + 文本输入框。
 - 用户输入的值由宿主持久化保存，关闭再打开设置页后依然存在。
 - 插件通过 `settings.getText(entryId)` 读取值，通过 `settings.setText(entryId, value)` 写入值。
-- `textSetting` 与 `enabled` 可以在同一份 `pluginUIEntries` 中混合使用，各自独立渲染为文本框或开关。
+- `textSetting` 与 `enabled` 可以在同一份 `pluginUIEntries` 中混合使用，各自独立渲染为文本框或开关。两者的值均由宿主自动持久化，重启后保持用户上次的选择。
 - 底部会显示「保存并关闭」和「关闭」按钮，方便用户确认操作。
 
 ## 14. 弹幕精选插件示例

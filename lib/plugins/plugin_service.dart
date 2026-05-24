@@ -32,6 +32,7 @@ class PluginService extends ChangeNotifier {
   static const String _enabledPluginsKey = 'plugin_enabled_ids';
   static const String _downloaderOverrideKey = 'plugin_downloader_override';
   static const String _textSettingPrefix = 'plugin_text_setting_';
+  static const String _switchSettingPrefix = 'plugin_switch_setting_';
   static const List<String> _pluginAssetPrefixes = <String>[
     'assets/plugins/builtin/',
     'assets/plugins/custom/',
@@ -75,6 +76,7 @@ class PluginService extends ChangeNotifier {
       <String, PluginJsRuntime>{};
   final Map<String, String> _scriptByPluginId = <String, String>{};
   final Map<String, String> _textSettingValues = <String, String>{};
+  final Map<String, bool> _switchSettingValues = <String, bool>{};
   final PluginStorage _pluginStorage = createPluginStorage();
   final PluginEventBus _eventBus;
 
@@ -122,6 +124,19 @@ class PluginService extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool getSwitchSettingValue(String pluginId, String entryId) {
+    return _switchSettingValues['$pluginId::$entryId'] ?? false;
+  }
+
+  Future<void> setSwitchSettingValue(
+      String pluginId, String entryId, bool value) async {
+    final key = '$pluginId::$entryId';
+    _switchSettingValues[key] = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('$_switchSettingPrefix$key', value);
+    notifyListeners();
+  }
+
   Future<void> _loadTextSettingValues() async {
     final prefs = await SharedPreferences.getInstance();
     for (final plugin in _plugins) {
@@ -136,6 +151,22 @@ class PluginService extends ChangeNotifier {
           if (def != null && def.isNotEmpty) {
             _textSettingValues[key] = def;
           }
+        }
+      }
+    }
+  }
+
+  Future<void> _loadSwitchSettingValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final plugin in _plugins) {
+      for (final entry in plugin.uiEntries) {
+        if (!entry.isSwitch) continue;
+        final key = '${plugin.manifest.id}::${entry.id}';
+        final saved = prefs.getBool('$_switchSettingPrefix$key');
+        if (saved != null) {
+          _switchSettingValues[key] = saved;
+        } else if (entry.enabled != null) {
+          _switchSettingValues[key] = entry.enabled!;
         }
       }
     }
@@ -510,6 +541,23 @@ class PluginService extends ChangeNotifier {
         }
         return null;
 
+      // ---- 插件开关设置 ----
+      case 'pluginGetSwitchSetting':
+        if (callArgs.isNotEmpty) {
+          return getSwitchSettingValue(pluginId, callArgs[0].toString());
+        }
+        return false;
+      case 'pluginSetSwitchSetting':
+        if (callArgs.length >= 2) {
+          final value = callArgs[1] == true || callArgs[1]?.toString() == 'true';
+          unawaited(setSwitchSettingValue(
+            pluginId,
+            callArgs[0].toString(),
+            value,
+          ));
+        }
+        return null;
+
       // ---- 调试 ----
       case 'devLog':
         if (callArgs.isNotEmpty) {
@@ -619,6 +667,7 @@ class PluginService extends ChangeNotifier {
     }
 
     await _loadTextSettingValues();
+    await _loadSwitchSettingValues();
 
     final existingIds = _plugins.map((e) => e.manifest.id).toSet();
     final sanitizedEnabled = enabledIds.where(existingIds.contains).toList();
@@ -926,6 +975,12 @@ class PluginService extends ChangeNotifier {
         },
         setText: function(entryId, value) {
           flutter_invokeMethod('pluginSetTextSetting', entryId, String(value));
+        },
+        getSwitch: function(entryId) {
+          return !!flutter_invokeMethod('pluginGetSwitchSetting', entryId);
+        },
+        setSwitch: function(entryId, value) {
+          flutter_invokeMethod('pluginSetSwitchSetting', entryId, !!value);
         },
       };
 
