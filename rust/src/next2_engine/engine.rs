@@ -23,6 +23,15 @@ use ttf_parser::{Face, GlyphId};
 
 use super::present::{attach_present_texture, signal_frame_ready, PresentTarget};
 
+#[cfg(target_os = "android")]
+use ndk_sys::ANativeWindow;
+
+#[cfg(target_os = "android")]
+#[link(name = "android")]
+extern "C" {
+    fn ANativeWindow_release(window: *mut ANativeWindow);
+}
+
 const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
@@ -56,10 +65,11 @@ pub struct RenderFrameInput {
 
 pub enum EngineCommand {
     AttachPresentTexture {
-        mtl_texture_ptr: usize,
+        raw_target_ptr: usize,
         width: u32,
         height: u32,
         bytes_per_row: u32,
+        reply: Option<mpsc::Sender<bool>>,
     },
     Resize {
         width: u32,
@@ -70,16 +80,7 @@ pub enum EngineCommand {
         input: RenderFrameInput,
         reply: mpsc::Sender<bool>,
     },
-    ReadbackFrame {
-        reply: mpsc::Sender<Option<Next2ReadbackFrame>>,
-    },
     Stop,
-}
-
-pub struct Next2ReadbackFrame {
-    pub pixels: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
 }
 
 pub struct EngineEntry {
@@ -123,17 +124,10 @@ pub fn remove_engine(handle: u64) -> Option<EngineEntry> {
     guard.remove(&handle)
 }
 
-pub fn readback_frame_bgra(handle: u64) -> Option<Next2ReadbackFrame> {
-    let entry = lookup_engine(handle)?;
-    let (reply_tx, reply_rx) = mpsc::channel();
-    if entry
-        .cmd_tx
-        .send(EngineCommand::ReadbackFrame { reply: reply_tx })
-        .is_err()
-    {
-        return None;
-    }
-    reply_rx.recv().ok().flatten()
+pub fn poll_frame_ready(handle: u64) -> bool {
+    lookup_engine(handle)
+        .map(|entry| entry.frame_ready.load(Ordering::Acquire))
+        .unwrap_or(false)
 }
 
 pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
@@ -177,6 +171,10 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
 }
 
 struct EngineDeviceContext {
+    #[cfg(target_os = "android")]
+    instance: Arc<wgpu::Instance>,
+    #[cfg(target_os = "android")]
+    adapter: Arc<wgpu::Adapter>,
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
 }
@@ -185,12 +183,12 @@ static DEVICE_CONTEXT: OnceLock<Result<Arc<EngineDeviceContext>, String>> = Once
 
 fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
     let init_result = DEVICE_CONTEXT.get_or_init(|| {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = Arc::new(wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             flags: wgpu::InstanceFlags::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions::default(),
-        });
+        }));
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -198,6 +196,7 @@ fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
             force_fallback_adapter: false,
         }))
         .map_err(|err| format!("wgpu: request_adapter failed: {err:?}"))?;
+        let adapter = Arc::new(adapter);
 
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("next2 render device"),
@@ -209,7 +208,15 @@ fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
         }))
         .map_err(|err| format!("wgpu: request_device failed: {err:?}"))?;
 
+        device.on_uncaptured_error(Arc::new(|err| {
+            eprintln!("wgpu uncaptured error: {err}");
+        }));
+
         Ok(Arc::new(EngineDeviceContext {
+            #[cfg(target_os = "android")]
+            instance,
+            #[cfg(target_os = "android")]
+            adapter,
             device: Arc::new(device),
             queue: Arc::new(queue),
         }))
@@ -238,28 +245,49 @@ fn extract_mtl_device_ptr(_device: &wgpu::Device) -> *mut std::ffi::c_void {
 }
 
 #[cfg(target_os = "android")]
+#[allow(dead_code)]
 pub fn attach_present_surface(
     handle: u64,
     native_window_ptr: *mut c_void,
     width: u32,
     height: u32,
 ) -> bool {
+    fn release_window(native_window_ptr: *mut c_void) {
+        if native_window_ptr.is_null() {
+            return;
+        }
+        unsafe { ANativeWindow_release(native_window_ptr as *mut ANativeWindow) };
+    }
+
     let Some(entry) = lookup_engine(handle) else {
+        release_window(native_window_ptr);
         return false;
     };
     if native_window_ptr.is_null() {
         return false;
     }
-    let _ = entry.cmd_tx.send(EngineCommand::AttachPresentTexture {
-        mtl_texture_ptr: native_window_ptr as usize,
-        width,
-        height,
-        bytes_per_row: 0,
-    });
-    true
+    let (reply_tx, reply_rx) = mpsc::channel();
+    if entry
+        .cmd_tx
+        .send(EngineCommand::AttachPresentTexture {
+            raw_target_ptr: native_window_ptr as usize,
+            width,
+            height,
+            bytes_per_row: 0,
+            reply: Some(reply_tx),
+        })
+        .is_err()
+    {
+        release_window(native_window_ptr);
+        return false;
+    }
+    reply_rx
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or(false)
 }
 
 #[cfg(not(target_os = "android"))]
+#[allow(dead_code)]
 pub fn attach_present_surface(
     _handle: u64,
     _native_window_ptr: *mut c_void,
@@ -309,18 +337,55 @@ fn run_engine_loop(
             received_command = true;
             match cmd {
                 EngineCommand::AttachPresentTexture {
-                    mtl_texture_ptr,
+                    raw_target_ptr,
                     width: w,
                     height: h,
                     bytes_per_row,
+                    reply,
                 } => {
-                    present_target = attach_present_texture(
-                        ctx.device.as_ref(),
-                        mtl_texture_ptr,
-                        w.max(1),
-                        h.max(1),
-                        bytes_per_row,
-                    );
+                    let attached;
+                    #[cfg(target_os = "android")]
+                    {
+                        attached = match super::present::attach_present_surface(
+                            ctx.instance.as_ref(),
+                            ctx.adapter.as_ref(),
+                            ctx.device.as_ref(),
+                            raw_target_ptr as *mut c_void,
+                            w.max(1),
+                            h.max(1),
+                        ) {
+                            Ok(target) => {
+                                present_target = Some(target);
+                                true
+                            }
+                            Err(_) => {
+                                present_target = None;
+                                false
+                            }
+                        };
+                    }
+                    #[cfg(not(target_os = "android"))]
+                    {
+                        attached = if let Some(target) = attach_present_texture(
+                            ctx.device.as_ref(),
+                            raw_target_ptr,
+                            w.max(1),
+                            h.max(1),
+                            bytes_per_row,
+                        ) {
+                            present_target = Some(target);
+                            true
+                        } else {
+                            present_target = None;
+                            false
+                        };
+                    }
+                    if let Some(reply_tx) = reply {
+                        let _ = reply_tx.send(attached);
+                    }
+                    if !attached {
+                        continue;
+                    }
                     width = w.max(1);
                     height = h.max(1);
                     let _ = renderer.resize(width, height);
@@ -346,10 +411,6 @@ fn run_engine_loop(
                         has_pending_frame = true;
                     }
                 }
-                EngineCommand::ReadbackFrame { reply } => {
-                    let frame = renderer.readback_bgra_frame();
-                    let _ = reply.send(frame);
-                }
                 EngineCommand::Stop => {
                     running = false;
                     break;
@@ -362,15 +423,13 @@ fn run_engine_loop(
         }
 
         if has_pending_frame {
-            if let Some(target) = present_target.as_ref() {
+            if let Some(target) = present_target.as_mut() {
                 renderer.draw_to_present(target);
-                signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
-                has_pending_frame = false;
             } else {
                 renderer.draw_to_offscreen();
-                signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
-                has_pending_frame = false;
             }
+            signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
+            has_pending_frame = false;
         }
     }
 }
@@ -845,7 +904,9 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
 
 struct Next2Renderer {
     ctx: Arc<EngineDeviceContext>,
-    pipeline: wgpu::RenderPipeline,
+    #[cfg(target_os = "android")]
+    surface_pipeline: Option<wgpu::RenderPipeline>,
+    offscreen_pipeline: wgpu::RenderPipeline,
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: wgpu::BindGroup,
     atlas: Next2GlyphAtlas,
@@ -857,9 +918,61 @@ struct Next2Renderer {
     width: u32,
     height: u32,
     offscreen_texture: wgpu::Texture,
+    #[cfg(target_os = "android")]
+    surface_format: Option<wgpu::TextureFormat>,
 }
 
 impl Next2Renderer {
+    fn create_pipeline(
+        device: &wgpu::Device,
+        atlas_bind_group_layout: &wgpu::BindGroupLayout,
+        target_format: wgpu::TextureFormat,
+        label: &'static str,
+    ) -> wgpu::RenderPipeline {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("next2 sdf shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(NEXT2_WGSL)),
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("next2 pipeline layout"),
+            bind_group_layouts: &[atlas_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[GlyphVertex::layout()],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+            cache: None,
+        })
+    }
+
     fn new(ctx: Arc<EngineDeviceContext>, width: u32, height: u32) -> Result<Self, String> {
         let atlas = Next2GlyphAtlas::new(ctx.device.as_ref())?;
 
@@ -902,56 +1015,12 @@ impl Next2Renderer {
             ],
         });
 
-        let shader =
-            ctx.device
-                .create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some("next2 sdf shader"),
-                    source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(NEXT2_WGSL)),
-                });
-
-        let pipeline_layout =
-            ctx.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("next2 pipeline layout"),
-                    bind_group_layouts: &[&atlas_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
-
-        let pipeline =
-            ctx.device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("next2 render pipeline"),
-                    layout: Some(&pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: Some("vs_main"),
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                        buffers: &[GlyphVertex::layout()],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: None,
-                        unclipped_depth: false,
-                        polygon_mode: wgpu::PolygonMode::Fill,
-                        conservative: false,
-                    },
-                    depth_stencil: None,
-                    multisample: wgpu::MultisampleState::default(),
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader,
-                        entry_point: Some("fs_main"),
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: wgpu::TextureFormat::Bgra8Unorm,
-                            blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                    }),
-                    multiview: None,
-                    cache: None,
-                });
+        let offscreen_pipeline = Self::create_pipeline(
+            ctx.device.as_ref(),
+            &atlas_bind_group_layout,
+            wgpu::TextureFormat::Bgra8Unorm,
+            "next2 render pipeline",
+        );
 
         let vertex_capacity = 4096usize * std::mem::size_of::<GlyphVertex>();
         let vertex_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -968,21 +1037,25 @@ impl Next2Renderer {
             Some("next2 offscreen texture"),
         );
 
-        Ok(Self {
-            ctx,
-            pipeline,
-            atlas_bind_group_layout,
-            atlas_bind_group,
-            atlas,
+            Ok(Self {
+                ctx,
+                #[cfg(target_os = "android")]
+                surface_pipeline: None,
+                offscreen_pipeline,
+                atlas_bind_group_layout,
+                atlas_bind_group,
+                atlas,
             vertex_buffer,
             vertex_capacity_bytes: vertex_capacity,
             vertices: Vec::new(),
             frame_items: Vec::new(),
-            clear_color: [0.0, 0.0, 0.0, 0.0],
-            width: width.max(1),
-            height: height.max(1),
-            offscreen_texture,
-        })
+                clear_color: [0.0, 0.0, 0.0, 0.0],
+                width: width.max(1),
+                height: height.max(1),
+                offscreen_texture,
+                #[cfg(target_os = "android")]
+                surface_format: None,
+            })
     }
 
     fn resize(&mut self, width: u32, height: u32) -> bool {
@@ -1037,66 +1110,145 @@ impl Next2Renderer {
         true
     }
 
-    fn draw_to_present(&mut self, present: &PresentTarget) {
-        let PresentTarget::Texture(texture_target) = present;
-        self.width = texture_target.width.max(1);
-        self.height = texture_target.height.max(1);
+    fn draw_to_present(&mut self, present: &mut PresentTarget) {
+        match present {
+            #[cfg(target_os = "android")]
+            PresentTarget::Surface(surface) => {
+                let surface_format = surface.format();
+                if self.surface_format != Some(surface_format) || self.surface_pipeline.is_none() {
+                    self.surface_pipeline = Some(Self::create_pipeline(
+                        self.ctx.device.as_ref(),
+                        &self.atlas_bind_group_layout,
+                        surface_format,
+                        "next2 android surface render pipeline",
+                    ));
+                    self.surface_format = Some(surface_format);
+                }
+                self.width = surface.width().max(1);
+                self.height = surface.height().max(1);
+                self.build_vertices();
+                let frame = match surface.surface().get_current_texture() {
+                    Ok(frame) => frame,
+                    Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                        let _ = surface.recreate(self.ctx.device.as_ref());
+                        return;
+                    }
+                    Err(wgpu::SurfaceError::Timeout) => return,
+                    Err(wgpu::SurfaceError::OutOfMemory) => return,
+                    Err(wgpu::SurfaceError::Other) => return,
+                };
+                let view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder = self
+                    .ctx
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("next2 android surface render encoder"),
+                    });
+                if self.vertices.is_empty() {
+                    let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("next2 android surface clear pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                } else {
+                    self.ensure_vertex_capacity();
+                    let bytes = bytemuck::cast_slice(self.vertices.as_slice());
+                    self.ctx.queue.write_buffer(&self.vertex_buffer, 0, bytes);
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("next2 android surface render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    pass.set_pipeline(self.surface_pipeline.as_ref().unwrap());
+                    pass.set_bind_group(0, &self.atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                    pass.draw(0..self.vertices.len() as u32, 0..1);
+                }
+                self.ctx.queue.submit(std::iter::once(encoder.finish()));
+                frame.present();
+            }
+            PresentTarget::Texture(texture_target) => {
+                self.width = texture_target.width.max(1);
+                self.height = texture_target.height.max(1);
+                self.build_vertices();
 
-        self.build_vertices();
+                if self.vertices.is_empty() {
+                    self.clear_only(texture_target);
+                    return;
+                }
 
-        if self.vertices.is_empty() {
-            self.clear_only(texture_target);
-            return;
+                self.ensure_vertex_capacity();
+
+                let bytes = bytemuck::cast_slice(self.vertices.as_slice());
+                self.ctx.queue.write_buffer(&self.vertex_buffer, 0, bytes);
+
+                let view = texture_target
+                    .render_texture()
+                    .create_view(&wgpu::TextureViewDescriptor {
+                        format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                        ..Default::default()
+                    });
+
+                let mut encoder = self
+                    .ctx
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("next2 render encoder"),
+                    });
+
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("next2 render pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: self.clear_color[0],
+                                    g: self.clear_color[1],
+                                    b: self.clear_color[2],
+                                    a: self.clear_color[3],
+                                }),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+
+                    pass.set_pipeline(&self.offscreen_pipeline);
+                    pass.set_bind_group(0, &self.atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                    pass.draw(0..self.vertices.len() as u32, 0..1);
+                }
+
+                self.ctx.queue.submit(std::iter::once(encoder.finish()));
+            }
         }
-
-        self.ensure_vertex_capacity();
-
-        let bytes = bytemuck::cast_slice(self.vertices.as_slice());
-        self.ctx.queue.write_buffer(&self.vertex_buffer, 0, bytes);
-
-        let view = texture_target
-            .render_texture()
-            .create_view(&wgpu::TextureViewDescriptor {
-                format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                ..Default::default()
-            });
-
-        let mut encoder = self
-            .ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("next2 render encoder"),
-            });
-
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("next2 render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.clear_color[0],
-                            g: self.clear_color[1],
-                            b: self.clear_color[2],
-                            a: self.clear_color[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.atlas_bind_group, &[]);
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.draw(0..self.vertices.len() as u32, 0..1);
-        }
-
-        self.ctx.queue.submit(std::iter::once(encoder.finish()));
     }
 
     fn draw_to_offscreen(&mut self) {
@@ -1147,7 +1299,7 @@ impl Next2Renderer {
                 occlusion_query_set: None,
             });
 
-            pass.set_pipeline(&self.pipeline);
+            pass.set_pipeline(&self.offscreen_pipeline);
             pass.set_bind_group(0, &self.atlas_bind_group, &[]);
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             pass.draw(0..self.vertices.len() as u32, 0..1);
@@ -1236,22 +1388,6 @@ impl Next2Renderer {
         }
 
         self.ctx.queue.submit(std::iter::once(encoder.finish()));
-    }
-
-    fn readback_bgra_frame(&self) -> Option<Next2ReadbackFrame> {
-        let pixels = read_bgra_texture(
-            self.ctx.device.as_ref(),
-            self.ctx.queue.as_ref(),
-            &self.offscreen_texture,
-            self.width,
-            self.height,
-        )
-        .ok()?;
-        Some(Next2ReadbackFrame {
-            pixels,
-            width: self.width,
-            height: self.height,
-        })
     }
 
     fn ensure_vertex_capacity(&mut self) {
@@ -1436,141 +1572,6 @@ fn create_render_texture(
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     })
-}
-
-fn align_up_u32(value: u32, alignment: u32) -> u32 {
-    if alignment == 0 {
-        return value;
-    }
-    let add = alignment.saturating_sub(1);
-    value
-        .saturating_add(add)
-        .saturating_div(alignment)
-        .saturating_mul(alignment)
-}
-
-fn unpack_u8_rows_without_padding(
-    mapped: &[u8],
-    width: u32,
-    height: u32,
-    bytes_per_row_padded: u32,
-) -> Result<Vec<u8>, String> {
-    let row_bytes = width
-        .checked_mul(4)
-        .ok_or_else(|| "next2 readback: row_bytes overflow".to_string())?;
-    let total = (row_bytes as usize)
-        .checked_mul(height as usize)
-        .ok_or_else(|| "next2 readback: total overflow".to_string())?;
-    let mut out = vec![0u8; total];
-
-    for y in 0..height as usize {
-        let src_start = y
-            .checked_mul(bytes_per_row_padded as usize)
-            .ok_or_else(|| "next2 readback: src_start overflow".to_string())?;
-        let src_end = src_start
-            .checked_add(row_bytes as usize)
-            .ok_or_else(|| "next2 readback: src_end overflow".to_string())?;
-        if src_end > mapped.len() {
-            return Err("next2 readback: mapped range too small".to_string());
-        }
-        let dst_start = y
-            .checked_mul(row_bytes as usize)
-            .ok_or_else(|| "next2 readback: dst_start overflow".to_string())?;
-        let dst_end = dst_start
-            .checked_add(row_bytes as usize)
-            .ok_or_else(|| "next2 readback: dst_end overflow".to_string())?;
-        out[dst_start..dst_end].copy_from_slice(&mapped[src_start..src_end]);
-    }
-
-    Ok(out)
-}
-
-fn read_bgra_texture(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    texture: &wgpu::Texture,
-    width: u32,
-    height: u32,
-) -> Result<Vec<u8>, String> {
-    if width == 0 || height == 0 {
-        return Ok(Vec::new());
-    }
-
-    const BYTES_PER_PIXEL: u32 = 4;
-    const COPY_BYTES_PER_ROW_ALIGNMENT: u32 = 256;
-
-    let bytes_per_row_unpadded = width
-        .checked_mul(BYTES_PER_PIXEL)
-        .ok_or_else(|| "next2 readback: bytes_per_row overflow".to_string())?;
-    let bytes_per_row_padded = align_up_u32(bytes_per_row_unpadded, COPY_BYTES_PER_ROW_ALIGNMENT);
-    if bytes_per_row_padded == 0 {
-        return Err("next2 readback: bytes_per_row_padded == 0".to_string());
-    }
-    let readback_size = (bytes_per_row_padded as u64)
-        .checked_mul(height as u64)
-        .ok_or_else(|| "next2 readback: readback_size overflow".to_string())?;
-
-    let readback = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("next2 readback buffer"),
-        size: readback_size,
-        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("next2 readback encoder"),
-    });
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &readback,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(bytes_per_row_padded),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    queue.submit(Some(encoder.finish()));
-
-    let slice = readback.slice(0..readback_size);
-    let (tx, rx) = mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |res| {
-        let _ = tx.send(res);
-    });
-    let _ = device.poll(wgpu::PollType::wait_indefinitely());
-
-    let map_status: Result<(), String> = match rx.recv() {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(e)) => Err(format!("next2 readback: map_async failed: {e:?}")),
-        Err(e) => Err(format!("next2 readback: map_async channel failed: {e}")),
-    };
-
-    let mut result: Option<Vec<u8>> = None;
-    if map_status.is_ok() {
-        let mapped = slice.get_mapped_range();
-        result = Some(unpack_u8_rows_without_padding(
-            &mapped,
-            width,
-            height,
-            bytes_per_row_padded,
-        )?);
-        drop(mapped);
-        readback.unmap();
-    }
-
-    map_status?;
-    Ok(result.unwrap_or_default())
 }
 
 fn to_ndc(x: f32, y: f32, width: f32, height: f32) -> [f32; 2] {

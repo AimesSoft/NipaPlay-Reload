@@ -37,14 +37,22 @@ class Next2TextureBridge {
       return null;
     }
 
-    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
-      'getTextureInfo',
-      <String, dynamic>{
-        'surfaceId': surfaceId,
-        'width': width,
-        'height': height,
-      },
-    );
+    Map<dynamic, dynamic>? raw;
+    try {
+      raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'getTextureInfo',
+        <String, dynamic>{
+          'surfaceId': surfaceId,
+          'width': width,
+          'height': height,
+        },
+      );
+    } on PlatformException catch (e) {
+      if (e.code == 'plugin_detached' || e.code == 'surface_disposed') {
+        return null;
+      }
+      rethrow;
+    }
 
     if (raw == null) {
       return null;
@@ -56,7 +64,7 @@ class Next2TextureBridge {
     final outHeight = (raw['height'] as num?)?.toInt() ?? height;
     final isNewEngine = raw['isNewEngine'] == true;
 
-    if (textureId == null || engineHandle == null) {
+    if (textureId == null || textureId < 0 || engineHandle == null || engineHandle <= 0) {
       return null;
     }
 

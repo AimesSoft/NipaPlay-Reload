@@ -1,0 +1,9 @@
+{
+  "name": "kmbal_ionicons",
+  "private": true,
+  "devDependencies": {
+    "oslllo-svg-fixer": "5.0.0",
+    "serve": "14.2.5",
+    "svgtofont": "6.4.1"
+  }
+}

@@ -269,7 +269,7 @@ class SharedRemoteLibrarySettingsSection extends StatelessWidget {
     SharedRemoteLibraryProvider provider,
   ) async {
     try {
-      final payload = await RemoteAccessQrCameraScanner.scan();
+      final payload = await RemoteAccessQrCameraScanner.scan(context);
       if (payload == null) return;
 
       final candidates = payload.allCandidateBaseUrls;

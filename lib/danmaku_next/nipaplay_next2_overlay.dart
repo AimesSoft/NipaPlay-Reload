@@ -216,6 +216,12 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     );
 
     if (info == null) {
+      if (_textureReady || _textureId != null) {
+        setState(() {
+          _textureReady = false;
+          _textureId = null;
+        });
+      }
       return false;
     }
 

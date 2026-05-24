@@ -29,6 +29,7 @@ metal = "0.32.0"
 [target.'cfg(target_os = "android")'.dependencies]
 jni-sys = "0.4.1"
 ndk-sys = "0.6.0+11769913"
+raw-window-handle = "0.6.2"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

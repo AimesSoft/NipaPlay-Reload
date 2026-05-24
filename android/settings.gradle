@@ -1,4 +1,43 @@
 pluginManagement {
+    def proxySpec = System.getenv("HTTPS_PROXY")
+    if (proxySpec == null) {
+        proxySpec = System.getenv("https_proxy")
+    }
+    if (proxySpec == null) {
+        proxySpec = System.getenv("HTTP_PROXY")
+    }
+    if (proxySpec == null) {
+        proxySpec = System.getenv("http_proxy")
+    }
+    if (proxySpec == null) {
+        proxySpec = System.getenv("ALL_PROXY")
+    }
+    if (proxySpec == null) {
+        proxySpec = System.getenv("all_proxy")
+    }
+    if (proxySpec != null && !proxySpec.isBlank()) {
+        try {
+            def normalizedProxySpec = proxySpec.contains("://") ? proxySpec : "http://${proxySpec}"
+            def proxyUri = new java.net.URI(normalizedProxySpec)
+            def proxyHost = proxyUri.host
+            def proxyPort = proxyUri.port > 0 ? proxyUri.port : (proxyUri.scheme?.toLowerCase()?.startsWith("socks") ? 1080 : 80)
+            if (proxyHost != null && !proxyHost.isBlank()) {
+                def proxyScheme = proxyUri.scheme?.toLowerCase() ?: "http"
+                if (proxyScheme.startsWith("socks")) {
+                    System.setProperty("socksProxyHost", proxyHost)
+                    System.setProperty("socksProxyPort", proxyPort.toString())
+                } else {
+                    System.setProperty("http.proxyHost", proxyHost)
+                    System.setProperty("http.proxyPort", proxyPort.toString())
+                    System.setProperty("https.proxyHost", proxyHost)
+                    System.setProperty("https.proxyPort", proxyPort.toString())
+                }
+            }
+        } catch (Exception e) {
+            println("Warning: unable to configure Gradle proxy from environment: ${e.message}")
+        }
+    }
+
     def flutterSdkPath = {
         def properties = new Properties()
         file("local.properties").withInputStream { properties.load(it) }
