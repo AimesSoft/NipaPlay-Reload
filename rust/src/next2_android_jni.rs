@@ -68,8 +68,11 @@ pub extern "system" fn Java_com_flutter_1rust_1bridge_rust_1lib_1nipaplay_RustLi
     width: jint,
     height: jint,
 ) -> jint {
-    crate::next2_engine::ffi::next2_engine_resize(handle as u64, width.max(1) as u32, height.max(1) as u32)
-        as jint
+    crate::next2_engine::ffi::next2_engine_resize(
+        handle as u64,
+        width.max(1) as u32,
+        height.max(1) as u32,
+    ) as jint
 }
 
 #[cfg(target_os = "android")]

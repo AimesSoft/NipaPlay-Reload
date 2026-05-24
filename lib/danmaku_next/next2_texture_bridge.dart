@@ -88,6 +88,7 @@ class Next2TextureBridge {
     double scaleX = 1.0,
     double scaleY = 1.0,
     double fontScale = 1.0,
+    Map<String, dynamic>? framePayload,
   }) async {
     if (!isSupported) {
       return false;
@@ -98,17 +99,18 @@ class Next2TextureBridge {
       return false;
     }
 
-    final payload = <String, dynamic>{
-      'items': items
-          .map(
-            (item) => _itemToJson(
-              item,
-              scaleX: scaleX,
-              scaleY: scaleY,
-            ),
-          )
-          .toList(growable: false),
-    };
+    final payload = framePayload ??
+        <String, dynamic>{
+          'items': items
+              .map(
+                (item) => _itemToJson(
+                  item,
+                  scaleX: scaleX,
+                  scaleY: scaleY,
+                ),
+              )
+              .toList(growable: false),
+        };
 
     final ok = await _channel.invokeMethod<bool>(
       'setFrame',

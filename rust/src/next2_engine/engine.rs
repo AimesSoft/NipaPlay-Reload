@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
-use std::fs;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
+use base64::Engine as _;
 use bytemuck::{Pod, Zeroable};
 use fdsm::bezier::scanline::FillRule;
 use fdsm::correct_error::{correct_error_mtsdf, ErrorCorrectionConfig};
@@ -41,18 +41,22 @@ const MAX_FONT_COLLECTION_FACES: u32 = 32;
 const EDGE_COLORING_CORNER_THRESHOLD: f64 = 0.03;
 const EDGE_COLORING_SEED: u64 = 69441337420;
 const ATLAS_GLYPH_PADDING: u32 = 2;
+const EMOJI_ATLAS_SIZE: u32 = 2048;
+const EMOJI_SDF_SPREAD: f32 = 8.0;
+const EMOJI_OUTLINE_SCALE: f32 = 0.58;
+const EMOJI_SIDE_BEARING_RATIO: f32 = 0.08;
+const GLYPH_MODE_TEXT: f32 = 0.0;
+const GLYPH_MODE_EMOJI: f32 = 1.0;
 const SHADOW_ALPHA_SCALE: f32 = 0.85;
 const MISSING_GLYPH_FALLBACK: char = '□';
 const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
 
-const SYSTEM_FONT_FALLBACK_PATHS: &[&str] = &[
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/System/Library/Fonts/CJKSymbolsFallback.ttc",
-    "/System/Library/Fonts/Apple Symbols.ttf",
-    "/System/Library/Fonts/Apple Color Emoji.ttc",
-];
-
 static FONT_DATA: &[u8] = include_bytes!("../../../assets/subfont.ttf");
+static NEXT2_FALLBACK_FONTS: &[&[u8]] = &[
+    include_bytes!("../../assets/next2_fonts/NotoSansYi-Regular.ttf"),
+    include_bytes!("../../assets/next2_fonts/NotoSansGeorgian-Regular.ttf"),
+    include_bytes!("../../assets/next2_fonts/NotoSansLao-Regular.ttf"),
+];
 
 #[derive(Clone)]
 pub struct RenderFrameInput {
@@ -439,6 +443,7 @@ fn run_engine_loop(
 struct GlyphVertex {
     position: [f32; 2],
     uv: [f32; 2],
+    uv_aux: [f32; 2],
     color: [f32; 4],
     outline_color: [f32; 4],
     params: [f32; 4],
@@ -446,7 +451,7 @@ struct GlyphVertex {
 
 impl GlyphVertex {
     const fn layout() -> wgpu::VertexBufferLayout<'static> {
-        const ATTRS: [wgpu::VertexAttribute; 5] = [
+        const ATTRS: [wgpu::VertexAttribute; 6] = [
             wgpu::VertexAttribute {
                 format: wgpu::VertexFormat::Float32x2,
                 offset: 0,
@@ -458,19 +463,24 @@ impl GlyphVertex {
                 shader_location: 1,
             },
             wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x4,
+                format: wgpu::VertexFormat::Float32x2,
                 offset: 16,
                 shader_location: 2,
             },
             wgpu::VertexAttribute {
                 format: wgpu::VertexFormat::Float32x4,
-                offset: 32,
+                offset: 24,
                 shader_location: 3,
             },
             wgpu::VertexAttribute {
                 format: wgpu::VertexFormat::Float32x4,
-                offset: 48,
+                offset: 40,
                 shader_location: 4,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 56,
+                shader_location: 5,
             },
         ];
 
@@ -508,6 +518,269 @@ struct GlyphAtlasEntry {
     offset_y: f32,
     advance: f32,
     spread: f32,
+}
+
+#[derive(Clone)]
+struct EmojiAtlasEntry {
+    uv_min: [f32; 2],
+    uv_max: [f32; 2],
+    mask_uv_min: [f32; 2],
+    mask_uv_max: [f32; 2],
+    width: u32,
+    height: u32,
+    advance: f32,
+    offset_x: f32,
+    offset_y: f32,
+}
+
+struct EmojiRasterData {
+    id: String,
+    width: u32,
+    height: u32,
+    advance: f32,
+    offset_x: f32,
+    offset_y: f32,
+    rgba: Vec<u8>,
+}
+
+struct Next2EmojiAtlas {
+    color_texture: wgpu::Texture,
+    color_texture_view: wgpu::TextureView,
+    mask_texture: wgpu::Texture,
+    mask_texture_view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+    width: u32,
+    height: u32,
+    cursor_x: u32,
+    cursor_y: u32,
+    row_height: u32,
+    entries: HashMap<String, EmojiAtlasEntry>,
+}
+
+impl Next2EmojiAtlas {
+    fn new(device: &wgpu::Device) -> Self {
+        let color_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("next2 emoji color atlas"),
+            size: wgpu::Extent3d {
+                width: EMOJI_ATLAS_SIZE,
+                height: EMOJI_ATLAS_SIZE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let color_texture_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mask_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("next2 emoji mask atlas"),
+            size: wgpu::Extent3d {
+                width: EMOJI_ATLAS_SIZE,
+                height: EMOJI_ATLAS_SIZE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let mask_texture_view = mask_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("next2 emoji atlas sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        Self {
+            color_texture,
+            color_texture_view,
+            mask_texture,
+            mask_texture_view,
+            sampler,
+            width: EMOJI_ATLAS_SIZE,
+            height: EMOJI_ATLAS_SIZE,
+            cursor_x: 0,
+            cursor_y: 0,
+            row_height: 0,
+            entries: HashMap::new(),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.row_height = 0;
+        self.entries.clear();
+    }
+
+    fn entry_for(&self, id: &str) -> Option<&EmojiAtlasEntry> {
+        self.entries.get(id)
+    }
+
+    fn upload_glyphs(&mut self, queue: &wgpu::Queue, glyphs: &[EmojiRasterData]) {
+        let mut index = 0usize;
+        let mut restarted_after_clear = false;
+        while index < glyphs.len() {
+            let glyph = &glyphs[index];
+            if self.entries.contains_key(&glyph.id) {
+                index += 1;
+                continue;
+            }
+            let Some(cleared) = self.upload_one(queue, glyph) else {
+                index += 1;
+                continue;
+            };
+            if cleared && !restarted_after_clear {
+                restarted_after_clear = true;
+                index = 0;
+                continue;
+            }
+            index += 1;
+        }
+    }
+
+    fn upload_one(&mut self, queue: &wgpu::Queue, glyph: &EmojiRasterData) -> Option<bool> {
+        if glyph.width == 0 || glyph.height == 0 {
+            return None;
+        }
+        let color_pixels = sanitize_emoji_rgba(glyph.width, glyph.height, &glyph.rgba)?;
+        let mask_pixels = build_emoji_sdf_mask(glyph.width, glyph.height, &color_pixels);
+
+        let padded_w = glyph
+            .width
+            .saturating_add(ATLAS_GLYPH_PADDING.saturating_mul(2))
+            .max(1);
+        let padded_h = glyph
+            .height
+            .saturating_add(ATLAS_GLYPH_PADDING.saturating_mul(2))
+            .max(1);
+
+        if self.cursor_x + padded_w > self.width {
+            self.cursor_x = 0;
+            self.cursor_y = self.cursor_y.saturating_add(self.row_height);
+            self.row_height = 0;
+        }
+        let mut cleared = false;
+        if self.cursor_y + padded_h > self.height {
+            self.clear();
+            cleared = true;
+        }
+        if self.cursor_x + padded_w > self.width || self.cursor_y + padded_h > self.height {
+            return None;
+        }
+
+        let mut padded_color = vec![0u8; (padded_w * padded_h * 4) as usize];
+        let mut padded_mask = vec![0u8; (padded_w * padded_h) as usize];
+        let src_row_bytes = (glyph.width * 4) as usize;
+        let dst_row_bytes = (padded_w * 4) as usize;
+        let src_mask_row = glyph.width as usize;
+        let dst_mask_row = padded_w as usize;
+        let pad_bytes = (ATLAS_GLYPH_PADDING * 4) as usize;
+        let pad_mask = ATLAS_GLYPH_PADDING as usize;
+        for row in 0..glyph.height as usize {
+            let src_start = row * src_row_bytes;
+            let src_end = src_start + src_row_bytes;
+            let dst_start = (row + ATLAS_GLYPH_PADDING as usize) * dst_row_bytes + pad_bytes;
+            let dst_end = dst_start + src_row_bytes;
+            padded_color[dst_start..dst_end].copy_from_slice(&color_pixels[src_start..src_end]);
+
+            let src_m_start = row * src_mask_row;
+            let src_m_end = src_m_start + src_mask_row;
+            let dst_m_start = (row + ATLAS_GLYPH_PADDING as usize) * dst_mask_row + pad_mask;
+            let dst_m_end = dst_m_start + src_mask_row;
+            padded_mask[dst_m_start..dst_m_end]
+                .copy_from_slice(&mask_pixels[src_m_start..src_m_end]);
+        }
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.color_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: self.cursor_x,
+                    y: self.cursor_y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            &padded_color,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded_w * 4),
+                rows_per_image: Some(padded_h),
+            },
+            wgpu::Extent3d {
+                width: padded_w,
+                height: padded_h,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.mask_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: self.cursor_x,
+                    y: self.cursor_y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            &padded_mask,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded_w),
+                rows_per_image: Some(padded_h),
+            },
+            wgpu::Extent3d {
+                width: padded_w,
+                height: padded_h,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        let glyph_x = self.cursor_x + ATLAS_GLYPH_PADDING;
+        let glyph_y = self.cursor_y + ATLAS_GLYPH_PADDING;
+        let half_texel_u = 0.5 / self.width as f32;
+        let half_texel_v = 0.5 / self.height as f32;
+        let uv_min = [
+            glyph_x as f32 / self.width as f32 + half_texel_u,
+            glyph_y as f32 / self.height as f32 + half_texel_v,
+        ];
+        let uv_max = [
+            (glyph_x + glyph.width) as f32 / self.width as f32 - half_texel_u,
+            (glyph_y + glyph.height) as f32 / self.height as f32 - half_texel_v,
+        ];
+
+        let entry = EmojiAtlasEntry {
+            uv_min,
+            uv_max,
+            mask_uv_min: uv_min,
+            mask_uv_max: uv_max,
+            width: glyph.width,
+            height: glyph.height,
+            advance: glyph.advance.max(0.0),
+            offset_x: glyph.offset_x,
+            offset_y: glyph.offset_y,
+        };
+        self.entries.insert(glyph.id.clone(), entry);
+
+        self.cursor_x = self.cursor_x.saturating_add(padded_w);
+        self.row_height = self.row_height.max(padded_h);
+        Some(cleared)
+    }
 }
 
 struct Next2GlyphAtlas {
@@ -584,7 +857,11 @@ impl Next2GlyphAtlas {
         let px = quantized_size as f32;
         let mut ascent = (px * 0.82).max(1.0);
         for font in &self.fonts {
-            ascent = ascent.max(scale_metric_to_px(font.face.ascender() as f32, &font.face, px));
+            ascent = ascent.max(scale_metric_to_px(
+                font.face.ascender() as f32,
+                &font.face,
+                px,
+            ));
         }
 
         self.line_ascent_cache.insert(quantized_size, ascent);
@@ -606,7 +883,9 @@ impl Next2GlyphAtlas {
     }
 
     fn has_glyph(&self, ch: char) -> bool {
-        self.fonts.iter().any(|font| font.face.glyph_index(ch).is_some())
+        self.fonts
+            .iter()
+            .any(|font| font.face.glyph_index(ch).is_some())
     }
 
     fn resolve_char(&self, ch: char) -> char {
@@ -772,10 +1051,9 @@ fn load_font_chain() -> Result<Vec<FontFaceHandle>, String> {
     let primary_bytes = FONT_DATA.to_vec().into_boxed_slice();
     load_faces_from_owned_bytes(primary_bytes, &mut seen, &mut fonts)?;
 
-    for path in SYSTEM_FONT_FALLBACK_PATHS {
-        if let Ok(bytes) = fs::read(path) {
-            let _ = load_faces_from_owned_bytes(bytes.into_boxed_slice(), &mut seen, &mut fonts);
-        }
+    for bytes in NEXT2_FALLBACK_FONTS {
+        let boxed = (*bytes).to_vec().into_boxed_slice();
+        let _ = load_faces_from_owned_bytes(boxed, &mut seen, &mut fonts);
     }
 
     if fonts.is_empty() {
@@ -821,8 +1099,8 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
         .glyph_hor_advance(glyph_id)
         .map(|v| v as f32)
         .unwrap_or_else(|| face.units_per_em() as f32 * FALLBACK_GLYPH_ADVANCE_RATIO);
-    let advance = scale_metric_to_px(advance_units, face, px)
-        .max(px * FALLBACK_GLYPH_ADVANCE_RATIO);
+    let advance =
+        scale_metric_to_px(advance_units, face, px).max(px * FALLBACK_GLYPH_ADVANCE_RATIO);
 
     let width_units = (bbox.x_max - bbox.x_min).max(0) as f64;
     let height_units = (bbox.y_max - bbox.y_min).max(0) as f64;
@@ -901,7 +1179,6 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
     })
 }
 
-
 struct Next2Renderer {
     ctx: Arc<EngineDeviceContext>,
     #[cfg(target_os = "android")]
@@ -910,6 +1187,7 @@ struct Next2Renderer {
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: wgpu::BindGroup,
     atlas: Next2GlyphAtlas,
+    emoji_atlas: Next2EmojiAtlas,
     vertex_buffer: wgpu::Buffer,
     vertex_capacity_bytes: usize,
     vertices: Vec<GlyphVertex>,
@@ -997,8 +1275,36 @@ impl Next2Renderer {
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
                     ],
                 });
+
+        let emoji_atlas = Next2EmojiAtlas::new(ctx.device.as_ref());
 
         let atlas_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("next2 atlas bg"),
@@ -1011,6 +1317,18 @@ impl Next2Renderer {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&atlas.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&emoji_atlas.color_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&emoji_atlas.mask_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&emoji_atlas.sampler),
                 },
             ],
         });
@@ -1037,25 +1355,26 @@ impl Next2Renderer {
             Some("next2 offscreen texture"),
         );
 
-            Ok(Self {
-                ctx,
-                #[cfg(target_os = "android")]
-                surface_pipeline: None,
-                offscreen_pipeline,
-                atlas_bind_group_layout,
-                atlas_bind_group,
-                atlas,
+        Ok(Self {
+            ctx,
+            #[cfg(target_os = "android")]
+            surface_pipeline: None,
+            offscreen_pipeline,
+            atlas_bind_group_layout,
+            atlas_bind_group,
+            atlas,
+            emoji_atlas,
             vertex_buffer,
             vertex_capacity_bytes: vertex_capacity,
             vertices: Vec::new(),
             frame_items: Vec::new(),
-                clear_color: [0.0, 0.0, 0.0, 0.0],
-                width: width.max(1),
-                height: height.max(1),
-                offscreen_texture,
-                #[cfg(target_os = "android")]
-                surface_format: None,
-            })
+            clear_color: [0.0, 0.0, 0.0, 0.0],
+            width: width.max(1),
+            height: height.max(1),
+            offscreen_texture,
+            #[cfg(target_os = "android")]
+            surface_format: None,
+        })
     }
 
     fn resize(&mut self, width: u32, height: u32) -> bool {
@@ -1073,6 +1392,8 @@ impl Next2Renderer {
     fn reset_scene(&mut self) {
         self.frame_items.clear();
         self.vertices.clear();
+        self.atlas.clear();
+        self.emoji_atlas.clear();
     }
 
     fn update_frame(&mut self, input: RenderFrameInput) -> bool {
@@ -1080,6 +1401,12 @@ impl Next2Renderer {
             Ok(parsed) => parsed,
             Err(_) => return false,
         };
+
+        let emoji_rasters = decode_emoji_rasters(parsed.emoji_glyphs.as_deref().unwrap_or(&[]));
+        if !emoji_rasters.is_empty() {
+            self.emoji_atlas
+                .upload_glyphs(self.ctx.queue.as_ref(), &emoji_rasters);
+        }
 
         self.frame_items.clear();
         self.frame_items.reserve(parsed.items.len());
@@ -1094,9 +1421,10 @@ impl Next2Renderer {
         let font_size = input.font_size.max(1.0);
 
         for item in parsed.items {
+            let tokens =
+                normalize_tokens(item.tokens, item.text.as_str(), item.count_text.as_deref());
             self.frame_items.push(FrameItem {
-                text: item.text,
-                count_text: item.count_text,
+                tokens,
                 x: item.x,
                 y: item.y,
                 color_argb: item.color_argb,
@@ -1140,12 +1468,12 @@ impl Next2Renderer {
                 let view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
-                let mut encoder = self
-                    .ctx
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("next2 android surface render encoder"),
-                    });
+                let mut encoder =
+                    self.ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("next2 android surface render encoder"),
+                        });
                 if self.vertices.is_empty() {
                     let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("next2 android surface clear pass"),
@@ -1204,19 +1532,20 @@ impl Next2Renderer {
                 let bytes = bytemuck::cast_slice(self.vertices.as_slice());
                 self.ctx.queue.write_buffer(&self.vertex_buffer, 0, bytes);
 
-                let view = texture_target
-                    .render_texture()
-                    .create_view(&wgpu::TextureViewDescriptor {
-                        format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                        ..Default::default()
-                    });
+                let view =
+                    texture_target
+                        .render_texture()
+                        .create_view(&wgpu::TextureViewDescriptor {
+                            format: Some(wgpu::TextureFormat::Bgra8Unorm),
+                            ..Default::default()
+                        });
 
-                let mut encoder = self
-                    .ctx
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("next2 render encoder"),
-                    });
+                let mut encoder =
+                    self.ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("next2 render encoder"),
+                        });
 
                 {
                     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1410,89 +1739,161 @@ impl Next2Renderer {
         self.vertices.clear();
 
         for item in self.frame_items.clone() {
-            let mut text = item.text.clone();
-            if let Some(count_text) = &item.count_text {
-                text.push(' ');
-                text.push_str(count_text);
-            }
-
             let outline_px = resolve_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);
             let outline_color = stroke_color(fill_color);
-            let shadow_color = [0.0, 0.0, 0.0, shadow.opacity * item.opacity * SHADOW_ALPHA_SCALE];
+            let shadow_color = [
+                0.0,
+                0.0,
+                0.0,
+                shadow.opacity * item.opacity * SHADOW_ALPHA_SCALE,
+            ];
 
             let mut cursor_x = item.x as f32;
-            let quantized_size = item.font_size.round().clamp(8.0, 128.0) as u32;
+            let quantized_size = item.font_size.round().clamp(8.0, 256.0) as u32;
             let baseline_y = item.y as f32 + self.atlas.line_ascent(quantized_size);
+            let tokens = item.tokens.clone();
 
-            for ch in text.chars() {
-                let Some(entry) = self
-                    .atlas
-                    .entry_for(self.ctx.queue.as_ref(), ch, quantized_size)
-                    .cloned()
-                else {
-                    continue;
-                };
+            for token in tokens {
+                match token {
+                    FrameToken::Text(text) => {
+                        for ch in text.chars() {
+                            let Some(entry) = self
+                                .atlas
+                                .entry_for(self.ctx.queue.as_ref(), ch, quantized_size)
+                                .cloned()
+                            else {
+                                continue;
+                            };
 
-                if entry.width == 0 || entry.height == 0 {
-                    cursor_x += entry.advance;
-                    continue;
+                            if entry.width == 0 || entry.height == 0 {
+                                cursor_x += entry.advance;
+                                continue;
+                            }
+
+                            let glyph_left = cursor_x + entry.offset_x;
+                            let glyph_top = baseline_y + entry.offset_y;
+                            let glyph_right = glyph_left + entry.width as f32;
+                            let glyph_bottom = glyph_top + entry.height as f32;
+
+                            if shadow.opacity > 0.0 {
+                                self.push_quad(
+                                    glyph_left + shadow.offset_x,
+                                    glyph_top + shadow.offset_y,
+                                    glyph_right + shadow.offset_x,
+                                    glyph_bottom + shadow.offset_y,
+                                    entry.uv_min,
+                                    entry.uv_max,
+                                    entry.uv_min,
+                                    entry.uv_max,
+                                    shadow_color,
+                                    shadow_color,
+                                    [entry.spread, 0.0, GLYPH_MODE_TEXT, 0.0],
+                                );
+                            }
+
+                            self.push_quad(
+                                glyph_left,
+                                glyph_top,
+                                glyph_right,
+                                glyph_bottom,
+                                entry.uv_min,
+                                entry.uv_max,
+                                entry.uv_min,
+                                entry.uv_max,
+                                fill_color,
+                                outline_color,
+                                [entry.spread, outline_px, GLYPH_MODE_TEXT, 0.0],
+                            );
+
+                            cursor_x += entry.advance;
+                        }
+                    }
+                    FrameToken::Emoji(id) => {
+                        let Some(entry) = self.emoji_atlas.entry_for(&id).cloned() else {
+                            cursor_x += quantized_size as f32;
+                            continue;
+                        };
+
+                        let side_bearing =
+                            (quantized_size as f32 * EMOJI_SIDE_BEARING_RATIO).clamp(1.0, 5.0);
+                        let emoji_outline_px = outline_px * EMOJI_OUTLINE_SCALE;
+                        let glyph_left = cursor_x + side_bearing + entry.offset_x;
+                        let glyph_top = baseline_y + entry.offset_y;
+                        let glyph_right = glyph_left + entry.width as f32;
+                        let glyph_bottom = glyph_top + entry.height as f32;
+
+                        if shadow.opacity > 0.0 {
+                            self.push_quad(
+                                glyph_left + shadow.offset_x,
+                                glyph_top + shadow.offset_y,
+                                glyph_right + shadow.offset_x,
+                                glyph_bottom + shadow.offset_y,
+                                entry.uv_min,
+                                entry.uv_max,
+                                entry.mask_uv_min,
+                                entry.mask_uv_max,
+                                shadow_color,
+                                shadow_color,
+                                [EMOJI_SDF_SPREAD, 0.0, GLYPH_MODE_EMOJI, 1.0],
+                            );
+                        }
+
+                        self.push_quad(
+                            glyph_left,
+                            glyph_top,
+                            glyph_right,
+                            glyph_bottom,
+                            entry.uv_min,
+                            entry.uv_max,
+                            entry.mask_uv_min,
+                            entry.mask_uv_max,
+                            [1.0, 1.0, 1.0, item.opacity],
+                            outline_color,
+                            [EMOJI_SDF_SPREAD, emoji_outline_px, GLYPH_MODE_EMOJI, 0.0],
+                        );
+
+                        cursor_x += entry.advance.max(1.0) + side_bearing * 2.0;
+                    }
                 }
-
-                let glyph_left = cursor_x + entry.offset_x;
-                let glyph_top = baseline_y + entry.offset_y;
-                let glyph_right = glyph_left + entry.width as f32;
-                let glyph_bottom = glyph_top + entry.height as f32;
-
-                if shadow.opacity > 0.0 {
-                    self.push_quad(
-                        glyph_left + shadow.offset_x,
-                        glyph_top + shadow.offset_y,
-                        glyph_right + shadow.offset_x,
-                        glyph_bottom + shadow.offset_y,
-                        entry.uv_min,
-                        entry.uv_max,
-                        shadow_color,
-                        shadow_color,
-                        [entry.spread, 0.0, self.width as f32, self.height as f32],
-                    );
-                }
-
-                self.push_quad(
-                    glyph_left,
-                    glyph_top,
-                    glyph_right,
-                    glyph_bottom,
-                    entry.uv_min,
-                    entry.uv_max,
-                    fill_color,
-                    outline_color,
-                    [entry.spread, outline_px, self.width as f32, self.height as f32],
-                );
-
-                cursor_x += entry.advance;
             }
         }
 
         if !self.frame_items.is_empty() {
-            self.atlas_bind_group =
-                self.ctx
-                    .device
-                    .create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("next2 atlas bg"),
-                        layout: &self.atlas_bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(&self.atlas.sampler),
-                            },
-                        ],
-                    });
+            self.atlas_bind_group = self
+                .ctx
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("next2 atlas bg"),
+                    layout: &self.atlas_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.atlas.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(
+                                &self.emoji_atlas.color_texture_view,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::TextureView(
+                                &self.emoji_atlas.mask_texture_view,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::Sampler(&self.emoji_atlas.sampler),
+                        },
+                    ],
+                });
         }
     }
 
@@ -1505,6 +1906,8 @@ impl Next2Renderer {
         bottom: f32,
         uv_min: [f32; 2],
         uv_max: [f32; 2],
+        uv_aux_min: [f32; 2],
+        uv_aux_max: [f32; 2],
         color: [f32; 4],
         outline_color: [f32; 4],
         params: [f32; 4],
@@ -1518,10 +1921,15 @@ impl Next2Renderer {
         let uv1 = [uv_max[0], uv_min[1]];
         let uv2 = [uv_max[0], uv_max[1]];
         let uv3 = [uv_min[0], uv_max[1]];
+        let uv_aux0 = [uv_aux_min[0], uv_aux_min[1]];
+        let uv_aux1 = [uv_aux_max[0], uv_aux_min[1]];
+        let uv_aux2 = [uv_aux_max[0], uv_aux_max[1]];
+        let uv_aux3 = [uv_aux_min[0], uv_aux_max[1]];
 
         let v0 = GlyphVertex {
             position: p0,
             uv: uv0,
+            uv_aux: uv_aux0,
             color,
             outline_color,
             params,
@@ -1529,6 +1937,7 @@ impl Next2Renderer {
         let v1 = GlyphVertex {
             position: p1,
             uv: uv1,
+            uv_aux: uv_aux1,
             color,
             outline_color,
             params,
@@ -1536,6 +1945,7 @@ impl Next2Renderer {
         let v2 = GlyphVertex {
             position: p2,
             uv: uv2,
+            uv_aux: uv_aux2,
             color,
             outline_color,
             params,
@@ -1543,6 +1953,7 @@ impl Next2Renderer {
         let v3 = GlyphVertex {
             position: p3,
             uv: uv3,
+            uv_aux: uv_aux3,
             color,
             outline_color,
             params,
@@ -1645,9 +2056,170 @@ fn stroke_color(fill: [f32; 4]) -> [f32; 4] {
     }
 }
 
+fn sanitize_emoji_rgba(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
+    let expected = width.checked_mul(height)?.checked_mul(4)? as usize;
+    if rgba.len() != expected {
+        return None;
+    }
+    let mut out = vec![0u8; expected];
+    for i in (0..expected).step_by(4) {
+        let a = rgba[i + 3] as f32 / 255.0;
+        if a <= 0.0 {
+            continue;
+        }
+        let inv = (1.0 / a).min(64.0);
+        out[i] = (rgba[i] as f32 * inv).clamp(0.0, 255.0) as u8;
+        out[i + 1] = (rgba[i + 1] as f32 * inv).clamp(0.0, 255.0) as u8;
+        out[i + 2] = (rgba[i + 2] as f32 * inv).clamp(0.0, 255.0) as u8;
+        out[i + 3] = rgba[i + 3];
+    }
+    Some(out)
+}
+
+fn build_emoji_sdf_mask(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
+    let px_count = (width as usize).saturating_mul(height as usize);
+    let mut alpha = vec![0.0f32; px_count];
+    for i in 0..px_count {
+        alpha[i] = rgba[i * 4 + 3] as f32 / 255.0;
+    }
+
+    let mut inside = vec![f32::INFINITY; px_count];
+    let mut outside = vec![f32::INFINITY; px_count];
+    for i in 0..px_count {
+        if alpha[i] >= 0.5 {
+            inside[i] = 0.0;
+        } else {
+            outside[i] = 0.0;
+        }
+    }
+
+    distance_transform_2d(&mut inside, width as usize, height as usize);
+    distance_transform_2d(&mut outside, width as usize, height as usize);
+
+    let mut out = vec![0u8; px_count];
+    let spread = EMOJI_SDF_SPREAD.max(1.0);
+    for i in 0..px_count {
+        let dist = outside[i].sqrt() - inside[i].sqrt();
+        let norm = 0.5 + dist / (2.0 * spread);
+        out[i] = (norm.clamp(0.0, 1.0) * 255.0).round() as u8;
+    }
+    out
+}
+
+fn distance_transform_2d(field: &mut [f32], width: usize, height: usize) {
+    let mut row = vec![0.0f32; width];
+    for y in 0..height {
+        let start = y * width;
+        row.copy_from_slice(&field[start..start + width]);
+        distance_transform_1d(&mut row, width);
+        field[start..start + width].copy_from_slice(&row);
+    }
+
+    let mut col = vec![0.0f32; height];
+    for x in 0..width {
+        for y in 0..height {
+            col[y] = field[y * width + x];
+        }
+        distance_transform_1d(&mut col, height);
+        for y in 0..height {
+            field[y * width + x] = col[y];
+        }
+    }
+}
+
+fn distance_transform_1d(f: &mut [f32], n: usize) {
+    if n == 0 {
+        return;
+    }
+
+    let sites: Vec<usize> = (0..n).filter(|&i| f[i].is_finite()).collect();
+    if sites.is_empty() {
+        f.fill(f32::INFINITY);
+        return;
+    }
+
+    let mut v = vec![0usize; sites.len()];
+    let mut z = vec![0.0f32; sites.len() + 1];
+    let mut k = 0usize;
+    v[0] = sites[0];
+    z[0] = f32::NEG_INFINITY;
+    z[1] = f32::INFINITY;
+
+    for &q in sites.iter().skip(1) {
+        let mut s = intersection_1d(f, v[k], q);
+        while k > 0 && s <= z[k] {
+            k -= 1;
+            s = intersection_1d(f, v[k], q);
+        }
+        if s <= z[k] && k == 0 {
+            v[0] = q;
+            z[1] = f32::INFINITY;
+            continue;
+        }
+        k += 1;
+        v[k] = q;
+        z[k] = s;
+        z[k + 1] = f32::INFINITY;
+    }
+
+    let mut g = vec![0.0f32; n];
+    let mut kk = 0usize;
+    let last = k;
+    for q in 0..n {
+        while kk < last && z[kk + 1] < q as f32 {
+            kk += 1;
+        }
+        let dx = q as f32 - v[kk] as f32;
+        g[q] = dx * dx + f[v[kk]];
+    }
+    f.copy_from_slice(&g);
+}
+
+fn intersection_1d(f: &[f32], i: usize, j: usize) -> f32 {
+    let fi = f[i];
+    let fj = f[j];
+    if !fi.is_finite() && !fj.is_finite() {
+        return f32::INFINITY;
+    }
+    if !fi.is_finite() {
+        return f32::NEG_INFINITY;
+    }
+    if !fj.is_finite() {
+        return f32::INFINITY;
+    }
+    ((fj + (j * j) as f32) - (fi + (i * i) as f32)) / (2.0 * (j as f32 - i as f32))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn emoji_sdf_mask_keeps_inside_above_midpoint() {
+        let width = 5;
+        let height = 5;
+        let mut rgba = vec![0u8; width * height * 4];
+        for y in 1..4 {
+            for x in 1..4 {
+                rgba[(y * width + x) * 4 + 3] = 255;
+            }
+        }
+
+        let mask = build_emoji_sdf_mask(width as u32, height as u32, &rgba);
+
+        let center = mask[2 * width + 2];
+        let corner = mask[0];
+
+        assert!(center > 128, "center={center} corner={corner}");
+        assert!(corner < 128, "center={center} corner={corner}");
+    }
+}
+
 #[derive(Deserialize)]
 struct FramePayload {
     items: Vec<FrameItemPayload>,
+    #[serde(default)]
+    emoji_glyphs: Option<Vec<FrameEmojiGlyphPayload>>,
 }
 
 #[derive(Deserialize)]
@@ -1660,6 +2232,28 @@ struct FrameItemPayload {
     color_argb: i32,
     #[serde(default = "default_font_size_multiplier")]
     font_size_multiplier: f64,
+    #[serde(default)]
+    tokens: Option<Vec<FrameTokenPayload>>,
+}
+
+#[derive(Deserialize)]
+struct FrameEmojiGlyphPayload {
+    id: String,
+    w: u32,
+    h: u32,
+    adv: f64,
+    ox: f64,
+    oy: f64,
+    rgba_b64: String,
+}
+
+#[derive(Deserialize, Clone)]
+struct FrameTokenPayload {
+    k: String,
+    #[serde(default)]
+    t: Option<String>,
+    #[serde(default)]
+    id: Option<String>,
 }
 
 fn default_font_size_multiplier() -> f64 {
@@ -1668,8 +2262,7 @@ fn default_font_size_multiplier() -> f64 {
 
 #[derive(Clone)]
 struct FrameItem {
-    text: String,
-    count_text: Option<String>,
+    tokens: Vec<FrameToken>,
     x: f64,
     y: f64,
     color_argb: i32,
@@ -1679,31 +2272,111 @@ struct FrameItem {
     opacity: f32,
 }
 
+#[derive(Clone)]
+enum FrameToken {
+    Text(String),
+    Emoji(String),
+}
+
+fn normalize_tokens(
+    tokens: Option<Vec<FrameTokenPayload>>,
+    text: &str,
+    count_text: Option<&str>,
+) -> Vec<FrameToken> {
+    if let Some(raw_tokens) = tokens {
+        let mut out = Vec::with_capacity(raw_tokens.len());
+        for token in raw_tokens {
+            match token.k.as_str() {
+                "e" => {
+                    if let Some(id) = token.id {
+                        if !id.is_empty() {
+                            out.push(FrameToken::Emoji(id));
+                        }
+                    }
+                }
+                "t" => {
+                    if let Some(t) = token.t {
+                        if !t.is_empty() {
+                            out.push(FrameToken::Text(t));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if !out.is_empty() {
+            return out;
+        }
+    }
+
+    let mut fallback_text = text.to_string();
+    if let Some(count_text) = count_text {
+        if !count_text.is_empty() {
+            fallback_text.push(' ');
+            fallback_text.push_str(count_text);
+        }
+    }
+    if fallback_text.is_empty() {
+        Vec::new()
+    } else {
+        vec![FrameToken::Text(fallback_text)]
+    }
+}
+
+fn decode_emoji_rasters(payloads: &[FrameEmojiGlyphPayload]) -> Vec<EmojiRasterData> {
+    let mut out = Vec::with_capacity(payloads.len());
+    for item in payloads {
+        if item.id.is_empty() || item.w == 0 || item.h == 0 || item.rgba_b64.is_empty() {
+            continue;
+        }
+        let Ok(rgba) = base64::engine::general_purpose::STANDARD.decode(item.rgba_b64.as_bytes())
+        else {
+            continue;
+        };
+        out.push(EmojiRasterData {
+            id: item.id.clone(),
+            width: item.w,
+            height: item.h,
+            advance: item.adv as f32,
+            offset_x: item.ox as f32,
+            offset_y: item.oy as f32,
+            rgba,
+        });
+    }
+    out
+}
+
 const NEXT2_WGSL: &str = r#"
 struct VsIn {
     @location(0) pos: vec2<f32>,
     @location(1) uv: vec2<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) outline_color: vec4<f32>,
-    @location(4) params: vec4<f32>,
+    @location(2) uv_aux: vec2<f32>,
+    @location(3) color: vec4<f32>,
+    @location(4) outline_color: vec4<f32>,
+    @location(5) params: vec4<f32>,
 };
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    @location(1) color: vec4<f32>,
-    @location(2) outline_color: vec4<f32>,
-    @location(3) params: vec4<f32>,
+    @location(1) uv_aux: vec2<f32>,
+    @location(2) color: vec4<f32>,
+    @location(3) outline_color: vec4<f32>,
+    @location(4) params: vec4<f32>,
 };
 
 @group(0) @binding(0) var atlas_tex: texture_2d<f32>;
 @group(0) @binding(1) var atlas_sampler: sampler;
+@group(0) @binding(2) var emoji_tex: texture_2d<f32>;
+@group(0) @binding(3) var emoji_mask_tex: texture_2d<f32>;
+@group(0) @binding(4) var emoji_sampler: sampler;
 
 @vertex
 fn vs_main(v: VsIn) -> VsOut {
     var o: VsOut;
     o.pos = vec4<f32>(v.pos, 0.0, 1.0);
     o.uv = v.uv;
+    o.uv_aux = v.uv_aux;
     o.color = v.color;
     o.outline_color = v.outline_color;
     o.params = v.params;
@@ -1716,11 +2389,40 @@ fn median3(r: f32, g: f32, b: f32) -> f32 {
 
 @fragment
 fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
+    let mode = v.params.z;
+    let is_emoji = mode > 0.5;
+    let spread = max(v.params.x, 0.001);
+    let outline_px = max(v.params.y, 0.0);
+
+    if (is_emoji) {
+        let color_texel = textureSample(emoji_tex, emoji_sampler, v.uv);
+        let sdf_texel = textureSample(emoji_mask_tex, emoji_sampler, v.uv_aux).r;
+        let d = (sdf_texel - 0.5) * spread;
+        let px = max(fwidth(d), 0.0001);
+        let fill_coverage = smoothstep(-px, px, d);
+
+        var outline_coverage = 0.0;
+        if (outline_px > 0.0) {
+            let outer_alpha = smoothstep(
+                -outline_px - px,
+                -outline_px + px,
+                d,
+            );
+            outline_coverage = max(outer_alpha - fill_coverage, 0.0);
+        }
+
+        let fill_alpha = fill_coverage * color_texel.a * v.color.a;
+        let outline_alpha = outline_coverage * v.outline_color.a;
+        let fill_rgb = color_texel.rgb * fill_alpha;
+        let outline_rgb = v.outline_color.rgb * outline_alpha;
+        let out_rgb = fill_rgb + outline_rgb * (1.0 - fill_alpha);
+        let out_alpha = fill_alpha + outline_alpha * (1.0 - fill_alpha);
+        return vec4<f32>(out_rgb, out_alpha);
+    }
+
     let texel = textureSample(atlas_tex, atlas_sampler, v.uv);
     let dist_msdf = median3(texel.r, texel.g, texel.b);
     let dist_sdf = texel.a;
-    let spread = max(v.params.x, 0.001);
-    let outline_px = max(v.params.y, 0.0);
 
     let d_fill = (dist_msdf - 0.5) * spread;
     let px_fill = max(fwidth(d_fill), 0.0001);

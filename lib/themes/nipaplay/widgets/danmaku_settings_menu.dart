@@ -718,15 +718,25 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                     const SizedBox(height: 12),
                     if (_isNext2Kernel) ...[
-                      SettingsSlider(
-                        value: videoState.next2DanmakuOutlineWidth,
-                        onChanged: videoState.setNext2DanmakuOutlineWidth,
-                        label: '描边粗细',
-                        displayTextBuilder: (v) =>
-                            v <= 0 ? '关闭' : '${v.toStringAsFixed(2)}x',
-                        min: 0.0,
-                        max: 4.0,
-                        step: 0.05,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '描边',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                          FluentSettingsSwitch(
+                            value: videoState.next2DanmakuOutlineWidth > 0.0,
+                            onChanged: (value) {
+                              videoState.setNext2DanmakuOutlineWidth(
+                                value ? 1.0 : 0.0,
+                              );
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                     ] else ...[
@@ -790,7 +800,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                     const SizedBox(height: 4),
                     const SettingsHintText(
-                      'Next2 使用描边粗细滑块；阴影可单独切换。',
+                      'Next2 使用描边开关；阴影可单独切换。',
                     ),
                   ],
                 ),

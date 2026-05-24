@@ -551,8 +551,7 @@ fn scroll_can_add_to_track(
             continue;
         }
 
-        let existing_x =
-            width - (elapsed / scroll_duration_seconds) * (width + existing.width);
+        let existing_x = width - (elapsed / scroll_duration_seconds) * (width + existing.width);
         let existing_end = existing_x + existing.width;
 
         if width - existing_end < 0.0 {
