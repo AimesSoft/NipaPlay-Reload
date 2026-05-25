@@ -5,11 +5,12 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/texture_registrar.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -33,24 +34,18 @@ class RustLibNipaplayPlugin : public flutter::Plugin {
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
-  void EnsureTickTimerLocked(HWND hwnd);
-  void StopTickTimerLocked(HWND hwnd);
+  void EnsureTickThreadRunning();
+  void StopTickThread();
   void DisposeSurface(const std::string& surface_id);
   void Tick();
-  static std::optional<LRESULT> WindowProc(
-      RustLibNipaplayPlugin* self,
-      HWND hwnd,
-      UINT message,
-      WPARAM wparam,
-      LPARAM lparam);
 
   flutter::PluginRegistrarWindows* registrar_;
   flutter::TextureRegistrar* texture_registrar_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unordered_map<std::string, std::unique_ptr<SurfaceState>> surfaces_;
   std::mutex mutex_;
-  int window_proc_delegate_id_ = -1;
-  bool tick_timer_active_ = false;
+  std::thread tick_thread_;
+  std::atomic<bool> tick_running_{false};
 };
 
 }  // namespace rust_lib_nipaplay

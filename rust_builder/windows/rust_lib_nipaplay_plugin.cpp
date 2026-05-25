@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include "rust_lib_nipaplay_plugin.h"
 
 #include <flutter/plugin_registrar_windows.h>
@@ -7,6 +8,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <mutex>
 
 extern "C" {
 uint64_t next2_engine_create(uint32_t width, uint32_t height);
@@ -36,7 +38,6 @@ namespace {
 constexpr char kChannelName[] = "nipaplay/next2_texture";
 constexpr int kMaxDimension = 16384;
 constexpr int kFallbackSize = 512;
-constexpr UINT_PTR kTickTimerId = 0x4E32544Bu;  // "N2TK"
 constexpr UINT kTickIntervalMs = 16;  // ~60Hz
 
 std::optional<int64_t> ToInt64(const flutter::EncodableValue& value) {
@@ -122,6 +123,17 @@ uint8_t ReadU8(const flutter::EncodableMap& args, const char* key, uint8_t fallb
   return static_cast<uint8_t>(std::clamp<int64_t>(*v, 0, 255));
 }
 
+std::string ReadString(const flutter::EncodableMap& args, const char* key) {
+  const auto it = args.find(flutter::EncodableValue(key));
+  if (it == args.end()) {
+    return "";
+  }
+  if (const auto* s = std::get_if<std::string>(&it->second)) {
+    return *s;
+  }
+  return "";
+}
+
 std::string ReadSurfaceId(const flutter::EncodableMap& args) {
   const auto it = args.find(flutter::EncodableValue("surfaceId"));
   if (it == args.end()) {
@@ -183,24 +195,10 @@ RustLibNipaplayPlugin::RustLibNipaplayPlugin(
   channel_->SetMethodCallHandler([this](const auto& call, auto result) {
     HandleMethodCall(call, std::move(result));
   });
-
-  window_proc_delegate_id_ = registrar_->RegisterTopLevelWindowProcDelegate(
-      [this](HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
-          -> std::optional<LRESULT> {
-        return WindowProc(this, hwnd, message, wparam, lparam);
-      });
 }
 
 RustLibNipaplayPlugin::~RustLibNipaplayPlugin() {
-  HWND hwnd = registrar_->GetView() ? registrar_->GetView()->GetNativeWindow() : nullptr;
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    StopTickTimerLocked(hwnd);
-  }
-
-  if (window_proc_delegate_id_ >= 0) {
-    registrar_->UnregisterTopLevelWindowProcDelegate(window_proc_delegate_id_);
-  }
+  StopTickThread();
 
   std::vector<uint64_t> handles;
   std::vector<int64_t> texture_ids;
@@ -243,7 +241,6 @@ void RustLibNipaplayPlugin::HandleMethodCall(
         ReadClampedInt(*args, "width", kFallbackSize, 1, kMaxDimension));
     const uint32_t height = static_cast<uint32_t>(
         ReadClampedInt(*args, "height", kFallbackSize, 1, kMaxDimension));
-    HWND hwnd = registrar_->GetView() ? registrar_->GetView()->GetNativeWindow() : nullptr;
 
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = surfaces_.find(surface_id);
@@ -306,7 +303,7 @@ void RustLibNipaplayPlugin::HandleMethodCall(
       is_new_engine = true;
     }
 
-    EnsureTickTimerLocked(hwnd);
+    EnsureTickThreadRunning();
 
     flutter::EncodableMap response;
     response[flutter::EncodableValue("textureId")] =
@@ -373,7 +370,6 @@ void RustLibNipaplayPlugin::HandleMethodCall(
 
 void RustLibNipaplayPlugin::DisposeSurface(const std::string& surface_id) {
   std::unique_ptr<SurfaceState> removed;
-  HWND hwnd = registrar_->GetView() ? registrar_->GetView()->GetNativeWindow() : nullptr;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = surfaces_.find(surface_id);
@@ -383,7 +379,7 @@ void RustLibNipaplayPlugin::DisposeSurface(const std::string& surface_id) {
     removed = std::move(it->second);
     surfaces_.erase(it);
     if (surfaces_.empty()) {
-      StopTickTimerLocked(hwnd);
+      StopTickThread();
     }
   }
   if (removed->texture_id >= 0) {
@@ -419,36 +415,30 @@ void RustLibNipaplayPlugin::Tick() {
   }
 }
 
-void RustLibNipaplayPlugin::EnsureTickTimerLocked(HWND hwnd) {
-  if (tick_timer_active_ || hwnd == nullptr) {
+void RustLibNipaplayPlugin::EnsureTickThreadRunning() {
+  if (tick_running_.load()) {
     return;
   }
-  if (::SetTimer(hwnd, kTickTimerId, kTickIntervalMs, nullptr) != 0) {
-    tick_timer_active_ = true;
-  }
+  tick_running_.store(true);
+  tick_thread_ = std::thread([this]() {
+    while (tick_running_.load()) {
+      try {
+        Tick();
+      } catch (...) {
+      }
+      ::Sleep(kTickIntervalMs);
+    }
+  });
 }
 
-void RustLibNipaplayPlugin::StopTickTimerLocked(HWND hwnd) {
-  if (!tick_timer_active_) {
+void RustLibNipaplayPlugin::StopTickThread() {
+  if (!tick_running_.load()) {
     return;
   }
-  if (hwnd != nullptr) {
-    ::KillTimer(hwnd, kTickTimerId);
+  tick_running_.store(false);
+  if (tick_thread_.joinable()) {
+    tick_thread_.join();
   }
-  tick_timer_active_ = false;
-}
-
-std::optional<LRESULT> RustLibNipaplayPlugin::WindowProc(
-    RustLibNipaplayPlugin* self,
-    HWND hwnd,
-    UINT message,
-    WPARAM wparam,
-    LPARAM lparam) {
-  if (message == WM_TIMER && wparam == kTickTimerId) {
-    self->Tick();
-    return 0;
-  }
-  return std::nullopt;
 }
 
 }  // namespace rust_lib_nipaplay
