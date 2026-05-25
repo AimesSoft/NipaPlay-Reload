@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
 
 const MERGE_WINDOW_SECONDS: f64 = 45.0;
 const TRACK_GAP_RATIO: f64 = 0.25;
@@ -8,6 +10,7 @@ pub const NEXT2_TYPE_SCROLL: i32 = 0;
 pub const NEXT2_TYPE_TOP: i32 = 1;
 pub const NEXT2_TYPE_BOTTOM: i32 = 2;
 
+#[derive(Clone)]
 pub struct RustNext2DanmakuItem {
     pub time_seconds: f64,
     pub text: String,
@@ -16,6 +19,7 @@ pub struct RustNext2DanmakuItem {
     pub is_me: bool,
 }
 
+#[derive(Clone)]
 pub struct RustNext2PrepareRequest {
     pub items: Vec<RustNext2DanmakuItem>,
     pub width: f64,
@@ -29,6 +33,7 @@ pub struct RustNext2PrepareRequest {
     pub custom_font_file_path: String,
 }
 
+#[derive(Clone)]
 pub struct RustNext2PreparedLayout {
     pub width: f64,
     pub height: f64,
@@ -37,8 +42,10 @@ pub struct RustNext2PreparedLayout {
     pub items: Vec<RustNext2PreparedItem>,
     pub item_times: Vec<f64>,
     pub track_count: i32,
+    pub cache_key: u64,
 }
 
+#[derive(Clone)]
 pub struct RustNext2PreparedItem {
     pub time_seconds: f64,
     pub text: String,
@@ -53,15 +60,18 @@ pub struct RustNext2PreparedItem {
     pub scroll_speed: f64,
 }
 
+#[derive(Clone)]
 pub struct RustNext2FrameRequest {
     pub layout: RustNext2PreparedLayout,
     pub current_time_seconds: f64,
 }
 
+#[derive(Clone)]
 pub struct RustNext2FrameLayout {
     pub items: Vec<RustNext2FrameItem>,
 }
 
+#[derive(Clone)]
 pub struct RustNext2FrameItem {
     pub time_seconds: f64,
     pub text: String,
@@ -258,6 +268,15 @@ pub fn next2_prepare_layout(
         });
     }
 
+    let cache_key = calc_layout_cache_key(
+        width,
+        height,
+        scroll_duration_seconds,
+        static_duration_seconds,
+        track_count,
+        &prepared_items,
+    );
+
     Ok(RustNext2PreparedLayout {
         width,
         height,
@@ -266,21 +285,29 @@ pub fn next2_prepare_layout(
         items: prepared_items,
         item_times,
         track_count,
+        cache_key,
     })
 }
 
 pub fn next2_layout_frame(request: RustNext2FrameRequest) -> RustNext2FrameLayout {
-    let layout = request.layout;
-    if layout.items.is_empty() || layout.width <= 0.0 || layout.height <= 0.0 {
-        return RustNext2FrameLayout { items: Vec::new() };
+    let cache = frame_cache();
+    if let Ok(mut guard) = cache.lock() {
+        let (result, _) = next2_layout_frame_with_cache(request, &mut guard);
+        return result;
     }
+    build_next2_frame(&request.layout, request.current_time_seconds)
+}
 
+fn build_next2_frame(
+    layout: &RustNext2PreparedLayout,
+    current_time_seconds: f64,
+) -> RustNext2FrameLayout {
     let max_duration = layout
         .scroll_duration_seconds
         .max(layout.static_duration_seconds);
-    let window_start = request.current_time_seconds - max_duration;
+    let window_start = current_time_seconds - max_duration;
     let left = lower_bound(&layout.item_times, window_start);
-    let right = upper_bound(&layout.item_times, request.current_time_seconds);
+    let right = upper_bound(&layout.item_times, current_time_seconds);
 
     let mut out = Vec::with_capacity(right.saturating_sub(left));
 
@@ -289,7 +316,7 @@ pub fn next2_layout_frame(request: RustNext2FrameRequest) -> RustNext2FrameLayou
         if item.track_index < 0 {
             continue;
         }
-        let elapsed = request.current_time_seconds - item.time_seconds;
+        let elapsed = current_time_seconds - item.time_seconds;
         if elapsed < 0.0 {
             continue;
         }
@@ -335,7 +362,8 @@ pub fn next2_layout_frame(request: RustNext2FrameRequest) -> RustNext2FrameLayou
         }
     }
 
-    RustNext2FrameLayout { items: out }
+    let result = RustNext2FrameLayout { items: out };
+    result
 }
 
 #[derive(Clone)]
@@ -733,6 +761,120 @@ fn simple_text_hash(value: &str) -> u64 {
     hash
 }
 
+struct FrameCacheEntry {
+    value: RustNext2FrameLayout,
+    last_used_tick: u64,
+}
+
+struct FrameCache {
+    entries: HashMap<u64, FrameCacheEntry>,
+    use_tick: u64,
+}
+
+impl FrameCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            use_tick: 0,
+        }
+    }
+
+    fn get(&mut self, key: u64) -> Option<RustNext2FrameLayout> {
+        let next_tick = self.use_tick.wrapping_add(1);
+        self.use_tick = next_tick;
+        let entry = self.entries.get_mut(&key)?;
+        entry.last_used_tick = next_tick;
+        Some(entry.value.clone())
+    }
+
+    fn insert(&mut self, key: u64, value: RustNext2FrameLayout) {
+        let next_tick = self.use_tick.wrapping_add(1);
+        self.use_tick = next_tick;
+        self.entries.insert(
+            key,
+            FrameCacheEntry {
+                value,
+                last_used_tick: next_tick,
+            },
+        );
+        while self.entries.len() > FRAME_CACHE_CAPACITY {
+            let Some((&victim, _)) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used_tick)
+            else {
+                break;
+            };
+            self.entries.remove(&victim);
+        }
+    }
+}
+
+static FRAME_CACHE: OnceLock<Mutex<FrameCache>> = OnceLock::new();
+
+fn frame_cache() -> &'static Mutex<FrameCache> {
+    FRAME_CACHE.get_or_init(|| Mutex::new(FrameCache::new()))
+}
+
+const FRAME_CACHE_CAPACITY: usize = 256;
+
+fn calc_layout_cache_key(
+    width: f64,
+    height: f64,
+    scroll_duration_seconds: f64,
+    static_duration_seconds: f64,
+    track_count: i32,
+    items: &[RustNext2PreparedItem],
+) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    width.to_bits().hash(&mut hasher);
+    height.to_bits().hash(&mut hasher);
+    scroll_duration_seconds.to_bits().hash(&mut hasher);
+    static_duration_seconds.to_bits().hash(&mut hasher);
+    track_count.hash(&mut hasher);
+    for item in items {
+        item.time_seconds.to_bits().hash(&mut hasher);
+        item.text.hash(&mut hasher);
+        item.type_code.hash(&mut hasher);
+        item.color_argb.hash(&mut hasher);
+        item.is_me.hash(&mut hasher);
+        item.font_size_multiplier.to_bits().hash(&mut hasher);
+        item.count_text.hash(&mut hasher);
+        item.track_index.hash(&mut hasher);
+        item.y_position.to_bits().hash(&mut hasher);
+        item.width.to_bits().hash(&mut hasher);
+        item.scroll_speed.to_bits().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn calc_frame_cache_key(layout: &RustNext2PreparedLayout, current_time_seconds: f64) -> u64 {
+    let quantized_tick = (current_time_seconds * 60.0).round() as i64;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    layout.cache_key.hash(&mut hasher);
+    quantized_tick.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn next2_layout_frame_with_cache(
+    request: RustNext2FrameRequest,
+    cache: &mut FrameCache,
+) -> (RustNext2FrameLayout, bool) {
+    let layout = request.layout;
+    if layout.items.is_empty() || layout.width <= 0.0 || layout.height <= 0.0 {
+        return (RustNext2FrameLayout { items: Vec::new() }, false);
+    }
+
+    let frame_key = calc_frame_cache_key(&layout, request.current_time_seconds);
+    if let Some(cached) = cache.get(frame_key) {
+        return (cached, true);
+    }
+
+    let result = build_next2_frame(&layout, request.current_time_seconds);
+    cache.insert(frame_key, result.clone());
+    (result, false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -761,5 +903,80 @@ mod tests {
         assert_eq!(merged[0].count_text.as_deref(), Some("x2"));
         assert_eq!(merged[1].time_seconds, 60.0);
         assert_eq!(merged[1].count_text.as_deref(), Some("x2"));
+    }
+
+    #[test]
+    fn frame_cache_hits_inside_same_quantized_tick() {
+        let mut cache = FrameCache::new();
+
+        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
+            items: vec![mk_item(0.0, "hello"), mk_item(0.2, "world")],
+            width: 1280.0,
+            height: 720.0,
+            font_size: 24.0,
+            display_area: 1.0,
+            scroll_duration_seconds: 10.0,
+            allow_stacking: false,
+            merge_danmaku: false,
+            custom_font_family: String::new(),
+            custom_font_file_path: String::new(),
+        })
+        .expect("prepare layout should succeed");
+
+        let (first, hit1) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared.clone(),
+                current_time_seconds: 0.3001,
+            },
+            &mut cache,
+        );
+        let (second, hit2) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared,
+                current_time_seconds: 0.3002,
+            },
+            &mut cache,
+        );
+
+        assert_eq!(first.items.len(), second.items.len());
+        assert!(!hit1);
+        assert!(hit2);
+    }
+
+    #[test]
+    fn frame_cache_misses_when_quantized_tick_changes() {
+        let mut cache = FrameCache::new();
+
+        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
+            items: vec![mk_item(0.0, "hello")],
+            width: 1280.0,
+            height: 720.0,
+            font_size: 24.0,
+            display_area: 1.0,
+            scroll_duration_seconds: 10.0,
+            allow_stacking: false,
+            merge_danmaku: false,
+            custom_font_family: String::new(),
+            custom_font_file_path: String::new(),
+        })
+        .expect("prepare layout should succeed");
+
+        let (_, hit1) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared.clone(),
+                current_time_seconds: 0.3001,
+            },
+            &mut cache,
+        );
+        let (_, hit2) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared,
+                current_time_seconds: 0.3170,
+            },
+            &mut cache,
+        );
+
+        assert!(!hit1);
+        assert!(!hit2);
     }
 }

@@ -6,300 +6,214 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `calc_merged_font_size_multiplier`, `cmp_f64`, `from_plain`, `from_raw`, `is_wide_char`, `lower_bound`, `measure_text_height`, `measure_text_width`, `merge_key`, `normalize_color`, `normalize_type_code`, `prepare_merged_items`, `resolve_base_track_height`, `sanitize_display_area`, `sanitize_positive`, `scroll_can_add_to_track`, `select_scroll_track`, `select_static_track`, `simple_text_hash`, `upper_bound`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RawNext2Item`, `WorkingNext2Item`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`
 
-Future<RustNext2PreparedLayout> next2PrepareLayout(
-        {required RustNext2PrepareRequest request}) =>
-    RustLib.instance.api.crateApiNext2Next2PrepareLayout(request: request);
+            // These functions are ignored because they are not marked as `pub`: `calc_frame_cache_key`, `calc_layout_cache_key`, `calc_merged_font_size_multiplier`, `cmp_f64`, `frame_cache`, `from_plain`, `from_raw`, `get`, `insert`, `is_wide_char`, `lower_bound`, `measure_text_height`, `measure_text_width`, `merge_key`, `new`, `normalize_color`, `normalize_type_code`, `prepare_merged_items`, `resolve_base_track_height`, `sanitize_display_area`, `sanitize_positive`, `scroll_can_add_to_track`, `select_scroll_track`, `select_static_track`, `simple_text_hash`, `upper_bound`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FrameCache`, `RawNext2Item`, `WorkingNext2Item`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`
 
-Future<RustNext2FrameLayout> next2LayoutFrame(
-        {required RustNext2FrameRequest request}) =>
-    RustLib.instance.api.crateApiNext2Next2LayoutFrame(request: request);
 
-class RustNext2DanmakuItem {
-  final double timeSeconds;
-  final String text;
-  final int typeCode;
-  final int colorArgb;
-  final bool isMe;
+            Future<RustNext2PreparedLayout>  next2PrepareLayout({required RustNext2PrepareRequest request }) => RustLib.instance.api.crateApiNext2Next2PrepareLayout(request: request);
 
-  const RustNext2DanmakuItem({
-    required this.timeSeconds,
-    required this.text,
-    required this.typeCode,
-    required this.colorArgb,
-    required this.isMe,
-  });
+Future<RustNext2FrameLayout>  next2LayoutFrame({required RustNext2FrameRequest request }) => RustLib.instance.api.crateApiNext2Next2LayoutFrame(request: request);
 
-  @override
-  int get hashCode =>
-      timeSeconds.hashCode ^
-      text.hashCode ^
-      typeCode.hashCode ^
-      colorArgb.hashCode ^
-      isMe.hashCode;
+            class RustNext2DanmakuItem  {
+                final double timeSeconds;
+final String text;
+final int typeCode;
+final int colorArgb;
+final bool isMe;
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RustNext2DanmakuItem &&
-          runtimeType == other.runtimeType &&
-          timeSeconds == other.timeSeconds &&
-          text == other.text &&
-          typeCode == other.typeCode &&
-          colorArgb == other.colorArgb &&
-          isMe == other.isMe;
-}
+                const RustNext2DanmakuItem({required this.timeSeconds ,required this.text ,required this.typeCode ,required this.colorArgb ,required this.isMe ,});
 
-class RustNext2FrameItem {
-  final double timeSeconds;
-  final String text;
-  final int typeCode;
-  final int colorArgb;
-  final bool isMe;
-  final double fontSizeMultiplier;
-  final String? countText;
-  final double x;
-  final double y;
-  final double offstageX;
+                
+                
 
-  const RustNext2FrameItem({
-    required this.timeSeconds,
-    required this.text,
-    required this.typeCode,
-    required this.colorArgb,
-    required this.isMe,
-    required this.fontSizeMultiplier,
-    this.countText,
-    required this.x,
-    required this.y,
-    required this.offstageX,
-  });
+                
+        @override
+        int get hashCode => timeSeconds.hashCode^text.hashCode^typeCode.hashCode^colorArgb.hashCode^isMe.hashCode;
+        
 
-  @override
-  int get hashCode =>
-      timeSeconds.hashCode ^
-      text.hashCode ^
-      typeCode.hashCode ^
-      colorArgb.hashCode ^
-      isMe.hashCode ^
-      fontSizeMultiplier.hashCode ^
-      countText.hashCode ^
-      x.hashCode ^
-      y.hashCode ^
-      offstageX.hashCode;
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is RustNext2DanmakuItem &&
+                runtimeType == other.runtimeType
+                && timeSeconds == other.timeSeconds&& text == other.text&& typeCode == other.typeCode&& colorArgb == other.colorArgb&& isMe == other.isMe;
+        
+            }
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RustNext2FrameItem &&
-          runtimeType == other.runtimeType &&
-          timeSeconds == other.timeSeconds &&
-          text == other.text &&
-          typeCode == other.typeCode &&
-          colorArgb == other.colorArgb &&
-          isMe == other.isMe &&
-          fontSizeMultiplier == other.fontSizeMultiplier &&
-          countText == other.countText &&
-          x == other.x &&
-          y == other.y &&
-          offstageX == other.offstageX;
-}
+class RustNext2FrameItem  {
+                final double timeSeconds;
+final String text;
+final int typeCode;
+final int colorArgb;
+final bool isMe;
+final double fontSizeMultiplier;
+final String? countText;
+final double x;
+final double y;
+final double offstageX;
 
-class RustNext2FrameLayout {
-  final List<RustNext2FrameItem> items;
+                const RustNext2FrameItem({required this.timeSeconds ,required this.text ,required this.typeCode ,required this.colorArgb ,required this.isMe ,required this.fontSizeMultiplier ,this.countText ,required this.x ,required this.y ,required this.offstageX ,});
 
-  const RustNext2FrameLayout({
-    required this.items,
-  });
+                
+                
 
-  @override
-  int get hashCode => items.hashCode;
+                
+        @override
+        int get hashCode => timeSeconds.hashCode^text.hashCode^typeCode.hashCode^colorArgb.hashCode^isMe.hashCode^fontSizeMultiplier.hashCode^countText.hashCode^x.hashCode^y.hashCode^offstageX.hashCode;
+        
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RustNext2FrameLayout &&
-          runtimeType == other.runtimeType &&
-          items == other.items;
-}
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is RustNext2FrameItem &&
+                runtimeType == other.runtimeType
+                && timeSeconds == other.timeSeconds&& text == other.text&& typeCode == other.typeCode&& colorArgb == other.colorArgb&& isMe == other.isMe&& fontSizeMultiplier == other.fontSizeMultiplier&& countText == other.countText&& x == other.x&& y == other.y&& offstageX == other.offstageX;
+        
+            }
 
-class RustNext2FrameRequest {
-  final RustNext2PreparedLayout layout;
-  final double currentTimeSeconds;
+class RustNext2FrameLayout  {
+                final List<RustNext2FrameItem> items;
 
-  const RustNext2FrameRequest({
-    required this.layout,
-    required this.currentTimeSeconds,
-  });
+                const RustNext2FrameLayout({required this.items ,});
 
-  @override
-  int get hashCode => layout.hashCode ^ currentTimeSeconds.hashCode;
+                
+                
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RustNext2FrameRequest &&
-          runtimeType == other.runtimeType &&
-          layout == other.layout &&
-          currentTimeSeconds == other.currentTimeSeconds;
-}
+                
+        @override
+        int get hashCode => items.hashCode;
+        
 
-class RustNext2PrepareRequest {
-  final List<RustNext2DanmakuItem> items;
-  final double width;
-  final double height;
-  final double fontSize;
-  final double displayArea;
-  final double scrollDurationSeconds;
-  final bool allowStacking;
-  final bool mergeDanmaku;
-  final String customFontFamily;
-  final String customFontFilePath;
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is RustNext2FrameLayout &&
+                runtimeType == other.runtimeType
+                && items == other.items;
+        
+            }
 
-  const RustNext2PrepareRequest({
-    required this.items,
-    required this.width,
-    required this.height,
-    required this.fontSize,
-    required this.displayArea,
-    required this.scrollDurationSeconds,
-    required this.allowStacking,
-    required this.mergeDanmaku,
-    required this.customFontFamily,
-    required this.customFontFilePath,
-  });
+class RustNext2FrameRequest  {
+                final RustNext2PreparedLayout layout;
+final double currentTimeSeconds;
 
-  @override
-  int get hashCode =>
-      items.hashCode ^
-      width.hashCode ^
-      height.hashCode ^
-      fontSize.hashCode ^
-      displayArea.hashCode ^
-      scrollDurationSeconds.hashCode ^
-      allowStacking.hashCode ^
-      mergeDanmaku.hashCode ^
-      customFontFamily.hashCode ^
-      customFontFilePath.hashCode;
+                const RustNext2FrameRequest({required this.layout ,required this.currentTimeSeconds ,});
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RustNext2PrepareRequest &&
-          runtimeType == other.runtimeType &&
-          items == other.items &&
-          width == other.width &&
-          height == other.height &&
-          fontSize == other.fontSize &&
-          displayArea == other.displayArea &&
-          scrollDurationSeconds == other.scrollDurationSeconds &&
-          allowStacking == other.allowStacking &&
-          mergeDanmaku == other.mergeDanmaku &&
-          customFontFamily == other.customFontFamily &&
-          customFontFilePath == other.customFontFilePath;
-}
+                
+                
 
-class RustNext2PreparedItem {
-  final double timeSeconds;
-  final String text;
-  final int typeCode;
-  final int colorArgb;
-  final bool isMe;
-  final double fontSizeMultiplier;
-  final String? countText;
-  final int trackIndex;
-  final double yPosition;
-  final double width;
-  final double scrollSpeed;
+                
+        @override
+        int get hashCode => layout.hashCode^currentTimeSeconds.hashCode;
+        
 
-  const RustNext2PreparedItem({
-    required this.timeSeconds,
-    required this.text,
-    required this.typeCode,
-    required this.colorArgb,
-    required this.isMe,
-    required this.fontSizeMultiplier,
-    this.countText,
-    required this.trackIndex,
-    required this.yPosition,
-    required this.width,
-    required this.scrollSpeed,
-  });
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is RustNext2FrameRequest &&
+                runtimeType == other.runtimeType
+                && layout == other.layout&& currentTimeSeconds == other.currentTimeSeconds;
+        
+            }
 
-  @override
-  int get hashCode =>
-      timeSeconds.hashCode ^
-      text.hashCode ^
-      typeCode.hashCode ^
-      colorArgb.hashCode ^
-      isMe.hashCode ^
-      fontSizeMultiplier.hashCode ^
-      countText.hashCode ^
-      trackIndex.hashCode ^
-      yPosition.hashCode ^
-      width.hashCode ^
-      scrollSpeed.hashCode;
+class RustNext2PrepareRequest  {
+                final List<RustNext2DanmakuItem> items;
+final double width;
+final double height;
+final double fontSize;
+final double displayArea;
+final double scrollDurationSeconds;
+final bool allowStacking;
+final bool mergeDanmaku;
+final String customFontFamily;
+final String customFontFilePath;
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RustNext2PreparedItem &&
-          runtimeType == other.runtimeType &&
-          timeSeconds == other.timeSeconds &&
-          text == other.text &&
-          typeCode == other.typeCode &&
-          colorArgb == other.colorArgb &&
-          isMe == other.isMe &&
-          fontSizeMultiplier == other.fontSizeMultiplier &&
-          countText == other.countText &&
-          trackIndex == other.trackIndex &&
-          yPosition == other.yPosition &&
-          width == other.width &&
-          scrollSpeed == other.scrollSpeed;
-}
+                const RustNext2PrepareRequest({required this.items ,required this.width ,required this.height ,required this.fontSize ,required this.displayArea ,required this.scrollDurationSeconds ,required this.allowStacking ,required this.mergeDanmaku ,required this.customFontFamily ,required this.customFontFilePath ,});
 
-class RustNext2PreparedLayout {
-  final double width;
-  final double height;
-  final double scrollDurationSeconds;
-  final double staticDurationSeconds;
-  final List<RustNext2PreparedItem> items;
-  final Float64List itemTimes;
-  final int trackCount;
+                
+                
 
-  const RustNext2PreparedLayout({
-    required this.width,
-    required this.height,
-    required this.scrollDurationSeconds,
-    required this.staticDurationSeconds,
-    required this.items,
-    required this.itemTimes,
-    required this.trackCount,
-  });
+                
+        @override
+        int get hashCode => items.hashCode^width.hashCode^height.hashCode^fontSize.hashCode^displayArea.hashCode^scrollDurationSeconds.hashCode^allowStacking.hashCode^mergeDanmaku.hashCode^customFontFamily.hashCode^customFontFilePath.hashCode;
+        
 
-  @override
-  int get hashCode =>
-      width.hashCode ^
-      height.hashCode ^
-      scrollDurationSeconds.hashCode ^
-      staticDurationSeconds.hashCode ^
-      items.hashCode ^
-      itemTimes.hashCode ^
-      trackCount.hashCode;
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is RustNext2PrepareRequest &&
+                runtimeType == other.runtimeType
+                && items == other.items&& width == other.width&& height == other.height&& fontSize == other.fontSize&& displayArea == other.displayArea&& scrollDurationSeconds == other.scrollDurationSeconds&& allowStacking == other.allowStacking&& mergeDanmaku == other.mergeDanmaku&& customFontFamily == other.customFontFamily&& customFontFilePath == other.customFontFilePath;
+        
+            }
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is RustNext2PreparedLayout &&
-          runtimeType == other.runtimeType &&
-          width == other.width &&
-          height == other.height &&
-          scrollDurationSeconds == other.scrollDurationSeconds &&
-          staticDurationSeconds == other.staticDurationSeconds &&
-          items == other.items &&
-          itemTimes == other.itemTimes &&
-          trackCount == other.trackCount;
-}
+class RustNext2PreparedItem  {
+                final double timeSeconds;
+final String text;
+final int typeCode;
+final int colorArgb;
+final bool isMe;
+final double fontSizeMultiplier;
+final String? countText;
+final int trackIndex;
+final double yPosition;
+final double width;
+final double scrollSpeed;
+
+                const RustNext2PreparedItem({required this.timeSeconds ,required this.text ,required this.typeCode ,required this.colorArgb ,required this.isMe ,required this.fontSizeMultiplier ,this.countText ,required this.trackIndex ,required this.yPosition ,required this.width ,required this.scrollSpeed ,});
+
+                
+                
+
+                
+        @override
+        int get hashCode => timeSeconds.hashCode^text.hashCode^typeCode.hashCode^colorArgb.hashCode^isMe.hashCode^fontSizeMultiplier.hashCode^countText.hashCode^trackIndex.hashCode^yPosition.hashCode^width.hashCode^scrollSpeed.hashCode;
+        
+
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is RustNext2PreparedItem &&
+                runtimeType == other.runtimeType
+                && timeSeconds == other.timeSeconds&& text == other.text&& typeCode == other.typeCode&& colorArgb == other.colorArgb&& isMe == other.isMe&& fontSizeMultiplier == other.fontSizeMultiplier&& countText == other.countText&& trackIndex == other.trackIndex&& yPosition == other.yPosition&& width == other.width&& scrollSpeed == other.scrollSpeed;
+        
+            }
+
+class RustNext2PreparedLayout  {
+                final double width;
+final double height;
+final double scrollDurationSeconds;
+final double staticDurationSeconds;
+final List<RustNext2PreparedItem> items;
+final Float64List itemTimes;
+final int trackCount;
+final BigInt cacheKey;
+
+                const RustNext2PreparedLayout({required this.width ,required this.height ,required this.scrollDurationSeconds ,required this.staticDurationSeconds ,required this.items ,required this.itemTimes ,required this.trackCount ,required this.cacheKey ,});
+
+                
+                
+
+                
+        @override
+        int get hashCode => width.hashCode^height.hashCode^scrollDurationSeconds.hashCode^staticDurationSeconds.hashCode^items.hashCode^itemTimes.hashCode^trackCount.hashCode^cacheKey.hashCode;
+        
+
+                
+        @override
+        bool operator ==(Object other) =>
+            identical(this, other) ||
+            other is RustNext2PreparedLayout &&
+                runtimeType == other.runtimeType
+                && width == other.width&& height == other.height&& scrollDurationSeconds == other.scrollDurationSeconds&& staticDurationSeconds == other.staticDurationSeconds&& items == other.items&& itemTimes == other.itemTimes&& trackCount == other.trackCount&& cacheKey == other.cacheKey;
+        
+            }
+            

@@ -1145,6 +1145,7 @@ impl SseDecode for crate::api::next2::RustNext2PreparedLayout {
             <Vec<crate::api::next2::RustNext2PreparedItem>>::sse_decode(deserializer);
         let mut var_itemTimes = <Vec<f64>>::sse_decode(deserializer);
         let mut var_trackCount = <i32>::sse_decode(deserializer);
+        let mut var_cacheKey = <u64>::sse_decode(deserializer);
         return crate::api::next2::RustNext2PreparedLayout {
             width: var_width,
             height: var_height,
@@ -1153,6 +1154,7 @@ impl SseDecode for crate::api::next2::RustNext2PreparedLayout {
             items: var_items,
             item_times: var_itemTimes,
             track_count: var_trackCount,
+            cache_key: var_cacheKey,
         };
     }
 }
@@ -1174,6 +1176,13 @@ impl SseDecode for crate::api::performance::RustPerformanceSample {
             timestamp_ms: var_timestampMs,
             note: var_note,
         };
+    }
+}
+
+impl SseDecode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u64::<NativeEndian>().unwrap()
     }
 }
 
@@ -1499,6 +1508,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::next2::RustNext2PrepareReques
             self.scroll_duration_seconds.into_into_dart().into_dart(),
             self.allow_stacking.into_into_dart().into_dart(),
             self.merge_danmaku.into_into_dart().into_dart(),
+            self.custom_font_family.into_into_dart().into_dart(),
+            self.custom_font_file_path.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1555,6 +1566,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::next2::RustNext2PreparedLayou
             self.items.into_into_dart().into_dart(),
             self.item_times.into_into_dart().into_dart(),
             self.track_count.into_into_dart().into_dart(),
+            self.cache_key.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1875,6 +1887,7 @@ impl SseEncode for crate::api::next2::RustNext2PreparedLayout {
         <Vec<crate::api::next2::RustNext2PreparedItem>>::sse_encode(self.items, serializer);
         <Vec<f64>>::sse_encode(self.item_times, serializer);
         <i32>::sse_encode(self.track_count, serializer);
+        <u64>::sse_encode(self.cache_key, serializer);
     }
 }
 
@@ -1887,6 +1900,13 @@ impl SseEncode for crate::api::performance::RustPerformanceSample {
         <String>::sse_encode(self.source, serializer);
         <i64>::sse_encode(self.timestamp_ms, serializer);
         <Option<String>>::sse_encode(self.note, serializer);
+    }
+}
+
+impl SseEncode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u64::<NativeEndian>(self).unwrap();
     }
 }
 
