@@ -23,6 +23,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
     required this.allowStacking,
     required this.mergeDanmaku,
     required this.customFontFamily,
+    required this.customFontFilePath,
     required this.outlineWidth,
     required this.shadowStyle,
     this.onLayoutCalculated,
@@ -41,6 +42,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
   final bool allowStacking;
   final bool mergeDanmaku;
   final String customFontFamily;
+  final String customFontFilePath;
   final double outlineWidth;
   final DanmakuShadowStyle shadowStyle;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
@@ -88,6 +90,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
         oldWidget.displayArea != widget.displayArea ||
         oldWidget.scrollDurationSeconds != widget.scrollDurationSeconds ||
         oldWidget.customFontFamily != widget.customFontFamily ||
+        oldWidget.customFontFilePath != widget.customFontFilePath ||
         oldWidget.outlineWidth != widget.outlineWidth ||
         oldWidget.shadowStyle != widget.shadowStyle ||
         oldWidget.opacity != widget.opacity ||
@@ -180,6 +183,8 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
           scrollDurationSeconds: widget.scrollDurationSeconds,
           allowStacking: widget.allowStacking,
           mergeDanmaku: widget.mergeDanmaku,
+          customFontFamily: widget.customFontFamily,
+          customFontFilePath: widget.customFontFilePath,
         );
 
         final frame = await _bridge.layout(
@@ -267,6 +272,8 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       // Overall opacity is applied by the outer Flutter Opacity widget.
       // Keep Rust-side glyph compositing at full alpha to avoid edge fringe.
       opacity: 1.0,
+      customFontFamily: widget.customFontFamily,
+      customFontFilePath: widget.customFontFilePath,
       scaleX: widthScale,
       scaleY: heightScale,
       fontScale: fontScale,

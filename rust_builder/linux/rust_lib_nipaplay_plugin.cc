@@ -20,7 +20,9 @@ uint8_t next2_engine_set_frame(uint64_t handle,
                                float font_size,
                                float outline_width,
                                uint8_t shadow_style,
-                               float opacity);
+                               float opacity,
+                               const char* custom_font_family,
+                               const char* custom_font_file_path);
 uint8_t next2_engine_reset_scene(uint64_t handle);
 uint8_t next2_engine_copy_bgra_frame(uint64_t handle,
                                      uint8_t* out_pixels,
@@ -360,8 +362,19 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
     const float outline_width = ReadFloat(args, "outlineWidth", 1.0f);
     const uint8_t shadow_style = ReadU8(args, "shadowStyle", 1);
     const float opacity = ReadFloat(args, "opacity", 1.0f);
+    FlValue* custom_font_family_v = fl_value_lookup_string(args, "customFontFamily");
+    FlValue* custom_font_file_path_v = fl_value_lookup_string(args, "customFontFilePath");
+    const char* custom_font_family =
+        custom_font_family_v != nullptr && fl_value_get_type(custom_font_family_v) == FL_VALUE_TYPE_STRING
+            ? fl_value_get_string(custom_font_family_v)
+            : "";
+    const char* custom_font_file_path =
+        custom_font_file_path_v != nullptr && fl_value_get_type(custom_font_file_path_v) == FL_VALUE_TYPE_STRING
+            ? fl_value_get_string(custom_font_file_path_v)
+            : "";
     const uint8_t ok = next2_engine_set_frame(handle, frame_json, font_size,
-                                              outline_width, shadow_style, opacity);
+                                              outline_width, shadow_style, opacity,
+                                              custom_font_family, custom_font_file_path);
     g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
         fl_method_success_response_new(fl_value_new_bool(ok != 0)));
     fl_method_call_respond(method_call, response, nullptr);

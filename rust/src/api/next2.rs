@@ -25,6 +25,8 @@ pub struct RustNext2PrepareRequest {
     pub scroll_duration_seconds: f64,
     pub allow_stacking: bool,
     pub merge_danmaku: bool,
+    pub custom_font_family: String,
+    pub custom_font_file_path: String,
 }
 
 pub struct RustNext2PreparedLayout {

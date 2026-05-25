@@ -1087,6 +1087,8 @@ impl SseDecode for crate::api::next2::RustNext2PrepareRequest {
         let mut var_scrollDurationSeconds = <f64>::sse_decode(deserializer);
         let mut var_allowStacking = <bool>::sse_decode(deserializer);
         let mut var_mergeDanmaku = <bool>::sse_decode(deserializer);
+        let mut var_customFontFamily = <String>::sse_decode(deserializer);
+        let mut var_customFontFilePath = <String>::sse_decode(deserializer);
         return crate::api::next2::RustNext2PrepareRequest {
             items: var_items,
             width: var_width,
@@ -1096,6 +1098,8 @@ impl SseDecode for crate::api::next2::RustNext2PrepareRequest {
             scroll_duration_seconds: var_scrollDurationSeconds,
             allow_stacking: var_allowStacking,
             merge_danmaku: var_mergeDanmaku,
+            custom_font_family: var_customFontFamily,
+            custom_font_file_path: var_customFontFilePath,
         };
     }
 }
@@ -1839,6 +1843,8 @@ impl SseEncode for crate::api::next2::RustNext2PrepareRequest {
         <f64>::sse_encode(self.scroll_duration_seconds, serializer);
         <bool>::sse_encode(self.allow_stacking, serializer);
         <bool>::sse_encode(self.merge_danmaku, serializer);
+        <String>::sse_encode(self.custom_font_family, serializer);
+        <String>::sse_encode(self.custom_font_file_path, serializer);
     }
 }
 

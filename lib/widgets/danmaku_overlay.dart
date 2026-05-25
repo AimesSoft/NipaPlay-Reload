@@ -156,6 +156,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             allowStacking: videoState.danmakuStacking,
             mergeDanmaku: widget.isVisible && videoState.mergeDanmaku,
             customFontFamily: videoState.danmakuFontFamily,
+            customFontFilePath: videoState.danmakuFontFilePath,
             outlineWidth: videoState.next2DanmakuOutlineWidth,
             shadowStyle: videoState.danmakuShadowStyle,
           );

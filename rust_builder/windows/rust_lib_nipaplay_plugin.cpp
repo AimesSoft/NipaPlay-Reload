@@ -18,7 +18,9 @@ uint8_t next2_engine_set_frame(uint64_t handle,
                                float font_size,
                                float outline_width,
                                uint8_t shadow_style,
-                               float opacity);
+                               float opacity,
+                               const char* custom_font_family,
+                               const char* custom_font_file_path);
 uint8_t next2_engine_reset_scene(uint64_t handle);
 uint8_t next2_engine_copy_bgra_frame(uint64_t handle,
                                      uint8_t* out_pixels,
@@ -337,9 +339,13 @@ void RustLibNipaplayPlugin::HandleMethodCall(
     const float outline_width = ReadFloat(*args, "outlineWidth", 1.0f);
     const uint8_t shadow_style = ReadU8(*args, "shadowStyle", 1);
     const float opacity = ReadFloat(*args, "opacity", 1.0f);
+    const std::string custom_font_family = ReadString(*args, "customFontFamily");
+    const std::string custom_font_file_path = ReadString(*args, "customFontFilePath");
     const uint8_t ok = next2_engine_set_frame(handle, frame_json->c_str(),
                                               font_size, outline_width,
-                                              shadow_style, opacity);
+                                              shadow_style, opacity,
+                                              custom_font_family.c_str(),
+                                              custom_font_file_path.c_str());
     result->Success(flutter::EncodableValue(ok != 0));
     return;
   }
