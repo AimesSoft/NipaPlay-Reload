@@ -130,7 +130,26 @@ impl Next2Renderer {
                 pass.draw(0..3, 0..1);
             }
         } else {
-            self.clear_target_view(target_view);
+            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("next2 inline target clear pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: self.clear_color[0],
+                            g: self.clear_color[1],
+                            b: self.clear_color[2],
+                            a: self.clear_color[3],
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
         }
 
         let main_bytes = bytemuck::cast_slice(self.vertices.as_slice());
@@ -441,10 +460,30 @@ impl Next2Renderer {
         color: [f32; 4],
         params: [f32; 4],
     ) {
-        let p0 = to_ndc(left, top, self.shadow_width as f32, self.shadow_height as f32);
-        let p1 = to_ndc(right, top, self.shadow_width as f32, self.shadow_height as f32);
-        let p2 = to_ndc(right, bottom, self.shadow_width as f32, self.shadow_height as f32);
-        let p3 = to_ndc(left, bottom, self.shadow_width as f32, self.shadow_height as f32);
+        let p0 = to_ndc(
+            left,
+            top,
+            self.shadow_width as f32,
+            self.shadow_height as f32,
+        );
+        let p1 = to_ndc(
+            right,
+            top,
+            self.shadow_width as f32,
+            self.shadow_height as f32,
+        );
+        let p2 = to_ndc(
+            right,
+            bottom,
+            self.shadow_width as f32,
+            self.shadow_height as f32,
+        );
+        let p3 = to_ndc(
+            left,
+            bottom,
+            self.shadow_width as f32,
+            self.shadow_height as f32,
+        );
 
         let uv0 = [uv_min[0], uv_min[1]];
         let uv1 = [uv_max[0], uv_min[1]];
@@ -825,4 +864,3 @@ mod tests {
         assert!(corner < 128, "center={center} corner={corner}");
     }
 }
-

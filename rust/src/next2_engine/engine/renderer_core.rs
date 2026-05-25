@@ -445,16 +445,42 @@ impl Next2Renderer {
             PresentTarget::Texture(texture_target) => {
                 self.width = texture_target.width.max(1);
                 self.height = texture_target.height.max(1);
-                let view =
-                    texture_target
-                        .render_texture()
+                let glyph_pipeline = self.offscreen_pipeline.clone();
+                let screen_pipeline = self.screen_pipeline.clone();
+                let offscreen_view =
+                    self.offscreen_texture
                         .create_view(&wgpu::TextureViewDescriptor {
                             format: Some(wgpu::TextureFormat::Bgra8Unorm),
                             ..Default::default()
                         });
-                let glyph_pipeline = self.offscreen_pipeline.clone();
-                let screen_pipeline = self.screen_pipeline.clone();
-                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
+                self.draw_to_view(&offscreen_view, &glyph_pipeline, &screen_pipeline);
+
+                let mut encoder =
+                    self.ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("next2 present blit encoder"),
+                        });
+                encoder.copy_texture_to_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &self.offscreen_texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyTextureInfo {
+                        texture: texture_target.render_texture(),
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width: self.width.max(1),
+                        height: self.height.max(1),
+                        depth_or_array_layers: 1,
+                    },
+                );
+                self.ctx.queue.submit(std::iter::once(encoder.finish()));
             }
         }
     }
@@ -546,5 +572,4 @@ impl Next2Renderer {
             pixels,
         })
     }
-
 }
