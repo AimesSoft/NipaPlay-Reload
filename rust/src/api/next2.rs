@@ -137,7 +137,6 @@ pub fn next2_prepare_layout(
     let mut scroll_track_heights = vec![base_track_height; track_len];
     let mut top_track_heights = vec![base_track_height; track_len];
     let mut bottom_track_heights = vec![base_track_height; track_len];
-    let mut last_scroll_visible_time: Option<f64> = None;
 
     for idx in 0..items.len() {
         let item_type = items[idx].type_code;
@@ -159,7 +158,6 @@ pub fn next2_prepare_layout(
                     width,
                     scroll_duration_seconds,
                     request.allow_stacking,
-                    last_scroll_visible_time,
                 );
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
@@ -167,7 +165,6 @@ pub fn next2_prepare_layout(
                     if item_height > scroll_track_heights[track] {
                         scroll_track_heights[track] = item_height;
                     }
-                    last_scroll_visible_time = Some(item_time);
                 }
             }
             NEXT2_TYPE_TOP => {
@@ -549,12 +546,8 @@ fn select_scroll_track(
     width: f64,
     scroll_duration_seconds: f64,
     allow_stacking: bool,
-    last_scroll_visible_time: Option<f64>,
 ) -> Option<usize> {
     let item = &items[item_index];
-    let elapsed_since_last = last_scroll_visible_time
-        .map(|last_time| item.time_seconds - last_time)
-        .unwrap_or(f64::INFINITY);
 
     for (i, track_items) in tracks.iter_mut().enumerate().take(track_count) {
         if !track_items.is_empty() {
@@ -562,15 +555,6 @@ fn select_scroll_track(
                 let existing = &items[*existing_idx];
                 item.time_seconds - existing.time_seconds <= scroll_duration_seconds
             });
-        }
-
-        if should_skip_for_density(
-            elapsed_since_last,
-            i,
-            track_count,
-            scroll_duration_seconds,
-        ) {
-            continue;
         }
 
         if scroll_can_add_to_track(item, items, track_items, width, scroll_duration_seconds) {
@@ -620,26 +604,6 @@ fn scroll_can_add_to_track(
         }
     }
     true
-}
-
-fn should_skip_for_density(
-    elapsed_since_last: f64,
-    track_order: usize,
-    max_visible: usize,
-    scroll_duration_seconds: f64,
-) -> bool {
-    if track_order <= 1 {
-        return false;
-    }
-    if !elapsed_since_last.is_finite() || elapsed_since_last < 0.0 {
-        return false;
-    }
-    if max_visible == 0 || !scroll_duration_seconds.is_finite() || scroll_duration_seconds <= 0.0 {
-        return false;
-    }
-
-    let min_gap = scroll_duration_seconds / max_visible as f64;
-    elapsed_since_last < min_gap
 }
 
 fn select_static_track(
@@ -1014,60 +978,5 @@ mod tests {
 
         assert!(!hit1);
         assert!(!hit2);
-    }
-
-    #[test]
-    fn density_control_skips_late_tracks_in_burst() {
-        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
-            items: vec![
-                mk_item(0.0, "a"),
-                mk_item(0.05, "b"),
-                mk_item(0.10, "c"),
-                mk_item(0.15, "d"),
-            ],
-            width: 1280.0,
-            height: 720.0,
-            font_size: 24.0,
-            display_area: 1.0,
-            scroll_duration_seconds: 10.0,
-            allow_stacking: false,
-            merge_danmaku: false,
-            custom_font_family: String::new(),
-            custom_font_file_path: String::new(),
-        })
-        .expect("prepare layout should succeed");
-
-        let track_indices: Vec<i32> = prepared.items.iter().map(|item| item.track_index).collect();
-
-        assert_eq!(track_indices[0], 0);
-        assert_eq!(track_indices[1], 1);
-        assert_eq!(track_indices[2], -1);
-        assert_eq!(track_indices[3], -1);
-    }
-
-    #[test]
-    fn density_control_keeps_me_messages() {
-        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
-            items: vec![
-                mk_item(0.0, "a"),
-                mk_item(0.05, "b"),
-                RustNext2DanmakuItem {
-                    is_me: true,
-                    ..mk_item(0.10, "me")
-                },
-            ],
-            width: 1280.0,
-            height: 720.0,
-            font_size: 24.0,
-            display_area: 1.0,
-            scroll_duration_seconds: 10.0,
-            allow_stacking: false,
-            merge_danmaku: false,
-            custom_font_family: String::new(),
-            custom_font_file_path: String::new(),
-        })
-        .expect("prepare layout should succeed");
-
-        assert_eq!(prepared.items[2].track_index, 0);
     }
 }
