@@ -208,7 +208,8 @@ class NipaPlayNextEngine {
         type: type,
         color: color,
         isMe: isMe,
-        fontSizeMultiplier: 1.0,
+        fontSizeMultiplier:
+            isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
         countText: countText,
       );
 
@@ -294,7 +295,7 @@ class NipaPlayNextEngine {
         _fontSize * item.content.fontSizeMultiplier,
       );
       item.width = width;
-      final itemHeight = baseDanmakuHeight;
+      final itemHeight = baseDanmakuHeight * item.content.fontSizeMultiplier;
 
       switch (item.type) {
         case DanmakuItemType.scroll:
@@ -457,6 +458,10 @@ class NipaPlayNextEngine {
     final int base = item.content.text.hashCode ^ item.timeSeconds.toInt();
     final int hash = base & 0x7fffffff;
     return hash % trackCount;
+  }
+
+  double _calcMergedFontSizeMultiplier(int mergeCount) {
+    return (1.0 + mergeCount / 10.0).clamp(1.0, 2.0);
   }
 
   int _selectStaticTrackCanvas({

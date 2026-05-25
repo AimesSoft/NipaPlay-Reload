@@ -134,19 +134,18 @@ pub fn next2_prepare_layout(
     let mut scroll_tracks: Vec<Vec<usize>> = vec![Vec::new(); track_len];
     let mut top_track_items: Vec<Option<usize>> = vec![None; track_len];
     let mut bottom_track_items: Vec<Option<usize>> = vec![None; track_len];
-    let mut scroll_track_heights = vec![base_track_height; track_len];
-    let mut top_track_heights = vec![base_track_height; track_len];
-    let mut bottom_track_heights = vec![base_track_height; track_len];
+    let scroll_track_heights = vec![base_track_height; track_len];
+    let top_track_heights = vec![base_track_height; track_len];
+    let bottom_track_heights = vec![base_track_height; track_len];
 
     for idx in 0..items.len() {
         let item_type = items[idx].type_code;
         let item_time = items[idx].time_seconds;
-        let item_height = {
+        {
             let item = &mut items[idx];
             item.width = measure_text_width(&item.text, font_size * item.font_size_multiplier);
             item.scroll_speed = (width + item.width) / scroll_duration_seconds;
-            base_danmaku_height * item.font_size_multiplier
-        };
+        }
 
         match item_type {
             NEXT2_TYPE_SCROLL => {
@@ -158,13 +157,12 @@ pub fn next2_prepare_layout(
                     width,
                     scroll_duration_seconds,
                     request.allow_stacking,
+                    base_danmaku_height,
+                    base_track_height,
                 );
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
                     scroll_tracks[track].push(idx);
-                    if item_height > scroll_track_heights[track] {
-                        scroll_track_heights[track] = item_height;
-                    }
                 }
             }
             NEXT2_TYPE_TOP => {
@@ -178,9 +176,6 @@ pub fn next2_prepare_layout(
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
                     top_track_items[track] = Some(idx);
-                    if item_height > top_track_heights[track] {
-                        top_track_heights[track] = item_height;
-                    }
                 }
             }
             NEXT2_TYPE_BOTTOM => {
@@ -194,9 +189,6 @@ pub fn next2_prepare_layout(
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
                     bottom_track_items[track] = Some(idx);
-                    if item_height > bottom_track_heights[track] {
-                        bottom_track_heights[track] = item_height;
-                    }
                 }
             }
             _ => {
@@ -477,7 +469,7 @@ fn prepare_merged_items(items: Vec<RustNext2DanmakuItem>) -> Vec<RawNext2Item> {
             });
 
             let mut first_processed = first_raw.clone();
-            first_processed.font_size_multiplier = 1.0;
+            first_processed.font_size_multiplier = calc_merged_font_size_multiplier(count as i32);
             first_processed.count_text = Some(format!("x{count}"));
             processed.insert(first_key.clone(), first_processed);
 
@@ -488,7 +480,7 @@ fn prepare_merged_items(items: Vec<RustNext2DanmakuItem>) -> Vec<RawNext2Item> {
                 color_argb: current.color_argb,
                 is_me: current.is_me,
             });
-            current_processed.font_size_multiplier = 1.0;
+            current_processed.font_size_multiplier = calc_merged_font_size_multiplier(count as i32);
             current_processed.count_text = Some(format!("x{count}"));
             processed.insert(key, current_processed);
         } else {
@@ -546,18 +538,27 @@ fn select_scroll_track(
     width: f64,
     scroll_duration_seconds: f64,
     allow_stacking: bool,
+    base_danmaku_height: f64,
+    base_track_height: f64,
 ) -> Option<usize> {
     let item = &items[item_index];
 
-    for (i, track_items) in tracks.iter_mut().enumerate().take(track_count) {
-        if !track_items.is_empty() {
-            track_items.retain(|existing_idx| {
-                let existing = &items[*existing_idx];
-                item.time_seconds - existing.time_seconds <= scroll_duration_seconds
-            });
-        }
+    compact_scroll_tracks(item.time_seconds, items, tracks, scroll_duration_seconds);
 
+    for (i, track_items) in tracks.iter().enumerate().take(track_count) {
         if scroll_can_add_to_track(item, items, track_items, width, scroll_duration_seconds) {
+            if scroll_has_neighbor_overlap_at_spawn(
+                item,
+                i,
+                items,
+                tracks,
+                width,
+                scroll_duration_seconds,
+                base_danmaku_height,
+                base_track_height,
+            ) {
+                continue;
+            }
             return Some(i);
         }
     }
@@ -573,6 +574,23 @@ fn select_scroll_track(
     }
 
     None
+}
+
+fn compact_scroll_tracks(
+    time_seconds: f64,
+    items: &[WorkingNext2Item],
+    tracks: &mut [Vec<usize>],
+    scroll_duration_seconds: f64,
+) {
+    for track_items in tracks {
+        if track_items.is_empty() {
+            continue;
+        }
+        track_items.retain(|existing_idx| {
+            let existing = &items[*existing_idx];
+            time_seconds - existing.time_seconds <= scroll_duration_seconds
+        });
+    }
 }
 
 fn scroll_can_add_to_track(
@@ -604,6 +622,75 @@ fn scroll_can_add_to_track(
         }
     }
     true
+}
+
+fn scroll_has_neighbor_overlap_at_spawn(
+    new_item: &WorkingNext2Item,
+    candidate_track: usize,
+    items: &[WorkingNext2Item],
+    tracks: &[Vec<usize>],
+    width: f64,
+    scroll_duration_seconds: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
+) -> bool {
+    for (existing_track, track_items) in tracks.iter().enumerate() {
+        for existing_idx in track_items {
+            let existing = &items[*existing_idx];
+            if new_item.count_text.is_none() && existing.count_text.is_none() {
+                continue;
+            }
+            if !tracks_vertical_overlap(
+                candidate_track,
+                new_item.font_size_multiplier,
+                existing_track,
+                existing.font_size_multiplier,
+                base_danmaku_height,
+                base_track_height,
+            ) {
+                continue;
+            }
+            if scroll_items_overlap_at_spawn(new_item, existing, width, scroll_duration_seconds) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn tracks_vertical_overlap(
+    track_a: usize,
+    font_scale_a: f64,
+    track_b: usize,
+    font_scale_b: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
+) -> bool {
+    let top_a = track_a as f64 * base_track_height;
+    let top_b = track_b as f64 * base_track_height;
+    let height_a = (base_danmaku_height * font_scale_a.max(1.0)).max(base_danmaku_height);
+    let height_b = (base_danmaku_height * font_scale_b.max(1.0)).max(base_danmaku_height);
+    let bottom_a = top_a + height_a;
+    let bottom_b = top_b + height_b;
+    top_a < bottom_b && top_b < bottom_a
+}
+
+fn scroll_items_overlap_at_spawn(
+    new_item: &WorkingNext2Item,
+    existing: &WorkingNext2Item,
+    width: f64,
+    scroll_duration_seconds: f64,
+) -> bool {
+    let elapsed = new_item.time_seconds - existing.time_seconds;
+    if elapsed < 0.0 || elapsed > scroll_duration_seconds {
+        return false;
+    }
+    let existing_x = width - (elapsed / scroll_duration_seconds) * (width + existing.width);
+    let existing_end = existing_x + existing.width;
+
+    let new_start = width;
+    let new_end = width + new_item.width;
+    new_start < existing_end && existing_x < new_end
 }
 
 fn select_static_track(
@@ -740,6 +827,11 @@ fn cmp_f64(a: f64, b: f64) -> Ordering {
             Ordering::Less
         }
     })
+}
+
+fn calc_merged_font_size_multiplier(merge_count: i32) -> f64 {
+    let value = 1.0 + (merge_count as f64 / 10.0);
+    value.clamp(1.0, 2.0)
 }
 
 fn merge_key(content: &str, time_seconds: f64) -> String {
@@ -901,13 +993,38 @@ mod tests {
     }
 
     #[test]
-    fn merged_danmaku_keeps_base_font_size_multiplier() {
+    fn merged_danmaku_scales_font_size_multiplier() {
         let merged = prepare_merged_items(vec![mk_item(0.0, "same"), mk_item(1.0, "same")]);
 
         assert!(!merged.is_empty());
         for item in merged {
-            assert_eq!(item.font_size_multiplier, 1.0);
+            assert!(item.font_size_multiplier > 1.0);
         }
+    }
+
+    #[test]
+    fn merged_danmaku_preserves_layout_for_distant_items() {
+        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
+            items: vec![
+                mk_item(0.0, "same"),
+                mk_item(0.2, "same"),
+                mk_item(5.0, "other-1"),
+                mk_item(5.2, "other-2"),
+            ],
+            width: 1280.0,
+            height: 720.0,
+            font_size: 24.0,
+            display_area: 1.0,
+            scroll_duration_seconds: 10.0,
+            allow_stacking: false,
+            merge_danmaku: true,
+            custom_font_family: String::new(),
+            custom_font_file_path: String::new(),
+        })
+        .expect("prepare layout should succeed");
+
+        let tracks: Vec<i32> = prepared.items.iter().map(|item| item.track_index).collect();
+        assert!(tracks.iter().all(|t| *t >= 0));
     }
 
     #[test]

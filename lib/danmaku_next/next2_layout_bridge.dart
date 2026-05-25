@@ -115,7 +115,7 @@ class Next2LayoutBridge {
               type: _toItemType(item.typeCode),
               color: Color(item.colorArgb),
               isMe: item.isMe,
-              fontSizeMultiplier: 1.0,
+              fontSizeMultiplier: item.fontSizeMultiplier,
               countText: item.countText,
             ),
             x: item.x,
