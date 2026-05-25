@@ -2,7 +2,7 @@ use std::ffi::{c_char, c_void, CStr};
 use std::sync::mpsc;
 
 use super::engine::{
-    create_engine, lookup_engine, readback_frame_bgra, remove_engine, EngineCommand,
+    create_engine, lookup_engine, n2log, readback_frame_bgra, remove_engine, EngineCommand,
     RenderFrameInput,
 };
 
@@ -16,7 +16,21 @@ fn parse_c_string(ptr: *const c_char) -> Option<String> {
 
 #[no_mangle]
 pub extern "C" fn next2_engine_create(width: u32, height: u32) -> u64 {
-    create_engine(width, height).unwrap_or(0)
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        create_engine(width, height).unwrap_or(0)
+    }));
+    match result {
+        Ok(handle) => handle,
+        Err(e) => {
+            let msg = e
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| e.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown");
+            n2log(&format!("FFI create_engine PANIC: {msg}"));
+            0
+        }
+    }
 }
 
 #[no_mangle]
@@ -28,7 +42,21 @@ pub extern "C" fn next2_engine_get_mtl_device(handle: u64) -> *mut c_void {
 
 #[no_mangle]
 pub extern "C" fn next2_engine_poll_frame_ready(handle: u64) -> bool {
-    super::engine::poll_frame_ready(handle)
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        super::engine::poll_frame_ready(handle)
+    }));
+    match result {
+        Ok(ready) => ready,
+        Err(e) => {
+            let msg = e
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| e.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown");
+            n2log(&format!("FFI poll_frame_ready PANIC: {msg}"));
+            false
+        }
+    }
 }
 
 #[no_mangle]
@@ -118,38 +146,52 @@ pub extern "C" fn next2_engine_set_frame(
     custom_font_family: *const c_char,
     custom_font_file_path: *const c_char,
 ) -> u8 {
-    let Some(entry) = lookup_engine(handle) else {
-        return 0;
-    };
-    let Some(json) = parse_c_string(frame_json) else {
-        return 0;
-    };
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(entry) = lookup_engine(handle) else {
+            return 0;
+        };
+        let Some(json) = parse_c_string(frame_json) else {
+            return 0;
+        };
 
-    let custom_font_family = parse_c_string(custom_font_family).unwrap_or_default();
-    let custom_font_file_path = parse_c_string(custom_font_file_path).unwrap_or_default();
+        let custom_font_family = parse_c_string(custom_font_family).unwrap_or_default();
+        let custom_font_file_path = parse_c_string(custom_font_file_path).unwrap_or_default();
 
-    let (reply_tx, reply_rx) = mpsc::channel();
-    if entry
-        .cmd_tx
-        .send(EngineCommand::SetFrame {
-            input: RenderFrameInput {
-                frame_json: json,
-                font_size,
-                outline_width,
-                shadow_style,
-                opacity,
-                custom_font_family,
-                custom_font_file_path,
-            },
-            reply: reply_tx,
-        })
-        .is_err()
-    {
-        return 0;
-    }
-    match reply_rx.recv() {
-        Ok(true) => 1,
-        _ => 0,
+        let (reply_tx, reply_rx) = mpsc::channel();
+        if entry
+            .cmd_tx
+            .send(EngineCommand::SetFrame {
+                input: RenderFrameInput {
+                    frame_json: json,
+                    font_size,
+                    outline_width,
+                    shadow_style,
+                    opacity,
+                    custom_font_family,
+                    custom_font_file_path,
+                },
+                reply: reply_tx,
+            })
+            .is_err()
+        {
+            return 0;
+        }
+        match reply_rx.recv() {
+            Ok(true) => 1,
+            _ => 0,
+        }
+    }));
+    match result {
+        Ok(v) => v,
+        Err(e) => {
+            let msg = e
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| e.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown");
+            n2log(&format!("FFI set_frame PANIC: {msg}"));
+            0
+        }
     }
 }
 
@@ -161,24 +203,38 @@ pub extern "C" fn next2_engine_copy_bgra_frame(
     out_width: *mut u32,
     out_height: *mut u32,
 ) -> u8 {
-    let Some(frame) = readback_frame_bgra(handle) else {
-        return 0;
-    };
-    if !out_width.is_null() {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(frame) = readback_frame_bgra(handle) else {
+            return 0;
+        };
+        if out_pixels.is_null() || out_pixels_len < frame.pixels.len() {
+            return 0;
+        }
+        if !out_width.is_null() {
+            unsafe {
+                *out_width = frame.width;
+            }
+        }
+        if !out_height.is_null() {
+            unsafe {
+                *out_height = frame.height;
+            }
+        }
         unsafe {
-            *out_width = frame.width;
+            std::ptr::copy_nonoverlapping(frame.pixels.as_ptr(), out_pixels, frame.pixels.len());
+        }
+        1
+    }));
+    match result {
+        Ok(v) => v,
+        Err(e) => {
+            let msg = e
+                .downcast_ref::<String>()
+                .map(|s| s.as_str())
+                .or_else(|| e.downcast_ref::<&str>().copied())
+                .unwrap_or("unknown");
+            n2log(&format!("FFI copy_bgra_frame PANIC: {msg}"));
+            0
         }
     }
-    if !out_height.is_null() {
-        unsafe {
-            *out_height = frame.height;
-        }
-    }
-    if out_pixels.is_null() || out_pixels_len < frame.pixels.len() {
-        return 0;
-    }
-    unsafe {
-        std::ptr::copy_nonoverlapping(frame.pixels.as_ptr(), out_pixels, frame.pixels.len());
-    }
-    1
 }

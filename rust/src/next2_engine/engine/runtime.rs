@@ -2,15 +2,28 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
+static LOG_FILE: OnceLock<Mutex<std::fs::File>> = OnceLock::new();
+
+pub(crate) fn n2log(msg: &str) {
+    let file = LOG_FILE.get_or_init(|| {
+        let path = std::env::temp_dir().join("next2_debug.log");
+        Mutex::new(std::fs::File::create(path).unwrap())
+    });
+    if let Ok(mut f) = file.lock() {
+        let _ = writeln!(f, "[next2] {}", msg);
+        let _ = f.flush();
+    }
+}
+
 use base64::Engine as _;
 use bytemuck::{Pod, Zeroable};
 use fdsm::bezier::scanline::FillRule;
-use fdsm::correct_error::{correct_error_mtsdf, ErrorCorrectionConfig};
 use fdsm::generate::generate_mtsdf;
 use fdsm::render::correct_sign_mtsdf;
 use fdsm::shape::{Contour, Shape};
@@ -22,7 +35,7 @@ use nalgebra::{Affine2, Similarity2, Vector2};
 use serde::Deserialize;
 use ttf_parser::{Face, GlyphId};
 
-use super::present::{attach_present_texture, signal_frame_ready, PresentTarget};
+use super::present::{attach_present_texture, PresentTarget};
 
 #[cfg(target_os = "android")]
 use ndk_sys::ANativeWindow;
@@ -71,6 +84,7 @@ pub struct RenderFrameInput {
     pub custom_font_file_path: String,
 }
 
+#[derive(Clone)]
 pub struct Next2ReadbackFrame {
     pub width: u32,
     pub height: u32,
@@ -94,15 +108,12 @@ pub enum EngineCommand {
         input: RenderFrameInput,
         reply: mpsc::Sender<bool>,
     },
-    ReadbackFrame {
-        reply: mpsc::Sender<Option<Next2ReadbackFrame>>,
-    },
     Stop,
 }
 
 pub struct EngineEntry {
     pub cmd_tx: mpsc::Sender<EngineCommand>,
-    pub frame_ready: Arc<AtomicBool>,
+    pub latest_frame: Arc<Mutex<Option<Next2ReadbackFrame>>>,
     pub mtl_device_ptr: usize,
 }
 
@@ -134,7 +145,7 @@ pub fn lookup_engine(handle: u64) -> Option<EngineEntry> {
     let entry = guard.get(&handle)?;
     Some(EngineEntry {
         cmd_tx: entry.cmd_tx.clone(),
-        frame_ready: Arc::clone(&entry.frame_ready),
+        latest_frame: Arc::clone(&entry.latest_frame),
         mtl_device_ptr: entry.mtl_device_ptr,
     })
 }
@@ -148,22 +159,23 @@ pub fn remove_engine(handle: u64) -> Option<EngineEntry> {
 }
 
 pub fn poll_frame_ready(handle: u64) -> bool {
-    lookup_engine(handle)
-        .map(|entry| entry.frame_ready.swap(false, Ordering::AcqRel))
+    let Some(entry) = lookup_engine(handle) else {
+        return false;
+    };
+    let latest_frame = Arc::clone(&entry.latest_frame);
+    drop(entry);
+    latest_frame
+        .try_lock()
+        .map(|guard| guard.is_some())
         .unwrap_or(false)
 }
 
 pub fn readback_frame_bgra(handle: u64) -> Option<Next2ReadbackFrame> {
     let entry = lookup_engine(handle)?;
-    let (reply_tx, reply_rx) = mpsc::channel();
-    if entry
-        .cmd_tx
-        .send(EngineCommand::ReadbackFrame { reply: reply_tx })
-        .is_err()
-    {
-        return None;
-    }
-    reply_rx.recv().ok().flatten()
+    let latest_frame = Arc::clone(&entry.latest_frame);
+    drop(entry);
+    let guard = latest_frame.try_lock().ok()?;
+    guard.clone()
 }
 
 pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
@@ -172,16 +184,29 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
 
     let ctx = device_context()?;
 
+    n2log(&format!("engine created: {}x{}", width, height));
+
     let mtl_device_ptr = extract_mtl_device_ptr(ctx.device.as_ref()) as usize;
 
     let (cmd_tx, cmd_rx) = mpsc::channel::<EngineCommand>();
-    let frame_ready = Arc::new(AtomicBool::new(false));
-    let frame_ready_thread = Arc::clone(&frame_ready);
+    let latest_frame: Arc<Mutex<Option<Next2ReadbackFrame>>> = Arc::new(Mutex::new(None));
+    let latest_frame_thread = Arc::clone(&latest_frame);
 
     thread::Builder::new()
         .name("next2-engine".to_string())
         .spawn(move || {
-            run_engine_loop(ctx, width, height, frame_ready_thread, cmd_rx);
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                run_engine_loop(ctx, width, height, latest_frame_thread, cmd_rx);
+            }));
+            if let Err(e) = result {
+                if let Some(s) = e.downcast_ref::<String>() {
+                    n2log(&format!("ENGINE THREAD PANIC: {}", s));
+                } else if let Some(s) = e.downcast_ref::<&str>() {
+                    n2log(&format!("ENGINE THREAD PANIC: {}", s));
+                } else {
+                    n2log("ENGINE THREAD PANIC: unknown");
+                }
+            }
         })
         .map_err(|err| format!("spawn next2-engine failed: {err}"))?;
 
@@ -198,7 +223,7 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
         handle,
         EngineEntry {
             cmd_tx,
-            frame_ready,
+            latest_frame,
             mtl_device_ptr,
         },
     );
@@ -219,8 +244,17 @@ static DEVICE_CONTEXT: OnceLock<Result<Arc<EngineDeviceContext>, String>> = Once
 
 fn device_context() -> Result<Arc<EngineDeviceContext>, String> {
     let init_result = DEVICE_CONTEXT.get_or_init(|| {
+        let backends = if cfg!(target_os = "windows") {
+            wgpu::Backends::DX12
+        } else if cfg!(any(target_os = "macos", target_os = "ios")) {
+            wgpu::Backends::METAL
+        } else if cfg!(target_os = "android") {
+            wgpu::Backends::VULKAN
+        } else {
+            wgpu::Backends::PRIMARY
+        };
         let instance = Arc::new(wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends,
             flags: wgpu::InstanceFlags::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions::default(),
@@ -337,7 +371,7 @@ fn run_engine_loop(
     ctx: Arc<EngineDeviceContext>,
     mut width: u32,
     mut height: u32,
-    frame_ready: Arc<AtomicBool>,
+    latest_frame: Arc<Mutex<Option<Next2ReadbackFrame>>>,
     cmd_rx: mpsc::Receiver<EngineCommand>,
 ) {
     let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
@@ -453,9 +487,6 @@ fn run_engine_loop(
                         has_pending_frame = true;
                     }
                 }
-                EngineCommand::ReadbackFrame { reply } => {
-                    let _ = reply.send(renderer.readback_frame_bgra());
-                }
                 EngineCommand::Stop => {
                     running = false;
                     break;
@@ -470,10 +501,14 @@ fn run_engine_loop(
         if has_pending_frame {
             if let Some(target) = present_target.as_mut() {
                 renderer.draw_to_present(target);
+                renderer.draw_to_offscreen();
             } else {
                 renderer.draw_to_offscreen();
             }
-            signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
+
+            let frame = renderer.readback_pixels();
+            *latest_frame.lock().unwrap() = frame;
+
             has_pending_frame = false;
         }
     }

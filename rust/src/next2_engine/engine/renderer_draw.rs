@@ -21,7 +21,6 @@ impl Next2Renderer {
         }
 
         self.ensure_vertex_capacity();
-
         let mut encoder = self
             .ctx
             .device
@@ -289,7 +288,7 @@ impl Next2Renderer {
         self.vertices.clear();
         self.shadow_vertices.clear();
 
-        for item in self.frame_items.clone() {
+        for item in self.frame_items.clone().iter() {
             let outline_px = resolve_outline_px(item.font_size, item.outline_width);
             let shadow = resolve_shadow(item.font_size, item.shadow_style);
             let fill_color = argb_to_linear(item.color_argb, item.opacity);

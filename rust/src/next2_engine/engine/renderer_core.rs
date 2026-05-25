@@ -364,6 +364,10 @@ impl Next2Renderer {
         self.emoji_atlas.clear();
     }
 
+    fn frame_items(&self) -> &[FrameItem] {
+        &self.frame_items
+    }
+
     fn update_frame(&mut self, input: RenderFrameInput, custom_font: Option<FontSource>) -> bool {
         let parsed = match serde_json::from_str::<FramePayload>(&input.frame_json) {
             Ok(parsed) => parsed,
@@ -547,9 +551,7 @@ impl Next2Renderer {
         self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
     }
 
-    fn readback_frame_bgra(&mut self) -> Option<Next2ReadbackFrame> {
-        self.draw_to_offscreen();
-
+    fn readback_pixels(&self) -> Option<Next2ReadbackFrame> {
         let width = self.width.max(1);
         let height = self.height.max(1);
         let bytes_per_pixel = 4u32;
@@ -601,6 +603,7 @@ impl Next2Renderer {
         });
         let _ = self.ctx.device.poll(wgpu::PollType::wait_indefinitely());
         if rx.recv().ok()? != true {
+            n2log("readback: map_async failed");
             return None;
         }
 
@@ -621,5 +624,10 @@ impl Next2Renderer {
             height,
             pixels,
         })
+    }
+
+    fn readback_frame_bgra(&mut self) -> Option<Next2ReadbackFrame> {
+        self.draw_to_offscreen();
+        self.readback_pixels()
     }
 }

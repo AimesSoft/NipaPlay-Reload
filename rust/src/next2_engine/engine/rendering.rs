@@ -674,14 +674,26 @@ fn load_faces_from_owned_bytes(
 }
 
 fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Option<GlyphMsdfData> {
-    let bbox = face.glyph_bounding_box(glyph_id)?;
-
+    n2log(&format!("glyph_msdf: glyph_id={}, px={}", glyph_id.0, px));
     let advance_units = face
         .glyph_hor_advance(glyph_id)
         .map(|v| v as f32)
         .unwrap_or_else(|| face.units_per_em() as f32 * FALLBACK_GLYPH_ADVANCE_RATIO);
     let advance =
         scale_metric_to_px(advance_units, face, px).max(px * FALLBACK_GLYPH_ADVANCE_RATIO);
+
+    let Some(bbox) = face.glyph_bounding_box(glyph_id) else {
+        let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;
+        return Some(GlyphMsdfData {
+            pixels: Vec::new(),
+            width: 0,
+            height: 0,
+            spread: 0.0,
+            offset_x: scale_metric_to_px(side_bearing, face, px),
+            offset_y: 0.0,
+            advance,
+        });
+    };
 
     let width_units = (bbox.x_max - bbox.x_min).max(0) as f64;
     let height_units = (bbox.y_max - bbox.y_min).max(0) as f64;
@@ -710,6 +722,7 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
     ));
 
     let mut shape: Shape<Contour> = fdsm_ttf_parser::load_shape_from_face(face, glyph_id)?;
+    n2log("glyph_msdf: shape loaded");
     shape.transform(&transform);
 
     let width = (width_units * px_scale + 2.0 * MSDF_RANGE).ceil().max(1.0) as u32;
@@ -717,30 +730,52 @@ fn glyph_msdf_from_face(face: &Face<'static>, glyph_id: GlyphId, px: f32) -> Opt
 
     let colored_shape =
         Shape::edge_coloring_simple(shape, EDGE_COLORING_CORNER_THRESHOLD, EDGE_COLORING_SEED);
+    n2log("glyph_msdf: edge colored");
     let prepared_colored_shape = colored_shape.prepare();
 
-    let mut mtsdf_f32 = Rgba32FImage::new(width, height);
-    generate_mtsdf(&prepared_colored_shape, MSDF_RANGE, &mut mtsdf_f32);
-    correct_error_mtsdf(
-        &mut mtsdf_f32,
-        &colored_shape,
-        &prepared_colored_shape,
-        MSDF_RANGE,
-        &ErrorCorrectionConfig::default(),
-    );
-    correct_sign_mtsdf(&mut mtsdf_f32, &prepared_colored_shape, FillRule::Nonzero);
+    // fdsm 0.8.0 generate_mtsdf / correct_sign_mtsdf can hang on certain glyphs.
+    // Run in a separate thread with a timeout to prevent permanent deadlock.
+    n2log(&format!("glyph_msdf: generating {}x{}", width, height));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let _worker = std::thread::Builder::new()
+        .name("next2-msdf".into())
+        .spawn(move || {
+            let mut mtsdf_f32 = Rgba32FImage::new(width, height);
+            generate_mtsdf(&prepared_colored_shape, MSDF_RANGE, &mut mtsdf_f32);
+            correct_sign_mtsdf(&mut mtsdf_f32, &prepared_colored_shape, FillRule::Nonzero);
 
-    let mtsdf_u8: RgbaImage = mtsdf_f32.convert();
-    let raw_rgba = mtsdf_u8.into_raw();
-    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-    for y in 0..height {
-        let src_y = height - 1 - y;
-        let row_start = (src_y * width * 4) as usize;
-        let row_end = row_start + (width * 4) as usize;
-        for chunk in raw_rgba[row_start..row_end].chunks_exact(4) {
-            rgba.extend_from_slice(chunk);
+            let mtsdf_u8: RgbaImage = mtsdf_f32.convert();
+            let raw_rgba = mtsdf_u8.into_raw();
+            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+            for y in 0..height {
+                let src_y = height - 1 - y;
+                let row_start = (src_y * width * 4) as usize;
+                let row_end = row_start + (width * 4) as usize;
+                for chunk in raw_rgba[row_start..row_end].chunks_exact(4) {
+                    rgba.extend_from_slice(chunk);
+                }
+            }
+            let _ = tx.send(rgba);
+        });
+
+    let result = match rx.recv_timeout(std::time::Duration::from_secs(2)) {
+        Ok(pixels) => {
+            n2log("glyph_msdf: done");
+            Some(pixels)
         }
-    }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            n2log(&format!("glyph_msdf: TIMEOUT glyph_id={}", glyph_id.0));
+            None
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            n2log(&format!("glyph_msdf: CRASH glyph_id={}", glyph_id.0));
+            None
+        }
+    };
+
+    let Some(rgba) = result else {
+        return None;
+    };
 
     let side_bearing = face.glyph_hor_side_bearing(glyph_id).unwrap_or(0) as f32;
     let offset_x = scale_metric_to_px(side_bearing, face, px) - MSDF_RANGE as f32;
