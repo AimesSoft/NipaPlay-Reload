@@ -1,9 +1,6 @@
 package com.flutter_rust_bridge.rust_lib_nipaplay;
 
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.Rect;
+import android.graphics.SurfaceTexture;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -12,10 +9,11 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.view.TextureRegistry;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -40,17 +38,6 @@ public final class RustLibNipaplayPlugin
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
   private volatile boolean detached = false;
 
-  private final Runnable ticker =
-      new Runnable() {
-        @Override
-        public void run() {
-          renderTick();
-          if (textureRegistry != null) {
-            mainHandler.postDelayed(this, 16);
-          }
-        }
-      };
-
   private static final class SurfaceState {
     final String surfaceId;
     TextureRegistry.SurfaceTextureEntry textureEntry;
@@ -60,7 +47,7 @@ public final class RustLibNipaplayPlugin
     long engineHandle;
     boolean initInProgress;
     boolean disposed;
-    ByteBuffer frameBuffer;
+    final List<PendingResult> pendingResults = new ArrayList<>();
 
     SurfaceState(String surfaceId, int width, int height) {
       this.surfaceId = surfaceId;
@@ -69,7 +56,33 @@ public final class RustLibNipaplayPlugin
       this.engineHandle = 0L;
       this.initInProgress = false;
       this.disposed = false;
-      this.frameBuffer = null;
+    }
+  }
+
+  private static final class SurfaceCreateResult {
+    final TextureRegistry.SurfaceTextureEntry textureEntry;
+    final Surface surface;
+    final String error;
+
+    SurfaceCreateResult(
+        TextureRegistry.SurfaceTextureEntry textureEntry, Surface surface, String error) {
+      this.textureEntry = textureEntry;
+      this.surface = surface;
+      this.error = error;
+    }
+
+    static SurfaceCreateResult error(String message) {
+      return new SurfaceCreateResult(null, null, message);
+    }
+  }
+
+  private static final class PendingResult {
+    final RequestedInfo request;
+    final MethodChannel.Result result;
+
+    PendingResult(RequestedInfo request, MethodChannel.Result result) {
+      this.request = request;
+      this.result = result;
     }
   }
 
@@ -79,13 +92,11 @@ public final class RustLibNipaplayPlugin
     textureRegistry = binding.getTextureRegistry();
     channel = new MethodChannel(binding.getBinaryMessenger(), CHANNEL_NAME);
     channel.setMethodCallHandler(this);
-    mainHandler.post(ticker);
   }
 
   @Override
   public void onDetachedFromEngine(FlutterPluginBinding binding) {
     detached = true;
-    mainHandler.removeCallbacks(ticker);
     if (channel != null) {
       channel.setMethodCallHandler(null);
       channel = null;
@@ -132,48 +143,111 @@ public final class RustLibNipaplayPlugin
           && state.width == request.width
           && state.height == request.height
           && !state.initInProgress) {
-        result.success(buildResponse(state, false));
+        result.success(buildResponse(state, state.textureEntry, false));
         return;
       }
+      state.pendingResults.add(new PendingResult(request, result));
       if (state.initInProgress) {
-        result.error("engine_init_busy", "Engine init already in progress", null);
         return;
       }
       state.initInProgress = true;
     }
 
     try {
-      renderExecutor.execute(
-          () -> {
-            try {
-              createOrResizeSurface(state, request);
-              mainHandler.post(
-                  () -> {
-                    synchronized (lock) {
-                      state.initInProgress = false;
-                    }
-                    if (detached) {
-                      result.error("plugin_detached", "Plugin detached", null);
-                    } else {
-                      result.success(buildResponse(state, true));
-                    }
-                  });
-            } catch (Exception e) {
-              Log.e(TAG, "getTextureInfo failed", e);
-              mainHandler.post(
-                  () -> {
-                    synchronized (lock) {
-                      state.initInProgress = false;
-                    }
-                    result.error("engine_init_failed", e.getMessage(), null);
-                  });
-            }
-          });
+      renderExecutor.execute(() -> initSurface(request, state));
     } catch (RejectedExecutionException e) {
+      final List<MethodChannel.Result> callbacks = new ArrayList<>();
       synchronized (lock) {
         state.initInProgress = false;
+        for (PendingResult pending : state.pendingResults) {
+          callbacks.add(pending.result);
+        }
+        state.pendingResults.clear();
       }
-      result.error("plugin_detached", "Renderer executor unavailable", null);
+      mainHandler.post(
+          () -> {
+            for (MethodChannel.Result callback : callbacks) {
+              callback.error("plugin_detached", "Renderer executor unavailable", null);
+            }
+          });
+    }
+  }
+
+  private void initSurface(RequestedInfo request, SurfaceState state) {
+    try {
+      createOrResizeSurface(state, request);
+      final List<MethodChannel.Result> callbacks = new ArrayList<>();
+      RequestedInfo nextRequest = null;
+      Map<String, Object> response = null;
+
+      synchronized (lock) {
+        state.initInProgress = false;
+        final TextureRegistry.SurfaceTextureEntry textureEntry = state.textureEntry;
+        if (state.disposed || textureEntry == null || state.surface == null || state.engineHandle == 0L) {
+          throw new IllegalStateException("surface became unavailable during init");
+        }
+        response = buildResponse(state, textureEntry, true);
+        if (!state.pendingResults.isEmpty()) {
+          final List<PendingResult> remaining = new ArrayList<>();
+          for (PendingResult pending : state.pendingResults) {
+            if (pending.request.width == state.width
+                && pending.request.height == state.height
+                && pending.request.surfaceId.equals(state.surfaceId)) {
+              callbacks.add(pending.result);
+            } else {
+              remaining.add(pending);
+            }
+          }
+          state.pendingResults.clear();
+          state.pendingResults.addAll(remaining);
+          if (!state.pendingResults.isEmpty()) {
+            nextRequest = state.pendingResults.get(state.pendingResults.size() - 1).request;
+            state.initInProgress = true;
+          }
+        }
+      }
+
+      final Map<String, Object> successResponse = response;
+      final RequestedInfo followRequest = nextRequest;
+      mainHandler.post(
+          () -> {
+            final boolean stillAlive;
+            synchronized (lock) {
+              stillAlive = !detached && !state.disposed;
+            }
+            if (!stillAlive) {
+              for (MethodChannel.Result callback : callbacks) {
+                callback.error(
+                    detached ? "plugin_detached" : "surface_disposed",
+                    detached ? "Plugin detached" : "surface disposed",
+                    null);
+              }
+            } else {
+              for (MethodChannel.Result callback : callbacks) {
+                callback.success(successResponse);
+              }
+            }
+          });
+
+      if (followRequest != null) {
+        renderExecutor.execute(() -> initSurface(followRequest, state));
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "getTextureInfo failed", e);
+      final List<MethodChannel.Result> callbacks = new ArrayList<>();
+      synchronized (lock) {
+        state.initInProgress = false;
+        for (PendingResult pending : state.pendingResults) {
+          callbacks.add(pending.result);
+        }
+        state.pendingResults.clear();
+      }
+      mainHandler.post(
+          () -> {
+            for (MethodChannel.Result callback : callbacks) {
+              callback.error("engine_init_failed", e.getMessage(), null);
+            }
+          });
     }
   }
 
@@ -181,9 +255,13 @@ public final class RustLibNipaplayPlugin
     TextureRegistry.SurfaceTextureEntry oldEntry = state.textureEntry;
     Surface oldSurface = state.surface;
 
-    final TextureRegistry.SurfaceTextureEntry textureEntry = textureRegistry.createSurfaceTexture();
-    textureEntry.surfaceTexture().setDefaultBufferSize(request.width, request.height);
-    final Surface surface = new Surface(textureEntry.surfaceTexture());
+    SurfaceCreateResult createResult = createSurfaceOnMainThread(request.width, request.height);
+    if (createResult.textureEntry == null || createResult.surface == null) {
+      throw new IllegalStateException(
+          createResult.error != null ? createResult.error : "Surface creation failed");
+    }
+    final TextureRegistry.SurfaceTextureEntry textureEntry = createResult.textureEntry;
+    final Surface surface = createResult.surface;
 
     long handle = state.engineHandle;
     boolean engineCreated = false;
@@ -199,16 +277,13 @@ public final class RustLibNipaplayPlugin
       }
     }
     if (handle == 0L) {
-      textureEntry.release();
-      surface.release();
+      releaseSurfaceResourcesOnMainThread(surface, textureEntry);
       throw new IllegalStateException("next2_engine_create returned 0");
     }
 
-    int attached =
-        nativeNext2AttachSurface(handle, surface, request.width, request.height) ? 1 : 0;
-    if (attached == 0) {
-      textureEntry.release();
-      surface.release();
+    boolean attached = nativeNext2AttachSurface(handle, surface, request.width, request.height);
+    if (!attached) {
+      releaseSurfaceResourcesOnMainThread(surface, textureEntry);
       if (engineCreated) {
         nativeNext2EngineDispose(handle);
       }
@@ -217,8 +292,7 @@ public final class RustLibNipaplayPlugin
 
     synchronized (lock) {
       if (state.disposed) {
-        textureEntry.release();
-        surface.release();
+        releaseSurfaceResourcesOnMainThread(surface, textureEntry);
         nativeNext2EngineDispose(handle);
         return;
       }
@@ -229,12 +303,75 @@ public final class RustLibNipaplayPlugin
       state.height = request.height;
     }
 
-    if (oldSurface != null) {
-      oldSurface.release();
+    releaseOldResourcesOnMainThread(oldSurface, oldEntry);
+  }
+
+  private SurfaceCreateResult createSurfaceOnMainThread(int width, int height) {
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      return createSurface(width, height);
     }
-    if (oldEntry != null) {
-      oldEntry.release();
+    final SurfaceCreateResult[] holder = new SurfaceCreateResult[1];
+    final CountDownLatch latch = new CountDownLatch(1);
+    mainHandler.post(
+        () -> {
+          try {
+            holder[0] = createSurface(width, height);
+          } catch (RuntimeException e) {
+            holder[0] = SurfaceCreateResult.error("create_surface_exception: " + e.getMessage());
+          } finally {
+            latch.countDown();
+          }
+        });
+    try {
+      latch.await();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return SurfaceCreateResult.error("create_surface_interrupted");
     }
+    if (holder[0] == null) {
+      return SurfaceCreateResult.error("create_surface_failed");
+    }
+    return holder[0];
+  }
+
+  private void releaseSurfaceResourcesOnMainThread(
+      Surface surface, TextureRegistry.SurfaceTextureEntry textureEntry) {
+    if (surface == null && textureEntry == null) {
+      return;
+    }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      if (surface != null) {
+        surface.release();
+      }
+      if (textureEntry != null) {
+        textureEntry.release();
+      }
+      return;
+    }
+    mainHandler.post(
+        () -> {
+          if (surface != null) {
+            surface.release();
+          }
+          if (textureEntry != null) {
+            textureEntry.release();
+          }
+        });
+  }
+
+  private SurfaceCreateResult createSurface(int width, int height) {
+    if (textureRegistry == null) {
+      return SurfaceCreateResult.error("Texture registry unavailable");
+    }
+    TextureRegistry.SurfaceTextureEntry textureEntry = textureRegistry.createSurfaceTexture();
+    SurfaceTexture surfaceTexture = textureEntry.surfaceTexture();
+    surfaceTexture.setDefaultBufferSize(width, height);
+    Surface surface = new Surface(surfaceTexture);
+    return new SurfaceCreateResult(textureEntry, surface, null);
+  }
+
+  private void releaseOldResourcesOnMainThread(Surface oldSurface, TextureRegistry.SurfaceTextureEntry oldEntry) {
+    releaseSurfaceResourcesOnMainThread(oldSurface, oldEntry);
   }
 
   private void setFrame(Object arguments, MethodChannel.Result result) {
@@ -275,19 +412,29 @@ public final class RustLibNipaplayPlugin
   private void disposeTexture(Object arguments, MethodChannel.Result result) {
     final String surfaceId = parseSurfaceId(arguments);
     SurfaceState removed;
+    final List<MethodChannel.Result> pendingCallbacks = new ArrayList<>();
     synchronized (lock) {
       removed = surfaces.remove(surfaceId);
       if (removed != null) {
         removed.disposed = true;
+        for (PendingResult pending : removed.pendingResults) {
+          pendingCallbacks.add(pending.result);
+        }
+        removed.pendingResults.clear();
       }
     }
+    if (!pendingCallbacks.isEmpty()) {
+      mainHandler.post(
+          () -> {
+            for (MethodChannel.Result callback : pendingCallbacks) {
+              callback.error("surface_disposed", "surface disposed", null);
+            }
+          });
+    }
     if (removed != null) {
-      if (removed.surface != null) {
-        removed.surface.release();
-      }
-      if (removed.textureEntry != null) {
-        removed.textureEntry.release();
-      }
+      releaseSurfaceResourcesOnMainThread(removed.surface, removed.textureEntry);
+      removed.surface = null;
+      removed.textureEntry = null;
       if (removed.engineHandle != 0L) {
         nativeNext2EngineDispose(removed.engineHandle);
       }
@@ -302,65 +449,13 @@ public final class RustLibNipaplayPlugin
       surfaces.clear();
     }
     for (SurfaceState state : snapshot.values()) {
-      if (state.surface != null) {
-        state.surface.release();
-      }
-      if (state.textureEntry != null) {
-        state.textureEntry.release();
-      }
+      state.disposed = true;
+      state.pendingResults.clear();
+      releaseSurfaceResourcesOnMainThread(state.surface, state.textureEntry);
+      state.surface = null;
+      state.textureEntry = null;
       if (state.engineHandle != 0L) {
         nativeNext2EngineDispose(state.engineHandle);
-      }
-    }
-  }
-
-  private void renderTick() {
-    if (textureRegistry == null || detached) {
-      return;
-    }
-    final Map<String, SurfaceState> snapshot;
-    synchronized (lock) {
-      snapshot = new HashMap<>(surfaces);
-    }
-    for (SurfaceState state : snapshot.values()) {
-      if (state.engineHandle == 0L || state.surface == null || state.textureEntry == null) {
-        continue;
-      }
-      if (!nativeNext2EnginePollFrameReady(state.engineHandle)) {
-        continue;
-      }
-      int size = state.width * state.height * 4;
-      if (size <= 0) {
-        continue;
-      }
-      if (state.frameBuffer == null || state.frameBuffer.capacity() != size) {
-        state.frameBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder());
-      }
-      state.frameBuffer.clear();
-      long packed = nativeNext2EngineCopyBgraFrame(state.engineHandle, state.frameBuffer, size);
-      int outW = (int) (packed >>> 32);
-      int outH = (int) (packed & 0xFFFFFFFFL);
-      if (packed == 0L || outW <= 0 || outH <= 0) {
-        continue;
-      }
-
-      state.frameBuffer.position(0);
-      Bitmap bitmap = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888);
-      bitmap.copyPixelsFromBuffer(state.frameBuffer);
-
-      Canvas canvas;
-      try {
-        canvas = state.surface.lockCanvas(null);
-      } catch (Exception e) {
-        bitmap.recycle();
-        continue;
-      }
-      try {
-        canvas.drawColor(android.graphics.Color.TRANSPARENT, android.graphics.PorterDuff.Mode.CLEAR);
-        canvas.drawBitmap(bitmap, null, new Rect(0, 0, state.width, state.height), new Paint());
-      } finally {
-        state.surface.unlockCanvasAndPost(canvas);
-        bitmap.recycle();
       }
     }
   }
@@ -404,9 +499,10 @@ public final class RustLibNipaplayPlugin
     return "default";
   }
 
-  private Map<String, Object> buildResponse(SurfaceState state, boolean isNewEngine) {
+  private Map<String, Object> buildResponse(
+      SurfaceState state, TextureRegistry.SurfaceTextureEntry textureEntry, boolean isNewEngine) {
     final Map<String, Object> response = new HashMap<>();
-    response.put("textureId", state.textureEntry.id());
+    response.put("textureId", textureEntry.id());
     response.put("engineHandle", state.engineHandle);
     response.put("width", state.width);
     response.put("height", state.height);
@@ -463,15 +559,10 @@ public final class RustLibNipaplayPlugin
 
   private static native void nativeNext2EngineDispose(long handle);
 
-  private static native boolean nativeNext2EnginePollFrameReady(long handle);
-
   private static native int nativeNext2EngineSetFrame(
       long handle, String frameJson, float fontSize, float outlineWidth, int shadowStyle, float opacity);
 
   private static native int nativeNext2EngineResetScene(long handle);
-
-  private static native long nativeNext2EngineCopyBgraFrame(
-      long handle, ByteBuffer outBuffer, int outLen);
 
   private static native boolean nativeNext2AttachSurface(
       long handle, Surface surface, int width, int height);

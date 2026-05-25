@@ -37,14 +37,22 @@ class Next2TextureBridge {
       return null;
     }
 
-    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
-      'getTextureInfo',
-      <String, dynamic>{
-        'surfaceId': surfaceId,
-        'width': width,
-        'height': height,
-      },
-    );
+    Map<dynamic, dynamic>? raw;
+    try {
+      raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'getTextureInfo',
+        <String, dynamic>{
+          'surfaceId': surfaceId,
+          'width': width,
+          'height': height,
+        },
+      );
+    } on PlatformException catch (e) {
+      if (e.code == 'plugin_detached' || e.code == 'surface_disposed') {
+        return null;
+      }
+      rethrow;
+    }
 
     if (raw == null) {
       return null;
@@ -56,7 +64,7 @@ class Next2TextureBridge {
     final outHeight = (raw['height'] as num?)?.toInt() ?? height;
     final isNewEngine = raw['isNewEngine'] == true;
 
-    if (textureId == null || engineHandle == null) {
+    if (textureId == null || textureId < 0 || engineHandle == null || engineHandle <= 0) {
       return null;
     }
 
@@ -80,6 +88,7 @@ class Next2TextureBridge {
     double scaleX = 1.0,
     double scaleY = 1.0,
     double fontScale = 1.0,
+    Map<String, dynamic>? framePayload,
   }) async {
     if (!isSupported) {
       return false;
@@ -90,17 +99,18 @@ class Next2TextureBridge {
       return false;
     }
 
-    final payload = <String, dynamic>{
-      'items': items
-          .map(
-            (item) => _itemToJson(
-              item,
-              scaleX: scaleX,
-              scaleY: scaleY,
-            ),
-          )
-          .toList(growable: false),
-    };
+    final payload = framePayload ??
+        <String, dynamic>{
+          'items': items
+              .map(
+                (item) => _itemToJson(
+                  item,
+                  scaleX: scaleX,
+                  scaleY: scaleY,
+                ),
+              )
+              .toList(growable: false),
+        };
 
     final ok = await _channel.invokeMethod<bool>(
       'setFrame',

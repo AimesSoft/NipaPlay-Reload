@@ -31,7 +31,11 @@ pub struct RustGpuSample {
 
 #[flutter_rust_bridge::frb(sync)]
 pub fn is_performance_probe_available() -> bool {
-    cfg!(any(target_os = "linux", target_os = "macos", target_os = "windows"))
+    cfg!(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "windows"
+    ))
 }
 
 pub fn sample_performance() -> RustPerformanceSample {
@@ -199,10 +203,8 @@ fn sample_process_cpu_macos() -> Result<RustCpuSample, String> {
                 std::io::Error::last_os_error()
             ));
         }
-        let user_us =
-            usage.ru_utime.tv_sec * 1_000_000 + i64::from(usage.ru_utime.tv_usec);
-        let sys_us =
-            usage.ru_stime.tv_sec * 1_000_000 + i64::from(usage.ru_stime.tv_usec);
+        let user_us = usage.ru_utime.tv_sec * 1_000_000 + i64::from(usage.ru_utime.tv_usec);
+        let sys_us = usage.ru_stime.tv_sec * 1_000_000 + i64::from(usage.ru_stime.tv_usec);
         user_us + sys_us
     };
 
@@ -270,7 +272,10 @@ fn sample_gpu_macos() -> Result<RustGpuSample, String> {
     })?;
     let source = format!(
         "macos_ioreg_performance_statistics_{}",
-        used_key.unwrap_or("unknown").replace(' ', "_").replace('%', "pct")
+        used_key
+            .unwrap_or("unknown")
+            .replace(' ', "_")
+            .replace('%', "pct")
     );
 
     Ok(RustGpuSample {

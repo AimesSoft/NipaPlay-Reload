@@ -718,15 +718,25 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                     ),
                     const SizedBox(height: 12),
                     if (_isNext2Kernel) ...[
-                      SettingsSlider(
-                        value: videoState.next2DanmakuOutlineWidth,
-                        onChanged: videoState.setNext2DanmakuOutlineWidth,
-                        label: '描边粗细',
-                        displayTextBuilder: (v) =>
-                            v <= 0 ? '关闭' : '${v.toStringAsFixed(2)}x',
-                        min: 0.0,
-                        max: 4.0,
-                        step: 0.05,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '描边',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                          FluentSettingsSwitch(
+                            value: videoState.next2DanmakuOutlineWidth > 0.0,
+                            onChanged: (value) {
+                              videoState.setNext2DanmakuOutlineWidth(
+                                value ? 1.0 : 0.0,
+                              );
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                     ] else ...[
@@ -761,36 +771,64 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       ),
                       const SizedBox(height: 12),
                     ],
-                    const Text(
-                      '阴影样式',
-                      style: TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: DanmakuShadowStyle.values.map((style) {
-                        final selected = videoState.danmakuShadowStyle == style;
-                        return BlurButton(
-                          text: _shadowStyleLabel(style),
-                          icon: selected
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                          fontSize: 12,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
+                    if (_isNext2Kernel) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '阴影',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
                           ),
-                          foregroundColor: selected
-                              ? Colors.white
-                              : Colors.white.withOpacity(0.75),
-                          onTap: () => videoState.setDanmakuShadowStyle(style),
-                        );
-                      }).toList(),
-                    ),
+                          FluentSettingsSwitch(
+                            value: videoState.danmakuShadowStyle !=
+                                DanmakuShadowStyle.none,
+                            onChanged: (value) {
+                              videoState.setDanmakuShadowStyle(
+                                value
+                                    ? DanmakuShadowStyle.strong
+                                    : DanmakuShadowStyle.none,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const Text(
+                        '阴影样式',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: DanmakuShadowStyle.values.map((style) {
+                          final selected =
+                              videoState.danmakuShadowStyle == style;
+                          return BlurButton(
+                            text: _shadowStyleLabel(style),
+                            icon: selected
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
+                            fontSize: 12,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            foregroundColor: selected
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.75),
+                            onTap: () =>
+                                videoState.setDanmakuShadowStyle(style),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     const SettingsHintText(
-                      'Next2 使用描边粗细滑块；阴影可单独切换。',
+                      'Next2 使用描边开关；阴影可单独切换。',
                     ),
                   ],
                 ),
@@ -884,11 +922,13 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   );
                 }),
               ),
-              // 弹幕堆叠开关（Canvas/NipaPlay Next模式下隐藏）
+              // 弹幕堆叠开关（Canvas/NipaPlay Next/Next2 模式下隐藏）
               if (DanmakuKernelFactory.getKernelType() !=
                       DanmakuRenderEngine.canvas &&
                   DanmakuKernelFactory.getKernelType() !=
-                      DanmakuRenderEngine.nipaplayNext)
+                      DanmakuRenderEngine.nipaplayNext &&
+                  DanmakuKernelFactory.getKernelType() !=
+                      DanmakuRenderEngine.next2)
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
                   child: Column(

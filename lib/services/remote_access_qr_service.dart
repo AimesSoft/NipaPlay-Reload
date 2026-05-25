@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as img;
-import 'package:image_picker/image_picker.dart';
-import 'package:zxing2/qrcode.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
 class RemoteAccessQrPayload {
   const RemoteAccessQrPayload({
@@ -195,49 +194,6 @@ class RemoteAccessQrService {
     }
   }
 
-  static String decodeQrImage(Uint8List bytes) {
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      throw const FormatException('无法读取拍摄的图片');
-    }
-
-    final oriented = img.bakeOrientation(decoded);
-    final candidates = <img.Image>[
-      oriented,
-      if (oriented.width > 1600 || oriented.height > 1600)
-        img.copyResize(
-          oriented,
-          width: oriented.width >= oriented.height ? 1600 : null,
-          height: oriented.height > oriented.width ? 1600 : null,
-          interpolation: img.Interpolation.average,
-        ),
-    ];
-
-    Object? lastError;
-    for (final candidate in candidates) {
-      try {
-        final rgba = candidate
-            .convert(numChannels: 4)
-            .getBytes(order: img.ChannelOrder.rgba);
-        final pixels = rgba.buffer.asInt32List(
-          rgba.offsetInBytes,
-          rgba.lengthInBytes ~/ 4,
-        );
-        final source = RGBLuminanceSource(
-          candidate.width,
-          candidate.height,
-          pixels,
-        );
-        final bitmap = BinaryBitmap(HybridBinarizer(source));
-        return QRCodeReader().decode(bitmap).text;
-      } catch (e) {
-        lastError = e;
-      }
-    }
-
-    throw FormatException('未识别到二维码', lastError);
-  }
-
   static RemoteAccessQrPayload? _tryParseJsonPayload(String text) {
     try {
       final decoded = json.decode(text);
@@ -279,25 +235,91 @@ class RemoteAccessQrCameraScanner {
         defaultTargetPlatform == TargetPlatform.iOS;
   }
 
-  static Future<RemoteAccessQrPayload?> scan() async {
+  static Future<RemoteAccessQrPayload?> scan(BuildContext context) async {
     if (!isSupported) {
       throw UnsupportedError('当前平台不支持相机扫码');
     }
 
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      imageQuality: 95,
-      maxWidth: 2400,
-      maxHeight: 2400,
+    final scannedText = await Navigator.of(context, rootNavigator: true).push<
+      String
+    >(
+      CupertinoPageRoute(builder: (_) => const _RemoteAccessQrScannerPage()),
     );
-    if (image == null) return null;
-
-    final bytes = await image.readAsBytes();
-    final scannedText = await compute(decodeRemoteAccessQrImage, bytes);
+    if (scannedText == null || scannedText.trim().isEmpty) return null;
     return RemoteAccessQrService.parseScannedText(scannedText);
   }
 }
 
-String decodeRemoteAccessQrImage(Uint8List bytes) {
-  return RemoteAccessQrService.decodeQrImage(bytes);
+class _RemoteAccessQrScannerPage extends StatefulWidget {
+  const _RemoteAccessQrScannerPage();
+
+  @override
+  State<_RemoteAccessQrScannerPage> createState() =>
+      _RemoteAccessQrScannerPageState();
+}
+
+class _RemoteAccessQrScannerPageState extends State<_RemoteAccessQrScannerPage> {
+  final GlobalKey _qrKey = GlobalKey(debugLabel: 'remote_access_qr');
+  QRViewController? _controller;
+  StreamSubscription<Barcode>? _scanSubscription;
+  bool _hasResult = false;
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _controller?.pauseCamera();
+    }
+    _controller?.resumeCamera();
+  }
+
+  @override
+  void dispose() {
+    _scanSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _onQRViewCreated(QRViewController controller) {
+    _controller = controller;
+    _scanSubscription = controller.scannedDataStream.listen((scanData) {
+      if (_hasResult) return;
+      final code = scanData.code?.trim();
+      if (code == null || code.isEmpty) return;
+      if (!mounted) return;
+      _hasResult = true;
+      Navigator.of(context).pop(code);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      navigationBar: const CupertinoNavigationBar(
+        middle: Text('扫码连接'),
+      ),
+      child: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            QRView(
+              key: _qrKey,
+              onQRViewCreated: _onQRViewCreated,
+            ),
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 28,
+              child: Text(
+                '将二维码放入取景框内自动识别',
+                textAlign: TextAlign.center,
+                style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  color: CupertinoColors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

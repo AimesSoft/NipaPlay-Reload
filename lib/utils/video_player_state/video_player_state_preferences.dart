@@ -1224,7 +1224,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (value == null || !value.isFinite) {
       return 1.0;
     }
-    return value.clamp(0.0, 4.0).toDouble();
+    return value <= 0.0 ? 0.0 : 1.0;
   }
 
   bool _isSupportedDanmakuFontExtension(String path) {

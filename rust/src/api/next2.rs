@@ -196,6 +196,9 @@ pub fn next2_prepare_layout(
     let mut scroll_track_offsets = vec![0.0; track_len];
     let mut top_track_offsets = vec![0.0; track_len];
     let mut bottom_track_offsets = vec![0.0; track_len];
+    let mut scroll_track_base_offsets = vec![0.0; track_len];
+    let mut top_track_base_offsets = vec![0.0; track_len];
+    let mut bottom_track_base_offsets = vec![0.0; track_len];
 
     let mut scroll_offset = 0.0;
     let mut top_offset = 0.0;
@@ -209,6 +212,11 @@ pub fn next2_prepare_layout(
 
         bottom_accumulated += bottom_track_heights[i];
         bottom_track_offsets[i] = height - bottom_accumulated;
+
+        scroll_track_base_offsets[i] = scroll_offset - scroll_track_heights[i];
+        top_track_base_offsets[i] = top_offset - top_track_heights[i];
+        bottom_track_base_offsets[i] =
+            height - bottom_accumulated + bottom_track_heights[i] - base_track_height;
     }
 
     for item in &mut items {
@@ -221,9 +229,9 @@ pub fn next2_prepare_layout(
             continue;
         }
         item.y_position = match item.type_code {
-            NEXT2_TYPE_SCROLL => scroll_track_offsets[track],
-            NEXT2_TYPE_TOP => top_track_offsets[track],
-            NEXT2_TYPE_BOTTOM => bottom_track_offsets[track],
+            NEXT2_TYPE_SCROLL => scroll_track_base_offsets[track],
+            NEXT2_TYPE_TOP => top_track_base_offsets[track],
+            NEXT2_TYPE_BOTTOM => bottom_track_base_offsets[track],
             _ => 0.0,
         };
     }
@@ -551,8 +559,7 @@ fn scroll_can_add_to_track(
             continue;
         }
 
-        let existing_x =
-            width - (elapsed / scroll_duration_seconds) * (width + existing.width);
+        let existing_x = width - (elapsed / scroll_duration_seconds) * (width + existing.width);
         let existing_end = existing_x + existing.width;
 
         if width - existing_end < 0.0 {

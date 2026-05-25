@@ -91,7 +91,7 @@ class _CupertinoRemoteControllerSettingsPageState
 
   Future<void> _scanQrAndConnect() async {
     try {
-      final payload = await RemoteAccessQrCameraScanner.scan();
+      final payload = await RemoteAccessQrCameraScanner.scan(context);
       if (payload == null) return;
 
       final candidates = payload.allCandidateBaseUrls;

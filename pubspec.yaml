@@ -82,7 +82,7 @@ dependencies:
   media_kit_libs_video:
     path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
   qr_flutter: ^4.1.0  # 用于生成二维码
-  zxing2: ^0.2.4  # 用于识别远程访问二维码
+  qr_code_scanner_plus: ^2.0.12
   flutter_svg: ^2.0.14  # 用于显示SVG图标
   flutter_markdown: ^0.7.1
   desktop_drop: ^0.6.1
@@ -249,6 +249,8 @@ dependency_overrides:
     path: third_party/media-kit-upstream/libs/macos/media_kit_libs_macos_video
   smb_connect:
     path: third_party/smb_connect
+  kmbal_ionicons:
+    path: third_party/kmbal_ionicons
 
 
 

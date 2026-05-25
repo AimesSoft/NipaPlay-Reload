@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
+import 'next2_emoji_pipeline.dart';
 import 'next2_layout_bridge.dart';
 import 'next2_texture_bridge.dart';
 
@@ -51,6 +52,7 @@ class NipaPlayNext2Overlay extends StatefulWidget {
 class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
   final Next2LayoutBridge _bridge = Next2LayoutBridge();
   final Next2TextureBridge _textureBridge = Next2TextureBridge();
+  final Next2EmojiPipeline _emojiPipeline = Next2EmojiPipeline();
 
   Size _layoutSize = Size.zero;
 
@@ -199,6 +201,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       return false;
     }
 
+    final locale = Localizations.maybeLocaleOf(context);
     final views = WidgetsBinding.instance.platformDispatcher.views;
     final dpr =
         views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
@@ -216,6 +219,12 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     );
 
     if (info == null) {
+      if (_textureReady || _textureId != null) {
+        setState(() {
+          _textureReady = false;
+          _textureId = null;
+        });
+      }
       return false;
     }
 
@@ -232,6 +241,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
     if (info.isNewEngine) {
       await _textureBridge.resetScene();
+      _emojiPipeline.markAtlasDirty();
     }
 
     final widthScale = info.width > 0 ? info.width / _layoutSize.width : 1.0;
@@ -239,6 +249,15 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
         info.height > 0 ? info.height / _layoutSize.height : 1.0;
     final fontScale =
         ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
+
+    final prepared = await _emojiPipeline.buildPayload(
+      items: frame,
+      fontSize: widget.fontSize,
+      scaleX: widthScale,
+      scaleY: heightScale,
+      fontScale: fontScale,
+      locale: locale,
+    );
 
     final pushed = await _textureBridge.setFrame(
       items: frame,
@@ -251,7 +270,14 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       scaleX: widthScale,
       scaleY: heightScale,
       fontScale: fontScale,
+      framePayload: prepared.toJson(),
     );
+
+    if (pushed) {
+      _emojiPipeline.markAtlasSynced();
+    } else {
+      _emojiPipeline.markAtlasDirty();
+    }
 
     return pushed;
   }
