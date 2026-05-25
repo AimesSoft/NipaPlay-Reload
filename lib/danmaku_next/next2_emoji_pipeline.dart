@@ -54,9 +54,7 @@ class Next2EmojiPipeline {
 
     for (final item in items) {
       final renderedFontSize =
-          (fontSize * fontScale * item.content.fontSizeMultiplier)
-              .clamp(8.0, 256.0)
-              .toDouble();
+          (fontSize * fontScale).clamp(8.0, 256.0).toDouble();
 
       final tokens = _tokenize(
         item.content.text,
@@ -80,7 +78,7 @@ class Next2EmojiPipeline {
         'x': item.x * scaleX,
         'y': item.y * scaleY,
         'color_argb': item.content.color.toARGB32().toSigned(32),
-        'font_size_multiplier': item.content.fontSizeMultiplier,
+        'font_size_multiplier': 1.0,
         if (tokens.isNotEmpty) 'tokens': tokens,
       });
     }

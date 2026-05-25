@@ -477,7 +477,7 @@ fn prepare_merged_items(items: Vec<RustNext2DanmakuItem>) -> Vec<RawNext2Item> {
             });
 
             let mut first_processed = first_raw.clone();
-            first_processed.font_size_multiplier = calc_merged_font_size_multiplier(count as i32);
+            first_processed.font_size_multiplier = 1.0;
             first_processed.count_text = Some(format!("x{count}"));
             processed.insert(first_key.clone(), first_processed);
 
@@ -488,7 +488,7 @@ fn prepare_merged_items(items: Vec<RustNext2DanmakuItem>) -> Vec<RawNext2Item> {
                 color_argb: current.color_argb,
                 is_me: current.is_me,
             });
-            current_processed.font_size_multiplier = calc_merged_font_size_multiplier(count as i32);
+            current_processed.font_size_multiplier = 1.0;
             current_processed.count_text = Some(format!("x{count}"));
             processed.insert(key, current_processed);
         } else {
@@ -742,11 +742,6 @@ fn cmp_f64(a: f64, b: f64) -> Ordering {
     })
 }
 
-fn calc_merged_font_size_multiplier(merge_count: i32) -> f64 {
-    let value = 1.0 + (merge_count as f64 / 10.0);
-    value.clamp(1.0, 2.0)
-}
-
 fn merge_key(content: &str, time_seconds: f64) -> String {
     format!("{content}-{time_seconds:.6}")
 }
@@ -903,6 +898,16 @@ mod tests {
         assert_eq!(merged[0].count_text.as_deref(), Some("x2"));
         assert_eq!(merged[1].time_seconds, 60.0);
         assert_eq!(merged[1].count_text.as_deref(), Some("x2"));
+    }
+
+    #[test]
+    fn merged_danmaku_keeps_base_font_size_multiplier() {
+        let merged = prepare_merged_items(vec![mk_item(0.0, "same"), mk_item(1.0, "same")]);
+
+        assert!(!merged.is_empty());
+        for item in merged {
+            assert_eq!(item.font_size_multiplier, 1.0);
+        }
     }
 
     #[test]

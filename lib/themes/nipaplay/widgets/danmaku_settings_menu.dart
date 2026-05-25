@@ -827,9 +827,6 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       ),
                     ],
                     const SizedBox(height: 4),
-                    const SettingsHintText(
-                      'Next2 使用描边开关；阴影可单独切换。',
-                    ),
                   ],
                 ),
               ),

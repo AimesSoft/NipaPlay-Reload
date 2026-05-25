@@ -201,15 +201,15 @@ class NipaPlayNextEngine {
       final isMe = raw['isMe'] == true;
       final isMerged = raw['merged'] == true;
       final mergeCount = (raw['mergeCount'] as int?) ?? 1;
+      final countText = isMerged ? 'x$mergeCount' : null;
 
       final content = DanmakuContentItem(
         text,
         type: type,
         color: color,
         isMe: isMe,
-        fontSizeMultiplier:
-            isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
-        countText: isMerged ? 'x$mergeCount' : null,
+        fontSizeMultiplier: 1.0,
+        countText: countText,
       );
 
       _items.add(
@@ -294,7 +294,7 @@ class NipaPlayNextEngine {
         _fontSize * item.content.fontSizeMultiplier,
       );
       item.width = width;
-      final itemHeight = baseDanmakuHeight * item.content.fontSizeMultiplier;
+      final itemHeight = baseDanmakuHeight;
 
       switch (item.type) {
         case DanmakuItemType.scroll:
@@ -629,11 +629,6 @@ class NipaPlayNextEngine {
 
   String _resolveContent(Map<String, dynamic> raw) {
     return (raw['content'] ?? raw['c'])?.toString() ?? '';
-  }
-
-  double _calcMergedFontSizeMultiplier(int mergeCount) {
-    double multiplier = 1.0 + (mergeCount / 10.0);
-    return multiplier.clamp(1.0, 2.0);
   }
 
   double _measureTextWidth(String text, double fontSize) {
