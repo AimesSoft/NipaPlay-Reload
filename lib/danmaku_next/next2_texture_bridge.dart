@@ -64,7 +64,10 @@ class Next2TextureBridge {
     final outHeight = (raw['height'] as num?)?.toInt() ?? height;
     final isNewEngine = raw['isNewEngine'] == true;
 
-    if (textureId == null || textureId < 0 || engineHandle == null || engineHandle <= 0) {
+    if (textureId == null ||
+        textureId < 0 ||
+        engineHandle == null ||
+        engineHandle <= 0) {
       return null;
     }
 
@@ -85,6 +88,8 @@ class Next2TextureBridge {
     required double outlineWidth,
     required DanmakuShadowStyle shadowStyle,
     required double opacity,
+    String customFontFamily = '',
+    String customFontFilePath = '',
     double scaleX = 1.0,
     double scaleY = 1.0,
     double fontScale = 1.0,
@@ -121,6 +126,8 @@ class Next2TextureBridge {
         'outlineWidth': outlineWidth,
         'shadowStyle': _shadowStyleCode(shadowStyle),
         'opacity': opacity,
+        'customFontFamily': customFontFamily,
+        'customFontFilePath': customFontFilePath,
       },
     );
 

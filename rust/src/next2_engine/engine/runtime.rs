@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
+use std::fs;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
@@ -66,6 +67,8 @@ pub struct RenderFrameInput {
     pub outline_width: f32,
     pub shadow_style: u8,
     pub opacity: f32,
+    pub custom_font_family: String,
+    pub custom_font_file_path: String,
 }
 
 pub struct Next2ReadbackFrame {
@@ -101,6 +104,12 @@ pub struct EngineEntry {
     pub cmd_tx: mpsc::Sender<EngineCommand>,
     pub frame_ready: Arc<AtomicBool>,
     pub mtl_device_ptr: usize,
+}
+
+#[derive(Clone)]
+pub struct FontSource {
+    pub family: String,
+    pub bytes: Box<[u8]>,
 }
 
 struct EngineRegistry {
@@ -331,7 +340,7 @@ fn run_engine_loop(
     frame_ready: Arc<AtomicBool>,
     cmd_rx: mpsc::Receiver<EngineCommand>,
 ) {
-    let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height) {
+    let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
         Ok(renderer) => renderer,
         Err(_) => return,
     };
@@ -432,7 +441,13 @@ fn run_engine_loop(
                     has_pending_frame = true;
                 }
                 EngineCommand::SetFrame { input, reply } => {
-                    let ok = renderer.update_frame(input);
+                    let font_source = load_custom_font_source(
+                        input.custom_font_family.as_str(),
+                        input.custom_font_file_path.as_str(),
+                    )
+                    .ok()
+                    .flatten();
+                    let ok = renderer.update_frame(input, font_source);
                     let _ = reply.send(ok);
                     if ok {
                         has_pending_frame = true;
@@ -462,4 +477,23 @@ fn run_engine_loop(
             has_pending_frame = false;
         }
     }
+}
+
+fn load_custom_font_source(family: &str, file_path: &str) -> Result<Option<FontSource>, String> {
+    let family = family.trim();
+    let file_path = file_path.trim();
+    if family.is_empty() || file_path.is_empty() {
+        return Ok(None);
+    }
+
+    let bytes = fs::read(file_path)
+        .map_err(|err| format!("next2: failed to read custom font '{file_path}': {err}"))?;
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(FontSource {
+        family: family.to_string(),
+        bytes: bytes.into_boxed_slice(),
+    }))
 }

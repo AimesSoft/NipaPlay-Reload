@@ -115,6 +115,8 @@ pub extern "C" fn next2_engine_set_frame(
     outline_width: f32,
     shadow_style: u8,
     opacity: f32,
+    custom_font_family: *const c_char,
+    custom_font_file_path: *const c_char,
 ) -> u8 {
     let Some(entry) = lookup_engine(handle) else {
         return 0;
@@ -122,6 +124,9 @@ pub extern "C" fn next2_engine_set_frame(
     let Some(json) = parse_c_string(frame_json) else {
         return 0;
     };
+
+    let custom_font_family = parse_c_string(custom_font_family).unwrap_or_default();
+    let custom_font_file_path = parse_c_string(custom_font_file_path).unwrap_or_default();
 
     let (reply_tx, reply_rx) = mpsc::channel();
     if entry
@@ -133,6 +138,8 @@ pub extern "C" fn next2_engine_set_frame(
                 outline_width,
                 shadow_style,
                 opacity,
+                custom_font_family,
+                custom_font_file_path,
             },
             reply: reply_tx,
         })

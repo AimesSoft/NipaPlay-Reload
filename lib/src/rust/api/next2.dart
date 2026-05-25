@@ -156,6 +156,8 @@ class RustNext2PrepareRequest {
   final double scrollDurationSeconds;
   final bool allowStacking;
   final bool mergeDanmaku;
+  final String customFontFamily;
+  final String customFontFilePath;
 
   const RustNext2PrepareRequest({
     required this.items,
@@ -166,6 +168,8 @@ class RustNext2PrepareRequest {
     required this.scrollDurationSeconds,
     required this.allowStacking,
     required this.mergeDanmaku,
+    required this.customFontFamily,
+    required this.customFontFilePath,
   });
 
   @override
@@ -177,7 +181,9 @@ class RustNext2PrepareRequest {
       displayArea.hashCode ^
       scrollDurationSeconds.hashCode ^
       allowStacking.hashCode ^
-      mergeDanmaku.hashCode;
+      mergeDanmaku.hashCode ^
+      customFontFamily.hashCode ^
+      customFontFilePath.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -191,7 +197,9 @@ class RustNext2PrepareRequest {
           displayArea == other.displayArea &&
           scrollDurationSeconds == other.scrollDurationSeconds &&
           allowStacking == other.allowStacking &&
-          mergeDanmaku == other.mergeDanmaku;
+          mergeDanmaku == other.mergeDanmaku &&
+          customFontFamily == other.customFontFamily &&
+          customFontFilePath == other.customFontFilePath;
 }
 
 class RustNext2PreparedItem {

@@ -344,6 +344,7 @@ impl Next2EmojiAtlas {
 }
 
 struct Next2GlyphAtlas {
+    font_key: String,
     fonts: Vec<FontFaceHandle>,
     texture: wgpu::Texture,
     texture_view: wgpu::TextureView,
@@ -358,8 +359,9 @@ struct Next2GlyphAtlas {
 }
 
 impl Next2GlyphAtlas {
-    fn new(device: &wgpu::Device) -> Result<Self, String> {
-        let fonts = load_font_chain()?;
+    fn new(device: &wgpu::Device, custom_font: Option<FontSource>) -> Result<Self, String> {
+        let font_key = custom_font_key(custom_font.as_ref());
+        let fonts = load_font_chain(custom_font)?;
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("next2 msdf atlas"),
@@ -388,6 +390,7 @@ impl Next2GlyphAtlas {
         });
 
         Ok(Self {
+            font_key,
             fonts,
             texture,
             texture_view,
@@ -407,6 +410,7 @@ impl Next2GlyphAtlas {
         self.cursor_y = 0;
         self.row_height = 0;
         self.entries.clear();
+        self.line_ascent_cache.clear();
     }
 
     fn line_ascent(&mut self, quantized_size: u32) -> f32 {
@@ -604,9 +608,14 @@ fn hash_font_bytes(bytes: &[u8], collection_index: u32) -> u64 {
     hasher.finish()
 }
 
-fn load_font_chain() -> Result<Vec<FontFaceHandle>, String> {
+fn load_font_chain(custom_font: Option<FontSource>) -> Result<Vec<FontFaceHandle>, String> {
     let mut fonts = Vec::new();
     let mut seen = HashSet::new();
+
+    if let Some(custom_font) = custom_font {
+        let boxed = custom_font.bytes;
+        let _ = load_faces_from_owned_bytes(boxed, &mut seen, &mut fonts)?;
+    }
 
     let primary_bytes = FONT_DATA.to_vec().into_boxed_slice();
     load_faces_from_owned_bytes(primary_bytes, &mut seen, &mut fonts)?;
@@ -620,6 +629,18 @@ fn load_font_chain() -> Result<Vec<FontFaceHandle>, String> {
         return Err("next2: no usable font faces loaded".to_string());
     }
     Ok(fonts)
+}
+
+fn custom_font_key(custom_font: Option<&FontSource>) -> String {
+    match custom_font {
+        Some(font) => {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            font.family.hash(&mut hasher);
+            font.bytes.hash(&mut hasher);
+            format!("{}:{:x}", font.family, hasher.finish())
+        }
+        None => String::new(),
+    }
 }
 
 fn load_faces_from_owned_bytes(
@@ -773,4 +794,3 @@ struct Next2Renderer {
     #[cfg(target_os = "android")]
     surface_screen_pipeline: Option<wgpu::RenderPipeline>,
 }
-

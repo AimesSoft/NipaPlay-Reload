@@ -33,7 +33,9 @@ private func next2_engine_set_frame(
   _ fontSize: Float,
   _ outlineWidth: Float,
   _ shadowStyle: UInt8,
-  _ opacity: Float
+  _ opacity: Float,
+  _ customFontFamily: UnsafePointer<CChar>?,
+  _ customFontFilePath: UnsafePointer<CChar>?
 ) -> UInt8
 
 @_silgen_name("next2_engine_resize")
@@ -457,9 +459,15 @@ private final class Next2SurfaceState {
     let outlineWidth = (dict["outlineWidth"] as? NSNumber)?.floatValue ?? 1.0
     let shadowStyle = (dict["shadowStyle"] as? NSNumber)?.uint8Value ?? 1
     let opacity = (dict["opacity"] as? NSNumber)?.floatValue ?? 1.0
+    let customFontFamily = (dict["customFontFamily"] as? String) ?? ""
+    let customFontFilePath = (dict["customFontFilePath"] as? String) ?? ""
 
     let ok = frameJson.withCString { ptr in
-      next2_engine_set_frame(handle, ptr, fontSize, outlineWidth, shadowStyle, opacity) != 0
+      customFontFamily.withCString { familyPtr in
+        customFontFilePath.withCString { filePtr in
+          next2_engine_set_frame(handle, ptr, fontSize, outlineWidth, shadowStyle, opacity, familyPtr, filePtr) != 0
+        }
+      }
     }
     result(ok)
   }

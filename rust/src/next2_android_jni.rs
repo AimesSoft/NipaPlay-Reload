@@ -114,6 +114,8 @@ pub extern "system" fn Java_com_flutter_1rust_1bridge_rust_1lib_1nipaplay_RustLi
             outline_width,
             shadow_style as u8,
             opacity,
+            std::ptr::null(),
+            std::ptr::null(),
         ) as jint;
         release_string_utf_chars(env, frame_json, c_str_ptr);
         ok

@@ -100,8 +100,13 @@ impl Next2Renderer {
         })
     }
 
-    fn new(ctx: Arc<EngineDeviceContext>, width: u32, height: u32) -> Result<Self, String> {
-        let atlas = Next2GlyphAtlas::new(ctx.device.as_ref())?;
+    fn new(
+        ctx: Arc<EngineDeviceContext>,
+        width: u32,
+        height: u32,
+        custom_font: Option<FontSource>,
+    ) -> Result<Self, String> {
+        let atlas = Next2GlyphAtlas::new(ctx.device.as_ref(), custom_font)?;
 
         let atlas_bind_group_layout =
             ctx.device
@@ -359,11 +364,20 @@ impl Next2Renderer {
         self.emoji_atlas.clear();
     }
 
-    fn update_frame(&mut self, input: RenderFrameInput) -> bool {
+    fn update_frame(&mut self, input: RenderFrameInput, custom_font: Option<FontSource>) -> bool {
         let parsed = match serde_json::from_str::<FramePayload>(&input.frame_json) {
             Ok(parsed) => parsed,
             Err(_) => return false,
         };
+
+        let font_key = custom_font_key(custom_font.as_ref());
+        if self.atlas.font_key != font_key {
+            let Ok(atlas) = Next2GlyphAtlas::new(self.ctx.device.as_ref(), custom_font) else {
+                return false;
+            };
+            self.atlas = atlas;
+            self.rebuild_atlas_bind_group();
+        }
 
         let emoji_rasters = decode_emoji_rasters(parsed.emoji_glyphs.as_deref().unwrap_or(&[]));
         if !emoji_rasters.is_empty() {
@@ -399,6 +413,42 @@ impl Next2Renderer {
         }
 
         true
+    }
+
+    fn rebuild_atlas_bind_group(&mut self) {
+        self.atlas_bind_group = self
+            .ctx
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("next2 atlas bg"),
+                layout: &self.atlas_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&self.atlas.texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.atlas.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(
+                            &self.emoji_atlas.color_texture_view,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(
+                            &self.emoji_atlas.mask_texture_view,
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::Sampler(&self.emoji_atlas.sampler),
+                    },
+                ],
+            });
     }
 
     fn draw_to_present(&mut self, present: &mut PresentTarget) {

@@ -12,6 +12,8 @@ class Next2LayoutBridge {
   double _lastDisplayArea = -1;
   bool _lastAllowStacking = false;
   bool _lastMergeDanmaku = false;
+  String _lastCustomFontFamily = '';
+  String _lastCustomFontFilePath = '';
 
   Future<void> configure({
     required List<Map<String, dynamic>> danmakuList,
@@ -22,6 +24,8 @@ class Next2LayoutBridge {
     required double scrollDurationSeconds,
     required bool allowStacking,
     required bool mergeDanmaku,
+    required String customFontFamily,
+    required String customFontFilePath,
   }) async {
     final listIdentity = identityHashCode(danmakuList);
     final changed = listIdentity != _sourceListIdentity ||
@@ -31,6 +35,8 @@ class Next2LayoutBridge {
         (_lastDisplayArea - displayArea).abs() > 0.0001 ||
         _lastAllowStacking != allowStacking ||
         _lastMergeDanmaku != mergeDanmaku ||
+        _lastCustomFontFamily != customFontFamily ||
+        _lastCustomFontFilePath != customFontFilePath ||
         !_sameLayoutConfig(
           _prepared!,
           size: size,
@@ -74,6 +80,8 @@ class Next2LayoutBridge {
         scrollDurationSeconds: scrollDurationSeconds,
         allowStacking: allowStacking,
         mergeDanmaku: mergeDanmaku,
+        customFontFamily: customFontFamily,
+        customFontFilePath: customFontFilePath,
       ),
     );
     _sourceListIdentity = listIdentity;
@@ -82,6 +90,8 @@ class Next2LayoutBridge {
     _lastDisplayArea = displayArea;
     _lastAllowStacking = allowStacking;
     _lastMergeDanmaku = mergeDanmaku;
+    _lastCustomFontFamily = customFontFamily;
+    _lastCustomFontFilePath = customFontFilePath;
   }
 
   Future<List<PositionedDanmakuItem>> layout(double currentTimeSeconds) async {
