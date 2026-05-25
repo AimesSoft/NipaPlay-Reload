@@ -68,8 +68,6 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     final hasPreview = thumbnailPath != null &&
         thumbnailPath.isNotEmpty &&
         _isPreviewReady(thumbnailPath);
-    debugPrint(
-        'timeline preview overlay -> hasPreview=$hasPreview, thumb=$thumbnailPath');
     final previewWidth = globals.isPhone ? 140.0 : 200.0;
     final previewHeight = previewWidth * 9 / 16;
     final text =

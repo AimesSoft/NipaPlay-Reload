@@ -43,8 +43,8 @@ void main() {
       final videoState = _FakeVideoPlayerState(
         hasVideoValue: true,
         showControlsValue: true,
-        animeTitleValue: 'Sousou no Frieren',
-        episodeTitleValue: 'TV Special',
+        animeTitleValue: '关于邻家的天使大人不知不觉把我惯成了废人这档子事 第二季',
+        episodeTitleValue: '第4话',
       );
 
       await tester.pumpWidget(
@@ -62,8 +62,8 @@ void main() {
         ),
       );
 
-      expect(find.text('Sousou no Frieren'), findsOneWidget);
-      expect(find.text('TV Special'), findsOneWidget);
+      expect(find.textContaining('...'), findsOneWidget);
+      expect(find.text('第4话'), findsOneWidget);
       expect(find.byType(AnimatedSlide), findsOneWidget);
       expect(
         find.descendant(
@@ -73,6 +73,10 @@ void main() {
         findsNothing,
       );
       expect(find.byType(ControlTextShadow), findsNWidgets(2));
+
+      final titleRect = tester.getRect(find.textContaining('...'));
+      final episodeRect = tester.getRect(find.text('第4话'));
+      expect(episodeRect.left, greaterThan(titleRect.right));
     },
   );
 }
