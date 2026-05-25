@@ -1,7 +1,10 @@
 use std::ffi::{c_char, c_void, CStr};
 use std::sync::mpsc;
 
-use super::engine::{create_engine, lookup_engine, remove_engine, EngineCommand, RenderFrameInput};
+use super::engine::{
+    create_engine, lookup_engine, readback_frame_bgra, remove_engine, EngineCommand,
+    RenderFrameInput,
+};
 
 fn parse_c_string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
@@ -141,4 +144,34 @@ pub extern "C" fn next2_engine_set_frame(
         Ok(true) => 1,
         _ => 0,
     }
+}
+
+#[no_mangle]
+pub extern "C" fn next2_engine_copy_bgra_frame(
+    handle: u64,
+    out_pixels: *mut u8,
+    out_pixels_len: usize,
+    out_width: *mut u32,
+    out_height: *mut u32,
+) -> u8 {
+    let Some(frame) = readback_frame_bgra(handle) else {
+        return 0;
+    };
+    if !out_width.is_null() {
+        unsafe {
+            *out_width = frame.width;
+        }
+    }
+    if !out_height.is_null() {
+        unsafe {
+            *out_height = frame.height;
+        }
+    }
+    if out_pixels.is_null() || out_pixels_len < frame.pixels.len() {
+        return 0;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(frame.pixels.as_ptr(), out_pixels, frame.pixels.len());
+    }
+    1
 }

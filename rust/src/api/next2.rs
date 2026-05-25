@@ -215,7 +215,8 @@ pub fn next2_prepare_layout(
 
         scroll_track_base_offsets[i] = scroll_offset - scroll_track_heights[i];
         top_track_base_offsets[i] = top_offset - top_track_heights[i];
-        bottom_track_base_offsets[i] = height - bottom_accumulated + bottom_track_heights[i] - base_track_height;
+        bottom_track_base_offsets[i] =
+            height - bottom_accumulated + bottom_track_heights[i] - base_track_height;
     }
 
     for item in &mut items {
