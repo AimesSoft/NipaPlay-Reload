@@ -40,7 +40,7 @@ struct VsOut {
 @group(0) @binding(0) var source_tex: texture_2d<f32>;
 @group(0) @binding(1) var source_sampler: sampler;
 
-const BLUR_SCALE: f32 = 2.4;
+const BLUR_SCALE: f32 = 1.6;
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
@@ -64,15 +64,11 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
 fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
     let dims = vec2<f32>(textureDimensions(source_tex));
     let step = vec2<f32>(BLUR_SCALE / max(dims.x, 1.0), 0.0);
-    var color = textureSample(source_tex, source_sampler, v.uv) * 0.2270270270;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 1.3846154) * 0.194594595;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 1.3846154) * 0.194594595;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 3.2307692) * 0.121621622;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 3.2307692) * 0.121621622;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 5.0769231) * 0.054054055;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 5.0769231) * 0.054054055;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 6.9230769) * 0.016216217;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 6.9230769) * 0.016216217;
+    var color = textureSample(source_tex, source_sampler, v.uv) * 0.29411766;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 1.0) * 0.23529412;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 1.0) * 0.23529412;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 2.0) * 0.11764706;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 2.0) * 0.11764706;
     return color;
 }
 "#;
@@ -86,7 +82,7 @@ struct VsOut {
 @group(0) @binding(0) var source_tex: texture_2d<f32>;
 @group(0) @binding(1) var source_sampler: sampler;
 
-const BLUR_SCALE: f32 = 2.4;
+const BLUR_SCALE: f32 = 1.6;
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
@@ -110,15 +106,11 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
 fn fs_main(v: VsOut) -> @location(0) vec4<f32> {
     let dims = vec2<f32>(textureDimensions(source_tex));
     let step = vec2<f32>(0.0, BLUR_SCALE / max(dims.y, 1.0));
-    var color = textureSample(source_tex, source_sampler, v.uv) * 0.2270270270;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 1.3846154) * 0.194594595;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 1.3846154) * 0.194594595;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 3.2307692) * 0.121621622;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 3.2307692) * 0.121621622;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 5.0769231) * 0.054054055;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 5.0769231) * 0.054054055;
-    color += textureSample(source_tex, source_sampler, v.uv + step * 6.9230769) * 0.016216217;
-    color += textureSample(source_tex, source_sampler, v.uv - step * 6.9230769) * 0.016216217;
+    var color = textureSample(source_tex, source_sampler, v.uv) * 0.29411766;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 1.0) * 0.23529412;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 1.0) * 0.23529412;
+    color += textureSample(source_tex, source_sampler, v.uv + step * 2.0) * 0.11764706;
+    color += textureSample(source_tex, source_sampler, v.uv - step * 2.0) * 0.11764706;
     return color;
 }
 "#;

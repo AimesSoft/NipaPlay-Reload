@@ -48,7 +48,7 @@ const EMOJI_SIDE_BEARING_RATIO: f32 = 0.08;
 const GLYPH_MODE_TEXT: f32 = 0.0;
 const GLYPH_MODE_EMOJI: f32 = 1.0;
 const SHADOW_ALPHA_SCALE: f32 = 1.0;
-const SHADOW_RENDER_SCALE: u32 = 2;
+const SHADOW_RENDER_SCALE: u32 = 1;
 const MISSING_GLYPH_FALLBACK: char = '□';
 const FALLBACK_GLYPH_ADVANCE_RATIO: f32 = 0.58;
 
@@ -463,4 +463,3 @@ fn run_engine_loop(
         }
     }
 }
-
