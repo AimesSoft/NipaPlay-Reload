@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
 
 const MERGE_WINDOW_SECONDS: f64 = 45.0;
 const TRACK_GAP_RATIO: f64 = 0.25;
@@ -8,6 +10,7 @@ pub const NEXT2_TYPE_SCROLL: i32 = 0;
 pub const NEXT2_TYPE_TOP: i32 = 1;
 pub const NEXT2_TYPE_BOTTOM: i32 = 2;
 
+#[derive(Clone)]
 pub struct RustNext2DanmakuItem {
     pub time_seconds: f64,
     pub text: String,
@@ -16,6 +19,7 @@ pub struct RustNext2DanmakuItem {
     pub is_me: bool,
 }
 
+#[derive(Clone)]
 pub struct RustNext2PrepareRequest {
     pub items: Vec<RustNext2DanmakuItem>,
     pub width: f64,
@@ -29,6 +33,7 @@ pub struct RustNext2PrepareRequest {
     pub custom_font_file_path: String,
 }
 
+#[derive(Clone)]
 pub struct RustNext2PreparedLayout {
     pub width: f64,
     pub height: f64,
@@ -37,8 +42,10 @@ pub struct RustNext2PreparedLayout {
     pub items: Vec<RustNext2PreparedItem>,
     pub item_times: Vec<f64>,
     pub track_count: i32,
+    pub cache_key: u64,
 }
 
+#[derive(Clone)]
 pub struct RustNext2PreparedItem {
     pub time_seconds: f64,
     pub text: String,
@@ -53,15 +60,18 @@ pub struct RustNext2PreparedItem {
     pub scroll_speed: f64,
 }
 
+#[derive(Clone)]
 pub struct RustNext2FrameRequest {
     pub layout: RustNext2PreparedLayout,
     pub current_time_seconds: f64,
 }
 
+#[derive(Clone)]
 pub struct RustNext2FrameLayout {
     pub items: Vec<RustNext2FrameItem>,
 }
 
+#[derive(Clone)]
 pub struct RustNext2FrameItem {
     pub time_seconds: f64,
     pub text: String,
@@ -124,19 +134,18 @@ pub fn next2_prepare_layout(
     let mut scroll_tracks: Vec<Vec<usize>> = vec![Vec::new(); track_len];
     let mut top_track_items: Vec<Option<usize>> = vec![None; track_len];
     let mut bottom_track_items: Vec<Option<usize>> = vec![None; track_len];
-    let mut scroll_track_heights = vec![base_track_height; track_len];
-    let mut top_track_heights = vec![base_track_height; track_len];
-    let mut bottom_track_heights = vec![base_track_height; track_len];
+    let scroll_track_heights = vec![base_track_height; track_len];
+    let top_track_heights = vec![base_track_height; track_len];
+    let bottom_track_heights = vec![base_track_height; track_len];
 
     for idx in 0..items.len() {
         let item_type = items[idx].type_code;
         let item_time = items[idx].time_seconds;
-        let item_height = {
+        {
             let item = &mut items[idx];
             item.width = measure_text_width(&item.text, font_size * item.font_size_multiplier);
             item.scroll_speed = (width + item.width) / scroll_duration_seconds;
-            base_danmaku_height * item.font_size_multiplier
-        };
+        }
 
         match item_type {
             NEXT2_TYPE_SCROLL => {
@@ -148,45 +157,46 @@ pub fn next2_prepare_layout(
                     width,
                     scroll_duration_seconds,
                     request.allow_stacking,
+                    base_danmaku_height,
+                    base_track_height,
                 );
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
                     scroll_tracks[track].push(idx);
-                    if item_height > scroll_track_heights[track] {
-                        scroll_track_heights[track] = item_height;
-                    }
                 }
             }
             NEXT2_TYPE_TOP => {
                 let selected = select_static_track(
+                    idx,
                     item_time,
                     &items,
                     &mut top_track_items,
                     track_len,
                     static_duration_seconds,
+                    width,
+                    base_danmaku_height,
+                    base_track_height,
                 );
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
                     top_track_items[track] = Some(idx);
-                    if item_height > top_track_heights[track] {
-                        top_track_heights[track] = item_height;
-                    }
                 }
             }
             NEXT2_TYPE_BOTTOM => {
                 let selected = select_static_track(
+                    idx,
                     item_time,
                     &items,
                     &mut bottom_track_items,
                     track_len,
                     static_duration_seconds,
+                    width,
+                    base_danmaku_height,
+                    base_track_height,
                 );
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
                     bottom_track_items[track] = Some(idx);
-                    if item_height > bottom_track_heights[track] {
-                        bottom_track_heights[track] = item_height;
-                    }
                 }
             }
             _ => {
@@ -195,9 +205,6 @@ pub fn next2_prepare_layout(
         }
     }
 
-    let mut scroll_track_offsets = vec![0.0; track_len];
-    let mut top_track_offsets = vec![0.0; track_len];
-    let mut bottom_track_offsets = vec![0.0; track_len];
     let mut scroll_track_base_offsets = vec![0.0; track_len];
     let mut top_track_base_offsets = vec![0.0; track_len];
     let mut bottom_track_base_offsets = vec![0.0; track_len];
@@ -206,14 +213,11 @@ pub fn next2_prepare_layout(
     let mut top_offset = 0.0;
     let mut bottom_accumulated = 0.0;
     for i in 0..track_len {
-        scroll_track_offsets[i] = scroll_offset;
         scroll_offset += scroll_track_heights[i];
 
-        top_track_offsets[i] = top_offset;
         top_offset += top_track_heights[i];
 
         bottom_accumulated += bottom_track_heights[i];
-        bottom_track_offsets[i] = height - bottom_accumulated;
 
         scroll_track_base_offsets[i] = scroll_offset - scroll_track_heights[i];
         top_track_base_offsets[i] = top_offset - top_track_heights[i];
@@ -258,6 +262,15 @@ pub fn next2_prepare_layout(
         });
     }
 
+    let cache_key = calc_layout_cache_key(
+        width,
+        height,
+        scroll_duration_seconds,
+        static_duration_seconds,
+        track_count,
+        &prepared_items,
+    );
+
     Ok(RustNext2PreparedLayout {
         width,
         height,
@@ -266,21 +279,29 @@ pub fn next2_prepare_layout(
         items: prepared_items,
         item_times,
         track_count,
+        cache_key,
     })
 }
 
 pub fn next2_layout_frame(request: RustNext2FrameRequest) -> RustNext2FrameLayout {
-    let layout = request.layout;
-    if layout.items.is_empty() || layout.width <= 0.0 || layout.height <= 0.0 {
-        return RustNext2FrameLayout { items: Vec::new() };
+    let cache = frame_cache();
+    if let Ok(mut guard) = cache.lock() {
+        let (result, _) = next2_layout_frame_with_cache(request, &mut guard);
+        return result;
     }
+    build_next2_frame(&request.layout, request.current_time_seconds)
+}
 
+fn build_next2_frame(
+    layout: &RustNext2PreparedLayout,
+    current_time_seconds: f64,
+) -> RustNext2FrameLayout {
     let max_duration = layout
         .scroll_duration_seconds
         .max(layout.static_duration_seconds);
-    let window_start = request.current_time_seconds - max_duration;
+    let window_start = current_time_seconds - max_duration;
     let left = lower_bound(&layout.item_times, window_start);
-    let right = upper_bound(&layout.item_times, request.current_time_seconds);
+    let right = upper_bound(&layout.item_times, current_time_seconds);
 
     let mut out = Vec::with_capacity(right.saturating_sub(left));
 
@@ -289,7 +310,7 @@ pub fn next2_layout_frame(request: RustNext2FrameRequest) -> RustNext2FrameLayou
         if item.track_index < 0 {
             continue;
         }
-        let elapsed = request.current_time_seconds - item.time_seconds;
+        let elapsed = current_time_seconds - item.time_seconds;
         if elapsed < 0.0 {
             continue;
         }
@@ -335,7 +356,8 @@ pub fn next2_layout_frame(request: RustNext2FrameRequest) -> RustNext2FrameLayou
         }
     }
 
-    RustNext2FrameLayout { items: out }
+    let result = RustNext2FrameLayout { items: out };
+    result
 }
 
 #[derive(Clone)]
@@ -518,18 +540,24 @@ fn select_scroll_track(
     width: f64,
     scroll_duration_seconds: f64,
     allow_stacking: bool,
+    base_danmaku_height: f64,
+    base_track_height: f64,
 ) -> Option<usize> {
     let item = &items[item_index];
 
-    for (i, track_items) in tracks.iter_mut().enumerate().take(track_count) {
-        if !track_items.is_empty() {
-            track_items.retain(|existing_idx| {
-                let existing = &items[*existing_idx];
-                item.time_seconds - existing.time_seconds <= scroll_duration_seconds
-            });
-        }
+    compact_scroll_tracks(item.time_seconds, items, tracks, scroll_duration_seconds);
 
-        if scroll_can_add_to_track(item, items, track_items, width, scroll_duration_seconds) {
+    for i in 0..track_count {
+        if !scroll_will_collide_with_any(
+            item,
+            i,
+            items,
+            tracks,
+            width,
+            scroll_duration_seconds,
+            base_danmaku_height,
+            base_track_height,
+        ) {
             return Some(i);
         }
     }
@@ -547,56 +575,206 @@ fn select_scroll_track(
     None
 }
 
-fn scroll_can_add_to_track(
-    new_item: &WorkingNext2Item,
+fn compact_scroll_tracks(
+    time_seconds: f64,
     items: &[WorkingNext2Item],
-    track_items: &[usize],
-    width: f64,
+    tracks: &mut [Vec<usize>],
     scroll_duration_seconds: f64,
-) -> bool {
-    for existing_idx in track_items {
-        let existing = &items[*existing_idx];
-        let elapsed = new_item.time_seconds - existing.time_seconds;
-        if elapsed < 0.0 || elapsed > scroll_duration_seconds {
+) {
+    for track_items in tracks {
+        if track_items.is_empty() {
             continue;
         }
+        track_items.retain(|existing_idx| {
+            let existing = &items[*existing_idx];
+            time_seconds - existing.time_seconds <= scroll_duration_seconds
+        });
+    }
+}
 
-        let existing_x = width - (elapsed / scroll_duration_seconds) * (width + existing.width);
-        let existing_end = existing_x + existing.width;
-
-        if width - existing_end < 0.0 {
-            return false;
-        }
-
-        if existing.width < new_item.width {
-            let progress = (width - existing_x) / (existing.width + width);
-            if (1.0 - progress) > (width / (width + new_item.width)) {
-                return false;
+fn scroll_will_collide_with_any(
+    new_item: &WorkingNext2Item,
+    candidate_track: usize,
+    items: &[WorkingNext2Item],
+    tracks: &[Vec<usize>],
+    width: f64,
+    scroll_duration_seconds: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
+) -> bool {
+    for (existing_track, track_items) in tracks.iter().enumerate() {
+        for existing_idx in track_items {
+            let existing = &items[*existing_idx];
+            if tracks_vertical_overlap(
+                candidate_track,
+                new_item.font_size_multiplier,
+                existing_track,
+                existing.font_size_multiplier,
+                base_danmaku_height,
+                base_track_height,
+            ) && scroll_items_will_collide_in_duration(
+                new_item,
+                existing,
+                width,
+                scroll_duration_seconds,
+            ) {
+                return true;
             }
         }
     }
-    true
+    false
+}
+
+fn tracks_vertical_overlap(
+    track_a: usize,
+    font_scale_a: f64,
+    track_b: usize,
+    font_scale_b: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
+) -> bool {
+    let top_a = track_a as f64 * base_track_height;
+    let top_b = track_b as f64 * base_track_height;
+    let height_a = (base_danmaku_height * font_scale_a.max(1.0)).max(base_danmaku_height);
+    let height_b = (base_danmaku_height * font_scale_b.max(1.0)).max(base_danmaku_height);
+    let bottom_a = top_a + height_a;
+    let bottom_b = top_b + height_b;
+    top_a < bottom_b && top_b < bottom_a
+}
+
+fn scroll_items_will_collide_in_duration(
+    new_item: &WorkingNext2Item,
+    existing: &WorkingNext2Item,
+    width: f64,
+    scroll_duration_seconds: f64,
+) -> bool {
+    let start_t = new_item.time_seconds.max(existing.time_seconds);
+    let end_t = (new_item.time_seconds + scroll_duration_seconds)
+        .min(existing.time_seconds + scroll_duration_seconds);
+    if end_t <= start_t {
+        return false;
+    }
+    let d_start =
+        scroll_item_x_at_time(new_item, start_t, width, scroll_duration_seconds)
+            - scroll_item_x_at_time(existing, start_t, width, scroll_duration_seconds);
+    let d_end = scroll_item_x_at_time(new_item, end_t, width, scroll_duration_seconds)
+        - scroll_item_x_at_time(existing, end_t, width, scroll_duration_seconds);
+
+    let min_d = d_start.min(d_end);
+    let max_d = d_start.max(d_end);
+    !(max_d <= -new_item.width || min_d >= existing.width)
+}
+
+fn scroll_item_x_at_time(
+    item: &WorkingNext2Item,
+    time: f64,
+    width: f64,
+    scroll_duration_seconds: f64,
+) -> f64 {
+    width - ((time - item.time_seconds) / scroll_duration_seconds) * (width + item.width)
 }
 
 fn select_static_track(
+    item_index: usize,
     time_seconds: f64,
     items: &[WorkingNext2Item],
     tracks: &mut [Option<usize>],
     track_count: usize,
     static_duration_seconds: f64,
+    width: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
 ) -> Option<usize> {
-    for (i, existing_opt) in tracks.iter_mut().enumerate().take(track_count) {
-        match existing_opt {
-            None => return Some(i),
-            Some(existing_idx) => {
-                let existing = &items[*existing_idx];
-                if time_seconds - existing.time_seconds >= static_duration_seconds {
-                    return Some(i);
-                }
-            }
+    let item = &items[item_index];
+    compact_static_tracks(time_seconds, items, tracks, static_duration_seconds);
+
+    for i in 0..track_count {
+        if !static_will_collide_with_any(
+            item,
+            i,
+            items,
+            tracks,
+            static_duration_seconds,
+            width,
+            base_danmaku_height,
+            base_track_height,
+        ) {
+            return Some(i);
         }
     }
     None
+}
+
+fn compact_static_tracks(
+    time_seconds: f64,
+    items: &[WorkingNext2Item],
+    tracks: &mut [Option<usize>],
+    static_duration_seconds: f64,
+) {
+    for track in tracks.iter_mut() {
+        if let Some(existing_idx) = *track {
+            let existing = &items[existing_idx];
+            if time_seconds - existing.time_seconds >= static_duration_seconds {
+                *track = None;
+            }
+        }
+    }
+}
+
+fn static_will_collide_with_any(
+    new_item: &WorkingNext2Item,
+    candidate_track: usize,
+    items: &[WorkingNext2Item],
+    tracks: &[Option<usize>],
+    static_duration_seconds: f64,
+    width: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
+) -> bool {
+    for (existing_track, existing_idx_opt) in tracks.iter().enumerate() {
+        let Some(existing_idx) = existing_idx_opt else {
+            continue;
+        };
+        let existing = &items[*existing_idx];
+        if tracks_vertical_overlap(
+            candidate_track,
+            new_item.font_size_multiplier,
+            existing_track,
+            existing.font_size_multiplier,
+            base_danmaku_height,
+            base_track_height,
+        ) && static_items_will_collide(
+            new_item,
+            existing,
+            static_duration_seconds,
+            width,
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
+fn static_items_will_collide(
+    new_item: &WorkingNext2Item,
+    existing: &WorkingNext2Item,
+    static_duration_seconds: f64,
+    width: f64,
+) -> bool {
+    let new_start = new_item.time_seconds;
+    let new_end = new_item.time_seconds + static_duration_seconds;
+    let existing_start = existing.time_seconds;
+    let existing_end = existing.time_seconds + static_duration_seconds;
+
+    if new_end <= existing_start || existing_end <= new_start {
+        return false;
+    }
+
+    let new_x = (width - new_item.width) / 2.0;
+    let existing_x = (width - existing.width) / 2.0;
+    let new_end_x = new_x + new_item.width;
+    let existing_end_x = existing_x + existing.width;
+    new_x < existing_end_x && existing_x < new_end_x
 }
 
 fn sanitize_positive(value: f64, fallback: f64) -> f64 {
@@ -733,6 +911,120 @@ fn simple_text_hash(value: &str) -> u64 {
     hash
 }
 
+struct FrameCacheEntry {
+    value: RustNext2FrameLayout,
+    last_used_tick: u64,
+}
+
+struct FrameCache {
+    entries: HashMap<u64, FrameCacheEntry>,
+    use_tick: u64,
+}
+
+impl FrameCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            use_tick: 0,
+        }
+    }
+
+    fn get(&mut self, key: u64) -> Option<RustNext2FrameLayout> {
+        let next_tick = self.use_tick.wrapping_add(1);
+        self.use_tick = next_tick;
+        let entry = self.entries.get_mut(&key)?;
+        entry.last_used_tick = next_tick;
+        Some(entry.value.clone())
+    }
+
+    fn insert(&mut self, key: u64, value: RustNext2FrameLayout) {
+        let next_tick = self.use_tick.wrapping_add(1);
+        self.use_tick = next_tick;
+        self.entries.insert(
+            key,
+            FrameCacheEntry {
+                value,
+                last_used_tick: next_tick,
+            },
+        );
+        while self.entries.len() > FRAME_CACHE_CAPACITY {
+            let Some((&victim, _)) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used_tick)
+            else {
+                break;
+            };
+            self.entries.remove(&victim);
+        }
+    }
+}
+
+static FRAME_CACHE: OnceLock<Mutex<FrameCache>> = OnceLock::new();
+
+fn frame_cache() -> &'static Mutex<FrameCache> {
+    FRAME_CACHE.get_or_init(|| Mutex::new(FrameCache::new()))
+}
+
+const FRAME_CACHE_CAPACITY: usize = 256;
+
+fn calc_layout_cache_key(
+    width: f64,
+    height: f64,
+    scroll_duration_seconds: f64,
+    static_duration_seconds: f64,
+    track_count: i32,
+    items: &[RustNext2PreparedItem],
+) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    width.to_bits().hash(&mut hasher);
+    height.to_bits().hash(&mut hasher);
+    scroll_duration_seconds.to_bits().hash(&mut hasher);
+    static_duration_seconds.to_bits().hash(&mut hasher);
+    track_count.hash(&mut hasher);
+    for item in items {
+        item.time_seconds.to_bits().hash(&mut hasher);
+        item.text.hash(&mut hasher);
+        item.type_code.hash(&mut hasher);
+        item.color_argb.hash(&mut hasher);
+        item.is_me.hash(&mut hasher);
+        item.font_size_multiplier.to_bits().hash(&mut hasher);
+        item.count_text.hash(&mut hasher);
+        item.track_index.hash(&mut hasher);
+        item.y_position.to_bits().hash(&mut hasher);
+        item.width.to_bits().hash(&mut hasher);
+        item.scroll_speed.to_bits().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn calc_frame_cache_key(layout: &RustNext2PreparedLayout, current_time_seconds: f64) -> u64 {
+    let quantized_tick = (current_time_seconds * 60.0).round() as i64;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    layout.cache_key.hash(&mut hasher);
+    quantized_tick.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn next2_layout_frame_with_cache(
+    request: RustNext2FrameRequest,
+    cache: &mut FrameCache,
+) -> (RustNext2FrameLayout, bool) {
+    let layout = request.layout;
+    if layout.items.is_empty() || layout.width <= 0.0 || layout.height <= 0.0 {
+        return (RustNext2FrameLayout { items: Vec::new() }, false);
+    }
+
+    let frame_key = calc_frame_cache_key(&layout, request.current_time_seconds);
+    if let Some(cached) = cache.get(frame_key) {
+        return (cached, true);
+    }
+
+    let result = build_next2_frame(&layout, request.current_time_seconds);
+    cache.insert(frame_key, result.clone());
+    (result, false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -744,6 +1036,29 @@ mod tests {
             type_code: NEXT2_TYPE_SCROLL,
             color_argb: 0x00FF_FFFFu32 as i32,
             is_me: false,
+        }
+    }
+
+    fn mk_working_scroll_item(
+        time_seconds: f64,
+        text: &str,
+        width: f64,
+        font_size_multiplier: f64,
+        track_index: i32,
+        count_text: Option<&str>,
+    ) -> WorkingNext2Item {
+        WorkingNext2Item {
+            time_seconds,
+            text: text.to_string(),
+            type_code: NEXT2_TYPE_SCROLL,
+            color_argb: 0x00FF_FFFFu32 as i32,
+            is_me: false,
+            font_size_multiplier,
+            count_text: count_text.map(|v| v.to_string()),
+            track_index,
+            y_position: 0.0,
+            width,
+            scroll_speed: (1280.0 + width) / 10.0,
         }
     }
 
@@ -761,5 +1076,161 @@ mod tests {
         assert_eq!(merged[0].count_text.as_deref(), Some("x2"));
         assert_eq!(merged[1].time_seconds, 60.0);
         assert_eq!(merged[1].count_text.as_deref(), Some("x2"));
+    }
+
+    #[test]
+    fn merged_danmaku_scales_font_size_multiplier() {
+        let merged = prepare_merged_items(vec![mk_item(0.0, "same"), mk_item(1.0, "same")]);
+
+        assert!(!merged.is_empty());
+        for item in merged {
+            assert!(item.font_size_multiplier > 1.0);
+        }
+    }
+
+    #[test]
+    fn merged_danmaku_preserves_layout_for_distant_items() {
+        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
+            items: vec![
+                mk_item(0.0, "same"),
+                mk_item(0.2, "same"),
+                mk_item(5.0, "other-1"),
+                mk_item(5.2, "other-2"),
+            ],
+            width: 1280.0,
+            height: 720.0,
+            font_size: 24.0,
+            display_area: 1.0,
+            scroll_duration_seconds: 10.0,
+            allow_stacking: false,
+            merge_danmaku: true,
+            custom_font_family: String::new(),
+            custom_font_file_path: String::new(),
+        })
+        .expect("prepare layout should succeed");
+
+        let tracks: Vec<i32> = prepared.items.iter().map(|item| item.track_index).collect();
+        assert!(tracks.iter().all(|t| *t >= 0));
+    }
+
+    #[test]
+    fn merged_danmaku_pushes_overlapping_scroll_items_to_farther_tracks() {
+        let width = 1280.0;
+        let font_size = 24.0;
+        let base_danmaku_height = measure_text_height(font_size);
+        let base_track_height = resolve_base_track_height(font_size, base_danmaku_height);
+        let duration = 10.0;
+
+        let mut items = vec![
+            mk_working_scroll_item(0.0, "merged", 520.0, 2.0, 0, Some("x10")),
+            mk_working_scroll_item(0.05, "neighbor", 180.0, 1.0, -1, None),
+        ];
+        let mut tracks = vec![vec![0], Vec::new(), Vec::new()];
+
+        let selected = select_scroll_track(
+            1,
+            &items,
+            &mut tracks,
+            3,
+            width,
+            duration,
+            false,
+            base_danmaku_height,
+            base_track_height,
+        );
+
+        assert_eq!(selected, Some(2));
+        items[1].track_index = selected.map(|v| v as i32).unwrap_or(-1);
+        assert_eq!(items[1].track_index, 2);
+    }
+
+    #[test]
+    fn scroll_collision_detects_later_catch_up() {
+        let width = 1280.0;
+        let duration = 10.0;
+        let existing = mk_working_scroll_item(0.0, "slow", 120.0, 1.0, 0, None);
+        let new_item = mk_working_scroll_item(1.0, "wide", 420.0, 1.0, -1, None);
+
+        assert!(scroll_items_will_collide_in_duration(
+            &new_item,
+            &existing,
+            width,
+            duration,
+        ));
+    }
+
+    #[test]
+    fn frame_cache_hits_inside_same_quantized_tick() {
+        let mut cache = FrameCache::new();
+
+        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
+            items: vec![mk_item(0.0, "hello"), mk_item(0.2, "world")],
+            width: 1280.0,
+            height: 720.0,
+            font_size: 24.0,
+            display_area: 1.0,
+            scroll_duration_seconds: 10.0,
+            allow_stacking: false,
+            merge_danmaku: false,
+            custom_font_family: String::new(),
+            custom_font_file_path: String::new(),
+        })
+        .expect("prepare layout should succeed");
+
+        let (first, hit1) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared.clone(),
+                current_time_seconds: 0.3001,
+            },
+            &mut cache,
+        );
+        let (second, hit2) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared,
+                current_time_seconds: 0.3002,
+            },
+            &mut cache,
+        );
+
+        assert_eq!(first.items.len(), second.items.len());
+        assert!(!hit1);
+        assert!(hit2);
+    }
+
+    #[test]
+    fn frame_cache_misses_when_quantized_tick_changes() {
+        let mut cache = FrameCache::new();
+
+        let prepared = next2_prepare_layout(RustNext2PrepareRequest {
+            items: vec![mk_item(0.0, "hello")],
+            width: 1280.0,
+            height: 720.0,
+            font_size: 24.0,
+            display_area: 1.0,
+            scroll_duration_seconds: 10.0,
+            allow_stacking: false,
+            merge_danmaku: false,
+            custom_font_family: String::new(),
+            custom_font_file_path: String::new(),
+        })
+        .expect("prepare layout should succeed");
+
+        let (_, hit1) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared.clone(),
+                current_time_seconds: 0.3001,
+            },
+            &mut cache,
+        );
+        let (_, hit2) = next2_layout_frame_with_cache(
+            RustNext2FrameRequest {
+                layout: prepared,
+                current_time_seconds: 0.3170,
+            },
+            &mut cache,
+        );
+
+        assert!(!hit1);
+        assert!(!hit2);
     }
 }

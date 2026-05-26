@@ -201,6 +201,7 @@ class NipaPlayNextEngine {
       final isMe = raw['isMe'] == true;
       final isMerged = raw['merged'] == true;
       final mergeCount = (raw['mergeCount'] as int?) ?? 1;
+      final countText = isMerged ? 'x$mergeCount' : null;
 
       final content = DanmakuContentItem(
         text,
@@ -209,7 +210,7 @@ class NipaPlayNextEngine {
         isMe: isMe,
         fontSizeMultiplier:
             isMerged ? _calcMergedFontSizeMultiplier(mergeCount) : 1.0,
-        countText: isMerged ? 'x$mergeCount' : null,
+        countText: countText,
       );
 
       _items.add(
@@ -459,6 +460,10 @@ class NipaPlayNextEngine {
     return hash % trackCount;
   }
 
+  double _calcMergedFontSizeMultiplier(int mergeCount) {
+    return (1.0 + mergeCount / 10.0).clamp(1.0, 2.0);
+  }
+
   int _selectStaticTrackCanvas({
     required double time,
     required List<_NextItem?> tracks,
@@ -629,11 +634,6 @@ class NipaPlayNextEngine {
 
   String _resolveContent(Map<String, dynamic> raw) {
     return (raw['content'] ?? raw['c'])?.toString() ?? '';
-  }
-
-  double _calcMergedFontSizeMultiplier(int mergeCount) {
-    double multiplier = 1.0 + (mergeCount / 10.0);
-    return multiplier.clamp(1.0, 2.0);
   }
 
   double _measureTextWidth(String text, double fontSize) {

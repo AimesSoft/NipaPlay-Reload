@@ -90,6 +90,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
 @protected RustPerformanceSample dco_decode_rust_performance_sample(dynamic raw);
 
+@protected BigInt dco_decode_u_64(dynamic raw);
+
 @protected int dco_decode_u_8(dynamic raw);
 
 @protected void dco_decode_unit(dynamic raw);
@@ -158,6 +160,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
 @protected RustPerformanceSample sse_decode_rust_performance_sample(SseDeserializer deserializer);
 
+@protected BigInt sse_decode_u_64(SseDeserializer deserializer);
+
 @protected int sse_decode_u_8(SseDeserializer deserializer);
 
 @protected void sse_decode_unit(SseDeserializer deserializer);
@@ -225,6 +229,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 @protected void sse_encode_rust_next_2_prepared_layout(RustNext2PreparedLayout self, SseSerializer serializer);
 
 @protected void sse_encode_rust_performance_sample(RustPerformanceSample self, SseSerializer serializer);
+
+@protected void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
 @protected void sse_encode_u_8(int self, SseSerializer serializer);
 
