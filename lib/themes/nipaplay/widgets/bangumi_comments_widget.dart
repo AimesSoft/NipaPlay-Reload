@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/models/bangumi_comment_model.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/services/web_remote_access_service.dart';
@@ -89,12 +90,14 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
         return;
       }
       final int requestedSubjectId = widget.subjectId!;
-      debugPrint('[Bangumi Comments Widget] 开始加载 subjectId=$requestedSubjectId, offset=$_currentOffset');
+      debugPrint(
+          '[Bangumi Comments Widget] 开始加载 subjectId=$requestedSubjectId, offset=$_currentOffset');
       final result = await BangumiApiService.getSubjectComments(
         requestedSubjectId,
         offset: _currentOffset,
       );
-      debugPrint('[Bangumi Comments Widget] API返回 success=${result['success']}, message=${result['message']}');
+      debugPrint(
+          '[Bangumi Comments Widget] API返回 success=${result['success']}, message=${result['message']}');
 
       if (!mounted) return;
       if (widget.subjectId != requestedSubjectId) return;
@@ -104,9 +107,9 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
         debugPrint('[Bangumi Comments Widget] data类型: ${data.runtimeType}');
         final list = (data['data'] as List?) ?? (data['list'] as List?) ?? [];
         final total = data['total'] as int? ?? 0;
-        debugPrint('[Bangumi Comments Widget] 解析到 ${list.length} 条, total=$total');
-        var newComments =
-            list.map((e) => BangumiComment.fromJson(e)).toList();
+        debugPrint(
+            '[Bangumi Comments Widget] 解析到 ${list.length} 条, total=$total');
+        var newComments = list.map((e) => BangumiComment.fromJson(e)).toList();
         if (widget.currentUserId > 0) {
           final myComment = newComments.cast<BangumiComment?>().firstWhere(
                 (c) => c!.userId == widget.currentUserId,
@@ -119,7 +122,8 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
               .where((c) => c.userId != widget.currentUserId)
               .toList();
         }
-        debugPrint('[Bangumi Comments Widget] 转换后 ${newComments.length} 条 BangumiComment');
+        debugPrint(
+            '[Bangumi Comments Widget] 转换后 ${newComments.length} 条 BangumiComment');
 
         setState(() {
           _comments.addAll(newComments);
@@ -190,8 +194,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
   Widget build(BuildContext context) {
     if (widget.subjectId == null) {
       final bool isDark = Theme.of(context).brightness == Brightness.dark;
-      final Color secondaryTextColor =
-          isDark ? Colors.white70 : Colors.black54;
+      final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(
@@ -203,8 +206,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
 
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color textColor = isDark ? Colors.white : Colors.black87;
-    final Color secondaryTextColor =
-        isDark ? Colors.white70 : Colors.black54;
+    final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
     final Color accentColor = AppAccentColors.current;
     final Color mutedColor = accentColor.withOpacity(isDark ? 0.4 : 0.3);
 
@@ -263,8 +265,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
     final valueStyle = TextStyle(
         color: textColor.withOpacity(0.85), fontSize: 13, height: 1.5);
 
-    final int totalItemCount =
-        _comments.length + (hasMyComment ? 1 : 0);
+    final int totalItemCount = _comments.length + (hasMyComment ? 1 : 0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,19 +280,25 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
                     fontSize: 14,
                     height: 1.5)),
             if (widget.onEditRating != null)
-              GestureDetector(
-                onTap: widget.onEditRating,
+              HoverScaleTextButton(
+                onPressed: widget.onEditRating,
+                idleColor: textColor.withOpacity(0.72),
+                hoverColor: accentColor,
+                hoverScale: 1.08,
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Ionicons.create_outline,
-                        size: 15, color: accentColor),
+                    Icon(Ionicons.chatbubble_outline, size: 15),
                     const SizedBox(width: 4),
-                    Text('编辑评分',
-                        style: TextStyle(
-                            color: accentColor,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500)),
+                    const Text(
+                      '评论',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -323,8 +330,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
                       radius: 18,
                       backgroundColor: textColor.withOpacity(0.1),
                       backgroundImage: my.avatarUrl.isNotEmpty
-                          ? NetworkImage(
-                              _proxiedImageUrl(my.avatarUrl))
+                          ? NetworkImage(_proxiedImageUrl(my.avatarUrl))
                           : null,
                       child: my.avatarUrl.isEmpty
                           ? Icon(Ionicons.person,
@@ -341,9 +347,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
                             children: [
                               Flexible(
                                 child: Text(
-                                  my.nickname.isNotEmpty
-                                      ? my.nickname
-                                      : '我',
+                                  my.nickname.isNotEmpty ? my.nickname : '我',
                                   style: TextStyle(
                                     color: textColor,
                                     fontWeight: FontWeight.w500,
@@ -361,8 +365,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
                           ),
                           if (my.rate > 0) ...[
                             const SizedBox(height: 3),
-                            _buildMiniStars(
-                                my.rate, accentColor, mutedColor),
+                            _buildMiniStars(my.rate, accentColor, mutedColor),
                           ],
                           if (my.comment.isNotEmpty) ...[
                             const SizedBox(height: 4),
@@ -376,8 +379,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
               );
             }
 
-            final int commentIndex =
-                hasMyComment ? index - 1 : index;
+            final int commentIndex = hasMyComment ? index - 1 : index;
             final comment = _comments[commentIndex];
 
             final card = Container(
@@ -385,8 +387,8 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
               decoration: BoxDecoration(
                 color: textColor.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: textColor.withOpacity(0.12), width: 0.8),
+                border:
+                    Border.all(color: textColor.withOpacity(0.12), width: 0.8),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,8 +397,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
                     radius: 18,
                     backgroundColor: textColor.withOpacity(0.1),
                     backgroundImage: comment.avatarUrl.isNotEmpty
-                        ? NetworkImage(
-                            _proxiedImageUrl(comment.avatarUrl))
+                        ? NetworkImage(_proxiedImageUrl(comment.avatarUrl))
                         : null,
                     child: comment.avatarUrl.isEmpty
                         ? Icon(Ionicons.person,

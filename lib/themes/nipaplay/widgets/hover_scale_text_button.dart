@@ -92,54 +92,66 @@ class _HoverScaleTextButtonState extends State<HoverScaleTextButton> {
       final TextStyle resolvedStyle = baseStyle.copyWith(color: textColor);
 
       if (textChild.data != null) {
-        return Text(
-          textChild.data!,
-          key: textChild.key,
-          style: resolvedStyle,
-          strutStyle: textChild.strutStyle,
-          textAlign: textChild.textAlign,
-          textDirection: textChild.textDirection,
-          locale: textChild.locale,
-          softWrap: textChild.softWrap,
-          overflow: textChild.overflow,
-          textScaleFactor: textChild.textScaleFactor,
-          maxLines: textChild.maxLines,
-          semanticsLabel: textChild.semanticsLabel,
-          textWidthBasis: textChild.textWidthBasis,
-          textHeightBehavior: textChild.textHeightBehavior,
+        return IconTheme(
+          data: IconThemeData(color: textColor),
+          child: Text(
+            textChild.data!,
+            key: textChild.key,
+            style: resolvedStyle,
+            strutStyle: textChild.strutStyle,
+            textAlign: textChild.textAlign,
+            textDirection: textChild.textDirection,
+            locale: textChild.locale,
+            softWrap: textChild.softWrap,
+            overflow: textChild.overflow,
+            textScaleFactor: textChild.textScaleFactor,
+            maxLines: textChild.maxLines,
+            semanticsLabel: textChild.semanticsLabel,
+            textWidthBasis: textChild.textWidthBasis,
+            textHeightBehavior: textChild.textHeightBehavior,
+          ),
         );
       }
 
       if (textChild.textSpan != null) {
-        return Text.rich(
-          textChild.textSpan!,
-          key: textChild.key,
-          style: resolvedStyle,
-          strutStyle: textChild.strutStyle,
-          textAlign: textChild.textAlign,
-          textDirection: textChild.textDirection,
-          locale: textChild.locale,
-          softWrap: textChild.softWrap,
-          overflow: textChild.overflow,
-          textScaleFactor: textChild.textScaleFactor,
-          maxLines: textChild.maxLines,
-          semanticsLabel: textChild.semanticsLabel,
-          textWidthBasis: textChild.textWidthBasis,
-          textHeightBehavior: textChild.textHeightBehavior,
+        return IconTheme(
+          data: IconThemeData(color: textColor),
+          child: Text.rich(
+            textChild.textSpan!,
+            key: textChild.key,
+            style: resolvedStyle,
+            strutStyle: textChild.strutStyle,
+            textAlign: textChild.textAlign,
+            textDirection: textChild.textDirection,
+            locale: textChild.locale,
+            softWrap: textChild.softWrap,
+            overflow: textChild.overflow,
+            textScaleFactor: textChild.textScaleFactor,
+            maxLines: textChild.maxLines,
+            semanticsLabel: textChild.semanticsLabel,
+            textWidthBasis: textChild.textWidthBasis,
+            textHeightBehavior: textChild.textHeightBehavior,
+          ),
         );
       }
     }
 
     if (widget.text != null) {
-      return Text(
-        widget.text!,
-        style: baseStyle.copyWith(color: textColor),
+      return IconTheme(
+        data: IconThemeData(color: textColor),
+        child: Text(
+          widget.text!,
+          style: baseStyle.copyWith(color: textColor),
+        ),
       );
     }
 
-    return DefaultTextStyle.merge(
-      style: baseStyle.copyWith(color: textColor),
-      child: widget.child!,
+    return IconTheme(
+      data: IconThemeData(color: textColor),
+      child: DefaultTextStyle.merge(
+        style: baseStyle.copyWith(color: textColor),
+        child: widget.child!,
+      ),
     );
   }
 }
