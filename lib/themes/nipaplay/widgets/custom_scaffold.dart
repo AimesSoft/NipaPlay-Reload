@@ -5,12 +5,12 @@ import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_scaffold_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_home_page.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/switchable_view.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/platform_utils.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
-import 'package:nipaplay/utils/app_accent_color.dart';
 
 class CustomScaffold extends StatefulWidget {
   final List<Widget> pages;
@@ -206,28 +206,12 @@ class _CustomScaffoldState extends State<CustomScaffold> {
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               systemOverlayStyle: appBarOverlayStyle,
-              bottom: _LogoTabBar(
-                tabBar: TabBar(
-                  controller: widget.tabController,
-                  isScrollable: true,
-                  tabs: widget.tabPage,
-                  labelColor: AppAccentColors.current,
-                  unselectedLabelColor:
-                      isDarkMode ? Colors.white60 : Colors.black54,
-                  labelPadding: const EdgeInsets.only(bottom: 15.0),
-                  tabAlignment: TabAlignment.start,
-                  splashFactory: NoSplash.splashFactory,
-                  overlayColor: WidgetStateProperty.all(Colors.transparent),
-                  dividerColor:
-                      showTabDivider ? tabDividerColor : Colors.transparent,
-                  dividerHeight: 3.0,
-                  indicator: _CustomTabIndicator(
-                    indicatorHeight: 3.0,
-                    indicatorColor: AppAccentColors.current,
-                    radius: 30.0,
-                  ),
-                  indicatorSize: TabBarIndicatorSize.label,
-                ),
+              bottom: NipaplayMainTabBar(
+                controller: widget.tabController!,
+                tabs: widget.tabPage,
+                showDivider: showTabDivider,
+                dividerColor: tabDividerColor,
+                showLeadingLogoOnMobile: true,
               ),
             )
           : null,
@@ -298,77 +282,5 @@ class TabControllerScope extends InheritedWidget {
   @override
   bool updateShouldNotify(TabControllerScope oldWidget) {
     return enabled != oldWidget.enabled || controller != oldWidget.controller;
-  }
-}
-
-class _CustomTabIndicator extends Decoration {
-  final double indicatorHeight;
-  final Color indicatorColor;
-  final double radius;
-
-  _CustomTabIndicator({
-    required this.indicatorHeight,
-    required this.indicatorColor,
-    required this.radius,
-  });
-
-  @override
-  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
-    return _CustomPainter(this, onChanged);
-  }
-}
-
-class _CustomPainter extends BoxPainter {
-  final _CustomTabIndicator decoration;
-
-  _CustomPainter(this.decoration, VoidCallback? onChanged) : super(onChanged);
-
-  @override
-  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
-    assert(configuration.size != null);
-    final Rect rect = Offset(
-          offset.dx,
-          (configuration.size!.height - decoration.indicatorHeight),
-        ) &
-        Size(configuration.size!.width, decoration.indicatorHeight);
-    final Paint paint = Paint()
-      ..color = decoration.indicatorColor
-      ..style = PaintingStyle.fill;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(decoration.radius)),
-      paint,
-    );
-  }
-}
-
-class _LogoTabBar extends StatelessWidget implements PreferredSizeWidget {
-  final TabBar tabBar;
-
-  const _LogoTabBar({required this.tabBar});
-
-  @override
-  Size get preferredSize => tabBar.preferredSize;
-
-  @override
-  Widget build(BuildContext context) {
-    if (globals.isDesktopOrTablet) {
-      return tabBar;
-    }
-
-    return Row(
-      children: [
-        SizedBox(width: 16),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 20.0),
-          child: Image.asset(
-            'assets/logo.png',
-            height: 40,
-            fit: BoxFit.contain,
-          ),
-        ),
-        SizedBox(width: 8),
-        Expanded(child: tabBar),
-      ],
-    );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/dependency_versions_window.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/debug_log_viewer_page.dart';
+import 'package:nipaplay/themes/nipaplay/pages/settings/nipaplay_ui_preview_window.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
 import 'package:nipaplay/services/file_log_service.dart';
 import 'package:nipaplay/utils/linux_storage_migration.dart';
@@ -55,9 +56,9 @@ class DeveloperOptionsPage extends StatelessWidget {
                 devOptions.setShowSystemResources(value);
               },
             ),
-            
+
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            
+
             // 调试日志收集开关
             SettingsItem.toggle(
               title: '调试日志收集',
@@ -66,7 +67,7 @@ class DeveloperOptionsPage extends StatelessWidget {
               value: devOptions.enableDebugLogCollection,
               onChanged: (bool value) async {
                 await devOptions.setEnableDebugLogCollection(value);
-                
+
                 // 根据设置控制日志服务
                 final logService = DebugLogService();
                 if (value) {
@@ -76,7 +77,7 @@ class DeveloperOptionsPage extends StatelessWidget {
                 }
               },
             ),
-            
+
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
             // 日志写入文件开关
@@ -123,9 +124,8 @@ class DeveloperOptionsPage extends StatelessWidget {
                 final enabled = videoState.spoilerPreventionEnabled;
                 return SettingsItem.toggle(
                   title: '调试：打印 AI 返回内容',
-                  subtitle: enabled
-                      ? '开启后会在日志里打印 AI 返回的原始文本与命中弹幕'
-                      : '需先启用防剧透模式',
+                  subtitle:
+                      enabled ? '开启后会在日志里打印 AI 返回的原始文本与命中弹幕' : '需先启用防剧透模式',
                   icon: Ionicons.information_circle_outline,
                   enabled: enabled,
                   value: videoState.spoilerAiDebugPrintResponse,
@@ -141,7 +141,7 @@ class DeveloperOptionsPage extends StatelessWidget {
             ),
 
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-            
+
             // 终端输出查看器
             SettingsItem.button(
               title: '终端输出',
@@ -152,7 +152,7 @@ class DeveloperOptionsPage extends StatelessWidget {
                 _openDebugLogViewer(context);
               },
             ),
-            
+
             Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
 
             SettingsItem.button(
@@ -162,6 +162,18 @@ class DeveloperOptionsPage extends StatelessWidget {
               trailingIcon: Ionicons.chevron_forward_outline,
               onTap: () {
                 _openDependencyVersions(context);
+              },
+            ),
+
+            Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+            SettingsItem.button(
+              title: 'Nipaplay 设计 UI 预览',
+              subtitle: '在窗口中集中查看 Nipaplay UI 组件示例',
+              icon: Ionicons.color_palette_outline,
+              trailingIcon: Ionicons.chevron_forward_outline,
+              onTap: () {
+                _openNipaplayUiPreview(context);
               },
             ),
 
@@ -185,75 +197,94 @@ class DeveloperOptionsPage extends StatelessWidget {
               ListTile(
                 title: Text(
                   '检查Linux存储迁移状态',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
                   '查看Linux平台数据目录迁移状态',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  locale: Locale("zh-Hans", "zh"),
+                  style:
+                      TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: Icon(Ionicons.information_circle_outline, color: colorScheme.onSurface),
+                trailing: Icon(Ionicons.information_circle_outline,
+                    color: colorScheme.onSurface),
                 onTap: () => _checkLinuxMigrationStatus(context),
               ),
-              
-              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-              
+
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
               // 手动触发迁移
               ListTile(
                 title: Text(
                   '手动触发存储迁移',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
                   '强制重新执行数据目录迁移（仅用于测试）',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  locale: Locale("zh-Hans", "zh"),
+                  style:
+                      TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: const Icon(Ionicons.refresh_outline, color: Colors.orange),
+                trailing:
+                    const Icon(Ionicons.refresh_outline, color: Colors.orange),
                 onTap: () => _manualTriggerMigration(context),
               ),
-              
-              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-              
+
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
               // 紧急恢复个人文件
               ListTile(
                 title: const Text(
                   '🚨 紧急恢复个人文件',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  locale: Locale("zh-Hans", "zh"),
+                  style:
+                      TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
                   '将误迁移的个人文件恢复到Documents目录',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  locale: Locale("zh-Hans", "zh"),
+                  style:
+                      TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: const Icon(Ionicons.medical_outline, color: Colors.red),
+                trailing:
+                    const Icon(Ionicons.medical_outline, color: Colors.red),
                 onTap: () => _emergencyRestorePersonalFiles(context),
               ),
-              
-              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-              
+
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
               // 显示存储目录信息
               ListTile(
                 title: Text(
                   '显示存储目录信息',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
+                  locale: Locale("zh-Hans", "zh"),
+                  style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
                   '查看当前使用的数据和缓存目录路径',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  locale: Locale("zh-Hans", "zh"),
+                  style:
+                      TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                 ),
-                trailing: Icon(Ionicons.folder_outline, color: colorScheme.onSurface),
+                trailing:
+                    Icon(Ionicons.folder_outline, color: colorScheme.onSurface),
                 onTap: () => _showStorageDirectoryInfo(context),
               ),
-              
-              Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+              Divider(
+                  color: colorScheme.onSurface.withOpacity(0.12), height: 1),
             ],
-            
+
             // 这里可以添加更多开发者选项
           ],
         );
@@ -333,6 +364,21 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
       barrierDismissible: true,
       barrierColor: Colors.transparent,
       child: const DependencyVersionsWindow(),
+    );
+  }
+
+  void _openNipaplayUiPreview(BuildContext context) {
+    final enableAnimation = Provider.of<AppearanceSettingsProvider>(
+      context,
+      listen: false,
+    ).enablePageAnimation;
+
+    NipaplayWindow.show<void>(
+      context: context,
+      enableAnimation: enableAnimation,
+      barrierDismissible: true,
+      barrierColor: Colors.transparent,
+      child: const NipaplayUiPreviewWindow(),
     );
   }
 
@@ -461,14 +507,14 @@ style: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
   // 检查Linux存储迁移状态
   Future<void> _checkLinuxMigrationStatus(BuildContext context) async {
     if (kIsWeb || !platform.Platform.isLinux) return;
-    
+
     try {
       final needsMigration = await LinuxStorageMigration.needsMigration();
       final dataDir = await LinuxStorageMigration.getXDGDataDirectory();
       final cacheDir = await LinuxStorageMigration.getXDGCacheDirectory();
-      
+
       if (!context.mounted) return;
-      
+
       BlurDialog.show<void>(
         context: context,
         title: "Linux存储迁移状态",
@@ -479,18 +525,20 @@ XDG数据目录: $dataDir
 XDG缓存目录: $cacheDir
 
 遵循XDG Base Directory规范，提供更好的Linux用户体验。
-        """.trim(),
+        """
+            .trim(),
         actions: <Widget>[
           HoverScaleTextButton(
-            child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
+            child: const Text("知道了",
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       );
     } catch (e) {
       if (!context.mounted) return;
-      
+
       BlurSnackBar.show(context, '检查迁移状态失败: $e');
     }
   }
@@ -498,37 +546,39 @@ style: TextStyle(color: Colors.lightBlueAccent)),
   // 手动触发存储迁移
   Future<void> _manualTriggerMigration(BuildContext context) async {
     if (kIsWeb || !platform.Platform.isLinux) return;
-    
+
     final confirm = await BlurDialog.show<bool>(
       context: context,
       title: "确认迁移",
       content: "这将重新执行数据目录迁移过程。\n\n注意：这是一个测试功能，在正常情况下不应该使用。",
       actions: <Widget>[
         HoverScaleTextButton(
-          child: const Text("取消", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+          child: const Text("取消",
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
-          child: const Text("确认", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orange)),
+          child: const Text("确认",
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.orange)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],
     );
-    
+
     if (confirm == true && context.mounted) {
       BlurSnackBar.show(context, '开始执行迁移...');
-      
+
       try {
         // 重置迁移状态
         await LinuxStorageMigration.resetMigrationStatus();
-        
+
         // 执行迁移
         final result = await LinuxStorageMigration.performMigration();
-        
+
         if (!context.mounted) return;
-        
+
         if (result.success) {
           BlurDialog.show<void>(
             context: context,
@@ -540,11 +590,13 @@ ${result.message}
 - 总项目数: ${result.totalItems}
 - 成功项目: ${result.migratedItems}
 - 失败项目: ${result.failedItems}
-            """.trim(),
+            """
+                .trim(),
             actions: <Widget>[
               HoverScaleTextButton(
-                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
+                child: const Text("知道了",
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -558,11 +610,13 @@ ${result.message}
 
 错误信息:
 ${result.errors.join('\n')}
-            """.trim(),
+            """
+                .trim(),
             actions: <Widget>[
               HoverScaleTextButton(
-                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orange)),
+                child: const Text("知道了",
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -578,18 +632,20 @@ style: TextStyle(color: Colors.orange)),
   // 显示存储目录信息
   Future<void> _showStorageDirectoryInfo(BuildContext context) async {
     if (kIsWeb || !platform.Platform.isLinux) return;
-    
+
     try {
       final dataDir = await LinuxStorageMigration.getXDGDataDirectory();
       final cacheDir = await LinuxStorageMigration.getXDGCacheDirectory();
-      
+
       // 获取环境变量信息
-      final xdgDataHome = platform.Platform.environment['XDG_DATA_HOME'] ?? '未设置';
-      final xdgCacheHome = platform.Platform.environment['XDG_CACHE_HOME'] ?? '未设置';
+      final xdgDataHome =
+          platform.Platform.environment['XDG_DATA_HOME'] ?? '未设置';
+      final xdgCacheHome =
+          platform.Platform.environment['XDG_CACHE_HOME'] ?? '未设置';
       final homeDir = platform.Platform.environment['HOME'] ?? '未知';
-      
+
       if (!context.mounted) return;
-      
+
       BlurDialog.show<void>(
         context: context,
         title: "Linux存储目录信息",
@@ -608,11 +664,13 @@ XDG_CACHE_HOME: $xdgCacheHome
 • 缓存目录用于存储临时文件和缓存
 • 遵循XDG Base Directory规范
 • 提供与其他Linux应用一致的用户体验
-        """.trim(),
+        """
+            .trim(),
         actions: <Widget>[
           HoverScaleTextButton(
-            child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
+            child: const Text("知道了",
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.lightBlueAccent)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -622,11 +680,11 @@ style: TextStyle(color: Colors.lightBlueAccent)),
       BlurSnackBar.show(context, '获取目录信息失败: $e');
     }
   }
-  
+
   // 紧急恢复个人文件
   Future<void> _emergencyRestorePersonalFiles(BuildContext context) async {
     if (kIsWeb || !platform.Platform.isLinux) return;
-    
+
     final confirm = await BlurDialog.show<bool>(
       context: context,
       title: "🚨 紧急恢复个人文件",
@@ -639,29 +697,33 @@ style: TextStyle(color: Colors.lightBlueAccent)),
 • 这是一个紧急修复功能
 
 是否继续？
-      """.trim(),
+      """
+          .trim(),
       actions: <Widget>[
         HoverScaleTextButton(
-          child: const Text("取消", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70)),
+          child: const Text("取消",
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.white70)),
           onPressed: () => Navigator.of(context).pop(false),
         ),
         HoverScaleTextButton(
-          child: const Text("确认恢复", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red)),
+          child: const Text("确认恢复",
+              locale: Locale("zh-Hans", "zh"),
+              style: TextStyle(color: Colors.red)),
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],
     );
-    
+
     if (confirm == true && context.mounted) {
       BlurSnackBar.show(context, '开始恢复个人文件...');
-      
+
       try {
-        final result = await LinuxStorageMigration.emergencyRestorePersonalFiles();
-        
+        final result =
+            await LinuxStorageMigration.emergencyRestorePersonalFiles();
+
         if (!context.mounted) return;
-        
+
         if (result.success) {
           BlurDialog.show<void>(
             context: context,
@@ -675,11 +737,13 @@ ${result.message}
 - 失败项目: ${result.failedItems}
 
 您的个人文件已恢复到 ~/Documents 目录。
-            """.trim(),
+            """
+                .trim(),
             actions: <Widget>[
               HoverScaleTextButton(
-                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.lightBlueAccent)),
+                child: const Text("知道了",
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.lightBlueAccent)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -693,11 +757,13 @@ ${result.message}
 
 错误信息:
 ${result.errors.join('\n')}
-            """.trim(),
+            """
+                .trim(),
             actions: <Widget>[
               HoverScaleTextButton(
-                child: const Text("知道了", locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.orange)),
+                child: const Text("知道了",
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(color: Colors.orange)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -709,4 +775,4 @@ style: TextStyle(color: Colors.orange)),
       }
     }
   }
-} 
+}
