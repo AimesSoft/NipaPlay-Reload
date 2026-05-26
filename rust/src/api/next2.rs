@@ -167,11 +167,15 @@ pub fn next2_prepare_layout(
             }
             NEXT2_TYPE_TOP => {
                 let selected = select_static_track(
+                    idx,
                     item_time,
                     &items,
                     &mut top_track_items,
                     track_len,
                     static_duration_seconds,
+                    width,
+                    base_danmaku_height,
+                    base_track_height,
                 );
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
@@ -180,11 +184,15 @@ pub fn next2_prepare_layout(
             }
             NEXT2_TYPE_BOTTOM => {
                 let selected = select_static_track(
+                    idx,
                     item_time,
                     &items,
                     &mut bottom_track_items,
                     track_len,
                     static_duration_seconds,
+                    width,
+                    base_danmaku_height,
+                    base_track_height,
                 );
                 items[idx].track_index = selected.map(|v| v as i32).unwrap_or(-1);
                 if let Some(track) = selected {
@@ -197,9 +205,6 @@ pub fn next2_prepare_layout(
         }
     }
 
-    let mut scroll_track_offsets = vec![0.0; track_len];
-    let mut top_track_offsets = vec![0.0; track_len];
-    let mut bottom_track_offsets = vec![0.0; track_len];
     let mut scroll_track_base_offsets = vec![0.0; track_len];
     let mut top_track_base_offsets = vec![0.0; track_len];
     let mut bottom_track_base_offsets = vec![0.0; track_len];
@@ -208,14 +213,11 @@ pub fn next2_prepare_layout(
     let mut top_offset = 0.0;
     let mut bottom_accumulated = 0.0;
     for i in 0..track_len {
-        scroll_track_offsets[i] = scroll_offset;
         scroll_offset += scroll_track_heights[i];
 
-        top_track_offsets[i] = top_offset;
         top_offset += top_track_heights[i];
 
         bottom_accumulated += bottom_track_heights[i];
-        bottom_track_offsets[i] = height - bottom_accumulated;
 
         scroll_track_base_offsets[i] = scroll_offset - scroll_track_heights[i];
         top_track_base_offsets[i] = top_offset - top_track_heights[i];
@@ -545,20 +547,17 @@ fn select_scroll_track(
 
     compact_scroll_tracks(item.time_seconds, items, tracks, scroll_duration_seconds);
 
-    for (i, track_items) in tracks.iter().enumerate().take(track_count) {
-        if scroll_can_add_to_track(item, items, track_items, width, scroll_duration_seconds) {
-            if scroll_has_neighbor_overlap_at_spawn(
-                item,
-                i,
-                items,
-                tracks,
-                width,
-                scroll_duration_seconds,
-                base_danmaku_height,
-                base_track_height,
-            ) {
-                continue;
-            }
+    for i in 0..track_count {
+        if !scroll_will_collide_with_any(
+            item,
+            i,
+            items,
+            tracks,
+            width,
+            scroll_duration_seconds,
+            base_danmaku_height,
+            base_track_height,
+        ) {
             return Some(i);
         }
     }
@@ -593,38 +592,7 @@ fn compact_scroll_tracks(
     }
 }
 
-fn scroll_can_add_to_track(
-    new_item: &WorkingNext2Item,
-    items: &[WorkingNext2Item],
-    track_items: &[usize],
-    width: f64,
-    scroll_duration_seconds: f64,
-) -> bool {
-    for existing_idx in track_items {
-        let existing = &items[*existing_idx];
-        let elapsed = new_item.time_seconds - existing.time_seconds;
-        if elapsed < 0.0 || elapsed > scroll_duration_seconds {
-            continue;
-        }
-
-        let existing_x = width - (elapsed / scroll_duration_seconds) * (width + existing.width);
-        let existing_end = existing_x + existing.width;
-
-        if width - existing_end < 0.0 {
-            return false;
-        }
-
-        if existing.width < new_item.width {
-            let progress = (width - existing_x) / (existing.width + width);
-            if (1.0 - progress) > (width / (width + new_item.width)) {
-                return false;
-            }
-        }
-    }
-    true
-}
-
-fn scroll_has_neighbor_overlap_at_spawn(
+fn scroll_will_collide_with_any(
     new_item: &WorkingNext2Item,
     candidate_track: usize,
     items: &[WorkingNext2Item],
@@ -637,20 +605,19 @@ fn scroll_has_neighbor_overlap_at_spawn(
     for (existing_track, track_items) in tracks.iter().enumerate() {
         for existing_idx in track_items {
             let existing = &items[*existing_idx];
-            if new_item.count_text.is_none() && existing.count_text.is_none() {
-                continue;
-            }
-            if !tracks_vertical_overlap(
+            if tracks_vertical_overlap(
                 candidate_track,
                 new_item.font_size_multiplier,
                 existing_track,
                 existing.font_size_multiplier,
                 base_danmaku_height,
                 base_track_height,
+            ) && scroll_items_will_collide_in_duration(
+                new_item,
+                existing,
+                width,
+                scroll_duration_seconds,
             ) {
-                continue;
-            }
-            if scroll_items_overlap_at_spawn(new_item, existing, width, scroll_duration_seconds) {
                 return true;
             }
         }
@@ -675,43 +642,139 @@ fn tracks_vertical_overlap(
     top_a < bottom_b && top_b < bottom_a
 }
 
-fn scroll_items_overlap_at_spawn(
+fn scroll_items_will_collide_in_duration(
     new_item: &WorkingNext2Item,
     existing: &WorkingNext2Item,
     width: f64,
     scroll_duration_seconds: f64,
 ) -> bool {
-    let elapsed = new_item.time_seconds - existing.time_seconds;
-    if elapsed < 0.0 || elapsed > scroll_duration_seconds {
+    let start_t = new_item.time_seconds.max(existing.time_seconds);
+    let end_t = (new_item.time_seconds + scroll_duration_seconds)
+        .min(existing.time_seconds + scroll_duration_seconds);
+    if end_t <= start_t {
         return false;
     }
-    let existing_x = width - (elapsed / scroll_duration_seconds) * (width + existing.width);
-    let existing_end = existing_x + existing.width;
+    let d_start =
+        scroll_item_x_at_time(new_item, start_t, width, scroll_duration_seconds)
+            - scroll_item_x_at_time(existing, start_t, width, scroll_duration_seconds);
+    let d_end = scroll_item_x_at_time(new_item, end_t, width, scroll_duration_seconds)
+        - scroll_item_x_at_time(existing, end_t, width, scroll_duration_seconds);
 
-    let new_start = width;
-    let new_end = width + new_item.width;
-    new_start < existing_end && existing_x < new_end
+    let min_d = d_start.min(d_end);
+    let max_d = d_start.max(d_end);
+    !(max_d <= -new_item.width || min_d >= existing.width)
+}
+
+fn scroll_item_x_at_time(
+    item: &WorkingNext2Item,
+    time: f64,
+    width: f64,
+    scroll_duration_seconds: f64,
+) -> f64 {
+    width - ((time - item.time_seconds) / scroll_duration_seconds) * (width + item.width)
 }
 
 fn select_static_track(
+    item_index: usize,
     time_seconds: f64,
     items: &[WorkingNext2Item],
     tracks: &mut [Option<usize>],
     track_count: usize,
     static_duration_seconds: f64,
+    width: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
 ) -> Option<usize> {
-    for (i, existing_opt) in tracks.iter_mut().enumerate().take(track_count) {
-        match existing_opt {
-            None => return Some(i),
-            Some(existing_idx) => {
-                let existing = &items[*existing_idx];
-                if time_seconds - existing.time_seconds >= static_duration_seconds {
-                    return Some(i);
-                }
-            }
+    let item = &items[item_index];
+    compact_static_tracks(time_seconds, items, tracks, static_duration_seconds);
+
+    for i in 0..track_count {
+        if !static_will_collide_with_any(
+            item,
+            i,
+            items,
+            tracks,
+            static_duration_seconds,
+            width,
+            base_danmaku_height,
+            base_track_height,
+        ) {
+            return Some(i);
         }
     }
     None
+}
+
+fn compact_static_tracks(
+    time_seconds: f64,
+    items: &[WorkingNext2Item],
+    tracks: &mut [Option<usize>],
+    static_duration_seconds: f64,
+) {
+    for track in tracks.iter_mut() {
+        if let Some(existing_idx) = *track {
+            let existing = &items[existing_idx];
+            if time_seconds - existing.time_seconds >= static_duration_seconds {
+                *track = None;
+            }
+        }
+    }
+}
+
+fn static_will_collide_with_any(
+    new_item: &WorkingNext2Item,
+    candidate_track: usize,
+    items: &[WorkingNext2Item],
+    tracks: &[Option<usize>],
+    static_duration_seconds: f64,
+    width: f64,
+    base_danmaku_height: f64,
+    base_track_height: f64,
+) -> bool {
+    for (existing_track, existing_idx_opt) in tracks.iter().enumerate() {
+        let Some(existing_idx) = existing_idx_opt else {
+            continue;
+        };
+        let existing = &items[*existing_idx];
+        if tracks_vertical_overlap(
+            candidate_track,
+            new_item.font_size_multiplier,
+            existing_track,
+            existing.font_size_multiplier,
+            base_danmaku_height,
+            base_track_height,
+        ) && static_items_will_collide(
+            new_item,
+            existing,
+            static_duration_seconds,
+            width,
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
+fn static_items_will_collide(
+    new_item: &WorkingNext2Item,
+    existing: &WorkingNext2Item,
+    static_duration_seconds: f64,
+    width: f64,
+) -> bool {
+    let new_start = new_item.time_seconds;
+    let new_end = new_item.time_seconds + static_duration_seconds;
+    let existing_start = existing.time_seconds;
+    let existing_end = existing.time_seconds + static_duration_seconds;
+
+    if new_end <= existing_start || existing_end <= new_start {
+        return false;
+    }
+
+    let new_x = (width - new_item.width) / 2.0;
+    let existing_x = (width - existing.width) / 2.0;
+    let new_end_x = new_x + new_item.width;
+    let existing_end_x = existing_x + existing.width;
+    new_x < existing_end_x && existing_x < new_end_x
 }
 
 fn sanitize_positive(value: f64, fallback: f64) -> f64 {
@@ -976,6 +1039,29 @@ mod tests {
         }
     }
 
+    fn mk_working_scroll_item(
+        time_seconds: f64,
+        text: &str,
+        width: f64,
+        font_size_multiplier: f64,
+        track_index: i32,
+        count_text: Option<&str>,
+    ) -> WorkingNext2Item {
+        WorkingNext2Item {
+            time_seconds,
+            text: text.to_string(),
+            type_code: NEXT2_TYPE_SCROLL,
+            color_argb: 0x00FF_FFFFu32 as i32,
+            is_me: false,
+            font_size_multiplier,
+            count_text: count_text.map(|v| v.to_string()),
+            track_index,
+            y_position: 0.0,
+            width,
+            scroll_speed: (1280.0 + width) / 10.0,
+        }
+    }
+
     #[test]
     fn merged_deduplication_is_scoped_per_window() {
         let merged = prepare_merged_items(vec![
@@ -1025,6 +1111,52 @@ mod tests {
 
         let tracks: Vec<i32> = prepared.items.iter().map(|item| item.track_index).collect();
         assert!(tracks.iter().all(|t| *t >= 0));
+    }
+
+    #[test]
+    fn merged_danmaku_pushes_overlapping_scroll_items_to_farther_tracks() {
+        let width = 1280.0;
+        let font_size = 24.0;
+        let base_danmaku_height = measure_text_height(font_size);
+        let base_track_height = resolve_base_track_height(font_size, base_danmaku_height);
+        let duration = 10.0;
+
+        let mut items = vec![
+            mk_working_scroll_item(0.0, "merged", 520.0, 2.0, 0, Some("x10")),
+            mk_working_scroll_item(0.05, "neighbor", 180.0, 1.0, -1, None),
+        ];
+        let mut tracks = vec![vec![0], Vec::new(), Vec::new()];
+
+        let selected = select_scroll_track(
+            1,
+            &items,
+            &mut tracks,
+            3,
+            width,
+            duration,
+            false,
+            base_danmaku_height,
+            base_track_height,
+        );
+
+        assert_eq!(selected, Some(2));
+        items[1].track_index = selected.map(|v| v as i32).unwrap_or(-1);
+        assert_eq!(items[1].track_index, 2);
+    }
+
+    #[test]
+    fn scroll_collision_detects_later_catch_up() {
+        let width = 1280.0;
+        let duration = 10.0;
+        let existing = mk_working_scroll_item(0.0, "slow", 120.0, 1.0, 0, None);
+        let new_item = mk_working_scroll_item(1.0, "wide", 420.0, 1.0, -1, None);
+
+        assert!(scroll_items_will_collide_in_duration(
+            &new_item,
+            &existing,
+            width,
+            duration,
+        ));
     }
 
     #[test]
