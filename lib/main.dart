@@ -57,6 +57,8 @@ import 'services/file_picker_service.dart';
 import 'services/security_bookmark_service.dart';
 import 'themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/providers/theme_background_reveal_provider.dart';
+import 'package:nipaplay/platform_menu/macos_platform_menu.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -99,8 +101,6 @@ import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = globals.navigatorKey;
-// 将通道定义为全局变量
-const MethodChannel menuChannel = MethodChannel('custom_menu_channel');
 
 final GlobalKey<State<DefaultTabController>> tabControllerKey =
     GlobalKey<State<DefaultTabController>>();
@@ -375,132 +375,7 @@ void main(List<String> args) async {
     final manageStatus = await Permission.manageExternalStorage.status;
     debugPrint("最终存储权限状态: $finalStatus, 管理存储权限状态: $manageStatus");
   }
-  // 设置方法通道处理器
-  menuChannel.setMethodCallHandler((call) async {
-    print('[Dart] 收到方法调用: ${call.method}');
-
-    if (call.method == 'uploadVideo') {
-      try {
-        // 获取UI上下文
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
-        }
-
-        // 延迟确保UI准备好
-        Future.microtask(() {
-          print('[Dart] 启动文件选择器');
-          _showGlobalUploadDialog(context);
-        });
-
-        return '正在显示文件选择器';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openVideoPlayback') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
-        }
-
-        Future.microtask(() {
-          _navigateToPage(context, 1); // 切换到视频播放页面（索引1）
-        });
-
-        return '正在切换到视频播放页面';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openHome') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
-        }
-
-        Future.microtask(() {
-          _navigateToPage(context, 0); // 切换到主页（索引0）
-        });
-
-        return '正在切换到主页';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openMediaLibrary') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
-        }
-
-        Future.microtask(() {
-          _navigateToPage(context, 2); // 切换到媒体库页面（索引2）
-        });
-
-        return '正在切换到媒体库页面';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openNewSeries') {
-      try {
-        // iOS平台不支持新番更新页面，直接返回错误信息
-        if (Platform.isIOS) {
-          print('[Dart] iOS平台不支持新番更新功能');
-          return 'iOS平台不支持新番更新功能';
-        }
-
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
-        }
-
-        Future.microtask(() {
-          _navigateToPage(context, 3); // 切换到新番更新页面（索引3）
-        });
-
-        return '正在切换到新番更新页面';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    } else if (call.method == 'openSettings') {
-      try {
-        final context = navigatorKey.currentState?.overlay?.context;
-        if (context == null) {
-          print('[Dart] 错误: 无法获取UI上下文');
-          return '错误: 无法获取UI上下文';
-        }
-
-        Future.microtask(() {
-          final uiThemeProvider =
-              Provider.of<UIThemeProvider>(context, listen: false);
-          if (uiThemeProvider.isCupertinoTheme) {
-            _navigateToPage(context, 3); // Cupertino 主题保留底部设置页
-          } else {
-            SettingsPage.showWindow(context); // Nipaplay 主题使用弹窗设置页
-          }
-        });
-
-        return '正在打开设置';
-      } catch (e) {
-        print('[Dart] 错误: $e');
-        return '错误: $e';
-      }
-    }
-
-    // 默认返回空字符串
-    return '';
-  });
+  // (Menu actions are now handled by PlatformMenuBar in lib/platform_menu/)
 
   // 创建应用所需的目录结构
   await _initializeAppDirectories();
@@ -883,7 +758,94 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return DropTarget(
+    return MacosPlatformMenu(
+      onUploadVideo: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) _showGlobalUploadDialog(ctx);
+      },
+      onOpenHome: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) _navigateToPage(ctx, 0);
+      },
+      onOpenVideoPlayback: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) _navigateToPage(ctx, 1);
+      },
+      onOpenMediaLibrary: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) _navigateToPage(ctx, 2);
+      },
+      onOpenNewSeries: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) _navigateToPage(ctx, 3);
+      },
+      onOpenSettings: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx == null) return;
+        final uiThemeProvider =
+            Provider.of<UIThemeProvider>(ctx, listen: false);
+        if (uiThemeProvider.isCupertinoTheme) {
+          _navigateToPage(ctx, 3);
+        } else {
+          SettingsPage.showWindow(ctx);
+        }
+      },
+      onShowAbout: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) {
+          showAboutDialog(
+            context: ctx,
+            applicationName: 'NipaPlay',
+            applicationLegalese: '© AimesSoft',
+          );
+        }
+      },
+      onShowHelp: () {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) {
+          showDialog(
+            context: ctx,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('NipaPlay 帮助'),
+              content: const Text(
+                '快捷键：\n'
+                '• Cmd+U - 上传视频\n'
+                '• Cmd+W - 关闭窗口\n'
+                '• Cmd+Q - 退出应用\n'
+                '• Cmd+, - 偏好设置\n'
+                '• Cmd+1 - 主页\n'
+                '• Cmd+2 - 视频播放\n'
+                '• Cmd+3 - 媒体库\n'
+                '• Cmd+4 - 新番更新\n\n'
+                '支持的视频格式：\n'
+                'MP4, MKV, AVI, MOV, WebM, WMV, M4V, 3GP, FLV, TS, M2TS',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('确定'),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+      onOpenGitHub: () {
+        url_launcher.launchUrl(
+          Uri.parse('https://github.com/AimesSoft/NipaPlay-Reload'),
+        );
+      },
+      onOpenWebsite: () {
+        url_launcher.launchUrl(
+          Uri.parse('https://nipaplay.aimes-soft.com/'),
+        );
+      },
+      onCloseWindow: () {
+        if (!kIsWeb && Platform.isMacOS) {
+          windowManager.close();
+        }
+      },
+      child: DropTarget(
       onDragEntered: (details) {
         setState(() {
           _isDragging = true;
