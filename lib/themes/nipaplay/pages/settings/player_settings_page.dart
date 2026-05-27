@@ -434,6 +434,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
       case DanmakuRenderEngine.next2:
         return Next2PlatformSupport.description;
+      case DanmakuRenderEngine.dfmPlus:
+        return 'DFM+ 弹幕引擎\n移植自 B 站的 DanmakuFlameMaster「烈焰弹幕使」，结合 Rust 计算层和 GPU 渲染。';
     }
   }
 

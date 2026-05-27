@@ -3,6 +3,7 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/dfm_plus.dart';
 import 'api/file_scan.dart';
 import 'api/next2.dart';
 import 'api/performance.dart';
@@ -13,248 +14,565 @@ import 'dart:ffi' as ffi;
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
+abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
+  RustLibApiImplPlatform({
+    required super.handler,
+    required super.wire,
+    required super.generalizedFrbRustBinding,
+    required super.portManager,
+  });
 
+  @protected
+  String dco_decode_String(dynamic raw);
 
+  @protected
+  bool dco_decode_bool(dynamic raw);
 
-                abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
-                  RustLibApiImplPlatform({
-                    required super.handler,
-                    required super.wire,
-                    required super.generalizedFrbRustBinding,
-                    required super.portManager,
-                  });
+  @protected
+  DfmPlusFrameRequest dco_decode_box_autoadd_dfm_plus_frame_request(
+      dynamic raw);
 
-                  
+  @protected
+  DfmPlusPrepareRequest dco_decode_box_autoadd_dfm_plus_prepare_request(
+      dynamic raw);
 
-                  @protected String dco_decode_String(dynamic raw);
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw);
 
-@protected bool dco_decode_bool(dynamic raw);
+  @protected
+  RustNext2FrameRequest dco_decode_box_autoadd_rust_next_2_frame_request(
+      dynamic raw);
 
-@protected double dco_decode_box_autoadd_f_64(dynamic raw);
+  @protected
+  RustNext2PrepareRequest dco_decode_box_autoadd_rust_next_2_prepare_request(
+      dynamic raw);
 
-@protected RustNext2FrameRequest dco_decode_box_autoadd_rust_next_2_frame_request(dynamic raw);
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
 
-@protected RustNext2PrepareRequest dco_decode_box_autoadd_rust_next_2_prepare_request(dynamic raw);
+  @protected
+  DfmPlusDanmakuItem dco_decode_dfm_plus_danmaku_item(dynamic raw);
 
-@protected double dco_decode_f_64(dynamic raw);
+  @protected
+  DfmPlusFontMetrics dco_decode_dfm_plus_font_metrics(dynamic raw);
 
-@protected int dco_decode_i_32(dynamic raw);
+  @protected
+  DfmPlusFrameItem dco_decode_dfm_plus_frame_item(dynamic raw);
 
-@protected PlatformInt64 dco_decode_i_64(dynamic raw);
+  @protected
+  DfmPlusFrameLayout dco_decode_dfm_plus_frame_layout(dynamic raw);
 
-@protected List<String> dco_decode_list_String(dynamic raw);
+  @protected
+  DfmPlusFrameRequest dco_decode_dfm_plus_frame_request(dynamic raw);
 
-@protected Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
+  @protected
+  DfmPlusPrepareRequest dco_decode_dfm_plus_prepare_request(dynamic raw);
 
-@protected Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+  @protected
+  DfmPlusPreparedItem dco_decode_dfm_plus_prepared_item(dynamic raw);
 
-@protected List<RustFileHashEntry> dco_decode_list_rust_file_hash_entry(dynamic raw);
+  @protected
+  DfmPlusPreparedLayout dco_decode_dfm_plus_prepared_layout(dynamic raw);
 
-@protected List<RustFileScanEntry> dco_decode_list_rust_file_scan_entry(dynamic raw);
+  @protected
+  double dco_decode_f_64(dynamic raw);
 
-@protected List<RustNext2DanmakuItem> dco_decode_list_rust_next_2_danmaku_item(dynamic raw);
+  @protected
+  int dco_decode_i_32(dynamic raw);
 
-@protected List<RustNext2FrameItem> dco_decode_list_rust_next_2_frame_item(dynamic raw);
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
 
-@protected List<RustNext2PreparedItem> dco_decode_list_rust_next_2_prepared_item(dynamic raw);
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
 
-@protected String? dco_decode_opt_String(dynamic raw);
+  @protected
+  List<DfmPlusDanmakuItem> dco_decode_list_dfm_plus_danmaku_item(dynamic raw);
 
-@protected double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
+  @protected
+  List<DfmPlusFrameItem> dco_decode_list_dfm_plus_frame_item(dynamic raw);
 
-@protected RustCpuSample dco_decode_rust_cpu_sample(dynamic raw);
+  @protected
+  List<DfmPlusPreparedItem> dco_decode_list_dfm_plus_prepared_item(dynamic raw);
 
-@protected RustFileHashEntry dco_decode_rust_file_hash_entry(dynamic raw);
+  @protected
+  Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
 
-@protected RustFileScanDiff dco_decode_rust_file_scan_diff(dynamic raw);
+  @protected
+  Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
-@protected RustFileScanEntry dco_decode_rust_file_scan_entry(dynamic raw);
+  @protected
+  List<RustFileHashEntry> dco_decode_list_rust_file_hash_entry(dynamic raw);
 
-@protected RustFileScanSnapshot dco_decode_rust_file_scan_snapshot(dynamic raw);
+  @protected
+  List<RustFileScanEntry> dco_decode_list_rust_file_scan_entry(dynamic raw);
 
-@protected RustGpuSample dco_decode_rust_gpu_sample(dynamic raw);
+  @protected
+  List<RustNext2DanmakuItem> dco_decode_list_rust_next_2_danmaku_item(
+      dynamic raw);
 
-@protected RustNext2DanmakuItem dco_decode_rust_next_2_danmaku_item(dynamic raw);
+  @protected
+  List<RustNext2FrameItem> dco_decode_list_rust_next_2_frame_item(dynamic raw);
 
-@protected RustNext2FrameItem dco_decode_rust_next_2_frame_item(dynamic raw);
+  @protected
+  List<RustNext2PreparedItem> dco_decode_list_rust_next_2_prepared_item(
+      dynamic raw);
 
-@protected RustNext2FrameLayout dco_decode_rust_next_2_frame_layout(dynamic raw);
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
 
-@protected RustNext2FrameRequest dco_decode_rust_next_2_frame_request(dynamic raw);
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
 
-@protected RustNext2PrepareRequest dco_decode_rust_next_2_prepare_request(dynamic raw);
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
-@protected RustNext2PreparedItem dco_decode_rust_next_2_prepared_item(dynamic raw);
+  @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
 
-@protected RustNext2PreparedLayout dco_decode_rust_next_2_prepared_layout(dynamic raw);
+  @protected
+  RustCpuSample dco_decode_rust_cpu_sample(dynamic raw);
 
-@protected RustPerformanceSample dco_decode_rust_performance_sample(dynamic raw);
+  @protected
+  RustFileHashEntry dco_decode_rust_file_hash_entry(dynamic raw);
 
-@protected BigInt dco_decode_u_64(dynamic raw);
+  @protected
+  RustFileScanDiff dco_decode_rust_file_scan_diff(dynamic raw);
 
-@protected int dco_decode_u_8(dynamic raw);
+  @protected
+  RustFileScanEntry dco_decode_rust_file_scan_entry(dynamic raw);
 
-@protected void dco_decode_unit(dynamic raw);
+  @protected
+  RustFileScanSnapshot dco_decode_rust_file_scan_snapshot(dynamic raw);
 
-@protected String sse_decode_String(SseDeserializer deserializer);
+  @protected
+  RustGpuSample dco_decode_rust_gpu_sample(dynamic raw);
 
-@protected bool sse_decode_bool(SseDeserializer deserializer);
+  @protected
+  RustNext2DanmakuItem dco_decode_rust_next_2_danmaku_item(dynamic raw);
 
-@protected double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
+  @protected
+  RustNext2FrameItem dco_decode_rust_next_2_frame_item(dynamic raw);
 
-@protected RustNext2FrameRequest sse_decode_box_autoadd_rust_next_2_frame_request(SseDeserializer deserializer);
+  @protected
+  RustNext2FrameLayout dco_decode_rust_next_2_frame_layout(dynamic raw);
 
-@protected RustNext2PrepareRequest sse_decode_box_autoadd_rust_next_2_prepare_request(SseDeserializer deserializer);
+  @protected
+  RustNext2FrameRequest dco_decode_rust_next_2_frame_request(dynamic raw);
 
-@protected double sse_decode_f_64(SseDeserializer deserializer);
+  @protected
+  RustNext2PrepareRequest dco_decode_rust_next_2_prepare_request(dynamic raw);
 
-@protected int sse_decode_i_32(SseDeserializer deserializer);
+  @protected
+  RustNext2PreparedItem dco_decode_rust_next_2_prepared_item(dynamic raw);
 
-@protected PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+  @protected
+  RustNext2PreparedLayout dco_decode_rust_next_2_prepared_layout(dynamic raw);
 
-@protected List<String> sse_decode_list_String(SseDeserializer deserializer);
+  @protected
+  RustPerformanceSample dco_decode_rust_performance_sample(dynamic raw);
 
-@protected Float64List sse_decode_list_prim_f_64_strict(SseDeserializer deserializer);
+  @protected
+  int dco_decode_u_32(dynamic raw);
 
-@protected Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+  @protected
+  BigInt dco_decode_u_64(dynamic raw);
 
-@protected List<RustFileHashEntry> sse_decode_list_rust_file_hash_entry(SseDeserializer deserializer);
+  @protected
+  int dco_decode_u_8(dynamic raw);
 
-@protected List<RustFileScanEntry> sse_decode_list_rust_file_scan_entry(SseDeserializer deserializer);
+  @protected
+  void dco_decode_unit(dynamic raw);
 
-@protected List<RustNext2DanmakuItem> sse_decode_list_rust_next_2_danmaku_item(SseDeserializer deserializer);
+  @protected
+  String sse_decode_String(SseDeserializer deserializer);
 
-@protected List<RustNext2FrameItem> sse_decode_list_rust_next_2_frame_item(SseDeserializer deserializer);
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
 
-@protected List<RustNext2PreparedItem> sse_decode_list_rust_next_2_prepared_item(SseDeserializer deserializer);
+  @protected
+  DfmPlusFrameRequest sse_decode_box_autoadd_dfm_plus_frame_request(
+      SseDeserializer deserializer);
 
-@protected String? sse_decode_opt_String(SseDeserializer deserializer);
+  @protected
+  DfmPlusPrepareRequest sse_decode_box_autoadd_dfm_plus_prepare_request(
+      SseDeserializer deserializer);
 
-@protected double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
 
-@protected RustCpuSample sse_decode_rust_cpu_sample(SseDeserializer deserializer);
+  @protected
+  RustNext2FrameRequest sse_decode_box_autoadd_rust_next_2_frame_request(
+      SseDeserializer deserializer);
 
-@protected RustFileHashEntry sse_decode_rust_file_hash_entry(SseDeserializer deserializer);
+  @protected
+  RustNext2PrepareRequest sse_decode_box_autoadd_rust_next_2_prepare_request(
+      SseDeserializer deserializer);
 
-@protected RustFileScanDiff sse_decode_rust_file_scan_diff(SseDeserializer deserializer);
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
 
-@protected RustFileScanEntry sse_decode_rust_file_scan_entry(SseDeserializer deserializer);
+  @protected
+  DfmPlusDanmakuItem sse_decode_dfm_plus_danmaku_item(
+      SseDeserializer deserializer);
 
-@protected RustFileScanSnapshot sse_decode_rust_file_scan_snapshot(SseDeserializer deserializer);
+  @protected
+  DfmPlusFontMetrics sse_decode_dfm_plus_font_metrics(
+      SseDeserializer deserializer);
 
-@protected RustGpuSample sse_decode_rust_gpu_sample(SseDeserializer deserializer);
+  @protected
+  DfmPlusFrameItem sse_decode_dfm_plus_frame_item(SseDeserializer deserializer);
 
-@protected RustNext2DanmakuItem sse_decode_rust_next_2_danmaku_item(SseDeserializer deserializer);
+  @protected
+  DfmPlusFrameLayout sse_decode_dfm_plus_frame_layout(
+      SseDeserializer deserializer);
 
-@protected RustNext2FrameItem sse_decode_rust_next_2_frame_item(SseDeserializer deserializer);
+  @protected
+  DfmPlusFrameRequest sse_decode_dfm_plus_frame_request(
+      SseDeserializer deserializer);
 
-@protected RustNext2FrameLayout sse_decode_rust_next_2_frame_layout(SseDeserializer deserializer);
+  @protected
+  DfmPlusPrepareRequest sse_decode_dfm_plus_prepare_request(
+      SseDeserializer deserializer);
 
-@protected RustNext2FrameRequest sse_decode_rust_next_2_frame_request(SseDeserializer deserializer);
+  @protected
+  DfmPlusPreparedItem sse_decode_dfm_plus_prepared_item(
+      SseDeserializer deserializer);
 
-@protected RustNext2PrepareRequest sse_decode_rust_next_2_prepare_request(SseDeserializer deserializer);
+  @protected
+  DfmPlusPreparedLayout sse_decode_dfm_plus_prepared_layout(
+      SseDeserializer deserializer);
 
-@protected RustNext2PreparedItem sse_decode_rust_next_2_prepared_item(SseDeserializer deserializer);
+  @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
 
-@protected RustNext2PreparedLayout sse_decode_rust_next_2_prepared_layout(SseDeserializer deserializer);
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
 
-@protected RustPerformanceSample sse_decode_rust_performance_sample(SseDeserializer deserializer);
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
-@protected BigInt sse_decode_u_64(SseDeserializer deserializer);
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
 
-@protected int sse_decode_u_8(SseDeserializer deserializer);
+  @protected
+  List<DfmPlusDanmakuItem> sse_decode_list_dfm_plus_danmaku_item(
+      SseDeserializer deserializer);
 
-@protected void sse_decode_unit(SseDeserializer deserializer);
+  @protected
+  List<DfmPlusFrameItem> sse_decode_list_dfm_plus_frame_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_String(String self, SseSerializer serializer);
+  @protected
+  List<DfmPlusPreparedItem> sse_decode_list_dfm_plus_prepared_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_bool(bool self, SseSerializer serializer);
+  @protected
+  Float64List sse_decode_list_prim_f_64_strict(SseDeserializer deserializer);
 
-@protected void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
+  @protected
+  Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
-@protected void sse_encode_box_autoadd_rust_next_2_frame_request(RustNext2FrameRequest self, SseSerializer serializer);
+  @protected
+  List<RustFileHashEntry> sse_decode_list_rust_file_hash_entry(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_box_autoadd_rust_next_2_prepare_request(RustNext2PrepareRequest self, SseSerializer serializer);
+  @protected
+  List<RustFileScanEntry> sse_decode_list_rust_file_scan_entry(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_f_64(double self, SseSerializer serializer);
+  @protected
+  List<RustNext2DanmakuItem> sse_decode_list_rust_next_2_danmaku_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_i_32(int self, SseSerializer serializer);
+  @protected
+  List<RustNext2FrameItem> sse_decode_list_rust_next_2_frame_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+  @protected
+  List<RustNext2PreparedItem> sse_decode_list_rust_next_2_prepared_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_list_String(List<String> self, SseSerializer serializer);
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
 
-@protected void sse_encode_list_prim_f_64_strict(Float64List self, SseSerializer serializer);
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
 
-@protected void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer);
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
-@protected void sse_encode_list_rust_file_hash_entry(List<RustFileHashEntry> self, SseSerializer serializer);
+  @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
 
-@protected void sse_encode_list_rust_file_scan_entry(List<RustFileScanEntry> self, SseSerializer serializer);
+  @protected
+  RustCpuSample sse_decode_rust_cpu_sample(SseDeserializer deserializer);
 
-@protected void sse_encode_list_rust_next_2_danmaku_item(List<RustNext2DanmakuItem> self, SseSerializer serializer);
+  @protected
+  RustFileHashEntry sse_decode_rust_file_hash_entry(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_list_rust_next_2_frame_item(List<RustNext2FrameItem> self, SseSerializer serializer);
+  @protected
+  RustFileScanDiff sse_decode_rust_file_scan_diff(SseDeserializer deserializer);
 
-@protected void sse_encode_list_rust_next_2_prepared_item(List<RustNext2PreparedItem> self, SseSerializer serializer);
+  @protected
+  RustFileScanEntry sse_decode_rust_file_scan_entry(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_opt_String(String? self, SseSerializer serializer);
+  @protected
+  RustFileScanSnapshot sse_decode_rust_file_scan_snapshot(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+  @protected
+  RustGpuSample sse_decode_rust_gpu_sample(SseDeserializer deserializer);
 
-@protected void sse_encode_rust_cpu_sample(RustCpuSample self, SseSerializer serializer);
+  @protected
+  RustNext2DanmakuItem sse_decode_rust_next_2_danmaku_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_file_hash_entry(RustFileHashEntry self, SseSerializer serializer);
+  @protected
+  RustNext2FrameItem sse_decode_rust_next_2_frame_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_file_scan_diff(RustFileScanDiff self, SseSerializer serializer);
+  @protected
+  RustNext2FrameLayout sse_decode_rust_next_2_frame_layout(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_file_scan_entry(RustFileScanEntry self, SseSerializer serializer);
+  @protected
+  RustNext2FrameRequest sse_decode_rust_next_2_frame_request(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_file_scan_snapshot(RustFileScanSnapshot self, SseSerializer serializer);
+  @protected
+  RustNext2PrepareRequest sse_decode_rust_next_2_prepare_request(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_gpu_sample(RustGpuSample self, SseSerializer serializer);
+  @protected
+  RustNext2PreparedItem sse_decode_rust_next_2_prepared_item(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_next_2_danmaku_item(RustNext2DanmakuItem self, SseSerializer serializer);
+  @protected
+  RustNext2PreparedLayout sse_decode_rust_next_2_prepared_layout(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_next_2_frame_item(RustNext2FrameItem self, SseSerializer serializer);
+  @protected
+  RustPerformanceSample sse_decode_rust_performance_sample(
+      SseDeserializer deserializer);
 
-@protected void sse_encode_rust_next_2_frame_layout(RustNext2FrameLayout self, SseSerializer serializer);
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
 
-@protected void sse_encode_rust_next_2_frame_request(RustNext2FrameRequest self, SseSerializer serializer);
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer);
 
-@protected void sse_encode_rust_next_2_prepare_request(RustNext2PrepareRequest self, SseSerializer serializer);
+  @protected
+  int sse_decode_u_8(SseDeserializer deserializer);
 
-@protected void sse_encode_rust_next_2_prepared_item(RustNext2PreparedItem self, SseSerializer serializer);
+  @protected
+  void sse_decode_unit(SseDeserializer deserializer);
 
-@protected void sse_encode_rust_next_2_prepared_layout(RustNext2PreparedLayout self, SseSerializer serializer);
+  @protected
+  void sse_encode_String(String self, SseSerializer serializer);
 
-@protected void sse_encode_rust_performance_sample(RustPerformanceSample self, SseSerializer serializer);
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
 
-@protected void sse_encode_u_64(BigInt self, SseSerializer serializer);
+  @protected
+  void sse_encode_box_autoadd_dfm_plus_frame_request(
+      DfmPlusFrameRequest self, SseSerializer serializer);
 
-@protected void sse_encode_u_8(int self, SseSerializer serializer);
+  @protected
+  void sse_encode_box_autoadd_dfm_plus_prepare_request(
+      DfmPlusPrepareRequest self, SseSerializer serializer);
 
-@protected void sse_encode_unit(void self, SseSerializer serializer);
-                }
-                
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
 
+  @protected
+  void sse_encode_box_autoadd_rust_next_2_frame_request(
+      RustNext2FrameRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_rust_next_2_prepare_request(
+      RustNext2PrepareRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_danmaku_item(
+      DfmPlusDanmakuItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_font_metrics(
+      DfmPlusFontMetrics self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_frame_item(
+      DfmPlusFrameItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_frame_layout(
+      DfmPlusFrameLayout self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_frame_request(
+      DfmPlusFrameRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_prepare_request(
+      DfmPlusPrepareRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_prepared_item(
+      DfmPlusPreparedItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dfm_plus_prepared_layout(
+      DfmPlusPreparedLayout self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_dfm_plus_danmaku_item(
+      List<DfmPlusDanmakuItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_dfm_plus_frame_item(
+      List<DfmPlusFrameItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_dfm_plus_prepared_item(
+      List<DfmPlusPreparedItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_f_64_strict(
+      Float64List self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_8_strict(
+      Uint8List self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_rust_file_hash_entry(
+      List<RustFileHashEntry> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_rust_file_scan_entry(
+      List<RustFileScanEntry> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_rust_next_2_danmaku_item(
+      List<RustNext2DanmakuItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_rust_next_2_frame_item(
+      List<RustNext2FrameItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_rust_next_2_prepared_item(
+      List<RustNext2PreparedItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+      Uint8List? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_cpu_sample(RustCpuSample self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_file_hash_entry(
+      RustFileHashEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_file_scan_diff(
+      RustFileScanDiff self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_file_scan_entry(
+      RustFileScanEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_file_scan_snapshot(
+      RustFileScanSnapshot self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_gpu_sample(RustGpuSample self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_next_2_danmaku_item(
+      RustNext2DanmakuItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_next_2_frame_item(
+      RustNext2FrameItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_next_2_frame_layout(
+      RustNext2FrameLayout self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_next_2_frame_request(
+      RustNext2FrameRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_next_2_prepare_request(
+      RustNext2PrepareRequest self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_next_2_prepared_item(
+      RustNext2PreparedItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_next_2_prepared_layout(
+      RustNext2PreparedLayout self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rust_performance_sample(
+      RustPerformanceSample self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_8(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_unit(void self, SseSerializer serializer);
+}
 
 // Section: wire_class
 
+class RustLibWire implements BaseWire {
+  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) =>
+      RustLibWire(lib.ffiDynamicLibrary);
 
-        class RustLibWire implements BaseWire {
+  /// Holds the symbol lookup function.
+  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
+      _lookup;
 
-            factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) =>
-              RustLibWire(lib.ffiDynamicLibrary);
-        
-            /// Holds the symbol lookup function.
-            final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-                _lookup;
-  
-            /// The symbols are looked up in [dynamicLibrary].
-            RustLibWire(ffi.DynamicLibrary dynamicLibrary)
-                : _lookup = dynamicLibrary.lookup;
-
-            
-        }
-        
+  /// The symbols are looked up in [dynamicLibrary].
+  RustLibWire(ffi.DynamicLibrary dynamicLibrary)
+      : _lookup = dynamicLibrary.lookup;
+}

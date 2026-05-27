@@ -148,6 +148,8 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
         return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
       case DanmakuRenderEngine.next2:
         return Next2PlatformSupport.description;
+      case DanmakuRenderEngine.dfmPlus:
+        return 'DFM+ 弹幕引擎\n移植自 B 站的 DanmakuFlameMaster「烈焰弹幕使」，结合 Rust 计算层和 GPU 渲染。';
     }
   }
 
@@ -198,6 +200,15 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
               _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
         ),
       );
+      items.add(
+        DropdownMenuItemData(
+          title: 'DFM+',
+          value: DanmakuRenderEngine.dfmPlus,
+          isSelected: _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus,
+          description:
+              _getDanmakuRenderEngineDescription(DanmakuRenderEngine.dfmPlus),
+        ),
+      );
     } else if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.next2) {
       items.add(
         DropdownMenuItemData(
@@ -209,6 +220,19 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
           enabled: false,
           description:
               _getDanmakuRenderEngineDescription(DanmakuRenderEngine.next2),
+        ),
+      );
+    } else if (_selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus) {
+      items.add(
+        DropdownMenuItemData(
+          title: next2Supported
+              ? 'DFM+ (实验室关闭)'
+              : 'DFM+ (当前平台不支持)',
+          value: DanmakuRenderEngine.dfmPlus,
+          isSelected: true,
+          enabled: false,
+          description:
+              _getDanmakuRenderEngineDescription(DanmakuRenderEngine.dfmPlus),
         ),
       );
     }

@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_pane_bac
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_player_slider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/danmaku_history_sync.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as p;
 
@@ -301,6 +302,19 @@ class _CupertinoDanmakuSettingsPaneState
                   divisions: 15,
                   onChanged: widget.videoState.setDanmakuSpeedMultiplier,
                 ),
+                if (DanmakuKernelFactory.getKernelType() ==
+                    DanmakuRenderEngine.dfmPlus)
+                  _buildSliderTile(
+                    context,
+                    title: '轨道间距',
+                    description:
+                        '${(widget.videoState.danmakuDfmPlusTrackGap * 100).round()}%',
+                    value: widget.videoState.danmakuDfmPlusTrackGap,
+                    min: 0.0,
+                    max: 2.0,
+                    divisions: 40,
+                    onChanged: widget.videoState.setDanmakuDfmPlusTrackGap,
+                  ),
               ],
             ),
             CupertinoListSection.insetGrouped(

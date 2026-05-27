@@ -540,6 +540,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final double _maxDanmakuSpeedMultiplier = 2.0;
   final double _baseDanmakuScrollDurationSeconds = 10.0;
   double _danmakuSpeedMultiplier = 1.0; // 默认标准速度
+
+  // DFM+ 弹幕轨道间距比例设置
+  final String _danmakuDfmPlusTrackGapKey = 'danmaku_dfm_plus_track_gap';
+  double _danmakuDfmPlusTrackGap = 0.15;
+
   final String _rememberDanmakuOffsetKey = 'remember_danmaku_offset';
   bool _rememberDanmakuOffset = false; // 是否在切换视频时保留手动弹幕偏移
   double _manualDanmakuOffset = 0.0; // 手动设置的弹幕偏移
@@ -1178,6 +1183,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   SubtitleStyleOverrideMode get subtitleOverrideMode => _subtitleOverrideMode;
   double get danmakuDisplayArea => _danmakuDisplayArea;
   double get danmakuSpeedMultiplier => _danmakuSpeedMultiplier;
+  double get danmakuDfmPlusTrackGap => _danmakuDfmPlusTrackGap;
   double get danmakuScrollDurationSeconds =>
       _baseDanmakuScrollDurationSeconds / _danmakuSpeedMultiplier;
   bool get danmakuStacking => _danmakuStacking;

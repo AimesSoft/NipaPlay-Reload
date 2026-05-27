@@ -1,4 +1,5 @@
 pub mod api;
+pub mod dfm_core;
 mod frb_generated;
 mod next2_engine;
 

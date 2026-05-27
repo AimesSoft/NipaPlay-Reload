@@ -295,6 +295,9 @@ class SystemResourceMonitor {
         case DanmakuRenderEngine.next2:
           _danmakuKernelType = 'NipaPlay Next2';
           break;
+        case DanmakuRenderEngine.dfmPlus:
+          _danmakuKernelType = 'DFM+';
+          break;
       }
     } catch (e) {
       debugPrint('获取弹幕内核类型出错: $e');

@@ -871,6 +871,31 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   ],
                 ),
               ),
+              // DFM+ 弹幕轨道间距（仅 DFM+ 引擎显示）
+              if (DanmakuKernelFactory.getKernelType() ==
+                  DanmakuRenderEngine.dfmPlus)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SettingsSlider(
+                        value: videoState.danmakuDfmPlusTrackGap,
+                        onChanged: (v) =>
+                            videoState.setDanmakuDfmPlusTrackGap(v),
+                        label: '弹幕轨道间距',
+                        displayTextBuilder: (v) =>
+                            '${(v * 100).round()}%',
+                        min: 0.0,
+                        max: 2.0,
+                        step: 0.05,
+                      ),
+                      const SizedBox(height: 4),
+                      const SettingsHintText(
+                          '增大间距可减少弹幕重叠，减小间距可显示更多弹幕（默认50%）'),
+                    ],
+                  ),
+                ),
               // 弹幕屏蔽词
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
@@ -919,13 +944,15 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                   );
                 }),
               ),
-              // 弹幕堆叠开关（Canvas/NipaPlay Next/Next2 模式下隐藏）
+              // 弹幕堆叠开关（Canvas/NipaPlay Next/Next2/DFM+ 模式下隐藏）
               if (DanmakuKernelFactory.getKernelType() !=
                       DanmakuRenderEngine.canvas &&
                   DanmakuKernelFactory.getKernelType() !=
                       DanmakuRenderEngine.nipaplayNext &&
                   DanmakuKernelFactory.getKernelType() !=
-                      DanmakuRenderEngine.next2)
+                      DanmakuRenderEngine.next2 &&
+                  DanmakuKernelFactory.getKernelType() !=
+                      DanmakuRenderEngine.dfmPlus)
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
                   child: Column(

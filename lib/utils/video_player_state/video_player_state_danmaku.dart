@@ -500,13 +500,45 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       final timeB = (b['time'] as num?)?.toDouble() ?? 0.0;
       return timeA.compareTo(timeB);
     });
+    
+    debugPrint("[updateMerged] 合并后的总弹幕: ${mergedList.length}");
+    int mergedTopCount = 0, mergedBottomCount = 0, mergedScrollCount =0;
+    for(final d in mergedList) {
+      final t = d['type'];
+      if (t == 'top' || t ==5) mergedTopCount++;
+      else if (t == 'bottom' || t ==4) mergedBottomCount++;
+      else mergedScrollCount++;
+    }
+    debugPrint("[updateMerged] 合并后类型: 滚动:$mergedScrollCount, 顶部:$mergedTopCount, 底部:$mergedBottomCount");
 
     _totalDanmakuCount = mergedList.length;
     _maybeStartSpoilerDanmakuAnalysis(mergedList);
+    
+    int blockedTop =0, blockedBottom=0, blockedScroll=0;
     final filteredList = mergedList
-        .where((d) => !shouldBlockDanmaku(d))
+        .where((d) {
+          final bool result = !shouldBlockDanmaku(d);
+          if(!result){
+            final t = d['type'];
+            if (t == 'top' || t ==5) blockedTop++;
+            else if (t == 'bottom' || t ==4) blockedBottom++;
+            else blockedScroll++;
+          }
+          return result;
+        })
         .map(_prepareDanmakuForDisplay)
         .toList();
+    
+    int filteredTopCount=0, filteredBottomCount=0, filteredScrollCount=0;
+    for(final d in filteredList) {
+      final t = d['type'];
+      if (t == 'top' || t ==5) filteredTopCount++;
+      else if (t == 'bottom' || t ==4) filteredBottomCount++;
+      else filteredScrollCount++;
+    }
+    debugPrint("[updateMerged] 被shouldBlockDanmaku过滤的: 顶部:$blockedTop, 底部:$blockedBottom, 滚动:$blockedScroll");
+    debugPrint("[updateMerged] 过滤后: 滚动:$filteredScrollCount, 顶部:$filteredTopCount, 底部:$filteredBottomCount");
+
     _danmakuList = filteredList;
     _danmakuListVersion++;
 

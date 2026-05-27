@@ -163,6 +163,8 @@ class _CupertinoDanmakuSettingsPageState
         return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
       case DanmakuRenderEngine.next2:
         return Next2PlatformSupport.description;
+      case DanmakuRenderEngine.dfmPlus:
+        return 'DFM+ 弹幕引擎\n移植自 B 站的 DanmakuFlameMaster「烈焰弹幕使」，结合 Rust 计算层和 GPU 渲染。';
     }
   }
 
@@ -178,6 +180,8 @@ class _CupertinoDanmakuSettingsPageState
         return context.l10n.danmakuRenderEngineTitleNipaplayNext;
       case DanmakuRenderEngine.next2:
         return 'NipaPlay Next2';
+      case DanmakuRenderEngine.dfmPlus:
+        return 'DFM+';
     }
   }
 
@@ -189,20 +193,25 @@ class _CupertinoDanmakuSettingsPageState
         .where(
           (engine) =>
               (showNext2 && next2Supported) ||
-              engine != DanmakuRenderEngine.next2 ||
-              _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2,
+              (engine != DanmakuRenderEngine.next2 &&
+                  engine != DanmakuRenderEngine.dfmPlus) ||
+              _selectedDanmakuRenderEngine == DanmakuRenderEngine.next2 ||
+              _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus,
         )
         .toList();
     return engines
         .map(
           (engine) => AdaptivePopupMenuItem<DanmakuRenderEngine>(
-            label: !showNext2 && engine == DanmakuRenderEngine.next2
+            label: !showNext2 &&
+                    (engine == DanmakuRenderEngine.next2 ||
+                        engine == DanmakuRenderEngine.dfmPlus)
                 ? (next2Supported
-                    ? 'NipaPlay Next2 (实验室关闭)'
-                    : 'NipaPlay Next2 (当前平台不支持)')
+                    ? '${_danmakuTitle(engine)} (实验室关闭)'
+                    : '${_danmakuTitle(engine)} (当前平台不支持)')
                 : _danmakuTitle(engine),
             enabled: (showNext2 && next2Supported) ||
-                engine != DanmakuRenderEngine.next2,
+                (engine != DanmakuRenderEngine.next2 &&
+                    engine != DanmakuRenderEngine.dfmPlus),
             value: engine,
           ),
         )

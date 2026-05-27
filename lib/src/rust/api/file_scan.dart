@@ -6,114 +6,130 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `collect_video_files`, `ensure_existing_directory`, `is_video_file`, `make_scan_entry`, `path_to_dart_string`, `sha256_hex`
 
-            // These functions are ignored because they are not marked as `pub`: `collect_video_files`, `ensure_existing_directory`, `is_video_file`, `make_scan_entry`, `path_to_dart_string`, `sha256_hex`
+Future<RustFileScanSnapshot> scanVideoFiles({required String folderPath}) =>
+    RustLib.instance.api.crateApiFileScanScanVideoFiles(folderPath: folderPath);
 
+Future<RustFileScanDiff> diffVideoFiles(
+        {required String folderPath,
+        required List<RustFileHashEntry> cachedHashes}) =>
+    RustLib.instance.api.crateApiFileScanDiffVideoFiles(
+        folderPath: folderPath, cachedHashes: cachedHashes);
 
-            Future<RustFileScanSnapshot>  scanVideoFiles({required String folderPath }) => RustLib.instance.api.crateApiFileScanScanVideoFiles(folderPath: folderPath);
+class RustFileHashEntry {
+  final String relativePath;
+  final String hash;
 
-Future<RustFileScanDiff>  diffVideoFiles({required String folderPath , required List<RustFileHashEntry> cachedHashes }) => RustLib.instance.api.crateApiFileScanDiffVideoFiles(folderPath: folderPath, cachedHashes: cachedHashes);
+  const RustFileHashEntry({
+    required this.relativePath,
+    required this.hash,
+  });
 
-            class RustFileHashEntry  {
-                final String relativePath;
-final String hash;
+  @override
+  int get hashCode => relativePath.hashCode ^ hash.hashCode;
 
-                const RustFileHashEntry({required this.relativePath ,required this.hash ,});
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustFileHashEntry &&
+          runtimeType == other.runtimeType &&
+          relativePath == other.relativePath &&
+          hash == other.hash;
+}
 
-                
-                
+class RustFileScanDiff {
+  final int currentCount;
+  final int cachedCount;
+  final List<String> currentFiles;
+  final List<String> newFiles;
+  final List<String> modifiedFiles;
+  final List<String> deletedFiles;
+  final List<RustFileHashEntry> currentHashes;
 
-                
-        @override
-        int get hashCode => relativePath.hashCode^hash.hashCode;
-        
+  const RustFileScanDiff({
+    required this.currentCount,
+    required this.cachedCount,
+    required this.currentFiles,
+    required this.newFiles,
+    required this.modifiedFiles,
+    required this.deletedFiles,
+    required this.currentHashes,
+  });
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is RustFileHashEntry &&
-                runtimeType == other.runtimeType
-                && relativePath == other.relativePath&& hash == other.hash;
-        
-            }
+  @override
+  int get hashCode =>
+      currentCount.hashCode ^
+      cachedCount.hashCode ^
+      currentFiles.hashCode ^
+      newFiles.hashCode ^
+      modifiedFiles.hashCode ^
+      deletedFiles.hashCode ^
+      currentHashes.hashCode;
 
-class RustFileScanDiff  {
-                final int currentCount;
-final int cachedCount;
-final List<String> currentFiles;
-final List<String> newFiles;
-final List<String> modifiedFiles;
-final List<String> deletedFiles;
-final List<RustFileHashEntry> currentHashes;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustFileScanDiff &&
+          runtimeType == other.runtimeType &&
+          currentCount == other.currentCount &&
+          cachedCount == other.cachedCount &&
+          currentFiles == other.currentFiles &&
+          newFiles == other.newFiles &&
+          modifiedFiles == other.modifiedFiles &&
+          deletedFiles == other.deletedFiles &&
+          currentHashes == other.currentHashes;
+}
 
-                const RustFileScanDiff({required this.currentCount ,required this.cachedCount ,required this.currentFiles ,required this.newFiles ,required this.modifiedFiles ,required this.deletedFiles ,required this.currentHashes ,});
+class RustFileScanEntry {
+  final String relativePath;
+  final String absolutePath;
+  final PlatformInt64 size;
+  final PlatformInt64 modifiedMillis;
+  final String fileHash;
 
-                
-                
+  const RustFileScanEntry({
+    required this.relativePath,
+    required this.absolutePath,
+    required this.size,
+    required this.modifiedMillis,
+    required this.fileHash,
+  });
 
-                
-        @override
-        int get hashCode => currentCount.hashCode^cachedCount.hashCode^currentFiles.hashCode^newFiles.hashCode^modifiedFiles.hashCode^deletedFiles.hashCode^currentHashes.hashCode;
-        
+  @override
+  int get hashCode =>
+      relativePath.hashCode ^
+      absolutePath.hashCode ^
+      size.hashCode ^
+      modifiedMillis.hashCode ^
+      fileHash.hashCode;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is RustFileScanDiff &&
-                runtimeType == other.runtimeType
-                && currentCount == other.currentCount&& cachedCount == other.cachedCount&& currentFiles == other.currentFiles&& newFiles == other.newFiles&& modifiedFiles == other.modifiedFiles&& deletedFiles == other.deletedFiles&& currentHashes == other.currentHashes;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustFileScanEntry &&
+          runtimeType == other.runtimeType &&
+          relativePath == other.relativePath &&
+          absolutePath == other.absolutePath &&
+          size == other.size &&
+          modifiedMillis == other.modifiedMillis &&
+          fileHash == other.fileHash;
+}
 
-class RustFileScanEntry  {
-                final String relativePath;
-final String absolutePath;
-final PlatformInt64 size;
-final PlatformInt64 modifiedMillis;
-final String fileHash;
+class RustFileScanSnapshot {
+  final List<RustFileScanEntry> files;
 
-                const RustFileScanEntry({required this.relativePath ,required this.absolutePath ,required this.size ,required this.modifiedMillis ,required this.fileHash ,});
+  const RustFileScanSnapshot({
+    required this.files,
+  });
 
-                
-                
+  @override
+  int get hashCode => files.hashCode;
 
-                
-        @override
-        int get hashCode => relativePath.hashCode^absolutePath.hashCode^size.hashCode^modifiedMillis.hashCode^fileHash.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is RustFileScanEntry &&
-                runtimeType == other.runtimeType
-                && relativePath == other.relativePath&& absolutePath == other.absolutePath&& size == other.size&& modifiedMillis == other.modifiedMillis&& fileHash == other.fileHash;
-        
-            }
-
-class RustFileScanSnapshot  {
-                final List<RustFileScanEntry> files;
-
-                const RustFileScanSnapshot({required this.files ,});
-
-                
-                
-
-                
-        @override
-        int get hashCode => files.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is RustFileScanSnapshot &&
-                runtimeType == other.runtimeType
-                && files == other.files;
-        
-            }
-            
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustFileScanSnapshot &&
+          runtimeType == other.runtimeType &&
+          files == other.files;
+}
