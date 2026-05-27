@@ -275,9 +275,25 @@ class AudioTracksMenu extends StatelessWidget {
                     title = track.metadata['title']!;
                   }
 
-                  // 如果有编解码器名称，可以附加到标题上
-                  if (track.codec.name != null && track.codec.name!.isNotEmpty && track.codec.name != 'Unknown Audio Codec') {
-                    title += " (${track.codec.name})";
+                  // 为外挂轨道添加前缀和辨识信息
+                  if (track.isExternal) {
+                    title = '[外挂] $title';
+                    // 从元数据中提取编解码器和声道信息以增强辨识度
+                    final codecInfo = track.metadata['codec'] ?? '';
+                    final channelsInfo = track.metadata['channels'] ?? '';
+                    final samplerateInfo = track.metadata['samplerate'] ?? '';
+                    final detailParts = <String>[];
+                    if (codecInfo.isNotEmpty) detailParts.add(codecInfo);
+                    if (channelsInfo.isNotEmpty && channelsInfo != '0') detailParts.add(channelsInfo);
+                    if (samplerateInfo.isNotEmpty && samplerateInfo != '0') detailParts.add('${samplerateInfo}Hz');
+                    if (detailParts.isNotEmpty && !title.contains(codecInfo)) {
+                      title += ' (${detailParts.join(', ')})';
+                    }
+                  } else {
+                    // 非外挂轨道：如果有编解码器名称，附加到标题上
+                    if (track.codec.name != null && track.codec.name!.isNotEmpty && track.codec.name != 'Unknown Audio Codec') {
+                      title += " (${track.codec.name})";
+                    }
                   }
                   
                   return Material(

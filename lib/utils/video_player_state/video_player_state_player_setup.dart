@@ -330,6 +330,15 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       //debugPrint('3. 设置媒体源...');
       // 设置媒体源 - 如果提供了播放会话URL则使用它，否则使用videoPath
       String playUrl = resolvedActualPlayUrl ?? videoPath;
+
+      // MediaKit/mpv: 通过audio-add命令在主媒体加载后添加外部音频
+      if (isMediaKitKernel) {
+        final mkaPath = await _audioTrackManager.detectExternalAudioPath(videoPath);
+        if (mkaPath != null) {
+          _audioTrackManager.preloadExternalAudioForMediaKit(mkaPath);
+        }
+      }
+
       player.media = playUrl;
 
       //debugPrint('4. 准备播放器...');
@@ -760,6 +769,13 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // 尝试自动检测和加载字幕
       await _subtitleManager.autoDetectAndLoadSubtitle(videoPath);
+
+      // 尝试自动检测和加载同名MKA外部音频
+      // MediaKit已通过audio-add在主媒体加载后添加外部音频，此处仅处理MDK内核
+      _audioTrackManager.setCurrentVideoPath(videoPath);
+      if (!isMediaKitKernel) {
+        await _audioTrackManager.autoDetectAndLoadExternalAudio(videoPath);
+      }
 
       // 不在此处注册热键，由main.dart的_manageHotkeys统一管理
       debugPrint('[VideoPlayerState] 跳过热键注册，由主页面统一管理');

@@ -56,7 +56,7 @@ mdk.MediaType _fromPlayerMediaType(PlayerMediaType type) {
   }
 }
 
-PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
+PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo, {int internalAudioTrackCount = 0}) {
   return PlayerMediaInfo(
     duration: mdkInfo.duration,
     video: mdkInfo.video?.map((v) {
@@ -149,6 +149,7 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
         } catch (e) {}
       } catch (e) {}
 
+      final trackIndex = mdkInfo.audio!.indexOf(aMdk);
       return PlayerAudioStreamInfo(
         codec: PlayerAudioCodecParams(
           name: codecNameValue,
@@ -156,10 +157,11 @@ PlayerMediaInfo _toPlayerMediaInfo(mdk.MediaInfo mdkInfo) {
           channels: channels,
           sampleRate: sampleRate,
         ),
-        title: title ?? 'Audio track ${mdkInfo.audio!.indexOf(aMdk)}',
+        title: title ?? 'Audio track $trackIndex',
         language: language ?? 'unknown',
         metadata: metadata,
         rawRepresentation: rawRepresentation,
+        isExternal: internalAudioTrackCount > 0 && trackIndex >= internalAudioTrackCount,
       );
     }).toList(),
   );
@@ -173,6 +175,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
   final Map<String, String> _stickyProperties = {};
   String? _activeVideoDecoder;
   String? _activeAudioDecoder;
+  int _internalAudioTrackCount = 0; // 内部音频轨道数，用于区分外挂MKA轨道
 
   MdkPlayerAdapter() {
     _mdkPlayer = mdk.Player();
@@ -309,6 +312,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
     if (value.isNotEmpty && _mdkPlayer.media != value) {
       _activeVideoDecoder = null;
       _activeAudioDecoder = null;
+      _internalAudioTrackCount = 0; // 重置：新主媒体尚未加载外挂音频
       final videoDecoders = _videoDecoders.isNotEmpty
           ? List<String>.from(_videoDecoders)
           : List<String>.from(_mdkPlayer.videoDecoders);
@@ -342,7 +346,7 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
-  PlayerMediaInfo get mediaInfo => _toPlayerMediaInfo(_mdkPlayer.mediaInfo);
+  PlayerMediaInfo get mediaInfo => _toPlayerMediaInfo(_mdkPlayer.mediaInfo, internalAudioTrackCount: _internalAudioTrackCount);
 
   @override
   List<int> get activeSubtitleTracks => _mdkPlayer.activeSubtitleTracks;
@@ -403,8 +407,21 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
-  void setMedia(String path, PlayerMediaType type) =>
-      _mdkPlayer.setMedia(path, _fromPlayerMediaType(type));
+  void setMedia(String path, PlayerMediaType type) {
+    if (type == PlayerMediaType.audio) {
+      if (path.isNotEmpty) {
+        // 记录当前内部音频轨道数，用于区分外挂MKA轨道
+        try {
+          _internalAudioTrackCount = _mdkPlayer.mediaInfo.audio?.length ?? 0;
+        } catch (_) {
+          _internalAudioTrackCount = 0;
+        }
+      } else {
+        _internalAudioTrackCount = 0;
+      }
+    }
+    _mdkPlayer.setMedia(path, _fromPlayerMediaType(type));
+  }
 
   @override
   Future<void> prepare() async {

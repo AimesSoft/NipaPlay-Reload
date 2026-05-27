@@ -213,6 +213,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   };
   final Map<String, String> _properties = {};
 
+  // 外部音频文件路径（如MKA），在播放器就绪后通过audio-add命令加载
+  String? _pendingExternalAudioFile;
+  // 标记_pendingExternalAudioFile是否由当前视频的setMedia(audio)刚设置
+  bool _pendingExternalAudioIsFresh = false;
+  // 媒体加载代数计数器，用于作废旧的外挂音频延迟加载操作
+  int _mediaLoadGeneration = 0;
+
   // 添加播放速度状态变量
   double _playbackRate = 1.0;
   final bool _mpvDiagnosticsEnabled;
@@ -727,15 +734,39 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       audioStreams = [];
       for (int i = 0; i < realAudioTracks.length; i++) {
         final track = realAudioTracks[i];
-        final title = track.title ?? track.language ?? 'Audio Track ${i + 1}';
-        final language = track.language ?? '';
+        // 从AudioTrack提取丰富的元数据
+        final trackTitle = track.title;
+        final trackLanguage = track.language;
+        final isExternal = (track as dynamic).isExternal == true;
+        final trackCodec = (track as dynamic).codec as String?;
+        final trackChannels = (track as dynamic).channelscount as int?;
+        final trackChannelsStr = (track as dynamic).channels as String?;
+        final trackSampleRate = (track as dynamic).samplerate as int?;
+        final trackBitRate = (track as dynamic).bitrate as int?;
+
+        // 规范化声道名称：mpv可能返回"unknown2"等非友好名称，需转换为stereo/5.1等
+        final friendlyChannels = _normalizeChannelName(trackChannelsStr, trackChannels);
+
+        // 构建可辨识的标题：优先使用容器元数据，否则用轨道索引+编解码器信息
+        String title;
+        if (trackTitle != null && trackTitle.isNotEmpty) {
+          title = trackTitle;
+        } else if (trackLanguage != null && trackLanguage.isNotEmpty) {
+          title = trackLanguage;
+        } else {
+          // 无元数据时，使用轨道索引+编解码器构造可辨识名称
+          final codecPart = trackCodec ?? 'unknown';
+          title = 'Audio ${i + 1} ($codecPart${friendlyChannels.isNotEmpty ? ', $friendlyChannels' : ''})';
+        }
+
+        final language = trackLanguage ?? '';
         audioStreams.add(
           PlayerAudioStreamInfo(
             codec: PlayerAudioCodecParams(
-              name: title,
-              channels: 0,
-              sampleRate: 0,
-              bitRate: null,
+              name: trackCodec ?? title,
+              channels: trackChannels,
+              sampleRate: trackSampleRate,
+              bitRate: trackBitRate,
             ),
             title: title,
             language: language,
@@ -744,8 +775,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               'title': title,
               'language': language,
               'index': i.toString(),
+              'codec': trackCodec ?? '',
+              'channels': friendlyChannels,
+              'samplerate': trackSampleRate?.toString() ?? '',
+              'bitrate': trackBitRate?.toString() ?? '',
+              'isExternal': isExternal.toString(),
             },
             rawRepresentation: 'Audio: $title (ID: ${track.id})',
+            isExternal: isExternal,
           ),
         );
       }
@@ -908,15 +945,38 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       audioStreams = [];
       for (int i = 0; i < realAudioTracks.length; i++) {
         final track = realAudioTracks[i];
-        final title = track.title ?? track.language ?? 'Audio Track ${i + 1}';
-        final language = track.language ?? '';
+        // 从AudioTrack提取丰富的元数据
+        final trackTitle = track.title;
+        final trackLanguage = track.language;
+        final isExternal = (track as dynamic).isExternal == true;
+        final trackCodec = (track as dynamic).codec as String?;
+        final trackChannels = (track as dynamic).channelscount as int?;
+        final trackChannelsStr = (track as dynamic).channels as String?;
+        final trackSampleRate = (track as dynamic).samplerate as int?;
+        final trackBitRate = (track as dynamic).bitrate as int?;
+
+        // 规范化声道名称
+        final friendlyChannels = _normalizeChannelName(trackChannelsStr, trackChannels);
+
+        // 构建可辨识的标题
+        String title;
+        if (trackTitle != null && trackTitle.isNotEmpty) {
+          title = trackTitle;
+        } else if (trackLanguage != null && trackLanguage.isNotEmpty) {
+          title = trackLanguage;
+        } else {
+          final codecPart = trackCodec ?? 'unknown';
+          title = 'Audio ${i + 1} ($codecPart${friendlyChannels.isNotEmpty ? ', $friendlyChannels' : ''})';
+        }
+
+        final language = trackLanguage ?? '';
         audioStreams.add(
           PlayerAudioStreamInfo(
             codec: PlayerAudioCodecParams(
-              name: title,
-              channels: 0,
-              sampleRate: 0,
-              bitRate: null,
+              name: trackCodec ?? title,
+              channels: trackChannels,
+              sampleRate: trackSampleRate,
+              bitRate: trackBitRate,
             ),
             title: title,
             language: language,
@@ -925,8 +985,14 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               'title': title,
               'language': language,
               'index': i.toString(),
+              'codec': trackCodec ?? '',
+              'channels': friendlyChannels,
+              'samplerate': trackSampleRate?.toString() ?? '',
+              'bitrate': trackBitRate?.toString() ?? '',
+              'isExternal': isExternal.toString(),
             },
             rawRepresentation: 'Audio: $title (ID: ${track.id})',
+            isExternal: isExternal,
           ),
         );
       }
@@ -1512,6 +1578,19 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
 
+    if (type == PlayerMediaType.audio) {
+      // 外部音频文件（如MKA），记录路径，会在主媒体加载后通过audio-add命令加载
+      if (path.isEmpty) {
+        _pendingExternalAudioFile = null;
+        _pendingExternalAudioIsFresh = false;
+      } else {
+        _pendingExternalAudioFile = path;
+        _pendingExternalAudioIsFresh = true;
+        debugPrint('MediaKitAdapter: 已记录外部音频文件，将在主媒体加载后加载: $path');
+      }
+      return;
+    }
+
     // --- Original logic for Main Video/Audio Media ---
     _currentMedia = path;
     _activeSubtitleTracks = [];
@@ -1519,6 +1598,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _lastKnownActiveSubtitleId = null;
     _mediaInfo = PlayerMediaInfo(duration: 0);
     _isDisposed = false;
+    // 递增代数计数器，使旧的延迟加载操作作废
+    _mediaLoadGeneration++;
+    // 清除不属于当前视频的残留外部音频路径，防止旧视频的MKA被加载到新视频上
+    if (!_pendingExternalAudioIsFresh) {
+      _pendingExternalAudioFile = null;
+    }
+    _pendingExternalAudioIsFresh = false;
 
     final mediaOptions = <String, dynamic>{};
     _properties.forEach((key, value) {
@@ -1529,7 +1615,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     final media = Media(
       preparedMedia.url,
-      extras: mediaOptions,
+      extras: mediaOptions.isNotEmpty ? mediaOptions : null,
       httpHeaders: preparedMedia.httpHeaders,
     );
 
@@ -1591,6 +1677,69 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
     unawaited(_player.open(media, play: false));
     _scheduleMacOSHdrDiagnostics();
+
+    // 在主媒体加载后，通过audio-add命令加载外部音频文件（如MKA）
+    _loadPendingExternalAudio();
+  }
+
+  /// 通过mpv的audio-add命令加载待处理的外部音频文件
+  /// 使用auto标志添加轨道但不自动选择，保持当前音频轨道不变
+  void _loadPendingExternalAudio() {
+    final mkaPath = _pendingExternalAudioFile;
+    if (mkaPath == null || mkaPath.isEmpty) return;
+
+    // 捕获当前代数，用于作废旧操作
+    final currentGeneration = _mediaLoadGeneration;
+
+    // 延迟执行，等待主媒体完全加载后再添加外部音频
+    Future.delayed(const Duration(milliseconds: 1500), () async {
+      // 代数检查：如果已加载新的主媒体，则放弃本次外挂音频加载
+      if (currentGeneration != _mediaLoadGeneration) {
+        debugPrint('MediaKitAdapter: 外挂音频加载被作废（代数不匹配: $currentGeneration vs $_mediaLoadGeneration）');
+        return;
+      }
+      if (_isDisposed || _currentMedia.isEmpty) return;
+      try {
+        final dynamic nativePlayer = _player.platform;
+        if (nativePlayer != null) {
+          // audio-add语法: audio-add <url> [<flags> [<title> [<lang>]]]
+          // auto标志：添加轨道但不自动选择，保持当前音频轨道不变
+          // title参数：帮助用户识别外挂音频
+          // audio-add语法: audio-add <url> [<flags> [<title> [<lang>]]]
+          // 不传title/lang参数，让mpv从MKA容器中读取真实的轨道元数据
+          await nativePlayer.command([
+            'audio-add',
+            mkaPath,
+            'auto',
+          ]);
+          debugPrint('MediaKitAdapter: 已通过audio-add(auto)加载外部音频: $mkaPath');
+          _pendingExternalAudioFile = null;
+        } else {
+          debugPrint('MediaKitAdapter: 无法加载外部音频 - nativePlayer为null');
+        }
+      } catch (e) {
+        debugPrint('MediaKitAdapter: 加载外部音频失败: $e');
+        // 一次重试：再等1秒后尝试
+        Future.delayed(const Duration(milliseconds: 1000), () async {
+          if (currentGeneration != _mediaLoadGeneration) return;
+          if (_isDisposed || _currentMedia.isEmpty) return;
+          try {
+            final dynamic nativePlayer = _player.platform;
+            if (nativePlayer != null) {
+              await nativePlayer.command([
+                'audio-add',
+                mkaPath,
+                'auto',
+              ]);
+              debugPrint('MediaKitAdapter: 重试成功加载外部音频: $mkaPath');
+              _pendingExternalAudioFile = null;
+            }
+          } catch (e2) {
+            debugPrint('MediaKitAdapter: 重试加载外部音频仍失败: $e2');
+          }
+        });
+      }
+    });
   }
 
   void _scheduleMacOSHdrDiagnostics() {
@@ -2537,6 +2686,58 @@ String _getNormalizedLanguageHelper(String input) {
     }
   }
   return input; // Return original if no pattern matches
+}
+
+/// 规范化mpv返回的声道名称
+/// mpv的demux-channels属性可能返回"unknown2"、"unknown6"等非友好名称
+/// 此方法将其转换为stereo、5.1等常见友好名称
+String _normalizeChannelName(String? channelsStr, int? channelsCount) {
+  if (channelsStr != null && channelsStr.isNotEmpty) {
+    final lower = channelsStr.toLowerCase();
+    // 已知的友好名称，直接返回
+    const knownNames = {'stereo', 'mono', '5.1', '7.1', '3.0', '2.1', '4.0', 'quad'};
+    if (knownNames.contains(lower)) return channelsStr;
+
+    // 处理mpv的"unknownN"格式：提取数字，根据声道数映射友好名称
+    if (lower.startsWith('unknown')) {
+      final numStr = lower.substring(7); // 去掉"unknown"前缀
+      final num = int.tryParse(numStr);
+      if (num != null) return _channelCountToFriendlyName(num);
+      // 无法解析数字，继续使用channelsCount
+    } else {
+      // 非unknown格式（如"fl-fr"等声道布局字符串），直接返回原值
+      return channelsStr;
+    }
+  }
+  // 如果只有声道数量，根据数量映射
+  if (channelsCount != null && channelsCount > 0) {
+    return _channelCountToFriendlyName(channelsCount);
+  }
+  return '';
+}
+
+/// 根据声道数量映射为友好名称
+String _channelCountToFriendlyName(int count) {
+  switch (count) {
+    case 1:
+      return 'mono';
+    case 2:
+      return 'stereo';
+    case 3:
+      return '3.0';
+    case 4:
+      return '4.0';
+    case 5:
+      return '4.1';
+    case 6:
+      return '5.1';
+    case 7:
+      return '6.1';
+    case 8:
+      return '7.1';
+    default:
+      return '${count}ch';
+  }
 }
 
 // Method to produce normalized title and language for PlayerSubtitleStreamInfo

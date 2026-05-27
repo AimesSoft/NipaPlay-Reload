@@ -68,6 +68,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/seek_indicator.dart'; // Added 
 import 'package:volume_controller/volume_controller.dart';
 
 import 'subtitle_manager.dart'; // 导入字幕管理器
+import 'audio_track_manager.dart'; // 导入外部音频管理器
 import 'subtitle_language_utils.dart';
 import 'package:nipaplay/services/file_picker_service.dart'; // Added import for FilePickerService
 import 'package:nipaplay/utils/system_resource_monitor.dart';
@@ -589,6 +590,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 字幕管理器
   late SubtitleManager _subtitleManager;
 
+  // 外部音频管理器
+  late AudioTrackManager _audioTrackManager;
+
   // Screen Brightness Control
   double _currentBrightness =
       0.5; // Default, will be updated by _loadInitialBrightness
@@ -701,6 +705,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     player = Player();
     _ensurePlayerVolumeMatchesPlatformPolicy();
     _subtitleManager = SubtitleManager(player: player);
+    _audioTrackManager = AudioTrackManager(player: player);
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
     PlayerRemoteControlBridge.instance.attach(this);
@@ -1249,6 +1254,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // 字幕管理器相关的getter
   SubtitleManager get subtitleManager => _subtitleManager;
+
+  // 外部音频管理器getter
+  AudioTrackManager get audioTrackManager => _audioTrackManager;
   String? get currentExternalSubtitlePath =>
       _subtitleManager.currentExternalSubtitlePath;
   Map<String, Map<String, dynamic>> get subtitleTrackInfo =>
