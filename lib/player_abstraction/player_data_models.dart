@@ -65,6 +65,7 @@ class PlayerAudioStreamInfo {
   final String? language;
   final Map<String, String> metadata;
   final String rawRepresentation; // For mdk.Track.toString() compatibility if needed for audio too
+  final bool isExternal; // 是否为外部音频轨道（如外挂MKA）
 
   PlayerAudioStreamInfo({
     required this.codec,
@@ -72,6 +73,7 @@ class PlayerAudioStreamInfo {
     this.language,
     this.metadata = const {},
     required this.rawRepresentation,
+    this.isExternal = false,
   });
 
   @override

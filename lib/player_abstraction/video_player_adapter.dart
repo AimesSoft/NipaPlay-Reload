@@ -434,6 +434,9 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   @override
   void setMedia(String path, PlayerMediaType type) {
+    // VideoPlayer适配器不支持外部音频轨道，忽略audio类型
+    if (type == PlayerMediaType.audio) return;
+
     if (path.isEmpty) {
       _disposeController();
       _mediaPath = '';

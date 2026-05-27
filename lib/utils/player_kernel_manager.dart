@@ -43,6 +43,7 @@ class PlayerKernelManager {
       videoPlayerState.player.dispose();
       videoPlayerState.player = Player();
       videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
+      videoPlayerState.audioTrackManager.updatePlayer(videoPlayerState.player);
       videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
       await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
       await videoPlayerState.applyHardwareDecoderPreference();
@@ -58,6 +59,7 @@ class PlayerKernelManager {
     // 3. 创建新的播放器实例（Player()工厂会自动使用新的内核）
     videoPlayerState.player = Player();
     videoPlayerState.subtitleManager.updatePlayer(videoPlayerState.player);
+    videoPlayerState.audioTrackManager.updatePlayer(videoPlayerState.player);
     videoPlayerState.decoderManager.updatePlayer(videoPlayerState.player);
     await videoPlayerState.applyAnime4KProfileToCurrentPlayer();
     await videoPlayerState.applyHardwareDecoderPreference();

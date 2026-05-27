@@ -362,9 +362,24 @@ class CupertinoAudioTracksPane extends StatelessWidget {
       baseTitle = metadataTitle;
     }
 
-    final String codecName = track.codec.name ?? '';
-    if (codecName.isNotEmpty && codecName != 'Unknown Audio Codec') {
-      return '$baseTitle ($codecName)';
+    if (track.isExternal) {
+      baseTitle = '[外挂] $baseTitle';
+      // 从元数据中提取编解码器和声道信息以增强辨识度
+      final codecInfo = track.metadata['codec'] ?? '';
+      final channelsInfo = track.metadata['channels'] ?? '';
+      final samplerateInfo = track.metadata['samplerate'] ?? '';
+      final detailParts = <String>[];
+      if (codecInfo.isNotEmpty) detailParts.add(codecInfo);
+      if (channelsInfo.isNotEmpty && channelsInfo != '0') detailParts.add(channelsInfo);
+      if (samplerateInfo.isNotEmpty && samplerateInfo != '0') detailParts.add('${samplerateInfo}Hz');
+      if (detailParts.isNotEmpty && !baseTitle.contains(codecInfo)) {
+        baseTitle += ' (${detailParts.join(', ')})';
+      }
+    } else {
+      final String codecName = track.codec.name ?? '';
+      if (codecName.isNotEmpty && codecName != 'Unknown Audio Codec') {
+        baseTitle = '$baseTitle ($codecName)';
+      }
     }
     return baseTitle;
   }

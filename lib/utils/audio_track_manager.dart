@@ -1,0 +1,155 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../player_abstraction/player_abstraction.dart';
+
+/// 外部音频轨道管理器
+/// 负责自动检测同名MKA文件并加载为外部音频轨道
+class AudioTrackManager {
+  Player _player;
+  String? _currentVideoPath;
+  String? _externalAudioPath;
+
+  static const String _prefsKey = 'external_audio_mappings';
+
+  AudioTrackManager({required Player player}) : _player = player;
+
+  /// 更新播放器引用（内核热切换时调用）
+  void updatePlayer(Player newPlayer) {
+    _player = newPlayer;
+  }
+
+  /// 设置当前视频路径
+  void setCurrentVideoPath(String? path) {
+    _currentVideoPath = path;
+    if (path == null) {
+      _externalAudioPath = null;
+    }
+  }
+
+  /// 当前加载的外部音频路径
+  String? get externalAudioPath => _externalAudioPath;
+
+  /// 检测同名.mka文件路径（不加载，仅返回路径）
+  /// 用于在主媒体打开前获取MKA路径
+  Future<String?> detectExternalAudioPath(String videoPath) async {
+    if (kIsWeb) return null;
+
+    // 仅支持本地文件
+    if (videoPath.startsWith('http://') ||
+        videoPath.startsWith('https://') ||
+        videoPath.startsWith('jellyfin://') ||
+        videoPath.startsWith('emby://')) {
+      return null;
+    }
+
+    try {
+      final videoFile = File(videoPath);
+      if (!videoFile.existsSync()) return null;
+
+      final videoDir = videoFile.parent.path;
+      final videoName = p.basenameWithoutExtension(videoPath);
+      final mkaPath = p.join(videoDir, '$videoName.mka');
+
+      final mkaFile = File(mkaPath);
+      if (!mkaFile.existsSync()) {
+        debugPrint('AudioTrackManager: 未找到同名MKA文件: $mkaPath');
+        return null;
+      }
+
+      debugPrint('AudioTrackManager: 找到同名MKA文件: $mkaPath');
+      return mkaPath;
+    } catch (e) {
+      debugPrint('AudioTrackManager: 检测外部音频失败: $e');
+      return null;
+    }
+  }
+
+  /// 为MediaKit内核预加载外部音频（必须在主媒体打开前调用）
+  /// 通过setMedia(audio)将路径暂存到_pendingExternalAudioFile，
+  /// MediaKit适配器会在主媒体加载后通过audio-add命令将外部音频添加为轨道
+  void preloadExternalAudioForMediaKit(String mkaPath) {
+    try {
+      _player.setMedia(mkaPath, MediaType.audio);
+      _externalAudioPath = mkaPath;
+      debugPrint('AudioTrackManager: MediaKit预加载外部音频: $mkaPath');
+    } catch (e) {
+      debugPrint('AudioTrackManager: MediaKit预加载外部音频失败: $e');
+    }
+  }
+
+  /// 为MDK内核加载外部音频（必须在主媒体prepare成功后调用）
+  void loadExternalAudioForMdk(String mkaPath) {
+    try {
+      _player.setMedia(mkaPath, MediaType.audio);
+      _externalAudioPath = mkaPath;
+      debugPrint('AudioTrackManager: MDK加载外部音频: $mkaPath');
+    } catch (e) {
+      debugPrint('AudioTrackManager: MDK加载外部音频失败: $e');
+    }
+  }
+
+  /// 自动检测并加载外部音频（兼容两种内核）
+  /// MediaKit: 需在主媒体打开前调用detectExternalAudioPath + preloadExternalAudioForMediaKit
+  /// MDK: 需在主媒体prepare成功后调用此方法
+  Future<void> autoDetectAndLoadExternalAudio(String videoPath) async {
+    final mkaPath = await detectExternalAudioPath(videoPath);
+    if (mkaPath == null) return;
+
+    final kernelName = _player.getPlayerKernelName();
+    if (kernelName == 'MDK') {
+      loadExternalAudioForMdk(mkaPath);
+    }
+    // MediaKit内核应使用 preloadExternalAudioForMediaKit 在主媒体打开前设置
+  }
+
+  /// 清除外部音频
+  /// 对于MediaKit: 清除待加载的外挂音频路径（已加载的外部轨道会在下次打开新视频时自动清除）
+  /// 对于MDK: 通过setMedia空路径卸载
+  void clearExternalAudio() {
+    if (_externalAudioPath != null) {
+      try {
+        final kernelName = _player.getPlayerKernelName();
+        if (kernelName == 'Media Kit') {
+          // 清除待加载路径，阻止延迟加载
+          _player.setMedia('', MediaType.audio);
+          // 注意：已加载的外部音频轨道会在下次_player.open(新Media)时被mpv自动清除
+        } else if (kernelName == 'MDK') {
+          _player.setMedia('', MediaType.audio);
+        }
+      } catch (e) {
+        debugPrint('AudioTrackManager: 清除外部音频失败: $e');
+      }
+      _externalAudioPath = null;
+    }
+  }
+
+  /// 保存视频→外部音频的映射
+  Future<void> saveVideoAudioMapping(String videoPath, String audioPath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _getMappingKey(videoPath);
+      await prefs.setString(key, audioPath);
+    } catch (e) {
+      debugPrint('AudioTrackManager: 保存映射失败: $e');
+    }
+  }
+
+  /// 获取视频对应的外部音频路径
+  Future<String?> getVideoAudioPath(String videoPath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _getMappingKey(videoPath);
+      return prefs.getString(key);
+    } catch (e) {
+      debugPrint('AudioTrackManager: 读取映射失败: $e');
+      return null;
+    }
+  }
+
+  String _getMappingKey(String videoPath) {
+    final hash = videoPath.hashCode.toUnsigned(32).toString();
+    return '${_prefsKey}_$hash';
+  }
+}
