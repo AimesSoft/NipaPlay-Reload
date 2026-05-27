@@ -135,9 +135,12 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ### 播放体验
 
 * **内核支持**：基于 fvp (libmdk) / media_kit / video_player / libmpv，性能强劲。
-* **视频支持**：本地播放、Emby/Jellyfin 流媒体、WebDAV 挂载。
-* **画质增强**：支持 Anime4K 超分（实验性）、CRT 着色器效果。
+* **视频支持**：本地播放、Emby/Jellyfin/SMB 流媒体、WebDAV 挂载。
+* **画质增强**：支持 Anime4K 超分、CRT 着色器效果。
 * **音频控制**：多音轨切换、倍速播放。
+* **种子下载器**：支持种子文件下载，轻松获取网络资源。
+
+* **AI 防剧透**：智能识别并遮挡可能造成剧透的内容，追番更安心。
 
 ### 弹幕与字幕
 
@@ -154,6 +157,11 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 * **主题**：亮色/暗色切换、自定义背景图。
 * **操作**：自定义快捷键、适配平板/电视布局。
+
+### 技术架构
+
+* **JS 插件系统**：支持通过 JavaScript 编写插件，灵活扩展播放器功能。
+* **Rust+Dart 混合架构**：核心模块采用 Rust 实现高性能计算，与 Dart 层无缝协作。
 
 ## 文档与支持
 
@@ -173,6 +181,8 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 | **状态管理** | Provider |
 | **数据存储** | SQLite, SharedPreferences |
 | **网络 API** | Dio/Http, Bangumi API, 弹弹play API |
+| **插件系统** | JS 插件 (JavaScript Runtime) |
+| **原生模块** | Rust (FFI), Dart FFI |
 
 ## 开发计划 (Roadmap)
 
