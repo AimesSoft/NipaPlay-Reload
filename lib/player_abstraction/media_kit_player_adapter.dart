@@ -215,6 +215,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   // 外部音频文件路径（如MKA），在播放器就绪后通过audio-add命令加载
   String? _pendingExternalAudioFile;
+  // 标记_pendingExternalAudioFile是否由当前视频的setMedia(audio)刚设置
+  bool _pendingExternalAudioIsFresh = false;
   // 媒体加载代数计数器，用于作废旧的外挂音频延迟加载操作
   int _mediaLoadGeneration = 0;
 
@@ -1580,8 +1582,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       // 外部音频文件（如MKA），记录路径，会在主媒体加载后通过audio-add命令加载
       if (path.isEmpty) {
         _pendingExternalAudioFile = null;
+        _pendingExternalAudioIsFresh = false;
       } else {
         _pendingExternalAudioFile = path;
+        _pendingExternalAudioIsFresh = true;
         debugPrint('MediaKitAdapter: 已记录外部音频文件，将在主媒体加载后加载: $path');
       }
       return;
@@ -1596,8 +1600,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _isDisposed = false;
     // 递增代数计数器，使旧的延迟加载操作作废
     _mediaLoadGeneration++;
-    // 注意：不清除_pendingExternalAudioFile，因为它在setMedia(audio)时已由调用方设置
-    // 代数计数器会使旧的延迟加载作废，新的_loadPendingExternalAudio将使用新的路径
+    // 清除不属于当前视频的残留外部音频路径，防止旧视频的MKA被加载到新视频上
+    if (!_pendingExternalAudioIsFresh) {
+      _pendingExternalAudioFile = null;
+    }
+    _pendingExternalAudioIsFresh = false;
 
     final mediaOptions = <String, dynamic>{};
     _properties.forEach((key, value) {
