@@ -13,7 +13,6 @@ class MacosPlatformMenu extends StatelessWidget {
     this.onOpenHome,
     this.onOpenVideoPlayback,
     this.onOpenMediaLibrary,
-    this.onOpenNewSeries,
     this.onOpenSettings,
     this.onShowAbout,
     this.onShowHelp,
@@ -35,9 +34,6 @@ class MacosPlatformMenu extends StatelessWidget {
 
   /// 媒体库 (Cmd+3)
   final VoidCallback? onOpenMediaLibrary;
-
-  /// 新番更新 (Cmd+4)
-  final VoidCallback? onOpenNewSeries;
 
   /// 偏好设置 (Cmd+,)
   final VoidCallback? onOpenSettings;
@@ -198,15 +194,6 @@ class MacosPlatformMenu extends StatelessWidget {
                   meta: true,
                 ),
                 onSelected: onOpenMediaLibrary,
-              ),
-            if (onOpenNewSeries != null)
-              PlatformMenuItem(
-                label: '新番更新',
-                shortcut: const SingleActivator(
-                  LogicalKeyboardKey.digit4,
-                  meta: true,
-                ),
-                onSelected: onOpenNewSeries,
               ),
           ],
         ),
