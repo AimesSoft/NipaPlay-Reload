@@ -26,6 +26,7 @@ class BangumiMyCommentData {
 
 class BangumiCommentsWidget extends StatefulWidget {
   final int? subjectId;
+  final int dandanplayId;
   final VoidCallback? onEditRating;
   final BangumiMyCommentData? myComment;
   final int currentUserId;
@@ -35,6 +36,7 @@ class BangumiCommentsWidget extends StatefulWidget {
   const BangumiCommentsWidget({
     super.key,
     required this.subjectId,
+    this.dandanplayId = 0,
     this.onEditRating,
     this.myComment,
     this.currentUserId = 0,
@@ -50,13 +52,15 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
   final List<BangumiComment> _comments = [];
   bool _isLoading = false;
   bool _hasMore = true;
+  bool _usingFallback = false;
   int _currentOffset = 0;
+  int _currentPage = 0;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    if (widget.subjectId != null) {
+    if (widget.subjectId != null || widget.dandanplayId != 0) {
       _loadComments();
     }
   }
@@ -69,9 +73,11 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
       _isLoading = false;
       _comments.clear();
       _currentOffset = 0;
+      _currentPage = 0;
+      _usingFallback = false;
       _hasMore = true;
       _error = null;
-      if (widget.subjectId != null) {
+      if (widget.subjectId != null || widget.dandanplayId != 0) {
         _loadComments();
       }
     }
@@ -85,31 +91,100 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
     });
 
     try {
-      if (widget.subjectId == null) {
-        debugPrint('[Bangumi Comments Widget] subjectId为null，跳过加载');
+      if (widget.subjectId == null && widget.dandanplayId == 0) {
+        debugPrint('[Bangumi Comments Widget] subjectId和dandanplayId都不可用，跳过加载');
+        setState(() => _isLoading = false);
         return;
       }
-      final int requestedSubjectId = widget.subjectId!;
-      debugPrint(
-          '[Bangumi Comments Widget] 开始加载 subjectId=$requestedSubjectId, offset=$_currentOffset');
-      final result = await BangumiApiService.getSubjectComments(
-        requestedSubjectId,
-        offset: _currentOffset,
-      );
-      debugPrint(
-          '[Bangumi Comments Widget] API返回 success=${result['success']}, message=${result['message']}');
+
+      final int requestedSubjectId = widget.subjectId ?? 0;
+      Map<String, dynamic> result;
+
+      // 主请求：Bangumi API (4s超时)
+      if (!_usingFallback && requestedSubjectId != 0) {
+        debugPrint(
+            '[Bangumi Comments Widget] 尝试Bangumi主接口, subjectId=$requestedSubjectId, offset=$_currentOffset');
+        result = await BangumiApiService.getSubjectComments(
+          requestedSubjectId,
+          offset: _currentOffset,
+        );
+        debugPrint(
+            '[Bangumi Comments Widget] 主请求返回 success=${result['success']}, isTimeout=${result['isTimeout']}');
+
+        bool shouldFallback = false;
+        String fallbackReason = '';
+
+        if (result['success'] != true) {
+          shouldFallback = true;
+          fallbackReason = result['isTimeout'] == true
+              ? 'Bangumi请求超时(4s)'
+              : 'Bangumi请求失败: ${result['message']}';
+        } else {
+          final data = result['data'];
+          final list = (data is Map)
+              ? (data['data'] as List? ?? data['list'] as List? ?? [])
+              : [];
+          if (list.isEmpty && _currentOffset == 0) {
+            shouldFallback = true;
+            fallbackReason = 'Bangumi返回空列表';
+          }
+        }
+
+        if (shouldFallback && widget.dandanplayId != 0) {
+          debugPrint('[Bangumi Comments Widget] $fallbackReason，回退到Dandanplay, dandanplayId=${widget.dandanplayId}');
+          _usingFallback = true;
+          _currentPage = 0;
+          result = await BangumiApiService.getSubjectCommentsFallback(
+            widget.dandanplayId,
+            page: _currentPage,
+          );
+          debugPrint(
+              '[Bangumi Comments Widget] Dandanplay回退结果: success=${result['success']}');
+        } else if (shouldFallback && widget.dandanplayId == 0) {
+          debugPrint('[Bangumi Comments Widget] $fallbackReason，但无dandanplayId可用，无法回退');
+        }
+      } else if (widget.dandanplayId != 0) {
+        // 已经在使用回退，或没有 subjectId，直接用 Dandanplay
+        debugPrint(
+            '[Bangumi Comments Widget] 回退请求 dandanplayId=${widget.dandanplayId}, page=$_currentPage');
+        result = await BangumiApiService.getSubjectCommentsFallback(
+          widget.dandanplayId,
+          page: _currentPage,
+        );
+        debugPrint(
+            '[Bangumi Comments Widget] 回退请求返回 success=${result['success']}');
+      } else {
+        debugPrint('[Bangumi Comments Widget] 无可用请求源');
+        setState(() => _isLoading = false);
+        return;
+      }
 
       if (!mounted) return;
-      if (widget.subjectId != requestedSubjectId) return;
+      if (requestedSubjectId != 0 && widget.subjectId != requestedSubjectId) {
+        return;
+      }
 
       if (result['success'] == true) {
         final data = result['data'];
         debugPrint('[Bangumi Comments Widget] data类型: ${data.runtimeType}');
         final list = (data['data'] as List?) ?? (data['list'] as List?) ?? [];
         final total = data['total'] as int? ?? 0;
+        final bool isDandanplaySource = result['source'] == 'dandanplay';
         debugPrint(
-            '[Bangumi Comments Widget] 解析到 ${list.length} 条, total=$total');
-        var newComments = list.map((e) => BangumiComment.fromJson(e)).toList();
+            '[Bangumi Comments Widget] 解析到 ${list.length} 条, total=$total, source=${result['source']}');
+
+        List<BangumiComment> newComments;
+        if (isDandanplaySource) {
+          newComments = list
+              .whereType<Map<String, dynamic>>()
+              .map((e) => DandanplayComment.fromJson(e).toBangumiComment())
+              .toList();
+        } else {
+          newComments = list
+              .map((e) => BangumiComment.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
+
         if (widget.currentUserId > 0) {
           final myComment = newComments.cast<BangumiComment?>().firstWhere(
                 (c) => c!.userId == widget.currentUserId,
@@ -127,8 +202,16 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
 
         setState(() {
           _comments.addAll(newComments);
-          _currentOffset += list.length;
-          _hasMore = _currentOffset < total;
+          if (_usingFallback) {
+            _currentPage++;
+            final bool dandanplayHasMore = data['hasMore'] as bool? ?? true;
+            _hasMore = isDandanplaySource
+                ? dandanplayHasMore
+                : newComments.isNotEmpty;
+          } else {
+            _currentOffset += list.length;
+            _hasMore = _currentOffset < total;
+          }
           _isLoading = false;
         });
       } else {
@@ -330,7 +413,9 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
                       radius: 18,
                       backgroundColor: textColor.withOpacity(0.1),
                       backgroundImage: my.avatarUrl.isNotEmpty
-                          ? NetworkImage(_proxiedImageUrl(my.avatarUrl))
+                          ? (my.avatarUrl.startsWith('assets/')
+                              ? AssetImage(my.avatarUrl)
+                              : NetworkImage(_proxiedImageUrl(my.avatarUrl)))
                           : null,
                       child: my.avatarUrl.isEmpty
                           ? Icon(Ionicons.person,
@@ -397,7 +482,9 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
                     radius: 18,
                     backgroundColor: textColor.withOpacity(0.1),
                     backgroundImage: comment.avatarUrl.isNotEmpty
-                        ? NetworkImage(_proxiedImageUrl(comment.avatarUrl))
+                        ? (comment.avatarUrl.startsWith('assets/')
+                            ? AssetImage(comment.avatarUrl)
+                            : NetworkImage(_proxiedImageUrl(comment.avatarUrl)))
                         : null,
                     child: comment.avatarUrl.isEmpty
                         ? Icon(Ionicons.person,

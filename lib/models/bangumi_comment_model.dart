@@ -31,3 +31,62 @@ class BangumiComment {
     );
   }
 }
+
+class DandanplayComment {
+  final int id;
+  final int userId;
+  final String externalUserId;
+  final String userName;
+  final String imageUrl;
+  final String source;
+  final String text;
+  final int rating;
+  final DateTime updatedTime;
+
+  DandanplayComment({
+    required this.id,
+    required this.userId,
+    required this.externalUserId,
+    required this.userName,
+    required this.imageUrl,
+    required this.source,
+    required this.text,
+    required this.rating,
+    required this.updatedTime,
+  });
+
+  factory DandanplayComment.fromJson(Map<String, dynamic> json) {
+    DateTime parseUpdatedTime(dynamic value) {
+      if (value is String) {
+        return DateTime.tryParse(value) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      } else if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+      }
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    return DandanplayComment(
+      id: json['id'] as int? ?? 0,
+      userId: json['userId'] as int? ?? 0,
+      externalUserId: json['externalUserId'] as String? ?? '',
+      userName: json['userName'] as String? ?? '',
+      imageUrl: json['imageUrl'] as String? ?? '',
+      source: json['source'] as String? ?? '',
+      text: json['text'] as String? ?? '',
+      rating: json['rating'] as int? ?? 0,
+      updatedTime: parseUpdatedTime(json['updatedTime']),
+    );
+  }
+
+  BangumiComment toBangumiComment() {
+    return BangumiComment(
+      userId: userId,
+      username: userName,
+      nickname: userName,
+      avatarUrl: 'assets/avatar.png',
+      rate: rating,
+      comment: text,
+      updatedAt: updatedTime.millisecondsSinceEpoch ~/ 1000,
+    );
+  }
+}

@@ -2,6 +2,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/bangumi_collection_submit_result.dart';
 import 'package:nipaplay/models/shared_remote_library.dart';
@@ -21,6 +22,10 @@ import 'package:http/http.dart' as http;
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_rating_sheet.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bangumi_collection_sheet.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_bangumi_comments_widget.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_comment_dialog.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart'
+    show BangumiMyCommentData;
 import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class CupertinoDetailCastMember {
@@ -99,6 +104,8 @@ enum _CupertinoEpisodeCleanupAction { clearScanResults, deleteWatchHistory }
 class _CupertinoSharedAnimeDetailPageState
     extends State<CupertinoSharedAnimeDetailPage> {
   static const int _infoSegment = 0;
+  static const int _commentsSegment = 1;
+  static const int _episodesSegment = 2;
   static final Map<int, String> _coverCache = {};
   static const Map<int, String> _ratingEvaluationMap = {
     1: '不忍直视',
@@ -150,6 +157,27 @@ class _CupertinoSharedAnimeDetailPageState
   String? _bangumiComment;
   bool _isSavingBangumiCollection = false;
 
+  // 评论系统相关
+  int _commentsVersion = 0;
+  int _myCommentTimestamp = 0;
+  final GlobalKey _commentsWidgetKey = GlobalKey();
+
+  static const String _commentTimestampPrefix = 'bangumi_comment_ts_';
+
+  Future<void> _loadPersistedCommentTimestamp(int subjectId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ts = prefs.getInt('$_commentTimestampPrefix$subjectId');
+    if (ts != null && ts > 0 && mounted) {
+      setState(() => _myCommentTimestamp = ts);
+    }
+  }
+
+  Future<void> _saveCommentTimestamp(int subjectId, int timestamp) async {
+    if (subjectId <= 0 || timestamp <= 0) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('$_commentTimestampPrefix$subjectId', timestamp);
+  }
+
   // 云端观看状态
   Map<int, bool> _episodeWatchStatus = {};
   bool _isLoadingWatchStatus = false;
@@ -178,6 +206,7 @@ class _CupertinoSharedAnimeDetailPageState
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadEpisodes();
@@ -188,6 +217,19 @@ class _CupertinoSharedAnimeDetailPageState
     });
     BangumiApiService.loginStatusNotifier
         .addListener(_onBangumiLoginStatusChanged);
+  }
+
+  void _onScroll() {
+    if (_currentSegment != _commentsSegment) return;
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (maxScroll > 0 && currentScroll >= maxScroll - 200) {
+      final state = _commentsWidgetKey.currentState;
+      if (state is CupertinoBangumiCommentsWidgetState) {
+        state.tryLoadMore();
+      }
+    }
   }
 
   @override
@@ -258,6 +300,8 @@ class _CupertinoSharedAnimeDetailPageState
         _bangumiCollectionType = 0;
         _bangumiEpisodeStatus = 0;
         _hasBangumiCollection = false;
+        _commentsVersion = 0;
+        _myCommentTimestamp = 0;
       });
     }
 
@@ -270,13 +314,20 @@ class _CupertinoSharedAnimeDetailPageState
       final anime =
           await BangumiService.instance.getAnimeDetails(widget.anime.animeId);
       if (!mounted) return;
+      final subjectId = _extractBangumiSubjectId(anime);
       setState(() {
         _bangumiAnime = anime;
+        _bangumiSubjectId = subjectId;
       });
 
       // 加载完Bangumi信息后，加载观看状态
       _loadWatchStatus();
       _loadBangumiUserData(anime);
+
+      // 从本地恢复评论时间戳
+      if (subjectId != null) {
+        _loadPersistedCommentTimestamp(subjectId);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -390,7 +441,6 @@ class _CupertinoSharedAnimeDetailPageState
     if (!BangumiApiService.isLoggedIn) {
       if (mounted) {
         setState(() {
-          _bangumiSubjectId = null;
           _bangumiComment = null;
           _isLoadingBangumiCollection = false;
           _hasBangumiCollection = false;
@@ -496,6 +546,11 @@ class _CupertinoSharedAnimeDetailPageState
           _bangumiCollectionType = collectionType;
           _bangumiEpisodeStatus = episodeStatus;
           _isLoadingBangumiCollection = false;
+          if (_myCommentTimestamp == 0 &&
+              (userRating > 0 || (comment != null && comment.isNotEmpty))) {
+            _myCommentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            _saveCommentTimestamp(subjectId, _myCommentTimestamp);
+          }
         });
       } else {
         setState(() {
@@ -752,6 +807,22 @@ class _CupertinoSharedAnimeDetailPageState
     }
   }
 
+  void _showCommentDialog() {
+    if (_bangumiAnime == null || !BangumiApiService.isLoggedIn) return;
+
+    final int effectiveCollectionType =
+        _bangumiCollectionType != 0 ? _bangumiCollectionType : 3;
+
+    CupertinoCommentDialog.show(
+      context: context,
+      animeTitle: _resolveAnimeTitle(_bangumiAnime!),
+      initialRating: _bangumiUserRating > 0 ? _bangumiUserRating : _userRating,
+      initialComment: _bangumiComment,
+      collectionType: effectiveCollectionType,
+      onSubmit: _handleBangumiCollectionSubmitted,
+    );
+  }
+
   Future<bool> _handleBangumiCollectionSubmitted(
     BangumiCollectionSubmitResult result,
   ) async {
@@ -818,6 +889,13 @@ class _CupertinoSharedAnimeDetailPageState
 
     setState(() {
       _isSavingBangumiCollection = false;
+      if (bangumiSuccess) {
+        _commentsVersion++;
+        _myCommentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        if (_bangumiSubjectId != null) {
+          _saveCommentTimestamp(_bangumiSubjectId!, _myCommentTimestamp);
+        }
+      }
     });
 
     if (bangumiSuccess && dandanSuccess) {
@@ -1146,6 +1224,14 @@ class _CupertinoSharedAnimeDetailPageState
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                   child: _buildInfoSection(context, hostName),
+                ),
+              )
+            else if (_currentSegment == _commentsSegment)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                  child: _buildCommentsSection(context),
                 ),
               )
             else
@@ -2643,7 +2729,7 @@ class _CupertinoSharedAnimeDetailPageState
           fontWeight: FontWeight.w500,
         ),
         child: AdaptiveSegmentedControl(
-          labels: const ['详情', '剧集'],
+          labels: const ['详情', '评论', '剧集'],
           selectedIndex: _currentSegment,
           color: resolvedSegmentColor,
           onValueChanged: (index) {
@@ -2653,6 +2739,58 @@ class _CupertinoSharedAnimeDetailPageState
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildCommentsSection(BuildContext context) {
+    final userInfo = BangumiApiService.userInfo;
+    final int currentUserId =
+        userInfo != null ? (userInfo['id'] as int? ?? 0) : 0;
+    String userAvatar = '';
+    if (userInfo != null) {
+      final raw = userInfo['avatar'];
+      if (raw is String) {
+        userAvatar = raw;
+      } else if (raw is Map<String, dynamic>) {
+        userAvatar =
+            (raw['large'] as String?) ?? (raw['medium'] as String?) ?? '';
+      }
+    }
+    final String userNickname = userInfo != null
+        ? ((userInfo['nickname'] as String?) ??
+            (userInfo['username'] as String?) ??
+            '')
+        : '';
+    final myComment = BangumiApiService.isLoggedIn
+        ? BangumiMyCommentData(
+            nickname: userNickname,
+            avatarUrl: userAvatar,
+            rate: _bangumiUserRating,
+            comment: _bangumiComment ?? '',
+            updatedAt: _myCommentTimestamp > 0
+                ? _myCommentTimestamp
+                : DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          )
+        : null;
+
+    return CupertinoBangumiCommentsWidget(
+      key: _commentsWidgetKey,
+      subjectId: _bangumiSubjectId,
+      dandanplayId: _bangumiAnime?.id ?? 0,
+      onEditRating: BangumiApiService.isLoggedIn ? _showCommentDialog : null,
+      myComment: myComment,
+      currentUserId: currentUserId,
+      commentsVersion: _commentsVersion,
+      onMyCommentTimestamp: (timestamp) {
+        if (mounted && timestamp != _myCommentTimestamp) {
+          setState(() {
+            _myCommentTimestamp = timestamp;
+          });
+          if (_bangumiSubjectId != null) {
+            _saveCommentTimestamp(_bangumiSubjectId!, timestamp);
+          }
+        }
+      },
     );
   }
 
@@ -3947,6 +4085,7 @@ class _CupertinoSharedAnimeDetailPageState
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     BangumiApiService.loginStatusNotifier
         .removeListener(_onBangumiLoginStatusChanged);
     _scrollController.dispose();
