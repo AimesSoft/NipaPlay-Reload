@@ -926,6 +926,9 @@ class SubtitleManager extends ChangeNotifier {
             // 保存这个自动找到的字幕路径，下次可以直接使用
             saveVideoSubtitleMapping(videoPath, cachedPath);
 
+            // 异步预取远程字体（ASS/SSA 字幕可能引用服务端上的字体文件）
+            unawaited(_prefetchRemoteFontsForSubtitle(videoPath, cachedPath));
+
             // 设置完成后强制刷新状态
             await Future.delayed(_autoLoadStateSettleDelay);
 
@@ -1319,5 +1322,70 @@ class SubtitleManager extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  /// 异步预取远程媒体库中的字体文件到本地 subtitle_fonts 缓存
+  /// 当远程 ASS/SSA 字幕被缓存后，检查字幕内容中引用的字体，
+  /// 从服务端下载对应字体文件，使 libass 渲染时能自动找到字体
+  Future<void> _prefetchRemoteFontsForSubtitle(
+    String videoPath,
+    String cachedSubtitlePath,
+  ) async {
+    if (kIsWeb) return;
+
+    try {
+      // 仅对 ASS/SSA 字幕检查字体引用
+      final ext = p.extension(cachedSubtitlePath).toLowerCase();
+      if (ext != '.ass' && ext != '.ssa') return;
+
+      // 读取字幕文件内容并提取字体名
+      final subtitleFile = File(cachedSubtitlePath);
+      if (!await subtitleFile.exists()) return;
+      final content = await subtitleFile.readAsString();
+      final fontNames = extractAssFontNames(content);
+      if (fontNames.isEmpty) return;
+
+      debugPrint('SubtitleManager: 检测到远程字幕引用字体: $fontNames，开始从远程预取...');
+
+      // 获取远程字体候选列表
+      final fontCandidates = await RemoteSubtitleService.instance
+          .listFontsForVideo(videoPath);
+      if (fontCandidates.isEmpty) {
+        debugPrint('SubtitleManager: 远程媒体库未提供字体文件');
+        return;
+      }
+
+      // 对每个引用的字体，尝试在远程候选中找到并下载
+      for (final fontName in fontNames) {
+        // 尝试匹配：字体文件名（不含扩展名）与引用的字体名一致
+        RemoteFontCandidate? matched;
+        for (final candidate in fontCandidates) {
+          final candidateBaseName = p.basenameWithoutExtension(candidate.name);
+          if (candidateBaseName == fontName ||
+              candidateBaseName.toLowerCase() == fontName.toLowerCase()) {
+            matched = candidate;
+            break;
+          }
+        }
+        // 如果没有精确匹配，尝试模糊匹配
+        matched ??= fontCandidates.where((c) {
+          final baseName = p.basenameWithoutExtension(c.name).toLowerCase();
+          return baseName.contains(fontName.toLowerCase()) ||
+              fontName.toLowerCase().contains(baseName);
+        }).firstOrNull;
+
+        if (matched != null) {
+          try {
+            final cachedFontPath = await RemoteSubtitleService.instance
+                .ensureFontCached(matched);
+            debugPrint('SubtitleManager: 远程字体已缓存: $cachedFontPath');
+          } catch (e) {
+            debugPrint('SubtitleManager: 下载远程字体 $fontName 失败: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 预取远程字体失败: $e');
+    }
   }
 }
