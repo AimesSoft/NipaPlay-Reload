@@ -273,11 +273,9 @@ impl DanmakuItem {
         if self.is_measured(global_flags) {
             return;
         }
-        // Safety multiplier to account for font rendering variance (kerning, shaping, hinting)
         let raw_width = measure_text_width(&self.text, self.text_size) * 1.15;
-        // Add outline padding on both sides
         self.paint_width = raw_width + outline_width * 2.0;
-        self.paint_height = self.text_size * 1.2 + outline_width * 2.0;
+        self.paint_height = self.text_size * 1.2;
 
         // Compute scroll step
         if self.danmaku_type.is_scroll() {

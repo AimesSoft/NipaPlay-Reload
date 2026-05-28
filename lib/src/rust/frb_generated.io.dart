@@ -75,6 +75,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DfmPlusPreparedLayout dco_decode_dfm_plus_prepared_layout(dynamic raw);
 
   @protected
+  DfmPlusRawDanmakuItem dco_decode_dfm_plus_raw_danmaku_item(dynamic raw);
+
+  @protected
   double dco_decode_f_64(dynamic raw);
 
   @protected
@@ -94,6 +97,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<DfmPlusPreparedItem> dco_decode_list_dfm_plus_prepared_item(dynamic raw);
+
+  @protected
+  List<DfmPlusRawDanmakuItem> dco_decode_list_dfm_plus_raw_danmaku_item(
+      dynamic raw);
 
   @protected
   Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
@@ -244,6 +251,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  DfmPlusRawDanmakuItem sse_decode_dfm_plus_raw_danmaku_item(
+      SseDeserializer deserializer);
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
@@ -265,6 +276,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<DfmPlusPreparedItem> sse_decode_list_dfm_plus_prepared_item(
+      SseDeserializer deserializer);
+
+  @protected
+  List<DfmPlusRawDanmakuItem> sse_decode_list_dfm_plus_raw_danmaku_item(
       SseDeserializer deserializer);
 
   @protected
@@ -431,6 +446,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       DfmPlusPreparedLayout self, SseSerializer serializer);
 
   @protected
+  void sse_encode_dfm_plus_raw_danmaku_item(
+      DfmPlusRawDanmakuItem self, SseSerializer serializer);
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
@@ -453,6 +472,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_dfm_plus_prepared_item(
       List<DfmPlusPreparedItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_dfm_plus_raw_danmaku_item(
+      List<DfmPlusRawDanmakuItem> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_f_64_strict(

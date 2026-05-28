@@ -887,8 +887,8 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                         displayTextBuilder: (v) =>
                             '${(v * 100).round()}%',
                         min: 0.0,
-                        max: 2.0,
-                        step: 0.05,
+                        max: 0.5,
+                        step: 0.01,
                       ),
                       const SizedBox(height: 4),
                       const SettingsHintText(

@@ -6,8 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `fnv1a_hash`, `lower_bound`, `resolve_outline_px`, `upper_bound`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `build_dfm_plus_frame`, `calc_frame_cache_key`, `frame_cache`, `get`, `insert`, `lower_bound`, `new`, `resolve_outline_px`, `upper_bound`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FrameCacheEntry`, `FrameCache`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One-time layout preparation.
 /// Computes track assignments, collision avoidance, filtering, and merge.
@@ -16,9 +17,6 @@ Future<DfmPlusPreparedLayout> dfmPlusPrepareLayout(
         {required DfmPlusPrepareRequest request}) =>
     RustLib.instance.api.crateApiDfmPlusDfmPlusPrepareLayout(request: request);
 
-/// Per-frame layout query.
-/// Computes X positions for visible danmaku at the current time.
-/// Output format is compatible with Next2's FrameItemPayload.
 Future<DfmPlusFrameLayout> dfmPlusLayoutFrame(
         {required DfmPlusFrameRequest request}) =>
     RustLib.instance.api.crateApiDfmPlusDfmPlusLayoutFrame(request: request);
@@ -54,6 +52,35 @@ Future<Float64List> dfmPlusMeasureTextWidths(
         Uint8List? customFontBytes}) =>
     RustLib.instance.api.crateApiDfmPlusDfmPlusMeasureTextWidths(
         texts: texts, fontSize: fontSize, customFontBytes: customFontBytes);
+
+Future<DfmPlusPreparedLayout> dfmPlusPrepareLayoutFull(
+        {required List<DfmPlusRawDanmakuItem> rawItems,
+        required double width,
+        required double height,
+        required double fontSize,
+        required double displayArea,
+        required double scrollDurationSeconds,
+        required bool allowStacking,
+        required bool mergeDanmaku,
+        int? maxQuantity,
+        int? maxLinesPerType,
+        required double trackGapRatio,
+        required double outlineWidth,
+        Uint8List? customFontBytes}) =>
+    RustLib.instance.api.crateApiDfmPlusDfmPlusPrepareLayoutFull(
+        rawItems: rawItems,
+        width: width,
+        height: height,
+        fontSize: fontSize,
+        displayArea: displayArea,
+        scrollDurationSeconds: scrollDurationSeconds,
+        allowStacking: allowStacking,
+        mergeDanmaku: mergeDanmaku,
+        maxQuantity: maxQuantity,
+        maxLinesPerType: maxLinesPerType,
+        trackGapRatio: trackGapRatio,
+        outlineWidth: outlineWidth,
+        customFontBytes: customFontBytes);
 
 /// Input danmaku item for layout preparation.
 class DfmPlusDanmakuItem {
@@ -422,4 +449,39 @@ class DfmPlusPreparedLayout {
           itemTimes == other.itemTimes &&
           trackCount == other.trackCount &&
           cacheKey == other.cacheKey;
+}
+
+class DfmPlusRawDanmakuItem {
+  final double timeSeconds;
+  final String text;
+  final int typeCode;
+  final int colorArgb;
+  final bool isMe;
+
+  const DfmPlusRawDanmakuItem({
+    required this.timeSeconds,
+    required this.text,
+    required this.typeCode,
+    required this.colorArgb,
+    required this.isMe,
+  });
+
+  @override
+  int get hashCode =>
+      timeSeconds.hashCode ^
+      text.hashCode ^
+      typeCode.hashCode ^
+      colorArgb.hashCode ^
+      isMe.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DfmPlusRawDanmakuItem &&
+          runtimeType == other.runtimeType &&
+          timeSeconds == other.timeSeconds &&
+          text == other.text &&
+          typeCode == other.typeCode &&
+          colorArgb == other.colorArgb &&
+          isMe == other.isMe;
 }

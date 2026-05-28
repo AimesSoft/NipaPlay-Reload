@@ -6,6 +6,10 @@
 /// Output format is compatible with Next2's FrameItemPayload (JSON),
 /// allowing direct reuse of Next2's GPU rendering pipeline.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
+
 use crate::dfm_core::{
     filters::{FilterContext, FilterSystem},
     model::{DanmakuItem, DanmakuType, Duration, GlobalFlags},
@@ -115,6 +119,71 @@ pub struct DfmPlusFrameItem {
 
 const STATIC_DURATION_MS: i64 = 3800;
 
+const FRAME_CACHE_CAPACITY: usize = 256;
+
+struct FrameCacheEntry {
+    value: DfmPlusFrameLayout,
+    last_used_tick: u64,
+}
+
+struct FrameCache {
+    entries: HashMap<u64, FrameCacheEntry>,
+    use_tick: u64,
+}
+
+impl FrameCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            use_tick: 0,
+        }
+    }
+
+    fn get(&mut self, key: u64) -> Option<DfmPlusFrameLayout> {
+        let next_tick = self.use_tick.wrapping_add(1);
+        self.use_tick = next_tick;
+        let entry = self.entries.get_mut(&key)?;
+        entry.last_used_tick = next_tick;
+        Some(entry.value.clone())
+    }
+
+    fn insert(&mut self, key: u64, value: DfmPlusFrameLayout) {
+        let next_tick = self.use_tick.wrapping_add(1);
+        self.use_tick = next_tick;
+        self.entries.insert(
+            key,
+            FrameCacheEntry {
+                value,
+                last_used_tick: next_tick,
+            },
+        );
+        while self.entries.len() > FRAME_CACHE_CAPACITY {
+            let Some((&victim, _)) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used_tick)
+            else {
+                break;
+            };
+            self.entries.remove(&victim);
+        }
+    }
+}
+
+static FRAME_CACHE: OnceLock<Mutex<FrameCache>> = OnceLock::new();
+
+fn frame_cache() -> &'static Mutex<FrameCache> {
+    FRAME_CACHE.get_or_init(|| Mutex::new(FrameCache::new()))
+}
+
+fn calc_frame_cache_key(layout: &DfmPlusPreparedLayout, current_time_seconds: f64) -> u64 {
+    let quantized_tick = (current_time_seconds * 60.0).round() as i64;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    layout.cache_key.hash(&mut hasher);
+    quantized_tick.hash(&mut hasher);
+    hasher.finish()
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -159,11 +228,12 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
 
             // Use pre-measured dimensions from font measurer (pixel-accurate),
             // otherwise fall back to Rust-side heuristic.
-            // IMPORTANT: outline is rendered OUTSIDE text bounds by the GPU SDF shader,
-            // so we must expand by outline_px (matching resolve_outline_px) on both sides.
+            // Outline expands horizontally (left/right edges) for collision detection,
+            // but NOT vertically — outline is thin and semi-transparent, adding it to
+            // paint_height would waste track space and make the layout too sparse.
             if raw.paint_width > 0.0 && raw.paint_height > 0.0 {
                 item.paint_width = raw.paint_width as f32 + outline_px * 2.0;
-                item.paint_height = raw.paint_height as f32 + outline_px * 2.0;
+                item.paint_height = raw.paint_height as f32;
                 if item.danmaku_type.is_scroll() {
                     let distance = width + item.paint_width;
                     item.step_x = distance / item.duration_ms as f32;
@@ -239,6 +309,7 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
             height,
             &global_flags,
             display_area,
+            false,
         );
         let is_top_current = items[i].danmaku_type == DanmakuType::FixTop;
         if !placed {
@@ -247,11 +318,11 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
             }
             continue;
         }
-        if let Some(displaced) = displaced_index {
+        for &displaced in &displaced_index {
             if displaced < items.len() && !items[displaced].is_filtered {
                 let is_top_displaced = items[displaced].danmaku_type == DanmakuType::FixTop;
                 if is_top_displaced {
-                    eprintln!("DISPLACED TOP: displacing index {}, i={}, time: {}, text: {} because of {}", 
+                    eprintln!("DISPLACED TOP: displacing index {}, i={}, time: {}, text: {} because of {}",
                         displaced, i, items[displaced].time_ms as f64 / 1000.0, items[displaced].text, items[i].text);
                 }
                 items[displaced].is_filtered = true;
@@ -263,7 +334,6 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
     // Build prepared output
     let mut prepared_items = Vec::with_capacity(items.len());
     let mut item_times = Vec::with_capacity(items.len());
-    let mut top_prepared = 0;
     let mut top_filtered_count = 0;
 
     for item in &items {
@@ -309,7 +379,23 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
     let sorted_times: Vec<f64> = pairs.iter().map(|(t, _)| *t).collect();
     let sorted_items: Vec<DfmPlusPreparedItem> = pairs.into_iter().map(|(_, item)| item).into_iter().collect();
 
-    let cache_key = fnv1a_hash(&format!("{:?}_{:?}_{:?}_{:?}", width, height, font_size, items.len()));
+    let cache_key = {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (width as f64).to_bits().hash(&mut hasher);
+        (height as f64).to_bits().hash(&mut hasher);
+        font_size.to_bits().hash(&mut hasher);
+        display_area.to_bits().hash(&mut hasher);
+        scroll_dur_secs.to_bits().hash(&mut hasher);
+        items.len().hash(&mut hasher);
+        for item in &items {
+            if !item.is_filtered {
+                item.time_ms.hash(&mut hasher);
+                item.paint_width.to_bits().hash(&mut hasher);
+                item.danmaku_type.hash(&mut hasher);
+            }
+        }
+        hasher.finish()
+    };
 
     Ok(DfmPlusPreparedLayout {
         width: width as f64,
@@ -323,18 +409,26 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
     })
 }
 
-/// Per-frame layout query.
-/// Computes X positions for visible danmaku at the current time.
-/// Output format is compatible with Next2's FrameItemPayload.
 pub fn dfm_plus_layout_frame(request: DfmPlusFrameRequest) -> DfmPlusFrameLayout {
-    let layout = &request.layout;
-    let current_time = request.current_time_seconds;
+    let cache = frame_cache();
+    if let Ok(mut guard) = cache.lock() {
+        let frame_key = calc_frame_cache_key(&request.layout, request.current_time_seconds);
+        if let Some(cached) = guard.get(frame_key) {
+            return cached;
+        }
+        let result = build_dfm_plus_frame(&request.layout, request.current_time_seconds);
+        guard.insert(frame_key, result.clone());
+        return result;
+    }
+    build_dfm_plus_frame(&request.layout, request.current_time_seconds)
+}
+
+fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> DfmPlusFrameLayout {
     let width = layout.width as f32;
     let scroll_dur = layout.scroll_duration_seconds;
     let static_dur = layout.static_duration_seconds;
     let max_dur = scroll_dur.max(static_dur);
 
-    // Binary search for the time window [current_time - max_dur, current_time]
     let window_start = current_time - max_dur;
     let start_idx = lower_bound(&layout.item_times, window_start);
     let end_idx = upper_bound(&layout.item_times, current_time);
@@ -345,18 +439,18 @@ pub fn dfm_plus_layout_frame(request: DfmPlusFrameRequest) -> DfmPlusFrameLayout
         let item = &layout.items[i];
         let elapsed = current_time - item.time_seconds;
         if elapsed < 0.0 {
-            continue; // not yet visible
+            continue;
         }
 
         let type_code = item.type_code;
-        let is_scroll = type_code == 1 || type_code == 6; // DFM ScrollRL(1) or ScrollLR(6)
+        let is_scroll = type_code == 1 || type_code == 6;
 
         if !is_scroll && elapsed > item.duration_seconds {
-            continue; // fixed danmaku expired
+            continue;
         }
 
         let (x, offstage_x) = if is_scroll {
-            let speed = item.scroll_speed; // px/s
+            let speed = item.scroll_speed;
             let x = width as f64 - speed * elapsed;
             let offstage = width as f64 + item.width;
             (x, offstage)
@@ -366,12 +460,10 @@ pub fn dfm_plus_layout_frame(request: DfmPlusFrameRequest) -> DfmPlusFrameLayout
             (x, offstage)
         };
 
-        // Skip if fully offscreen
         if is_scroll && x < -item.width {
             continue;
         }
 
-        // Skip items that weren't placed by the retainer
         if item.y_position < 0.0 {
             continue;
         }
@@ -427,16 +519,6 @@ fn upper_bound(times: &[f64], target: f64) -> usize {
     lo
 }
 
-/// FNV-1a hash.
-fn fnv1a_hash(s: &str) -> u64 {
-    let mut hash: u64 = 0xcbf29ce484222325;
-    for byte in s.bytes() {
-        hash ^= byte as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
-}
-
 /// Compute the effective outline width in pixels, matching the GPU renderer's
 /// `resolve_outline_px(font_size, outline_width)` exactly:
 /// `(font_size * 0.06).clamp(1.0, 2.6) * outline_width.clamp(0.0, 4.0)`
@@ -466,15 +548,14 @@ pub struct DfmPlusFontMetrics {
 pub fn dfm_plus_font_metrics(
     font_size: f64,
     outline_width: f64,
-    custom_font_bytes: Option<Vec<u8>>,
+    _custom_font_bytes: Option<Vec<u8>>,
 ) -> Result<DfmPlusFontMetrics, String> {
-    let measurer = crate::dfm_core::measure::FontMeasurer::new(custom_font_bytes)?;
     let fs = font_size as f32;
     let ow = outline_width as f32;
     Ok(DfmPlusFontMetrics {
-        ascent: measurer.line_ascent(fs) as f64,
-        descent: measurer.line_descent(fs) as f64,
-        line_height: measurer.line_height(fs) as f64,
+        ascent: (fs * 0.9) as f64,
+        descent: (fs * 0.3) as f64,
+        line_height: crate::dfm_core::measure::measure_line_height_heuristic(fs) as f64,
         outline_px: resolve_outline_px(fs, ow) as f64,
     })
 }
@@ -487,10 +568,9 @@ pub fn dfm_plus_font_metrics(
 pub fn dfm_plus_measure_text_width(
     text: String,
     font_size: f64,
-    custom_font_bytes: Option<Vec<u8>>,
+    _custom_font_bytes: Option<Vec<u8>>,
 ) -> Result<f64, String> {
-    let measurer = crate::dfm_core::measure::FontMeasurer::new(custom_font_bytes)?;
-    Ok(measurer.measure_width(&text, font_size as f32) as f64)
+    Ok(crate::dfm_core::measure::measure_text_width_heuristic(&text, font_size as f32) as f64)
 }
 
 /// Measure widths of multiple text strings in a single call (amortizes font loading).
@@ -498,13 +578,79 @@ pub fn dfm_plus_measure_text_width(
 pub fn dfm_plus_measure_text_widths(
     texts: Vec<String>,
     font_size: f64,
-    custom_font_bytes: Option<Vec<u8>>,
+    _custom_font_bytes: Option<Vec<u8>>,
 ) -> Result<Vec<f64>, String> {
-    let measurer = crate::dfm_core::measure::FontMeasurer::new(custom_font_bytes)?;
     Ok(texts
         .iter()
-        .map(|t| measurer.measure_width(t, font_size as f32) as f64)
+        .map(|t| crate::dfm_core::measure::measure_text_width_heuristic(t, font_size as f32) as f64)
         .collect())
+}
+
+pub fn dfm_plus_prepare_layout_full(
+    raw_items: Vec<DfmPlusRawDanmakuItem>,
+    width: f64,
+    height: f64,
+    font_size: f64,
+    display_area: f64,
+    scroll_duration_seconds: f64,
+    allow_stacking: bool,
+    merge_danmaku: bool,
+    max_quantity: Option<u32>,
+    max_lines_per_type: Option<u32>,
+    track_gap_ratio: f64,
+    outline_width: f64,
+    _custom_font_bytes: Option<Vec<u8>>,
+) -> Result<DfmPlusPreparedLayout, String> {
+    let fs = font_size as f32;
+    let ow = outline_width as f32;
+    let _outline_px = resolve_outline_px(fs, ow);
+
+    let paint_height = crate::dfm_core::measure::measure_line_height_heuristic(fs) as f64;
+    let widths: Vec<f64> = raw_items
+        .iter()
+        .map(|raw| crate::dfm_core::measure::measure_text_width_heuristic(&raw.text, fs) as f64)
+        .collect();
+
+    let items: Vec<DfmPlusDanmakuItem> = raw_items
+        .into_iter()
+        .enumerate()
+        .map(|(i, raw)| {
+            let w = widths.get(i).copied().unwrap_or(font_size * 0.55);
+            DfmPlusDanmakuItem {
+                time_seconds: raw.time_seconds,
+                text: raw.text,
+                type_code: raw.type_code,
+                color_argb: raw.color_argb,
+                is_me: raw.is_me,
+                paint_width: w,
+                paint_height,
+            }
+        })
+        .collect();
+
+    dfm_plus_prepare_layout(DfmPlusPrepareRequest {
+        items,
+        width,
+        height,
+        font_size,
+        display_area,
+        scroll_duration_seconds,
+        allow_stacking,
+        merge_danmaku,
+        max_quantity,
+        max_lines_per_type,
+        track_gap_ratio,
+        outline_width,
+    })
+}
+
+#[derive(Debug, Clone)]
+pub struct DfmPlusRawDanmakuItem {
+    pub time_seconds: f64,
+    pub text: String,
+    pub type_code: i32,
+    pub color_argb: i32,
+    pub is_me: bool,
 }
 
 #[cfg(test)]
@@ -909,7 +1055,7 @@ mod tests {
                 item.index = i as u32;
                 if raw.paint_width > 0.0 && raw.paint_height >0.0 {
                     item.paint_width = raw.paint_width as f32 + outline_px *2.0;
-                    item.paint_height = raw.paint_height as f32 + outline_px * 2.0;
+                    item.paint_height = raw.paint_height as f32;
                     item.measure_flag = global_flags.measure_flag;
                 }
                 item
@@ -979,12 +1125,13 @@ mod tests {
             }
             item.measure(width, height, &global_flags);
             let is_top = item.danmaku_type == crate::dfm_core::model::DanmakuType::FixTop;
-            let (placed, displaced_index) = retainer.fix(
+            let (placed, _displaced_index) = retainer.fix(
                 item,
                 width,
                 height,
                 &global_flags,
-                display_area
+                display_area,
+                false,
             );
             if is_top {
                 if placed {
