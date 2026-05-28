@@ -917,6 +917,10 @@ class SubtitleManager extends ChangeNotifier {
             final cachedPath = await RemoteSubtitleService.instance
                 .ensureSubtitleCached(selected);
 
+            // 在加载字幕之前先下载远程字体，确保 libass 解析 ASS 时能找到字体
+            // 必须在 setExternalSubtitle 之前完成，否则 libass 无法匹配字体
+            await _prefetchRemoteFontsForSubtitle(videoPath, cachedPath);
+
             // 等待一段时间确保播放器准备好
             await Future.delayed(_autoLoadPlayerReadyDelay);
 
@@ -925,9 +929,6 @@ class SubtitleManager extends ChangeNotifier {
 
             // 保存这个自动找到的字幕路径，下次可以直接使用
             saveVideoSubtitleMapping(videoPath, cachedPath);
-
-            // 异步预取远程字体（ASS/SSA 字幕可能引用服务端上的字体文件）
-            unawaited(_prefetchRemoteFontsForSubtitle(videoPath, cachedPath));
 
             // 设置完成后强制刷新状态
             await Future.delayed(_autoLoadStateSettleDelay);
@@ -1325,8 +1326,8 @@ class SubtitleManager extends ChangeNotifier {
   }
 
   /// 异步预取远程媒体库中的字体文件到本地 subtitle_fonts 缓存
-  /// 当远程 ASS/SSA 字幕被缓存后，检查字幕内容中引用的字体，
-  /// 从服务端下载对应字体文件，使 libass 渲染时能自动找到字体
+  /// 当远程 ASS/SSA 字幕被缓存后，从服务端下载所有关联的字体文件，
+  /// 并将 sub-fonts-dir 设置为 subtitle_fonts 目录，使 libass 渲染时能自动找到字体
   Future<void> _prefetchRemoteFontsForSubtitle(
     String videoPath,
     String cachedSubtitlePath,
@@ -1338,16 +1339,11 @@ class SubtitleManager extends ChangeNotifier {
       final ext = p.extension(cachedSubtitlePath).toLowerCase();
       if (ext != '.ass' && ext != '.ssa') return;
 
-      // 读取字幕文件内容并提取字体名
-      final subtitleFile = File(cachedSubtitlePath);
-      if (!await subtitleFile.exists()) return;
-      final content = await subtitleFile.readAsString();
-      final fontNames = extractAssFontNames(content);
-      if (fontNames.isEmpty) return;
-
-      debugPrint('SubtitleManager: 检测到远程字幕引用字体: $fontNames，开始从远程预取...');
-
       // 获取远程字体候选列表
+      // 服务端在检测到 ASS/SSA 字幕时已将同目录下所有字体标记为 isLikelyMatch，
+      // 因此直接下载全部候选字体，而非仅按 ASS Fontname 匹配
+      // （ASS 中的 Fontname 可能是中文名如"思源黑体 CN"，而文件名是英文如
+      //  "SourceHanSansCN-Regular.ttf"，按名称匹配几乎不可能成功）
       final fontCandidates = await RemoteSubtitleService.instance
           .listFontsForVideo(videoPath);
       if (fontCandidates.isEmpty) {
@@ -1355,33 +1351,32 @@ class SubtitleManager extends ChangeNotifier {
         return;
       }
 
-      // 对每个引用的字体，尝试在远程候选中找到并下载
-      for (final fontName in fontNames) {
-        // 尝试匹配：字体文件名（不含扩展名）与引用的字体名一致
-        RemoteFontCandidate? matched;
-        for (final candidate in fontCandidates) {
-          final candidateBaseName = p.basenameWithoutExtension(candidate.name);
-          if (candidateBaseName == fontName ||
-              candidateBaseName.toLowerCase() == fontName.toLowerCase()) {
-            matched = candidate;
-            break;
-          }
-        }
-        // 如果没有精确匹配，尝试模糊匹配
-        matched ??= fontCandidates.where((c) {
-          final baseName = p.basenameWithoutExtension(c.name).toLowerCase();
-          return baseName.contains(fontName.toLowerCase()) ||
-              fontName.toLowerCase().contains(baseName);
-        }).firstOrNull;
+      debugPrint(
+        'SubtitleManager: 远程媒体库提供 ${fontCandidates.length} 个字体文件，开始下载...',
+      );
 
-        if (matched != null) {
-          try {
-            final cachedFontPath = await RemoteSubtitleService.instance
-                .ensureFontCached(matched);
-            debugPrint('SubtitleManager: 远程字体已缓存: $cachedFontPath');
-          } catch (e) {
-            debugPrint('SubtitleManager: 下载远程字体 $fontName 失败: $e');
-          }
+      bool anyFontCached = false;
+      for (final candidate in fontCandidates) {
+        try {
+          final cachedFontPath = await RemoteSubtitleService.instance
+              .ensureFontCached(candidate);
+          anyFontCached = true;
+          debugPrint('SubtitleManager: 远程字体已缓存: $cachedFontPath');
+        } catch (e) {
+          debugPrint('SubtitleManager: 下载远程字体 ${candidate.name} 失败: $e');
+        }
+      }
+
+      // 字体下载完成后，立即更新播放器的 sub-fonts-dir 指向 subtitle_fonts 目录，
+      // 确保 libass 能在当前播放会话中找到新下载的字体
+      if (anyFontCached) {
+        try {
+          final baseDir = await StorageService.getAppStorageDirectory();
+          final fontsDir = p.join(baseDir.path, 'subtitle_fonts');
+          _player.setProperty('sub-fonts-dir', fontsDir);
+          debugPrint('SubtitleManager: 已更新 sub-fonts-dir=$fontsDir');
+        } catch (e) {
+          debugPrint('SubtitleManager: 更新 sub-fonts-dir 失败: $e');
         }
       }
     } catch (e) {

@@ -1979,7 +1979,36 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           effectiveFontDir = savedFontDir;
           _subtitleFontDir = savedFontDir;
         } else {
-          _subtitleFontDir = '';
+          // 没有用户手动设置的字体目录时，检查 subtitle_fonts 缓存目录
+          // 远程视频（http/jellyfin/emby）下载的字幕字体存放在此目录
+          try {
+            final baseDir = await StorageService.getAppStorageDirectory();
+            final cacheFontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+            if (await cacheFontsDir.exists()) {
+              bool hasFontFiles = false;
+              await for (final entity in cacheFontsDir.list()) {
+                if (entity is File) {
+                  final ext = p.extension(entity.path).toLowerCase();
+                  if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
+                    hasFontFiles = true;
+                    break;
+                  }
+                }
+              }
+              if (hasFontFiles) {
+                effectiveFontDir = cacheFontsDir.path;
+                _subtitleFontDir = cacheFontsDir.path;
+                debugPrint('[VideoPlayerState] 使用 subtitle_fonts 缓存目录: $effectiveFontDir');
+              } else {
+                _subtitleFontDir = '';
+              }
+            } else {
+              _subtitleFontDir = '';
+            }
+          } catch (e) {
+            debugPrint('[VideoPlayerState] 检查 subtitle_fonts 缓存目录失败: $e');
+            _subtitleFontDir = '';
+          }
         }
       }
 
