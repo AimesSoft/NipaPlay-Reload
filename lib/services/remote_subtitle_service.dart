@@ -743,6 +743,8 @@ class RemoteSubtitleService {
       fragment: '',
     );
 
+    debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: requestUri=$requestUri, audioPath=${info.audioPath}, audioFilePath=${info.audioFilePath}');
+
     final headers = <String, String>{
       'accept': 'application/json',
       'user-agent': 'NipaPlay',
@@ -765,11 +767,13 @@ class RemoteSubtitleService {
     Response<String> response;
     try {
       response = await dio.get<String>(requestUri.toString());
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP请求失败: $e');
       return const [];
     }
 
     final status = response.statusCode ?? 0;
+    debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
     if (status != 200) {
       return const [];
     }
@@ -785,7 +789,8 @@ class RemoteSubtitleService {
       payload = decoded is Map<String, dynamic>
           ? decoded
           : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: JSON解析失败: $e');
       return const [];
     }
     if (payload.isEmpty) {
@@ -794,8 +799,11 @@ class RemoteSubtitleService {
 
     final rawItems = payload['items'];
     if (rawItems is! List) {
+      debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: payload中无items, keys=${payload.keys.toList()}');
       return const [];
     }
+
+    debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: rawItems count=${rawItems.length}');
 
     final candidates = <RemoteAudioCandidate>[];
     for (final item in rawItems) {

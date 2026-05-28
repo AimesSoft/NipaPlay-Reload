@@ -655,6 +655,7 @@ class LocalMediaShareService {
     final String videoBaseName = p.basenameWithoutExtension(videoPath).toLowerCase();
 
     // 检查是否存在同名 ASS/SSA 字幕（如果有，则所有字体都标记为 isLikelyMatch）
+    // 同时检查视频同级目录和子目录中的字幕
     bool hasAssSubtitle = false;
     await for (final entry in videoDir.list(followLinks: false)) {
       if (entry is! File) continue;
@@ -670,32 +671,19 @@ class LocalMediaShareService {
 
     final List<Map<String, dynamic>> items = <Map<String, dynamic>>[];
 
+    // 扫描视频同级目录中的字体文件
+    await _collectFontFiles(videoDir, videoDir, hasAssSubtitle, items);
+
+    // 扫描子目录中的字体文件（如 Fonts/、fonts/ 等常见子目录）
+    // 许多字幕组（如 VCB-Studio）将字体放在 Fonts/ 子目录中
     await for (final entry in videoDir.list(followLinks: false)) {
-      if (entry is! File) continue;
-
-      final filePath = entry.path;
-      final ext = p.extension(filePath).toLowerCase();
-      if (!_fontExtensions.contains(ext)) {
-        continue;
+      if (entry is! Directory) continue;
+      final dirName = p.basename(entry.path);
+      final dirNameLower = dirName.toLowerCase();
+      // 只扫描可能的字体子目录，避免遍历不相关的深层目录
+      if (dirNameLower == 'fonts' || dirNameLower == 'font') {
+        await _collectFontFiles(entry, videoDir, hasAssSubtitle, items);
       }
-
-      FileStat stat;
-      try {
-        stat = await entry.stat();
-      } catch (_) {
-        continue;
-      }
-      if (stat.type != FileSystemEntityType.file) {
-        continue;
-      }
-
-      items.add({
-        'name': p.basename(filePath),
-        'extension': ext,
-        'size': stat.size,
-        'lastModified': stat.modified.toIso8601String(),
-        'isLikelyMatch': hasAssSubtitle,
-      });
     }
 
     items.sort((a, b) {
@@ -705,6 +693,55 @@ class LocalMediaShareService {
     });
 
     return items;
+  }
+
+  /// 递归收集目录中的字体文件，返回的 name 使用相对于 videoDir 的相对路径
+  Future<void> _collectFontFiles(
+    Directory scanDir,
+    Directory videoDir,
+    bool isLikelyMatch,
+    List<Map<String, dynamic>> items,
+  ) async {
+    if (!await scanDir.exists()) return;
+
+    await for (final entry in scanDir.list(followLinks: false)) {
+      if (entry is File) {
+        final filePath = entry.path;
+        final ext = p.extension(filePath).toLowerCase();
+        if (!_fontExtensions.contains(ext)) continue;
+
+        FileStat stat;
+        try {
+          stat = await entry.stat();
+        } catch (_) {
+          continue;
+        }
+        if (stat.type != FileSystemEntityType.file) continue;
+
+        // 使用相对于 videoDir 的路径作为 name，以便客户端请求时能在子目录中找到文件
+        final relativePath = p.relative(filePath, from: videoDir.path);
+        // 统一使用正斜杠，兼容不同平台的路径分隔符
+        final normalizedName = relativePath.replaceAll('\\', '/');
+
+        items.add({
+          'name': normalizedName,
+          'extension': ext,
+          'size': stat.size,
+          'lastModified': stat.modified.toIso8601String(),
+          'isLikelyMatch': isLikelyMatch,
+        });
+      } else if (entry is Directory) {
+        // 对于 Fonts/ 等已知子目录下的进一步子目录也递归扫描
+        final dirName = p.basename(entry.path).toLowerCase();
+        if (dirName != 'fonts' && dirName != 'font') {
+          // 只在已知字体目录内部递归，避免无限制遍历
+          final parentName = p.basename(scanDir.path).toLowerCase();
+          if (parentName == 'fonts' || parentName == 'font') {
+            await _collectFontFiles(entry, videoDir, isLikelyMatch, items);
+          }
+        }
+      }
+    }
   }
 
   Future<Response> buildExternalAudioResponse(
@@ -790,10 +827,10 @@ class LocalMediaShareService {
       return Response.notFound('Font not found');
     }
 
-    final fontFile = await _resolveFileByName(
+    // 字体文件可能在视频同级目录或子目录（如 Fonts/）中
+    final fontFile = await _resolveFontFileByName(
       videoPath: videoPath,
-      fileName: fontName,
-      allowedExtensions: _fontExtensions,
+      fontName: fontName,
     );
     if (fontFile == null) {
       return Response.notFound('Font not found');
@@ -1049,6 +1086,64 @@ class LocalMediaShareService {
 
     final resolvedPath = p.join(videoFile.parent.path, sanitizedName);
     final resolvedFile = File(resolvedPath);
+    if (!await resolvedFile.exists()) {
+      return null;
+    }
+
+    return resolvedFile;
+  }
+
+  /// 解析字体文件路径，支持相对于视频目录的子目录路径（如 Fonts/xxx.ttf）
+  /// 安全性：只允许在视频同级目录及其子目录内查找，防止路径遍历
+  Future<File?> _resolveFontFileByName({
+    required String videoPath,
+    required String fontName,
+  }) async {
+    final normalizedName = fontName.trim();
+    if (normalizedName.isEmpty) {
+      return null;
+    }
+
+    // 统一使用正斜杠
+    final normalizedSlash = normalizedName.replaceAll('\\', '/');
+
+    // 验证扩展名
+    final basename = p.basename(normalizedSlash);
+    final ext = p.extension(basename).toLowerCase();
+    if (!_fontExtensions.contains(ext)) {
+      return null;
+    }
+
+    // 安全检查：禁止路径遍历（..）和绝对路径
+    final segments = normalizedSlash.split('/');
+    for (final segment in segments) {
+      if (segment == '..' || segment.isEmpty && segments.length > 1) {
+        return null;
+      }
+    }
+
+    final videoFile = File(videoPath);
+    if (!await videoFile.exists()) {
+      return null;
+    }
+
+    final videoDir = videoFile.parent.path;
+    final resolvedPath = p.join(videoDir, normalizedSlash);
+
+    // 确保解析后的路径仍在视频目录内（安全边界检查）
+    final canonicalVideoDir = await Directory(videoDir).resolveSymbolicLinks();
+    final resolvedFile = File(resolvedPath);
+    String canonicalResolvedPath;
+    try {
+      canonicalResolvedPath = await resolvedFile.resolveSymbolicLinks();
+    } catch (_) {
+      return null;
+    }
+
+    if (!canonicalResolvedPath.startsWith(canonicalVideoDir)) {
+      return null;
+    }
+
     if (!await resolvedFile.exists()) {
       return null;
     }

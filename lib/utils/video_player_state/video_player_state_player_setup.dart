@@ -333,9 +333,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // MediaKit/mpv: 通过audio-add命令在主媒体加载后添加外部音频
       if (isMediaKitKernel) {
+        debugPrint('[MKA_DEBUG] MediaKit内核: 开始检测外挂音轨, videoPath=$videoPath');
         final mkaPath = await _audioTrackManager.detectExternalAudioPath(videoPath);
+        debugPrint('[MKA_DEBUG] MediaKit内核: detectExternalAudioPath 返回 mkaPath=$mkaPath');
         if (mkaPath != null) {
           _audioTrackManager.preloadExternalAudioForMediaKit(mkaPath);
+          debugPrint('[MKA_DEBUG] MediaKit内核: 已预加载外部音频: $mkaPath');
+        } else {
+          debugPrint('[MKA_DEBUG] MediaKit内核: 未检测到外挂音轨');
         }
       }
 
