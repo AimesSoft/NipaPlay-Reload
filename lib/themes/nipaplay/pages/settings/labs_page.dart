@@ -43,8 +43,8 @@ class LabsPage extends StatelessWidget {
               height: 1,
             ),
             SettingsItem.toggle(
-              title: '显示 Next2 弹幕内核',
-              subtitle: '开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2',
+              title: '显示 Next2和 DFM+ 弹幕内核',
+              subtitle: '开启后，弹幕渲染引擎下拉菜单显示 NipaPlay Next2 和 DFM+',
               icon: Ionicons.flask_outline,
               value: labsSettings.enableNext2DanmakuKernel,
               onChanged: (bool value) {

@@ -18,6 +18,9 @@ enum DanmakuRenderEngine {
 
   /// NipaPlay Next2 弹幕逻辑 + Rust 渲染内核
   next2,
+
+  /// DFM+ 弹幕引擎（B站 DanmakuFlameMaster 算法 + Rust + GPU 渲染）
+  dfmPlus,
 }
 
 /// 负责读写弹幕渲染引擎设置的工厂类
@@ -84,7 +87,8 @@ class DanmakuKernelFactory {
   }
 
   static DanmakuRenderEngine _sanitizeEngine(DanmakuRenderEngine engine) {
-    if (engine == DanmakuRenderEngine.next2 &&
+    if ((engine == DanmakuRenderEngine.next2 ||
+            engine == DanmakuRenderEngine.dfmPlus) &&
         !Next2PlatformSupport.isKernelSupported) {
       return DanmakuRenderEngine.nipaplayNext;
     }

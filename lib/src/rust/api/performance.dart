@@ -6,96 +6,106 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-
-            // These functions are ignored because they are not marked as `pub`: `now_millis`, `num_cpus`, `parse_ioreg_percent_stat`, `sample_gpu_macos`, `sample_gpu`, `sample_process_cpu_macos`, `sample_process_cpu`, `sample_process_memory_macos`, `sample_process_memory`
+// These functions are ignored because they are not marked as `pub`: `now_millis`, `num_cpus`, `parse_ioreg_percent_stat`, `sample_gpu_macos`, `sample_gpu`, `sample_process_cpu_macos`, `sample_process_cpu`, `sample_process_memory_macos`, `sample_process_memory`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RustMemorySample`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`, `fmt`, `fmt`
 
+bool isPerformanceProbeAvailable() =>
+    RustLib.instance.api.crateApiPerformanceIsPerformanceProbeAvailable();
 
-            bool  isPerformanceProbeAvailable() => RustLib.instance.api.crateApiPerformanceIsPerformanceProbeAvailable();
+Future<RustPerformanceSample> samplePerformance() =>
+    RustLib.instance.api.crateApiPerformanceSamplePerformance();
 
-Future<RustPerformanceSample>  samplePerformance() => RustLib.instance.api.crateApiPerformanceSamplePerformance();
+Future<RustCpuSample> sampleCpuCounters() =>
+    RustLib.instance.api.crateApiPerformanceSampleCpuCounters();
 
-Future<RustCpuSample>  sampleCpuCounters() => RustLib.instance.api.crateApiPerformanceSampleCpuCounters();
+Future<double> sampleMemoryRssMb() =>
+    RustLib.instance.api.crateApiPerformanceSampleMemoryRssMb();
 
-Future<double>  sampleMemoryRssMb() => RustLib.instance.api.crateApiPerformanceSampleMemoryRssMb();
+Future<RustGpuSample> sampleGpuPercent() =>
+    RustLib.instance.api.crateApiPerformanceSampleGpuPercent();
 
-Future<RustGpuSample>  sampleGpuPercent() => RustLib.instance.api.crateApiPerformanceSampleGpuPercent();
+class RustCpuSample {
+  final PlatformInt64 processCpuMicros;
+  final PlatformInt64 timestampMs;
+  final int logicalCpus;
 
-            class RustCpuSample  {
-                final PlatformInt64 processCpuMicros;
-final PlatformInt64 timestampMs;
-final int logicalCpus;
+  const RustCpuSample({
+    required this.processCpuMicros,
+    required this.timestampMs,
+    required this.logicalCpus,
+  });
 
-                const RustCpuSample({required this.processCpuMicros ,required this.timestampMs ,required this.logicalCpus ,});
+  @override
+  int get hashCode =>
+      processCpuMicros.hashCode ^ timestampMs.hashCode ^ logicalCpus.hashCode;
 
-                
-                
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustCpuSample &&
+          runtimeType == other.runtimeType &&
+          processCpuMicros == other.processCpuMicros &&
+          timestampMs == other.timestampMs &&
+          logicalCpus == other.logicalCpus;
+}
 
-                
-        @override
-        int get hashCode => processCpuMicros.hashCode^timestampMs.hashCode^logicalCpus.hashCode;
-        
+class RustGpuSample {
+  final double gpuPercent;
+  final String source;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is RustCpuSample &&
-                runtimeType == other.runtimeType
-                && processCpuMicros == other.processCpuMicros&& timestampMs == other.timestampMs&& logicalCpus == other.logicalCpus;
-        
-            }
+  const RustGpuSample({
+    required this.gpuPercent,
+    required this.source,
+  });
 
-class RustGpuSample  {
-                final double gpuPercent;
-final String source;
+  @override
+  int get hashCode => gpuPercent.hashCode ^ source.hashCode;
 
-                const RustGpuSample({required this.gpuPercent ,required this.source ,});
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustGpuSample &&
+          runtimeType == other.runtimeType &&
+          gpuPercent == other.gpuPercent &&
+          source == other.source;
+}
 
-                
-                
+class RustPerformanceSample {
+  final double? cpuProcessPercent;
+  final double? memoryRssMb;
+  final double? gpuPercent;
+  final String source;
+  final PlatformInt64 timestampMs;
+  final String? note;
 
-                
-        @override
-        int get hashCode => gpuPercent.hashCode^source.hashCode;
-        
+  const RustPerformanceSample({
+    this.cpuProcessPercent,
+    this.memoryRssMb,
+    this.gpuPercent,
+    required this.source,
+    required this.timestampMs,
+    this.note,
+  });
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is RustGpuSample &&
-                runtimeType == other.runtimeType
-                && gpuPercent == other.gpuPercent&& source == other.source;
-        
-            }
+  @override
+  int get hashCode =>
+      cpuProcessPercent.hashCode ^
+      memoryRssMb.hashCode ^
+      gpuPercent.hashCode ^
+      source.hashCode ^
+      timestampMs.hashCode ^
+      note.hashCode;
 
-class RustPerformanceSample  {
-                final double? cpuProcessPercent;
-final double? memoryRssMb;
-final double? gpuPercent;
-final String source;
-final PlatformInt64 timestampMs;
-final String? note;
-
-                const RustPerformanceSample({this.cpuProcessPercent ,this.memoryRssMb ,this.gpuPercent ,required this.source ,required this.timestampMs ,this.note ,});
-
-                
-                
-
-                
-        @override
-        int get hashCode => cpuProcessPercent.hashCode^memoryRssMb.hashCode^gpuPercent.hashCode^source.hashCode^timestampMs.hashCode^note.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is RustPerformanceSample &&
-                runtimeType == other.runtimeType
-                && cpuProcessPercent == other.cpuProcessPercent&& memoryRssMb == other.memoryRssMb&& gpuPercent == other.gpuPercent&& source == other.source&& timestampMs == other.timestampMs&& note == other.note;
-        
-            }
-            
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RustPerformanceSample &&
+          runtimeType == other.runtimeType &&
+          cpuProcessPercent == other.cpuProcessPercent &&
+          memoryRssMb == other.memoryRssMb &&
+          gpuPercent == other.gpuPercent &&
+          source == other.source &&
+          timestampMs == other.timestampMs &&
+          note == other.note;
+}

@@ -318,6 +318,8 @@ class _CupertinoPlayerSettingsPageState
         return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
       case DanmakuRenderEngine.next2:
         return Next2PlatformSupport.description;
+      case DanmakuRenderEngine.dfmPlus:
+        return 'DFM+ 弹幕引擎\n移植自 B 站的 DanmakuFlameMaster「烈焰弹幕使」，结合 Rust 计算层和 GPU 渲染。';
     }
   }
 
@@ -385,6 +387,8 @@ class _CupertinoPlayerSettingsPageState
         return context.l10n.danmakuRenderEngineTitleNipaplayNext;
       case DanmakuRenderEngine.next2:
         return 'NipaPlay Next2';
+      case DanmakuRenderEngine.dfmPlus:
+        return 'DFM+';
     }
   }
 

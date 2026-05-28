@@ -64,7 +64,12 @@ List<Map<String, dynamic>> parseDanmakuListInBackground(List<dynamic>? rawDanmak
               standardizedItem['type'] = 'scroll';
           }
         } else if (danmakuItem.containsKey('type')) {
-          standardizedItem['type'] = danmakuItem['type']?.toString() ?? 'scroll';
+          final typeValue = danmakuItem['type'];
+          if (typeValue is num) {
+            standardizedItem['type'] = typeValue.toInt();
+          } else {
+            standardizedItem['type'] = typeValue?.toString() ?? 'scroll';
+          }
         } else {
           standardizedItem['type'] = 'scroll';
         }

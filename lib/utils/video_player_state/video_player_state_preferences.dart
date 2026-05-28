@@ -2076,6 +2076,23 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  Future<void> _loadDanmakuDfmPlusTrackGap() async {
+    final prefs = await SharedPreferences.getInstance();
+    _danmakuDfmPlusTrackGap = prefs.getDouble(_danmakuDfmPlusTrackGapKey) ?? 0.15;
+    _notifyListeners();
+  }
+
+  Future<void> setDanmakuDfmPlusTrackGap(double gap) async {
+    final normalized = gap.clamp(0.0, 2.0);
+    if ((_danmakuDfmPlusTrackGap - normalized).abs() < 0.0001) {
+      return;
+    }
+    _danmakuDfmPlusTrackGap = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_danmakuDfmPlusTrackGapKey, normalized);
+    _notifyListeners();
+  }
+
   // 获取弹幕轨道间距倍数（基于字体大小计算）
   double get danmakuTrackHeightMultiplier {
     // 使用默认的轨道高度倍数1.5，根据字体大小的比例调整
