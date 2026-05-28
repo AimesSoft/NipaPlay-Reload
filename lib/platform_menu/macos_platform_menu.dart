@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -55,6 +57,11 @@ class MacosPlatformMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // PlatformMenuBar 的 PlatformProvidedMenuItem 仅在 macOS 上支持，
+    // 其他平台直接返回子组件。
+    if (kIsWeb || !Platform.isMacOS) {
+      return child;
+    }
     return PlatformMenuBar(
       menus: _buildMenus(),
       child: child,
