@@ -3,39 +3,49 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+/// 单个导航菜单项
+class NavigationItem {
+  const NavigationItem({required this.label, required this.onSelected});
+
+  final String label;
+  final VoidCallback onSelected;
+}
+
 /// macOS PlatformMenuBar wrapper for NipaPlay.
 ///
-/// Replaces the native XIB-based menu bar with Flutter's PlatformMenuBar API,
-/// allowing menu structure and callbacks to be defined entirely in Dart.
+/// [navigationItems] 动态传入当前可见的导航页面，
+/// 菜单会自动分配 Cmd+1, Cmd+2, ... 快捷键。
+///
+/// 或使用 [navigationItemsBuilder] 从 context 动态构建导航项。
 class MacosPlatformMenu extends StatelessWidget {
   const MacosPlatformMenu({
     super.key,
     required this.child,
+    this.navigationItems,
+    this.navigationItemsBuilder,
     this.onUploadVideo,
-    this.onOpenHome,
-    this.onOpenVideoPlayback,
-    this.onOpenMediaLibrary,
     this.onOpenSettings,
     this.onShowAbout,
     this.onShowHelp,
     this.onOpenGitHub,
     this.onOpenWebsite,
     this.onCloseWindow,
-  });
+  }) : assert(
+          navigationItems != null || navigationItemsBuilder != null,
+          'Either navigationItems or navigationItemsBuilder must be provided',
+        );
 
   final Widget child;
 
+  /// 当前可见的导航页面列表（静态传入）
+  final List<NavigationItem>? navigationItems;
+
+  /// 从 context 动态构建导航项（优先于 navigationItems）
+  final List<NavigationItem> Function(BuildContext context)?
+      navigationItemsBuilder;
+
   /// 上传视频 (Cmd+U)
   final VoidCallback? onUploadVideo;
-
-  /// 主页 (Cmd+1)
-  final VoidCallback? onOpenHome;
-
-  /// 视频播放 (Cmd+2)
-  final VoidCallback? onOpenVideoPlayback;
-
-  /// 媒体库 (Cmd+3)
-  final VoidCallback? onOpenMediaLibrary;
 
   /// 偏好设置 (Cmd+,)
   final VoidCallback? onOpenSettings;
@@ -55,6 +65,13 @@ class MacosPlatformMenu extends StatelessWidget {
   /// 关闭窗口 (Cmd+W)
   final VoidCallback? onCloseWindow;
 
+  List<NavigationItem> _resolveNavigationItems(BuildContext context) {
+    if (navigationItemsBuilder != null) {
+      return navigationItemsBuilder!(context);
+    }
+    return navigationItems ?? const [];
+  }
+
   @override
   Widget build(BuildContext context) {
     // PlatformMenuBar 的 PlatformProvidedMenuItem 仅在 macOS 上支持，
@@ -63,16 +80,16 @@ class MacosPlatformMenu extends StatelessWidget {
       return child;
     }
     return PlatformMenuBar(
-      menus: _buildMenus(),
+      menus: _buildMenus(context),
       child: child,
     );
   }
 
-  List<PlatformMenuItem> _buildMenus() {
+  List<PlatformMenuItem> _buildMenus(BuildContext context) {
     return <PlatformMenuItem>[
       _buildAppMenu(),
       _buildFileMenu(),
-      _buildNavigationMenu(),
+      _buildNavigationMenu(context),
       _buildWindowMenu(),
       _buildHelpMenu(),
     ];
@@ -83,13 +100,11 @@ class MacosPlatformMenu extends StatelessWidget {
     return PlatformMenu(
       label: 'NipaPlay',
       menus: <PlatformMenuItem>[
-        // 关于 NipaPlay
         if (onShowAbout != null)
           PlatformMenuItem(
             label: '关于 NipaPlay',
             onSelected: onShowAbout,
           ),
-        // 偏好设置 (Cmd+,)
         if (onOpenSettings != null)
           PlatformMenuItem(
             label: '偏好设置...',
@@ -99,7 +114,6 @@ class MacosPlatformMenu extends StatelessWidget {
             ),
             onSelected: onOpenSettings,
           ),
-        // Services 子菜单 (系统提供)
         const PlatformMenuItemGroup(
           members: <PlatformMenuItem>[
             PlatformProvidedMenuItem(
@@ -107,7 +121,6 @@ class MacosPlatformMenu extends StatelessWidget {
             ),
           ],
         ),
-        // 隐藏 / 隐藏其他 / 显示全部 (系统提供)
         const PlatformMenuItemGroup(
           members: <PlatformMenuItem>[
             PlatformProvidedMenuItem(
@@ -121,7 +134,6 @@ class MacosPlatformMenu extends StatelessWidget {
             ),
           ],
         ),
-        // 退出 (系统提供)
         const PlatformMenuItemGroup(
           members: <PlatformMenuItem>[
             PlatformProvidedMenuItem(
@@ -168,42 +180,36 @@ class MacosPlatformMenu extends StatelessWidget {
     );
   }
 
-  /// 导航菜单
-  PlatformMenu _buildNavigationMenu() {
+  /// 导航菜单 — 根据当前可见的 Tab 动态生成快捷键
+  PlatformMenu _buildNavigationMenu(BuildContext context) {
+    const digitKeys = [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+      LogicalKeyboardKey.digit5,
+      LogicalKeyboardKey.digit6,
+      LogicalKeyboardKey.digit7,
+      LogicalKeyboardKey.digit8,
+      LogicalKeyboardKey.digit9,
+    ];
+
+    final navItems = _resolveNavigationItems(context);
+    final items = <PlatformMenuItem>[];
+    for (var i = 0; i < navItems.length && i < digitKeys.length; i++) {
+      items.add(
+        PlatformMenuItem(
+          label: navItems[i].label,
+          shortcut: SingleActivator(digitKeys[i], meta: true),
+          onSelected: navItems[i].onSelected,
+        ),
+      );
+    }
+
     return PlatformMenu(
       label: '导航',
       menus: <PlatformMenuItem>[
-        PlatformMenuItemGroup(
-          members: <PlatformMenuItem>[
-            if (onOpenHome != null)
-              PlatformMenuItem(
-                label: '主页',
-                shortcut: const SingleActivator(
-                  LogicalKeyboardKey.digit1,
-                  meta: true,
-                ),
-                onSelected: onOpenHome,
-              ),
-            if (onOpenVideoPlayback != null)
-              PlatformMenuItem(
-                label: '视频播放',
-                shortcut: const SingleActivator(
-                  LogicalKeyboardKey.digit2,
-                  meta: true,
-                ),
-                onSelected: onOpenVideoPlayback,
-              ),
-            if (onOpenMediaLibrary != null)
-              PlatformMenuItem(
-                label: '媒体库',
-                shortcut: const SingleActivator(
-                  LogicalKeyboardKey.digit3,
-                  meta: true,
-                ),
-                onSelected: onOpenMediaLibrary,
-              ),
-          ],
-        ),
+        PlatformMenuItemGroup(members: items),
       ],
     );
   }
