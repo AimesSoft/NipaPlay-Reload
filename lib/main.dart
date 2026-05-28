@@ -42,6 +42,7 @@ import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/downloader_settings_provider.dart';
+import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/ui_theme_provider.dart';
@@ -759,23 +760,56 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MacosPlatformMenu(
+      navigationItemsBuilder: (ctx) {
+        final webdav = ctx.read<WebDAVQuickAccessProvider>();
+        final downloader = ctx.read<DownloaderSettingsProvider>();
+        final showWebDAV = webdav.showWebDAVTab;
+        final showDownloader = globals.isDownloaderSupportedPlatform &&
+            downloader.enabled;
+        // 实际 Tab 顺序：主页(0), 视频(1), [WebDAV(2)], 媒体库, [下载器], 账户
+        final mediaLibIdx = showWebDAV ? 3 : 2;
+        final downloaderIdx = showWebDAV ? 4 : 3;
+        final accountIdx = showWebDAV
+            ? 5
+            : showDownloader
+                ? 4
+                : 3;
+        final items = <NavigationItem>[
+          NavigationItem(
+            label: AppLocalizations.of(ctx)!.tabHome,
+            onSelected: () => _navigateToPage(ctx, 0),
+          ),
+          NavigationItem(
+            label: AppLocalizations.of(ctx)!.tabVideoPlay,
+            onSelected: () => _navigateToPage(ctx, 1),
+          ),
+        ];
+        if (showWebDAV) {
+          items.add(NavigationItem(
+            label: 'WebDAV',
+            onSelected: () => _navigateToPage(ctx, 2),
+          ));
+        }
+        items.add(NavigationItem(
+          label: AppLocalizations.of(ctx)!.tabMediaLibrary,
+          onSelected: () => _navigateToPage(ctx, mediaLibIdx),
+        ));
+        if (showDownloader) {
+          items.add(NavigationItem(
+            label: AppLocalizations.of(ctx)!.tabTorrentDownload,
+            onSelected: () => _navigateToPage(ctx, downloaderIdx),
+          ));
+        }
+        items.add(NavigationItem(
+          label: AppLocalizations.of(ctx)!.tabAccount,
+          onSelected: () => _navigateToPage(ctx, accountIdx),
+        ));
+        return items;
+      },
       onUploadVideo: () {
         final ctx = navigatorKey.currentState?.overlay?.context;
         if (ctx != null) _showGlobalUploadDialog(ctx);
       },
-      onOpenHome: () {
-        final ctx = navigatorKey.currentState?.overlay?.context;
-        if (ctx != null) _navigateToPage(ctx, 0);
-      },
-      onOpenVideoPlayback: () {
-        final ctx = navigatorKey.currentState?.overlay?.context;
-        if (ctx != null) _navigateToPage(ctx, 1);
-      },
-      onOpenMediaLibrary: () {
-        final ctx = navigatorKey.currentState?.overlay?.context;
-        if (ctx != null) _navigateToPage(ctx, 2);
-      },
-
       onOpenSettings: () {
         final ctx = navigatorKey.currentState?.overlay?.context;
         if (ctx == null) return;
@@ -810,10 +844,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                 '• Cmd+W - 关闭窗口\n'
                 '• Cmd+Q - 退出应用\n'
                 '• Cmd+, - 偏好设置\n'
-                '• Cmd+1 - 主页\n'
-                '• Cmd+2 - 视频播放\n'
-                '• Cmd+3 - 媒体库\n'
-
+                '• Cmd+1~N - 切换标签页（根据当前显示的标签动态分配）\n\n'
                 '支持的视频格式：\n'
                 'MP4, MKV, AVI, MOV, WebM, WMV, M4V, 3GP, FLV, TS, M2TS',
               ),
@@ -1972,10 +2003,7 @@ Future<void> _showGlobalUploadDialog(BuildContext context) async {
 // 导航到特定页面逻辑
 void _navigateToPage(BuildContext context, int pageIndex) {
   MainPageState? mainPageState = MainPageState.of(context);
-  final resolvedPageIndex = _resolveRequestedPageIndex(
-    requestedIndex: pageIndex,
-    tabLength: mainPageState?.globalTabController?.length,
-  );
+  final resolvedPageIndex = pageIndex;
   print('[Dart] 准备导航到页面索引: $resolvedPageIndex');
 
   // 尝试获取MainPageState
