@@ -775,10 +775,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
         final ctx = navigatorKey.currentState?.overlay?.context;
         if (ctx != null) _navigateToPage(ctx, 2);
       },
-      onOpenNewSeries: () {
-        final ctx = navigatorKey.currentState?.overlay?.context;
-        if (ctx != null) _navigateToPage(ctx, 3);
-      },
+
       onOpenSettings: () {
         final ctx = navigatorKey.currentState?.overlay?.context;
         if (ctx == null) return;
@@ -816,7 +813,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                 '• Cmd+1 - 主页\n'
                 '• Cmd+2 - 视频播放\n'
                 '• Cmd+3 - 媒体库\n'
-                '• Cmd+4 - 新番更新\n\n'
+
                 '支持的视频格式：\n'
                 'MP4, MKV, AVI, MOV, WebM, WMV, M4V, 3GP, FLV, TS, M2TS',
               ),
