@@ -956,27 +956,49 @@ class RemoteSubtitleService {
     }
 
     final requestUri = candidate.audioUri.replace(userInfo: '');
+    debugPrint('[MKA_DEBUG] _downloadSharedRemoteAudio: 开始流式下载, uri=$requestUri');
+
+    // MKA/FLAC 文件通常很大（几十到几百MB），使用 ResponseType.stream 流式下载
+    // 避免将整个文件缓冲到内存导致 OOM 或连接超时
     final dio = Dio(
       BaseOptions(
-        connectTimeout: const Duration(milliseconds: 10000),
-        receiveTimeout: const Duration(milliseconds: 120000),
+        connectTimeout: const Duration(milliseconds: 15000),
+        receiveTimeout: const Duration(milliseconds: 300000), // 5分钟超时
         sendTimeout: const Duration(milliseconds: 10000),
         followRedirects: true,
-        responseType: ResponseType.bytes,
+        responseType: ResponseType.stream,
         headers: headers,
       ),
     );
 
-    final response = await dio.get<List<int>>(requestUri.toString());
+    final response = await dio.get<ResponseBody>(requestUri.toString());
     final status = response.statusCode ?? 0;
     if (status != 200 && status != 206) {
       throw Exception('共享媒体外挂音轨下载失败 (HTTP $status)');
     }
-    final data = response.data;
-    if (data == null || data.isEmpty) {
-      throw Exception('共享媒体外挂音轨返回空内容');
+
+    final body = response.data;
+    if (body == null) {
+      throw Exception('共享媒体外挂音轨返回空流');
     }
-    await destination.writeAsBytes(data, flush: true);
+
+    // 流式写入文件
+    final sink = destination.openWrite();
+    try {
+      await for (final chunk in body.stream) {
+        sink.add(chunk);
+      }
+      await sink.close();
+    } catch (e) {
+      try { await sink.close(); } catch (_) {}
+      rethrow;
+    }
+
+    final size = await destination.length();
+    debugPrint('[MKA_DEBUG] _downloadSharedRemoteAudio: 下载完成, size=$size bytes');
+    if (size == 0) {
+      throw Exception('共享媒体外挂音轨下载结果为空文件');
+    }
   }
 
   Future<void> _downloadSharedRemoteFont(
