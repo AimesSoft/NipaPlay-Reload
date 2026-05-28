@@ -382,8 +382,10 @@ class RemoteSubtitleService {
 
     final baseDir = await StorageService.getAppStorageDirectory();
     final cacheDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+    debugPrint('[FONT_DEBUG] ensureFontCached: baseDir=${baseDir.path}, subtitle_fonts=${cacheDir.path}, exists=${await cacheDir.exists()}');
     if (!await cacheDir.exists()) {
       await cacheDir.create(recursive: true);
+      debugPrint('[FONT_DEBUG] ensureFontCached: 创建了 subtitle_fonts 目录');
     }
 
     final extension =
@@ -392,10 +394,12 @@ class RemoteSubtitleService {
         'shared:${candidate.fontUri.replace(userInfo: '', fragment: '').toString()}';
     final hash = sha1.convert(utf8.encode(cacheKey)).toString();
     final target = File(p.join(cacheDir.path, '$hash$extension'));
+    debugPrint('[FONT_DEBUG] ensureFontCached: candidate=${candidate.name}, hash=$hash, target=${target.path}');
 
     if (!forceRefresh && await target.exists()) {
       final size = await target.length();
       if (size > 0) {
+        debugPrint('[FONT_DEBUG] ensureFontCached: 字体已缓存, size=$size, 跳过下载');
         return target.path;
       }
     }
@@ -411,8 +415,10 @@ class RemoteSubtitleService {
         await target.delete();
       }
       await tmp.rename(target.path);
+      debugPrint('[FONT_DEBUG] ensureFontCached: 下载完成, 最终路径=${target.path}, size=${await target.length()}');
       return target.path;
     } catch (e) {
+      debugPrint('[FONT_DEBUG] ensureFontCached: 下载失败: $e');
       if (await tmp.exists()) {
         await tmp.delete();
       }
@@ -835,6 +841,8 @@ class RemoteSubtitleService {
       fragment: '',
     );
 
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: requestUri=$requestUri, shareId=${info.shareId}, fontsPath=${info.fontsPath}, fontPath=${info.fontPath}');
+
     final headers = <String, String>{
       'accept': 'application/json',
       'user-agent': 'NipaPlay',
@@ -857,11 +865,13 @@ class RemoteSubtitleService {
     Response<String> response;
     try {
       response = await dio.get<String>(requestUri.toString());
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP请求失败: $e');
       return const [];
     }
 
     final status = response.statusCode ?? 0;
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
     if (status != 200) {
       return const [];
     }
@@ -877,7 +887,8 @@ class RemoteSubtitleService {
       payload = decoded is Map<String, dynamic>
           ? decoded
           : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: JSON解析失败: $e');
       return const [];
     }
     if (payload.isEmpty) {
@@ -886,8 +897,11 @@ class RemoteSubtitleService {
 
     final rawItems = payload['items'];
     if (rawItems is! List) {
+      debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: payload中无items字段, keys=${payload.keys.toList()}');
       return const [];
     }
+
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: rawItems count=${rawItems.length}');
 
     final candidates = <RemoteFontCandidate>[];
     for (final item in rawItems) {
@@ -918,6 +932,7 @@ class RemoteSubtitleService {
     }
 
     candidates.sort((a, b) => a.name.compareTo(b.name));
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: 最终候选数=${candidates.length}');
     return candidates;
   }
 
@@ -968,6 +983,7 @@ class RemoteSubtitleService {
     }
 
     final requestUri = candidate.fontUri.replace(userInfo: '');
+    debugPrint('[FONT_DEBUG] _downloadSharedRemoteFont: 请求字体 ${candidate.name}, uri=$requestUri');
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(milliseconds: 10000),
@@ -981,6 +997,7 @@ class RemoteSubtitleService {
 
     final response = await dio.get<List<int>>(requestUri.toString());
     final status = response.statusCode ?? 0;
+    debugPrint('[FONT_DEBUG] _downloadSharedRemoteFont: HTTP $status, data size=${response.data?.length ?? 0} bytes');
     if (status != 200 && status != 206) {
       throw Exception('共享媒体字体下载失败 (HTTP $status)');
     }
