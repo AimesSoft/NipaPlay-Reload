@@ -1,4 +1,4 @@
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -306,76 +306,242 @@ fn parse_ioreg_percent_stat(text: &str, key: &str) -> Option<f64> {
     number.parse::<f64>().ok()
 }
 
-#[cfg(target_os = "windows")]
-fn sample_process_cpu_windows() -> Result<RustCpuSample, String> {
-    let pid = std::process::id().to_string();
-    let command = format!("(Get-Process -Id {pid} | Select-Object -ExpandProperty CPU)");
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &command])
-        .output()
-        .map_err(|e| format!("exec powershell failed: {e}"))?;
+// ---------------------------------------------------------------------------
+// Windows native Win32 API sampling (no PowerShell / child processes)
+// ---------------------------------------------------------------------------
 
-    if !output.status.success() {
-        return Err(format!("powershell exited with {}", output.status));
+/// Manual FFI for GetProcessTimes / GetProcessMemoryInfo (lightweight, no crate needed).
+#[cfg(target_os = "windows")]
+#[allow(non_camel_case_types)]
+mod win32_kernel {
+    use std::ffi::c_void;
+
+    pub type HANDLE = *mut c_void;
+    pub type BOOL = i32;
+
+    #[repr(C)]
+    pub struct FILETIME {
+        pub dw_low_date_time: u32,
+        pub dw_high_date_time: u32,
     }
 
-    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let seconds = raw
-        .parse::<f64>()
-        .map_err(|e| format!("parse CPU seconds failed ({raw}): {e}"))?;
+    #[repr(C)]
+    pub struct PROCESS_MEMORY_COUNTERS {
+        pub cb: u32,
+        pub page_fault_count: u32,
+        pub peak_working_set_size: usize,
+        pub working_set_size: usize,
+        pub quota_peak_paged_pool_usage: usize,
+        pub quota_paged_pool_usage: usize,
+        pub quota_peak_non_paged_pool_usage: usize,
+        pub quota_non_paged_pool_usage: usize,
+        pub pagefile_usage: usize,
+        pub peak_pagefile_usage: usize,
+    }
 
-    Ok(RustCpuSample {
-        process_cpu_micros: (seconds * 1_000_000.0) as i64,
-        timestamp_ms: now_millis(),
-        logical_cpus: num_cpus(),
-    })
+    extern "system" {
+        pub fn GetCurrentProcess() -> HANDLE;
+        pub fn GetProcessTimes(
+            hprocess: HANDLE,
+            creation_time: *mut FILETIME,
+            exit_time: *mut FILETIME,
+            kernel_time: *mut FILETIME,
+            user_time: *mut FILETIME,
+        ) -> BOOL;
+        pub fn GetProcessMemoryInfo(
+            process: HANDLE,
+            counters: *mut PROCESS_MEMORY_COUNTERS,
+            cb: u32,
+        ) -> BOOL;
+    }
+}
+
+#[cfg(target_os = "windows")]
+use self::win32_kernel::*;
+
+#[cfg(target_os = "windows")]
+fn filetime_to_micros(ft: &FILETIME) -> i64 {
+    let val = ((ft.dw_high_date_time as i64) << 32) | (ft.dw_low_date_time as i64);
+    val / 10 // FILETIME is in 100-nanosecond intervals
+}
+
+#[cfg(target_os = "windows")]
+fn sample_process_cpu_windows() -> Result<RustCpuSample, String> {
+    unsafe {
+        let process = GetCurrentProcess();
+        let mut creation = FILETIME {
+            dw_low_date_time: 0,
+            dw_high_date_time: 0,
+        };
+        let mut exit_ft = FILETIME {
+            dw_low_date_time: 0,
+            dw_high_date_time: 0,
+        };
+        let mut kernel = FILETIME {
+            dw_low_date_time: 0,
+            dw_high_date_time: 0,
+        };
+        let mut user = FILETIME {
+            dw_low_date_time: 0,
+            dw_high_date_time: 0,
+        };
+
+        if GetProcessTimes(process, &mut creation, &mut exit_ft, &mut kernel, &mut user) == 0 {
+            return Err(format!(
+                "GetProcessTimes failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        let cpu_micros = filetime_to_micros(&kernel) + filetime_to_micros(&user);
+
+        Ok(RustCpuSample {
+            process_cpu_micros: cpu_micros,
+            timestamp_ms: now_millis(),
+            logical_cpus: num_cpus(),
+        })
+    }
 }
 
 #[cfg(target_os = "windows")]
 fn sample_process_memory_windows() -> Result<RustMemorySample, String> {
-    let pid = std::process::id().to_string();
-    let command = format!("(Get-Process -Id {pid} | Select-Object -ExpandProperty WorkingSet64)");
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &command])
-        .output()
-        .map_err(|e| format!("exec powershell failed: {e}"))?;
+    unsafe {
+        let mut counters: PROCESS_MEMORY_COUNTERS = std::mem::zeroed();
+        counters.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
 
-    if !output.status.success() {
-        return Err(format!("powershell exited with {}", output.status));
+        if GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, counters.cb) == 0 {
+            return Err(format!(
+                "GetProcessMemoryInfo failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        Ok(RustMemorySample {
+            rss_mb: counters.working_set_size as f64 / 1024.0 / 1024.0,
+        })
     }
-
-    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let bytes = raw
-        .parse::<f64>()
-        .map_err(|e| format!("parse WorkingSet64 failed ({raw}): {e}"))?;
-
-    Ok(RustMemorySample {
-        rss_mb: bytes / 1024.0 / 1024.0,
-    })
 }
+
+// ---------------------------------------------------------------------------
+// GPU sampling via the `windows` crate PDH bindings
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Performance::{
+    PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData,
+    PdhGetFormattedCounterArrayW, PdhOpenQueryW,
+    PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE,
+};
+
+#[cfg(target_os = "windows")]
+static mut PDH_QUERY: Option<isize> = None;
+#[cfg(target_os = "windows")]
+static mut PDH_COUNTER: isize = 0;
+
+const PDH_MORE_DATA: u32 = 0x8000_07D2;
 
 #[cfg(target_os = "windows")]
 fn sample_gpu_windows() -> Result<RustGpuSample, String> {
-    let command = "(Get-Counter '\\GPU Engine(*)\\Utilization Percentage').CounterSamples | Where-Object {$_.CookedValue -ge 0} | Measure-Object CookedValue -Average | Select-Object -ExpandProperty Average";
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", command])
-        .output()
-        .map_err(|e| format!("exec powershell failed: {e}"))?;
+    unsafe {
+        if PDH_QUERY.is_none() {
+            let mut query: isize = 0;
+            let result = PdhOpenQueryW(
+                windows::core::PCWSTR(std::ptr::null()),
+                0,
+                &mut query,
+            );
+            if result != 0 {
+                return Err(format!("PdhOpenQueryW failed with code {result}"));
+            }
 
-    if !output.status.success() {
-        return Err(format!("powershell exited with {}", output.status));
+            let path: Vec<u16> = "\\GPU Engine(*)\\Utilization Percentage"
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+
+            let mut counter: isize = 0;
+            let result = PdhAddEnglishCounterW(
+                query,
+                windows::core::PCWSTR(path.as_ptr()),
+                0,
+                &mut counter,
+            );
+            if result != 0 {
+                let _ = PdhCloseQuery(query);
+                return Err(format!("PdhAddEnglishCounterW failed with code {result}"));
+            }
+
+            PDH_QUERY = Some(query);
+            PDH_COUNTER = counter;
+        }
+
+        let query = PDH_QUERY.unwrap();
+
+        let result = PdhCollectQueryData(query);
+        if result != 0 {
+            return Err(format!("PdhCollectQueryData (1st) failed with code {result}"));
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(250));
+
+        let result = PdhCollectQueryData(query);
+        if result != 0 {
+            return Err(format!("PdhCollectQueryData (2nd) failed with code {result}"));
+        }
+
+        let mut buf_size: u32 = 0;
+        let mut item_count: u32 = 0;
+        let result = PdhGetFormattedCounterArrayW(
+            PDH_COUNTER,
+            PDH_FMT_DOUBLE,
+            &mut buf_size,
+            &mut item_count,
+            None,
+        );
+        if result != 0 && result != PDH_MORE_DATA {
+            return Err(format!("PdhGetFormattedCounterArrayW (size) failed with code {result}"));
+        }
+
+        if item_count == 0 || buf_size == 0 {
+            return Ok(RustGpuSample {
+                gpu_percent: 0.0,
+                source: "windows_pdh".to_string(),
+            });
+        }
+
+        let item_size = std::mem::size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>() as u32;
+        let alloc = ((buf_size / item_size) as usize).saturating_add(8);
+        let mut items: Vec<PDH_FMT_COUNTERVALUE_ITEM_W> = Vec::with_capacity(alloc);
+        items.set_len(alloc);
+
+        let result = PdhGetFormattedCounterArrayW(
+            PDH_COUNTER,
+            PDH_FMT_DOUBLE,
+            &mut buf_size,
+            &mut item_count,
+            Some(items.as_mut_ptr()),
+        );
+        if result != 0 {
+            return Err(format!("PdhGetFormattedCounterArrayW (data) failed with code {result}"));
+        }
+
+        let values: Vec<f64> = items[..item_count as usize]
+            .iter()
+            .map(|item| item.FmtValue.Anonymous.doubleValue)
+            .filter(|v| *v > 0.0)
+            .collect();
+
+        let gpu_pct = if values.is_empty() {
+            0.0
+        } else {
+            (values.iter().sum::<f64>() / values.len() as f64).clamp(0.0, 100.0)
+        };
+
+        Ok(RustGpuSample {
+            gpu_percent: gpu_pct,
+            source: "windows_pdh".to_string(),
+        })
     }
-
-    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let value = raw
-        .parse::<f64>()
-        .map_err(|e| format!("parse gpu counter failed ({raw}): {e}"))?
-        .clamp(0.0, 100.0);
-
-    Ok(RustGpuSample {
-        gpu_percent: value,
-        source: "windows_get_counter_gpu_engine".to_string(),
-    })
 }
 
 #[cfg(target_os = "linux")]
