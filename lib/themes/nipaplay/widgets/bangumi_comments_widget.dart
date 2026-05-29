@@ -275,7 +275,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.subjectId == null) {
+    if (widget.subjectId == null && widget.dandanplayId == 0) {
       final bool isDark = Theme.of(context).brightness == Brightness.dark;
       final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
       return Padding(

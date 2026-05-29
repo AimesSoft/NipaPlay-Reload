@@ -301,7 +301,7 @@ class CupertinoBangumiCommentsWidgetState
     final bool isDark =
         MediaQuery.of(context).platformBrightness == Brightness.dark;
 
-    if (widget.subjectId == null) {
+    if (widget.subjectId == null && widget.dandanplayId == 0) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(
