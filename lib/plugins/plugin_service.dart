@@ -20,6 +20,7 @@ import 'package:nipaplay/plugins/plugin_event_bus.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/github_accel_resolver.dart';
+import 'package:nipaplay/plugins/similarity_ffi_service.dart';
 import 'package:http/http.dart' as http;
 
 class PluginService extends ChangeNotifier {
@@ -570,6 +571,40 @@ class PluginService extends ChangeNotifier {
         }
         return null;
 
+      // ---- 弹幕相似度查重 ----
+      case 'danmakuCheckSimilarity':
+        if (callArgs.length >= 2) {
+          try {
+            final items = json.decode(callArgs[0].toString());
+            final config = json.decode(callArgs[1].toString());
+            if (items is List && config is Map) {
+              final result = SimilarityFfiService.instance.checkSimilarity(
+                items.cast<Map<String, dynamic>>(),
+                Map<String, dynamic>.from(config),
+              );
+              return result;
+            }
+          } catch (e) {
+            debugPrint('[Plugin:${pluginId}] danmakuCheckSimilarity 错误: $e');
+          }
+        }
+        return '{}';
+      case 'danmakuPairSimilarity':
+        if (callArgs.length >= 2) {
+          try {
+            final textA = callArgs[0]?.toString() ?? '';
+            final textB = callArgs[1]?.toString() ?? '';
+            final usePinyin = callArgs.length < 3 || callArgs[2] != false;
+            final score = SimilarityFfiService.instance.pairSimilarity(
+              textA, textB, usePinyin: usePinyin,
+            );
+            return score.toString();
+          } catch (e) {
+            debugPrint('[Plugin:${pluginId}] danmakuPairSimilarity 错误: $e');
+          }
+        }
+        return '0';
+
       default:
         debugPrint('[Plugin:${pluginId}] 未处理的桥接方法: $method');
         return null;
@@ -911,6 +946,18 @@ class PluginService extends ChangeNotifier {
         replace: function(newDanmaku) {
           if (!plugin.hasPermission('danmaku.modify')) return false;
           return flutter_invokeMethod('danmakuReplace', JSON.stringify(newDanmaku));
+        },
+        checkSimilarity: function(danmakuList, config) {
+          if (!plugin.hasPermission('danmaku.modify')) return null;
+          var result = flutter_invokeMethod('danmakuCheckSimilarity',
+            JSON.stringify(danmakuList), JSON.stringify(config || {}));
+          return result ? JSON.parse(result) : null;
+        },
+        pairSimilarity: function(textA, textB, usePinyin) {
+          if (!plugin.hasPermission('danmaku.modify')) return 0;
+          var result = flutter_invokeMethod('danmakuPairSimilarity',
+            textA, textB, usePinyin !== false);
+          return result ? parseFloat(result) : 0;
         },
       };
 
