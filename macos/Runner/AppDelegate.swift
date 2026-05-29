@@ -6,15 +6,9 @@ import UniformTypeIdentifiers
 @main
 @objcMembers
 class AppDelegate: FlutterAppDelegate {
-  // 直接创建全局引用
-  var uploadMenuItem: NSMenuItem?
-  var videoPlaybackMenuItem: NSMenuItem?
-  var mediaLibraryMenuItem: NSMenuItem?
-  var newSeriesMenuItem: NSMenuItem?
-  var settingsMenuItem: NSMenuItem?
-  
-  // 连接到xib中定义的导航菜单 - 使用不同名称避免与基类冲突
-  @IBOutlet weak var playerMenu: NSMenu!
+  // Keep IBOutlet connected from MainMenu.xib to avoid runtime crash,
+  // but no longer used — Flutter's PlatformMenuBar handles the menu bar.
+  @IBOutlet weak var playerMenu: NSMenu?
 
   private var didConfigureBundledMoltenVK = false
 
@@ -25,11 +19,6 @@ class AppDelegate: FlutterAppDelegate {
   @objc override func applicationDidFinishLaunching(_ notification: Notification) {
     configureBundledMoltenVKIfAvailable()
     print("[AppDelegate] 应用启动")
-    
-    // 延迟更新菜单项，确保应用完全初始化
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-      self.updateMenuItems()
-    }
   }
 
   private func configureBundledMoltenVKIfAvailable() {
@@ -88,314 +77,10 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
   
-  // 更新菜单项
-  private func updateMenuItems() {
-    print("[AppDelegate] 开始更新菜单项")
-    
-    // 直接使用已连接的playerMenu
-    guard let menu = playerMenu else {
-      print("[AppDelegate] 错误: playerMenu未连接")
-      return
-    }
-    
-    // 查找已有的上传视频菜单项
-    var uploadItemExists = false
-    for item in menu.items {
-      if item.title == "上传视频" {
-        uploadItemExists = true
-        item.action = #selector(uploadVideo(_:))
-        item.target = self
-        uploadMenuItem = item
-        break
-      }
-    }
-    
-    // 如果不存在，则添加上传视频菜单项
-    if !uploadItemExists {
-      let uploadItem = NSMenuItem(title: "上传视频", action: #selector(uploadVideo(_:)), keyEquivalent: "u")
-      uploadItem.keyEquivalentModifierMask = [.command]
-      uploadItem.target = self
-      menu.addItem(uploadItem)
-      uploadMenuItem = uploadItem
-    }
-    
-    // 添加分隔线（如果不存在）
-    var hasSeparator = false
-    for (index, item) in menu.items.enumerated() {
-      if item.isSeparatorItem && index > 0 {
-        hasSeparator = true
-        break
-      }
-    }
-    
-    if !hasSeparator {
-      menu.addItem(NSMenuItem.separator())
-    }
-    
-    // 添加或更新媒体库菜单项
-    var hasMediaLibraryItem = false
-    for item in menu.items {
-      if item.title == "媒体库" {
-        hasMediaLibraryItem = true
-        item.action = #selector(openMediaLibrary(_:))
-        item.target = self
-        mediaLibraryMenuItem = item
-        break
-      }
-    }
-    
-    if !hasMediaLibraryItem {
-      let mediaLibraryItem = NSMenuItem(title: "媒体库", action: #selector(openMediaLibrary(_:)), keyEquivalent: "1")
-      mediaLibraryItem.keyEquivalentModifierMask = [.command]
-      mediaLibraryItem.target = self
-      menu.addItem(mediaLibraryItem)
-      mediaLibraryMenuItem = mediaLibraryItem
-    }
-    
-    // 添加或更新新番更新菜单项
-    var hasNewSeriesItem = false
-    for item in menu.items {
-      if item.title == "新番更新" {
-        hasNewSeriesItem = true
-        item.action = #selector(openNewSeries(_:))
-        item.target = self
-        newSeriesMenuItem = item
-        break
-      }
-    }
-    
-    if !hasNewSeriesItem {
-      let newSeriesItem = NSMenuItem(title: "新番更新", action: #selector(openNewSeries(_:)), keyEquivalent: "2")
-      newSeriesItem.keyEquivalentModifierMask = [.command]
-      newSeriesItem.target = self
-      menu.addItem(newSeriesItem)
-      newSeriesMenuItem = newSeriesItem
-    }
-    
-    // 添加或更新设置菜单项
-    var hasSettingsItem = false
-    for item in menu.items {
-      if item.title == "设置" {
-        hasSettingsItem = true
-        item.action = #selector(openSettings(_:))
-        item.target = self
-        settingsMenuItem = item
-        break
-      }
-    }
-    
-    if !hasSettingsItem {
-      let settingsItem = NSMenuItem(title: "设置", action: #selector(openSettings(_:)), keyEquivalent: "3")
-      settingsItem.keyEquivalentModifierMask = [.command]
-      settingsItem.target = self
-      menu.addItem(settingsItem)
-      settingsMenuItem = settingsItem
-    }
-    
-    print("[AppDelegate] 菜单已更新: \(menu.items.count) 个项目")
-  }
-  
-  // 处理菜单点击，直接获取FlutterViewController并创建通道
-  @objc func uploadVideo(_ sender: Any?) {
-    print("[AppDelegate] 菜单点击: 上传视频")
-    invokeFlutterMethod("uploadVideo")
-  }
+  // MARK: - Window lifecycle
 
-  // 打开视频播放
-  @objc func openVideoPlayback(_ sender: Any?) {
-      print("[AppDelegate] 菜单点击: 视频播放")
-      invokeFlutterMethod("openVideoPlayback")
-  }
-  
-  // 打开主页
-  @objc func openHome(_ sender: Any?) {
-    print("[AppDelegate] 菜单点击: 主页")
-    invokeFlutterMethod("openHome")
-  }
-  
-  // 打开媒体库
-  @objc func openMediaLibrary(_ sender: Any?) {
-    print("[AppDelegate] 菜单点击: 媒体库")
-    invokeFlutterMethod("openMediaLibrary")
-  }
-  
-  // 打开新番更新
-  @objc func openNewSeries(_ sender: Any?) {
-    print("[AppDelegate] 菜单点击: 新番更新")
-    invokeFlutterMethod("openNewSeries")
-  }
-  
-  // 打开设置
-  @objc func openSettings(_ sender: Any?) {
-    print("[AppDelegate] 菜单点击: 设置")
-    invokeFlutterMethod("openSettings")
-  }
-  
-  // 显示关于页面
-  @objc func showAbout(_ sender: Any?) {
-    print("[AppDelegate] 菜单点击: 关于")
-    showAboutDialog()
-  }
-  
-  // 显示帮助
-  @objc func showHelp(_ sender: Any?) {
-    print("[AppDelegate] 菜单点击: 帮助")
-    showHelpDialog()
-  }
-  
-  // 打开 GitHub 页面
-  @objc func openGitHub(_ sender: Any?) {
-    if let url = URL(string: "https://github.com/AimesSoft/NipaPlay-Reload") {
-      NSWorkspace.shared.open(url)
-    }
-  }
-  
-  // 打开网站
-  @objc func openWebsite(_ sender: Any?) {
-    if let url = URL(string: "https://nipaplay.aimes-soft.com/") {
-      NSWorkspace.shared.open(url)
-    }
-  }
-  
-  // 显示关于对话框
-  private func showAboutDialog() {
-    DispatchQueue.main.async {
-      let alert = NSAlert()
-      alert.messageText = "关于 NipaPlay"
-      
-      // 自动获取版本号
-      let version = self.getAppVersion()
-      
-      alert.informativeText = "NipaPlay - 跨平台弹幕视频播放器\n\n版本：\(version)\n\n一个支持多种视频格式和弹幕功能的现代化播放器。"
-      alert.alertStyle = .informational
-      alert.addButton(withTitle: "确定")
-      
-      if let window = NSApp.mainWindow {
-        alert.beginSheetModal(for: window, completionHandler: nil)
-      } else {
-        alert.runModal()
-      }
-    }
-  }
-  
-  // 获取应用版本号
-  private func getAppVersion() -> String {
-    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-      return version
-    }
-    return "1.0.0" // 默认版本号
-  }
-  
-  // 显示帮助对话框
-  private func showHelpDialog() {
-    DispatchQueue.main.async {
-      let alert = NSAlert()
-      alert.messageText = "NipaPlay 帮助"
-      alert.informativeText = """
-      快捷键：
-      • Cmd+U - 上传视频
-      • Cmd+W - 关闭窗口
-      • Cmd+Q - 退出应用
-      • Cmd+, - 偏好设置
-      • Cmd+1 - 主页
-      • Cmd+2 - 视频播放
-      • Cmd+3 - 媒体库
-      • Cmd+4 - 新番更新
-      
-      支持的视频格式：
-      MP4, MKV, AVI, MOV, WebM, WMV, M4V, 3GP, FLV, TS, M2TS
-      
-      更多信息请访问项目主页：
-      https://github.com/AimesSoft/NipaPlay-Reload
-      https://nipaplay.aimes-soft.com/
-      """
-      alert.alertStyle = .informational
-      alert.addButton(withTitle: "访问 GitHub")
-      alert.addButton(withTitle: "访问网站")
-      alert.addButton(withTitle: "确定")
-      
-      if let window = NSApp.mainWindow {
-        alert.beginSheetModal(for: window) { response in
-          switch response {
-          case .alertFirstButtonReturn: // 访问 GitHub
-            self.openGitHub(nil)
-          case .alertSecondButtonReturn: // 访问网站
-            self.openWebsite(nil)
-          default:
-            break
-          }
-        }
-      } else {
-        let response = alert.runModal()
-        switch response {
-        case .alertFirstButtonReturn:
-          self.openGitHub(nil)
-        case .alertSecondButtonReturn:
-          self.openWebsite(nil)
-        default:
-          break
-        }
-      }
-    }
-  }
-  
-  // 封装调用Flutter方法的逻辑
-  private func invokeFlutterMethod(_ method: String, arguments: Any? = nil) {
-    // 获取控制器和创建通道
-    guard let controller = self.mainFlutterWindow?.nipaplayFlutterViewController else {
-      print("[AppDelegate] 错误: 无法获取Flutter控制器")
-      showSimpleAlert(message: "应用尚未准备好，请稍后再试")
-      return
-    }
-    
-    // 立即创建通道
-    let channel = FlutterMethodChannel(name: "custom_menu_channel", binaryMessenger: controller.engine.binaryMessenger)
-    
-    // 定义一个操作映射
-    let methodActions: [String: () -> Void] = [
-        "uploadVideo": { channel.invokeMethod("uploadVideo", arguments: arguments, result: self.handleFlutterResult) },
-        "openVideoPlayback": { channel.invokeMethod("openVideoPlayback", arguments: arguments, result: self.handleFlutterResult) },
-        "openHome": { channel.invokeMethod("openHome", arguments: arguments, result: self.handleFlutterResult) },
-        "openMediaLibrary": { channel.invokeMethod("openMediaLibrary", arguments: arguments, result: self.handleFlutterResult) },
-        "openNewSeries": { channel.invokeMethod("openNewSeries", arguments: arguments, result: self.handleFlutterResult) },
-        "openSettings": { channel.invokeMethod("openSettings", arguments: arguments, result: self.handleFlutterResult) }
-    ]
-
-    if let action = methodActions[method] {
-        print("[AppDelegate] 调用\(method)方法")
-        action()
-    } else {
-        print("[AppDelegate] 未知的Flutter方法: \(method)")
-        showSimpleAlert(message: "未知的操作")
-    }
-  }
-
-  // 统一处理Flutter调用结果
-  private func handleFlutterResult(result: Any?) {
-      if let error = result as? FlutterError {
-          print("[AppDelegate] 调用失败: \(error.message ?? "未知错误")")
-          self.showSimpleAlert(message: "操作失败: \(error.message ?? "未知错误")")
-      } else {
-          print("[AppDelegate] 调用成功")
-      }
-  }
-  
-  // 简化的警告显示
-  private func showSimpleAlert(message: String) {
-    DispatchQueue.main.async {
-      if let window = NSApp.mainWindow {
-        let alert = NSAlert()
-        alert.messageText = "提示"
-        alert.informativeText = message
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "确定")
-        alert.beginSheetModal(for: window, completionHandler: nil)
-      }
-    }
-  }
-  
   @objc override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    // 需要支持“关闭窗口后仍驻留菜单栏(托盘)”的行为，因此不能在最后一个窗口关闭时退出进程。
+    // 需要支持"关闭窗口后仍驻留菜单栏(托盘)"的行为，因此不能在最后一个窗口关闭时退出进程。
     return false
   }
 
@@ -403,17 +88,16 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
   
-  // 处理单个文件拖拽到Dock图标
+  // MARK: - File handling (drag-drop to Dock icon)
+
   @objc override func application(_ sender: NSApplication, openFile filename: String) -> Bool {
     print("[AppDelegate] 收到文件拖拽: \(filename)")
     handleOpenFile(filename)
     return true
   }
   
-  // 处理多个文件拖拽到Dock图标
   @objc override func application(_ sender: NSApplication, openFiles filenames: [String]) {
     print("[AppDelegate] 收到多个文件拖拽: \(filenames)")
-    // 处理第一个支持的视频文件
     for filename in filenames {
       if isSupportedVideoFile(filename) {
         handleOpenFile(filename)
@@ -422,23 +106,18 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
   
-  // 处理文件打开
   private func handleOpenFile(_ filename: String) {
     print("[AppDelegate] 处理文件: \(filename)")
     
-    // 检查文件是否为支持的视频格式
     guard isSupportedVideoFile(filename) else {
       print("[AppDelegate] 不支持的文件格式: \(filename)")
       showSimpleAlert(message: "不支持的文件格式")
       return
     }
     
-    // 如果应用未启动，保存文件路径供后续处理
     if !isFlutterReady() {
       print("[AppDelegate] Flutter未准备好，保存文件路径")
       pendingFilePath = filename
-      
-      // 延迟处理，等待Flutter初始化
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
         if let savedPath = self.pendingFilePath {
           self.sendFileToFlutter(savedPath)
@@ -450,14 +129,12 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
   
-  // 检查是否为支持的视频文件
   private func isSupportedVideoFile(_ filename: String) -> Bool {
     let supportedExtensions = ["mp4", "mkv", "avi", "mov", "webm", "wmv", "m4v", "3gp", "flv", "ts", "m2ts"]
     let fileExtension = (filename as NSString).pathExtension.lowercased()
     return supportedExtensions.contains(fileExtension)
   }
   
-  // 检查Flutter是否准备好
   private func isFlutterReady() -> Bool {
     guard let _ = self.mainFlutterWindow?.nipaplayFlutterViewController else {
       return false
@@ -465,7 +142,6 @@ class AppDelegate: FlutterAppDelegate {
     return true
   }
   
-  // 发送文件路径到Flutter
   private func sendFileToFlutter(_ filename: String) {
     print("[AppDelegate] 发送文件到Flutter: \(filename)")
     
@@ -485,6 +161,20 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
   
-  // 保存待处理的文件路径
   private var pendingFilePath: String?
+
+  // MARK: - Helpers
+
+  private func showSimpleAlert(message: String) {
+    DispatchQueue.main.async {
+      if let window = NSApp.mainWindow {
+        let alert = NSAlert()
+        alert.messageText = "提示"
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "确定")
+        alert.beginSheetModal(for: window, completionHandler: nil)
+      }
+    }
+  }
 }
