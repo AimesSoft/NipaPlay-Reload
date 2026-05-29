@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
@@ -185,6 +186,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   int _commentsVersion = 0;
   final GlobalKey _commentsWidgetKey = GlobalKey();
   int _myCommentTimestamp = 0;
+
+  static const String _commentTimestampPrefix = 'bangumi_comment_ts_';
+
+  Future<void> _loadPersistedCommentTimestamp(int subjectId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ts = prefs.getInt('$_commentTimestampPrefix$subjectId');
+    if (ts != null && ts > 0 && mounted) {
+      setState(() => _myCommentTimestamp = ts);
+    }
+  }
+
+  Future<void> _saveCommentTimestamp(int subjectId, int timestamp) async {
+    if (subjectId <= 0 || timestamp <= 0) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('$_commentTimestampPrefix$subjectId', timestamp);
+  }
 
   // 上次观看的剧集信息
   WatchHistoryItem? _lastWatchedEpisode;
@@ -563,6 +580,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       });
     }
 
+    // 从本地恢复评论时间戳
+    _loadPersistedCommentTimestamp(subjectId);
+
     // 以下收藏相关功能需要登录
     if (!BangumiApiService.isLoggedIn) {
       try {
@@ -666,7 +686,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _isLoadingBangumiCollection = false;
           if (_myCommentTimestamp == 0 &&
               (userRating > 0 || (comment != null && comment.isNotEmpty))) {
-            _myCommentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            _myCommentTimestamp =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            _saveCommentTimestamp(subjectId, _myCommentTimestamp);
           }
         });
       } else {
@@ -851,7 +873,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             if (ratingPayload != null) {
               _bangumiUserRating = ratingPayload;
             }
-            _myCommentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            _myCommentTimestamp =
+                DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            _saveCommentTimestamp(subjectId, _myCommentTimestamp);
           });
         }
         if (episodeStatus != null) {
@@ -1285,6 +1309,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                         return BangumiCommentsWidget(
                           key: _commentsWidgetKey,
                           subjectId: _bangumiSubjectId,
+                          dandanplayId: anime.id,
                           onEditRating: BangumiApiService.isLoggedIn
                               ? _showCommentDialog
                               : null,
@@ -1296,6 +1321,10 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                               setState(() {
                                 _myCommentTimestamp = timestamp;
                               });
+                              if (_bangumiSubjectId != null) {
+                                _saveCommentTimestamp(
+                                    _bangumiSubjectId!, timestamp);
+                              }
                             }
                           },
                         );

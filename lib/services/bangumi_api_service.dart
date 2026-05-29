@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
+import 'package:nipaplay/services/dandanplay_service.dart';
 
 /// Bangumi API服务
 ///
@@ -747,6 +748,7 @@ class BangumiApiService {
     int subjectId, {
     int limit = 20,
     int offset = 0,
+    Duration timeout = const Duration(seconds: 4),
   }) async {
     try {
       final targetUri = Uri.parse(
@@ -755,6 +757,7 @@ class BangumiApiService {
         'limit': limit.toString(),
         'offset': offset.toString(),
       });
+      debugPrint('[Bangumi Comments] 请求 subjectId=$subjectId, offset=$offset, timeout=${timeout.inSeconds}s');
       debugPrint('[Bangumi Comments] 原始URI: $targetUri');
       final uri = WebRemoteAccessService.proxyUri(targetUri);
       debugPrint('[Bangumi Comments] 代理后URI: $uri');
@@ -762,9 +765,12 @@ class BangumiApiService {
       final response = await http.get(uri, headers: {
         'User-Agent': _userAgent,
         'Accept': 'application/json',
-      });
+      }).timeout(timeout);
       debugPrint('[Bangumi Comments] 状态码: ${response.statusCode}');
-      debugPrint('[Bangumi Comments] 响应体前200字符: ${response.body.length > 200 ? response.body.substring(0, 200) : response.body}');
+      final preview = response.body.length > 300
+          ? response.body.substring(0, 300)
+          : response.body;
+      debugPrint('[Bangumi Comments] 响应体前300字符: $preview');
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = json.decode(response.body);
@@ -774,15 +780,132 @@ class BangumiApiService {
         }
         return {'success': true, 'data': data};
       } else {
-        debugPrint('[Bangumi Comments] 请求失败: ${response.statusCode} - ${response.body}');
+        debugPrint('[Bangumi Comments] 请求失败: ${response.statusCode}');
         return {
           'success': false,
           'message': '获取评论失败: ${response.statusCode}',
         };
       }
+    } on TimeoutException {
+      debugPrint('[Bangumi Comments] 请求超时(${timeout.inSeconds}s)，subjectId=$subjectId');
+      return {'success': false, 'message': '请求超时', 'isTimeout': true};
     } catch (e) {
       debugPrint('[Bangumi Comments] 获取评论异常: $e');
       return {'success': false, 'message': '网络错误: $e'};
     }
   }
+
+  /// Dandanplay 镜像回退接口
+  /// 使用 page 分页，page 从 0 开始，每页固定 20 条
+  /// 返回数据中包含 'source': 'dandanplay' 标记，调用方应使用 DandanplayComment.fromJson 解析
+  static Future<Map<String, dynamic>> getSubjectCommentsFallback(
+    int bangumiId, {
+    int page = 1,
+  }) async {
+    try {
+      final targetUri = Uri.parse(
+        'https://api.dandanplay.net/api/v2/bangumi/$bangumiId/comments',
+      ).replace(queryParameters: {'page': page.toString()});
+      debugPrint('[Dandanplay Comments] 原始URI: $targetUri');
+      final uri = WebRemoteAccessService.proxyUri(targetUri);
+      debugPrint('[Dandanplay Comments] 代理后URI: $uri');
+
+      final appSecret = await DandanplayService.getAppSecret();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final apiPath = '/api/v2/bangumi/$bangumiId/comments';
+
+      final Map<String, String> headers = {
+        'User-Agent': _userAgent,
+        'Accept': 'application/json',
+        'X-AppId': DandanplayService.appId,
+        'X-Signature': DandanplayService.generateSignature(
+          DandanplayService.appId,
+          timestamp,
+          apiPath,
+          appSecret,
+        ),
+        'X-Timestamp': '$timestamp',
+      };
+
+      final response = await http.get(uri, headers: headers);
+      debugPrint('[Dandanplay Comments] 状态码: ${response.statusCode}');
+      final dandanPreview = response.body.length > 300
+          ? response.body.substring(0, 300)
+          : response.body;
+      debugPrint('[Dandanplay Comments] 响应体前300字符: $dandanPreview');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final body = json.decode(response.body);
+        debugPrint(
+            '[Dandanplay Comments] 响应类型: ${body.runtimeType}');
+
+        if (body is Map<String, dynamic>) {
+          List<dynamic>? commentList;
+          int? total;
+
+          if (body['comments'] is List) {
+            commentList = body['comments'];
+          }
+          if (commentList == null && body['data'] is Map) {
+            final inner = body['data'] as Map<String, dynamic>;
+            if (inner['comments'] is List) {
+              commentList = inner['comments'];
+            }
+          }
+
+          total = body['count'] as int? ?? body['total'] as int? ?? commentList?.length ?? 0;
+          final bool hasMore = body['hasMore'] as bool? ?? (commentList != null && commentList.length >= 20);
+
+          if (commentList != null) {
+            debugPrint(
+                '[Dandanplay Comments] 解析到 ${commentList.length} 条评论, count=$total, hasMore=$hasMore');
+            return {
+              'success': true,
+              'source': 'dandanplay',
+              'data': {'data': commentList, 'total': total, 'hasMore': hasMore},
+            };
+          }
+
+          if (body['data'] is List) {
+            final list = body['data'] as List;
+            debugPrint(
+                '[Dandanplay Comments] data是数组，解析到 ${list.length} 条评论');
+            return {
+              'success': true,
+              'source': 'dandanplay',
+              'data': {'data': list, 'total': total ?? list.length, 'hasMore': list.length >= 20},
+            };
+          }
+        }
+
+        if (body is List) {
+          debugPrint('[Dandanplay Comments] 响应体是数组，解析到 ${body.length} 条评论');
+          return {
+            'success': true,
+            'source': 'dandanplay',
+            'data': {'data': body, 'total': body.length, 'hasMore': body.length >= 20},
+          };
+        }
+
+        final preview = response.body.length > 300
+            ? response.body.substring(0, 300)
+            : response.body;
+        debugPrint('[Dandanplay Comments] 无法解析响应，body预览: $preview');
+        return {
+          'success': false,
+          'message': 'Dandanplay 评论: 无法解析响应格式',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Dandanplay 获取评论失败: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      debugPrint('[Dandanplay Comments] 异常: $e');
+      return {'success': false, 'message': 'Dandanplay 网络错误: $e'};
+    }
+  }
+
 }
