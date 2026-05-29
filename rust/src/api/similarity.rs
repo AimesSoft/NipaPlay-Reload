@@ -15,8 +15,8 @@ extern "C" {
         str_buf: *mut u16,
         max_dist: c_int,
         max_cosine: c_int,
-        use_pinyin: bool,
-        cross_mode: bool,
+        use_pinyin: c_int,   // int 代替 bool，FFI 跨语言安全
+        cross_mode: c_int,   // int 代替 bool，FFI 跨语言安全
     );
     fn sim_engine_check_similar(
         engine: *mut SimilarityEngine,
@@ -102,8 +102,8 @@ pub fn danmaku_similarity_check(
             str_buf.as_mut_ptr(),
             config.max_dist,
             config.max_cosine,
-            config.use_pinyin,
-            config.cross_mode,
+            config.use_pinyin as c_int,
+            config.cross_mode as c_int,
         );
     }
 
@@ -187,8 +187,8 @@ pub fn danmaku_pair_similarity(
             str_buf.as_mut_ptr(),
             999,    // 不设编辑距离上限
             0,      // 禁用余弦检测
-            use_pinyin,
-            true,   // 单对比较忽略 mode
+            use_pinyin as c_int,
+            1,      // 单对比较忽略 mode
         );
     }
 

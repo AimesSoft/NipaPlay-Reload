@@ -366,9 +366,9 @@ extern "C" {
     }
     void sim_engine_begin_chunk(SimilarityEngine* engine,
         ushort* str_buf, int max_dist, int max_cosine,
-        bool use_pinyin, bool cross_mode) {
+        int use_pinyin, int cross_mode) {
         engine->begin_chunk(str_buf, max_dist, max_cosine,
-                            use_pinyin, cross_mode);
+                            use_pinyin != 0, cross_mode != 0);
     }
     uint sim_engine_check_similar(SimilarityEngine* engine,
         uint mode, uint index_l) {

@@ -19,12 +19,12 @@ SimilarityEngine* sim_engine_create();
 /// 销毁引擎实例
 void sim_engine_destroy(SimilarityEngine* engine);
 
-/// 初始化查重块
+/// 初始化查重块（use_pinyin/cross_mode 用 int 代替 bool，确保 FFI 跨语言安全）
 void sim_engine_begin_chunk(
     SimilarityEngine* engine,
     ushort* str_buf,
     int max_dist, int max_cosine,
-    bool use_pinyin, bool cross_mode
+    int use_pinyin, int cross_mode
 );
 
 /// 逐条检测，返回打包结果（0=不相似）
