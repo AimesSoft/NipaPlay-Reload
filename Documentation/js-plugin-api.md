@@ -334,15 +334,20 @@ danmaku.replace({
   comments: filteredDanmaku
 });
 
+// 检查原生相似度引擎是否可用（建议在调用 checkSimilarity/pairSimilarity 前先检查）
+const available = danmaku.similarityAvailable(); // 返回 true/false
+
 // 弹幕相似度批量查重（返回相似对和分组）
 // danmakuList: 弹幕数组，每项 { text: 弹幕文本, mode: 弹幕类型(0=滚动,1=顶部,2=底部), time_seconds: 时间秒数 }
 // config: 可选配置 { max_dist: 编辑距离阈值(默认3), max_cosine: 余弦相似度阈值0-100(默认70), use_pinyin: 启用拼音对比(默认true), cross_mode: 跨类型对比(默认false), time_window: 时间窗口秒数(默认45) }
 // 返回: { pairs: [{source_index, target_index, reason, distance, score}], groups: [[idx1,idx2,...], ...] }
+// 引擎不可用时返回 null
 const result = danmaku.checkSimilarity(danmakuList, { max_dist: 3, use_pinyin: true });
 
 // 弹幕相似度单对比较（返回 0.0-1.0 相似度分数）
 // textA, textB: 弹幕文本
 // usePinyin: 是否启用拼音对比（默认 true）
+// 引擎不可用时返回 0
 const score = danmaku.pairSimilarity('弹幕A', '弹幕B', true);
 ```
 
@@ -454,7 +459,7 @@ settings.setSwitch('enable_filter', true);
 |------|------|------|
 | `plugin` | 插件元数据与权限检查 | 正常 |
 | `player` | 播放器控制（play/pause/seek/getState） | 正常 |
-| `danmaku` | 弹幕控制（show/hide/opacity/replace/addFilter/removeFilter/checkSimilarity/pairSimilarity） | 正常 |
+| `danmaku` | 弹幕控制（show/hide/opacity/replace/addFilter/removeFilter/similarityAvailable/checkSimilarity/pairSimilarity） | 正常 |
 | `ui` | UI 交互（showSnackBar/showLoading 使用 BlurSnackBar，showDialog 暂不支持） | 部分支持 |
 | `storage` | 本地存储（set/remove/clear 正常，get 同步返回 null） | 部分支持 |
 | `dev` | 开发调试（log/logError） | 正常 |

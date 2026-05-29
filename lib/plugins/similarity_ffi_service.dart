@@ -58,39 +58,73 @@ class SimilarityFfiService {
 
     try {
       _dylib = _openDynamicLibrary();
+      debugPrint('[SimilarityFFI] DLL 加载成功: ${Platform.resolvedExecutable}');
+    } catch (e) {
+      _available = false;
+      debugPrint('[SimilarityFFI] DLL 加载失败: $e');
+      return;
+    }
+
+    try {
       _checkBatch = _dylib!.lookupFunction<
           _SimilarityCheckBatchC,
           _SimilarityCheckBatchDart>('similarity_check_batch');
+      debugPrint('[SimilarityFFI] 符号 similarity_check_batch 查找成功');
+    } catch (e) {
+      debugPrint('[SimilarityFFI] 符号 similarity_check_batch 查找失败: $e');
+    }
+
+    try {
       _pair = _dylib!.lookupFunction<
           _SimilarityPairC,
           _SimilarityPairDart>('similarity_pair');
+      debugPrint('[SimilarityFFI] 符号 similarity_pair 查找成功');
+    } catch (e) {
+      debugPrint('[SimilarityFFI] 符号 similarity_pair 查找失败: $e');
+    }
+
+    try {
       _freeCstring = _dylib!.lookupFunction<
           _SimilarityFreeCstringC,
           _SimilarityFreeCstringDart>('similarity_free_cstring');
-      _available = true;
-      debugPrint('[SimilarityFFI] 初始化成功');
+      debugPrint('[SimilarityFFI] 符号 similarity_free_cstring 查找成功');
     } catch (e) {
-      _available = false;
-      debugPrint('[SimilarityFFI] 初始化失败（相似度查重不可用）: $e');
+      debugPrint('[SimilarityFFI] 符号 similarity_free_cstring 查找失败: $e');
+    }
+
+    _available = _checkBatch != null && _pair != null && _freeCstring != null;
+    if (_available) {
+      debugPrint('[SimilarityFFI] ✅ 初始化成功，引擎可用');
+    } else {
+      debugPrint('[SimilarityFFI] ❌ 初始化失败，部分符号缺失，相似度查重不可用');
     }
   }
 
   /// 批量查重：输入弹幕列表和配置，返回相似结果 JSON 字符串。
   /// 如果引擎不可用，返回 '{}'。
   String checkSimilarity(List<Map<String, dynamic>> items, Map<String, dynamic> config) {
-    if (!_available || _checkBatch == null || _freeCstring == null) return '{}';
+    if (!_available || _checkBatch == null || _freeCstring == null) {
+      debugPrint('[SimilarityFFI] checkSimilarity: 引擎不可用，返回空结果');
+      return '{}';
+    }
 
     final itemsJson = json.encode(items);
     final configJson = json.encode(config);
+    debugPrint('[SimilarityFFI] checkSimilarity: 输入 ${items.length} 条弹幕, config=$config');
 
     final itemsPtr = itemsJson.toNativeUtf8();
     final configPtr = configJson.toNativeUtf8();
 
     try {
       final resultPtr = _checkBatch!(itemsPtr, configPtr);
-      if (resultPtr == nullptr) return '{}';
+      if (resultPtr == nullptr) {
+        debugPrint('[SimilarityFFI] checkSimilarity: C++ 返回 nullptr');
+        return '{}';
+      }
       try {
-        return resultPtr.toDartString();
+        final result = resultPtr.toDartString();
+        debugPrint('[SimilarityFFI] checkSimilarity: 结果长度=${result.length}');
+        return result;
       } finally {
         _freeCstring!(resultPtr);
       }

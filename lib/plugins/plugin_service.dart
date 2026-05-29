@@ -572,6 +572,8 @@ class PluginService extends ChangeNotifier {
         return null;
 
       // ---- 弹幕相似度查重 ----
+      case 'danmakuSimilarityAvailable':
+        return SimilarityFfiService.instance.available;
       case 'danmakuCheckSimilarity':
         if (callArgs.length >= 2) {
           try {
@@ -946,6 +948,9 @@ class PluginService extends ChangeNotifier {
         replace: function(newDanmaku) {
           if (!plugin.hasPermission('danmaku.modify')) return false;
           return flutter_invokeMethod('danmakuReplace', JSON.stringify(newDanmaku));
+        },
+        similarityAvailable: function() {
+          return !!flutter_invokeMethod('danmakuSimilarityAvailable');
         },
         checkSimilarity: function(danmakuList, config) {
           if (!plugin.hasPermission('danmaku.modify')) return null;
