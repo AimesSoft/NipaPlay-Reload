@@ -1,4 +1,4 @@
-﻿part of video_player_state;
+part of video_player_state;
 
 extension VideoPlayerStatePlayerSetup on VideoPlayerState {
   Future<void> initializePlayer(

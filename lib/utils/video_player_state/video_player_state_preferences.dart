@@ -1,4 +1,4 @@
-﻿part of video_player_state;
+part of video_player_state;
 
 extension VideoPlayerStatePreferences on VideoPlayerState {
   // 设置错误状态
