@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
@@ -88,13 +89,6 @@ class LocalMediaManagementApi {
     '.flac',
     '.aac',
     '.wav',
-  };
-  static const Set<String> _subtitleExtensions = {
-    '.ass',
-    '.ssa',
-    '.srt',
-    '.sub',
-    '.sup',
   };
   static const Map<String, int> _subtitleExtensionPriority = {
     '.ass': 0,
@@ -844,7 +838,7 @@ class LocalMediaManagementApi {
         }
 
         final ext = p.extension(filePath).toLowerCase();
-        if (!_subtitleExtensions.contains(ext)) {
+        if (!subtitleExtensions.contains(ext)) {
           continue;
         }
 
@@ -1160,7 +1154,7 @@ class LocalMediaManagementApi {
     }
 
     final ext = p.extension(sanitizedName).toLowerCase();
-    if (!_subtitleExtensions.contains(ext)) {
+    if (!subtitleExtensions.contains(ext)) {
       return null;
     }
 

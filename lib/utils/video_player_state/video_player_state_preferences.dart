@@ -1,4 +1,4 @@
-part of video_player_state;
+﻿part of video_player_state;
 
 extension VideoPlayerStatePreferences on VideoPlayerState {
   // 设置错误状态
@@ -2012,21 +2012,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         }
       }
 
-      debugPrint('[FONT_DEBUG] applySubtitleStylePreference: effectiveFontDir=$effectiveFontDir, _subtitleFontDir=$_subtitleFontDir, _currentVideoPath=$_currentVideoPath, hadPreviousFontDir=$hadPreviousFontDir');
+      if (kDebugMode) debugPrint('[FONT_DEBUG] applySubtitleStylePreference: effectiveFontDir=$effectiveFontDir, _subtitleFontDir=$_subtitleFontDir, _currentVideoPath=$_currentVideoPath, hadPreviousFontDir=$hadPreviousFontDir');
       if (effectiveFontDir != null) {
         player.setProperty('sub-fonts-dir', effectiveFontDir);
-        debugPrint('[FONT_DEBUG] 已设置 sub-fonts-dir=$effectiveFontDir');
+        if (kDebugMode) debugPrint('[FONT_DEBUG] 已设置 sub-fonts-dir=$effectiveFontDir');
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', effectiveFontDir);
         }
       } else if (hadPreviousFontDir) {
         player.setProperty('sub-fonts-dir', '');
-        debugPrint('[FONT_DEBUG] 清除 sub-fonts-dir（之前有设置但当前无字体目录）');
+        if (kDebugMode) debugPrint('[FONT_DEBUG] 清除 sub-fonts-dir（之前有设置但当前无字体目录）');
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', '');
         }
       } else {
-        debugPrint('[FONT_DEBUG] 无 effectiveFontDir 且无之前设置，sub-fonts-dir 未变更');
+        if (kDebugMode) debugPrint('[FONT_DEBUG] 无 effectiveFontDir 且无之前设置，sub-fonts-dir 未变更');
       }
 
       final resolvedFontName = _subtitleFontName.isNotEmpty
