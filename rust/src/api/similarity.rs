@@ -38,6 +38,11 @@ impl EngineGuard {
             ptr: unsafe { sim_engine_create() }
         }
     }
+
+    /// 引擎指针是否有效（非 null）
+    fn is_valid(&self) -> bool {
+        !self.ptr.is_null()
+    }
 }
 
 impl Drop for EngineGuard {
@@ -91,6 +96,9 @@ pub fn danmaku_similarity_check(
 ) -> SimilarityResult {
     // 创建独立的引擎实例——无需 Mutex
     let engine = EngineGuard::new();
+    if !engine.is_valid() {
+        return SimilarityResult { pairs: vec![], groups: vec![] };
+    }
 
     // 分配 UTF-16 字符串缓冲区
     let mut str_buf = vec![0u16; MAX_STRING_LEN + 4];
@@ -179,6 +187,9 @@ pub fn danmaku_pair_similarity(
     use_pinyin: bool,
 ) -> f64 {
     let engine = EngineGuard::new();
+    if !engine.is_valid() {
+        return 0.0;
+    }
     let mut str_buf = vec![0u16; MAX_STRING_LEN + 4];
 
     unsafe {

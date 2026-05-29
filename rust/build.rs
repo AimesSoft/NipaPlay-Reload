@@ -7,7 +7,8 @@ fn main() {
         .file("cpp/similarity/src/similarity_engine.cpp")
         .file("cpp/similarity/src/pinyin_dict.cpp")
         .include("cpp/similarity/src") // similarity_engine.h 在此
-        .flag_if_supported("-fno-exceptions")
+        // 注意：不使用 -fno-exceptions，C API 的 try-catch 需要 C++ 异常支持
+        // 来捕获 FFI 边界上的任何异常，防止进程崩溃
         .flag_if_supported("-fno-rtti")
         .flag_if_supported("/utf-8");  // MSVC: 防止 C4819 编码警告导致错误
 

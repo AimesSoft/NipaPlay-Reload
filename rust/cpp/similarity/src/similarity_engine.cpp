@@ -5,9 +5,10 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <new>
 
-// pinyin_dict 保持全局只读共享，线程安全
-extern std::unordered_map<ushort, std::pair<uchar, uchar>> pinyin_dict;
+// pinyin_dict 改为懒加载，避免 DLL 加载时在 loader lock 下初始化大型 map
+extern const std::unordered_map<ushort, std::pair<uchar, uchar>>& get_pinyin_dict();
 
 constexpr int PINYIN_BASE = 0xe000;
 constexpr int HASH_MOD = 1007;
@@ -103,9 +104,10 @@ public:
             // 原代码: if(config.use_pinyin)
             // 替换:   if(engine->config_.use_pinyin)
             if(engine->config_.use_pinyin) {
+                const auto& pd = get_pinyin_dict();
                 for(ushort c: orig) {
-                    auto cs = pinyin_dict.find(c);  // pinyin_dict 保持全局
-                    if(cs != pinyin_dict.end()) {
+                    auto cs = pd.find(c);
+                    if(cs != pd.end()) {
                         pinyin.push(PINYIN_BASE + cs->second.first);
                         if(cs->second.second)
                             pinyin.push(PINYIN_BASE + cs->second.second);
@@ -356,28 +358,43 @@ SimilarityEngine::SimilarityEngine()
     std::memset(ed_b_.get(), 0, MAX_HASH_VAL * sizeof(short));
 }
 
-// ===== C API 实现 =====
+// ===== C API 实现（所有函数均带 try-catch 和 null 检查，防止 C++ 异常穿透 FFI 边界导致进程崩溃） =====
 extern "C" {
     SimilarityEngine* sim_engine_create() {
-        return new SimilarityEngine();
+        try {
+            return new (std::nothrow) SimilarityEngine();
+        } catch (...) {
+            return nullptr;
+        }
     }
     void sim_engine_destroy(SimilarityEngine* engine) {
-        delete engine;
+        try {
+            if (engine) delete engine;
+        } catch (...) {}
     }
     void sim_engine_begin_chunk(SimilarityEngine* engine,
         ushort* str_buf, int max_dist, int max_cosine,
         int use_pinyin, int cross_mode) {
-        engine->begin_chunk(str_buf, max_dist, max_cosine,
-                            use_pinyin != 0, cross_mode != 0);
+        try {
+            if (engine && str_buf) engine->begin_chunk(str_buf, max_dist, max_cosine,
+                                use_pinyin != 0, cross_mode != 0);
+        } catch (...) {}
     }
     uint sim_engine_check_similar(SimilarityEngine* engine,
         uint mode, uint index_l) {
-        return engine->check_similar(mode, index_l);
+        try {
+            if (engine) return engine->check_similar(mode, index_l);
+        } catch (...) {}
+        return 0;
     }
     void sim_engine_begin_index_lock(SimilarityEngine* engine) {
-        engine->begin_index_lock();
+        try {
+            if (engine) engine->begin_index_lock();
+        } catch (...) {}
     }
     void sim_engine_reset(SimilarityEngine* engine) {
-        engine->reset();
+        try {
+            if (engine) engine->reset();
+        } catch (...) {}
     }
 }
