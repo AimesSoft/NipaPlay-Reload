@@ -1979,20 +1979,54 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           effectiveFontDir = savedFontDir;
           _subtitleFontDir = savedFontDir;
         } else {
-          _subtitleFontDir = '';
+          // 没有用户手动设置的字体目录时，检查 subtitle_fonts 缓存目录
+          // 远程视频（http/jellyfin/emby）下载的字幕字体存放在此目录
+          try {
+            final baseDir = await StorageService.getAppStorageDirectory();
+            final cacheFontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+            if (await cacheFontsDir.exists()) {
+              bool hasFontFiles = false;
+              await for (final entity in cacheFontsDir.list()) {
+                if (entity is File) {
+                  final ext = p.extension(entity.path).toLowerCase();
+                  if (ext == '.ttf' || ext == '.otf' || ext == '.ttc') {
+                    hasFontFiles = true;
+                    break;
+                  }
+                }
+              }
+              if (hasFontFiles) {
+                effectiveFontDir = cacheFontsDir.path;
+                _subtitleFontDir = cacheFontsDir.path;
+                debugPrint('[VideoPlayerState] 使用 subtitle_fonts 缓存目录: $effectiveFontDir');
+              } else {
+                _subtitleFontDir = '';
+              }
+            } else {
+              _subtitleFontDir = '';
+            }
+          } catch (e) {
+            debugPrint('[VideoPlayerState] 检查 subtitle_fonts 缓存目录失败: $e');
+            _subtitleFontDir = '';
+          }
         }
       }
 
+      debugPrint('[FONT_DEBUG] applySubtitleStylePreference: effectiveFontDir=$effectiveFontDir, _subtitleFontDir=$_subtitleFontDir, _currentVideoPath=$_currentVideoPath, hadPreviousFontDir=$hadPreviousFontDir');
       if (effectiveFontDir != null) {
         player.setProperty('sub-fonts-dir', effectiveFontDir);
+        debugPrint('[FONT_DEBUG] 已设置 sub-fonts-dir=$effectiveFontDir');
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', effectiveFontDir);
         }
       } else if (hadPreviousFontDir) {
         player.setProperty('sub-fonts-dir', '');
+        debugPrint('[FONT_DEBUG] 清除 sub-fonts-dir（之前有设置但当前无字体目录）');
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', '');
         }
+      } else {
+        debugPrint('[FONT_DEBUG] 无 effectiveFontDir 且无之前设置，sub-fonts-dir 未变更');
       }
 
       final resolvedFontName = _subtitleFontName.isNotEmpty

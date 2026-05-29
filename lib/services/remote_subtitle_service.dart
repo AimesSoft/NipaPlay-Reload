@@ -21,6 +21,18 @@ const Set<String> _subtitleExtensions = {
   '.sub',
   '.sup',
 };
+const Set<String> _audioExtensions = {
+  '.mka',
+  '.aac',
+  '.flac',
+  '.wav',
+  '.mp3',
+};
+const Set<String> _fontExtensions = {
+  '.ttf',
+  '.otf',
+  '.ttc',
+};
 
 sealed class RemoteSubtitleCandidate {
   const RemoteSubtitleCandidate();
@@ -118,6 +130,46 @@ class SharedRemoteSubtitleCandidate extends RemoteSubtitleCandidate {
 
   @override
   String get sourceLabel => '共享媒体库';
+}
+
+class RemoteAudioCandidate {
+  final String shareId;
+  final String fileName;
+  final Uri audioUri;
+  final String? authorizationHeader;
+  final bool isLikelyMatch;
+  final String name;
+  final String extension;
+
+  const RemoteAudioCandidate({
+    required this.shareId,
+    required this.fileName,
+    required this.audioUri,
+    required this.authorizationHeader,
+    required this.isLikelyMatch,
+    required this.name,
+    required this.extension,
+  });
+}
+
+class RemoteFontCandidate {
+  final String shareId;
+  final String fileName;
+  final Uri fontUri;
+  final String? authorizationHeader;
+  final bool isLikelyMatch;
+  final String name;
+  final String extension;
+
+  const RemoteFontCandidate({
+    required this.shareId,
+    required this.fileName,
+    required this.fontUri,
+    required this.authorizationHeader,
+    required this.isLikelyMatch,
+    required this.name,
+    required this.extension,
+  });
 }
 
 class RemoteSubtitleService {
@@ -249,6 +301,131 @@ class RemoteSubtitleService {
     }
   }
 
+  /// 列出远程视频的外挂音轨候选（MKA等）
+  Future<List<RemoteAudioCandidate>> listExternalAudioForVideo(
+      String videoPath) async {
+    if (kIsWeb || videoPath.isEmpty) return const [];
+
+    final sharedStream = _parseSharedRemoteStreamUrl(videoPath);
+    if (sharedStream != null) {
+      return _listSharedRemoteAudioCandidates(sharedStream);
+    }
+
+    return const [];
+  }
+
+  /// 列出远程视频的字体候选（TTF/OTF等）
+  Future<List<RemoteFontCandidate>> listFontsForVideo(String videoPath) async {
+    if (kIsWeb || videoPath.isEmpty) return const [];
+
+    final sharedStream = _parseSharedRemoteStreamUrl(videoPath);
+    if (sharedStream != null) {
+      return _listSharedRemoteFontCandidates(sharedStream);
+    }
+
+    return const [];
+  }
+
+  /// 下载远程外挂音轨到本地缓存，返回缓存文件路径
+  Future<String> ensureAudioCached(RemoteAudioCandidate candidate,
+      {bool forceRefresh = false}) async {
+    if (kIsWeb) {
+      throw UnsupportedError('Web 平台不支持缓存远程音轨');
+    }
+
+    final baseDir = await StorageService.getAppStorageDirectory();
+    final cacheDir = Directory(p.join(baseDir.path, 'remote_audio'));
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+    }
+
+    final extension =
+        candidate.extension.isNotEmpty ? candidate.extension : '.mka';
+    final cacheKey =
+        'shared:${candidate.audioUri.replace(userInfo: '', fragment: '').toString()}';
+    final hash = sha1.convert(utf8.encode(cacheKey)).toString();
+    final target = File(p.join(cacheDir.path, '$hash$extension'));
+
+    if (!forceRefresh && await target.exists()) {
+      final size = await target.length();
+      if (size > 0) {
+        return target.path;
+      }
+    }
+
+    final tmp = File('${target.path}.downloading');
+    if (await tmp.exists()) {
+      await tmp.delete();
+    }
+
+    try {
+      await _downloadSharedRemoteAudio(candidate, tmp);
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await tmp.rename(target.path);
+      return target.path;
+    } catch (e) {
+      if (await tmp.exists()) {
+        await tmp.delete();
+      }
+      rethrow;
+    }
+  }
+
+  /// 下载远程字体到本地 subtitle_fonts 缓存目录，返回缓存文件路径
+  Future<String> ensureFontCached(RemoteFontCandidate candidate,
+      {bool forceRefresh = false}) async {
+    if (kIsWeb) {
+      throw UnsupportedError('Web 平台不支持缓存远程字体');
+    }
+
+    final baseDir = await StorageService.getAppStorageDirectory();
+    final cacheDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+    debugPrint('[FONT_DEBUG] ensureFontCached: baseDir=${baseDir.path}, subtitle_fonts=${cacheDir.path}, exists=${await cacheDir.exists()}');
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+      debugPrint('[FONT_DEBUG] ensureFontCached: 创建了 subtitle_fonts 目录');
+    }
+
+    final extension =
+        candidate.extension.isNotEmpty ? candidate.extension : '.ttf';
+    final cacheKey =
+        'shared:${candidate.fontUri.replace(userInfo: '', fragment: '').toString()}';
+    final hash = sha1.convert(utf8.encode(cacheKey)).toString();
+    final target = File(p.join(cacheDir.path, '$hash$extension'));
+    debugPrint('[FONT_DEBUG] ensureFontCached: candidate=${candidate.name}, hash=$hash, target=${target.path}');
+
+    if (!forceRefresh && await target.exists()) {
+      final size = await target.length();
+      if (size > 0) {
+        debugPrint('[FONT_DEBUG] ensureFontCached: 字体已缓存, size=$size, 跳过下载');
+        return target.path;
+      }
+    }
+
+    final tmp = File('${target.path}.downloading');
+    if (await tmp.exists()) {
+      await tmp.delete();
+    }
+
+    try {
+      await _downloadSharedRemoteFont(candidate, tmp);
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await tmp.rename(target.path);
+      debugPrint('[FONT_DEBUG] ensureFontCached: 下载完成, 最终路径=${target.path}, size=${await target.length()}');
+      return target.path;
+    } catch (e) {
+      debugPrint('[FONT_DEBUG] ensureFontCached: 下载失败: $e');
+      if (await tmp.exists()) {
+        await tmp.delete();
+      }
+      rethrow;
+    }
+  }
+
   Future<void> _downloadToFile(
       RemoteSubtitleCandidate candidate, File destination) async {
     if (candidate is WebDavRemoteSubtitleCandidate) {
@@ -341,6 +518,10 @@ class RemoteSubtitleService {
       shareId: shareId,
       subtitlesPath: '${pathPrefix}subtitles',
       subtitlePath: '${pathPrefix}subtitle',
+      audioPath: '${pathPrefix}audio',
+      audioFilePath: '${pathPrefix}audio_file',
+      fontsPath: '${pathPrefix}fonts',
+      fontPath: '${pathPrefix}font',
     );
   }
 
@@ -548,6 +729,313 @@ class RemoteSubtitleService {
 
     candidates.sort((a, b) => a.name.compareTo(b.name));
     return candidates;
+  }
+
+  Future<List<RemoteAudioCandidate>> _listSharedRemoteAudioCandidates(
+    _SharedRemoteStreamInfo info,
+  ) async {
+    final authHeader = _buildBasicAuthHeader(info.streamUri);
+    final requestUri = info.streamUri.replace(
+      userInfo: '',
+      path: info.audioPath,
+      query: '',
+      queryParameters: null,
+      fragment: '',
+    );
+
+    debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: requestUri=$requestUri, audioPath=${info.audioPath}, audioFilePath=${info.audioFilePath}');
+
+    final headers = <String, String>{
+      'accept': 'application/json',
+      'user-agent': 'NipaPlay',
+    };
+    if (authHeader != null) {
+      headers['authorization'] = authHeader;
+    }
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(milliseconds: 10000),
+        receiveTimeout: const Duration(milliseconds: 15000),
+        sendTimeout: const Duration(milliseconds: 10000),
+        followRedirects: true,
+        responseType: ResponseType.plain,
+        headers: headers,
+      ),
+    );
+
+    Response<String> response;
+    try {
+      response = await dio.get<String>(requestUri.toString());
+    } catch (e) {
+      debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP请求失败: $e');
+      return const [];
+    }
+
+    final status = response.statusCode ?? 0;
+    debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
+    if (status != 200) {
+      return const [];
+    }
+
+    final body = response.data;
+    if (body == null || body.trim().isEmpty) {
+      return const [];
+    }
+
+    Map<String, dynamic> payload;
+    try {
+      final decoded = json.decode(body);
+      payload = decoded is Map<String, dynamic>
+          ? decoded
+          : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
+    } catch (e) {
+      debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: JSON解析失败: $e');
+      return const [];
+    }
+    if (payload.isEmpty) {
+      return const [];
+    }
+
+    final rawItems = payload['items'];
+    if (rawItems is! List) {
+      debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: payload中无items, keys=${payload.keys.toList()}');
+      return const [];
+    }
+
+    debugPrint('[MKA_DEBUG] _listSharedRemoteAudioCandidates: rawItems count=${rawItems.length}');
+
+    final candidates = <RemoteAudioCandidate>[];
+    for (final item in rawItems) {
+      if (item is! Map) continue;
+      final map = item.cast<String, dynamic>();
+      final name = (map['name']?.toString() ?? '').trim();
+      if (name.isEmpty) continue;
+      final ext = p.extension(name).toLowerCase();
+      if (!_audioExtensions.contains(ext)) continue;
+
+      final audioUri = info.streamUri.replace(
+        path: info.audioFilePath,
+        queryParameters: {'name': name},
+        fragment: '',
+      );
+
+      candidates.add(
+        RemoteAudioCandidate(
+          shareId: info.shareId,
+          fileName: name,
+          audioUri: audioUri,
+          authorizationHeader: authHeader,
+          isLikelyMatch: map['isLikelyMatch'] == true,
+          name: name,
+          extension: ext,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) => a.name.compareTo(b.name));
+    return candidates;
+  }
+
+  Future<List<RemoteFontCandidate>> _listSharedRemoteFontCandidates(
+    _SharedRemoteStreamInfo info,
+  ) async {
+    final authHeader = _buildBasicAuthHeader(info.streamUri);
+    final requestUri = info.streamUri.replace(
+      userInfo: '',
+      path: info.fontsPath,
+      query: '',
+      queryParameters: null,
+      fragment: '',
+    );
+
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: requestUri=$requestUri, shareId=${info.shareId}, fontsPath=${info.fontsPath}, fontPath=${info.fontPath}');
+
+    final headers = <String, String>{
+      'accept': 'application/json',
+      'user-agent': 'NipaPlay',
+    };
+    if (authHeader != null) {
+      headers['authorization'] = authHeader;
+    }
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(milliseconds: 10000),
+        receiveTimeout: const Duration(milliseconds: 15000),
+        sendTimeout: const Duration(milliseconds: 10000),
+        followRedirects: true,
+        responseType: ResponseType.plain,
+        headers: headers,
+      ),
+    );
+
+    Response<String> response;
+    try {
+      response = await dio.get<String>(requestUri.toString());
+    } catch (e) {
+      debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP请求失败: $e');
+      return const [];
+    }
+
+    final status = response.statusCode ?? 0;
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: HTTP status=$status, body length=${response.data?.length ?? 0}');
+    if (status != 200) {
+      return const [];
+    }
+
+    final body = response.data;
+    if (body == null || body.trim().isEmpty) {
+      return const [];
+    }
+
+    Map<String, dynamic> payload;
+    try {
+      final decoded = json.decode(body);
+      payload = decoded is Map<String, dynamic>
+          ? decoded
+          : (decoded is Map ? decoded.cast<String, dynamic>() : const {});
+    } catch (e) {
+      debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: JSON解析失败: $e');
+      return const [];
+    }
+    if (payload.isEmpty) {
+      return const [];
+    }
+
+    final rawItems = payload['items'];
+    if (rawItems is! List) {
+      debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: payload中无items字段, keys=${payload.keys.toList()}');
+      return const [];
+    }
+
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: rawItems count=${rawItems.length}');
+
+    final candidates = <RemoteFontCandidate>[];
+    for (final item in rawItems) {
+      if (item is! Map) continue;
+      final map = item.cast<String, dynamic>();
+      final name = (map['name']?.toString() ?? '').trim();
+      if (name.isEmpty) continue;
+      final ext = p.extension(name).toLowerCase();
+      if (!_fontExtensions.contains(ext)) continue;
+
+      final fontUri = info.streamUri.replace(
+        path: info.fontPath,
+        queryParameters: {'name': name},
+        fragment: '',
+      );
+
+      candidates.add(
+        RemoteFontCandidate(
+          shareId: info.shareId,
+          fileName: name,
+          fontUri: fontUri,
+          authorizationHeader: authHeader,
+          isLikelyMatch: map['isLikelyMatch'] == true,
+          name: name,
+          extension: ext,
+        ),
+      );
+    }
+
+    candidates.sort((a, b) => a.name.compareTo(b.name));
+    debugPrint('[FONT_DEBUG] _listSharedRemoteFontCandidates: 最终候选数=${candidates.length}');
+    return candidates;
+  }
+
+  Future<void> _downloadSharedRemoteAudio(
+      RemoteAudioCandidate candidate, File destination) async {
+    final headers = <String, String>{
+      'user-agent': 'NipaPlay',
+      'accept': '*/*',
+    };
+    if (candidate.authorizationHeader != null &&
+        candidate.authorizationHeader!.isNotEmpty) {
+      headers['authorization'] = candidate.authorizationHeader!;
+    }
+
+    final requestUri = candidate.audioUri.replace(userInfo: '');
+    debugPrint('[MKA_DEBUG] _downloadSharedRemoteAudio: 开始流式下载, uri=$requestUri');
+
+    // MKA/FLAC 文件通常很大（几十到几百MB），使用 ResponseType.stream 流式下载
+    // 避免将整个文件缓冲到内存导致 OOM 或连接超时
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(milliseconds: 15000),
+        receiveTimeout: const Duration(milliseconds: 300000), // 5分钟超时
+        sendTimeout: const Duration(milliseconds: 10000),
+        followRedirects: true,
+        responseType: ResponseType.stream,
+        headers: headers,
+      ),
+    );
+
+    final response = await dio.get<ResponseBody>(requestUri.toString());
+    final status = response.statusCode ?? 0;
+    if (status != 200 && status != 206) {
+      throw Exception('共享媒体外挂音轨下载失败 (HTTP $status)');
+    }
+
+    final body = response.data;
+    if (body == null) {
+      throw Exception('共享媒体外挂音轨返回空流');
+    }
+
+    // 流式写入文件
+    final sink = destination.openWrite();
+    try {
+      await for (final chunk in body.stream) {
+        sink.add(chunk);
+      }
+      await sink.close();
+    } catch (e) {
+      try { await sink.close(); } catch (_) {}
+      rethrow;
+    }
+
+    final size = await destination.length();
+    debugPrint('[MKA_DEBUG] _downloadSharedRemoteAudio: 下载完成, size=$size bytes');
+    if (size == 0) {
+      throw Exception('共享媒体外挂音轨下载结果为空文件');
+    }
+  }
+
+  Future<void> _downloadSharedRemoteFont(
+      RemoteFontCandidate candidate, File destination) async {
+    final headers = <String, String>{
+      'user-agent': 'NipaPlay',
+      'accept': '*/*',
+    };
+    if (candidate.authorizationHeader != null &&
+        candidate.authorizationHeader!.isNotEmpty) {
+      headers['authorization'] = candidate.authorizationHeader!;
+    }
+
+    final requestUri = candidate.fontUri.replace(userInfo: '');
+    debugPrint('[FONT_DEBUG] _downloadSharedRemoteFont: 请求字体 ${candidate.name}, uri=$requestUri');
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(milliseconds: 10000),
+        receiveTimeout: const Duration(milliseconds: 45000),
+        sendTimeout: const Duration(milliseconds: 10000),
+        followRedirects: true,
+        responseType: ResponseType.bytes,
+        headers: headers,
+      ),
+    );
+
+    final response = await dio.get<List<int>>(requestUri.toString());
+    final status = response.statusCode ?? 0;
+    debugPrint('[FONT_DEBUG] _downloadSharedRemoteFont: HTTP $status, data size=${response.data?.length ?? 0} bytes');
+    if (status != 200 && status != 206) {
+      throw Exception('共享媒体字体下载失败 (HTTP $status)');
+    }
+    final data = response.data;
+    if (data == null || data.isEmpty) {
+      throw Exception('共享媒体字体返回空内容');
+    }
+    await destination.writeAsBytes(data, flush: true);
   }
 
   Future<List<RemoteSubtitleCandidate>> _listWebDavCandidates(
@@ -1039,11 +1527,19 @@ class _SharedRemoteStreamInfo {
   final String shareId;
   final String subtitlesPath;
   final String subtitlePath;
+  final String audioPath;
+  final String audioFilePath;
+  final String fontsPath;
+  final String fontPath;
 
   const _SharedRemoteStreamInfo({
     required this.streamUri,
     required this.shareId,
     required this.subtitlesPath,
     required this.subtitlePath,
+    required this.audioPath,
+    required this.audioFilePath,
+    required this.fontsPath,
+    required this.fontPath,
   });
 }

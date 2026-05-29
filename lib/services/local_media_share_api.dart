@@ -16,6 +16,12 @@ class LocalMediaShareApi {
     router.get('/episodes/<shareId>/subtitles', _handleEpisodeSubtitles);
     router.get('/episodes/<shareId>/subtitle', _handleEpisodeSubtitleStream);
     router.add('HEAD', '/episodes/<shareId>/subtitle', _handleEpisodeSubtitleStreamHead);
+    router.get('/episodes/<shareId>/audio', _handleEpisodeExternalAudio);
+    router.get('/episodes/<shareId>/audio_file', _handleEpisodeAudioFileStream);
+    router.add('HEAD', '/episodes/<shareId>/audio_file', _handleEpisodeAudioFileStreamHead);
+    router.get('/episodes/<shareId>/fonts', _handleEpisodeFonts);
+    router.get('/episodes/<shareId>/font', _handleEpisodeFontStream);
+    router.add('HEAD', '/episodes/<shareId>/font', _handleEpisodeFontStreamHead);
     router.post('/episodes/<shareId>/progress', _handleUpdateEpisodeProgress);
     router.post('/episodes/<shareId>/thumbnail', _handleUpdateEpisodeThumbnail);
   }
@@ -182,6 +188,136 @@ class LocalMediaShareApi {
     }
   }
 
+
+  Future<Response> _handleEpisodeExternalAudio(Request request) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    final episode = _service.getEpisodeByShareId(shareId);
+    if (episode == null) {
+      return Response.notFound('Episode not found');
+    }
+
+    try {
+      final items = await _service.listEpisodeExternalAudio(episode);
+      return Response.ok(
+        json.encode({'success': true, 'items': items}),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error listing shared episode external audio: $e',
+      );
+    }
+  }
+
+  Future<Response> _handleEpisodeAudioFileStream(Request request) async {
+    return _handleEpisodeAudioFileStreamInternal(request, headOnly: false);
+  }
+
+  Future<Response> _handleEpisodeAudioFileStreamHead(Request request) async {
+    return _handleEpisodeAudioFileStreamInternal(request, headOnly: true);
+  }
+
+  Future<Response> _handleEpisodeAudioFileStreamInternal(
+    Request request, {
+    required bool headOnly,
+  }) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    final audioName = request.url.queryParameters['name']?.trim();
+    if (audioName == null || audioName.isEmpty) {
+      return Response.badRequest(body: 'Missing audio name');
+    }
+
+    final episode = _service.getEpisodeByShareId(shareId);
+    if (episode == null) {
+      return Response.notFound('Episode not found');
+    }
+
+    try {
+      return await _service.buildExternalAudioResponse(
+        request,
+        episode,
+        audioName: audioName,
+        headOnly: headOnly,
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error streaming shared external audio: $e',
+      );
+    }
+  }
+
+  Future<Response> _handleEpisodeFonts(Request request) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    final episode = _service.getEpisodeByShareId(shareId);
+    if (episode == null) {
+      return Response.notFound('Episode not found');
+    }
+
+    try {
+      final items = await _service.listEpisodeFonts(episode);
+      return Response.ok(
+        json.encode({'success': true, 'items': items}),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error listing shared episode fonts: $e',
+      );
+    }
+  }
+
+  Future<Response> _handleEpisodeFontStream(Request request) async {
+    return _handleEpisodeFontStreamInternal(request, headOnly: false);
+  }
+
+  Future<Response> _handleEpisodeFontStreamHead(Request request) async {
+    return _handleEpisodeFontStreamInternal(request, headOnly: true);
+  }
+
+  Future<Response> _handleEpisodeFontStreamInternal(
+    Request request, {
+    required bool headOnly,
+  }) async {
+    final shareId = request.params['shareId'];
+    if (shareId == null || shareId.isEmpty) {
+      return Response.badRequest(body: 'Missing shareId');
+    }
+
+    final fontName = request.url.queryParameters['name']?.trim();
+    if (fontName == null || fontName.isEmpty) {
+      return Response.badRequest(body: 'Missing font name');
+    }
+
+    final episode = _service.getEpisodeByShareId(shareId);
+    if (episode == null) {
+      return Response.notFound('Episode not found');
+    }
+
+    try {
+      return await _service.buildFontResponse(
+        request,
+        episode,
+        fontName: fontName,
+        headOnly: headOnly,
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: 'Error streaming shared font: $e',
+      );
+    }
+  }
 
   Future<Response> _handleUpdateEpisodeProgress(Request request) async {
     final shareId = request.params['shareId'];

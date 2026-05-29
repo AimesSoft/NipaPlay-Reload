@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../player_abstraction/player_abstraction.dart';
+import '../services/remote_subtitle_service.dart';
 
 /// 外部音频轨道管理器
 /// 负责自动检测同名MKA文件并加载为外部音频轨道
@@ -33,13 +34,18 @@ class AudioTrackManager {
 
   /// 检测同名.mka文件路径（不加载，仅返回路径）
   /// 用于在主媒体打开前获取MKA路径
+  /// 支持本地文件和共享远程媒体库
   Future<String?> detectExternalAudioPath(String videoPath) async {
     if (kIsWeb) return null;
+    debugPrint('[MKA_DEBUG] detectExternalAudioPath: videoPath=$videoPath');
 
-    // 仅支持本地文件
-    if (videoPath.startsWith('http://') ||
-        videoPath.startsWith('https://') ||
-        videoPath.startsWith('jellyfin://') ||
+    // 检查是否来自共享远程媒体库
+    if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
+      return _detectRemoteExternalAudioPath(videoPath);
+    }
+
+    // 非本地文件协议不支持
+    if (videoPath.startsWith('jellyfin://') ||
         videoPath.startsWith('emby://')) {
       return null;
     }
@@ -62,6 +68,47 @@ class AudioTrackManager {
       return mkaPath;
     } catch (e) {
       debugPrint('AudioTrackManager: 检测外部音频失败: $e');
+      return null;
+    }
+  }
+
+  /// 检测远程共享媒体库的外挂音轨，下载到缓存后返回本地路径
+  Future<String?> _detectRemoteExternalAudioPath(String videoPath) async {
+    try {
+      if (!RemoteSubtitleService.instance.isPotentialRemoteVideoPath(videoPath)) {
+        debugPrint('[MKA_DEBUG] _detectRemoteExternalAudioPath: 不是远程视频路径');
+        return null;
+      }
+
+      debugPrint('[MKA_DEBUG] _detectRemoteExternalAudioPath: 调用 listExternalAudioForVideo...');
+      final candidates = await RemoteSubtitleService.instance
+          .listExternalAudioForVideo(videoPath);
+      debugPrint('[MKA_DEBUG] listExternalAudioForVideo 返回 ${candidates.length} 个候选');
+      for (int i = 0; i < candidates.length; i++) {
+        final c = candidates[i];
+        debugPrint('[MKA_DEBUG] 音轨候选[$i]: name=${c.name}, ext=${c.extension}, isLikelyMatch=${c.isLikelyMatch}, uri=${c.audioUri}');
+      }
+      if (candidates.isEmpty) {
+        debugPrint('[MKA_DEBUG] 远程媒体库未找到外挂音轨');
+        return null;
+      }
+
+      // 优先选择 isLikelyMatch 的候选（同名 MKA）
+      RemoteAudioCandidate best = candidates.first;
+      for (final c in candidates) {
+        if (c.isLikelyMatch) {
+          best = c;
+          break;
+        }
+      }
+
+      debugPrint('[MKA_DEBUG] 选中音轨: ${best.name}, 正在下载到缓存...');
+      final cachedPath = await RemoteSubtitleService.instance
+          .ensureAudioCached(best);
+      debugPrint('[MKA_DEBUG] 远程外挂音轨已缓存: $cachedPath');
+      return cachedPath;
+    } catch (e) {
+      debugPrint('[MKA_DEBUG] 检测远程外挂音轨失败: $e');
       return null;
     }
   }
