@@ -326,13 +326,7 @@ class RemoteSubtitleService {
       }
       if (totalSize <= _maxCacheSizeBytes) return;
 
-      // 按最后修改时间排序，最旧的在前
-      files.sort((a, b) async {
-        final aTime = await a.lastModified();
-        final bTime = await b.lastModified();
-        return aTime.compareTo(bTime);
-      });
-      // 同步排序用缓存时间
+      // 按最后修改时间排序（异步获取时间），最旧的在前
       final sorted = await _sortFilesByModifiedTime(files);
 
       // 删除最旧的文件直到总大小低于阈值
