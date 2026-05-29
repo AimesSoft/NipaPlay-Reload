@@ -993,7 +993,8 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
           );
         },
       ),
-    );
+    ),
+  );
   }
 
   void _logSystemUiOverlayDecision({

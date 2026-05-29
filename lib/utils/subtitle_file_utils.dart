@@ -237,24 +237,3 @@ bool _isSubtitleNoiseToken(String token) {
   return false;
 }
 
-/// 从 ASS/SSA 字幕内容中提取引用的字体名称
-/// 解析 Style 行中的 Fontname 字段，返回去重后的字体名列表
-Set<String> extractAssFontNames(String content) {
-  final fontNames = <String>{};
-  final fontPattern = RegExp(r'Fontname:\s*(.+)', caseSensitive: false);
-  for (final line in content.split('\n')) {
-    final trimmed = line.trim();
-    if (trimmed.isEmpty) continue;
-    // 只在 [V4+ Styles] / [V4 Styles] / [Styles] 段中提取
-    // 简化处理：匹配所有含 Fontname: 的行
-    final match = fontPattern.firstMatch(trimmed);
-    if (match != null) {
-      final name = match.group(1)?.trim() ?? '';
-      if (name.isNotEmpty && name != 'Arial') {
-        // 排除默认 Arial 字体（libass 已内置）
-        fontNames.add(name);
-      }
-    }
-  }
-  return fontNames;
-}

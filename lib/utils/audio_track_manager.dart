@@ -37,7 +37,7 @@ class AudioTrackManager {
   /// 支持本地文件和共享远程媒体库
   Future<String?> detectExternalAudioPath(String videoPath) async {
     if (kIsWeb) return null;
-    debugPrint('[MKA_DEBUG] detectExternalAudioPath: videoPath=$videoPath');
+    if (kDebugMode) debugPrint('[MKA_DEBUG] detectExternalAudioPath: videoPath=$videoPath');
 
     // 检查是否来自共享远程媒体库
     if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
@@ -76,39 +76,44 @@ class AudioTrackManager {
   Future<String?> _detectRemoteExternalAudioPath(String videoPath) async {
     try {
       if (!RemoteSubtitleService.instance.isPotentialRemoteVideoPath(videoPath)) {
-        debugPrint('[MKA_DEBUG] _detectRemoteExternalAudioPath: 不是远程视频路径');
+        if (kDebugMode) debugPrint('[MKA_DEBUG] _detectRemoteExternalAudioPath: 不是远程视频路径');
         return null;
       }
 
-      debugPrint('[MKA_DEBUG] _detectRemoteExternalAudioPath: 调用 listExternalAudioForVideo...');
+      if (kDebugMode) debugPrint('[MKA_DEBUG] _detectRemoteExternalAudioPath: 调用 listExternalAudioForVideo...');
       final candidates = await RemoteSubtitleService.instance
           .listExternalAudioForVideo(videoPath);
-      debugPrint('[MKA_DEBUG] listExternalAudioForVideo 返回 ${candidates.length} 个候选');
+      if (kDebugMode) debugPrint('[MKA_DEBUG] listExternalAudioForVideo 返回 ${candidates.length} 个候选');
       for (int i = 0; i < candidates.length; i++) {
         final c = candidates[i];
-        debugPrint('[MKA_DEBUG] 音轨候选[$i]: name=${c.name}, ext=${c.extension}, isLikelyMatch=${c.isLikelyMatch}, uri=${c.audioUri}');
+        if (kDebugMode) debugPrint('[MKA_DEBUG] 音轨候选[$i]: name=${c.name}, ext=${c.extension}, isLikelyMatch=${c.isLikelyMatch}, uri=${c.audioUri}');
       }
       if (candidates.isEmpty) {
-        debugPrint('[MKA_DEBUG] 远程媒体库未找到外挂音轨');
+        if (kDebugMode) debugPrint('[MKA_DEBUG] 远程媒体库未找到外挂音轨');
         return null;
       }
 
       // 优先选择 isLikelyMatch 的候选（同名 MKA）
-      RemoteAudioCandidate best = candidates.first;
+      // 无匹配候选时返回 null，避免加载不相关音频（如 OP/ED 或其他集数音轨）
+      RemoteAudioCandidate? best;
       for (final c in candidates) {
         if (c.isLikelyMatch) {
           best = c;
           break;
         }
       }
+      if (best == null) {
+        if (kDebugMode) debugPrint('[MKA_DEBUG] 无 isLikelyMatch 候选，跳过不相关音轨');
+        return null;
+      }
 
-      debugPrint('[MKA_DEBUG] 选中音轨: ${best.name}, 正在下载到缓存...');
+      if (kDebugMode) debugPrint('[MKA_DEBUG] 选中音轨: ${best.name}, 正在下载到缓存...');
       final cachedPath = await RemoteSubtitleService.instance
           .ensureAudioCached(best);
-      debugPrint('[MKA_DEBUG] 远程外挂音轨已缓存: $cachedPath');
+      if (kDebugMode) debugPrint('[MKA_DEBUG] 远程外挂音轨已缓存: $cachedPath');
       return cachedPath;
     } catch (e) {
-      debugPrint('[MKA_DEBUG] 检测远程外挂音轨失败: $e');
+      if (kDebugMode) debugPrint('[MKA_DEBUG] 检测远程外挂音轨失败: $e');
       return null;
     }
   }
