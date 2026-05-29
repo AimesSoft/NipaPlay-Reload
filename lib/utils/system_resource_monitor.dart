@@ -248,7 +248,8 @@ class SystemResourceMonitor {
       final gpuSample = await rust_perf.sampleGpuPercent();
       _gpuUsage = gpuSample.gpuPercent.clamp(0.0, 100.0);
       _lastGpuSampleMillis = nowMs;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('读取 GPU 采样失败: $e');
       _gpuUsage = null;
     }
   }
