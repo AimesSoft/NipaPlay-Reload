@@ -26,23 +26,11 @@ class SimilarityEngine {
         uint dispose_idx = 0;
     } config_;
 
-    std::vector<struct DanmuCacheline> nearby_danmu_;
-    std::unordered_map<ulong, uint> precise_matcher_;
-
-    // scratch buffers: heap 分配避免栈溢出（~4MB）
-    // 原代码: short ed_a[MAX_HASH_VAL], ed_b[MAX_HASH_VAL]
-    std::unique_ptr<short[]> ed_a_;
-    std::unique_ptr<short[]> ed_b_;
+    // 数据成员声明移至类底部（MSVC 要求完整类型才能实例化 vector）
+    // 此处仅前向声明，实际定义在 DanmuCacheline 之后
 
 public:
-    SimilarityEngine()
-        : ed_a_(std::make_unique<short[]>(MAX_HASH_VAL))
-        , ed_b_(std::make_unique<short[]>(MAX_HASH_VAL))
-    {
-        std::memset(ed_a_.get(), 0, MAX_HASH_VAL * sizeof(short));
-        std::memset(ed_b_.get(), 0, MAX_HASH_VAL * sizeof(short));
-    }
-
+    SimilarityEngine();   // 构造函数声明，定义在类底部
     ~SimilarityEngine() = default;
     SimilarityEngine(const SimilarityEngine&) = delete;
     SimilarityEngine& operator=(const SimilarityEngine&) = delete;
@@ -173,11 +161,11 @@ public:
     int edit_distance(UnorderedContainer<ushort>& p,
                       UnorderedContainer<ushort>& q) {
         short* ea = ed_a_.get();
-        for(auto& [c, x]: p.data) ea[c] += x;
-        for(auto& [c, x]: q.data) ea[c] -= x;
+        for(auto& item: p.data) ea[item.first] += item.second;
+        for(auto& item: q.data) ea[item.first] -= item.second;
         int ans = 0;
-        for(auto& [c, _]: p.data) { ans += std::abs(ea[c]); ea[c] = 0; }
-        for(auto& [c, _]: q.data) { ans += std::abs(ea[c]); ea[c] = 0; }
+        for(auto& item: p.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
+        for(auto& item: q.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
         return ans;
     }
 
@@ -188,16 +176,16 @@ public:
                           UnorderedContainer<uint>& q) {
         short* ea = ed_a_.get();
         short* eb = ed_b_.get();
-        for(auto& [c, x]: p.data) ea[c] += x;
-        for(auto& [c, x]: q.data) eb[c] += x;
+        for(auto& item: p.data) ea[item.first] += item.second;
+        for(auto& item: q.data) eb[item.first] += item.second;
         int x=0, y=0, z=0;
-        for(auto& [c, _]: p.data) {
-            int xa = ea[c], xb = eb[c];
+        for(auto& item: p.data) {
+            int xa = ea[item.first], xb = eb[item.first];
             x += xa*xb; y += xa*xa; z += xb*xb;
-            ea[c] = 0; eb[c] = 0;
+            ea[item.first] = 0; eb[item.first] = 0;
         }
-        for(auto& [c, _]: q.data) {
-            int xb = eb[c]; z += xb*xb; eb[c] = 0;
+        for(auto& item: q.data) {
+            int xb = eb[item.first]; z += xb*xb; eb[item.first] = 0;
         }
         if(y<=0 || z<=0) return 0.0f;
         return static_cast<float>(x) * x / y / z;
@@ -351,7 +339,22 @@ public:
         config_.dispose_idx = 0;
         config_.index_r_lock = false;
     }
+
+    // ===== 数据成员（放在 DanmuCacheline 定义之后，MSVC 需要完整类型）=====
+    std::vector<DanmuCacheline> nearby_danmu_;
+    std::unordered_map<ulong, uint> precise_matcher_;
+    std::unique_ptr<short[]> ed_a_;
+    std::unique_ptr<short[]> ed_b_;
 };
+
+// 构造函数定义（类外定义，因为成员声明在类底部）
+SimilarityEngine::SimilarityEngine()
+    : ed_a_(std::make_unique<short[]>(MAX_HASH_VAL))
+    , ed_b_(std::make_unique<short[]>(MAX_HASH_VAL))
+{
+    std::memset(ed_a_.get(), 0, MAX_HASH_VAL * sizeof(short));
+    std::memset(ed_b_.get(), 0, MAX_HASH_VAL * sizeof(short));
+}
 
 // ===== C API 实现 =====
 extern "C" {
