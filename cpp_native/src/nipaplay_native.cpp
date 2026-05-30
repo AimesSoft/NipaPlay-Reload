@@ -183,9 +183,24 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
         if (!output_items || !output_count) {
             return {NP_ERR_NULL_PTR, "null output pointer"};
         }
+        if (output_capacity <= 0) {
+            *output_count = 0;
+            return {NP_OK, nullptr};
+        }
 
         auto* engine = static_cast<nipaplay::native::DanmakuLayoutEngine*>(handle);
-        const int32_t count = engine->frame(current_time, output_items, output_capacity);
+
+        // 使用 C++ 内部 LayoutResult 中间缓冲区（字段顺序与 NpLayoutResult 不同）
+        std::vector<nipaplay::native::LayoutResult> cppResults(output_capacity);
+        const int32_t count = engine->frame(current_time, cppResults.data(), output_capacity);
+
+        // 转换：LayoutResult → NpLayoutResult（字段顺序不同，必须逐个映射）
+        for (int32_t i = 0; i < count; i++) {
+            output_items[i].y_position   = cppResults[i].y_position;
+            output_items[i].scroll_speed = cppResults[i].scroll_speed;
+            output_items[i].item_index   = cppResults[i].item_index;
+            output_items[i].track_index = cppResults[i].track_index;
+        }
         *output_count = count;
 
         return {NP_OK, nullptr};
