@@ -22,3 +22,7 @@ cmake --build "${BUILD_DIR}" -j$(sysctl -n hw.ncpu)
 # 复制 dylib 到 Frameworks
 cp "${BUILD_DIR}/libnipaplay_native.dylib" \
     "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/"
+
+# Code sign the dylib (required for macOS app notarization)
+codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" \
+    "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/libnipaplay_native.dylib"
