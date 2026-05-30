@@ -101,7 +101,7 @@ class NipaPlayNextEngine {
 
   /// Disable the native engine and fall back to Dart permanently.
   void _disableNativeEngine() {
-    _logFrame('[WARN] native C++ engine DISABLED, falling back to Dart permanently');
+    _logNative('[FALLBACK] native C++ engine DISABLED, falling back to Dart path permanently');
     if (_nativeEngine != null) {
       try {
         _nativeEngine!.dispose();
