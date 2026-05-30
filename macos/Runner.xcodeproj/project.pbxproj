@@ -246,13 +246,14 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 33CC10FB2044A3C60003C045 /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
-				2915594BD446538B5CE873B9 /* [CP] Check Pods Manifest.lock */,
-				33CC10E92044A3C60003C045 /* Sources */,
-				33CC10EA2044A3C60003C045 /* Frameworks */,
-				33CC10EB2044A3C60003C045 /* Resources */,
-				33CC110E2044A8840003C045 /* Bundle Framework */,
-				3399D490228B24CF009A79C7 /* ShellScript */,
-				5B37853252ABE5D38BD93F49 /* [CP] Embed Pods Frameworks */,
+					2915594BD446538B5CE873B9 /* [CP] Check Pods Manifest.lock */,
+					NP1A2B3C4D5E6F70 /* Build cpp_native */,
+					33CC10E92044A3C60003C045 /* Sources */,
+					33CC10EA2044A3C60003C045 /* Frameworks */,
+					33CC10EB2044A3C60003C045 /* Resources */,
+					33CC110E2044A8840003C045 /* Bundle Framework */,
+					3399D490228B24CF009A79C7 /* ShellScript */,
+					5B37853252ABE5D38BD93F49 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -339,6 +340,24 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		NP1A2B3C4D5E6F70 /* Build cpp_native */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build cpp_native";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$PROJECT_DIR/../cpp_native/scripts/build_macos.sh\"\n";
+		};
 		2915594BD446538B5CE873B9 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;

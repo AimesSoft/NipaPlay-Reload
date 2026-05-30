@@ -32,6 +32,9 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Suppress deprecated experimental/coroutine warning in newer MSVC
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
@@ -128,3 +131,17 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# ──── cpp_native: C++ → Dart FFI ────
+set(NP_LIB_TYPE SHARED)  # Windows 使用 DLL
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../cpp_native" cpp_native_build)
+
+# 链接 nipaplay_native 到主可执行文件
+add_dependencies(${BINARY_NAME} nipaplay_native)
+target_link_libraries(${BINARY_NAME} PRIVATE nipaplay_native)
+
+# 将 DLL 安装到与 exe 同目录（使用 install 而非 POST_BUILD，
+# 因为 add_custom_command(TARGET) 不能跨目录使用）
+install(FILES "$<TARGET_FILE:nipaplay_native>"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
