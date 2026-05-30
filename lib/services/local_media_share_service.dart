@@ -12,6 +12,7 @@ import 'package:nipaplay/models/bangumi_model.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 
 class SharedEpisodeInfo {
@@ -104,31 +105,12 @@ class LocalMediaShareService {
   }
 
   static final LocalMediaShareService instance = LocalMediaShareService._internal();
-  static const Set<String> _subtitleExtensions = {
-    '.ass',
-    '.ssa',
-    '.srt',
-    '.sub',
-    '.sup',
-  };
   static const Map<String, int> _subtitleExtensionPriority = {
     '.ass': 0,
     '.ssa': 1,
     '.srt': 2,
     '.sub': 3,
     '.sup': 4,
-  };
-  static const Set<String> _audioExtensions = {
-    '.mka',
-    '.aac',
-    '.flac',
-    '.wav',
-    '.mp3',
-  };
-  static const Set<String> _fontExtensions = {
-    '.ttf',
-    '.otf',
-    '.ttc',
   };
 
   final Map<String, SharedEpisodeInfo> _shareEpisodeMap = {};
@@ -476,7 +458,7 @@ class LocalMediaShareService {
       }
 
       final ext = p.extension(filePath).toLowerCase();
-      if (!_subtitleExtensions.contains(ext)) {
+      if (!subtitleExtensions.contains(ext)) {
         continue;
       }
 
@@ -593,7 +575,7 @@ class LocalMediaShareService {
       }
 
       final ext = p.extension(filePath).toLowerCase();
-      if (!_audioExtensions.contains(ext)) {
+      if (!audioExtensions.contains(ext)) {
         continue;
       }
 
@@ -608,8 +590,10 @@ class LocalMediaShareService {
       }
 
       final audioBaseName = p.basenameWithoutExtension(filePath).toLowerCase();
-      final bool isLikelyMatch =
-          audioBaseName == videoBaseName || audioBaseName.contains(videoBaseName);
+      // 使用精确匹配或分隔符边界匹配，避免 "ep1" 误匹配 "ep10" 等
+      final bool isExactMatch = audioBaseName == videoBaseName;
+      final bool isLikelyMatch = isExactMatch ||
+          _isSeparatorBoundedContains(audioBaseName, videoBaseName);
 
       items.add({
         'name': p.basename(filePath),
@@ -708,7 +692,7 @@ class LocalMediaShareService {
       if (entry is File) {
         final filePath = entry.path;
         final ext = p.extension(filePath).toLowerCase();
-        if (!_fontExtensions.contains(ext)) continue;
+        if (!fontExtensions.contains(ext)) continue;
 
         FileStat stat;
         try {
@@ -758,7 +742,7 @@ class LocalMediaShareService {
     final audioFile = await _resolveFileByName(
       videoPath: videoPath,
       fileName: audioName,
-      allowedExtensions: _audioExtensions,
+      allowedExtensions: audioExtensions,
     );
     if (audioFile == null) {
       return Response.notFound('Audio not found');
@@ -1055,7 +1039,7 @@ class LocalMediaShareService {
     return _resolveFileByName(
       videoPath: videoPath,
       fileName: subtitleName,
-      allowedExtensions: _subtitleExtensions,
+      allowedExtensions: subtitleExtensions,
     );
   }
 
@@ -1110,7 +1094,7 @@ class LocalMediaShareService {
     // 验证扩展名
     final basename = p.basename(normalizedSlash);
     final ext = p.extension(basename).toLowerCase();
-    if (!_fontExtensions.contains(ext)) {
+    if (!fontExtensions.contains(ext)) {
       return null;
     }
 
@@ -1140,7 +1124,9 @@ class LocalMediaShareService {
       return null;
     }
 
-    if (!canonicalResolvedPath.startsWith(canonicalVideoDir)) {
+    // 使用路径分隔符边界检查，防止 /media/show 匹配 /media/show-secret
+    if (!canonicalResolvedPath.startsWith(canonicalVideoDir + p.separator) &&
+        canonicalResolvedPath != canonicalVideoDir) {
       return null;
     }
 
@@ -1149,5 +1135,32 @@ class LocalMediaShareService {
     }
 
     return resolvedFile;
+  }
+
+  /// 检查 [haystack] 是否包含 [needle]，但要求 [needle] 在 [haystack] 中的
+  /// 边界处有非字母数字分隔符（如 '.', '-', '_', ' ', '[' 等），
+  /// 避免 "ep1" 匹配 "ep10" 或 "ep12" 的情况。
+  static bool _isSeparatorBoundedContains(String haystack, String needle) {
+    int pos = 0;
+    while (pos <= haystack.length - needle.length) {
+      final idx = haystack.indexOf(needle, pos);
+      if (idx < 0) break;
+      // 检查 needle 前后的字符是否为分隔符或字符串边界
+      final beforeOk =
+          idx == 0 || _isSeparator(haystack.codeUnitAt(idx - 1));
+      final afterOk = idx + needle.length == haystack.length ||
+          _isSeparator(haystack.codeUnitAt(idx + needle.length));
+      if (beforeOk && afterOk) return true;
+      pos = idx + 1;
+    }
+    return false;
+  }
+
+  /// 判断字符是否为非字母数字的分隔符
+  static bool _isSeparator(int charCode) {
+    // 允许的分隔符: . - _ 空格 [ ] ( ) 以及非ASCII字符（如中文）
+    if (charCode >= 0x80) return true; // 非ASCII视为分隔符
+    final ch = String.fromCharCode(charCode);
+    return RegExp(r'[^a-zA-Z0-9]').hasMatch(ch);
   }
 }
