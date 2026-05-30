@@ -121,6 +121,18 @@ pub fn danmaku_similarity_check(
     let mut groups: Vec<Vec<i32>> = Vec::new();
     let time_window = config.time_window;
 
+    // ===== 索引映射 =====
+    // C++ 引擎在匹配成功时不将弹幕加入 nearby_danmu_（只保留组代表），
+    // 因此引擎内部索引与原始数组索引会产生偏差。
+    // 必须维护双向映射才能正确传递 index_l 和解析 target_index。
+
+    /// 引擎内部索引 → 原始数组索引（仅被加入 nearby_danmu_ 的项才有映射）
+    let mut engine_to_orig: Vec<i32> = Vec::new();
+
+    /// 原始数组索引 → 该项的组代表在引擎中的内部索引
+    /// （未匹配项的代表就是自身；匹配项的代表是它匹配到的那条）
+    let mut orig_to_rep_engine_idx: Vec<u32> = Vec::with_capacity(items.len());
+
     // 逐条弹幕送入引擎
     for (i, item) in items.iter().enumerate() {
         // UTF-8 → UTF-16 转换
@@ -130,11 +142,20 @@ pub fn danmaku_similarity_check(
         str_buf[copy_len] = 0; // null terminator
 
         // 计算 index_l（时间窗口裁剪）
-        let mut index_l = 0u32;
-        if time_window > 0.0 {
+        // 关键修正：index_l 必须是引擎内部索引空间中的值，而非原始数组索引。
+        // 默认值 = 当前引擎内部数组长度，表示"不搜索任何已有条目"（全在窗口外）。
+        let mut index_l: u32 = engine_to_orig.len() as u32;
+        if time_window > 0.0 && !orig_to_rep_engine_idx.is_empty() {
+            // 从最近的弹幕向前扫描，找到时间窗口内的所有原始索引，
+            // 取其组代表的引擎内部索引的最小值作为 index_l。
             for (j, prev) in items[..i].iter().enumerate().rev() {
                 if item.time_seconds - prev.time_seconds <= time_window {
-                    index_l = j as u32;
+                    if j < orig_to_rep_engine_idx.len() {
+                        let ej = orig_to_rep_engine_idx[j];
+                        if ej < index_l {
+                            index_l = ej;
+                        }
+                    }
                 } else {
                     break;
                 }
@@ -151,7 +172,35 @@ pub fn danmaku_similarity_check(
             let dist = ((ret >> 19) & ((1 << 11) - 1)) as i32;
             let idx_diff = (ret & ((1 << 19) - 1)) as i32;
 
-            let target_index = (i as i32) - idx_diff;
+            // C++ 引擎返回的 idx_diff = p.idx - q.idx（引擎内部索引差）
+            // p.idx = 当前 nearby_danmu_.size()（本条若不匹配将被插入的位置）
+            // q.idx = 匹配到的条目在 nearby_danmu_ 中的索引
+            // 因此匹配到的条目的引擎内部索引 = engine_to_orig.len() - idx_diff
+            let current_engine_size = engine_to_orig.len() as u32;
+            let matched_engine_idx = current_engine_idx_saturating_sub(current_engine_size, idx_diff as u32);
+
+            // 通过反向映射还原原始数组索引
+            let target_index = if (matched_engine_idx as usize) < engine_to_orig.len() {
+                engine_to_orig[matched_engine_idx as usize]
+            } else {
+                // 映射失败时的安全回退（不应发生）
+                (i as i32).saturating_sub(idx_diff)
+            };
+
+            // 时间窗口安全校验：引擎可能在 index_l 映射不完美时
+            // 返回窗口外的匹配对，此处过滤掉
+            if target_index < 0
+                || (target_index as usize) >= items.len()
+                || (time_window > 0.0
+                    && item.time_seconds - items[target_index as usize].time_seconds > time_window)
+            {
+                // 窗口外的匹配无效：将本条视为未匹配，加入引擎
+                let new_engine_idx = engine_to_orig.len() as u32;
+                engine_to_orig.push(i as i32);
+                orig_to_rep_engine_idx.push(new_engine_idx);
+                continue;
+            }
+
             let reason_str = match reason_code {
                 0 => "identical",
                 1 => "edit_distance",
@@ -171,6 +220,15 @@ pub fn danmaku_similarity_check(
             });
 
             update_groups(&mut group_map, &mut groups, i as i32, target_index);
+
+            // 本条匹配成功，不加入 nearby_danmu_，
+            // 记录其组代表在引擎中的内部索引
+            orig_to_rep_engine_idx.push(matched_engine_idx);
+        } else {
+            // 本条未匹配，被加入 nearby_danmu_ 的末尾
+            let new_engine_idx = engine_to_orig.len() as u32;
+            engine_to_orig.push(i as i32);
+            orig_to_rep_engine_idx.push(new_engine_idx);
         }
     }
 
@@ -178,6 +236,11 @@ pub fn danmaku_similarity_check(
     unsafe { sim_engine_reset(engine.ptr); }
 
     SimilarityResult { pairs, groups }
+}
+
+/// 安全的饱和减法，防止 idx_diff > current_engine_size 时下溢
+fn current_engine_idx_saturating_sub(size: u32, diff: u32) -> u32 {
+    size.saturating_sub(diff)
 }
 
 /// 单对相似度：输入两段文本，返回 0.0-1.0 分数
