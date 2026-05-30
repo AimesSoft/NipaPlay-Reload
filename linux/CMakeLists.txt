@@ -171,3 +171,15 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# ──── cpp_native: C++ → Dart FFI ────
+set(NP_LIB_TYPE SHARED)  # Linux 使用 .so
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../cpp_native" cpp_native_build)
+
+add_dependencies(${BINARY_NAME} nipaplay_native)
+target_link_libraries(${BINARY_NAME} PRIVATE nipaplay_native)
+
+# .so 安装到 lib/ 目录（CMAKE_INSTALL_RPATH 已设为 $ORIGIN/lib）
+install(TARGETS nipaplay_native
+    LIBRARY DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+)
