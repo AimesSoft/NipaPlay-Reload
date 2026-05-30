@@ -9,6 +9,7 @@ set(NATIVE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/nipaplay_native.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/string_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/example_calculator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/danmaku_layout.cpp
 )
 
 set(NATIVE_INCLUDES

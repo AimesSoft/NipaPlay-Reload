@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart' show Utf8;
 import '../native_library.dart';
 import '../types/native_types.dart';
+import '../types/native_layout_types.dart';
 
 class NativeBindings {
   static final _dylib = NativeLibrary.instance;
@@ -32,4 +33,27 @@ class NativeBindings {
       NpResult Function(Pointer<Void>, Pointer<Utf8>, Pointer<NpString>),
       NpResult Function(NpHandle, Pointer<Utf8>, Pointer<NpString>)>(
       'np_example_process_text');
+
+  // ──── DanmakuLayoutEngine ────
+  static final npLayoutCreate = _dylib.lookupFunction<
+      Pointer<Void> Function(),
+      NpHandle Function()>('np_layout_create');
+
+  static final npLayoutDestroy = _dylib.lookupFunction<
+      Void Function(Pointer<Void>),
+      void Function(NpHandle)>('np_layout_destroy');
+
+  static final npLayoutConfigure = _dylib.lookupFunction<
+      NpResult Function(Pointer<Void>, Pointer<NpDanmakuItem>, Int32,
+          Double, Double, Double, Double, Double, Double,
+          Int32, Double, Double),
+      NpResult Function(NpHandle, Pointer<NpDanmakuItem>, int,
+          double, double, double, double, double, double,
+          int, double, double)>('np_layout_configure');
+
+  static final npLayoutFrame = _dylib.lookupFunction<
+      NpResult Function(Pointer<Void>, Double,
+          Pointer<NpLayoutResult>, Int32, Pointer<Int32>),
+      NpResult Function(NpHandle, double,
+          Pointer<NpLayoutResult>, int, Pointer<Int32>)>('np_layout_frame');
 }
