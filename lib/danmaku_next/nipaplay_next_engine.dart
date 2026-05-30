@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show listEquals, kIsWeb, kReleaseMode;
+import 'package:flutter/foundation.dart' show debugPrint, listEquals, kIsWeb, kReleaseMode;
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
@@ -60,12 +60,12 @@ class NipaPlayNextEngine {
     DanmakuNextLog.d('Engine', '[$_id] $msg', throttle: Duration.zero);
   }
 
-  /// Native-engine-only log: also prints to console for Release visibility.
+  /// Native-engine-only log: outputs to program log (debugPrint).
+  /// debugPrint is visible in Flutter's logging system (DevTools, run log).
   void _logNative(String msg) {
     final line = '[$_id] $msg';
     developer.log(line, name: _logTag);
-    // ignore: avoid_print
-    print('[$_logTag] $line');
+    debugPrint('[$_logTag] $line');
   }
 
   /// Frame-level log: Debug/Profile only, throttled to ~1 per 2s.
