@@ -2,10 +2,18 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CPP_NATIVE_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Map Xcode configuration to CMake build type
+if [ "${CONFIGURATION}" = "Debug" ]; then
+    CMAKE_BUILD_TYPE="Debug"
+else
+    CMAKE_BUILD_TYPE="Release"
+fi
+
 BUILD_DIR="${DERIVED_SOURCES_DIR:-${CPP_NATIVE_DIR}/build_macos}"
 
 cmake -S "${CPP_NATIVE_DIR}" -B "${BUILD_DIR}" \
-    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
     -DNP_LIB_TYPE=SHARED \
     -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 

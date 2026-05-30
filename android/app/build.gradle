@@ -100,10 +100,10 @@ android {
     }
 
     // ──── cpp_native: CMake path & version (must be outside defaultConfig for AGP 8.x) ────
+    // ──── cpp_native: CMake path (version auto-detected from SDK, minimum 3.16 required) ────
     externalNativeBuild {
         cmake {
             path = file("../../cpp_native/CMakeLists.txt")
-            version = "3.18.1"
         }
     }
 }

@@ -2,13 +2,21 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CPP_NATIVE_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Map Xcode configuration to CMake build type
+if [ "${CONFIGURATION}" = "Debug" ]; then
+    CMAKE_BUILD_TYPE="Debug"
+else
+    CMAKE_BUILD_TYPE="Release"
+fi
+
 BUILD_DIR="${DERIVED_SOURCES_DIR:-${CPP_NATIVE_DIR}/build_ios}"
 
 # 构建静态库（arm64 only for device, x86_64 for simulator）
 ARCHS="${ARCHS_STANDARD:-arm64}"
 for ARCH in ${ARCHS}; do
     cmake -S "${CPP_NATIVE_DIR}" -B "${BUILD_DIR}/${ARCH}" \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
         -DNP_LIB_TYPE=STATIC \
         -DCMAKE_OSX_ARCHITECTURES="${ARCH}" \
         -DCMAKE_SYSTEM_NAME=iOS \
