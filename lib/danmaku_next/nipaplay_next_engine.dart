@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show listEquals, kIsWeb;
+import 'package:flutter/foundation.dart' show listEquals, kIsWeb, kReleaseMode;
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
@@ -56,9 +56,26 @@ class NipaPlayNextEngine {
   int get layoutVersion => _layoutVersion;
 
   void _log(String msg) {
+    developer.log('[$_id] $msg', name: _logTag);
+    DanmakuNextLog.d('Engine', '[$_id] $msg', throttle: Duration.zero);
+  }
+
+  /// Native-engine-only log: also prints to console for Release visibility.
+  void _logNative(String msg) {
     final line = '[$_id] $msg';
     developer.log(line, name: _logTag);
-    DanmakuNextLog.d('Engine', line, throttle: Duration.zero);
+    // ignore: avoid_print
+    print('[$_logTag] $line');
+  }
+
+  /// Frame-level log: Debug/Profile only, throttled to ~1 per 2s.
+  /// Completely eliminated in Release builds (early return + tree-shaking).
+  void _logFrame(String msg) {
+    if (kReleaseMode) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastFrameLogTimeMs < 2000) return;
+    _lastFrameLogTimeMs = nowMs;
+    developer.log('[$_id] $msg', name: _logTag);
   }
 
   /// Attempt to initialize the native C++ layout engine.
@@ -73,28 +90,18 @@ class NipaPlayNextEngine {
     try {
       _nativeEngine = DanmakuLayoutEngine();
       _nativeEngineAvailable = true;
-      _log('[OK] native C++ layout engine INITIALIZED successfully (handle=${_nativeEngine!.itemCount})');
-      DanmakuNextLog.d(
-        'Engine',
-        'native C++ layout engine initialized',
-        throttle: Duration.zero,
-      );
+      _logNative('[OK] native C++ layout engine INITIALIZED successfully (handle=${_nativeEngine!.itemCount})');
       return _nativeEngine;
     } catch (e) {
       _nativeEngineAvailable = false;
-      _log('[ERR] native C++ layout engine UNAVAILABLE, using Dart fallback: $e');
-      DanmakuNextLog.d(
-        'Engine',
-        'native layout engine unavailable, using Dart fallback: $e',
-        throttle: Duration.zero,
-      );
+      _logNative('[ERR] native C++ layout engine UNAVAILABLE, using Dart fallback: $e');
       return null;
     }
   }
 
   /// Disable the native engine and fall back to Dart permanently.
   void _disableNativeEngine() {
-    _log('[WARN] native C++ engine DISABLED, falling back to Dart permanently');
+    _logNative('[WARN] native C++ engine DISABLED, falling back to Dart permanently');
     if (_nativeEngine != null) {
       try {
         _nativeEngine!.dispose();
@@ -166,7 +173,7 @@ class NipaPlayNextEngine {
     if (_layoutDirty) {
       final native = _tryInitNativeEngine();
       if (native != null) {
-        _log('configure -> _rebuildLayoutNative (C++ path)');
+        _logNative('configure -> _rebuildLayoutNative (C++ path)');
         _rebuildLayoutNative(native);
       } else {
         _log('configure -> _rebuildLayout (Dart fallback path)');
@@ -190,12 +197,7 @@ class NipaPlayNextEngine {
       try {
         return _layoutNative(currentTimeSeconds);
       } catch (e) {
-        _log('[ERR] native frame EXCEPTION, falling back to Dart: $e');
-        DanmakuNextLog.d(
-          'Engine',
-          'native frame exception, falling back to Dart: $e',
-          throttle: Duration.zero,
-        );
+        _logNative('[ERR] native frame EXCEPTION, falling back to Dart: $e');
         _disableNativeEngine();
         _layoutDirty = true;
         _rebuildLayout();
@@ -211,12 +213,7 @@ class NipaPlayNextEngine {
   List<PositionedDanmakuItem> _layoutNative(double currentTimeSeconds) {
     final frameResult = _nativeEngine!.frame(currentTimeSeconds);
     if (!frameResult.isOk) {
-      _log('[ERR] native frame ERROR: ${frameResult.errorMessage}, falling back to Dart');
-      DanmakuNextLog.d(
-        'Engine',
-        'native frame error: ${frameResult.errorMessage}, falling back to Dart',
-        throttle: Duration.zero,
-      );
+      _logNative('[ERR] native frame ERROR: ${frameResult.errorMessage}, falling back to Dart');
       _disableNativeEngine();
       _layoutDirty = true;
       _rebuildLayout();
@@ -224,12 +221,7 @@ class NipaPlayNextEngine {
     }
 
     final layoutResults = frameResult.requireValue;
-    // Frame log throttle: at most once per 2 seconds
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (nowMs - _lastFrameLogTimeMs >= 2000) {
-      _lastFrameLogTimeMs = nowMs;
-      _log('native frame(t=${currentTimeSeconds.toStringAsFixed(2)}) -> ${layoutResults.length} visible items');
-    }
+    _logFrame('native frame(t=${currentTimeSeconds.toStringAsFixed(2)}) -> ${layoutResults.length} visible items');
     _positionedBuffer.clear();
 
     for (final r in layoutResults) {
@@ -265,11 +257,13 @@ class NipaPlayNextEngine {
       }
     }
 
-    DanmakuNextLog.d(
-      'Engine',
-      'layout(native) time=${currentTimeSeconds.toStringAsFixed(2)} out=${_positionedBuffer.length}',
-      throttle: const Duration(seconds: 1),
-    );
+    if (!kReleaseMode) {
+      DanmakuNextLog.d(
+        'Engine',
+        'layout(native) time=${currentTimeSeconds.toStringAsFixed(2)} out=${_positionedBuffer.length}',
+        throttle: const Duration(seconds: 1),
+      );
+    }
     return _positionedBuffer;
   }
 
@@ -418,11 +412,13 @@ class NipaPlayNextEngine {
     _layoutVersion++;
 
     if (_items.isEmpty || _size.isEmpty) {
-      DanmakuNextLog.d(
-        'Engine',
-        'layout rebuild(native) skipped items=${_items.length} size=${_size.width}x${_size.height}',
-        throttle: Duration.zero,
-      );
+      if (!kReleaseMode) {
+        DanmakuNextLog.d(
+          'Engine',
+          'layout rebuild(native) skipped items=${_items.length} size=${_size.width}x${_size.height}',
+          throttle: Duration.zero,
+        );
+      }
       return;
     }
 
@@ -450,17 +446,10 @@ class NipaPlayNextEngine {
       ));
     }
 
-    _log('native configure: ${_items.length} items, size=${_size.width.toStringAsFixed(0)}x${_size.height.toStringAsFixed(0)}, '
+    _logNative('native configure: ${_items.length} items, size=${_size.width.toStringAsFixed(0)}x${_size.height.toStringAsFixed(0)}, '
         'font=${_fontSize.toStringAsFixed(1)}, area=${_displayArea.toStringAsFixed(2)}, '
         'scroll=${_scrollDurationSeconds.toStringAsFixed(1)}, stacking=$_allowStacking, '
         'baseH=${baseDanmakuHeight.toStringAsFixed(1)}, trackH=${baseTrackHeight.toStringAsFixed(1)}');
-    DanmakuNextLog.d(
-      'Engine',
-      'layout rebuild(native) items=${_items.length} font=${_fontSize.toStringAsFixed(1)} '
-          'area=${_displayArea.toStringAsFixed(2)} scroll=${_scrollDurationSeconds.toStringAsFixed(1)} '
-          'stacking=$_allowStacking',
-      throttle: Duration.zero,
-    );
 
     final result = native.configure(
       inputs: inputs,
@@ -475,12 +464,7 @@ class NipaPlayNextEngine {
     );
 
     if (!result.isOk) {
-      _log('[ERR] native configure FAILED: ${result.errorMessage}, falling back to Dart');
-      DanmakuNextLog.d(
-        'Engine',
-        'native configure failed: ${result.errorMessage}, falling back to Dart',
-        throttle: Duration.zero,
-      );
+      _logNative('[ERR] native configure FAILED: ${result.errorMessage}, falling back to Dart');
       _disableNativeEngine();
       _layoutDirty = true;
       _rebuildLayout(); // Fallback to Dart
