@@ -10,6 +10,8 @@ fn main() {
         // 注意：不使用 -fno-exceptions，C API 的 try-catch 需要 C++ 异常支持
         // 来捕获 FFI 边界上的任何异常，防止进程崩溃
         .flag_if_supported("-fno-rtti")
+        .flag_if_supported("-ffast-math")   // -O3 -ffast-math ≡ -Ofast; safe: no isnan/isinf, integer-only std::abs
+        .flag_if_supported("/fp:fast")      // MSVC equivalent of -ffast-math
         .flag_if_supported("/utf-8");  // MSVC: 防止 C4819 编码警告导致错误
 
     // MSVC: cc crate 在某些环境（如 Flutter cargokit）中无法自动检测 INCLUDE 路径，

@@ -1,8 +1,28 @@
 #pragma once
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 namespace nipaplay::native {
+
+// ──── -ffast-math-safe NaN / Inf checks via bit inspection ────
+// std::isnan / std::isinf are undefined under -ffast-math (-ffinite-math-only).
+// These use raw IEEE 754 bit patterns and are immune to FP semantics flags.
+
+inline bool np_isnan(double v) noexcept {
+    uint64_t bits;
+    std::memcpy(&bits, &v, sizeof(bits));
+    // NaN: exponent all-1s (bits 52..62), mantissa non-zero (bits 0..51)
+    return ((bits >> 52) & 0x7FFu) == 0x7FFu && (bits & 0x000FFFFFFFFFFFFFull) != 0;
+}
+
+inline bool np_isinf(double v) noexcept {
+    uint64_t bits;
+    std::memcpy(&bits, &v, sizeof(bits));
+    // Inf: exponent all-1s, mantissa zero
+    return ((bits >> 52) & 0x7FFu) == 0x7FFu && (bits & 0x000FFFFFFFFFFFFFull) == 0;
+}
+
 
 /// 弹幕类型
 enum class DanmakuType : int32_t {

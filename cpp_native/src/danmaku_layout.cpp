@@ -1,7 +1,6 @@
 #include "danmaku_layout.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace nipaplay::native {
 
@@ -47,7 +46,7 @@ void DanmakuLayoutEngine::rebuildLayout() {
     const double effectiveHeight = std::max(1.0, height_ * display_area_);
 
     int32_t trackCount;
-    if (display_area_ <= 0 || std::isnan(display_area_) || std::isinf(display_area_)) {
+    if (display_area_ <= 0 || np_isnan(display_area_) || np_isinf(display_area_)) {
         trackCount = 1;
     } else {
         trackCount = static_cast<int32_t>(effectiveHeight / base_track_height_);

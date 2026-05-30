@@ -74,3 +74,14 @@ Dart 侧绑定位于 `lib/cpp_native/`。
 - armeabi-v7a 兼容：`Pointer<Void>` 自动适配 4 字节指针
 - MSVC 统一使用 `/MD`（动态 CRT），与 Flutter 引擎一致
 - Android 使用 `c++_shared` STL，与 Flutter 引擎一致
+
+## Release 编译优化
+
+Release 构建下开启了 **-Ofast 等效优化**（`-O3` + `-ffast-math`），以最大化弹幕布局引擎的计算吞吐：
+
+| 平台 | 优化标志 |
+|------|---------|
+| GCC / Clang (Linux, macOS, iOS, Android) | `-O3 -ffast-math` |
+| MSVC (Windows) | `/O2 /fp:fast` |
+
+`-ffast-math` 包含 `-ffinite-math-only`，会使标准库的 `std::isnan` / `std::isinf` 失效。为此，弹幕布局引擎使用 **IEEE 754 位运算** 实现的 `np_isnan` / `np_isinf` 替代标准库调用，确保在快速浮点模式下 NaN / Inf 检测仍然正确。

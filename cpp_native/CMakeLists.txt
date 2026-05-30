@@ -21,13 +21,21 @@ set(NATIVE_INCLUDES
 if(MSVC)
     add_compile_options(/utf-8 /EHsc /W4 /Zc:__cplusplus)
     add_definitions(-DNIPAPLAY_NATIVE_BUILDING)
-    # C++20: /std:c++20 由 CMAKE_CXX_STANDARD 自动设置
-elseif(APPLE)
+    # Release: /O2 is default; add /fp:fast for aggressive FP optimizations
+    # (np_isnan/np_isinf use bit-level checks, safe under /fp:fast)
+    add_compile_options($<$<CONFIG:Release>:/fp:fast>)
+else()
+    # Common flags for Apple & Linux
     add_compile_options(-fno-rtti -fvisibility=hidden)
     add_definitions(-DNIPAPLAY_NATIVE_BUILDING)
-else()
-    add_compile_options(-fno-rtti -fvisibility=hidden -fPIC)
-    add_definitions(-DNIPAPLAY_NATIVE_BUILDING)
+    if(NOT APPLE)
+        add_compile_options(-fPIC)
+    endif()
+
+    # Release: -O3 -ffast-math (equivalent to -Ofast)
+    # np_isnan/np_isinf (IEEE 754 bit-level) bypass -ffinite-math-only safely.
+    add_compile_options($<$<CONFIG:Release>:-O3>)
+    add_compile_options($<$<CONFIG:Release>:-ffast-math>)
 endif()
 
 # ──── 库类型 ────

@@ -60,8 +60,8 @@ class NipaPlayNextEngine {
     DanmakuNextLog.d('Engine', '[$_id] $msg', throttle: Duration.zero);
   }
 
-  /// Native-engine-only log: outputs to program log (debugPrint).
-  /// debugPrint is visible in Flutter's logging system (DevTools, run log).
+  /// Native-engine init log: outputs to program log (debugPrint) in ALL modes.
+  /// Only used for engine initialization result — the single log kept in Release.
   void _logNative(String msg) {
     final line = '[$_id] $msg';
     developer.log(line, name: _logTag);
@@ -101,7 +101,7 @@ class NipaPlayNextEngine {
 
   /// Disable the native engine and fall back to Dart permanently.
   void _disableNativeEngine() {
-    _logNative('[WARN] native C++ engine DISABLED, falling back to Dart permanently');
+    _logFrame('[WARN] native C++ engine DISABLED, falling back to Dart permanently');
     if (_nativeEngine != null) {
       try {
         _nativeEngine!.dispose();
@@ -173,7 +173,7 @@ class NipaPlayNextEngine {
     if (_layoutDirty) {
       final native = _tryInitNativeEngine();
       if (native != null) {
-        _logNative('configure -> _rebuildLayoutNative (C++ path)');
+        _logFrame('configure -> _rebuildLayoutNative (C++ path)');
         _rebuildLayoutNative(native);
       } else {
         _log('configure -> _rebuildLayout (Dart fallback path)');
@@ -197,7 +197,7 @@ class NipaPlayNextEngine {
       try {
         return _layoutNative(currentTimeSeconds);
       } catch (e) {
-        _logNative('[ERR] native frame EXCEPTION, falling back to Dart: $e');
+        _logFrame('[ERR] native frame EXCEPTION, falling back to Dart: $e');
         _disableNativeEngine();
         _layoutDirty = true;
         _rebuildLayout();
@@ -213,7 +213,7 @@ class NipaPlayNextEngine {
   List<PositionedDanmakuItem> _layoutNative(double currentTimeSeconds) {
     final frameResult = _nativeEngine!.frame(currentTimeSeconds);
     if (!frameResult.isOk) {
-      _logNative('[ERR] native frame ERROR: ${frameResult.errorMessage}, falling back to Dart');
+      _logFrame('[ERR] native frame ERROR: ${frameResult.errorMessage}, falling back to Dart');
       _disableNativeEngine();
       _layoutDirty = true;
       _rebuildLayout();
@@ -446,7 +446,7 @@ class NipaPlayNextEngine {
       ));
     }
 
-    _logNative('native configure: ${_items.length} items, size=${_size.width.toStringAsFixed(0)}x${_size.height.toStringAsFixed(0)}, '
+    _logFrame('native configure: ${_items.length} items, size=${_size.width.toStringAsFixed(0)}x${_size.height.toStringAsFixed(0)}, '
         'font=${_fontSize.toStringAsFixed(1)}, area=${_displayArea.toStringAsFixed(2)}, '
         'scroll=${_scrollDurationSeconds.toStringAsFixed(1)}, stacking=$_allowStacking, '
         'baseH=${baseDanmakuHeight.toStringAsFixed(1)}, trackH=${baseTrackHeight.toStringAsFixed(1)}');
@@ -464,7 +464,7 @@ class NipaPlayNextEngine {
     );
 
     if (!result.isOk) {
-      _logNative('[ERR] native configure FAILED: ${result.errorMessage}, falling back to Dart');
+      _logFrame('[ERR] native configure FAILED: ${result.errorMessage}, falling back to Dart');
       _disableNativeEngine();
       _layoutDirty = true;
       _rebuildLayout(); // Fallback to Dart
