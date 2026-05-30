@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'package:ffi/ffi.dart' show Utf8;
 import '../native_library.dart';
 import '../types/native_types.dart';
 

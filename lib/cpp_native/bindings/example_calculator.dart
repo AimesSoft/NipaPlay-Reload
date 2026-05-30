@@ -25,7 +25,7 @@ class ExampleCalculator implements Finalizable {
   factory ExampleCalculator() {
     final handle = NativeBindings.npExampleCreate();
     if (handle == nullptr) {
-      throw NativeException(
+      throw const NativeException(
           NpResultCode.errNullPtr, 'failed to create ExampleCalculator');
     }
     return ExampleCalculator._(handle);

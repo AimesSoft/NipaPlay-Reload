@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'package:ffi/ffi.dart' show Utf8;
 
 /// NpHandle — 不透明句柄，对应 C++ 侧的 void*
 /// 在 32-bit 平台 (armeabi-v7a) 为 4 字节，64-bit 为 8 字节

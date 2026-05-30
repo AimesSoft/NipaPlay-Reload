@@ -136,13 +136,12 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 set(NP_LIB_TYPE SHARED)  # Windows 使用 DLL
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../cpp_native" cpp_native_build)
 
-# 将 DLL 复制到输出目录（与 exe 同目录）
+# 链接 nipaplay_native 到主可执行文件
 add_dependencies(${BINARY_NAME} nipaplay_native)
 target_link_libraries(${BINARY_NAME} PRIVATE nipaplay_native)
 
-# 确保 DLL 被复制到构建产物目录
-add_custom_command(TARGET nipaplay_native POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:nipaplay_native>"
-        "$<TARGET_FILE_DIR:${BINARY_NAME}>"
-)
+# 将 DLL 安装到与 exe 同目录（使用 install 而非 POST_BUILD，
+# 因为 add_custom_command(TARGET) 不能跨目录使用）
+install(FILES "$<TARGET_FILE:nipaplay_native>"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
