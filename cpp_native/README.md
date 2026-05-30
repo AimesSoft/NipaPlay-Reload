@@ -75,13 +75,14 @@ Dart 侧绑定位于 `lib/cpp_native/`。
 - MSVC 统一使用 `/MD`（动态 CRT），与 Flutter 引擎一致
 - Android 使用 `c++_shared` STL，与 Flutter 引擎一致
 
-## Release 编译优化
+## 编译优化
 
-Release 构建下开启了 **-Ofast 等效优化**（`-O3` + `-ffast-math`），以最大化弹幕布局引擎的计算吞吐：
+| 构建模式 | GCC / Clang | MSVC |
+|---------|-------------|------|
+| **Debug** | `-Og` | `/Od`（默认） |
+| **Release** | `-O3 -ffast-math`（等效 `-Ofast`） | `/O2 /fp:fast` |
 
-| 平台 | 优化标志 |
-|------|---------|
-| GCC / Clang (Linux, macOS, iOS, Android) | `-O3 -ffast-math` |
-| MSVC (Windows) | `/O2 /fp:fast` |
+- **Debug** 使用 `-Og`：保留完整调试信息与栈帧，优化调试体验而不完全禁用优化。
+- **Release** 使用 `-O3 -ffast-math`：最大化弹幕布局引擎的计算吞吐。
 
 `-ffast-math` 包含 `-ffinite-math-only`，会使标准库的 `std::isnan` / `std::isinf` 失效。为此，弹幕布局引擎使用 **IEEE 754 位运算** 实现的 `np_isnan` / `np_isinf` 替代标准库调用，确保在快速浮点模式下 NaN / Inf 检测仍然正确。

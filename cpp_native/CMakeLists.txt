@@ -21,8 +21,8 @@ set(NATIVE_INCLUDES
 if(MSVC)
     add_compile_options(/utf-8 /EHsc /W4 /Zc:__cplusplus)
     add_definitions(-DNIPAPLAY_NATIVE_BUILDING)
-    # Release: /O2 is default; add /fp:fast for aggressive FP optimizations
-    # (np_isnan/np_isinf use bit-level checks, safe under /fp:fast)
+    # Debug: /Od (default, no optimizations, best debugging experience)
+    # Release: /O2 (default) + /fp:fast (aggressive FP optimizations)
     add_compile_options($<$<CONFIG:Release>:/fp:fast>)
 else()
     # Common flags for Apple & Linux
@@ -31,6 +31,9 @@ else()
     if(NOT APPLE)
         add_compile_options(-fPIC)
     endif()
+
+    # Debug: -Og (optimize for debugging experience, preserves stack frames)
+    add_compile_options($<$<CONFIG:Debug>:-Og>)
 
     # Release: -O3 -ffast-math (equivalent to -Ofast)
     # np_isnan/np_isinf (IEEE 754 bit-level) bypass -ffinite-math-only safely.
