@@ -56,7 +56,9 @@ class NipaPlayNextEngine {
   int get layoutVersion => _layoutVersion;
 
   void _log(String msg) {
-    developer.log('[$_id] $msg', name: _logTag);
+    final line = '[$_id] $msg';
+    developer.log(line, name: _logTag);
+    DanmakuNextLog.d('Engine', line, throttle: Duration.zero);
   }
 
   /// Attempt to initialize the native C++ layout engine.
