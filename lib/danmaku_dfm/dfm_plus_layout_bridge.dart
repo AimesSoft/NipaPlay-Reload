@@ -1,6 +1,6 @@
 import 'dart:io' as io;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
@@ -18,6 +18,7 @@ class DfmPlusLayoutBridge {
   double _lastOutlineWidth = -1;
   String _lastCustomFontFamily = '';
   String _lastCustomFontFilePath = '';
+  List<String> _lastBlockWords = const [];
 
   Uint8List? _cachedFontBytes;
   String? _cachedFontFilePath;
@@ -37,6 +38,7 @@ class DfmPlusLayoutBridge {
     double outlineWidth = 0.0,
     String customFontFamily = '',
     String customFontFilePath = '',
+    List<String> blockWords = const [],
   }) async {
     final listIdentity = identityHashCode(danmakuList);
     final changed = listIdentity != _sourceListIdentity ||
@@ -49,6 +51,7 @@ class DfmPlusLayoutBridge {
         (_lastOutlineWidth - outlineWidth).abs() > 0.001 ||
         _lastCustomFontFamily != customFontFamily ||
         _lastCustomFontFilePath != customFontFilePath ||
+        !listEquals(_lastBlockWords, blockWords) ||
         !_sameLayoutConfig(
           _prepared!,
           size: size,
@@ -57,6 +60,11 @@ class DfmPlusLayoutBridge {
 
     if (!changed) {
       return;
+    }
+
+    final oldHandle = _prepared?.handle;
+    if (oldHandle != null && oldHandle != BigInt.zero) {
+      rust_dfm.dfmPlusDropLayout(handle: oldHandle);
     }
 
     final fontBytes = await _loadFontBytes(customFontFilePath);
@@ -98,6 +106,7 @@ class DfmPlusLayoutBridge {
       trackGapRatio: trackGapRatio,
       outlineWidth: outlineWidth,
       customFontBytes: fontBytes,
+      blockWords: blockWords,
     );
     _sourceListIdentity = listIdentity;
     _sourceListVersion = danmakuListVersion;
@@ -108,6 +117,7 @@ class DfmPlusLayoutBridge {
     _lastOutlineWidth = outlineWidth;
     _lastCustomFontFamily = customFontFamily;
     _lastCustomFontFilePath = customFontFilePath;
+    _lastBlockWords = List.unmodifiable(blockWords);
   }
 
   Future<List<PositionedDanmakuItem>> layout(double currentTimeSeconds) async {
@@ -118,29 +128,40 @@ class DfmPlusLayoutBridge {
 
     final frame = await rust_dfm.dfmPlusLayoutFrame(
       request: rust_dfm.DfmPlusFrameRequest(
-        layout: prepared,
+        layoutHandle: prepared.handle,
         currentTimeSeconds: currentTimeSeconds,
       ),
     );
 
     return frame.items
         .map(
-          (item) => PositionedDanmakuItem(
+          (fi) {
+            final pi = prepared.items[fi.itemIndex];
+            return PositionedDanmakuItem(
             content: DanmakuContentItem(
-              item.text,
-              type: _toItemType(item.typeCode),
-              color: Color(item.colorArgb),
-              isMe: item.isMe,
-              fontSizeMultiplier: item.fontSizeMultiplier,
-              countText: item.countText,
+              pi.text,
+              type: _toItemType(pi.typeCode),
+              color: Color(pi.colorArgb),
+              isMe: pi.isMe,
+              fontSizeMultiplier: pi.fontSizeMultiplier,
+              countText: pi.countText,
             ),
-            x: item.x,
-            y: item.y,
-            offstageX: item.offstageX,
-            time: item.timeSeconds,
-          ),
+            x: fi.x,
+            y: fi.y,
+            offstageX: fi.offstageX,
+            time: pi.timeSeconds,
+          );
+          },
         )
         .toList(growable: false);
+  }
+
+  void dispose() {
+    final handle = _prepared?.handle;
+    if (handle != null && handle != BigInt.zero) {
+      rust_dfm.dfmPlusDropLayout(handle: handle);
+    }
+    _prepared = null;
   }
 
   bool _sameLayoutConfig(

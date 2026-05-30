@@ -1,33 +1,7 @@
-use std::sync::{Mutex, OnceLock};
-
-struct MeasurerCache {
-    custom_font_hash: u64,
-}
-
-static MEASURER_CACHE: OnceLock<Mutex<MeasurerCache>> = OnceLock::new();
-
-fn hash_bytes_opt(bytes: Option<&[u8]>) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    match bytes {
-        Some(b) => b.hash(&mut hasher),
-        None => 0u8.hash(&mut hasher),
-    }
-    hasher.finish()
-}
-
-pub fn with_cached_measurer<F, R>(custom_font_bytes: Option<Vec<u8>>, f: F) -> Result<R, String>
+pub fn with_cached_measurer<F, R>(_custom_font_bytes: Option<Vec<u8>>, f: F) -> Result<R, String>
 where
     F: FnOnce(HeuristicMeasurer) -> R,
 {
-    let custom_hash = hash_bytes_opt(custom_font_bytes.as_deref());
-    let cache = MEASURER_CACHE.get_or_init(|| {
-        Mutex::new(MeasurerCache {
-            custom_font_hash: 0,
-        })
-    });
-    let mut guard = cache.lock().map_err(|e| format!("measurer lock: {}", e))?;
-    guard.custom_font_hash = custom_hash;
     Ok(f(HeuristicMeasurer))
 }
 

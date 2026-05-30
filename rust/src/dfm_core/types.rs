@@ -120,7 +120,7 @@ pub fn layout_item(item: &mut DanmakuItem, view_width: f32, _x: f32, y: f32, tim
         if !item.is_shown_state(flags) {
             item.y = y;
             item.is_shown = true;
-            item.visible_flag = flags.visible_flag;
+            item.flags.visible = flags.visible_flag;
         }
         // Update alpha for special danmaku
         if item.danmaku_type == DanmakuType::Special {

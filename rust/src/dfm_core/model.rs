@@ -62,7 +62,7 @@ impl Duration {
     }
 }
 
-/// Global epoch-based invalidation flags.
+/// Epoch-based dirty flags, grouped for cache locality.
 /// Ported from GlobalFlagValues.java. Incrementing a flag invalidates all
 /// danmaku items whose per-instance flag doesn't match, without iteration.
 #[derive(Debug, Clone)]
@@ -104,6 +104,17 @@ impl GlobalFlags {
     pub fn update_first_shown(&mut self) { self.first_shown_flag += 1; }
     pub fn update_sync_offset(&mut self) { self.sync_offset_flag += 1; }
     pub fn update_prepare(&mut self) { self.prepare_flag += 1; }
+}
+
+/// Per-item epoch flags, matching GlobalFlags for dirty-checking.
+#[derive(Debug, Clone, Default)]
+pub struct EpochFlags {
+    pub measure: u64,
+    pub visible: u64,
+    pub filter: u64,
+    pub first_shown: u64,
+    pub sync_offset: u64,
+    pub prepare: u64,
 }
 
 /// Special danmaku path segment for linear interpolation.
@@ -150,12 +161,7 @@ pub struct DanmakuItem {
     pub filter_param: u32,
 
     // -- Epoch-based dirty flags --
-    pub measure_flag: u64,
-    pub visible_flag: u64,
-    pub filter_flag: u64,
-    pub first_shown_flag: u64,
-    pub sync_offset_flag: u64,
-    pub prepare_flag: u64,
+    pub flags: EpochFlags,
 
     // -- Scroll physics (computed after measure) --
     pub step_x: f32, // pixels per millisecond
@@ -195,12 +201,7 @@ impl DanmakuItem {
             is_shown: false,
             is_filtered: false,
             filter_param: 0,
-            measure_flag: 0,
-            visible_flag: 0,
-            filter_flag: 0,
-            first_shown_flag: 0,
-            sync_offset_flag: 0,
-            prepare_flag: 0,
+            flags: EpochFlags::default(),
             step_x: 0.0,
             line_paths: None,
             begin_alpha: 255,
@@ -212,7 +213,7 @@ impl DanmakuItem {
     /// Get the actual display time, accounting for sync offset.
     /// Ported from BaseDanmaku.getActualTime().
     pub fn get_actual_time(&self, global_flags: &GlobalFlags) -> i64 {
-        if self.sync_offset_flag == global_flags.sync_offset_flag {
+        if self.flags.sync_offset == global_flags.sync_offset_flag {
             self.time_ms + self.time_offset
         } else {
             self.time_ms
@@ -223,7 +224,7 @@ impl DanmakuItem {
     pub fn is_measured(&self, global_flags: &GlobalFlags) -> bool {
         self.paint_width > -1.0
             && self.paint_height > -1.0
-            && self.measure_flag == global_flags.measure_flag
+            && self.flags.measure == global_flags.measure_flag
     }
 
     /// Check if this danmaku is timed out at the given time.
@@ -244,12 +245,12 @@ impl DanmakuItem {
 
     /// Check if this danmaku is visible.
     pub fn is_shown_state(&self, global_flags: &GlobalFlags) -> bool {
-        self.is_shown && self.visible_flag == global_flags.visible_flag
+        self.is_shown && self.flags.visible == global_flags.visible_flag
     }
 
     /// Check if the filter state is current.
     pub fn has_passed_filter(&mut self, global_flags: &GlobalFlags) -> bool {
-        if self.filter_flag != global_flags.filter_flag {
+        if self.flags.filter != global_flags.filter_flag {
             self.filter_param = 0;
             return false;
         }
@@ -258,7 +259,7 @@ impl DanmakuItem {
 
     /// Check if this danmaku is filtered.
     pub fn is_filtered_state(&self, global_flags: &GlobalFlags) -> bool {
-        self.filter_flag == global_flags.filter_flag && self.filter_param != 0
+        self.flags.filter == global_flags.filter_flag && self.filter_param != 0
     }
 
     /// Measure the danmaku dimensions based on text content.
@@ -283,7 +284,7 @@ impl DanmakuItem {
             self.step_x = distance / self.duration_ms as f32;
         }
 
-        self.measure_flag = global_flags.measure_flag;
+        self.flags.measure = global_flags.measure_flag;
     }
 
     /// Get the bounding rectangle at a specific time.
