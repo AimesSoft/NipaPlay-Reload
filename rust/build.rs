@@ -25,7 +25,7 @@ fn main() {
         build.flag_if_supported("/fp:fast");    // MSVC equivalent
         // Release: LTO (link-time optimization)
         build.flag_if_supported("-flto");       // GCC/Clang: link-time optimization
-        build.flag_if_supported("/GL");         // MSVC: whole program optimization
+        build.flag_if_supported("/GL");         // MSVC: whole program optimization (compile)
     } else {
         // Debug: -Og (optimize for debugging, preserve stack frames)
         build.opt_level(0);
@@ -49,4 +49,10 @@ fn main() {
     }
 
     build.compile("similarity");
+
+    // MSVC Release: /GL 编译的目标文件需要 /LTCG 传递给最终链接器（Rust link.exe）
+    // cc crate 只控制 lib.exe 归档步骤，最终链接由 Rust 工具链完成，需手动传递 /LTCG
+    if is_release && std::env::var("CARGO_CFG_TARGET_OS").map(|s| s == "windows").unwrap_or(false) {
+        println!("cargo:rustc-link-arg=/LTCG");
+    }
 }
