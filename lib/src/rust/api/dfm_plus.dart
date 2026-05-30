@@ -6,8 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_dfm_plus_frame`, `calc_frame_cache_key`, `frame_cache`, `get`, `insert`, `lower_bound`, `new`, `resolve_outline_px`, `upper_bound`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FrameCacheEntry`, `FrameCache`
+// These functions are ignored because they are not marked as `pub`: `build_dfm_plus_frame`, `calc_frame_cache_key`, `fxhash_str`, `get`, `insert`, `lower_bound`, `new`, `resolve_outline_px`, `upper_bound`, `with_frame_cache`, `with_handle`, `with_layout_store`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FrameCache`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One-time layout preparation.
@@ -20,6 +20,9 @@ Future<DfmPlusPreparedLayout> dfmPlusPrepareLayout(
 Future<DfmPlusFrameLayout> dfmPlusLayoutFrame(
         {required DfmPlusFrameRequest request}) =>
     RustLib.instance.api.crateApiDfmPlusDfmPlusLayoutFrame(request: request);
+
+Future<void> dfmPlusDropLayout({required BigInt handle}) =>
+    RustLib.instance.api.crateApiDfmPlusDfmPlusDropLayout(handle: handle);
 
 /// Get font metrics for collision detection, matching the GPU renderer's computations exactly.
 /// `custom_font_bytes`: optional custom font file contents.
@@ -66,7 +69,8 @@ Future<DfmPlusPreparedLayout> dfmPlusPrepareLayoutFull(
         int? maxLinesPerType,
         required double trackGapRatio,
         required double outlineWidth,
-        Uint8List? customFontBytes}) =>
+        Uint8List? customFontBytes,
+        required List<String> blockWords}) =>
     RustLib.instance.api.crateApiDfmPlusDfmPlusPrepareLayoutFull(
         rawItems: rawItems,
         width: width,
@@ -80,7 +84,8 @@ Future<DfmPlusPreparedLayout> dfmPlusPrepareLayoutFull(
         maxLinesPerType: maxLinesPerType,
         trackGapRatio: trackGapRatio,
         outlineWidth: outlineWidth,
-        customFontBytes: customFontBytes);
+        customFontBytes: customFontBytes,
+        blockWords: blockWords);
 
 /// Input danmaku item for layout preparation.
 class DfmPlusDanmakuItem {
@@ -171,26 +176,16 @@ class DfmPlusFontMetrics {
 }
 
 /// Single frame item with computed position.
+/// Only contains the item index and position data — no text/style clones.
+/// The Dart side uses item_index to look up text/style from PreparedLayout.items.
 class DfmPlusFrameItem {
-  final double timeSeconds;
-  final String text;
-  final int typeCode;
-  final int colorArgb;
-  final bool isMe;
-  final double fontSizeMultiplier;
-  final String? countText;
+  final int itemIndex;
   final double x;
   final double y;
   final double offstageX;
 
   const DfmPlusFrameItem({
-    required this.timeSeconds,
-    required this.text,
-    required this.typeCode,
-    required this.colorArgb,
-    required this.isMe,
-    required this.fontSizeMultiplier,
-    this.countText,
+    required this.itemIndex,
     required this.x,
     required this.y,
     required this.offstageX,
@@ -198,29 +193,14 @@ class DfmPlusFrameItem {
 
   @override
   int get hashCode =>
-      timeSeconds.hashCode ^
-      text.hashCode ^
-      typeCode.hashCode ^
-      colorArgb.hashCode ^
-      isMe.hashCode ^
-      fontSizeMultiplier.hashCode ^
-      countText.hashCode ^
-      x.hashCode ^
-      y.hashCode ^
-      offstageX.hashCode;
+      itemIndex.hashCode ^ x.hashCode ^ y.hashCode ^ offstageX.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is DfmPlusFrameItem &&
           runtimeType == other.runtimeType &&
-          timeSeconds == other.timeSeconds &&
-          text == other.text &&
-          typeCode == other.typeCode &&
-          colorArgb == other.colorArgb &&
-          isMe == other.isMe &&
-          fontSizeMultiplier == other.fontSizeMultiplier &&
-          countText == other.countText &&
+          itemIndex == other.itemIndex &&
           x == other.x &&
           y == other.y &&
           offstageX == other.offstageX;
@@ -247,23 +227,23 @@ class DfmPlusFrameLayout {
 
 /// Per-frame layout request.
 class DfmPlusFrameRequest {
-  final DfmPlusPreparedLayout layout;
+  final BigInt layoutHandle;
   final double currentTimeSeconds;
 
   const DfmPlusFrameRequest({
-    required this.layout,
+    required this.layoutHandle,
     required this.currentTimeSeconds,
   });
 
   @override
-  int get hashCode => layout.hashCode ^ currentTimeSeconds.hashCode;
+  int get hashCode => layoutHandle.hashCode ^ currentTimeSeconds.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is DfmPlusFrameRequest &&
           runtimeType == other.runtimeType &&
-          layout == other.layout &&
+          layoutHandle == other.layoutHandle &&
           currentTimeSeconds == other.currentTimeSeconds;
 }
 
@@ -279,12 +259,9 @@ class DfmPlusPrepareRequest {
   final bool mergeDanmaku;
   final int? maxQuantity;
   final int? maxLinesPerType;
-
-  /// Gap ratio between tracks. 0.5 = 50% of item height as gap. Default: 0.5.
   final double trackGapRatio;
-
-  /// Outline width in pixels, used to expand paint_width for accurate collision detection.
   final double outlineWidth;
+  final List<String> blockWords;
 
   const DfmPlusPrepareRequest({
     required this.items,
@@ -299,6 +276,7 @@ class DfmPlusPrepareRequest {
     this.maxLinesPerType,
     required this.trackGapRatio,
     required this.outlineWidth,
+    required this.blockWords,
   });
 
   @override
@@ -314,7 +292,8 @@ class DfmPlusPrepareRequest {
       maxQuantity.hashCode ^
       maxLinesPerType.hashCode ^
       trackGapRatio.hashCode ^
-      outlineWidth.hashCode;
+      outlineWidth.hashCode ^
+      blockWords.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -332,7 +311,8 @@ class DfmPlusPrepareRequest {
           maxQuantity == other.maxQuantity &&
           maxLinesPerType == other.maxLinesPerType &&
           trackGapRatio == other.trackGapRatio &&
-          outlineWidth == other.outlineWidth;
+          outlineWidth == other.outlineWidth &&
+          blockWords == other.blockWords;
 }
 
 /// Single prepared item with layout information.
@@ -350,6 +330,8 @@ class DfmPlusPreparedItem {
   final double scrollSpeed;
   final bool isFiltered;
   final double durationSeconds;
+  final bool isScroll;
+  final double centeredX;
 
   const DfmPlusPreparedItem({
     required this.timeSeconds,
@@ -365,6 +347,8 @@ class DfmPlusPreparedItem {
     required this.scrollSpeed,
     required this.isFiltered,
     required this.durationSeconds,
+    required this.isScroll,
+    required this.centeredX,
   });
 
   @override
@@ -381,7 +365,9 @@ class DfmPlusPreparedItem {
       width.hashCode ^
       scrollSpeed.hashCode ^
       isFiltered.hashCode ^
-      durationSeconds.hashCode;
+      durationSeconds.hashCode ^
+      isScroll.hashCode ^
+      centeredX.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -400,11 +386,14 @@ class DfmPlusPreparedItem {
           width == other.width &&
           scrollSpeed == other.scrollSpeed &&
           isFiltered == other.isFiltered &&
-          durationSeconds == other.durationSeconds;
+          durationSeconds == other.durationSeconds &&
+          isScroll == other.isScroll &&
+          centeredX == other.centeredX;
 }
 
 /// Prepared layout result.
 class DfmPlusPreparedLayout {
+  final BigInt handle;
   final double width;
   final double height;
   final double scrollDurationSeconds;
@@ -415,6 +404,7 @@ class DfmPlusPreparedLayout {
   final BigInt cacheKey;
 
   const DfmPlusPreparedLayout({
+    required this.handle,
     required this.width,
     required this.height,
     required this.scrollDurationSeconds,
@@ -427,6 +417,7 @@ class DfmPlusPreparedLayout {
 
   @override
   int get hashCode =>
+      handle.hashCode ^
       width.hashCode ^
       height.hashCode ^
       scrollDurationSeconds.hashCode ^
@@ -441,6 +432,7 @@ class DfmPlusPreparedLayout {
       identical(this, other) ||
       other is DfmPlusPreparedLayout &&
           runtimeType == other.runtimeType &&
+          handle == other.handle &&
           width == other.width &&
           height == other.height &&
           scrollDurationSeconds == other.scrollDurationSeconds &&

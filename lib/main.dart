@@ -766,7 +766,6 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
         final showWebDAV = webdav.showWebDAVTab;
         final showDownloader = globals.isDownloaderSupportedPlatform &&
             downloader.enabled;
-        // 实际 Tab 顺序：主页(0), 视频(1), [WebDAV(2)], 媒体库, [下载器], 账户
         final mediaLibIdx = showWebDAV ? 3 : 2;
         final downloaderIdx = showWebDAV ? 4 : 3;
         final accountIdx = showWebDAV
@@ -774,13 +773,14 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
             : showDownloader
                 ? 4
                 : 3;
+        final l10n = AppLocalizations.of(ctx);
         final items = <NavigationItem>[
           NavigationItem(
-            label: AppLocalizations.of(ctx)!.tabHome,
+            label: l10n?.tabHome ?? '主页',
             onSelected: () => _navigateToPage(ctx, 0),
           ),
           NavigationItem(
-            label: AppLocalizations.of(ctx)!.tabVideoPlay,
+            label: l10n?.tabVideoPlay ?? '视频播放',
             onSelected: () => _navigateToPage(ctx, 1),
           ),
         ];
@@ -791,17 +791,17 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
           ));
         }
         items.add(NavigationItem(
-          label: AppLocalizations.of(ctx)!.tabMediaLibrary,
+            label: l10n?.tabMediaLibrary ?? '媒体库',
           onSelected: () => _navigateToPage(ctx, mediaLibIdx),
         ));
         if (showDownloader) {
           items.add(NavigationItem(
-            label: AppLocalizations.of(ctx)!.tabTorrentDownload,
+            label: l10n?.tabTorrentDownload ?? '下载器',
             onSelected: () => _navigateToPage(ctx, downloaderIdx),
           ));
         }
         items.add(NavigationItem(
-          label: AppLocalizations.of(ctx)!.tabAccount,
+          label: l10n?.tabAccount ?? '个人中心',
           onSelected: () => _navigateToPage(ctx, accountIdx),
         ));
         return items;
@@ -995,6 +995,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
       ),
     ),
   );
+    
   }
 
   void _logSystemUiOverlayDecision({

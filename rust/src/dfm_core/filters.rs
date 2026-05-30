@@ -8,7 +8,8 @@
 /// - Overlapping detection
 /// - Keyword/user blocking
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
+use regex::Regex;
 
 use crate::dfm_core::model::{DanmakuItem, DanmakuType, Duration, GlobalFlags};
 
@@ -33,45 +34,37 @@ pub struct RetainerState {
 /// Complete filter system.
 #[derive(Debug)]
 pub struct FilterSystem {
-    /// Blocked danmaku types.
-    pub blocked_types: HashSet<DanmakuType>,
-    /// Maximum number of scroll danmakus on screen.
+    pub blocked_types: FxHashSet<DanmakuType>,
     pub max_quantity: Option<u32>,
-    /// Maximum lines per danmaku type.
-    pub max_lines: HashMap<DanmakuType, u32>,
-    /// Enable overlapping detection (secondary filter).
-    pub overlapping_filter: HashMap<DanmakuType, bool>,
-    /// Blocked user IDs.
-    pub blocked_users: HashSet<String>,
-    /// Blocked keywords (plain text or regex patterns starting with /).
+    pub max_lines: FxHashMap<DanmakuType, u32>,
+    pub overlapping_filter: FxHashMap<DanmakuType, bool>,
+    pub blocked_users: FxHashSet<String>,
     pub blocked_keywords: Vec<String>,
-    /// Enable duplicate merging.
+    pub blocked_regexes: Vec<Regex>,
     pub duplicate_merge: bool,
-    /// Elapsed time limit in ms (performance protection).
     pub elapsed_time_limit_ms: u64,
-    // Internal state for quantity filter
     last_skipped_time: Option<i64>,
-    // Internal state for duplicate merging
-    current_duplicates: HashMap<String, i64>, // text -> first seen time
-    blocked_duplicates: HashSet<String>,
-    passed_duplicates: HashSet<String>,
+    current_duplicates: FxHashMap<String, i64>,
+    blocked_duplicates: FxHashSet<String>,
+    passed_duplicates: FxHashSet<String>,
 }
 
 impl Default for FilterSystem {
     fn default() -> Self {
         Self {
-            blocked_types: HashSet::new(),
+            blocked_types: FxHashSet::default(),
             max_quantity: None,
-            max_lines: HashMap::new(),
-            overlapping_filter: HashMap::new(),
-            blocked_users: HashSet::new(),
+            max_lines: FxHashMap::default(),
+            overlapping_filter: FxHashMap::default(),
+            blocked_users: FxHashSet::default(),
             blocked_keywords: Vec::new(),
+            blocked_regexes: Vec::new(),
             duplicate_merge: false,
             elapsed_time_limit_ms: 20,
             last_skipped_time: None,
-            current_duplicates: HashMap::new(),
-            blocked_duplicates: HashSet::new(),
-            passed_duplicates: HashSet::new(),
+            current_duplicates: FxHashMap::default(),
+            blocked_duplicates: FxHashSet::default(),
+            passed_duplicates: FxHashSet::default(),
         }
     }
 }
@@ -85,7 +78,7 @@ impl FilterSystem {
         if self.blocked_types.contains(&item.danmaku_type) {
             item.is_filtered = true;
             item.filter_param = 1;
-            item.filter_flag = ctx.global_flags.filter_flag;
+            item.flags.filter = ctx.global_flags.filter_flag;
             return true;
         }
 
@@ -94,7 +87,7 @@ impl FilterSystem {
             if self.filter_quantity(item, ctx) {
                 item.is_filtered = true;
                 item.filter_param = 2;
-                item.filter_flag = ctx.global_flags.filter_flag;
+                item.flags.filter = ctx.global_flags.filter_flag;
                 return true;
             }
         }
@@ -103,7 +96,7 @@ impl FilterSystem {
         if ctx.frame_elapsed_ms >= self.elapsed_time_limit_ms && item.is_outside(ctx.timer_ms, &ctx.global_flags) {
             item.is_filtered = true;
             item.filter_param = 3;
-            item.filter_flag = ctx.global_flags.filter_flag;
+            item.flags.filter = ctx.global_flags.filter_flag;
             return true;
         }
 
@@ -111,7 +104,7 @@ impl FilterSystem {
         if self.filter_keywords(item) {
             item.is_filtered = true;
             item.filter_param = 4;
-            item.filter_flag = ctx.global_flags.filter_flag;
+            item.flags.filter = ctx.global_flags.filter_flag;
             return true;
         }
 
@@ -119,7 +112,7 @@ impl FilterSystem {
         if self.duplicate_merge && self.filter_duplicate(item, ctx) {
             item.is_filtered = true;
             item.filter_param = 5;
-            item.filter_flag = ctx.global_flags.filter_flag;
+            item.flags.filter = ctx.global_flags.filter_flag;
             return true;
         }
 
@@ -178,10 +171,15 @@ impl FilterSystem {
         false
     }
 
-    /// Keyword filter.
+    /// Keyword and regex filter.
     fn filter_keywords(&self, item: &DanmakuItem) -> bool {
         for keyword in &self.blocked_keywords {
             if item.text.contains(keyword.as_str()) {
+                return true;
+            }
+        }
+        for re in &self.blocked_regexes {
+            if re.is_match(&item.text) {
                 return true;
             }
         }
@@ -193,28 +191,25 @@ impl FilterSystem {
     fn filter_duplicate(&mut self, item: &DanmakuItem, ctx: &FilterContext) -> bool {
         let text = &item.text;
 
-        // Clean up old entries
-        self.current_duplicates.retain(|_, &mut time| {
-            ctx.timer_ms - time < 10000 // 10 second window
-        });
+        if self.current_duplicates.len() > 128 {
+            self.current_duplicates.retain(|_, &mut time| {
+                ctx.timer_ms - time < 10000
+            });
+        }
 
-        // Check blocked
         if self.blocked_duplicates.contains(text) {
             return true;
         }
 
-        // Check passed
         if self.passed_duplicates.contains(text) {
             return false;
         }
 
-        // Check current
         if self.current_duplicates.contains_key(text) {
             self.blocked_duplicates.insert(text.clone());
             return true;
         }
 
-        // First occurrence — allow
         self.current_duplicates.insert(text.clone(), item.get_actual_time(&ctx.global_flags));
         self.passed_duplicates.insert(text.clone());
         false
@@ -227,6 +222,40 @@ impl FilterSystem {
         self.blocked_duplicates.clear();
         self.passed_duplicates.clear();
     }
+
+    /// Parse block_words list into keywords and regex patterns.
+    /// Format: plain text → keyword, "规则名称/表达式/" → regex
+    pub fn set_block_words(&mut self, words: &[String]) {
+        self.blocked_keywords.clear();
+        self.blocked_regexes.clear();
+        for word in words {
+            if let Some(regex_str) = parse_regex_rule(word) {
+                if let Ok(re) = Regex::new(&regex_str) {
+                    self.blocked_regexes.push(re);
+                }
+            } else {
+                self.blocked_keywords.push(word.clone());
+            }
+        }
+    }
+}
+
+/// Parse "规则名称/表达式/" format into just the regex pattern string.
+/// Returns None if not in this format.
+fn parse_regex_rule(word: &str) -> Option<String> {
+    if !word.contains('/') {
+        return None;
+    }
+    let first_slash = word.find('/')?;
+    let last_slash = word.rfind('/')?;
+    if first_slash == last_slash || last_slash != word.len() - 1 {
+        return None;
+    }
+    let pattern = &word[first_slash + 1..last_slash];
+    if pattern.is_empty() {
+        return None;
+    }
+    Some(pattern.to_string())
 }
 
 #[cfg(test)]

@@ -22,6 +22,9 @@ fdsm-ttf-parser = "0.2.0"
 ttf-parser = "0.25.1"
 image = { version = "0.25.6", default-features = false }
 nalgebra = { version = "0.34.1", default-features = false, features = ["std"] }
+rustc-hash = "2"
+smallvec = "1"
+regex = "1"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 wgpu-hal = { version = "27.0.4", features = ["metal"] }

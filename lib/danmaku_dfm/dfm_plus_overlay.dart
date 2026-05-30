@@ -29,6 +29,7 @@ class DfmPlusOverlay extends StatefulWidget {
     required this.trackGapRatio,
     this.maxQuantity,
     this.maxLinesPerType,
+    this.blockWords = const [],
     this.onLayoutCalculated,
   });
 
@@ -51,6 +52,7 @@ class DfmPlusOverlay extends StatefulWidget {
   final double trackGapRatio;
   final int? maxQuantity;
   final int? maxLinesPerType;
+  final List<String> blockWords;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
 
   @override
@@ -68,6 +70,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   bool _updateInFlight = false;
   bool _updateQueued = false;
 
+  int _lastQuantizedTick = -1 << 31;
+  bool _forceLayout = false;
+
   int? _textureId;
   bool _textureReady = false;
   String _surfaceId = 'dfm-default';
@@ -81,6 +86,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
 
   @override
   void dispose() {
+    _bridge.dispose();
     _textureBridge.disposeSurface(_surfaceId);
     super.dispose();
   }
@@ -103,7 +109,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         oldWidget.opacity != widget.opacity ||
         oldWidget.isVisible != widget.isVisible ||
         oldWidget.maxQuantity != widget.maxQuantity ||
-        oldWidget.maxLinesPerType != widget.maxLinesPerType) {
+        oldWidget.maxLinesPerType != widget.maxLinesPerType ||
+        !listEquals(oldWidget.blockWords, widget.blockWords)) {
+      _forceLayout = true;
       _queueUpdate();
     }
   }
@@ -123,6 +131,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
 
         if (_layoutSize != size) {
           _layoutSize = size;
+          _forceLayout = true;
           _queueUpdate();
         }
 
@@ -130,6 +139,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
             View.of(context).devicePixelRatio;
         if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
           _lastDevicePixelRatio = dpr;
+          _forceLayout = true;
           _queueUpdate();
         }
 
@@ -183,6 +193,17 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           continue;
         }
 
+        final currentTime =
+            widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
+        final quantizedTick = (currentTime * 60.0).round().toInt();
+
+        if (!_forceLayout && quantizedTick == _lastQuantizedTick) {
+          continue;
+        }
+
+        _lastQuantizedTick = quantizedTick;
+        _forceLayout = false;
+
         await _bridge.configure(
           danmakuList: widget.danmakuList,
           danmakuListVersion: widget.danmakuListVersion,
@@ -198,11 +219,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           outlineWidth: widget.outlineWidth,
           customFontFamily: widget.customFontFamily,
           customFontFilePath: widget.customFontFilePath,
+          blockWords: widget.blockWords,
         );
 
-        final frame = await _bridge.layout(
-          widget.playbackTimeMs.value / 1000.0 + widget.timeOffset,
-        );
+        final frame = await _bridge.layout(currentTime);
 
         await _tryUpdateTexture(frame);
         widget.onLayoutCalculated?.call(frame);

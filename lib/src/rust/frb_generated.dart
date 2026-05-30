@@ -74,7 +74,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 715062527;
+  int get rustContentHash => 1494214116;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -86,6 +86,8 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<void> crateApiDfmPlusDfmPlusDropLayout({required BigInt handle});
+
   Future<DfmPlusFontMetrics> crateApiDfmPlusDfmPlusFontMetrics(
       {required double fontSize,
       required double outlineWidth,
@@ -120,7 +122,8 @@ abstract class RustLibApi extends BaseApi {
       int? maxLinesPerType,
       required double trackGapRatio,
       required double outlineWidth,
-      Uint8List? customFontBytes});
+      Uint8List? customFontBytes,
+      required List<String> blockWords});
 
   Future<RustFileScanDiff> crateApiFileScanDiffVideoFiles(
       {required String folderPath,
@@ -186,6 +189,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<void> crateApiDfmPlusDfmPlusDropLayout({required BigInt handle}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_u_64(handle, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 1, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiDfmPlusDfmPlusDropLayoutConstMeta,
+      argValues: [handle],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDfmPlusDfmPlusDropLayoutConstMeta =>
+      const TaskConstMeta(
+        debugName: "dfm_plus_drop_layout",
+        argNames: ["handle"],
+      );
+
+  @override
   Future<DfmPlusFontMetrics> crateApiDfmPlusDfmPlusFontMetrics(
       {required double fontSize,
       required double outlineWidth,
@@ -197,7 +225,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_f_64(outlineWidth, serializer);
         sse_encode_opt_list_prim_u_8_strict(customFontBytes, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 1, port: port_);
+            funcId: 2, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_dfm_plus_font_metrics,
@@ -223,7 +251,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_dfm_plus_frame_request(request, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 2, port: port_);
+            funcId: 3, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_dfm_plus_frame_layout,
@@ -253,7 +281,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_f_64(fontSize, serializer);
         sse_encode_opt_list_prim_u_8_strict(customFontBytes, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 3, port: port_);
+            funcId: 4, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_f_64,
@@ -283,7 +311,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_f_64(fontSize, serializer);
         sse_encode_opt_list_prim_u_8_strict(customFontBytes, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 4, port: port_);
+            funcId: 5, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_prim_f_64_strict,
@@ -309,7 +337,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_dfm_plus_prepare_request(request, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 5, port: port_);
+            funcId: 6, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_dfm_plus_prepared_layout,
@@ -341,7 +369,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       int? maxLinesPerType,
       required double trackGapRatio,
       required double outlineWidth,
-      Uint8List? customFontBytes}) {
+      Uint8List? customFontBytes,
+      required List<String> blockWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -358,8 +387,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_f_64(trackGapRatio, serializer);
         sse_encode_f_64(outlineWidth, serializer);
         sse_encode_opt_list_prim_u_8_strict(customFontBytes, serializer);
+        sse_encode_list_String(blockWords, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 6, port: port_);
+            funcId: 7, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_dfm_plus_prepared_layout,
@@ -379,7 +409,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         maxLinesPerType,
         trackGapRatio,
         outlineWidth,
-        customFontBytes
+        customFontBytes,
+        blockWords
       ],
       apiImpl: this,
     ));
@@ -401,7 +432,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           "maxLinesPerType",
           "trackGapRatio",
           "outlineWidth",
-          "customFontBytes"
+          "customFontBytes",
+          "blockWords"
         ],
       );
 
@@ -415,7 +447,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(folderPath, serializer);
         sse_encode_list_rust_file_hash_entry(cachedHashes, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
+            funcId: 8, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_file_scan_diff,
@@ -439,7 +471,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 8, port: port_);
+            funcId: 9, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -461,7 +493,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -484,7 +516,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -510,7 +542,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_rust_next_2_frame_request(request, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 11, port: port_);
+            funcId: 12, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_next_2_frame_layout,
@@ -536,7 +568,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_rust_next_2_prepare_request(request, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 12, port: port_);
+            funcId: 13, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_next_2_prepared_layout,
@@ -560,7 +592,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 13, port: port_);
+            funcId: 14, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_cpu_sample,
@@ -584,7 +616,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 14, port: port_);
+            funcId: 15, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_gpu_sample,
@@ -608,7 +640,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 15, port: port_);
+            funcId: 16, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_f_64,
@@ -632,7 +664,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 16, port: port_);
+            funcId: 17, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_performance_sample,
@@ -658,7 +690,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(folderPath, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 17, port: port_);
+            funcId: 18, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_rust_file_scan_snapshot,
@@ -688,7 +720,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 18, port: port_);
+            funcId: 19, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -718,7 +750,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(downloadDir, serializer);
         sse_encode_bool(createFolderForTask, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 19, port: port_);
+            funcId: 20, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -743,7 +775,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 20, port: port_);
+            funcId: 21, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -768,7 +800,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 21, port: port_);
+            funcId: 22, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -793,7 +825,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 22, port: port_);
+            funcId: 23, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -819,7 +851,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 23, port: port_);
+            funcId: 24, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -844,7 +876,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(downloadDir, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 24, port: port_);
+            funcId: 25, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -868,7 +900,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 25, port: port_);
+            funcId: 26, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -893,7 +925,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 26, port: port_);
+            funcId: 27, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -921,7 +953,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(fileId, serializer);
         sse_encode_String(filename, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 27, port: port_);
+            funcId: 28, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -1026,19 +1058,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DfmPlusFrameItem dco_decode_dfm_plus_frame_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return DfmPlusFrameItem(
-      timeSeconds: dco_decode_f_64(arr[0]),
-      text: dco_decode_String(arr[1]),
-      typeCode: dco_decode_i_32(arr[2]),
-      colorArgb: dco_decode_i_32(arr[3]),
-      isMe: dco_decode_bool(arr[4]),
-      fontSizeMultiplier: dco_decode_f_64(arr[5]),
-      countText: dco_decode_opt_String(arr[6]),
-      x: dco_decode_f_64(arr[7]),
-      y: dco_decode_f_64(arr[8]),
-      offstageX: dco_decode_f_64(arr[9]),
+      itemIndex: dco_decode_i_32(arr[0]),
+      x: dco_decode_f_64(arr[1]),
+      y: dco_decode_f_64(arr[2]),
+      offstageX: dco_decode_f_64(arr[3]),
     );
   }
 
@@ -1060,7 +1086,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (arr.length != 2)
       throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return DfmPlusFrameRequest(
-      layout: dco_decode_dfm_plus_prepared_layout(arr[0]),
+      layoutHandle: dco_decode_u_64(arr[0]),
       currentTimeSeconds: dco_decode_f_64(arr[1]),
     );
   }
@@ -1069,8 +1095,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DfmPlusPrepareRequest dco_decode_dfm_plus_prepare_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return DfmPlusPrepareRequest(
       items: dco_decode_list_dfm_plus_danmaku_item(arr[0]),
       width: dco_decode_f_64(arr[1]),
@@ -1084,6 +1110,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       maxLinesPerType: dco_decode_opt_box_autoadd_u_32(arr[9]),
       trackGapRatio: dco_decode_f_64(arr[10]),
       outlineWidth: dco_decode_f_64(arr[11]),
+      blockWords: dco_decode_list_String(arr[12]),
     );
   }
 
@@ -1091,8 +1118,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DfmPlusPreparedItem dco_decode_dfm_plus_prepared_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
     return DfmPlusPreparedItem(
       timeSeconds: dco_decode_f_64(arr[0]),
       text: dco_decode_String(arr[1]),
@@ -1107,6 +1134,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       scrollSpeed: dco_decode_f_64(arr[10]),
       isFiltered: dco_decode_bool(arr[11]),
       durationSeconds: dco_decode_f_64(arr[12]),
+      isScroll: dco_decode_bool(arr[13]),
+      centeredX: dco_decode_f_64(arr[14]),
     );
   }
 
@@ -1114,17 +1143,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DfmPlusPreparedLayout dco_decode_dfm_plus_prepared_layout(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return DfmPlusPreparedLayout(
-      width: dco_decode_f_64(arr[0]),
-      height: dco_decode_f_64(arr[1]),
-      scrollDurationSeconds: dco_decode_f_64(arr[2]),
-      staticDurationSeconds: dco_decode_f_64(arr[3]),
-      items: dco_decode_list_dfm_plus_prepared_item(arr[4]),
-      itemTimes: dco_decode_list_prim_f_64_strict(arr[5]),
-      trackCount: dco_decode_i_32(arr[6]),
-      cacheKey: dco_decode_u_64(arr[7]),
+      handle: dco_decode_u_64(arr[0]),
+      width: dco_decode_f_64(arr[1]),
+      height: dco_decode_f_64(arr[2]),
+      scrollDurationSeconds: dco_decode_f_64(arr[3]),
+      staticDurationSeconds: dco_decode_f_64(arr[4]),
+      items: dco_decode_list_dfm_plus_prepared_item(arr[5]),
+      itemTimes: dco_decode_list_prim_f_64_strict(arr[6]),
+      trackCount: dco_decode_i_32(arr[7]),
+      cacheKey: dco_decode_u_64(arr[8]),
     );
   }
 
@@ -1603,27 +1633,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DfmPlusFrameItem sse_decode_dfm_plus_frame_item(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_timeSeconds = sse_decode_f_64(deserializer);
-    var var_text = sse_decode_String(deserializer);
-    var var_typeCode = sse_decode_i_32(deserializer);
-    var var_colorArgb = sse_decode_i_32(deserializer);
-    var var_isMe = sse_decode_bool(deserializer);
-    var var_fontSizeMultiplier = sse_decode_f_64(deserializer);
-    var var_countText = sse_decode_opt_String(deserializer);
+    var var_itemIndex = sse_decode_i_32(deserializer);
     var var_x = sse_decode_f_64(deserializer);
     var var_y = sse_decode_f_64(deserializer);
     var var_offstageX = sse_decode_f_64(deserializer);
     return DfmPlusFrameItem(
-        timeSeconds: var_timeSeconds,
-        text: var_text,
-        typeCode: var_typeCode,
-        colorArgb: var_colorArgb,
-        isMe: var_isMe,
-        fontSizeMultiplier: var_fontSizeMultiplier,
-        countText: var_countText,
-        x: var_x,
-        y: var_y,
-        offstageX: var_offstageX);
+        itemIndex: var_itemIndex, x: var_x, y: var_y, offstageX: var_offstageX);
   }
 
   @protected
@@ -1638,10 +1653,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DfmPlusFrameRequest sse_decode_dfm_plus_frame_request(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_layout = sse_decode_dfm_plus_prepared_layout(deserializer);
+    var var_layoutHandle = sse_decode_u_64(deserializer);
     var var_currentTimeSeconds = sse_decode_f_64(deserializer);
     return DfmPlusFrameRequest(
-        layout: var_layout, currentTimeSeconds: var_currentTimeSeconds);
+        layoutHandle: var_layoutHandle,
+        currentTimeSeconds: var_currentTimeSeconds);
   }
 
   @protected
@@ -1660,6 +1676,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_maxLinesPerType = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_trackGapRatio = sse_decode_f_64(deserializer);
     var var_outlineWidth = sse_decode_f_64(deserializer);
+    var var_blockWords = sse_decode_list_String(deserializer);
     return DfmPlusPrepareRequest(
         items: var_items,
         width: var_width,
@@ -1672,7 +1689,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         maxQuantity: var_maxQuantity,
         maxLinesPerType: var_maxLinesPerType,
         trackGapRatio: var_trackGapRatio,
-        outlineWidth: var_outlineWidth);
+        outlineWidth: var_outlineWidth,
+        blockWords: var_blockWords);
   }
 
   @protected
@@ -1692,6 +1710,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_scrollSpeed = sse_decode_f_64(deserializer);
     var var_isFiltered = sse_decode_bool(deserializer);
     var var_durationSeconds = sse_decode_f_64(deserializer);
+    var var_isScroll = sse_decode_bool(deserializer);
+    var var_centeredX = sse_decode_f_64(deserializer);
     return DfmPlusPreparedItem(
         timeSeconds: var_timeSeconds,
         text: var_text,
@@ -1705,13 +1725,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         width: var_width,
         scrollSpeed: var_scrollSpeed,
         isFiltered: var_isFiltered,
-        durationSeconds: var_durationSeconds);
+        durationSeconds: var_durationSeconds,
+        isScroll: var_isScroll,
+        centeredX: var_centeredX);
   }
 
   @protected
   DfmPlusPreparedLayout sse_decode_dfm_plus_prepared_layout(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_handle = sse_decode_u_64(deserializer);
     var var_width = sse_decode_f_64(deserializer);
     var var_height = sse_decode_f_64(deserializer);
     var var_scrollDurationSeconds = sse_decode_f_64(deserializer);
@@ -1721,6 +1744,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_trackCount = sse_decode_i_32(deserializer);
     var var_cacheKey = sse_decode_u_64(deserializer);
     return DfmPlusPreparedLayout(
+        handle: var_handle,
         width: var_width,
         height: var_height,
         scrollDurationSeconds: var_scrollDurationSeconds,
@@ -2290,13 +2314,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_dfm_plus_frame_item(
       DfmPlusFrameItem self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_f_64(self.timeSeconds, serializer);
-    sse_encode_String(self.text, serializer);
-    sse_encode_i_32(self.typeCode, serializer);
-    sse_encode_i_32(self.colorArgb, serializer);
-    sse_encode_bool(self.isMe, serializer);
-    sse_encode_f_64(self.fontSizeMultiplier, serializer);
-    sse_encode_opt_String(self.countText, serializer);
+    sse_encode_i_32(self.itemIndex, serializer);
     sse_encode_f_64(self.x, serializer);
     sse_encode_f_64(self.y, serializer);
     sse_encode_f_64(self.offstageX, serializer);
@@ -2313,7 +2331,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_dfm_plus_frame_request(
       DfmPlusFrameRequest self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_dfm_plus_prepared_layout(self.layout, serializer);
+    sse_encode_u_64(self.layoutHandle, serializer);
     sse_encode_f_64(self.currentTimeSeconds, serializer);
   }
 
@@ -2333,6 +2351,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.maxLinesPerType, serializer);
     sse_encode_f_64(self.trackGapRatio, serializer);
     sse_encode_f_64(self.outlineWidth, serializer);
+    sse_encode_list_String(self.blockWords, serializer);
   }
 
   @protected
@@ -2352,12 +2371,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_f_64(self.scrollSpeed, serializer);
     sse_encode_bool(self.isFiltered, serializer);
     sse_encode_f_64(self.durationSeconds, serializer);
+    sse_encode_bool(self.isScroll, serializer);
+    sse_encode_f_64(self.centeredX, serializer);
   }
 
   @protected
   void sse_encode_dfm_plus_prepared_layout(
       DfmPlusPreparedLayout self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.handle, serializer);
     sse_encode_f_64(self.width, serializer);
     sse_encode_f_64(self.height, serializer);
     sse_encode_f_64(self.scrollDurationSeconds, serializer);

@@ -6,9 +6,11 @@
 /// Output format is compatible with Next2's FrameItemPayload (JSON),
 /// allowing direct reuse of Next2's GPU rendering pipeline.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
+use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::dfm_core::{
     filters::{FilterContext, FilterSystem},
@@ -48,15 +50,15 @@ pub struct DfmPlusPrepareRequest {
     pub merge_danmaku: bool,
     pub max_quantity: Option<u32>,
     pub max_lines_per_type: Option<u32>,
-    /// Gap ratio between tracks. 0.5 = 50% of item height as gap. Default: 0.5.
     pub track_gap_ratio: f64,
-    /// Outline width in pixels, used to expand paint_width for accurate collision detection.
     pub outline_width: f64,
+    pub block_words: Vec<String>,
 }
 
 /// Prepared layout result.
 #[derive(Debug, Clone)]
 pub struct DfmPlusPreparedLayout {
+    pub handle: u64,
     pub width: f64,
     pub height: f64,
     pub scroll_duration_seconds: f64,
@@ -65,6 +67,17 @@ pub struct DfmPlusPreparedLayout {
     pub item_times: Vec<f64>,
     pub track_count: i32,
     pub cache_key: u64,
+}
+
+impl DfmPlusPreparedLayout {
+    fn with_handle(mut self) -> Self {
+        let handle = NEXT_LAYOUT_HANDLE.fetch_add(1, Ordering::Relaxed);
+        self.handle = handle;
+        with_layout_store(|store| {
+            store.insert(handle, Arc::new(self.clone()));
+        });
+        self
+    }
 }
 
 /// Single prepared item with layout information.
@@ -83,12 +96,14 @@ pub struct DfmPlusPreparedItem {
     pub scroll_speed: f64,
     pub is_filtered: bool,
     pub duration_seconds: f64,
+    pub is_scroll: bool,
+    pub centered_x: f64,
 }
 
 /// Per-frame layout request.
 #[derive(Debug, Clone)]
 pub struct DfmPlusFrameRequest {
-    pub layout: DfmPlusPreparedLayout,
+    pub layout_handle: u64,
     pub current_time_seconds: f64,
 }
 
@@ -99,15 +114,11 @@ pub struct DfmPlusFrameLayout {
 }
 
 /// Single frame item with computed position.
+/// Only contains the item index and position data — no text/style clones.
+/// The Dart side uses item_index to look up text/style from PreparedLayout.items.
 #[derive(Debug, Clone)]
 pub struct DfmPlusFrameItem {
-    pub time_seconds: f64,
-    pub text: String,
-    pub type_code: i32,
-    pub color_argb: i32,
-    pub is_me: bool,
-    pub font_size_multiplier: f64,
-    pub count_text: Option<String>,
+    pub item_index: i32,
     pub x: f64,
     pub y: f64,
     pub offstage_x: f64,
@@ -121,59 +132,65 @@ const STATIC_DURATION_MS: i64 = 3800;
 
 const FRAME_CACHE_CAPACITY: usize = 256;
 
-struct FrameCacheEntry {
-    value: DfmPlusFrameLayout,
-    last_used_tick: u64,
-}
-
 struct FrameCache {
-    entries: HashMap<u64, FrameCacheEntry>,
-    use_tick: u64,
+    entries: FxHashMap<u64, DfmPlusFrameLayout>,
+    insertion_order: VecDeque<u64>,
 }
 
 impl FrameCache {
     fn new() -> Self {
         Self {
-            entries: HashMap::new(),
-            use_tick: 0,
+            entries: FxHashMap::default(),
+            insertion_order: VecDeque::with_capacity(FRAME_CACHE_CAPACITY),
         }
     }
 
     fn get(&mut self, key: u64) -> Option<DfmPlusFrameLayout> {
-        let next_tick = self.use_tick.wrapping_add(1);
-        self.use_tick = next_tick;
-        let entry = self.entries.get_mut(&key)?;
-        entry.last_used_tick = next_tick;
-        Some(entry.value.clone())
+        self.entries.get(&key).cloned()
     }
 
     fn insert(&mut self, key: u64, value: DfmPlusFrameLayout) {
-        let next_tick = self.use_tick.wrapping_add(1);
-        self.use_tick = next_tick;
-        self.entries.insert(
-            key,
-            FrameCacheEntry {
-                value,
-                last_used_tick: next_tick,
-            },
-        );
+        if self.entries.insert(key, value).is_none() {
+            self.insertion_order.push_back(key);
+        }
         while self.entries.len() > FRAME_CACHE_CAPACITY {
-            let Some((&victim, _)) = self
-                .entries
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_used_tick)
-            else {
+            if let Some(evict_key) = self.insertion_order.pop_front() {
+                self.entries.remove(&evict_key);
+            } else {
                 break;
-            };
-            self.entries.remove(&victim);
+            }
         }
     }
 }
 
 static FRAME_CACHE: OnceLock<Mutex<FrameCache>> = OnceLock::new();
 
-fn frame_cache() -> &'static Mutex<FrameCache> {
-    FRAME_CACHE.get_or_init(|| Mutex::new(FrameCache::new()))
+fn with_frame_cache<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut FrameCache) -> R,
+{
+    let cache = FRAME_CACHE.get_or_init(|| Mutex::new(FrameCache::new()));
+    let mut guard = cache.lock().unwrap();
+    f(&mut *guard)
+}
+
+static LAYOUT_STORE: OnceLock<Mutex<FxHashMap<u64, Arc<DfmPlusPreparedLayout>>>> = OnceLock::new();
+static NEXT_LAYOUT_HANDLE: AtomicU64 = AtomicU64::new(1);
+
+fn with_layout_store<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut FxHashMap<u64, Arc<DfmPlusPreparedLayout>>) -> R,
+{
+    let store = LAYOUT_STORE.get_or_init(|| Mutex::new(FxHashMap::default()));
+    let mut guard = store.lock().unwrap();
+    f(&mut guard)
+}
+
+fn fxhash_str(s: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = rustc_hash::FxHasher::default();
+    s.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn calc_frame_cache_key(layout: &DfmPlusPreparedLayout, current_time_seconds: f64) -> u64 {
@@ -238,7 +255,7 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
                     let distance = width + item.paint_width;
                     item.step_x = distance / item.duration_ms as f32;
                 }
-                item.measure_flag = global_flags.measure_flag;
+                item.flags.measure = global_flags.measure_flag;
             }
 
             item
@@ -251,21 +268,25 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
     }
 
     // Merge duplicates if requested
-    let mut merge_map: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+    let mut merge_map: FxHashMap<u64, Vec<usize>> = FxHashMap::default();
     if request.merge_danmaku {
         for (i, item) in items.iter().enumerate() {
-            merge_map.entry(item.text.clone()).or_default().push(i);
+            let text_hash = fxhash_str(&item.text);
+            merge_map.entry(text_hash).or_default().push(i);
         }
-        for (_text, indices) in &merge_map {
+        for indices in merge_map.values() {
             if indices.len() > 1 {
-                let count = indices.len();
-                let _multiplier = (1.0 + count as f64 / 10.0).clamp(1.0, 2.0);
+                let first_idx = indices[0];
+                let first_text = items[first_idx].text.clone();
                 for &idx in indices.iter().skip(1) {
-                    items[idx].is_filtered = true;
-                    items[idx].filter_param = 99;
+                    if items[idx].text == first_text {
+                        items[idx].is_filtered = true;
+                        items[idx].filter_param = 99;
+                    }
                 }
-                if let Some(&first_idx) = indices.first() {
-                    items[first_idx].text = format!("{} x{}", items[first_idx].text, count);
+                let real_count = indices.iter().filter(|&&idx| items[idx].is_filtered || idx == first_idx).count();
+                if real_count > 1 {
+                    items[first_idx].text.push_str(&format!(" x{}", real_count));
                 }
             }
         }
@@ -277,6 +298,7 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         filter_sys.max_quantity = Some(q);
     }
     filter_sys.duplicate_merge = request.merge_danmaku;
+    filter_sys.set_block_words(&request.block_words);
 
     let scroll_duration = Duration::new(scroll_dur_ms);
     let mut ctx = FilterContext {
@@ -295,38 +317,39 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
     }
 
     // Track-based collision avoidance layout
+    // Group by type for better cache locality: each TrackData stays hot in L1
     let track_gap_ratio = request.track_gap_ratio.clamp(0.0, 2.0) as f32;
     let mut retainer = DanmakuRetainer::new(2.0, track_gap_ratio);
 
-    for i in 0..items.len() {
-        if items[i].is_filtered {
-            continue;
-        }
-        items[i].measure(width, height, &global_flags);
-        let (placed, displaced_index) = retainer.fix(
-            &mut items[i],
-            width,
-            height,
-            &global_flags,
-            display_area,
-            false,
-        );
-        let is_top_current = items[i].danmaku_type == DanmakuType::FixTop;
-        if !placed {
-            if is_top_current {
-                eprintln!("NOT PLACED TOP: i={}, time: {}, text: {}", i, items[i].time_ms as f64 / 1000.0, items[i].text);
+    let type_order: &[DanmakuType] = &[
+        DanmakuType::ScrollRL,
+        DanmakuType::ScrollLR,
+        DanmakuType::FixTop,
+        DanmakuType::FixBottom,
+    ];
+
+    for &danmaku_type in type_order {
+        for i in 0..items.len() {
+            if items[i].is_filtered || items[i].danmaku_type != danmaku_type {
+                continue;
             }
-            continue;
-        }
-        for &displaced in &displaced_index {
-            if displaced < items.len() && !items[displaced].is_filtered {
-                let is_top_displaced = items[displaced].danmaku_type == DanmakuType::FixTop;
-                if is_top_displaced {
-                    eprintln!("DISPLACED TOP: displacing index {}, i={}, time: {}, text: {} because of {}",
-                        displaced, i, items[displaced].time_ms as f64 / 1000.0, items[displaced].text, items[i].text);
+            items[i].measure(width, height, &global_flags);
+            let (placed, displaced_index) = retainer.fix(
+                &mut items[i],
+                width,
+                height,
+                &global_flags,
+                display_area,
+                false,
+            );
+            if !placed {
+                continue;
+            }
+            for &displaced in &displaced_index {
+                if displaced < items.len() && !items[displaced].is_filtered {
+                    items[displaced].is_filtered = true;
+                    items[displaced].filter_param = 99;
                 }
-                items[displaced].is_filtered = true;
-                items[displaced].filter_param = 99;
             }
         }
     }
@@ -334,21 +357,14 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
     // Build prepared output
     let mut prepared_items = Vec::with_capacity(items.len());
     let mut item_times = Vec::with_capacity(items.len());
-    let mut top_filtered_count = 0;
 
     for item in &items {
-        let is_top = item.danmaku_type == DanmakuType::FixTop;
         if item.is_filtered {
-            if is_top {
-                top_filtered_count +=1;
-                eprintln!("FILTERED TOP: time: {}, text: {}, param: {}", item.time_ms as f64 / 1000.0, item.text, item.filter_param);
-            }
             continue;
         }
         let type_code = item.danmaku_type as i32;
-        if is_top {
-            eprintln!("KEEPING TOP: time: {}, text: {}, y: {}", item.time_ms as f64 /1000.0, item.text, item.y);
-        }
+        let is_scroll = item.danmaku_type.is_scroll();
+        let centered_x = if is_scroll { 0.0 } else { (width as f64 - item.paint_width as f64) / 2.0 };
         prepared_items.push(DfmPlusPreparedItem {
             time_seconds: item.time_ms as f64 / 1000.0,
             text: item.text.clone(),
@@ -363,21 +379,17 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
             scroll_speed: item.step_x as f64 * 1000.0,
             is_filtered: item.is_filtered,
             duration_seconds: item.duration_ms as f64 / 1000.0,
+            is_scroll,
+            centered_x,
         });
         item_times.push(item.time_ms as f64 / 1000.0);
     }
-    eprintln!("Prepared items total: {} (top filtered: {})", prepared_items.len(), top_filtered_count);
 
-    // Sort by time for binary search
-    let mut pairs: Vec<(f64, DfmPlusPreparedItem)> = item_times
-        .iter()
-        .zip(prepared_items.iter())
-        .map(|(&t, item)| (t, item.clone()))
-        .collect();
-    pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut sort_indices: Vec<usize> = (0..item_times.len()).collect();
+    sort_indices.sort_by(|&a, &b| item_times[a].partial_cmp(&item_times[b]).unwrap_or(std::cmp::Ordering::Equal));
 
-    let sorted_times: Vec<f64> = pairs.iter().map(|(t, _)| *t).collect();
-    let sorted_items: Vec<DfmPlusPreparedItem> = pairs.into_iter().map(|(_, item)| item).into_iter().collect();
+    let sorted_times: Vec<f64> = sort_indices.iter().map(|&i| item_times[i]).collect();
+    let sorted_items: Vec<DfmPlusPreparedItem> = sort_indices.into_iter().map(|i| prepared_items[i].clone()).collect();
 
     let cache_key = {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -386,18 +398,18 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         font_size.to_bits().hash(&mut hasher);
         display_area.to_bits().hash(&mut hasher);
         scroll_dur_secs.to_bits().hash(&mut hasher);
-        items.len().hash(&mut hasher);
-        for item in &items {
-            if !item.is_filtered {
-                item.time_ms.hash(&mut hasher);
-                item.paint_width.to_bits().hash(&mut hasher);
-                item.danmaku_type.hash(&mut hasher);
-            }
+        let visible_count = items.iter().filter(|i| !i.is_filtered).count();
+        visible_count.hash(&mut hasher);
+        for item in items.iter().filter(|i| !i.is_filtered).take(64) {
+            item.time_ms.hash(&mut hasher);
+            item.paint_width.to_bits().hash(&mut hasher);
+            item.danmaku_type.hash(&mut hasher);
         }
         hasher.finish()
     };
 
     Ok(DfmPlusPreparedLayout {
+        handle: 0,
         width: width as f64,
         height: height as f64,
         scroll_duration_seconds: scroll_dur_secs,
@@ -406,21 +418,38 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         item_times: sorted_times,
         track_count: ((height * display_area) / (font_size * 1.2 * 1.25)).max(1.0) as i32,
         cache_key,
-    })
+    }
+    .with_handle())
 }
 
 pub fn dfm_plus_layout_frame(request: DfmPlusFrameRequest) -> DfmPlusFrameLayout {
-    let cache = frame_cache();
-    if let Ok(mut guard) = cache.lock() {
-        let frame_key = calc_frame_cache_key(&request.layout, request.current_time_seconds);
-        if let Some(cached) = guard.get(frame_key) {
-            return cached;
-        }
-        let result = build_dfm_plus_frame(&request.layout, request.current_time_seconds);
-        guard.insert(frame_key, result.clone());
-        return result;
+    let layout_arc = {
+        let store = LAYOUT_STORE.get_or_init(|| Mutex::new(FxHashMap::default()));
+        let guard = store.lock().unwrap();
+        guard.get(&request.layout_handle).cloned()
+    };
+
+    let layout = match layout_arc {
+        Some(arc) => arc,
+        None => return DfmPlusFrameLayout { items: vec![] },
+    };
+
+    let frame_key = calc_frame_cache_key(&layout, request.current_time_seconds);
+    let cached = with_frame_cache(|cache| cache.get(frame_key));
+    if let Some(cached) = cached {
+        return cached;
     }
-    build_dfm_plus_frame(&request.layout, request.current_time_seconds)
+    let result = build_dfm_plus_frame(&layout, request.current_time_seconds);
+    with_frame_cache(|cache| cache.insert(frame_key, result.clone()));
+    result
+}
+
+pub fn dfm_plus_drop_layout(handle: u64) {
+    if handle != 0 {
+        with_layout_store(|store| {
+            store.remove(&handle);
+        });
+    }
 }
 
 fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> DfmPlusFrameLayout {
@@ -442,8 +471,7 @@ fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> Df
             continue;
         }
 
-        let type_code = item.type_code;
-        let is_scroll = type_code == 1 || type_code == 6;
+        let is_scroll = item.is_scroll;
 
         if !is_scroll && elapsed > item.duration_seconds {
             continue;
@@ -455,7 +483,7 @@ fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> Df
             let offstage = width as f64 + item.width;
             (x, offstage)
         } else {
-            let x = (width as f64 - item.width) / 2.0;
+            let x = item.centered_x;
             let offstage = width as f64;
             (x, offstage)
         };
@@ -469,13 +497,7 @@ fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> Df
         }
 
         frame_items.push(DfmPlusFrameItem {
-            time_seconds: item.time_seconds,
-            text: item.text.clone(),
-            type_code: item.type_code,
-            color_argb: item.color_argb,
-            is_me: item.is_me,
-            font_size_multiplier: item.font_size_multiplier,
-            count_text: item.count_text.clone(),
+            item_index: i as i32,
             x,
             y: item.y_position,
             offstage_x,
@@ -491,32 +513,11 @@ fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> Df
 
 /// Find the first index where item_times[i] >= target.
 fn lower_bound(times: &[f64], target: f64) -> usize {
-    let mut lo = 0;
-    let mut hi = times.len();
-    while lo < hi {
-        let mid = lo + (hi - lo) / 2;
-        if times[mid] < target {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    lo
+    times.partition_point(|&t| t < target)
 }
 
-/// Find the first index where item_times[i] > target.
 fn upper_bound(times: &[f64], target: f64) -> usize {
-    let mut lo = 0;
-    let mut hi = times.len();
-    while lo < hi {
-        let mid = lo + (hi - lo) / 2;
-        if times[mid] <= target {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    lo
+    times.partition_point(|&t| t <= target)
 }
 
 /// Compute the effective outline width in pixels, matching the GPU renderer's
@@ -600,6 +601,7 @@ pub fn dfm_plus_prepare_layout_full(
     track_gap_ratio: f64,
     outline_width: f64,
     _custom_font_bytes: Option<Vec<u8>>,
+    block_words: Vec<String>,
 ) -> Result<DfmPlusPreparedLayout, String> {
     let fs = font_size as f32;
     let ow = outline_width as f32;
@@ -641,6 +643,7 @@ pub fn dfm_plus_prepare_layout_full(
         max_lines_per_type,
         track_gap_ratio,
         outline_width,
+        block_words,
     })
 }
 
@@ -692,6 +695,7 @@ mod tests {
             max_lines_per_type: None,
             track_gap_ratio: 0.5,
             outline_width: 0.0,
+            block_words: vec![],
         };
         
         let layout = dfm_plus_prepare_layout(req).expect("prepare should work");
@@ -704,13 +708,14 @@ mod tests {
         assert_eq!(layout.items.len(), 2, "should have 2 items");
         
         let frame = dfm_plus_layout_frame(DfmPlusFrameRequest {
-            layout: layout.clone(),
+            layout_handle: layout.handle,
             current_time_seconds: 0.5,
         });
         
         eprintln!("Frame at 0.5s has {} items", frame.items.len());
-        for item in &frame.items {
-            eprintln!(" - text={}, y={}, x={}, type={}", item.text, item.y, item.x, item.type_code);
+        for fi in &frame.items {
+            let pi = &layout.items[fi.item_index as usize];
+            eprintln!(" - text={}, y={}, x={}, type={}", pi.text, fi.y, fi.x, pi.type_code);
         }
         
         assert_eq!(frame.items.len(), 2, "frame should have 2 items");
@@ -775,6 +780,7 @@ mod tests {
             max_lines_per_type: None,
             track_gap_ratio: 0.5,
             outline_width: 0.0,
+            block_words: vec![],
         };
 
         let layout = dfm_plus_prepare_layout(req).expect("prepare layout failed");
@@ -793,25 +799,28 @@ mod tests {
         // Test at a time where we have prepared items (around 1042-1050 seconds)
         for test_time in [1042.0, 1043.0, 1046.0, 1346.0, 1350.0, 1399.0, 1400.0, 1409.0, 1420.0, 1432.0, 1448.0] {
             let frame = dfm_plus_layout_frame(DfmPlusFrameRequest {
-                layout: layout.clone(),
+                layout_handle: layout.handle,
                 current_time_seconds: test_time,
             });
 
             let top_items: Vec<_> = frame.items.iter()
-                .filter(|i| i.type_code == 5)
+                .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
                 .collect();
 
             eprintln!("Frame at t={:.2}s, total items: {}, top items: {}", test_time, frame.items.len(), top_items.len());
-            for item in &top_items {
-                eprintln!("  text={:.20}, y={:.1}, time={:.2}", item.text, item.y, item.time_seconds);
+            for fi in &top_items {
+                let pi = &layout.items[fi.item_index as usize];
+                eprintln!("  text={:.20}, y={:.1}, time={:.2}", pi.text, fi.y, pi.time_seconds);
             }
 
             for i in 0..top_items.len() {
                 for j in (i+1)..top_items.len() {
                     let y_diff = (top_items[i].y - top_items[j].y).abs();
+                    let pi_i = &layout.items[top_items[i].item_index as usize];
+                    let pi_j = &layout.items[top_items[j].item_index as usize];
                     assert!(y_diff > 1.0,
                         "At t={:.2}s, top items '{}' (y={:.1}) and '{}' (y={:.1}) share same y!",
-                        test_time, top_items[i].text, top_items[i].y, top_items[j].text, top_items[j].y);
+                        test_time, pi_i.text, top_items[i].y, pi_j.text, top_items[j].y);
                 }
             }
         }
@@ -851,6 +860,7 @@ mod tests {
             max_lines_per_type: None,
             track_gap_ratio: 0.5,
             outline_width: 0.0,
+            block_words: vec![],
         };
 
         let result = dfm_plus_prepare_layout(req);
@@ -885,11 +895,12 @@ mod tests {
             max_lines_per_type: None,
             track_gap_ratio: 0.5,
             outline_width: 0.0,
+            block_words: vec![],
         };
 
         let layout = dfm_plus_prepare_layout(req).unwrap();
         let frame = dfm_plus_layout_frame(DfmPlusFrameRequest {
-            layout,
+            layout_handle: layout.handle,
             current_time_seconds: 1.5,
         });
         assert_eq!(frame.items.len(), 1);
@@ -948,29 +959,33 @@ mod tests {
             max_lines_per_type: None,
             track_gap_ratio: 0.5,
             outline_width: 0.0,
+            block_words: vec![],
         };
 
         let layout = dfm_plus_prepare_layout(req).unwrap();
         let frame = dfm_plus_layout_frame(DfmPlusFrameRequest {
-            layout: layout.clone(),
+            layout_handle: layout.handle,
             current_time_seconds: 1.0,
         });
 
         let top_items: Vec<_> = frame.items.iter()
-            .filter(|i| i.type_code == 5)
+            .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
             .collect();
 
         eprintln!("Frame at t=1.0, top items: {}", top_items.len());
-        for item in &top_items {
-            eprintln!("  text={}, y={}", item.text, item.y);
+        for fi in &top_items {
+            let pi = &layout.items[fi.item_index as usize];
+            eprintln!("  text={}, y={}", pi.text, fi.y);
         }
 
         for i in 0..top_items.len() {
             for j in (i+1)..top_items.len() {
                 let y_diff = (top_items[i].y - top_items[j].y).abs();
+                let pi_i = &layout.items[top_items[i].item_index as usize];
+                let pi_j = &layout.items[top_items[j].item_index as usize];
                 assert!(y_diff > 1.0, 
                     "TOP items {} and {} share y={}, causing visual overlap!", 
-                    top_items[i].text, top_items[j].text, top_items[i].y);
+                    pi_i.text, pi_j.text, top_items[i].y);
             }
         }
     }
@@ -1056,7 +1071,7 @@ mod tests {
                 if raw.paint_width > 0.0 && raw.paint_height >0.0 {
                     item.paint_width = raw.paint_width as f32 + outline_px *2.0;
                     item.paint_height = raw.paint_height as f32;
-                    item.measure_flag = global_flags.measure_flag;
+                    item.flags.measure = global_flags.measure_flag;
                 }
                 item
             })
@@ -1211,6 +1226,7 @@ mod tests {
             max_lines_per_type: None,
             track_gap_ratio:0.5,
             outline_width:0.0,
+            block_words: vec![],
         };
 
         let layout = dfm_plus_prepare_layout(req).expect("prepare layout failed");
@@ -1222,19 +1238,19 @@ mod tests {
         // Test t= 1.0 看看有没有
         let test_time = 1.0;
         let frame = dfm_plus_layout_frame(DfmPlusFrameRequest {
-            layout: layout.clone(),
+            layout_handle: layout.handle,
             current_time_seconds: test_time,
         });
         eprintln!("Frame at {}s has {} items total", test_time, frame.items.len());
-        let top_in_frame = frame.items.iter().filter(|i| i.type_code ==5).count();
-        let bottom_in_frame = frame.items.iter().filter(|i| i.type_code ==4).count();
-        let scroll_in_frame = frame.items.iter().filter(|i| i.type_code ==1 || i.type_code ==6).count();
+        let top_in_frame = frame.items.iter().filter(|fi| layout.items[fi.item_index as usize].type_code ==5).count();
+        let bottom_in_frame = frame.items.iter().filter(|fi| layout.items[fi.item_index as usize].type_code ==4).count();
+        let scroll_in_frame = frame.items.iter().filter(|fi| { let tc = layout.items[fi.item_index as usize].type_code; tc ==1 || tc ==6 }).count();
         eprintln!("Top in frame: {}, bottom: {}, scroll: {}", top_in_frame, bottom_in_frame, scroll_in_frame);
 
-        // 打印 frame 的 top:
         eprintln!("Top in frame:");
-        for item in frame.items.iter().filter(|i| i.type_code ==5) {
-            eprintln!("  text=\"{}\", y={}, time={}", item.text, item.y, item.time_seconds);
+        for fi in frame.items.iter().filter(|fi| layout.items[fi.item_index as usize].type_code ==5) {
+            let pi = &layout.items[fi.item_index as usize];
+            eprintln!("  text=\"{}\", y={}, time={}", pi.text, fi.y, pi.time_seconds);
         }
     }
 
@@ -1290,51 +1306,58 @@ mod tests {
             max_lines_per_type: None,
             track_gap_ratio: 0.5,
             outline_width: 0.0,
+            block_words: vec![],
         };
 
         let layout = dfm_plus_prepare_layout(req).unwrap();
 
         let frame_at_1s = dfm_plus_layout_frame(DfmPlusFrameRequest {
-            layout: layout.clone(),
+            layout_handle: layout.handle,
             current_time_seconds: 1.0,
         });
         let top_at_1s: Vec<_> = frame_at_1s.items.iter()
-            .filter(|i| i.type_code == 5)
+            .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
             .collect();
 
         eprintln!("Frame at t=1.0, top items: {}", top_at_1s.len());
-        for item in &top_at_1s {
-            eprintln!("  text={}, y={}", item.text, item.y);
+        for fi in &top_at_1s {
+            let pi = &layout.items[fi.item_index as usize];
+            eprintln!("  text={}, y={}", pi.text, fi.y);
         }
 
         let frame_at_5s = dfm_plus_layout_frame(DfmPlusFrameRequest {
-            layout: layout.clone(),
+            layout_handle: layout.handle,
             current_time_seconds: 5.0,
         });
         let top_at_5s: Vec<_> = frame_at_5s.items.iter()
-            .filter(|i| i.type_code == 5)
+            .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
             .collect();
 
         eprintln!("Frame at t=5.0, top items: {}", top_at_5s.len());
-        for item in &top_at_5s {
-            eprintln!("  text={}, y={}", item.text, item.y);
+        for fi in &top_at_5s {
+            let pi = &layout.items[fi.item_index as usize];
+            eprintln!("  text={}, y={}", pi.text, fi.y);
         }
 
         for i in 0..top_at_1s.len() {
             for j in (i+1)..top_at_1s.len() {
                 let y_diff = (top_at_1s[i].y - top_at_1s[j].y).abs();
+                let pi_i = &layout.items[top_at_1s[i].item_index as usize];
+                let pi_j = &layout.items[top_at_1s[j].item_index as usize];
                 assert!(y_diff > 1.0, 
                     "At t=1.0, top items {} and {} share y={}!", 
-                    top_at_1s[i].text, top_at_1s[j].text, top_at_1s[i].y);
+                    pi_i.text, pi_j.text, top_at_1s[i].y);
             }
         }
 
         for i in 0..top_at_5s.len() {
             for j in (i+1)..top_at_5s.len() {
                 let y_diff = (top_at_5s[i].y - top_at_5s[j].y).abs();
+                let pi_i = &layout.items[top_at_5s[i].item_index as usize];
+                let pi_j = &layout.items[top_at_5s[j].item_index as usize];
                 assert!(y_diff > 1.0, 
                     "At t=5.0, top items {} and {} share y={}!", 
-                    top_at_5s[i].text, top_at_5s[j].text, top_at_5s[i].y);
+                    pi_i.text, pi_j.text, top_at_5s[i].y);
             }
         }
     }

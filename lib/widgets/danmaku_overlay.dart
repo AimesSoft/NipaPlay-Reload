@@ -183,6 +183,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             outlineWidth: videoState.next2DanmakuOutlineWidth,
             shadowStyle: videoState.danmakuShadowStyle,
             trackGapRatio: videoState.danmakuDfmPlusTrackGap,
+            blockWords: videoState.danmakuBlockWords,
           );
         }
 

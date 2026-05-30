@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `build_next2_frame`, `calc_frame_cache_key`, `calc_layout_cache_key`, `calc_merged_font_size_multiplier`, `cmp_f64`, `compact_scroll_tracks`, `compact_static_tracks`, `frame_cache`, `from_plain`, `from_raw`, `is_wide_char`, `lower_bound`, `measure_text_height`, `measure_text_width`, `merge_key`, `next2_layout_frame_with_cache`, `normalize_color`, `normalize_type_code`, `prepare_merged_items`, `resolve_base_track_height`, `sanitize_display_area`, `sanitize_positive`, `scroll_item_x_at_time`, `scroll_items_will_collide_in_duration`, `scroll_will_collide_with_any`, `select_scroll_track`, `select_static_track`, `simple_text_hash`, `static_items_will_collide`, `static_will_collide_with_any`, `tracks_vertical_overlap`, `upper_bound`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RawNext2Item`, `WorkingNext2Item`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FrameCacheEntry`, `RawNext2Item`, `WorkingNext2Item`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`
 
 Future<RustNext2PreparedLayout> next2PrepareLayout(
