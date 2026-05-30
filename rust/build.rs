@@ -11,13 +11,21 @@ fn main() {
         // 注意：不使用 -fno-exceptions，C API 的 try-catch 需要 C++ 异常支持
         // 来捕获 FFI 边界上的任何异常，防止进程崩溃
         .flag_if_supported("-fno-rtti")
-        .flag_if_supported("/utf-8");  // MSVC: 防止 C4819 编码警告导致错误
+        .flag_if_supported("/utf-8")  // MSVC: 防止 C4819 编码警告导致错误
+        // 开启所有编译器 warning
+        .flag_if_supported("-Wall")       // GCC/Clang: 大部分有用警告
+        .flag_if_supported("-Wextra")     // GCC/Clang: 额外警告
+        .flag_if_supported("-Wpedantic")  // GCC/Clang: 严格标准合规警告
+        .flag_if_supported("/W4");        // MSVC: 高级别警告
 
     if is_release {
         // Release: -O3 -ffast-math (equivalent to -Ofast)
         build.opt_level(3);
         build.flag_if_supported("-ffast-math"); // safe: no isnan/isinf, integer-only std::abs
         build.flag_if_supported("/fp:fast");    // MSVC equivalent
+        // Release: LTO (link-time optimization)
+        build.flag_if_supported("-flto");       // GCC/Clang: link-time optimization
+        build.flag_if_supported("/GL");         // MSVC: whole program optimization (compile)
     } else {
         // Debug: -Og (optimize for debugging, preserve stack frames)
         build.opt_level(0);
@@ -41,4 +49,10 @@ fn main() {
     }
 
     build.compile("similarity");
+
+    // MSVC Release: /GL 编译的目标文件需要 /LTCG 传递给最终链接器（Rust link.exe）
+    // cc crate 只控制 lib.exe 归档步骤，最终链接由 Rust 工具链完成，需手动传递 /LTCG
+    if is_release && std::env::var("CARGO_CFG_TARGET_OS").map(|s| s == "windows").unwrap_or(false) {
+        println!("cargo:rustc-link-arg=/LTCG");
+    }
 }
