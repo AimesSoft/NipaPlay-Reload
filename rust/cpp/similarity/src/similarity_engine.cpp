@@ -87,10 +87,11 @@ public:
         // 关键设计：传入引擎指针访问实例成员
         explicit DanmuCacheline(SimilarityEngine* engine,
                                const ushort* s, uint mode, uint idx)
-            : idx(idx), mode(mode), peers({})
+            : idx(idx), mode(mode)
             , str(engine->ed_a_.get())      // str 使用 ed_a scratch buffer
             , pinyin(engine->ed_a_.get())   // pinyin 使用 ed_a（互斥使用）
             , gram(engine->ed_a_.get())     // gram 使用 ed_a（key 空间不同，互斥使用）
+            , peers({})
         {
             // gen orig and str
             // 与原代码完全一致
@@ -228,7 +229,7 @@ public:
             return sim_result(combined_identical, 0, idx_delta);
 
         // check edit dist
-        int edit_dis;
+        int edit_dis = 0;
         bool calc_edit_dis = std::abs(p.str.length - q.str.length) <= config_.max_dist;
         if(calc_edit_dis) {
             edit_dis = edit_distance(

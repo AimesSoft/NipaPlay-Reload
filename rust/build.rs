@@ -23,6 +23,9 @@ fn main() {
         build.opt_level(3);
         build.flag_if_supported("-ffast-math"); // safe: no isnan/isinf, integer-only std::abs
         build.flag_if_supported("/fp:fast");    // MSVC equivalent
+        // Release: LTO (link-time optimization)
+        build.flag_if_supported("-flto");       // GCC/Clang: link-time optimization
+        build.flag_if_supported("/GL");         // MSVC: whole program optimization
     } else {
         // Debug: -Og (optimize for debugging, preserve stack frames)
         build.opt_level(0);

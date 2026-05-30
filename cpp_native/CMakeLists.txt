@@ -24,6 +24,9 @@ if(MSVC)
     # Debug: /Od (default, no optimizations, best debugging experience)
     # Release: /O2 (default) + /fp:fast (aggressive FP optimizations)
     add_compile_options($<$<CONFIG:Release>:/fp:fast>)
+    # Release: /GL (whole program optimization) + /LTCG (link-time code generation)
+    add_compile_options($<$<CONFIG:Release>:/GL>)
+    add_link_options($<$<CONFIG:Release>:/LTCG>)
 else()
     # Common flags for Apple & Linux
     add_compile_options(-fno-rtti -fvisibility=hidden -Wall -Wextra -Wpedantic)
@@ -39,6 +42,9 @@ else()
     # np_isnan/np_isinf (IEEE 754 bit-level) bypass -ffinite-math-only safely.
     add_compile_options($<$<CONFIG:Release>:-O3>)
     add_compile_options($<$<CONFIG:Release>:-ffast-math>)
+    # Release: -flto (link-time optimization)
+    add_compile_options($<$<CONFIG:Release>:-flto>)
+    add_link_options($<$<CONFIG:Release>:-flto>)
 endif()
 
 # ──── 库类型 ────
