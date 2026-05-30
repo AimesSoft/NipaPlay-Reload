@@ -25,13 +25,17 @@ for ARCH in ${ARCHS}; do
     cmake --build "${BUILD_DIR}/${ARCH}" -j$(sysctl -n hw.ncpu)
 done
 
-# 如果多架构，用 lipo 合并
+# 如果多架构，用 lipo 合并；单架构则直接复制
 if [ $(echo ${ARCHS} | wc -w) -gt 1 ]; then
     LIPO_ARGS=""
     for ARCH in ${ARCHS}; do
         LIPO_ARGS="${LIPO_ARGS} ${BUILD_DIR}/${ARCH}/libnipaplay_native.a"
     done
     lipo -create ${LIPO_ARGS} -output "${BUILD_DIR}/libnipaplay_native.a"
+else
+    # 单架构时 lipo 分支被跳过，需手动复制到统一路径
+    SINGLE_ARCH=$(echo ${ARCHS} | awk '{print $1}')
+    cp "${BUILD_DIR}/${SINGLE_ARCH}/libnipaplay_native.a" "${BUILD_DIR}/libnipaplay_native.a"
 fi
 
 # Copy to both BUILT_PRODUCTS_DIR and DERIVED_SOURCES_DIR (Xcode can find it)

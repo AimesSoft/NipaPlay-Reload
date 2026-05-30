@@ -37,6 +37,7 @@ class NipaPlayNextEngine {
   DanmakuLayoutEngine? _nativeEngine;
   bool _nativeEngineTried = false;
   bool _nativeEngineAvailable = false;
+  bool _dartFallbackNotified = false; // 仅在首次 Dart fallback 时输出一次 Release 可见日志
 
   final LinkedHashMap<String, double> _textWidthCache =
       LinkedHashMap<String, double>();
@@ -269,7 +270,11 @@ class NipaPlayNextEngine {
 
   /// Dart fallback layout: original time-window query + binary search logic.
   List<PositionedDanmakuItem> _layoutDart(double currentTimeSeconds) {
-    _log('layout -> Dart fallback path');
+    if (!_dartFallbackNotified) {
+      _dartFallbackNotified = true;
+      _logNative('[FALLBACK] using Dart layout path (first frame)');
+    }
+    _logFrame('layout -> Dart fallback path');
     final maxDuration = max(_scrollDurationSeconds, _staticDurationSeconds);
     final windowStart = currentTimeSeconds - maxDuration;
     final left = _lowerBound(windowStart);
