@@ -26,7 +26,7 @@ if(MSVC)
     add_compile_options($<$<CONFIG:Release>:/fp:fast>)
 else()
     # Common flags for Apple & Linux
-    add_compile_options(-fno-rtti -fvisibility=hidden)
+    add_compile_options(-fno-rtti -fvisibility=hidden -Wall -Wextra -Wpedantic)
     add_definitions(-DNIPAPLAY_NATIVE_BUILDING)
     if(NOT APPLE)
         add_compile_options(-fPIC)
