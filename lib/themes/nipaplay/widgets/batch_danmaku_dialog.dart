@@ -75,11 +75,25 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
   String get hotkeyDisableReason => 'batch_danmaku_dialog';
 
   /// 从路径或 URL 得到显示名：URL 取 pathSegments 最后一段，本地路径用 basename。
+  /// 特殊处理 SMB 代理 URL（形如 http://127.0.0.1:PORT/smb/stream?conn=...&path=/foo/bar.mkv），
+  /// 真实文件名在查询参数 path 里，pathSegments.last 只会得到 "stream"。
   static String _displayNameFromPath(String path) {
     if (path.contains('://')) {
-      final segments = Uri.tryParse(path)?.pathSegments;
-      if (segments != null && segments.isNotEmpty) {
-        return segments.last;
+      final uri = Uri.tryParse(path);
+      if (uri != null) {
+        // SMB 代理：从查询参数 path 取真实文件名
+        final smbPath = uri.queryParameters['path'];
+        if (smbPath != null && smbPath.isNotEmpty) {
+          final lastSlash = smbPath.lastIndexOf('/');
+          final tail = lastSlash >= 0 ? smbPath.substring(lastSlash + 1) : smbPath;
+          if (tail.isNotEmpty) return tail;
+        }
+        // 一般 HTTP URL：取 pathSegments 最后一段
+        final segments = uri.pathSegments;
+        if (segments.isNotEmpty) {
+          final last = segments.last;
+          if (last.isNotEmpty) return last;
+        }
       }
       return path;
     }
