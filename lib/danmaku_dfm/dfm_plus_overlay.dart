@@ -4,6 +4,7 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
 import 'package:nipaplay/danmaku_next/next2_texture_bridge.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import 'dfm_plus_layout_bridge.dart';
 
@@ -77,6 +78,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   bool _textureReady = false;
   String _surfaceId = 'dfm-default';
   double _lastDevicePixelRatio = 1.0;
+
+  /// Tablet devices render at 2x then downscale to fix aliasing on iPad.
+  static const double _tabletSupersampleMultiplier = 2.0;
 
   @override
   void initState() {
@@ -152,10 +156,14 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
                 _textureId != null &&
                 Next2TextureBridge.isSupported;
 
+            // Use filtered downsampling when supersampling is active (tablets)
+            // so the 2x buffer is properly averaged during downscale.
+            final filterQuality =
+                globals.isTablet ? FilterQuality.low : FilterQuality.none;
             final Widget content = hasTexture
                 ? Texture(
                     textureId: _textureId!,
-                    filterQuality: FilterQuality.none,
+                    filterQuality: filterQuality,
                   )
                 : const SizedBox.expand();
 
@@ -243,8 +251,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     final views = WidgetsBinding.instance.platformDispatcher.views;
     final dpr =
         views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
+
+    // Apply supersampling multiplier for tablet devices to fix aliasing.
+    final supersample = globals.isTablet ? _tabletSupersampleMultiplier : 1.0;
     final double pixelRatio =
-        dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0;
+        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
+
     final int pixelWidth =
         (_layoutSize.width * pixelRatio).round().clamp(1, 16384).toInt();
     final int pixelHeight =
