@@ -2168,10 +2168,21 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   /// URL 或本地路径取“文件名”：URL 取 pathSegments 最后一段，否则 p.basename。
+  /// SMB 代理 URL（/smb/stream?path=...）真实文件名在查询参数里，需特殊处理。
   static String _basenameOrUrlLastSegment(String pathOrUrl) {
     if (pathOrUrl.contains('://')) {
-      final last = Uri.tryParse(pathOrUrl)?.pathSegments.lastOrNull;
-      if (last != null && last.isNotEmpty) return last;
+      final uri = Uri.tryParse(pathOrUrl);
+      if (uri != null) {
+        final smbPath = uri.queryParameters['path'];
+        if (smbPath != null && smbPath.isNotEmpty) {
+          final lastSlash = smbPath.lastIndexOf('/');
+          final tail =
+              lastSlash >= 0 ? smbPath.substring(lastSlash + 1) : smbPath;
+          if (tail.isNotEmpty) return tail;
+        }
+        final last = uri.pathSegments.lastOrNull;
+        if (last != null && last.isNotEmpty) return last;
+      }
       return pathOrUrl;
     }
     return p.basename(pathOrUrl);
@@ -2258,6 +2269,51 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           // 处理返回结果
           print('Custom media info result for WebDAV: $result');
         }
+      },
+    );
+  }
+
+  Widget _buildBatchDanmakuMatchFolderActionForSMB(
+    SMBConnection connection,
+    String folderPath,
+    List<SMBFileEntry> videoFiles,
+    double indent, {
+    required bool isDark,
+    required Color titleColor,
+    required Color subtitleColor,
+    required Color iconColor,
+  }) {
+    // SMB 文件以代理流 URL 作为唯一标识（与 _playSMBFile 写入历史记录时一致），
+    // 这样后续手动/批量匹配写入的 WatchHistoryItem 才能被播放路径命中。
+    final fileUrls = videoFiles
+        .map((f) => SMBProxyService.instance.buildStreamUrl(connection, f.path))
+        .toList();
+    final folderDisplayName = (folderPath == '/' || folderPath.isEmpty)
+        ? connection.name
+        : p.basename(folderPath);
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.fromLTRB(indent, 0, 8, 0),
+      leading: Icon(Icons.playlist_add_check, color: iconColor, size: 18),
+      title: Text(
+        '批量匹配弹幕（本文件夹）',
+        locale: const Locale('zh-Hans', 'zh'),
+        style: TextStyle(color: titleColor, fontSize: 13),
+      ),
+      subtitle: Text(
+        '对齐左侧文件顺序与右侧剧集顺序，一键匹配 ${videoFiles.length} 个文件',
+        locale: const Locale('zh-Hans', 'zh'),
+        style: TextStyle(color: subtitleColor, fontSize: 12),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () {
+        _showBatchDanmakuMatchDialog(
+          folderPath,
+          fileUrls,
+          initialSearchKeyword: folderDisplayName,
+          onSuccessRefresh: () => setState(() {}),
+        );
       },
     );
   }
@@ -3180,6 +3236,19 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         .where((f) => !f.isDirectory && SMBService.instance.isVideoFile(f.name))
         .toList();
 
+    final batchActionWidget = videoFilesInFolder.length >= 2
+        ? _buildBatchDanmakuMatchFolderActionForSMB(
+            connection,
+            path,
+            videoFilesInFolder,
+            indent,
+            isDark: isDark,
+            titleColor: textColor,
+            subtitleColor: secondaryTextColor,
+            iconColor: iconColor,
+          )
+        : null;
+
     final customMediaInfoWidget = videoFilesInFolder.length >= 2
         ? _buildCustomMediaInfoActionForSMB(
             connection,
@@ -3193,6 +3262,9 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         : null;
 
     final widgets = <Widget>[];
+    if (batchActionWidget != null) {
+      widgets.add(batchActionWidget);
+    }
     if (customMediaInfoWidget != null) {
       widgets.add(customMediaInfoWidget);
     }
@@ -3309,11 +3381,16 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                             );
                           },
                         ),
-                        // 播放按钮
+                        // 手动匹配弹幕按钮（替换原“播放”按钮；行点击仍可播放）
                         SearchBarActionButton(
-                          icon: Icons.play_circle_outline,
-                          tooltip: '播放',
-                          onPressed: () => _playSMBFile(connection, file),
+                          icon: Icons.subtitles,
+                          color: iconColor,
+                          tooltip: '手动匹配弹幕',
+                          onPressed: () => _showManualDanmakuMatchDialog(
+                            fileUrl!,
+                            file.name,
+                            snapshot.data,
+                          ),
                         ),
                       ],
                     )
