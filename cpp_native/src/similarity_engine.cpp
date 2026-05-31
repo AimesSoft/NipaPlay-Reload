@@ -2,6 +2,7 @@
 #include "nipaplay_native/nipaplay_native.h"
 
 #include <cmath>
+#include <cstdio>
 #include <new>
 #include <stdexcept>
 #include <functional>
@@ -512,7 +513,7 @@ static std::string result_to_json(const SimResult& result) {
         if (i > 0) json += ",";
         char buf[128];
         snprintf(buf, sizeof(buf),
-            "{\"source_index\":%d,\"target_index\":%d,\"distance\":%d,\"score\":%.6f}",
+            "{\"source_index\":%d,\"target_index\":%d,\"distance\":%d,\"score\":%.6f",
             p.source_index, p.target_index, p.distance, p.score);
         json += buf;
         json += ",\"reason\":\"";
@@ -521,10 +522,12 @@ static std::string result_to_json(const SimResult& result) {
     }
 
     json += "],\"groups\":[";
+    bool first_group = true;
     for (size_t i = 0; i < result.groups.size(); i++) {
         const auto& g = result.groups[i];
         if (g.empty()) continue;
-        if (i > 0) json += ",";
+        if (!first_group) json += ",";
+        first_group = false;
         json += "[";
         for (size_t j = 0; j < g.size(); j++) {
             if (j > 0) json += ",";
@@ -543,9 +546,28 @@ std::string similarity_check_batch_json(
     try {
         auto items = parse_items_json(items_json);
         auto config = parse_config_json(config_json);
+
+        // 诊断：输出解析后的 items 数量和配置
+        fprintf(stderr, "[SIM-CPP] parse_items_json: json_len=%zu items=%zu\n",
+                items_json.size(), items.size());
+        if (!items.empty()) {
+            fprintf(stderr, "[SIM-CPP] first_item: text='%s' mode=%d time=%.1f\n",
+                    items[0].text.substr(0, 30).c_str(), items[0].mode, items[0].time_seconds);
+        }
+        fprintf(stderr, "[SIM-CPP] config: max_dist=%d max_cosine=%d use_pinyin=%d cross_mode=%d time_window=%.1f\n",
+                config.max_dist, config.max_cosine, config.use_pinyin, config.cross_mode, config.time_window);
+
         auto result = danmaku_similarity_check(items, config);
+
+        fprintf(stderr, "[SIM-CPP] result: pairs=%zu groups=%zu\n",
+                result.pairs.size(), result.groups.size());
+
         return result_to_json(result);
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[SIM-CPP] EXCEPTION in similarity_check_batch_json: %s\n", e.what());
+        return "{}";
     } catch (...) {
+        fprintf(stderr, "[SIM-CPP] UNKNOWN EXCEPTION in similarity_check_batch_json\n");
         return "{}";
     }
 }

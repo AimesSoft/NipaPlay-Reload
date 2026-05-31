@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 
 import '../native_library.dart';
 import '../types/native_types.dart';
@@ -124,6 +125,10 @@ class SimilarityEngine {
     final itemsJson = json.encode(items.map((i) => i.toJson()).toList());
     final configJson = json.encode(config.toJson());
 
+    // 诊断：输出 JSON 前 200 字符
+    debugPrint('[SimEngine] itemsJson[:200]=${itemsJson.substring(0, itemsJson.length > 200 ? 200 : itemsJson.length)}');
+    debugPrint('[SimEngine] configJson=$configJson');
+
     final itemsPtr = itemsJson.toNativeUtf8();
     final configPtr = configJson.toNativeUtf8();
     final outputPtr = calloc<NpString>();
@@ -133,27 +138,35 @@ class SimilarityEngine {
           itemsPtr, configPtr, outputPtr);
 
       final code = npResultCodeFromInt(result.code);
+      // 诊断：输出 C++ 返回的错误码
+      debugPrint('[SimEngine] npSimCheckBatch result: code=$code (${result.code}), msg=${result.message != nullptr ? result.message.cast<Utf8>().toDartString() : "null"}');
       if (code != NpResultCode.ok) {
+        debugPrint('[SimEngine] ❌ C++ returned non-OK, returning empty');
         return SimilarityResult.empty();
       }
 
       final output = outputPtr.ref;
       if (output.data == nullptr) {
+        debugPrint('[SimEngine] ❌ output.data is nullptr, returning empty');
         return SimilarityResult.empty();
       }
 
       try {
         final resultStr = output.data.cast<Utf8>().toDartString();
+        // 诊断：输出 C++ 返回的 JSON 前 300 字符
+        debugPrint('[SimEngine] resultJson[:300]=${resultStr.substring(0, resultStr.length > 300 ? 300 : resultStr.length)}');
         final decoded = json.decode(resultStr);
         if (decoded is Map<String, dynamic>) {
           return SimilarityResult.fromJson(decoded);
         }
+        debugPrint('[SimEngine] ❌ decoded is not Map<String, dynamic>: ${decoded.runtimeType}');
         return SimilarityResult.empty();
       } finally {
         // 用 np_string_free 释放 C++ 分配的字符串
         NativeBindings.npStringFree(outputPtr);
       }
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[SimEngine] ❌ Exception: $e\n$st');
       return SimilarityResult.empty();
     } finally {
       malloc.free(itemsPtr);

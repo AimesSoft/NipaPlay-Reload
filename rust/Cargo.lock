@@ -2761,7 +2761,6 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "bytemuck",
- "cc",
  "fdsm",
  "fdsm-ttf-parser",
  "flutter_rust_bridge",
