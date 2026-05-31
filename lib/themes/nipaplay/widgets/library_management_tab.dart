@@ -2361,8 +2361,12 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
   }
 
   // 显示手动匹配弹幕对话框
+  // [onSuccessRefresh] 在匹配并保存成功后调用，用于触发调用方所在视图的刷新。
+  // 远程库（WebDAV/SMB）必须传入此回调，否则下方的 _refreshExpandedFolderContents
+  // 只会在本地文件夹 map 上查找，对远程内容是 no-op，导致行内字幕保持旧状态。
   Future<void> _showManualDanmakuMatchDialog(
-      String filePath, String fileName, WatchHistoryItem? historyItem) async {
+      String filePath, String fileName, WatchHistoryItem? historyItem,
+      {void Function()? onSuccessRefresh}) async {
     try {
       // 使用文件名作为初始搜索关键词
       String initialSearchKeyword = fileName;
@@ -2432,7 +2436,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
               BlurSnackBar.show(context, '弹幕匹配成功：$animeTitle - $episodeTitle');
 
               // 刷新UI以显示新的动画信息
-              _refreshExpandedFolderContents(p.dirname(filePath));
+              if (onSuccessRefresh != null) {
+                onSuccessRefresh();
+              } else {
+                _refreshExpandedFolderContents(p.dirname(filePath));
+              }
             }
           } catch (e) {
             debugPrint('❌ 更新弹幕匹配信息失败：$e');
@@ -3183,6 +3191,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                               fileUrl!,
                               file.name,
                               snapshot.data,
+                              onSuccessRefresh: () => setState(() {}),
                             ),
                           ),
                         ],
@@ -3390,6 +3399,7 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
                             fileUrl!,
                             file.name,
                             snapshot.data,
+                            onSuccessRefresh: () => setState(() {}),
                           ),
                         ),
                       ],
