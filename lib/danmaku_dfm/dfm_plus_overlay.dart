@@ -156,10 +156,14 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
                 _textureId != null &&
                 Next2TextureBridge.isSupported;
 
+            // Use filtered downsampling when supersampling is active (tablets)
+            // so the 2x buffer is properly averaged during downscale.
+            final filterQuality =
+                globals.isTablet ? FilterQuality.low : FilterQuality.none;
             final Widget content = hasTexture
                 ? Texture(
                     textureId: _textureId!,
-                    filterQuality: FilterQuality.none,
+                    filterQuality: filterQuality,
                   )
                 : const SizedBox.expand();
 
