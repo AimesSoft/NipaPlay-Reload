@@ -15,5 +15,6 @@
 library;
 
 export 'bindings/example_calculator.dart';
+export 'bindings/similarity_engine.dart';
 export 'types/native_result.dart';
 export 'types/native_types.dart';
