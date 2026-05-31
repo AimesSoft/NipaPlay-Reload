@@ -22,6 +22,9 @@ extern const std::unordered_map<sim_ushort, std::pair<sim_uchar, sim_uchar>>& ge
 constexpr int SIM_PINYIN_BASE = 0xe000;
 constexpr int SIM_HASH_MOD = 1007;
 constexpr int SIM_MAX_HASH_VAL = std::max(SIM_HASH_MOD * SIM_HASH_MOD, 1 << 16) + 7;
+// NOTE: Each SimilarityEngine instance allocates ~4 MB for ed_a_ + ed_b_
+//       (2 × 1,014,056 × sizeof(short) ≈ 3.87 MB). This is fine for desktop,
+//       but should be monitored on memory-constrained Android 32-bit targets.
 constexpr sim_uint SIM_MAX_IDX_RANGE = (1 << 19) - 3;
 constexpr sim_uint SIM_MAX_DIST_VAL = (1 << 11) - 3;
 
@@ -149,31 +152,31 @@ public:
     }
 
     // ──── 编辑距离 ────
-    int edit_distance(UnorderedContainer<sim_ushort>& p,
-                      UnorderedContainer<sim_ushort>& q) {
+    int edit_distance(const UnorderedContainer<sim_ushort>& p,
+                      const UnorderedContainer<sim_ushort>& q) {
         short* ea = ed_a_.get();
-        for(auto& item: p.data) ea[item.first] += item.second;
-        for(auto& item: q.data) ea[item.first] -= item.second;
+        for(const auto& item: p.data) ea[item.first] += item.second;
+        for(const auto& item: q.data) ea[item.first] -= item.second;
         int ans = 0;
-        for(auto& item: p.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
-        for(auto& item: q.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
+        for(const auto& item: p.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
+        for(const auto& item: q.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
         return ans;
     }
 
     // ──── 余弦距离 ────
-    float cosine_distance(UnorderedContainer<sim_uint>& p,
-                          UnorderedContainer<sim_uint>& q) {
+    float cosine_distance(const UnorderedContainer<sim_uint>& p,
+                          const UnorderedContainer<sim_uint>& q) {
         short* ea = ed_a_.get();
         short* eb = ed_b_.get();
-        for(auto& item: p.data) ea[item.first] += item.second;
-        for(auto& item: q.data) eb[item.first] += item.second;
+        for(const auto& item: p.data) ea[item.first] += item.second;
+        for(const auto& item: q.data) eb[item.first] += item.second;
         int x=0, y=0, z=0;
-        for(auto& item: p.data) {
+        for(const auto& item: p.data) {
             int xa = ea[item.first], xb = eb[item.first];
             x += xa*xb; y += xa*xa; z += xb*xb;
             ea[item.first] = 0; eb[item.first] = 0;
         }
-        for(auto& item: q.data) {
+        for(const auto& item: q.data) {
             int xb = eb[item.first]; z += xb*xb; eb[item.first] = 0;
         }
         if(y<=0 || z<=0) return 0.0f;
@@ -209,8 +212,8 @@ public:
         bool calc_edit_dis = std::abs(p.str.length - q.str.length) <= config_.max_dist;
         if(calc_edit_dis) {
             edit_dis = edit_distance(
-                const_cast<UnorderedContainer<sim_ushort>&>(p.str),
-                const_cast<UnorderedContainer<sim_ushort>&>(q.str));
+                p.str,
+                q.str);
             if(
                 (len_sum < (sim_uint)config_.min_danmu_size) ?
                     edit_dis < config_.max_dist * (int)len_sum / config_.min_danmu_size:
@@ -224,8 +227,8 @@ public:
             && std::abs(p.pinyin.length - q.pinyin.length) <= config_.max_dist;
         if(calc_py_dis) {
             int py_dis = edit_distance(
-                const_cast<UnorderedContainer<sim_ushort>&>(p.pinyin),
-                const_cast<UnorderedContainer<sim_ushort>&>(q.pinyin));
+                p.pinyin,
+                q.pinyin);
             if(
                 (len_sum < (sim_uint)config_.min_danmu_size) ?
                     py_dis < config_.max_dist * (int)len_sum / config_.min_danmu_size:
@@ -240,8 +243,8 @@ public:
         );
         if(calc_cosine_sim) {
             int cosine_sim = 100 * cosine_distance(
-                const_cast<UnorderedContainer<sim_uint>&>(p.gram),
-                const_cast<UnorderedContainer<sim_uint>&>(q.gram));
+                p.gram,
+                q.gram);
             if(cosine_sim >= config_.max_cosine) {
                 return sim_result(combined_cosine_distance, cosine_sim, idx_delta);
             }

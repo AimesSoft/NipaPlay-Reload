@@ -191,4 +191,19 @@ class SimilarityEngine {
       malloc.free(bPtr);
     }
   }
+
+  /// 探测原生绑定是否可用——不吞异常，让调用方正确判断 DLL/符号是否存在。
+  /// 成功返回 true；如果 DLL 加载或符号查找失败，抛出异常。
+  static bool probeNativeBinding() {
+    final aPtr = ''.toNativeUtf8();
+    final bPtr = ''.toNativeUtf8();
+    try {
+      // 只需触发 NativeBindings 的 lookupFunction + 一次 FFI 调用
+      NativeBindings.npSimPairSimilarity(aPtr, bPtr, 0);
+      return true;
+    } finally {
+      malloc.free(aPtr);
+      malloc.free(bPtr);
+    }
+  }
 }

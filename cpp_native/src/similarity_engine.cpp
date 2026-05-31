@@ -135,6 +135,11 @@ SimResult danmaku_similarity_check(
 {
     SimResult result;
 
+    // NOTE: O(n²) comparison loop — no upper bound on items size.
+    // In typical danmaku scenarios batches are small (<1000), but if
+    // very large batches are ever passed, consider adding a cap or
+    // switching to a streaming approach to avoid pathological performance.
+
     auto engine = std::make_unique<SimilarityEngine>();
     if (!engine) return result;
 
@@ -251,7 +256,7 @@ double danmaku_pair_similarity(
 
     engine->begin_chunk(str_buf.data(),
                         999,   // 不设编辑距离上限
-                        0,     // 禁用余弦检测
+                        101,   // 禁用余弦检测 (>100 时 max_cosine<=100 判断为 false)
                         use_pinyin,
                         true); // 单对比较忽略 mode
 
@@ -307,25 +312,49 @@ static std::string parse_string(const char*& p) {
             case 't': result += '\t'; break;
             case 'r': result += '\r'; break;
             case 'u': {
-                // Unicode escape: \uXXXX
-                if (p[1] && p[2] && p[3] && p[4]) {
+                // Unicode escape: \uXXXX (with UTF-16 surrogate pair support)
+                // Handles \uD83D\uDE00 style emoji escapes produced by some
+                // JSON serializers. Dart's json.encode uses proper UTF-8,
+                // so this path is rarely hit but included for correctness.
+                auto parse_hex4 = [](const char* s) -> unsigned int {
                     unsigned int cp = 0;
-                    for (int i = 1; i <= 4; i++) {
-                        char c = p[i];
+                    for (int i = 0; i < 4; i++) {
+                        char c = s[i];
                         cp <<= 4;
                         if (c >= '0' && c <= '9') cp |= c - '0';
                         else if (c >= 'a' && c <= 'f') cp |= c - 'a' + 10;
                         else if (c >= 'A' && c <= 'F') cp |= c - 'A' + 10;
                     }
+                    return cp;
+                };
+                if (p[1] && p[2] && p[3] && p[4]) {
+                    unsigned int cp = parse_hex4(p + 1);
                     p += 4;
+                    // UTF-16 surrogate pair handling
+                    if (cp >= 0xD800 && cp <= 0xDBFF) {
+                        // High surrogate — look for \uXXXX low surrogate
+                        if (p[1] == '\\' && p[2] == 'u' &&
+                            p[3] && p[4] && p[5] && p[6]) {
+                            unsigned int low = parse_hex4(p + 3);
+                            if (low >= 0xDC00 && low <= 0xDFFF) {
+                                cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                                p += 6; // consume \uXXXX of low surrogate
+                            }
+                        }
+                    }
                     // UTF-8 encode
                     if (cp <= 0x7F) {
                         result += static_cast<char>(cp);
                     } else if (cp <= 0x7FF) {
                         result += static_cast<char>(0xC0 | (cp >> 6));
                         result += static_cast<char>(0x80 | (cp & 0x3F));
-                    } else {
+                    } else if (cp <= 0xFFFF) {
                         result += static_cast<char>(0xE0 | (cp >> 12));
+                        result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                        result += static_cast<char>(0x80 | (cp & 0x3F));
+                    } else if (cp <= 0x10FFFF) {
+                        result += static_cast<char>(0xF0 | (cp >> 18));
+                        result += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
                         result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
                         result += static_cast<char>(0x80 | (cp & 0x3F));
                     }
@@ -547,6 +576,7 @@ std::string similarity_check_batch_json(
         auto items = parse_items_json(items_json);
         auto config = parse_config_json(config_json);
 
+#ifndef NDEBUG
         // 诊断：输出解析后的 items 数量和配置
         fprintf(stderr, "[SIM-CPP] parse_items_json: json_len=%zu items=%zu\n",
                 items_json.size(), items.size());
@@ -556,11 +586,14 @@ std::string similarity_check_batch_json(
         }
         fprintf(stderr, "[SIM-CPP] config: max_dist=%d max_cosine=%d use_pinyin=%d cross_mode=%d time_window=%.1f\n",
                 config.max_dist, config.max_cosine, config.use_pinyin, config.cross_mode, config.time_window);
+#endif
 
         auto result = danmaku_similarity_check(items, config);
 
+#ifndef NDEBUG
         fprintf(stderr, "[SIM-CPP] result: pairs=%zu groups=%zu\n",
                 result.pairs.size(), result.groups.size());
+#endif
 
         return result_to_json(result);
     } catch (const std::exception& e) {

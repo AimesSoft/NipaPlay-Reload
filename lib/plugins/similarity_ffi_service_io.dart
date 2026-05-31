@@ -24,13 +24,11 @@ class SimilarityFfiService {
   void _init() {
     if (kIsWeb) return; // Web 不支持 FFI
 
-    // cpp_native 的 SimilarityEngine 使用静态方法，
-    // 通过 NativeLibrary 单例加载 nipaplay_native DLL。
-    // 如果 DLL 加载或符号查找失败，调用时会抛异常，
-    // 因此这里做一次探测性调用来验证可用性。
+    // 使用 probeNativeBinding() 探测 DLL + 符号是否可用。
+    // 不使用 pairSimilarity() 因为它会吞掉 FFI 异象并返回 0.0，
+    // 导致此处始终认为可用。
     try {
-      // 尝试一个极简的 pairSimilarity 调用来验证 DLL + 符号可用
-      SimilarityEngine.pairSimilarity('', '', usePinyin: false);
+      SimilarityEngine.probeNativeBinding();
       _available = true;
       debugPrint('[SimilarityFFI] ✅ nipaplay_native DLL 加载成功，引擎可用');
     } catch (e) {
