@@ -128,6 +128,9 @@ pub fn danmaku_similarity_check(
     // 只有 Rust 拒绝匹配时 engine_to_orig push 而 C++ 不 push，产生脱同步
     let mut c_nearby_count: u32 = 0;
     let mut rejection_count: u32 = 0;
+    let mut desync_count: u32 = 0;
+    let mut max_desync: u32 = 0;
+    let mut match_reason_counts: [u32; 4] = [0; 4]; // [identical, edit_distance, pinyin_distance, cosine]
 
     eprintln!("[SIM-DEBUG] === 开始批量查重 === items={}, time_window={}, max_dist={}, max_cosine={}, cross_mode={}",
         items.len(), time_window, config.max_dist, config.max_cosine, config.cross_mode);
@@ -154,8 +157,9 @@ pub fn danmaku_similarity_check(
 
         // 计算 index_l（时间窗口裁剪）
         // 关键修正：index_l 必须是引擎内部索引空间中的值，而非原始数组索引。
-        // 默认值 = 当前引擎内部数组长度，表示"不搜索任何已有条目"（全在窗口外）。
-        let mut index_l: u32 = engine_to_orig.len() as u32;
+        // 默认值 = 当前 C++ nearby_danmu_ 的大小，表示"不搜索任何已有条目"（全在窗口外）。
+        // 必须用 c_nearby_count 而非 engine_to_orig.len()，因为后者在拒绝后会产生幽灵条目。
+        let mut index_l: u32 = c_nearby_count;
         if time_window > 0.0 && !orig_to_rep_engine_idx.is_empty() {
             // 从最近的弹幕向前扫描，找到时间窗口内的所有原始索引，
             // 取其组代表的引擎内部索引的最小值作为 index_l。
@@ -173,12 +177,11 @@ pub fn danmaku_similarity_check(
             }
         }
 
-        // 诊断：index_l 与 C++ nearby_danmu_.size() 的关系
+        // 诊断：index_l 与 C++ nearby_danmu_.size() 的关系（仅计数，汇总时输出）
         let desync = engine_to_orig.len() as u32 - c_nearby_count;
         if desync > 0 {
-            eprintln!("[SIM-DEBUG] i={} time={:.2} text='{}' DESYNC={} engine_to_orig.len()={} c_nearby_count={} index_l={}",
-                i, item.time_seconds, &item.text[..item.text.len().min(20)], desync,
-                engine_to_orig.len(), c_nearby_count, index_l);
+            desync_count += 1;
+            max_desync = max_desync.max(desync);
         }
 
         // 调用 C++ 查重
@@ -194,8 +197,9 @@ pub fn danmaku_similarity_check(
             // C++ 引擎返回的 idx_diff = p.idx - q.idx（引擎内部索引差）
             // p.idx = 当前 nearby_danmu_.size()（本条若不匹配将被插入的位置）
             // q.idx = 匹配到的条目在 nearby_danmu_ 中的索引
-            // 因此匹配到的条目的引擎内部索引 = engine_to_orig.len() - idx_diff
-            let current_engine_size = engine_to_orig.len() as u32;
+            // 因此匹配到的条目的引擎内部索引 = c_nearby_count - idx_diff
+            // 必须用 c_nearby_count（= nearby_danmu_.size()），不能用 engine_to_orig.len()
+            let current_engine_size = c_nearby_count;
             let matched_engine_idx = current_engine_idx_saturating_sub(current_engine_size, idx_diff as u32);
 
             // 通过反向映射还原原始数组索引
@@ -206,9 +210,10 @@ pub fn danmaku_similarity_check(
                 (i as i32).saturating_sub(idx_diff)
             };
 
-            // 诊断：记录 C++ 匹配原始信息
-            eprintln!("[SIM-DEBUG] i={} C++_MATCH reason={} idx_diff={} c_nearby_count={} current_engine_size={} matched_engine_idx={} target_index={}",
-                i, reason_code, idx_diff, c_nearby_count, current_engine_size, matched_engine_idx, target_index);
+            // 诊断：按 reason 分类计数匹配
+            if (reason_code as usize) < 4 {
+                match_reason_counts[reason_code as usize] += 1;
+            }
 
             // 时间窗口安全校验：引擎可能在 index_l 映射不完美时
             // 返回窗口外的匹配对，此处过滤掉
@@ -217,24 +222,15 @@ pub fn danmaku_similarity_check(
                 || (time_window > 0.0
                     && item.time_seconds - items[target_index as usize].time_seconds > time_window)
             {
-                // 诊断：记录拒绝信息
+                // 诊断：仅计数拒绝
                 rejection_count += 1;
-                let time_delta = if target_index >= 0 && (target_index as usize) < items.len() {
-                    item.time_seconds - items[target_index as usize].time_seconds
-                } else {
-                    -1.0
-                };
-                eprintln!("[SIM-DEBUG] i={} REJECTED! target_index={} time_delta={:.2} window={} rejection_count={} DESYNC_WILL_BE={}",
-                    i, target_index, time_delta, time_window, rejection_count,
-                    engine_to_orig.len() as u32 + 1 - c_nearby_count);
-                // ^^^ 关键：这里 Rust 推了 engine_to_orig 但 C++ 没推 nearby_danmu_，
-                // 所以 DESYNC 将在下一轮增加 1
+                // 修复后：拒绝路径不 push engine_to_orig，与 C++ nearby_danmu_ 保持对齐，不再产生 DESYNC
 
-                // 窗口外的匹配无效：将本条视为未匹配，加入引擎
-                let new_engine_idx = engine_to_orig.len() as u32;
-                engine_to_orig.push(i as i32);
-                orig_to_rep_engine_idx.push(new_engine_idx);
-                continue;
+            // 窗口外的匹配无效：将本条视为"匹配但被拒绝"
+            // 不 push engine_to_orig（C++ 没把此条加入 nearby_danmu_，保持对齐）
+            // orig_to_rep_engine_idx 指向匹配到的组代表，用于后续 index_l 计算
+            orig_to_rep_engine_idx.push(matched_engine_idx);
+            continue;
             }
 
             let reason_str = match reason_code {
@@ -272,10 +268,12 @@ pub fn danmaku_similarity_check(
     // 清理引擎（EngineGuard Drop 时自动 sim_engine_destroy）
     unsafe { sim_engine_reset(engine.ptr); }
 
-    // 诊断：汇总
-    eprintln!("[SIM-DEBUG] === 查重完成 === pairs={}, groups={}, rejections={}, final_desync={}",
-        pairs.len(), groups.len(), rejection_count,
-        engine_to_orig.len() as u32 - c_nearby_count);
+    // 诊断：汇总（压缩版——逐条日志已替换为统计计数）
+    let final_desync = engine_to_orig.len() as u32 - c_nearby_count;
+    eprintln!("[SIM-DEBUG] === 查重完成 === items={} pairs={} groups={} rejections={} desync_events={} max_desync={} final_desync={} matches_by_reason=[identical={},edit={},pinyin={},cosine={}]",
+        items.len(), pairs.len(), groups.len(), rejection_count,
+        desync_count, max_desync, final_desync,
+        match_reason_counts[0], match_reason_counts[1], match_reason_counts[2], match_reason_counts[3]);
 
     SimilarityResult { pairs, groups }
 }
