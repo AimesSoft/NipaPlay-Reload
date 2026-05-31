@@ -121,6 +121,17 @@ pub fn danmaku_similarity_check(
     let mut groups: Vec<Vec<i32>> = Vec::new();
     let time_window = config.time_window;
 
+    // ===== 诊断：脱同步追踪 =====
+    // c_nearby_count 追踪 C++ nearby_danmu_ 的实际大小
+    // 规则：ret==0 时 C++ 会 push → +1；ret!=0 时 C++ 不 push → 不变
+    // Rust 侧 engine_to_orig 也会在 ret==0 时 push，但对齐
+    // 只有 Rust 拒绝匹配时 engine_to_orig push 而 C++ 不 push，产生脱同步
+    let mut c_nearby_count: u32 = 0;
+    let mut rejection_count: u32 = 0;
+
+    eprintln!("[SIM-DEBUG] === 开始批量查重 === items={}, time_window={}, max_dist={}, max_cosine={}, cross_mode={}",
+        items.len(), time_window, config.max_dist, config.max_cosine, config.cross_mode);
+
     // ===== 索引映射 =====
     // C++ 引擎在匹配成功时不将弹幕加入 nearby_danmu_（只保留组代表），
     // 因此引擎内部索引与原始数组索引会产生偏差。
@@ -162,6 +173,14 @@ pub fn danmaku_similarity_check(
             }
         }
 
+        // 诊断：index_l 与 C++ nearby_danmu_.size() 的关系
+        let desync = engine_to_orig.len() as u32 - c_nearby_count;
+        if desync > 0 {
+            eprintln!("[SIM-DEBUG] i={} time={:.2} text='{}' DESYNC={} engine_to_orig.len()={} c_nearby_count={} index_l={}",
+                i, item.time_seconds, &item.text[..item.text.len().min(20)], desync,
+                engine_to_orig.len(), c_nearby_count, index_l);
+        }
+
         // 调用 C++ 查重
         let ret = unsafe {
             sim_engine_check_similar(engine.ptr, item.mode as u32, index_l)
@@ -187,6 +206,10 @@ pub fn danmaku_similarity_check(
                 (i as i32).saturating_sub(idx_diff)
             };
 
+            // 诊断：记录 C++ 匹配原始信息
+            eprintln!("[SIM-DEBUG] i={} C++_MATCH reason={} idx_diff={} c_nearby_count={} current_engine_size={} matched_engine_idx={} target_index={}",
+                i, reason_code, idx_diff, c_nearby_count, current_engine_size, matched_engine_idx, target_index);
+
             // 时间窗口安全校验：引擎可能在 index_l 映射不完美时
             // 返回窗口外的匹配对，此处过滤掉
             if target_index < 0
@@ -194,6 +217,19 @@ pub fn danmaku_similarity_check(
                 || (time_window > 0.0
                     && item.time_seconds - items[target_index as usize].time_seconds > time_window)
             {
+                // 诊断：记录拒绝信息
+                rejection_count += 1;
+                let time_delta = if target_index >= 0 && (target_index as usize) < items.len() {
+                    item.time_seconds - items[target_index as usize].time_seconds
+                } else {
+                    -1.0
+                };
+                eprintln!("[SIM-DEBUG] i={} REJECTED! target_index={} time_delta={:.2} window={} rejection_count={} DESYNC_WILL_BE={}",
+                    i, target_index, time_delta, time_window, rejection_count,
+                    engine_to_orig.len() as u32 + 1 - c_nearby_count);
+                // ^^^ 关键：这里 Rust 推了 engine_to_orig 但 C++ 没推 nearby_danmu_，
+                // 所以 DESYNC 将在下一轮增加 1
+
                 // 窗口外的匹配无效：将本条视为未匹配，加入引擎
                 let new_engine_idx = engine_to_orig.len() as u32;
                 engine_to_orig.push(i as i32);
@@ -226,6 +262,7 @@ pub fn danmaku_similarity_check(
             orig_to_rep_engine_idx.push(matched_engine_idx);
         } else {
             // 本条未匹配，被加入 nearby_danmu_ 的末尾
+            c_nearby_count += 1; // 诊断：C++ 会 push
             let new_engine_idx = engine_to_orig.len() as u32;
             engine_to_orig.push(i as i32);
             orig_to_rep_engine_idx.push(new_engine_idx);
@@ -234,6 +271,11 @@ pub fn danmaku_similarity_check(
 
     // 清理引擎（EngineGuard Drop 时自动 sim_engine_destroy）
     unsafe { sim_engine_reset(engine.ptr); }
+
+    // 诊断：汇总
+    eprintln!("[SIM-DEBUG] === 查重完成 === pairs={}, groups={}, rejections={}, final_desync={}",
+        pairs.len(), groups.len(), rejection_count,
+        engine_to_orig.len() as u32 - c_nearby_count);
 
     SimilarityResult { pairs, groups }
 }

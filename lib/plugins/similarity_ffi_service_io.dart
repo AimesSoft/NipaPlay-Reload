@@ -112,6 +112,13 @@ class SimilarityFfiService {
     final configJson = json.encode(config);
     debugPrint('[SimilarityFFI] checkSimilarity: 输入 ${items.length} 条弹幕, config=$config');
 
+    // 诊断：输出首尾弹幕时间，追踪是否在视频末尾调用
+    if (items.isNotEmpty) {
+      final firstTime = items.first['time_seconds'];
+      final lastTime = items.last['time_seconds'];
+      debugPrint('[SimilarityFFI] checkSimilarity: time_range=$firstTime..$lastTime');
+    }
+
     final itemsPtr = itemsJson.toNativeUtf8();
     final configPtr = configJson.toNativeUtf8();
 
@@ -123,7 +130,22 @@ class SimilarityFfiService {
       }
       try {
         final result = resultPtr.toDartString();
-        debugPrint('[SimilarityFFI] checkSimilarity: 结果长度=${result.length}');
+        // 诊断：解析结果 JSON 统计 groups 数量和大小
+        try {
+          final decoded = json.decode(result);
+          if (decoded is Map) {
+            final groups = decoded['groups'];
+            final pairs = decoded['pairs'];
+            final groupCount = groups is List ? groups.length : 0;
+            final pairCount = pairs is List ? pairs.length : 0;
+            debugPrint('[SimilarityFFI] checkSimilarity: 结果 groups=$groupCount pairs=$pairCount');
+            // 诊断：打印每个 group 的大小
+            if (groups is List && groups.isNotEmpty) {
+              final sizes = groups.map((g) => (g as List).length).toList();
+              debugPrint('[SimilarityFFI] checkSimilarity: group_sizes=$sizes');
+            }
+          }
+        } catch (_) {}
         return result;
       } finally {
         _freeCstring!(resultPtr);
