@@ -336,6 +336,23 @@ public:
 
     void begin_index_lock() { config_.index_r_lock = true; }
 
+    // --- force_insert ---
+    // 将当前 str_buf 中的内容作为新条目强制插入 nearby_danmu_，
+    // 更新 precise_matcher_ 哈希表（覆盖过期条目）。
+    // 调用前提：str_buf 中已写入了弹幕文本（UTF-16 + null terminator），
+    // 且刚刚调用了 check_similar() 返回了匹配（被 Rust 拒绝）。
+    // 此时 check_similar 没有将弹幕推入 nearby_danmu_（因为匹配成功不推入），
+    // force_insert 补偿这一行为，让被拒绝的弹幕成为新的组代表。
+    void force_insert(uint mode) {
+        uint index_r = static_cast<uint>(nearby_danmu_.size());
+        auto p = DanmuCacheline(this, config_.str_buf, mode, index_r);
+        ulong h = precise_matcher_hash(config_.str_buf,
+                                       config_.cross_mode ? 0 : mode);
+        // 覆盖 precise_matcher_ 中的过期条目（如果有）
+        precise_matcher_[h] = index_r;
+        nearby_danmu_.push_back(std::move(p));
+    }
+
     void reset() {
         nearby_danmu_.clear();
         precise_matcher_.clear();
@@ -391,6 +408,11 @@ extern "C" {
     void sim_engine_begin_index_lock(SimilarityEngine* engine) {
         try {
             if (engine) engine->begin_index_lock();
+        } catch (...) {}
+    }
+    void sim_engine_force_insert(SimilarityEngine* engine, uint mode) {
+        try {
+            if (engine && engine->config_.str_buf) engine->force_insert(mode);
         } catch (...) {}
     }
     void sim_engine_reset(SimilarityEngine* engine) {

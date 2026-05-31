@@ -36,6 +36,11 @@ uint sim_engine_check_similar(
 /// 锁定索引范围
 void sim_engine_begin_index_lock(SimilarityEngine* engine);
 
+/// 强制插入：将当前 str_buf 中的内容作为新条目插入 nearby_danmu_，
+/// 更新 precise_matcher_ 哈希表。用于 Rust 侧拒绝窗口外匹配后，
+/// 将被拒绝的弹幕作为新组代表插入引擎，避免 precise_matcher_ 死循环。
+void sim_engine_force_insert(SimilarityEngine* engine, uint mode);
+
 /// 重置引擎状态
 void sim_engine_reset(SimilarityEngine* engine);
 

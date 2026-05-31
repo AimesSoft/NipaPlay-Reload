@@ -24,6 +24,7 @@ extern "C" {
         index_l: u32,
     ) -> u32;
     fn sim_engine_begin_index_lock(engine: *mut SimilarityEngine);
+    fn sim_engine_force_insert(engine: *mut SimilarityEngine, mode: u32);
     fn sim_engine_reset(engine: *mut SimilarityEngine);
 }
 
@@ -121,31 +122,23 @@ pub fn danmaku_similarity_check(
     let mut groups: Vec<Vec<i32>> = Vec::new();
     let time_window = config.time_window;
 
-    // ===== 诊断：脱同步追踪 =====
     // c_nearby_count 追踪 C++ nearby_danmu_ 的实际大小
-    // 规则：ret==0 时 C++ 会 push → +1；ret!=0 时 C++ 不 push → 不变
-    // Rust 侧 engine_to_orig 也会在 ret==0 时 push，但对齐
-    // 只有 Rust 拒绝匹配时 engine_to_orig push 而 C++ 不 push，产生脱同步
+    // 规则：ret==0 或拒绝时 C++ push → +1；匹配成功时不 push → 不变
+    // 修复后 engine_to_orig.len() 永远 == c_nearby_count（三条路径都对齐）
     let mut c_nearby_count: u32 = 0;
     let mut rejection_count: u32 = 0;
-    let mut desync_count: u32 = 0;
-    let mut max_desync: u32 = 0;
-    let mut match_reason_counts: [u32; 4] = [0; 4]; // [identical, edit_distance, pinyin_distance, cosine]
+    let mut match_reason_counts: [u32; 4] = [0; 4]; // [identical, edit, pinyin, cosine]
+
+    // STALE-REP 诊断：连续拒绝链追踪（修复后应不再出现长链）
+    let mut stale_rep_chain: u32 = 0;
+    let mut last_rejected_target: i32 = -1;
+    let mut stale_rep_max_chain: u32 = 0;
 
     eprintln!("[SIM-DEBUG] === 开始批量查重 === items={}, time_window={}, max_dist={}, max_cosine={}, cross_mode={}",
         items.len(), time_window, config.max_dist, config.max_cosine, config.cross_mode);
 
-    // ===== 索引映射 =====
-    // C++ 引擎在匹配成功时不将弹幕加入 nearby_danmu_（只保留组代表），
-    // 因此引擎内部索引与原始数组索引会产生偏差。
-    // 必须维护双向映射才能正确传递 index_l 和解析 target_index。
-
-    /// 引擎内部索引 → 原始数组索引（仅被加入 nearby_danmu_ 的项才有映射）
+    // 索引映射：引擎内部索引 → 原始数组索引（仅 nearby_danmu_ 中的项）
     let mut engine_to_orig: Vec<i32> = Vec::new();
-
-    /// 原始数组索引 → 该项的组代表在引擎中的内部索引
-    /// （未匹配项的代表就是自身；匹配项的代表是它匹配到的那条）
-    let mut orig_to_rep_engine_idx: Vec<u32> = Vec::with_capacity(items.len());
 
     // 逐条弹幕送入引擎
     for (i, item) in items.iter().enumerate() {
@@ -155,33 +148,17 @@ pub fn danmaku_similarity_check(
         str_buf[..copy_len].copy_from_slice(&utf16[..copy_len]);
         str_buf[copy_len] = 0; // null terminator
 
-        // 计算 index_l（时间窗口裁剪）
-        // 关键修正：index_l 必须是引擎内部索引空间中的值，而非原始数组索引。
-        // 默认值 = 当前 C++ nearby_danmu_ 的大小，表示"不搜索任何已有条目"（全在窗口外）。
-        // 必须用 c_nearby_count 而非 engine_to_orig.len()，因为后者在拒绝后会产生幽灵条目。
+        // 计算 index_l：正向扫描 engine_to_orig 找到第一个时间在窗口内的条目
         let mut index_l: u32 = c_nearby_count;
-        if time_window > 0.0 && !orig_to_rep_engine_idx.is_empty() {
-            // 从最近的弹幕向前扫描，找到时间窗口内的所有原始索引，
-            // 取其组代表的引擎内部索引的最小值作为 index_l。
-            for (j, prev) in items[..i].iter().enumerate().rev() {
-                if item.time_seconds - prev.time_seconds <= time_window {
-                    if j < orig_to_rep_engine_idx.len() {
-                        let ej = orig_to_rep_engine_idx[j];
-                        if ej < index_l {
-                            index_l = ej;
-                        }
-                    }
-                } else {
+        if time_window > 0.0 && !engine_to_orig.is_empty() {
+            for (eng_idx, &orig_idx) in engine_to_orig.iter().enumerate() {
+                if (orig_idx as usize) < items.len()
+                    && item.time_seconds - items[orig_idx as usize].time_seconds <= time_window
+                {
+                    index_l = eng_idx as u32;
                     break;
                 }
             }
-        }
-
-        // 诊断：index_l 与 C++ nearby_danmu_.size() 的关系（仅计数，汇总时输出）
-        let desync = engine_to_orig.len() as u32 - c_nearby_count;
-        if desync > 0 {
-            desync_count += 1;
-            max_desync = max_desync.max(desync);
         }
 
         // 调用 C++ 查重
@@ -210,28 +187,42 @@ pub fn danmaku_similarity_check(
                 (i as i32).saturating_sub(idx_diff)
             };
 
-            // 诊断：按 reason 分类计数匹配
             if (reason_code as usize) < 4 {
                 match_reason_counts[reason_code as usize] += 1;
             }
 
-            // 时间窗口安全校验：引擎可能在 index_l 映射不完美时
-            // 返回窗口外的匹配对，此处过滤掉
+            // 时间窗口安全校验：precise_matcher_ 可能返回过期代表
             if target_index < 0
                 || (target_index as usize) >= items.len()
                 || (time_window > 0.0
                     && item.time_seconds - items[target_index as usize].time_seconds > time_window)
             {
-                // 诊断：仅计数拒绝
+                // 窗口外匹配拒绝 → 将本条作为新组代表插入 C++ 引擎
+                // 修复 precise_matcher_ 过期代表死循环问题
                 rejection_count += 1;
-                // 修复后：拒绝路径不 push engine_to_orig，与 C++ nearby_danmu_ 保持对齐，不再产生 DESYNC
 
-            // 窗口外的匹配无效：将本条视为"匹配但被拒绝"
-            // 不 push engine_to_orig（C++ 没把此条加入 nearby_danmu_，保持对齐）
-            // orig_to_rep_engine_idx 指向匹配到的组代表，用于后续 index_l 计算
-            orig_to_rep_engine_idx.push(matched_engine_idx);
-            continue;
+                if target_index == last_rejected_target {
+                    stale_rep_chain += 1;
+                    stale_rep_max_chain = stale_rep_max_chain.max(stale_rep_chain);
+                } else {
+                    stale_rep_chain = 1;
+                    last_rejected_target = target_index;
+                }
+                if stale_rep_chain >= 3 {
+                    eprintln!("[STALE-REP] i={} time={:.1} 连续{}次拒绝 target_index={} (force_insert 应已阻断)",
+                        i, item.time_seconds, stale_rep_chain, target_index);
+                }
+
+                // force_insert: 将本条插入 nearby_danmu_，更新 precise_matcher_ 覆盖过期条目
+                unsafe {
+                    sim_engine_force_insert(engine.ptr, item.mode as u32);
+                }
+                c_nearby_count += 1;
+                engine_to_orig.push(i as i32);
+                continue;
             }
+            stale_rep_chain = 0;
+            last_rejected_target = -1;
 
             let reason_str = match reason_code {
                 0 => "identical",
@@ -252,28 +243,21 @@ pub fn danmaku_similarity_check(
             });
 
             update_groups(&mut group_map, &mut groups, i as i32, target_index);
-
-            // 本条匹配成功，不加入 nearby_danmu_，
-            // 记录其组代表在引擎中的内部索引
-            orig_to_rep_engine_idx.push(matched_engine_idx);
         } else {
-            // 本条未匹配，被加入 nearby_danmu_ 的末尾
-            c_nearby_count += 1; // 诊断：C++ 会 push
-            let new_engine_idx = engine_to_orig.len() as u32;
+            // 未匹配，被加入 nearby_danmu_ 的末尾
+            stale_rep_chain = 0;
+            last_rejected_target = -1;
+            c_nearby_count += 1;
             engine_to_orig.push(i as i32);
-            orig_to_rep_engine_idx.push(new_engine_idx);
         }
     }
 
-    // 清理引擎（EngineGuard Drop 时自动 sim_engine_destroy）
     unsafe { sim_engine_reset(engine.ptr); }
 
-    // 诊断：汇总（压缩版——逐条日志已替换为统计计数）
-    let final_desync = engine_to_orig.len() as u32 - c_nearby_count;
-    eprintln!("[SIM-DEBUG] === 查重完成 === items={} pairs={} groups={} rejections={} desync_events={} max_desync={} final_desync={} matches_by_reason=[identical={},edit={},pinyin={},cosine={}]",
+    eprintln!("[SIM-DEBUG] === 查重完成 === items={} pairs={} groups={} rejections={} matches=[identical={},edit={},pinyin={},cosine={}] stale_rep_max_chain={}",
         items.len(), pairs.len(), groups.len(), rejection_count,
-        desync_count, max_desync, final_desync,
-        match_reason_counts[0], match_reason_counts[1], match_reason_counts[2], match_reason_counts[3]);
+        match_reason_counts[0], match_reason_counts[1], match_reason_counts[2], match_reason_counts[3],
+        stale_rep_max_chain);
 
     SimilarityResult { pairs, groups }
 }

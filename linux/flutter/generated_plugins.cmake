@@ -13,6 +13,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   hotkey_manager_linux
   media_kit_libs_linux
   media_kit_video
+  rust_lib_nipaplay
   screen_retriever_linux
   tray_manager
   url_launcher_linux
@@ -22,7 +23,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   nipaplay_smb2
-  rust_lib_nipaplay
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

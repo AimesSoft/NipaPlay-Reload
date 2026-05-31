@@ -49,3 +49,7 @@ docs/error.txt
 /rust/target
 /node_modules/
 /data/
+
+# 忽略 errors 和 log
+android/.kotlin/errors
+*.log
