@@ -56,4 +56,15 @@ class NativeBindings {
           Pointer<NpLayoutResult>, Int32, Pointer<Int32>),
       NpResult Function(NpHandle, double,
           Pointer<NpLayoutResult>, int, Pointer<Int32>)>('np_layout_frame');
+
+  // ──── SimilarityEngine ────
+  static final npSimCheckBatch = _dylib.lookupFunction<
+      NpResult Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<NpString>),
+      NpResult Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<NpString>)>(
+      'np_sim_check_batch');
+
+  static final npSimPairSimilarity = _dylib.lookupFunction<
+      Double Function(Pointer<Utf8>, Pointer<Utf8>, Int32),
+      double Function(Pointer<Utf8>, Pointer<Utf8>, int)>(
+      'np_sim_pair_similarity');
 }

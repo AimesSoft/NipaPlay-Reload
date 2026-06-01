@@ -6,6 +6,7 @@
 #include "nipaplay_native/types.h"
 #include "example_calculator.h"
 #include "danmaku_layout.h"
+#include "similarity_engine.h"
 
 // ──── 辅助：NpString 内部分配（C++ 内部函数，非 extern "C"） ────
 NpString np_string_alloc(const std::string& s);
@@ -210,5 +211,42 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
         return {NP_ERR_INTERNAL, saveErrorMessage(e.what())};
     } catch (...) {
         return {NP_ERR_INTERNAL, "unknown C++ exception"};
+    }
+}
+
+// ──── 弹幕相似度引擎：SimilarityEngine ────
+
+NIPAPLAY_NATIVE_EXPORT NpResult np_sim_check_batch(
+    const char* items_json, const char* config_json, NpString* output)
+{
+    try {
+        if (!items_json || !config_json || !output) {
+            return {NP_ERR_NULL_PTR, "null pointer argument"};
+        }
+        std::string result = nipaplay::native::similarity_check_batch_json(
+            std::string(items_json), std::string(config_json));
+        *output = np_string_alloc(result);
+        if (!output->data) {
+            return {NP_ERR_OOM, "failed to allocate NpString"};
+        }
+        return {NP_OK, nullptr};
+    } catch (const std::bad_alloc&) {
+        return {NP_ERR_OOM, "out of memory"};
+    } catch (const std::exception& e) {
+        return {NP_ERR_INTERNAL, saveErrorMessage(e.what())};
+    } catch (...) {
+        return {NP_ERR_INTERNAL, "unknown C++ exception"};
+    }
+}
+
+NIPAPLAY_NATIVE_EXPORT double np_sim_pair_similarity(
+    const char* text_a, const char* text_b, int32_t use_pinyin)
+{
+    try {
+        if (!text_a || !text_b) return 0.0;
+        return nipaplay::native::danmaku_pair_similarity(
+            std::string(text_a), std::string(text_b), use_pinyin != 0);
+    } catch (...) {
+        return 0.0;
     }
 }

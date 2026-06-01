@@ -64,6 +64,16 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
     NpLayoutResult* output_items, int32_t output_capacity,
     int32_t* output_count);
 
+// ──── 弹幕相似度引擎：SimilarityEngine ────
+
+// 批量查重：输入弹幕 JSON + 配置 JSON，返回结果 JSON（NpString，用 np_string_free 释放）
+NIPAPLAY_NATIVE_EXPORT NpResult np_sim_check_batch(
+    const char* items_json, const char* config_json, NpString* output);
+
+// 单对相似度：输入两段文本 + 拼音开关，返回 0.0-1.0 分数
+NIPAPLAY_NATIVE_EXPORT double np_sim_pair_similarity(
+    const char* text_a, const char* text_b, int32_t use_pinyin);
+
 #ifdef __cplusplus
 }
 #endif
