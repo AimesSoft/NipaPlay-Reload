@@ -5,7 +5,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
-import 'package:nipaplay/utils/network_settings.dart';
 
 class ServerConnectivityService {
   static final ServerConnectivityService instance =
@@ -38,19 +37,22 @@ class ServerConnectivityService {
     dandanplayNotifier.value = null;
     bangumiNotifier.value = null;
 
-    final dandanplayServer = await NetworkSettings.getDandanplayServer();
+    try {
+      final dandanplayServer = await DandanplayService.getApiBaseUrl();
 
-    final results = await Future.wait([
-      _checkDandanplay(dandanplayServer),
-      _checkBangumi(),
-    ]);
+      final results = await Future.wait([
+        _checkDandanplay(dandanplayServer),
+        _checkBangumi(),
+      ]);
 
-    _dandanplayAvailable = results[0];
-    _bangumiAvailable = results[1];
-    _isChecking = false;
-    dandanplayNotifier.value = results[0];
-    bangumiNotifier.value = results[1];
-    checkingNotifier.value = false;
+      _dandanplayAvailable = results[0];
+      _bangumiAvailable = results[1];
+      dandanplayNotifier.value = results[0];
+      bangumiNotifier.value = results[1];
+    } finally {
+      _isChecking = false;
+      checkingNotifier.value = false;
+    }
   }
 
   static String _generateSignature(

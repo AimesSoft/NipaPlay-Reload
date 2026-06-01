@@ -466,9 +466,6 @@ void main(List<String> args) async {
 
     // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
     if (!kIsWeb) SMBProxyService.instance.initialize() else Future.value(),
-
-    // 服务器连接状态检测
-    ServerConnectivityService.instance.initialize(),
   ]).then((results) async {
     // BangumiService初始化完成后，检查并刷新缺少标签的缓存
     Future.microtask(() async {
@@ -478,6 +475,9 @@ void main(List<String> args) async {
         debugPrint('检查缓存标签失败: $e');
       }
     });
+
+    // 服务器连接状态检测（后台执行，不阻塞启动）
+    ServerConnectivityService.instance.checkConnectivity();
 
     // 处理主题模式设置
     final settingsMap = results[2] as Map<String, dynamic>;
