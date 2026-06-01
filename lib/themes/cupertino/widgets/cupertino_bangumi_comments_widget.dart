@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/models/bangumi_comment_model.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart'
     show BangumiMyCommentData;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -85,7 +86,11 @@ class CupertinoBangumiCommentsWidgetState
       final int requestedSubjectId = widget.subjectId ?? 0;
       Map<String, dynamic> result;
 
-      if (!_usingFallback && requestedSubjectId != 0) {
+      final connectivity = ServerConnectivityService.instance;
+      final bangumiUnavailable = connectivity.bangumiAvailable == false;
+      final dandanplayAvailable = connectivity.dandanplayAvailable == true;
+
+      if (!_usingFallback && requestedSubjectId != 0 && !(bangumiUnavailable && dandanplayAvailable && widget.dandanplayId != 0)) {
         debugPrint(
             '[Cupertino Comments] 尝试Bangumi主接口, subjectId=$requestedSubjectId, offset=$_currentOffset');
         result = await BangumiApiService.getSubjectComments(
@@ -112,7 +117,7 @@ class CupertinoBangumiCommentsWidgetState
           }
         }
 
-        if (shouldFallback && widget.dandanplayId != 0) {
+        if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable != false) {
           debugPrint(
               '[Cupertino Comments] $fallbackReason，回退到Dandanplay, dandanplayId=${widget.dandanplayId}');
           _usingFallback = true;
@@ -123,11 +128,18 @@ class CupertinoBangumiCommentsWidgetState
           );
           debugPrint(
               '[Cupertino Comments] Dandanplay回退结果: success=${result['success']}');
+        } else if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable == false) {
+          debugPrint(
+              '[Cupertino Comments] $fallbackReason，且Dandanplay不可用，跳过回退');
         } else if (shouldFallback && widget.dandanplayId == 0) {
           debugPrint(
               '[Cupertino Comments] $fallbackReason，但无dandanplayId可用，无法回退');
         }
       } else if (widget.dandanplayId != 0) {
+        if (bangumiUnavailable && dandanplayAvailable) {
+          debugPrint('[Cupertino Comments] Bangumi不可用但Dandanplay可用，跳过Bangumi直接回退, dandanplayId=${widget.dandanplayId}');
+        }
+        _usingFallback = true;
         debugPrint(
             '[Cupertino Comments] 使用Dandanplay回退接口, dandanplayId=${widget.dandanplayId}, page=$_currentPage');
         result = await BangumiApiService.getSubjectCommentsFallback(

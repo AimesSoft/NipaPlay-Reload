@@ -801,6 +801,7 @@ class BangumiApiService {
   static Future<Map<String, dynamic>> getSubjectCommentsFallback(
     int bangumiId, {
     int page = 1,
+    Duration timeout = const Duration(seconds: 8),
   }) async {
     try {
       final targetUri = Uri.parse(
@@ -828,7 +829,7 @@ class BangumiApiService {
         'X-Timestamp': '$timestamp',
       };
 
-      final response = await http.get(uri, headers: headers);
+      final response = await http.get(uri, headers: headers).timeout(timeout);
       debugPrint('[Dandanplay Comments] 状态码: ${response.statusCode}');
       final dandanPreview = response.body.length > 300
           ? response.body.substring(0, 300)

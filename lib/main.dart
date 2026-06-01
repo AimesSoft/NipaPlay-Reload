@@ -88,6 +88,7 @@ import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'pages/webdav_browser_page.dart';
@@ -474,6 +475,9 @@ void main(List<String> args) async {
         debugPrint('检查缓存标签失败: $e');
       }
     });
+
+    // 服务器连接状态检测（后台执行，不阻塞启动）
+    ServerConnectivityService.instance.checkConnectivity();
 
     // 处理主题模式设置
     final settingsMap = results[2] as Map<String, dynamic>;

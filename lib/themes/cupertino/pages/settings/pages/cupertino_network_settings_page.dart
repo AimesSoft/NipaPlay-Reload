@@ -2,6 +2,7 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 
+import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
@@ -23,17 +24,29 @@ class _CupertinoNetworkSettingsPageState
   bool _isSavingCustom = false;
   late final TextEditingController _customServerController;
 
+  final _connectivity = ServerConnectivityService.instance;
+
   @override
   void initState() {
     super.initState();
     _customServerController = TextEditingController();
     _loadCurrentServer();
+    _connectivity.dandanplayNotifier.addListener(_onConnectivityChanged);
+    _connectivity.bangumiNotifier.addListener(_onConnectivityChanged);
+    _connectivity.checkingNotifier.addListener(_onConnectivityChanged);
   }
 
   @override
   void dispose() {
+    _connectivity.dandanplayNotifier.removeListener(_onConnectivityChanged);
+    _connectivity.bangumiNotifier.removeListener(_onConnectivityChanged);
+    _connectivity.checkingNotifier.removeListener(_onConnectivityChanged);
     _customServerController.dispose();
     super.dispose();
+  }
+
+  void _onConnectivityChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadCurrentServer() async {
@@ -219,6 +232,8 @@ class _CupertinoNetworkSettingsPageState
                   ),
                   padding: EdgeInsets.fromLTRB(16, topPadding, 16, 32),
                   children: [
+                    _buildConnectivityCard(context),
+                    const SizedBox(height: 24),
                     _buildServerSelectorCard(context),
                     const SizedBox(height: 24),
                     _buildCustomServerCard(context),
@@ -228,6 +243,115 @@ class _CupertinoNetworkSettingsPageState
                 ),
         ),
       ),
+    );
+  }
+
+  Widget _buildConnectivityCard(BuildContext context) {
+    final Color sectionColor = resolveSettingsSectionBackground(context);
+    final Color iconColor = resolveSettingsIconColor(context);
+    final Color secondaryColor = resolveSettingsSecondaryTextColor(context);
+    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
+    final isChecking = _connectivity.isChecking;
+
+    return CupertinoSettingsGroupCard(
+      margin: EdgeInsets.zero,
+      backgroundColor: sectionColor,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(CupertinoIcons.wifi, size: 18, color: iconColor),
+                  const SizedBox(width: 8),
+                  Text(
+                    '网络诊断',
+                    style: textTheme.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: isChecking ? null : _connectivity.checkConnectivity,
+                    child: isChecking
+                        ? const CupertinoActivityIndicator(radius: 10)
+                        : Icon(
+                            CupertinoIcons.refresh,
+                            color: iconColor,
+                            size: 20,
+                          ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildCupertinoStatusRow(
+                '弹弹play 服务器',
+                _connectivity.dandanplayAvailable,
+                textTheme,
+                secondaryColor,
+              ),
+              const SizedBox(height: 10),
+              _buildCupertinoStatusRow(
+                'Bangumi 服务器',
+                _connectivity.bangumiAvailable,
+                textTheme,
+                secondaryColor,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCupertinoStatusRow(
+    String label,
+    bool? available,
+    TextStyle textTheme,
+    Color secondaryColor,
+  ) {
+    String statusText;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (available == null) {
+      statusText = '检测中…';
+      statusColor = secondaryColor;
+      statusIcon = CupertinoIcons.hourglass;
+    } else if (available) {
+      statusText = '可用';
+      statusColor = CupertinoColors.activeGreen;
+      statusIcon = CupertinoIcons.checkmark_circle;
+    } else {
+      statusText = '不可用';
+      statusColor = CupertinoColors.systemRed;
+      statusIcon = CupertinoIcons.xmark_circle;
+    }
+
+    return Row(
+      children: [
+        Icon(statusIcon, color: statusColor, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: textTheme.copyWith(
+            fontSize: 14,
+            color: secondaryColor,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          statusText,
+          style: textTheme.copyWith(
+            fontSize: 14,
+            color: statusColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/utils/network_settings.dart';
+import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -22,16 +23,28 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
   final TextEditingController _customServerController = TextEditingController();
   bool _isSavingCustom = false;
 
+  final _connectivity = ServerConnectivityService.instance;
+
   @override
   void initState() {
     super.initState();
     _loadCurrentServer();
+    _connectivity.dandanplayNotifier.addListener(_onConnectivityChanged);
+    _connectivity.bangumiNotifier.addListener(_onConnectivityChanged);
+    _connectivity.checkingNotifier.addListener(_onConnectivityChanged);
   }
 
   @override
   void dispose() {
+    _connectivity.dandanplayNotifier.removeListener(_onConnectivityChanged);
+    _connectivity.bangumiNotifier.removeListener(_onConnectivityChanged);
+    _connectivity.checkingNotifier.removeListener(_onConnectivityChanged);
     _customServerController.dispose();
     super.dispose();
+  }
+
+  void _onConnectivityChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadCurrentServer() async {
@@ -107,6 +120,49 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     }
   }
 
+  Widget _buildStatusRow(String label, bool? available, ColorScheme colorScheme) {
+    String statusText;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (available == null) {
+      statusText = '检测中…';
+      statusColor = colorScheme.onSurface.withOpacity(0.5);
+      statusIcon = Ionicons.hourglass_outline;
+    } else if (available) {
+      statusText = '可用';
+      statusColor = Colors.green;
+      statusIcon = Ionicons.checkmark_circle_outline;
+    } else {
+      statusText = '不可用';
+      statusColor = Colors.red;
+      statusIcon = Ionicons.close_circle_outline;
+    }
+
+    return Row(
+      children: [
+        Icon(statusIcon, color: statusColor, size: 16),
+        SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: colorScheme.onSurface.withOpacity(0.8),
+            fontSize: 13,
+          ),
+        ),
+        Spacer(),
+        Text(
+          statusText,
+          style: TextStyle(
+            color: statusColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   List<DropdownMenuItemData> _getServerDropdownItems(BuildContext context) {
     final items = [
       DropdownMenuItemData(
@@ -147,11 +203,77 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     }
 
     final colorScheme = Theme.of(context).colorScheme;
+    final isChecking = _connectivity.isChecking;
+    final dandanplayAvailable = _connectivity.dandanplayAvailable;
+    final bangumiAvailable = _connectivity.bangumiAvailable;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: ListView(
         children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Ionicons.wifi_outline,
+                      color: colorScheme.onSurface,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      '网络诊断',
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Spacer(),
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: IconButton(
+                        onPressed: isChecking ? null : _connectivity.checkConnectivity,
+                        icon: isChecking
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppAccentColors.current,
+                                ),
+                              )
+                            : Icon(
+                                Ionicons.refresh_outline,
+                                color: colorScheme.onSurface,
+                                size: 18,
+                              ),
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                _buildStatusRow(
+                  '弹弹play 服务器',
+                  dandanplayAvailable,
+                  colorScheme,
+                ),
+                SizedBox(height: 8),
+                _buildStatusRow(
+                  'Bangumi 服务器',
+                  bangumiAvailable,
+                  colorScheme,
+                ),
+              ],
+            ),
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
           SettingsItem.dropdown(
             title: l10n.dandanplayServer,
             subtitle: l10n.networkServerSelectSubtitle,
@@ -230,7 +352,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             ),
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-          // 显示当前服务器信息
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -275,7 +396,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               ],
             ),
           ),
-          // 服务器说明
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(
