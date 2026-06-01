@@ -67,4 +67,6 @@ class SimilarityEngine {
   static double pairSimilarity(String textA, String textB,
           {bool usePinyin = true}) =>
       0.0;
+
+  static bool probeNativeBinding() => false;
 }
