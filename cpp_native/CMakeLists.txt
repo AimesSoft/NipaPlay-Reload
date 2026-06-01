@@ -19,36 +19,6 @@ set(NATIVE_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/modules
 )
 
-# ──── 平台特定编译选项 ────
-if(MSVC)
-    add_compile_options(/utf-8 /EHsc /W4 /Zc:__cplusplus)
-    add_definitions(-DNIPAPLAY_NATIVE_BUILDING)
-    # Debug: /Od (default, no optimizations, best debugging experience)
-    # Release: /O2 (default) + /fp:fast (aggressive FP optimizations)
-    add_compile_options($<$<CONFIG:Release>:/fp:fast>)
-    # Release: /GL (whole program optimization) + /LTCG (link-time code generation)
-    add_compile_options($<$<CONFIG:Release>:/GL>)
-    add_link_options($<$<CONFIG:Release>:/LTCG>)
-else()
-    # Common flags for Apple & Linux
-    add_compile_options(-fno-rtti -fvisibility=hidden -Wall -Wextra -Wpedantic)
-    add_definitions(-DNIPAPLAY_NATIVE_BUILDING)
-    if(NOT APPLE)
-        add_compile_options(-fPIC)
-    endif()
-
-    # Debug: -Og (optimize for debugging experience, preserves stack frames)
-    add_compile_options($<$<CONFIG:Debug>:-Og>)
-
-    # Release: -O3 -ffast-math (equivalent to -Ofast)
-    # np_isnan/np_isinf (IEEE 754 bit-level) bypass -ffinite-math-only safely.
-    add_compile_options($<$<CONFIG:Release>:-O3>)
-    add_compile_options($<$<CONFIG:Release>:-ffast-math>)
-    # Release: -flto (link-time optimization)
-    add_compile_options($<$<CONFIG:Release>:-flto>)
-    add_link_options($<$<CONFIG:Release>:-flto>)
-endif()
-
 # ──── 库类型 ────
 # 由调用方（各平台 CMake）决定 SHARED / STATIC
 # 默认 STATIC（iOS 必须静态链接）
@@ -56,8 +26,57 @@ if(NOT DEFINED NP_LIB_TYPE)
     set(NP_LIB_TYPE STATIC)
 endif()
 
+# ──── 跨平台属性（必须在 add_library 之前设置，作为目标属性初始值）────
+# 位置无关代码：GCC/Clang → -fPIC，MSVC → 无需处理，CMake 自动适配
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# 符号可见性：GCC/Clang → -fvisibility=hidden，MSVC → 不自动导出
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+# 内联函数符号隐藏：GCC/Clang → -fvisibility-inlines-hidden，减小动态库体积
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+
 add_library(nipaplay_native ${NP_LIB_TYPE} ${NATIVE_SOURCES})
 target_include_directories(nipaplay_native PUBLIC ${NATIVE_INCLUDES})
+
+# ──── 公共编译宏（target 作用域）────
+target_compile_definitions(nipaplay_native PRIVATE NIPAPLAY_NATIVE_BUILDING)
+
+# ──── 平台特定编译选项（target 作用域）────
+if(MSVC)
+    target_compile_options(nipaplay_native PRIVATE
+        /utf-8
+        /EHsc
+        /W4
+        /Zc:__cplusplus
+        /GR-
+        $<$<CONFIG:Release>:/Ob3>
+        $<$<CONFIG:Release>:/fp:fast>
+    )
+else()
+    # Common flags for Apple & Linux
+    target_compile_options(nipaplay_native PRIVATE
+        -fno-rtti
+        -fexceptions
+        -Wall
+        -Wextra
+        -Wpedantic
+        $<$<CONFIG:Debug>:-Og>
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:Release>:-ffast-math>
+    )
+endif()
+
+# ──── 安全启用 LTO/IPO ────
+# CMake 自动匹配编译器 flag: MSVC → /GL+/LTCG, GCC/Clang → -flto
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error LANGUAGES CXX)
+if(ipo_supported)
+    set_target_properties(nipaplay_native PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
+    )
+else()
+    message(WARNING "IPO/LTO not supported: ${ipo_error}")
+endif()
 
 # Android: 使用 c++_shared STL（与 Flutter 引擎一致）
 if(ANDROID)

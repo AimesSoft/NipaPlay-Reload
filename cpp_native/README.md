@@ -75,14 +75,49 @@ Dart 侧绑定位于 `lib/cpp_native/`。
 - MSVC 统一使用 `/MD`（动态 CRT），与 Flutter 引擎一致
 - Android 使用 `c++_shared` STL，与 Flutter 引擎一致
 
-## 编译优化
+## 编译选项
+
+> 所有编译选项均使用 **target 作用域**（`target_compile_options` / `target_compile_definitions`），
+> 不会泄漏到父级或其他子项目。跨平台属性在 `add_library` 之前设置为全局默认值，
+> CMake 自动根据编译器匹配正确的 flag。
+
+### 跨平台属性（CMake 自动适配）
+
+| 属性 | 说明 | 自动生成 flag |
+|------|------|--------------|
+| `CMAKE_POSITION_INDEPENDENT_CODE ON` | 位置无关代码 | GCC/Clang → `-fPIC`，MSVC → 无需处理 |
+| `CMAKE_CXX_VISIBILITY_PRESET hidden` | 符号可见性隐藏 | GCC/Clang → `-fvisibility=hidden`，MSVC → 不自动导出 |
+| `CMAKE_VISIBILITY_INLINES_HIDDEN ON` | 内联函数符号隐藏 | GCC/Clang → `-fvisibility-inlines-hidden`，减小动态库体积 |
+| `INTERPROCEDURAL_OPTIMIZATION_RELEASE` | Release LTO/IPO | GCC/Clang → `-flto`，MSVC → `/GL + /LTCG` |
+
+LTO/IPO 启用前使用 `CheckIPOSupported` 模块检测编译器支持情况，不支持时发出警告而非硬失败。
+
+### 公共编译定义
+
+| 定义 | 说明 |
+|------|------|
+| `NIPAPLAY_NATIVE_BUILDING` | 标识库自身编译（区别于外部引用头文件），通过 `target_compile_definitions` 设置 |
+
+### 平台特定编译选项
+
+| 功能维度 | GCC / Clang | MSVC | 说明 |
+|---------|-------------|------|------|
+| **RTTI** | `-fno-rtti` | `/GR-` | 禁用运行时类型信息，减小二进制体积 |
+| **异常** | `-fexceptions` | `/EHsc` | 显式启用异常（与 `/EHsc` 等价），防止外部全局 `-fno-exceptions` 覆盖 |
+| **警告** | `-Wall -Wextra -Wpedantic` | `/W4` | 严格静态警告 |
+| **字符集** | 默认 UTF-8 | `/utf-8` | 强制 MSVC 使用 UTF-8 |
+| **`__cplusplus`** | 默认正确 | `/Zc:__cplusplus` | 使 MSVC 的 `__cplusplus` 宏正确反映 C++20 |
+
+### 优化选项
 
 | 构建模式 | GCC / Clang | MSVC |
 |---------|-------------|------|
 | **Debug** | `-Og` | `/Od`（默认） |
-| **Release** | `-O3 -ffast-math`（等效 `-Ofast`） | `/O2 /fp:fast` |
+| **Release** | `-O3 -ffast-math`（等效 `-Ofast`） | `/O2 /Ob3 /fp:fast` |
+| **Release LTO** | `-flto`（由 CMake 属性自动添加） | `/GL + /LTCG`（由 CMake 属性自动添加） |
 
 - **Debug** 使用 `-Og`：保留完整调试信息与栈帧，优化调试体验而不完全禁用优化。
-- **Release** 使用 `-O3 -ffast-math`：最大化弹幕布局引擎的计算吞吐。
+- **Release** 使用 `-O3 -ffast-math` / `/O2 /Ob3 /fp:fast`：最大化弹幕布局引擎的计算吞吐。MSVC `/Ob3` 启用激进内联，接近 GCC `-O3` 的内联行为。
+- **Release LTO** 使用 `INTERPROCEDURAL_OPTIMIZATION_RELEASE`：CMake 跨平台属性，自动为各编译器匹配正确的 LTO/IPO flag。启用前通过 `CheckIPOSupported` 检测兼容性。
 
 `-ffast-math` 包含 `-ffinite-math-only`，会使标准库的 `std::isnan` / `std::isinf` 失效。为此，弹幕布局引擎使用 **IEEE 754 位运算** 实现的 `np_isnan` / `np_isinf` 替代标准库调用，确保在快速浮点模式下 NaN / Inf 检测仍然正确。
