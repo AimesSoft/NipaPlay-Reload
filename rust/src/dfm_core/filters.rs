@@ -10,6 +10,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use regex::Regex;
+use aho_corasick::AhoCorasick;
 
 use crate::dfm_core::model::{DanmakuItem, DanmakuType, Duration, GlobalFlags};
 
@@ -39,7 +40,7 @@ pub struct FilterSystem {
     pub max_lines: FxHashMap<DanmakuType, u32>,
     pub overlapping_filter: FxHashMap<DanmakuType, bool>,
     pub blocked_users: FxHashSet<String>,
-    pub blocked_keywords: Vec<String>,
+    pub blocked_keywords_aho: Option<AhoCorasick>,
     pub blocked_regexes: Vec<Regex>,
     pub duplicate_merge: bool,
     pub elapsed_time_limit_ms: u64,
@@ -57,7 +58,7 @@ impl Default for FilterSystem {
             max_lines: FxHashMap::default(),
             overlapping_filter: FxHashMap::default(),
             blocked_users: FxHashSet::default(),
-            blocked_keywords: Vec::new(),
+            blocked_keywords_aho: None,
             blocked_regexes: Vec::new(),
             duplicate_merge: false,
             elapsed_time_limit_ms: 20,
@@ -173,8 +174,8 @@ impl FilterSystem {
 
     /// Keyword and regex filter.
     fn filter_keywords(&self, item: &DanmakuItem) -> bool {
-        for keyword in &self.blocked_keywords {
-            if item.text.contains(keyword.as_str()) {
+        if let Some(ref aho) = self.blocked_keywords_aho {
+            if aho.is_match(&item.text) {
                 return true;
             }
         }
@@ -226,16 +227,20 @@ impl FilterSystem {
     /// Parse block_words list into keywords and regex patterns.
     /// Format: plain text → keyword, "规则名称/表达式/" → regex
     pub fn set_block_words(&mut self, words: &[String]) {
-        self.blocked_keywords.clear();
+        self.blocked_keywords_aho = None;
         self.blocked_regexes.clear();
+        let mut keywords: Vec<&str> = Vec::new();
         for word in words {
             if let Some(regex_str) = parse_regex_rule(word) {
                 if let Ok(re) = Regex::new(&regex_str) {
                     self.blocked_regexes.push(re);
                 }
             } else {
-                self.blocked_keywords.push(word.clone());
+                keywords.push(word.as_str());
             }
+        }
+        if !keywords.is_empty() {
+            self.blocked_keywords_aho = Some(AhoCorasick::builder().build(keywords).unwrap());
         }
     }
 }
@@ -286,7 +291,7 @@ mod tests {
     #[test]
     fn test_keyword_filter() {
         let mut filters = FilterSystem::default();
-        filters.blocked_keywords.push("bad".to_string());
+        filters.set_block_words(&["bad".to_string()]);
         let ctx = make_ctx(0);
         let mut item = DanmakuItem::new(0, "this is bad content".into(), 0xFFFFFFFF, 25.0, DanmakuType::ScrollRL, 5000);
         assert!(filters.filter_primary(&mut item, &ctx));

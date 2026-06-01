@@ -34,7 +34,7 @@ class DfmPlusLayoutBridge {
     required bool mergeDanmaku,
     int? maxQuantity,
     int? maxLinesPerType,
-    double trackGapRatio = 0.20,
+    double trackGapRatio = 0.15,
     double outlineWidth = 0.0,
     String customFontFamily = '',
     String customFontFilePath = '',

@@ -544,7 +544,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // DFM+ 弹幕轨道间距比例设置
   final String _danmakuDfmPlusTrackGapKey = 'danmaku_dfm_plus_track_gap';
-  double _danmakuDfmPlusTrackGap = 0.20;
+  double _danmakuDfmPlusTrackGap = 0.15;
 
   final String _rememberDanmakuOffsetKey = 'remember_danmaku_offset';
   bool _rememberDanmakuOffset = false; // 是否在切换视频时保留手动弹幕偏移

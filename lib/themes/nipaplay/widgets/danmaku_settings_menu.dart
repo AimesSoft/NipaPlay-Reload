@@ -892,7 +892,7 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                       ),
                       const SizedBox(height: 4),
                       const SettingsHintText(
-                          '增大间距可减少弹幕重叠，减小间距可显示更多弹幕（默认50%）'),
+                          '增大间距可减少弹幕重叠，减小间距可显示更多弹幕（默认15%）'),
                     ],
                   ),
                 ),
