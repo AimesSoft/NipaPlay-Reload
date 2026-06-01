@@ -88,6 +88,7 @@ import 'package:nipaplay/providers/app_language_provider.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/providers/bottom_bar_provider.dart';
 import 'package:nipaplay/providers/webdav_quick_access_provider.dart';
 import 'pages/webdav_browser_page.dart';
@@ -465,6 +466,9 @@ void main(List<String> args) async {
 
     // SMB 本地代理（用于 SMB 文件按 HTTP/Range 播放与匹配）
     if (!kIsWeb) SMBProxyService.instance.initialize() else Future.value(),
+
+    // 服务器连接状态检测
+    ServerConnectivityService.instance.initialize(),
   ]).then((results) async {
     // BangumiService初始化完成后，检查并刷新缺少标签的缓存
     Future.microtask(() async {

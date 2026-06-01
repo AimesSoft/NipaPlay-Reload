@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/models/bangumi_comment_model.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
+import 'package:nipaplay/services/server_connectivity_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -100,8 +101,12 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
       final int requestedSubjectId = widget.subjectId ?? 0;
       Map<String, dynamic> result;
 
+      final connectivity = ServerConnectivityService.instance;
+      final bangumiUnavailable = connectivity.bangumiAvailable == false;
+      final dandanplayAvailable = connectivity.dandanplayAvailable == true;
+
       // 主请求：Bangumi API (4s超时)
-      if (!_usingFallback && requestedSubjectId != 0) {
+      if (!_usingFallback && requestedSubjectId != 0 && !(bangumiUnavailable && dandanplayAvailable && widget.dandanplayId != 0)) {
         debugPrint(
             '[Bangumi Comments Widget] 尝试Bangumi主接口, subjectId=$requestedSubjectId, offset=$_currentOffset');
         result = await BangumiApiService.getSubjectComments(
@@ -144,7 +149,11 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
           debugPrint('[Bangumi Comments Widget] $fallbackReason，但无dandanplayId可用，无法回退');
         }
       } else if (widget.dandanplayId != 0) {
-        // 已经在使用回退，或没有 subjectId，直接用 Dandanplay
+        // 已经在使用回退，或没有 subjectId，或 Bangumi 不可用但 Dandanplay 可用，直接用 Dandanplay
+        if (bangumiUnavailable && dandanplayAvailable) {
+          debugPrint('[Bangumi Comments Widget] Bangumi不可用但Dandanplay可用，跳过Bangumi直接回退, dandanplayId=${widget.dandanplayId}');
+        }
+        _usingFallback = true;
         debugPrint(
             '[Bangumi Comments Widget] 回退请求 dandanplayId=${widget.dandanplayId}, page=$_currentPage');
         result = await BangumiApiService.getSubjectCommentsFallback(
