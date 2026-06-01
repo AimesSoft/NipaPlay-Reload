@@ -135,7 +135,7 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
           }
         }
 
-        if (shouldFallback && widget.dandanplayId != 0) {
+        if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable != false) {
           debugPrint('[Bangumi Comments Widget] $fallbackReason，回退到Dandanplay, dandanplayId=${widget.dandanplayId}');
           _usingFallback = true;
           _currentPage = 0;
@@ -145,6 +145,8 @@ class _BangumiCommentsWidgetState extends State<BangumiCommentsWidget> {
           );
           debugPrint(
               '[Bangumi Comments Widget] Dandanplay回退结果: success=${result['success']}');
+        } else if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable == false) {
+          debugPrint('[Bangumi Comments Widget] $fallbackReason，且Dandanplay不可用，跳过回退');
         } else if (shouldFallback && widget.dandanplayId == 0) {
           debugPrint('[Bangumi Comments Widget] $fallbackReason，但无dandanplayId可用，无法回退');
         }

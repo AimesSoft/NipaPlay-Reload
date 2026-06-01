@@ -117,7 +117,7 @@ class CupertinoBangumiCommentsWidgetState
           }
         }
 
-        if (shouldFallback && widget.dandanplayId != 0) {
+        if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable != false) {
           debugPrint(
               '[Cupertino Comments] $fallbackReason，回退到Dandanplay, dandanplayId=${widget.dandanplayId}');
           _usingFallback = true;
@@ -128,6 +128,9 @@ class CupertinoBangumiCommentsWidgetState
           );
           debugPrint(
               '[Cupertino Comments] Dandanplay回退结果: success=${result['success']}');
+        } else if (shouldFallback && widget.dandanplayId != 0 && dandanplayAvailable == false) {
+          debugPrint(
+              '[Cupertino Comments] $fallbackReason，且Dandanplay不可用，跳过回退');
         } else if (shouldFallback && widget.dandanplayId == 0) {
           debugPrint(
               '[Cupertino Comments] $fallbackReason，但无dandanplayId可用，无法回退');
