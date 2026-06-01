@@ -345,11 +345,11 @@ struct DanmakuSimItem {
 };
 
 struct SimConfig {
-    int max_dist = 3;
-    int max_cosine = 70;
+    int max_dist = 5;
+    int max_cosine = 45;
     bool use_pinyin = true;
-    bool cross_mode = false;
-    double time_window = 45.0;
+    bool cross_mode = true;
+    double time_window = 30.0;
 };
 
 struct SimPair {

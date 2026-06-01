@@ -50,11 +50,11 @@ class SimilarityConfig {
   final double timeWindow;
 
   const SimilarityConfig({
-    this.maxDist = 3,
-    this.maxCosine = 70,
+    this.maxDist = 5,
+    this.maxCosine = 45,
     this.usePinyin = true,
-    this.crossMode = false,
-    this.timeWindow = 45.0,
+    this.crossMode = true,
+    this.timeWindow = 30.0,
   });
 }
 
