@@ -224,7 +224,7 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
     let outline_px = resolve_outline_px(font_size, outline_width);
     let mut items: Vec<DanmakuItem> = request
         .items
-        .iter()
+        .into_iter()
         .enumerate()
         .map(|(i, raw)| {
             let danmaku_type = DanmakuType::from_code(raw.type_code);
@@ -235,7 +235,7 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
             };
             let mut item = DanmakuItem::new(
                 (raw.time_seconds * 1000.0) as i64,
-                raw.text.clone(),
+                raw.text,
                 raw.color_argb as u32,
                 font_size,
                 danmaku_type,
@@ -267,27 +267,30 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         item.measure_with_outline(width, height, &global_flags, outline_px);
     }
 
-    // Merge duplicates if requested
-    let mut merge_map: FxHashMap<u64, Vec<usize>> = FxHashMap::default();
     if request.merge_danmaku {
+        let mut merge_map: FxHashMap<u64, (usize, u32)> = FxHashMap::default();
+        let mut dup_indices: Vec<usize> = Vec::new();
         for (i, item) in items.iter().enumerate() {
             let text_hash = fxhash_str(&item.text);
-            merge_map.entry(text_hash).or_default().push(i);
-        }
-        for indices in merge_map.values() {
-            if indices.len() > 1 {
-                let first_idx = indices[0];
-                let first_text = items[first_idx].text.clone();
-                for &idx in indices.iter().skip(1) {
-                    if items[idx].text == first_text {
-                        items[idx].is_filtered = true;
-                        items[idx].filter_param = 99;
+            match merge_map.get_mut(&text_hash) {
+                Some((first_idx, count)) => {
+                    if item.text == items[*first_idx].text {
+                        dup_indices.push(i);
+                        *count += 1;
                     }
                 }
-                let real_count = indices.iter().filter(|&&idx| items[idx].is_filtered || idx == first_idx).count();
-                if real_count > 1 {
-                    items[first_idx].text.push_str(&format!(" x{}", real_count));
+                None => {
+                    merge_map.insert(text_hash, (i, 1));
                 }
+            }
+        }
+        for idx in dup_indices {
+            items[idx].is_filtered = true;
+            items[idx].filter_param = 99;
+        }
+        for &(first_idx, count) in merge_map.values() {
+            if count > 1 {
+                items[first_idx].text.push_str(&format!(" x{}", count));
             }
         }
     }
@@ -306,8 +309,8 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         index_in_screen: 0,
         screen_size: items.len(),
         frame_elapsed_ms: 0,
-        global_flags: global_flags.clone(),
-        scroll_duration: scroll_duration.clone(),
+        global_flags,
+        scroll_duration,
     };
 
     // Apply primary filters
@@ -328,12 +331,22 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         DanmakuType::FixBottom,
     ];
 
-    for &danmaku_type in type_order {
-        for i in 0..items.len() {
-            if items[i].is_filtered || items[i].danmaku_type != danmaku_type {
-                continue;
-            }
-            items[i].measure(width, height, &global_flags);
+    let mut type_indices: [Vec<usize>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+    for (i, item) in items.iter().enumerate() {
+        if item.is_filtered {
+            continue;
+        }
+        match item.danmaku_type {
+            DanmakuType::ScrollRL => type_indices[0].push(i),
+            DanmakuType::ScrollLR => type_indices[1].push(i),
+            DanmakuType::FixTop => type_indices[2].push(i),
+            DanmakuType::FixBottom => type_indices[3].push(i),
+            DanmakuType::Special => {}
+        }
+    }
+
+    for (type_idx, &danmaku_type) in type_order.iter().enumerate() {
+        for &i in &type_indices[type_idx] {
             let (placed, displaced_index) = retainer.fix(
                 &mut items[i],
                 width,
@@ -356,9 +369,8 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
 
     // Build prepared output
     let mut prepared_items = Vec::with_capacity(items.len());
-    let mut item_times = Vec::with_capacity(items.len());
 
-    for item in &items {
+    for item in &mut items {
         if item.is_filtered {
             continue;
         }
@@ -367,7 +379,7 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         let centered_x = if is_scroll { 0.0 } else { (width as f64 - item.paint_width as f64) / 2.0 };
         prepared_items.push(DfmPlusPreparedItem {
             time_seconds: item.time_ms as f64 / 1000.0,
-            text: item.text.clone(),
+            text: std::mem::take(&mut item.text),
             type_code,
             color_argb: item.text_color as i32,
             is_me: false,
@@ -382,14 +394,10 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
             is_scroll,
             centered_x,
         });
-        item_times.push(item.time_ms as f64 / 1000.0);
     }
 
-    let mut sort_indices: Vec<usize> = (0..item_times.len()).collect();
-    sort_indices.sort_by(|&a, &b| item_times[a].partial_cmp(&item_times[b]).unwrap_or(std::cmp::Ordering::Equal));
-
-    let sorted_times: Vec<f64> = sort_indices.iter().map(|&i| item_times[i]).collect();
-    let sorted_items: Vec<DfmPlusPreparedItem> = sort_indices.into_iter().map(|i| prepared_items[i].clone()).collect();
+    prepared_items.sort_by(|a, b| a.time_seconds.partial_cmp(&b.time_seconds).unwrap_or(std::cmp::Ordering::Equal));
+    let sorted_times: Vec<f64> = prepared_items.iter().map(|i| i.time_seconds).collect();
 
     let cache_key = {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -414,7 +422,7 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         height: height as f64,
         scroll_duration_seconds: scroll_dur_secs,
         static_duration_seconds: STATIC_DURATION_MS as f64 / 1000.0,
-        items: sorted_items,
+        items: prepared_items,
         item_times: sorted_times,
         track_count: ((height * display_area) / (font_size * 1.2 * 1.25)).max(1.0) as i32,
         cache_key,
@@ -479,9 +487,15 @@ fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> Df
 
         let (x, offstage_x) = if is_scroll {
             let speed = item.scroll_speed;
-            let x = width as f64 - speed * elapsed;
-            let offstage = width as f64 + item.width;
-            (x, offstage)
+            if item.type_code == 6 {
+                let x = speed * elapsed - item.width;
+                let offstage = -item.width;
+                (x, offstage)
+            } else {
+                let x = width as f64 - speed * elapsed;
+                let offstage = width as f64 + item.width;
+                (x, offstage)
+            }
         } else {
             let x = item.centered_x;
             let offstage = width as f64;
@@ -1095,7 +1109,7 @@ mod tests {
             index_in_screen: 0,
             screen_size: danmaku_items.len(),
             frame_elapsed_ms: 0,
-            global_flags: global_flags.clone(),
+            global_flags,
             scroll_duration,
         };
 

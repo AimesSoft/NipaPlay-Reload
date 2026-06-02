@@ -79,8 +79,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   String _surfaceId = 'dfm-default';
   double _lastDevicePixelRatio = 1.0;
 
-  /// Tablet devices render at 2x then downscale to fix aliasing on iPad.
-  static const double _tabletSupersampleMultiplier = 2.0;
+  /// Low-DPR screens render at 2x then downscale to fix aliasing.
+  static const double _supersampleMultiplier = 2.0;
 
   @override
   void initState() {
@@ -156,10 +156,11 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
                 _textureId != null &&
                 Next2TextureBridge.isSupported;
 
-            // Use filtered downsampling when supersampling is active (tablets)
-            // so the 2x buffer is properly averaged during downscale.
-            final filterQuality =
-                globals.isTablet ? FilterQuality.low : FilterQuality.none;
+            final needsSupersample =
+                globals.isTablet || (globals.isDesktop && dpr < 2.0);
+            final filterQuality = needsSupersample
+                ? FilterQuality.low
+                : FilterQuality.none;
             final Widget content = hasTexture
                 ? Texture(
                     textureId: _textureId!,
@@ -252,8 +253,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     final dpr =
         views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
 
-    // Apply supersampling multiplier for tablet devices to fix aliasing.
-    final supersample = globals.isTablet ? _tabletSupersampleMultiplier : 1.0;
+    final needsSupersample =
+        globals.isTablet || (globals.isDesktop && dpr < 2.0);
+    final supersample =
+        needsSupersample ? _supersampleMultiplier : 1.0;
     final double pixelRatio =
         (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
 

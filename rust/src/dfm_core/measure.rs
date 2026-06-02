@@ -26,17 +26,7 @@ impl HeuristicMeasurer {
 }
 
 pub fn measure_text_width_heuristic(text: &str, font_size: f32) -> f32 {
-    let mut width = 0.0f32;
-    for ch in text.chars() {
-        if ch == ' ' {
-            width += font_size * 0.35;
-        } else if ch.is_ascii() {
-            width += font_size * 0.55;
-        } else {
-            width += font_size;
-        }
-    }
-    width.max(1.0)
+    crate::dfm_core::model::measure_text_width(text, font_size)
 }
 
 pub fn measure_line_height_heuristic(font_size: f32) -> f32 {

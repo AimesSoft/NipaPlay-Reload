@@ -2759,6 +2759,7 @@ dependencies = [
 name = "rust_lib_nipaplay"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "base64",
  "bytemuck",
  "fdsm",
