@@ -309,8 +309,8 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         index_in_screen: 0,
         screen_size: items.len(),
         frame_elapsed_ms: 0,
-        global_flags: global_flags.clone(),
-        scroll_duration: scroll_duration.clone(),
+        global_flags,
+        scroll_duration,
     };
 
     // Apply primary filters
@@ -331,12 +331,22 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         DanmakuType::FixBottom,
     ];
 
-    for &danmaku_type in type_order {
-        for i in 0..items.len() {
-            if items[i].is_filtered || items[i].danmaku_type != danmaku_type {
-                continue;
-            }
-            items[i].measure(width, height, &global_flags);
+    let mut type_indices: [Vec<usize>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+    for (i, item) in items.iter().enumerate() {
+        if item.is_filtered {
+            continue;
+        }
+        match item.danmaku_type {
+            DanmakuType::ScrollRL => type_indices[0].push(i),
+            DanmakuType::ScrollLR => type_indices[1].push(i),
+            DanmakuType::FixTop => type_indices[2].push(i),
+            DanmakuType::FixBottom => type_indices[3].push(i),
+            DanmakuType::Special => {}
+        }
+    }
+
+    for (type_idx, &danmaku_type) in type_order.iter().enumerate() {
+        for &i in &type_indices[type_idx] {
             let (placed, displaced_index) = retainer.fix(
                 &mut items[i],
                 width,
@@ -477,9 +487,15 @@ fn build_dfm_plus_frame(layout: &DfmPlusPreparedLayout, current_time: f64) -> Df
 
         let (x, offstage_x) = if is_scroll {
             let speed = item.scroll_speed;
-            let x = width as f64 - speed * elapsed;
-            let offstage = width as f64 + item.width;
-            (x, offstage)
+            if item.type_code == 6 {
+                let x = speed * elapsed - item.width;
+                let offstage = -item.width;
+                (x, offstage)
+            } else {
+                let x = width as f64 - speed * elapsed;
+                let offstage = width as f64 + item.width;
+                (x, offstage)
+            }
         } else {
             let x = item.centered_x;
             let offstage = width as f64;
@@ -1093,7 +1109,7 @@ mod tests {
             index_in_screen: 0,
             screen_size: danmaku_items.len(),
             frame_elapsed_ms: 0,
-            global_flags: global_flags.clone(),
+            global_flags,
             scroll_duration,
         };
 

@@ -34,7 +34,7 @@ impl DanmakuType {
 
 /// Duration with multiplicative speed factor.
 /// Ported from Duration.java: value = initial_duration * factor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Duration {
     initial_duration: i64,
     factor: f32,
@@ -65,7 +65,7 @@ impl Duration {
 /// Epoch-based dirty flags, grouped for cache locality.
 /// Ported from GlobalFlagValues.java. Incrementing a flag invalidates all
 /// danmaku items whose per-instance flag doesn't match, without iteration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct GlobalFlags {
     pub measure_flag: u64,
     pub visible_flag: u64,

@@ -177,15 +177,11 @@ impl DanmakuRetainer {
             DanmakuType::FixTop => {
                 self.top_tracks.ensure_track_count(track_count);
                 match select_fixed_track(&entry, &mut self.top_tracks, track_count) {
-                    Some((row, was_queued, displaced_index)) => {
-                        if was_queued {
-                            let last = self.top_tracks.tracks[row].last().unwrap();
-                            item.time_ms = last.time_ms;
-                        }
+                    Some(row) => {
                         item.y = self.margin + row as f32 * track_height;
                         item.is_shown = true;
                         item.flags.visible = flags.visible_flag;
-                        (true, displaced_index.into_iter().collect())
+                        (true, SmallVec::new())
                     }
                     None => (false, SmallVec::new()),
                 }
@@ -193,15 +189,11 @@ impl DanmakuRetainer {
             DanmakuType::FixBottom => {
                 self.bottom_tracks.ensure_track_count(track_count);
                 match select_fixed_track(&entry, &mut self.bottom_tracks, track_count) {
-                    Some((row, was_queued, displaced_index)) => {
-                        if was_queued {
-                            let last = self.bottom_tracks.tracks[row].last().unwrap();
-                            item.time_ms = last.time_ms;
-                        }
+                    Some(row) => {
                         item.y = effective_height - (row as f32 + 1.0) * track_height;
                         item.is_shown = true;
                         item.flags.visible = flags.visible_flag;
-                        (true, displaced_index.into_iter().collect())
+                        (true, SmallVec::new())
                     }
                     None => (false, SmallVec::new()),
                 }
@@ -316,7 +308,7 @@ fn select_fixed_track(
     new_entry: &TrackEntry,
     track_data: &mut TrackData,
     track_count: usize,
-) -> Option<(usize, bool, Option<usize>)> {
+) -> Option<usize> {
     let new_start = new_entry.time_ms;
 
     if new_start != track_data.last_compact_ms {
@@ -328,13 +320,13 @@ fn select_fixed_track(
     for i in 0..track_count {
         if tracks[i].is_empty() {
             tracks[i].push(new_entry.clone());
-            return Some((i, false, None));
+            return Some(i);
         }
         let last = tracks[i].last().unwrap();
         let last_end = last.end_ms();
         if new_start >= last_end {
             tracks[i].push(new_entry.clone());
-            return Some((i, false, None));
+            return Some(i);
         }
     }
 
