@@ -51,10 +51,10 @@ public:
         void push(T x) {
             length++;
             if(ed_a[x] == 0) {
-                data.emplace_back(x, 1);
+                data.emplace_back(x, static_cast<sim_ushort>(1));
                 ed_a[x] = static_cast<short>(data.size());
             } else {
-                data[ed_a[x]-1].second++;
+                data[static_cast<size_t>(ed_a[x] - 1)].second++;
             }
         }
         void cleanup() {
@@ -96,9 +96,9 @@ public:
                 for(sim_ushort c: orig) {
                     auto cs = pd.find(c);
                     if(cs != pd.end()) {
-                        pinyin.push(SIM_PINYIN_BASE + cs->second.first);
+                        pinyin.push(static_cast<sim_ushort>(SIM_PINYIN_BASE + cs->second.first));
                         if(cs->second.second)
-                            pinyin.push(SIM_PINYIN_BASE + cs->second.second);
+                            pinyin.push(static_cast<sim_ushort>(SIM_PINYIN_BASE + cs->second.second));
                     } else {
                         if(c >= 'A' && c <= 'Z') c += 'a' - 'A';
                         pinyin.push(c);
@@ -155,8 +155,8 @@ public:
     int edit_distance(const UnorderedContainer<sim_ushort>& p,
                       const UnorderedContainer<sim_ushort>& q) {
         short* ea = ed_a_.get();
-        for(const auto& item: p.data) ea[item.first] += item.second;
-        for(const auto& item: q.data) ea[item.first] -= item.second;
+        for(const auto& item: p.data) ea[item.first] = static_cast<short>(ea[item.first] + item.second);
+        for(const auto& item: q.data) ea[item.first] = static_cast<short>(ea[item.first] - item.second);
         int ans = 0;
         for(const auto& item: p.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
         for(const auto& item: q.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
@@ -168,8 +168,8 @@ public:
                           const UnorderedContainer<sim_uint>& q) {
         short* ea = ed_a_.get();
         short* eb = ed_b_.get();
-        for(const auto& item: p.data) ea[item.first] += item.second;
-        for(const auto& item: q.data) eb[item.first] += item.second;
+        for(const auto& item: p.data) ea[item.first] = static_cast<short>(ea[item.first] + item.second);
+        for(const auto& item: q.data) eb[item.first] = static_cast<short>(eb[item.first] + item.second);
         int x=0, y=0, z=0;
         for(const auto& item: p.data) {
             int xa = ea[item.first], xb = eb[item.first];
@@ -180,7 +180,8 @@ public:
             int xb = eb[item.first]; z += xb*xb; eb[item.first] = 0;
         }
         if(y<=0 || z<=0) return 0.0f;
-        return static_cast<float>(x) * x / y / z;
+        return static_cast<float>(x) * static_cast<float>(x)
+             / static_cast<float>(y) / static_cast<float>(z);
     }
 
     // ──── CombinedReason 枚举 ────
@@ -202,7 +203,8 @@ public:
             return 0;
 
         sim_uint idx_delta = p.idx - q.idx;
-        sim_uint len_p = p.orig.size(), len_q = q.orig.size();
+        sim_uint len_p = static_cast<sim_uint>(p.orig.size()),
+                 len_q = static_cast<sim_uint>(q.orig.size());
         sim_uint len_sum = len_p + len_q;
 
         if(p.orig == q.orig)
@@ -215,11 +217,11 @@ public:
                 p.str,
                 q.str);
             if(
-                (len_sum < (sim_uint)config_.min_danmu_size) ?
-                    edit_dis < config_.max_dist * (int)len_sum / config_.min_danmu_size:
+                (len_sum < static_cast<sim_uint>(config_.min_danmu_size)) ?
+                    edit_dis < config_.max_dist * static_cast<int>(len_sum) / config_.min_danmu_size:
                     edit_dis <= config_.max_dist
             ) {
-                return sim_result(combined_edit_distance, edit_dis, idx_delta);
+                return sim_result(combined_edit_distance, static_cast<sim_uint>(edit_dis), idx_delta);
             }
         }
 
@@ -230,23 +232,23 @@ public:
                 p.pinyin,
                 q.pinyin);
             if(
-                (len_sum < (sim_uint)config_.min_danmu_size) ?
-                    py_dis < config_.max_dist * (int)len_sum / config_.min_danmu_size:
+                (len_sum < static_cast<sim_uint>(config_.min_danmu_size)) ?
+                    py_dis < config_.max_dist * static_cast<int>(len_sum) / config_.min_danmu_size:
                     py_dis <= config_.max_dist
             ) {
-                return sim_result(combined_pinyin_distance, py_dis, idx_delta);
+                return sim_result(combined_pinyin_distance, static_cast<sim_uint>(py_dis), idx_delta);
             }
         }
 
         bool calc_cosine_sim = config_.max_cosine <= 100 && !(
-            calc_edit_dis && edit_dis >= (int)len_sum
+            calc_edit_dis && edit_dis >= static_cast<int>(len_sum)
         );
         if(calc_cosine_sim) {
-            int cosine_sim = 100 * cosine_distance(
+            int cosine_sim = static_cast<int>(100 * cosine_distance(
                 p.gram,
-                q.gram);
+                q.gram));
             if(cosine_sim >= config_.max_cosine) {
-                return sim_result(combined_cosine_distance, cosine_sim, idx_delta);
+                return sim_result(combined_cosine_distance, static_cast<sim_uint>(cosine_sim), idx_delta);
             }
         }
 
@@ -272,7 +274,7 @@ public:
         sim_uint index_r = static_cast<sim_uint>(nearby_danmu_.size());
         auto p = DanmuCacheline(this, config_.str_buf, mode, index_r);
         sim_ulong h = precise_matcher_hash(config_.str_buf,
-                                           config_.cross_mode ? 0 : mode);
+                                           static_cast<sim_ushort>(config_.cross_mode ? 0 : mode));
 
         for(; config_.dispose_idx < index_l; config_.dispose_idx++) {
             nearby_danmu_[config_.dispose_idx].dispose(this);
@@ -315,7 +317,7 @@ public:
         sim_uint index_r = static_cast<sim_uint>(nearby_danmu_.size());
         auto p = DanmuCacheline(this, config_.str_buf, mode, index_r);
         sim_ulong h = precise_matcher_hash(config_.str_buf,
-                                           config_.cross_mode ? 0 : mode);
+                                           static_cast<sim_ushort>(config_.cross_mode ? 0 : mode));
         precise_matcher_[h] = index_r;
         nearby_danmu_.push_back(std::move(p));
     }
@@ -345,11 +347,11 @@ struct DanmakuSimItem {
 };
 
 struct SimConfig {
-    int max_dist = 3;
-    int max_cosine = 70;
+    int max_dist = 5;
+    int max_cosine = 45;
     bool use_pinyin = true;
-    bool cross_mode = false;
-    double time_window = 45.0;
+    bool cross_mode = true;
+    double time_window = 30.0;
 };
 
 struct SimPair {

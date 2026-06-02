@@ -55,11 +55,11 @@ class SimilarityFfiService {
 
       // 转换 Map → SimilarityConfig
       final simConfig = SimilarityConfig(
-        maxDist: config['max_dist'] as int? ?? 3,
-        maxCosine: config['max_cosine'] as int? ?? 70,
+        maxDist: config['max_dist'] as int? ?? 5,
+        maxCosine: config['max_cosine'] as int? ?? 45,
         usePinyin: config['use_pinyin'] as bool? ?? true,
-        crossMode: config['cross_mode'] as bool? ?? false,
-        timeWindow: (config['time_window'] as num?)?.toDouble() ?? 45.0,
+        crossMode: config['cross_mode'] as bool? ?? true,
+        timeWindow: (config['time_window'] as num?)?.toDouble() ?? 30.0,
       );
 
       debugPrint('[SimilarityFFI] checkSimilarity: 输入 ${items.length} 条弹幕, config=$config');

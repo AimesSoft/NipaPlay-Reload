@@ -11,8 +11,6 @@ import 'package:nipaplay/cpp_native/bindings/danmaku_layout.dart';
 
 const String _logTag = 'NipaPlayNextEngine';
 
-/// Global instance counter for unique IDs
-int _instanceCounter = 0;
 
 /// Frame log throttle: last time a frame log was emitted (global, ms)
 int _lastFrameLogTimeMs = 0;
@@ -52,7 +50,7 @@ class NipaPlayNextEngine {
   bool _layoutDirty = true;
   int _layoutVersion = 0;
 
-  NipaPlayNextEngine() : _id = '#${++_instanceCounter}';
+  NipaPlayNextEngine() : _id = 'C++';
 
   int get layoutVersion => _layoutVersion;
 

@@ -137,7 +137,7 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_configure(
 
         // 将 C 结构体数组转换为 C++ LayoutItem 向量
         std::vector<nipaplay::native::LayoutItem> cppItems;
-        cppItems.reserve(item_count);
+        cppItems.reserve(static_cast<size_t>(item_count));
         for (int32_t i = 0; i < item_count; i++) {
             const NpDanmakuItem& src = items[i];
             cppItems.push_back({
@@ -192,15 +192,16 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
         auto* engine = static_cast<nipaplay::native::DanmakuLayoutEngine*>(handle);
 
         // 使用 C++ 内部 LayoutResult 中间缓冲区（字段顺序与 NpLayoutResult 不同）
-        std::vector<nipaplay::native::LayoutResult> cppResults(output_capacity);
+        std::vector<nipaplay::native::LayoutResult> cppResults(static_cast<size_t>(output_capacity));
         const int32_t count = engine->frame(current_time, cppResults.data(), output_capacity);
 
         // 转换：LayoutResult → NpLayoutResult（字段顺序不同，必须逐个映射）
         for (int32_t i = 0; i < count; i++) {
-            output_items[i].y_position   = cppResults[i].y_position;
-            output_items[i].scroll_speed = cppResults[i].scroll_speed;
-            output_items[i].item_index   = cppResults[i].item_index;
-            output_items[i].track_index = cppResults[i].track_index;
+            auto si = static_cast<size_t>(i);
+            output_items[i].y_position   = cppResults[si].y_position;
+            output_items[i].scroll_speed = cppResults[si].scroll_speed;
+            output_items[i].item_index   = cppResults[si].item_index;
+            output_items[i].track_index = cppResults[si].track_index;
         }
         *output_count = count;
 

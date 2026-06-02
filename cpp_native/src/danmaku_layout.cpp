@@ -58,18 +58,19 @@ void DanmakuLayoutEngine::rebuildLayout() {
     if (trackCount <= 0) trackCount = 1;
 
     // 每条轨道的弹幕索引列表（滚动弹幕）
-    std::vector<std::vector<int32_t>> scrollTracks(trackCount);
+    const auto tc = static_cast<size_t>(trackCount);
+    std::vector<std::vector<int32_t>> scrollTracks(tc);
     // 固定弹幕（top/bottom）每条轨道只保留一个活跃索引
     // -1 表示空
-    std::vector<int32_t> topTrackItems(trackCount, -1);
-    std::vector<int32_t> bottomTrackItems(trackCount, -1);
+    std::vector<int32_t> topTrackItems(tc, -1);
+    std::vector<int32_t> bottomTrackItems(tc, -1);
 
     // 每条轨道的实际高度
-    std::vector<double> scrollTrackHeights(trackCount, base_track_height_);
-    std::vector<double> topTrackHeights(trackCount, base_track_height_);
-    std::vector<double> bottomTrackHeights(trackCount, base_track_height_);
+    std::vector<double> scrollTrackHeights(tc, base_track_height_);
+    std::vector<double> topTrackHeights(tc, base_track_height_);
+    std::vector<double> bottomTrackHeights(tc, base_track_height_);
 
-    for (int32_t i = 0; i < static_cast<int32_t>(items_.size()); i++) {
+    for (size_t i = 0; i < items_.size(); i++) {
         auto& item = items_[i];
         const double width = item.text_width;
         const double itemHeight = base_danmaku_height_ * item.font_size_multiplier;
@@ -80,7 +81,7 @@ void DanmakuLayoutEngine::rebuildLayout() {
             item.scroll_speed = speed;
 
             const int32_t selectedTrack = selectScrollTrack(
-                i, item.time_seconds, width,
+                static_cast<int32_t>(i), item.time_seconds, width,
                 trackCount, scrollTracks);
 
             if (selectedTrack < 0) {
@@ -89,9 +90,9 @@ void DanmakuLayoutEngine::rebuildLayout() {
             }
 
             item.track_index = selectedTrack;
-            scrollTracks[selectedTrack].push_back(i);
-            if (itemHeight > scrollTrackHeights[selectedTrack]) {
-                scrollTrackHeights[selectedTrack] = itemHeight;
+            scrollTracks[static_cast<size_t>(selectedTrack)].push_back(static_cast<int32_t>(i));
+            if (itemHeight > scrollTrackHeights[static_cast<size_t>(selectedTrack)]) {
+                scrollTrackHeights[static_cast<size_t>(selectedTrack)] = itemHeight;
             }
             break;
         }
@@ -103,9 +104,9 @@ void DanmakuLayoutEngine::rebuildLayout() {
                 continue;
             }
             item.track_index = selectedTrack;
-            topTrackItems[selectedTrack] = i;
-            if (itemHeight > topTrackHeights[selectedTrack]) {
-                topTrackHeights[selectedTrack] = itemHeight;
+            topTrackItems[static_cast<size_t>(selectedTrack)] = static_cast<int32_t>(i);
+            if (itemHeight > topTrackHeights[static_cast<size_t>(selectedTrack)]) {
+                topTrackHeights[static_cast<size_t>(selectedTrack)] = itemHeight;
             }
             break;
         }
@@ -117,9 +118,9 @@ void DanmakuLayoutEngine::rebuildLayout() {
                 continue;
             }
             item.track_index = selectedTrack;
-            bottomTrackItems[selectedTrack] = i;
-            if (itemHeight > bottomTrackHeights[selectedTrack]) {
-                bottomTrackHeights[selectedTrack] = itemHeight;
+            bottomTrackItems[static_cast<size_t>(selectedTrack)] = static_cast<int32_t>(i);
+            if (itemHeight > bottomTrackHeights[static_cast<size_t>(selectedTrack)]) {
+                bottomTrackHeights[static_cast<size_t>(selectedTrack)] = itemHeight;
             }
             break;
         }
@@ -127,37 +128,39 @@ void DanmakuLayoutEngine::rebuildLayout() {
     }
 
     // 计算 y 偏移量
-    std::vector<double> scrollTrackOffsets(trackCount, 0.0);
-    std::vector<double> topTrackOffsets(trackCount, 0.0);
-    std::vector<double> bottomTrackOffsets(trackCount, 0.0);
+    std::vector<double> scrollTrackOffsets(tc, 0.0);
+    std::vector<double> topTrackOffsets(tc, 0.0);
+    std::vector<double> bottomTrackOffsets(tc, 0.0);
 
     double scrollOffset = 0.0;
     double topOffset = 0.0;
     double bottomAccumulated = 0.0;
     for (int32_t i = 0; i < trackCount; i++) {
-        scrollTrackOffsets[i] = scrollOffset;
-        scrollOffset += scrollTrackHeights[i];
+        auto si = static_cast<size_t>(i);
+        scrollTrackOffsets[si] = scrollOffset;
+        scrollOffset += scrollTrackHeights[si];
 
-        topTrackOffsets[i] = topOffset;
-        topOffset += topTrackHeights[i];
+        topTrackOffsets[si] = topOffset;
+        topOffset += topTrackHeights[si];
 
-        bottomAccumulated += bottomTrackHeights[i];
-        bottomTrackOffsets[i] = height_ - bottomAccumulated;
+        bottomAccumulated += bottomTrackHeights[si];
+        bottomTrackOffsets[si] = height_ - bottomAccumulated;
     }
 
     // 设置 yPosition
     for (auto& item : items_) {
         const int32_t track = item.track_index;
         if (track < 0 || track >= trackCount) continue;
+        auto st = static_cast<size_t>(track);
         switch (item.type) {
         case DanmakuType::Scroll:
-            item.y_position = scrollTrackOffsets[track];
+            item.y_position = scrollTrackOffsets[st];
             break;
         case DanmakuType::Top:
-            item.y_position = topTrackOffsets[track];
+            item.y_position = topTrackOffsets[st];
             break;
         case DanmakuType::Bottom:
-            item.y_position = bottomTrackOffsets[track];
+            item.y_position = bottomTrackOffsets[st];
             break;
         }
     }
@@ -170,17 +173,17 @@ int32_t DanmakuLayoutEngine::selectScrollTrack(
     int32_t track_count,
     std::vector<std::vector<int32_t>>& scroll_tracks)
 {
-    const LayoutItem& item = items_[item_idx];
+    const LayoutItem& item = items_[static_cast<size_t>(item_idx)];
 
     for (int32_t i = 0; i < track_count; i++) {
-        auto& trackItemIndices = scroll_tracks[i];
+        auto& trackItemIndices = scroll_tracks[static_cast<size_t>(i)];
 
         // 移除已过期弹幕
         if (!trackItemIndices.empty()) {
             auto eraseFrom = std::remove_if(
                 trackItemIndices.begin(), trackItemIndices.end(),
                 [this, time](int32_t idx) {
-                    return time - items_[idx].time_seconds > scroll_duration_;
+                    return time - items_[static_cast<size_t>(idx)].time_seconds > scroll_duration_;
                 });
             trackItemIndices.erase(eraseFrom, trackItemIndices.end());
         }
@@ -210,7 +213,7 @@ bool DanmakuLayoutEngine::scrollCanAddToTrack(
     double new_width, double time) const
 {
     for (int32_t idx : track_item_indices) {
-        const LayoutItem& existing = items_[idx];
+        const LayoutItem& existing = items_[static_cast<size_t>(idx)];
         const double elapsed = time - existing.time_seconds;
         if (elapsed < 0 || elapsed > scroll_duration_) {
             continue;
@@ -242,11 +245,11 @@ int32_t DanmakuLayoutEngine::selectStaticTrack(
     int32_t track_count) const
 {
     for (int32_t i = 0; i < track_count; i++) {
-        const int32_t existingIdx = track_items[i];
+        const int32_t existingIdx = track_items[static_cast<size_t>(i)];
         if (existingIdx < 0) {
             return i;
         }
-        const double existingTime = items_[existingIdx].time_seconds;
+        const double existingTime = items_[static_cast<size_t>(existingIdx)].time_seconds;
         if (time - existingTime >= static_duration_) {
             return i;
         }
@@ -280,7 +283,7 @@ int32_t DanmakuLayoutEngine::frame(
     int32_t outCount = 0;
 
     for (int32_t i = left; i < right && outCount < output_capacity; i++) {
-        const LayoutItem& item = items_[i];
+        const LayoutItem& item = items_[static_cast<size_t>(i)];
         if (item.track_index < 0) continue;
 
         const double elapsed = current_time - item.time_seconds;
@@ -313,7 +316,7 @@ int32_t DanmakuLayoutEngine::lowerBound(double value) const {
     int32_t hi = static_cast<int32_t>(item_times_.size());
     while (lo < hi) {
         const int32_t mid = (lo + hi) >> 1;
-        if (item_times_[mid] < value) {
+        if (item_times_[static_cast<size_t>(mid)] < value) {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -327,7 +330,7 @@ int32_t DanmakuLayoutEngine::upperBound(double value) const {
     int32_t hi = static_cast<int32_t>(item_times_.size());
     while (lo < hi) {
         const int32_t mid = (lo + hi) >> 1;
-        if (item_times_[mid] <= value) {
+        if (item_times_[static_cast<size_t>(mid)] <= value) {
             lo = mid + 1;
         } else {
             hi = mid;

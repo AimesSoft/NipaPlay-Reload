@@ -101,21 +101,21 @@ static void update_groups(
     } else if (has_a && has_b) {
         int ra = it_a->second;
         int rb = it_b->second;
-        auto merged = std::move(groups[ra]);
-        auto other = std::move(groups[rb]);
+        auto merged = std::move(groups[static_cast<size_t>(ra)]);
+        auto other = std::move(groups[static_cast<size_t>(rb)]);
         merged.insert(merged.end(), other.begin(), other.end());
         for (int idx : merged) {
             group_map[idx] = ra;
         }
-        groups[ra] = std::move(merged);
-        groups[rb].clear(); // leave empty slot
+        groups[static_cast<size_t>(ra)] = std::move(merged);
+        groups[static_cast<size_t>(rb)].clear(); // leave empty slot
     } else if (has_a) {
         int ra = it_a->second;
-        groups[ra].push_back(b);
+        groups[static_cast<size_t>(ra)].push_back(b);
         group_map[b] = ra;
     } else if (has_b) {
         int rb = it_b->second;
-        groups[rb].push_back(a);
+        groups[static_cast<size_t>(rb)].push_back(a);
         group_map[a] = rb;
     } else {
         int group_idx = static_cast<int>(groups.size());
@@ -164,7 +164,7 @@ SimResult danmaku_similarity_check(
         // UTF-8 → UTF-16
         auto utf16 = utf8_to_utf16(item.text);
         size_t copy_len = std::min(utf16.size(), MAX_STRING_LEN - 1);
-        std::copy(utf16.begin(), utf16.begin() + copy_len, str_buf.begin());
+        std::copy(utf16.begin(), utf16.begin() + static_cast<std::ptrdiff_t>(copy_len), str_buf.begin());
         str_buf[copy_len] = 0; // null terminator
 
         // 计算 index_l
@@ -173,7 +173,7 @@ SimResult danmaku_similarity_check(
             for (size_t eng_idx = 0; eng_idx < engine_to_orig.size(); eng_idx++) {
                 int orig_idx = engine_to_orig[eng_idx];
                 if (orig_idx >= 0 && static_cast<size_t>(orig_idx) < items.size()
-                    && item.time_seconds - items[orig_idx].time_seconds <= time_window)
+                    && item.time_seconds - items[static_cast<size_t>(orig_idx)].time_seconds <= time_window)
                 {
                     index_l = static_cast<sim_uint>(eng_idx);
                     break;
@@ -199,7 +199,7 @@ SimResult danmaku_similarity_check(
             if (target_index < 0
                 || static_cast<size_t>(target_index) >= items.size()
                 || (time_window > 0.0
-                    && item.time_seconds - items[target_index].time_seconds > time_window))
+                    && item.time_seconds - items[static_cast<size_t>(target_index)].time_seconds > time_window))
             {
                 // 窗口外匹配拒绝 → force_insert
                 engine->force_insert(static_cast<sim_uint>(item.mode));
@@ -263,14 +263,14 @@ double danmaku_pair_similarity(
     // 送入第一条
     auto utf16_0 = utf8_to_utf16(text_a);
     size_t copy_len = std::min(utf16_0.size(), MAX_STRING_LEN - 1);
-    std::copy(utf16_0.begin(), utf16_0.begin() + copy_len, str_buf.begin());
+    std::copy(utf16_0.begin(), utf16_0.begin() + static_cast<std::ptrdiff_t>(copy_len), str_buf.begin());
     str_buf[copy_len] = 0;
     engine->check_similar(0, 0);
 
     // 送入第二条并获取结果
     auto utf16_1 = utf8_to_utf16(text_b);
     copy_len = std::min(utf16_1.size(), MAX_STRING_LEN - 1);
-    std::copy(utf16_1.begin(), utf16_1.begin() + copy_len, str_buf.begin());
+    std::copy(utf16_1.begin(), utf16_1.begin() + static_cast<std::ptrdiff_t>(copy_len), str_buf.begin());
     str_buf[copy_len] = 0;
     sim_uint ret = engine->check_similar(0, 0);
 
@@ -321,9 +321,9 @@ static std::string parse_string(const char*& p) {
                     for (int i = 0; i < 4; i++) {
                         char c = s[i];
                         cp <<= 4;
-                        if (c >= '0' && c <= '9') cp |= c - '0';
-                        else if (c >= 'a' && c <= 'f') cp |= c - 'a' + 10;
-                        else if (c >= 'A' && c <= 'F') cp |= c - 'A' + 10;
+                        if (c >= '0' && c <= '9') cp |= static_cast<unsigned int>(c - '0');
+                        else if (c >= 'a' && c <= 'f') cp |= static_cast<unsigned int>(c - 'a' + 10);
+                        else if (c >= 'A' && c <= 'F') cp |= static_cast<unsigned int>(c - 'A' + 10);
                     }
                     return cp;
                 };
