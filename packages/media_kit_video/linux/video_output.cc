@@ -58,6 +58,15 @@ static gboolean video_output_should_force_sw_rendering() {
 #endif
 }
 
+static gint64 video_output_scale_sw_dimension(gint64 value,
+                                              gint64 source,
+                                              gint64 target) {
+  if (value <= 0 || source <= 0 || target <= 0) {
+    return 0;
+  }
+  return MAX((gint64)1, value * target / source);
+}
+
 static void video_output_free_hw_render_context(VideoOutput* self) {
   if (self->render_context == NULL) {
     return;
@@ -422,7 +431,8 @@ gint64 video_output_get_width(VideoOutput* self) {
       return SW_RENDERING_MAX_WIDTH;
     }
     if (height >= SW_RENDERING_MAX_HEIGHT) {
-      return width / height * SW_RENDERING_MAX_HEIGHT;
+      return video_output_scale_sw_dimension(width, height,
+                                             SW_RENDERING_MAX_HEIGHT);
     }
   }
 
@@ -472,7 +482,8 @@ gint64 video_output_get_height(VideoOutput* self) {
       return SW_RENDERING_MAX_HEIGHT;
     }
     if (width >= SW_RENDERING_MAX_WIDTH) {
-      return height / width * SW_RENDERING_MAX_WIDTH;
+      return video_output_scale_sw_dimension(height, width,
+                                             SW_RENDERING_MAX_WIDTH);
     }
   }
 
