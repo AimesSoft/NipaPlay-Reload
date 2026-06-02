@@ -635,6 +635,9 @@ class _TorrentHoverActionState extends State<_TorrentHoverAction> {
                     style: TextStyle(
                       color: activeColor,
                       fontSize: 14,
+                      fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+                      decoration: TextDecoration.none,
+                      decorationColor: Colors.transparent,
                       fontWeight:
                           enabled && _isHovered ? FontWeight.w500 : null,
                     ),
