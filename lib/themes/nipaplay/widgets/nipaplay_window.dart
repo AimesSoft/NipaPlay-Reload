@@ -231,13 +231,20 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
     final double windowControlPadding =
         globals.isTablet ? _windowControlPadding + 3 : _windowControlPadding;
 
-    return Theme(
-      data: Theme.of(context).copyWith(
-        textTheme: Theme.of(context).textTheme.apply(
-              bodyColor: textColor,
-              displayColor: textColor,
-            ),
+    final baseTheme = Theme.of(context);
+    final windowTheme = baseTheme.copyWith(
+      textTheme: baseTheme.textTheme.apply(
+        bodyColor: textColor,
+        displayColor: textColor,
       ),
+    );
+    final windowTextStyle = DefaultTextStyle.of(context)
+        .style
+        .merge(windowTheme.textTheme.bodyMedium)
+        .copyWith(color: textColor);
+
+    return Theme(
+      data: windowTheme,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: GestureDetector(
@@ -312,7 +319,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                                 ),
                               ),
                               DefaultTextStyle(
-                                style: TextStyle(color: textColor),
+                                style: windowTextStyle,
                                 child: NipaplayWindowPositionProvider(
                                   onMove: _applyWindowOffset,
                                   child: Padding(

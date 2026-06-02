@@ -99,6 +99,8 @@ import 'package:nipaplay/services/desktop_pip_window_service.dart';
 import 'constants/settings_keys.dart';
 import 'player_abstraction/media_kit_player_adapter.dart';
 import 'utils/launch_file_handler.dart';
+import 'utils/linux_system_font_loader.dart';
+import 'utils/app_theme.dart';
 import 'package:nipaplay/services/desktop_exit_handler_stub.dart'
     if (dart.library.io) 'package:nipaplay/services/desktop_exit_handler.dart';
 
@@ -131,6 +133,7 @@ Alignment _resolveStartupWindowAlignment(
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await ensureLinuxSystemFontLoaded();
   await globals.initializeStartupDeviceProfile();
   debugPaintBaselinesEnabled = false;
   debugPaintSizeEnabled = false;
@@ -936,6 +939,9 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
               MaterialApp(
                 title: 'NipaPlay',
                 debugShowCheckedModeBanner: false,
+                theme: ThemeData(
+                  fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+                ),
                 locale: locale,
                 localizationsDelegates: localizationsDelegates,
                 supportedLocales: supportedLocales,

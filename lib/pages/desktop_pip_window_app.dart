@@ -15,6 +15,7 @@ import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/http_client_initializer.dart';
 import 'package:nipaplay/services/desktop_pip_window_service.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/pages/play_video_page.dart';
 import 'package:provider/provider.dart';
@@ -60,7 +61,11 @@ class _DesktopPipWindowApp extends StatelessWidget {
       child: MaterialApp(
         title: 'NipaPlay PiP',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData.dark(useMaterial3: true),
+        theme: ThemeData(
+          brightness: Brightness.dark,
+          useMaterial3: true,
+          fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+        ),
         home: _DesktopPipWindowPage(payload: payload),
       ),
     );

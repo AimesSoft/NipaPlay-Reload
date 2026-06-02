@@ -111,11 +111,11 @@ class _BlurButtonState extends State<BlurButton> {
   }) {
     final text = AnimatedDefaultTextStyle(
       duration: const Duration(milliseconds: 200),
-      style: TextStyle(
-        color: effectiveForegroundColor,
-        fontSize: widget.fontSize,
-        fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
-      ),
+      style: DefaultTextStyle.of(context).style.copyWith(
+            color: effectiveForegroundColor,
+            fontSize: widget.fontSize,
+            fontWeight: _isHovered ? FontWeight.w500 : FontWeight.normal,
+          ),
       child: Text(widget.text),
     );
 
