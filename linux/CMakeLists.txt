@@ -119,6 +119,13 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# flutter_js bundles an x64-only QuickJS bridge. Build a matching Linux bridge
+# locally and install it after plugin install scripts to support every arch.
+add_subdirectory(
+  "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/quickjs_c_bridge"
+  quickjs_c_bridge_build
+)
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
