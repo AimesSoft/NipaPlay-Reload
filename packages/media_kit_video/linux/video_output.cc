@@ -39,6 +39,34 @@ struct _VideoOutput {
 
 G_DEFINE_TYPE(VideoOutput, video_output, G_TYPE_OBJECT)
 
+static gboolean video_output_env_flag_enabled(const gchar* name) {
+  const gchar* value = g_getenv(name);
+  if (value == NULL) {
+    return FALSE;
+  }
+  return g_ascii_strcasecmp(value, "1") == 0 ||
+         g_ascii_strcasecmp(value, "true") == 0 ||
+         g_ascii_strcasecmp(value, "yes") == 0 ||
+         g_ascii_strcasecmp(value, "on") == 0;
+}
+
+static gboolean video_output_should_force_sw_rendering() {
+#if defined(__aarch64__) || defined(_M_ARM64)
+  return !video_output_env_flag_enabled("NIPAPLAY_ENABLE_LINUX_ARM64_MPV_GL");
+#else
+  return FALSE;
+#endif
+}
+
+static gint64 video_output_scale_sw_dimension(gint64 value,
+                                              gint64 source,
+                                              gint64 target) {
+  if (value <= 0 || source <= 0 || target <= 0) {
+    return 0;
+  }
+  return MAX((gint64)1, value * target / source);
+}
+
 static void video_output_free_hw_render_context(VideoOutput* self) {
   if (self->render_context == NULL) {
     return;
@@ -159,6 +187,21 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
   mpv_set_option_string(self->handle, "video-sync", "audio");
   // Causes frame drops with `pulse` audio output. (SlotSun/dart_simple_live#42)
   // mpv_set_option_string(self->handle, "video-timing-offset", "0");
+  if (self->configuration.enable_hardware_acceleration &&
+      video_output_should_force_sw_rendering()) {
+#ifdef MPV_RENDER_API_TYPE_SW
+    self->configuration.enable_hardware_acceleration = FALSE;
+    g_printerr(
+        "media_kit: VideoOutput: Linux ARM64 OpenGL texture rendering is "
+        "disabled; using S/W pixel-buffer rendering. Set "
+        "NIPAPLAY_ENABLE_LINUX_ARM64_MPV_GL=1 to override.\n");
+#else
+    g_printerr(
+        "media_kit: VideoOutput: Linux ARM64 OpenGL texture rendering would "
+        "be disabled, but this libmpv does not expose S/W rendering; keeping "
+        "OpenGL rendering.\n");
+#endif
+  }
   gboolean hardware_acceleration_supported = FALSE;
   if (self->configuration.enable_hardware_acceleration) {
     // Reuse Flutter's current EGL context to avoid per-frame context switches.
@@ -388,7 +431,8 @@ gint64 video_output_get_width(VideoOutput* self) {
       return SW_RENDERING_MAX_WIDTH;
     }
     if (height >= SW_RENDERING_MAX_HEIGHT) {
-      return width / height * SW_RENDERING_MAX_HEIGHT;
+      return video_output_scale_sw_dimension(width, height,
+                                             SW_RENDERING_MAX_HEIGHT);
     }
   }
 
@@ -438,7 +482,8 @@ gint64 video_output_get_height(VideoOutput* self) {
       return SW_RENDERING_MAX_HEIGHT;
     }
     if (width >= SW_RENDERING_MAX_WIDTH) {
-      return height / width * SW_RENDERING_MAX_WIDTH;
+      return video_output_scale_sw_dimension(height, width,
+                                             SW_RENDERING_MAX_WIDTH);
     }
   }
 
