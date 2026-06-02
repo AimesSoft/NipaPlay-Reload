@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
+import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
 import 'package:provider/provider.dart';
 
@@ -102,13 +103,14 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   }
 
   TextStyle _outlinedTextStyle({
+    required TextStyle baseStyle,
     required Color color,
     required double fontSize,
     FontWeight weight = FontWeight.w900,
     double strokeWidth = 2.4,
-    double letterSpacing = 0.2,
+    double letterSpacing = 0,
   }) {
-    return TextStyle(
+    return baseStyle.copyWith(
       fontSize: fontSize,
       height: 1.0,
       fontWeight: weight,
@@ -143,6 +145,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
     required String value,
     required Color labelColor,
     required Color valueColor,
+    required TextStyle baseStyle,
     bool compact = false,
   }) {
     return RichText(
@@ -153,21 +156,21 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
           TextSpan(
             text: '$label ',
             style: _outlinedTextStyle(
+              baseStyle: baseStyle,
               color: labelColor,
               fontSize: compact ? 12 : 13,
               weight: FontWeight.w800,
               strokeWidth: 1.9,
-              letterSpacing: 0.35,
             ),
           ),
           TextSpan(
             text: value,
             style: _outlinedTextStyle(
+              baseStyle: baseStyle,
               color: valueColor,
               fontSize: compact ? 13 : 14,
               weight: FontWeight.w900,
               strokeWidth: 2.6,
-              letterSpacing: 0.1,
             ),
           ),
         ],
@@ -228,6 +231,12 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
         final narrowScreen = screenWidth < 720;
         final showDetail = screenWidth >= 1160;
         final compact = screenWidth < 900;
+        final themeTextStyle = Theme.of(context).textTheme.bodyMedium;
+        final baseTextStyle = (themeTextStyle ?? const TextStyle()).copyWith(
+          fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+          decoration: TextDecoration.none,
+          decorationColor: Colors.transparent,
+        );
 
         final items = <Widget>[
           _segment(
@@ -235,6 +244,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             value: cpuText,
             labelColor: cpuBase,
             valueColor: cpuColor,
+            baseStyle: baseTextStyle,
             compact: compact,
           ),
           _segment(
@@ -242,6 +252,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             value: memText,
             labelColor: memBase,
             valueColor: memColor,
+            baseStyle: baseTextStyle,
             compact: compact,
           ),
           _segment(
@@ -249,6 +260,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             value: gpuText,
             labelColor: gpuBase,
             valueColor: gpuColor,
+            baseStyle: baseTextStyle,
             compact: compact,
           ),
           _segment(
@@ -256,6 +268,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
             value: fpsText,
             labelColor: fpsBase,
             valueColor: fpsColor,
+            baseStyle: baseTextStyle,
             compact: compact,
           ),
           if (showDetail)
@@ -264,6 +277,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
               value: _activeDecoder,
               labelColor: _shade(decBase, 0.28),
               valueColor: _shade(decBase, 0.06),
+              baseStyle: baseTextStyle,
               compact: true,
             ),
           if (showDetail)
@@ -272,6 +286,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
               value: _playerKernelType,
               labelColor: _shade(playerBase, 0.28),
               valueColor: _shade(playerBase, 0.06),
+              baseStyle: baseTextStyle,
               compact: true,
             ),
           if (showDetail)
@@ -280,6 +295,7 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
               value: _danmakuKernelType,
               labelColor: _shade(danmakuBase, 0.28),
               valueColor: _shade(danmakuBase, 0.06),
+              baseStyle: baseTextStyle,
               compact: true,
             ),
         ];

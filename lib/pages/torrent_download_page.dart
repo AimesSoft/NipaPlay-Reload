@@ -16,6 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/library_management_layout.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/app_theme.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
@@ -634,6 +635,9 @@ class _TorrentHoverActionState extends State<_TorrentHoverAction> {
                     style: TextStyle(
                       color: activeColor,
                       fontSize: 14,
+                      fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+                      decoration: TextDecoration.none,
+                      decorationColor: Colors.transparent,
                       fontWeight:
                           enabled && _isHovered ? FontWeight.w500 : null,
                     ),
@@ -951,20 +955,32 @@ class _MetricText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final themeTextStyle = Theme.of(context).textTheme.bodySmall;
+    final baseStyle = (themeTextStyle ?? const TextStyle()).copyWith(
+      fontSize: 12,
+      fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+      decoration: TextDecoration.none,
+      decorationColor: Colors.transparent,
+    );
     return Text.rich(
       TextSpan(
+        style: baseStyle,
         children: [
           TextSpan(
             text: '$label ',
-            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.50)),
+            style: baseStyle.copyWith(
+              color: colorScheme.onSurface.withOpacity(0.50),
+            ),
           ),
           TextSpan(
             text: value,
-            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.82)),
+            style: baseStyle.copyWith(
+              color: colorScheme.onSurface.withOpacity(0.82),
+            ),
           ),
         ],
       ),
-      style: const TextStyle(fontSize: 12),
+      style: baseStyle,
     );
   }
 }

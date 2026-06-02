@@ -44,6 +44,8 @@ class SystemResourceMonitor {
 
   int _lastGpuSampleMillis = 0;
   static const int _gpuSampleIntervalMs = 1500;
+  bool _gpuSamplingSupported = true;
+  String? _lastGpuSamplingError;
 
   double get cpuUsage => _cpuUsage;
   double get memoryUsageMB => _memoryUsageMB;
@@ -238,20 +240,40 @@ class SystemResourceMonitor {
       debugPrint('读取内存采样失败: $e');
     }
 
-    try {
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (_gpuUsage != null &&
-          nowMs - _lastGpuSampleMillis < _gpuSampleIntervalMs) {
-        return;
-      }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (!_gpuSamplingSupported) {
+      _gpuUsage = null;
+      return;
+    }
 
+    if (_gpuUsage != null &&
+        nowMs - _lastGpuSampleMillis < _gpuSampleIntervalMs) {
+      return;
+    }
+
+    try {
       final gpuSample = await rust_perf.sampleGpuPercent();
       _gpuUsage = gpuSample.gpuPercent.clamp(0.0, 100.0);
       _lastGpuSampleMillis = nowMs;
+      _lastGpuSamplingError = null;
     } catch (e) {
-      debugPrint('读取 GPU 采样失败: $e');
+      final error = e.toString();
+      if (_isUnsupportedGpuSamplingError(error)) {
+        _gpuSamplingSupported = false;
+        _gpuUsage = null;
+        return;
+      }
+      if (_lastGpuSamplingError != error) {
+        debugPrint('读取 GPU 采样失败: $error');
+        _lastGpuSamplingError = error;
+      }
       _gpuUsage = null;
     }
+  }
+
+  bool _isUnsupportedGpuSamplingError(String error) {
+    return error.contains('gpu_sampling_not_implemented') ||
+        error.contains('unsupported_platform');
   }
 
   void _stopMonitoring() {

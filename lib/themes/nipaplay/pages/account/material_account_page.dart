@@ -10,6 +10,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/widgets/user_activity/material_user_activity.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
+import 'package:nipaplay/utils/app_theme.dart';
 
 enum _BangumiSyncHelpService { dandanplay, nipaplay }
 
@@ -43,8 +44,44 @@ class _MaterialAccountPageState extends State<MaterialAccountPage>
     return fluent.FluentThemeData(
       brightness: brightness,
       accentColor: fluent.AccentColor.swatch({'normal': _accentColor}),
+      typography: _buildFluentTypography(context),
       micaBackgroundColor: Colors.transparent,
       scaffoldBackgroundColor: Colors.transparent,
+    );
+  }
+
+  fluent.Typography _buildFluentTypography(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final resources = brightness == Brightness.light
+        ? const fluent.ResourceDictionary.light()
+        : const fluent.ResourceDictionary.dark();
+    return _withCjkFallback(
+      fluent.Typography.fromBrightness(
+        brightness: brightness,
+        color: resources.textFillColorPrimary,
+      ),
+    );
+  }
+
+  fluent.Typography _withCjkFallback(fluent.Typography typography) {
+    return fluent.Typography.raw(
+      display: _textStyleWithCjkFallback(typography.display),
+      titleLarge: _textStyleWithCjkFallback(typography.titleLarge),
+      title: _textStyleWithCjkFallback(typography.title),
+      subtitle: _textStyleWithCjkFallback(typography.subtitle),
+      bodyLarge: _textStyleWithCjkFallback(typography.bodyLarge),
+      bodyStrong: _textStyleWithCjkFallback(typography.bodyStrong),
+      body: _textStyleWithCjkFallback(typography.body),
+      caption: _textStyleWithCjkFallback(typography.caption),
+    );
+  }
+
+  TextStyle? _textStyleWithCjkFallback(TextStyle? style) {
+    if (style == null) return null;
+    return style.copyWith(
+      fontFamilyFallback: AppTheme.platformFontFamilyFallback,
+      decoration: TextDecoration.none,
+      decorationColor: Colors.transparent,
     );
   }
 

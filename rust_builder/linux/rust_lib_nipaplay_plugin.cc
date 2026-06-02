@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -39,6 +40,10 @@ constexpr char kChannelName[] = "nipaplay/next2_texture";
 constexpr int kMaxDimension = 16384;
 constexpr int kFallbackSize = 512;
 
+struct SurfaceState;
+using SurfaceMap = std::unordered_map<std::string, std::unique_ptr<SurfaceState>>;
+using SurfaceMutex = std::mutex;
+
 struct SurfaceState {
   std::string surface_id;
   FlPixelBufferTexture* texture = nullptr;
@@ -72,8 +77,8 @@ struct _RustLibNipaplayPlugin {
   FlMethodChannel* channel;
   FlPluginRegistrar* registrar;
   FlTextureRegistrar* texture_registrar;
-  std::unordered_map<std::string, std::unique_ptr<SurfaceState>> surfaces;
-  std::mutex surfaces_lock;
+  SurfaceMap surfaces;
+  SurfaceMutex surfaces_lock;
   guint tick_source = 0;
 };
 
@@ -431,11 +436,21 @@ static void rust_lib_nipaplay_plugin_dispose(GObject* object) {
   G_OBJECT_CLASS(rust_lib_nipaplay_plugin_parent_class)->dispose(object);
 }
 
+static void rust_lib_nipaplay_plugin_finalize(GObject* object) {
+  RustLibNipaplayPlugin* self = RUST_LIB_NIPAPLAY_PLUGIN(object);
+  self->surfaces.~SurfaceMap();
+  self->surfaces_lock.~SurfaceMutex();
+  G_OBJECT_CLASS(rust_lib_nipaplay_plugin_parent_class)->finalize(object);
+}
+
 static void rust_lib_nipaplay_plugin_class_init(RustLibNipaplayPluginClass* klass) {
   G_OBJECT_CLASS(klass)->dispose = rust_lib_nipaplay_plugin_dispose;
+  G_OBJECT_CLASS(klass)->finalize = rust_lib_nipaplay_plugin_finalize;
 }
 
 static void rust_lib_nipaplay_plugin_init(RustLibNipaplayPlugin* self) {
+  new (&self->surfaces) SurfaceMap();
+  new (&self->surfaces_lock) SurfaceMutex();
   self->channel = nullptr;
   self->registrar = nullptr;
   self->texture_registrar = nullptr;

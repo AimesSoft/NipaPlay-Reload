@@ -1114,13 +1114,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final Color textColor = isDark ? Colors.white : Colors.black87;
     final Color secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
 
-    final valueStyle = TextStyle(
+    final baseTextStyle = DefaultTextStyle.of(context).style;
+    final valueStyle = baseTextStyle.copyWith(
         color: textColor.withOpacity(0.85), fontSize: 13, height: 1.5);
-    final boldWhiteKeyStyle = TextStyle(
-        color: textColor,
-        fontWeight: FontWeight.w600,
-        fontSize: 13,
-        height: 1.5);
+    final boldWhiteKeyStyle =
+        valueStyle.copyWith(color: textColor, fontWeight: FontWeight.w600);
     final sectionTitleStyle = Theme.of(context)
         .textTheme
         .titleMedium
@@ -1161,7 +1159,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       titlesWidgets.add(Text('其他标题:', style: sectionTitleStyle));
       titlesWidgets.add(SizedBox(height: 4));
       TextStyle aliasTextStyle =
-          TextStyle(color: secondaryTextColor, fontSize: 12);
+          baseTextStyle.copyWith(color: secondaryTextColor, fontSize: 12);
       for (var titleEntry in anime.titles!) {
         String titleText = titleEntry['title'] ?? '未知标题';
         String languageText = '';

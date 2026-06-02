@@ -199,7 +199,7 @@ pub extern "C" fn next2_engine_set_frame(
 pub extern "C" fn next2_engine_copy_bgra_frame(
     handle: u64,
     out_pixels: *mut u8,
-    out_pixels_len: usize,
+    out_pixels_len: u32,
     out_width: *mut u32,
     out_height: *mut u32,
 ) -> u8 {
@@ -207,6 +207,7 @@ pub extern "C" fn next2_engine_copy_bgra_frame(
         let Some(frame) = readback_frame_bgra(handle) else {
             return 0;
         };
+        let out_pixels_len = out_pixels_len as usize;
         if out_pixels.is_null() || out_pixels_len < frame.pixels.len() {
             return 0;
         }
