@@ -666,10 +666,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _position = clampedPosition;
       // 同步高频时间轴，确保弹幕立即跳转
       _playbackTimeMs.value = _position.inMilliseconds.toDouble();
-      // 重置平滑时钟锚点，seek 后需要重新对齐
-      _smoothAnchorMs = _position.inMilliseconds.toDouble();
-      _smoothAnchorWallMs = DateTime.now().millisecondsSinceEpoch;
-      _lastRawPlayerMs = _position.inMilliseconds;
+      // 重置平滑时钟锚点，seek 后下个 Ticker 回调会重新对齐
+      _lastRawPlayerMs = -1;
       if (_duration.inMilliseconds > 0) {
         _progress = clampedPosition.inMilliseconds / _duration.inMilliseconds;
       }

@@ -556,21 +556,23 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 : (_duration.inMilliseconds > 0
                     ? bufferedMs.clamp(0, _duration.inMilliseconds).toInt()
                     : bufferedMs);
-            // 高频时间轴：每帧更新弹幕时间（壁钟插值，亚毫秒精度）
+            // 高频时间轴：每帧更新弹幕时间（Ticker elapsed 插值，微秒精度）
             // player.position 返回整数 ms，直接使用会导致 16/17ms 交替增量，
             // 造成滚动弹幕每帧约 1px 的位置抖动（频闪）。
-            // 解决方案：以 player.position 为锚点，用壁钟时间在锚点间线性插值，
-            // 获得均匀的亚毫秒精度推进；漂移过大时（seek/暂停恢复）立即对齐。
+            // 解决方案：以 player.position 为锚点，用 Ticker.elapsed（微秒精度、
+            // 与 vsync 精确同步）在锚点间线性插值，获得均匀的亚毫秒推进；
+            // 漂移过大时（seek/暂停恢复）立即对齐。
+            final currentElapsedUs = elapsed.inMicroseconds;
             final playerMs = playerPosition.toDouble();
             if (_lastRawPlayerMs < 0) {
               // 首帧或重置后：直接锚定
               _smoothAnchorMs = playerMs;
-              _smoothAnchorWallMs = nowTime;
+              _smoothAnchorElapsedUs = currentElapsedUs;
               _lastRawPlayerMs = playerPosition;
             } else if (playerPosition != _lastRawPlayerMs) {
               // player.position 更新了：检查平滑时钟与实际位置的漂移
-              final wallDelta = nowTime - _smoothAnchorWallMs;
-              final smoothMs = _smoothAnchorMs + wallDelta;
+              final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+              final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0;
               final drift = smoothMs - playerMs;
               if (drift.abs() > 30.0) {
                 // 大跳变（seek/暂停恢复）：立即对齐
@@ -579,12 +581,12 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 // 小漂移：渐进修正（每帧修正 5%），避免突变
                 _smoothAnchorMs = smoothMs - drift * 0.05;
               }
-              _smoothAnchorWallMs = nowTime;
+              _smoothAnchorElapsedUs = currentElapsedUs;
               _lastRawPlayerMs = playerPosition;
             }
-            // 用壁钟插值计算当前平滑时间
-            final wallDelta = nowTime - _smoothAnchorWallMs;
-            final smoothTimeMs = _smoothAnchorMs + wallDelta;
+            // 用 Ticker elapsed 插值计算当前平滑时间
+            final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+            final smoothTimeMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0;
             _playbackTimeMs.value = smoothTimeMs.clamp(0.0, _duration.inMilliseconds.toDouble());
 
             // 节流保存播放位置：时间或位移达到阈值时才写
@@ -746,7 +748,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           _position = _lastSeekPosition!;
           _playbackTimeMs.value = _position.inMilliseconds.toDouble();
           _smoothAnchorMs = _position.inMilliseconds.toDouble();
-          _smoothAnchorWallMs = nowTime;
+          _smoothAnchorElapsedUs = elapsed.inMicroseconds;
           _lastRawPlayerMs = _position.inMilliseconds;
           if (_duration.inMilliseconds > 0) {
             _progress = _position.inMilliseconds / _duration.inMilliseconds;

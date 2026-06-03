@@ -289,10 +289,11 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final int _positionSaveIntervalMs = 3000; // 位置保存最小间隔
   final int _positionSaveDeltaThresholdMs = 2000; // 位置保存位移阈值
   // 高频时间轴：提供给弹幕的独立时间源（毫秒）
-  // 使用壁钟插值实现亚毫秒精度，消除 player.position 整数ms导致的频闪
+  // 使用 Ticker elapsed 插值实现微秒精度，消除 player.position 整数ms导致的频闪
+  // Ticker.elapsed 与 vsync 精确同步，比 DateTime.now()（~1ms精度）更适合弹幕渲染
   final ValueNotifier<double> _playbackTimeMs = ValueNotifier<double>(0);
   double _smoothAnchorMs = 0.0; // 上次锚定的播放位置（ms）
-  int _smoothAnchorWallMs = 0; // 锚定时的壁钟时间（ms）
+  int _smoothAnchorElapsedUs = 0; // 锚定时的 Ticker elapsed（微秒）
   int _lastRawPlayerMs = -1; // 上次 player.position 原始值，用于检测变化
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
