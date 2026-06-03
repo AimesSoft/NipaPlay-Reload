@@ -65,13 +65,12 @@ android {
         externalNativeBuild {
             cmake {
                 arguments "-DNP_LIB_TYPE=SHARED"
-                cFlags "-DNIPAPLAY_NATIVE_BUILDING"
-                cppFlags "-std=c++20", "-fno-rtti", "-fvisibility=hidden"
+                // cFlags / cppFlags 已移除：-std=c++20, -fno-rtti, -fvisibility=hidden,
+                // -DNIPAPLAY_NATIVE_BUILDING 均已在 cpp_native/CMakeLists.txt 中设置，
+                // 此处重复指定会导致覆盖冲突且增加维护负担。
             }
         }
         
-        // 支持ARM和x86架构（包括模拟器）
-        // 注释掉 ndk abiFilters，避免与 splits 配置冲突
     }
 
     buildTypes {

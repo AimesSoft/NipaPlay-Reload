@@ -1,0 +1,32 @@
+# ──── Rust 架构优化配置 ────
+# 与 cpp_native CMakeLists.txt 的 -march=x86-64-v3 对齐
+# x86-64-v3 = AVX2 + BMI/BMI2 + FMA + LZCNT + MOVBE + POPCNT ≈ Haswell(2013)+
+# Rust 侧 fdsm (MSDF 生成)、nalgebra (线性代数)、image (像素处理)
+# 均为 SIMD 密集型，AVX2 + FMA 有显著收益。
+#
+# ARM64 各平台默认值已足够，不覆盖以避免冲突：
+#   Android NDK  → abiFilters 已控制，且 armv8.2-a 碎片化风险高
+#   Apple Clang  → -arch arm64 隐含 armv8.5-a (M1+)
+#   Linux GCC    → 单独处理（见下方 [target.aarch64-unknown-linux-gnu]）
+
+# Windows x64 (MSVC toolchain)
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-cpu=x86-64-v3"]
+
+# Linux x64 (GNU toolchain)
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=x86-64-v3"]
+
+# macOS x64 (Intel Mac, universal binary 中的 x86_64 切片)
+# Apple Clang 的 -arch x86_64 隐含 x86-64-v2 (SSE4.2+AVX)，
+# 但 Rust 侧可通过 target-cpu 提升至 v3。
+# 注意：universal binary 仅 macOS侧 Rust 需要，
+# macOS arm64 切片使用 Apple M1+ 默认值，无需 target-cpu。
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "target-cpu=x86-64-v3"]
+
+# Linux aarch64 (Docker arm64 构建、Asahi Linux 等)
+# armv8.2-a 覆盖 Cortex-A76/A78/X1+、Neoverse N1/N2、Apple M1+
+# Raspberry Pi 4 (Cortex-A72) 不支持，但 wgpu 渲染已排除此类设备
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=neoverse-n1"]

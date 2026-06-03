@@ -1,6 +1,9 @@
 #include <exception>
 #include <new>
+#include <cstddef>
+#include <cstring>
 #include <string>
+#include <string_view>
 
 #include "nipaplay_native/nipaplay_native.h"
 #include "nipaplay_native/types.h"
@@ -9,7 +12,7 @@
 #include "similarity_engine.h"
 
 // ──── 辅助：NpString 内部分配（C++ 内部函数，非 extern "C"） ────
-NpString np_string_alloc(const std::string& s);
+NpString np_string_alloc(std::string_view s);
 
 // ──── 辅助：捕获异常消息到 thread-local 缓冲区 ────
 // e.what() 指向的字符串在 catch 块返回后即被销毁，
@@ -54,7 +57,7 @@ NIPAPLAY_NATIVE_EXPORT NpHandle np_example_create(void) {
 }
 
 NIPAPLAY_NATIVE_EXPORT void np_example_destroy(NpHandle handle) {
-    if (handle) {
+    if (handle) [[likely]] {
         auto* obj = static_cast<nipaplay::native::ExampleCalculator*>(handle);
         delete obj;
     }
@@ -62,7 +65,7 @@ NIPAPLAY_NATIVE_EXPORT void np_example_destroy(NpHandle handle) {
 
 NIPAPLAY_NATIVE_EXPORT int32_t np_example_add(NpHandle handle, int32_t a, int32_t b) {
     try {
-        if (!handle) return 0;
+        if (!handle) [[unlikely]] return 0;
         auto* obj = static_cast<nipaplay::native::ExampleCalculator*>(handle);
         return obj->add(a, b);
     } catch (...) {
@@ -73,13 +76,13 @@ NIPAPLAY_NATIVE_EXPORT int32_t np_example_add(NpHandle handle, int32_t a, int32_
 NIPAPLAY_NATIVE_EXPORT NpResult np_example_process_text(
     NpHandle handle, const char* input, NpString* output) {
     try {
-        if (!handle || !input || !output) {
+        if (!handle || !input || !output) [[unlikely]] {
             return {NP_ERR_NULL_PTR, "null pointer argument"};
         }
         auto* obj = static_cast<nipaplay::native::ExampleCalculator*>(handle);
-        std::string result = obj->processText(std::string(input));
+        std::string result = obj->processText(input);
         *output = np_string_alloc(result);
-        if (!output->data) {
+        if (!output->data) [[unlikely]] {
             return {NP_ERR_OOM, "failed to allocate NpString"};
         }
         return {NP_OK, nullptr};
@@ -106,7 +109,7 @@ NIPAPLAY_NATIVE_EXPORT NpHandle np_layout_create(void) {
 }
 
 NIPAPLAY_NATIVE_EXPORT void np_layout_destroy(NpHandle handle) {
-    if (handle) {
+    if (handle) [[likely]] {
         auto* obj = static_cast<nipaplay::native::DanmakuLayoutEngine*>(handle);
         delete obj;
     }
@@ -123,13 +126,13 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_configure(
     double base_track_height)
 {
     try {
-        if (!handle) {
+        if (!handle) [[unlikely]] {
             return {NP_ERR_NULL_PTR, "null handle"};
         }
-        if (item_count > 0 && !items) {
+        if (item_count > 0 && !items) [[unlikely]] {
             return {NP_ERR_NULL_PTR, "null items with count > 0"};
         }
-        if (width <= 0 || height <= 0) {
+        if (width <= 0 || height <= 0) [[unlikely]] {
             return {NP_ERR_INVALID_ARG, "width/height must be positive"};
         }
 
@@ -172,37 +175,46 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_configure(
     }
 }
 
+// 编译期校验：LayoutResult 与 NpLayoutResult 字段布局一致，允许零拷贝直写
+static_assert(offsetof(nipaplay::native::LayoutResult, y_position) ==
+              offsetof(NpLayoutResult, y_position),
+              "LayoutResult::y_position offset mismatch with NpLayoutResult");
+static_assert(offsetof(nipaplay::native::LayoutResult, scroll_speed) ==
+              offsetof(NpLayoutResult, scroll_speed),
+              "LayoutResult::scroll_speed offset mismatch with NpLayoutResult");
+static_assert(offsetof(nipaplay::native::LayoutResult, item_index) ==
+              offsetof(NpLayoutResult, item_index),
+              "LayoutResult::item_index offset mismatch with NpLayoutResult");
+static_assert(offsetof(nipaplay::native::LayoutResult, track_index) ==
+              offsetof(NpLayoutResult, track_index),
+              "LayoutResult::track_index offset mismatch with NpLayoutResult");
+static_assert(sizeof(nipaplay::native::LayoutResult) == sizeof(NpLayoutResult),
+              "LayoutResult size mismatch with NpLayoutResult");
+
 NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
     NpHandle handle, double current_time,
     NpLayoutResult* output_items, int32_t output_capacity,
     int32_t* output_count)
 {
     try {
-        if (!handle) {
+        if (!handle) [[unlikely]] {
             return {NP_ERR_NULL_PTR, "null handle"};
         }
-        if (!output_items || !output_count) {
+        if (!output_items || !output_count) [[unlikely]] {
             return {NP_ERR_NULL_PTR, "null output pointer"};
         }
-        if (output_capacity <= 0) {
+        if (output_capacity <= 0) [[unlikely]] {
             *output_count = 0;
             return {NP_OK, nullptr};
         }
 
         auto* engine = static_cast<nipaplay::native::DanmakuLayoutEngine*>(handle);
 
-        // 使用 C++ 内部 LayoutResult 中间缓冲区（字段顺序与 NpLayoutResult 不同）
-        std::vector<nipaplay::native::LayoutResult> cppResults(static_cast<size_t>(output_capacity));
-        const int32_t count = engine->frame(current_time, cppResults.data(), output_capacity);
+        // LayoutResult 与 NpLayoutResult 布局完全一致（由 static_assert 保证），
+        // 直接写入 Dart 预分配缓冲区，消除每帧堆分配 + 逐字段拷贝
+        auto* results = reinterpret_cast<nipaplay::native::LayoutResult*>(output_items);
+        const int32_t count = engine->frame(current_time, results, output_capacity);
 
-        // 转换：LayoutResult → NpLayoutResult（字段顺序不同，必须逐个映射）
-        for (int32_t i = 0; i < count; i++) {
-            auto si = static_cast<size_t>(i);
-            output_items[i].y_position   = cppResults[si].y_position;
-            output_items[i].scroll_speed = cppResults[si].scroll_speed;
-            output_items[i].item_index   = cppResults[si].item_index;
-            output_items[i].track_index = cppResults[si].track_index;
-        }
         *output_count = count;
 
         return {NP_OK, nullptr};
@@ -221,13 +233,13 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_sim_check_batch(
     const char* items_json, const char* config_json, NpString* output)
 {
     try {
-        if (!items_json || !config_json || !output) {
+        if (!items_json || !config_json || !output) [[unlikely]] {
             return {NP_ERR_NULL_PTR, "null pointer argument"};
         }
         std::string result = nipaplay::native::similarity_check_batch_json(
-            std::string(items_json), std::string(config_json));
+            items_json, config_json);
         *output = np_string_alloc(result);
-        if (!output->data) {
+        if (!output->data) [[unlikely]] {
             return {NP_ERR_OOM, "failed to allocate NpString"};
         }
         return {NP_OK, nullptr};
@@ -244,9 +256,9 @@ NIPAPLAY_NATIVE_EXPORT double np_sim_pair_similarity(
     const char* text_a, const char* text_b, int32_t use_pinyin)
 {
     try {
-        if (!text_a || !text_b) return 0.0;
+        if (!text_a || !text_b) [[unlikely]] return 0.0;
         return nipaplay::native::danmaku_pair_similarity(
-            std::string(text_a), std::string(text_b), use_pinyin != 0);
+            text_a, text_b, use_pinyin != 0);
     } catch (...) {
         return 0.0;
     }

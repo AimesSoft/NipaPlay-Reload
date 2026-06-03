@@ -151,24 +151,20 @@ class SimilarityEngine {
         return SimilarityResult.empty();
       }
 
-      try {
-        final resultStr = output.data.cast<Utf8>().toDartString();
-        // 诊断：输出 C++ 返回的 JSON 前 300 字符
-        debugPrint('[SimEngine] resultJson[:300]=${resultStr.substring(0, resultStr.length > 300 ? 300 : resultStr.length)}');
-        final decoded = json.decode(resultStr);
-        if (decoded is Map<String, dynamic>) {
-          return SimilarityResult.fromJson(decoded);
-        }
-        debugPrint('[SimEngine] ❌ decoded is not Map<String, dynamic>: ${decoded.runtimeType}');
-        return SimilarityResult.empty();
-      } finally {
-        // 用 np_string_free 释放 C++ 分配的字符串
-        NativeBindings.npStringFree(outputPtr);
+      final resultStr = output.data.cast<Utf8>().toDartString();
+      // 诊断：输出 C++ 返回的 JSON 前 300 字符
+      debugPrint('[SimEngine] resultJson[:300]=${resultStr.substring(0, resultStr.length > 300 ? 300 : resultStr.length)}');
+      final decoded = json.decode(resultStr);
+      if (decoded is Map<String, dynamic>) {
+        return SimilarityResult.fromJson(decoded);
       }
+      debugPrint('[SimEngine] ❌ decoded is not Map<String, dynamic>: ${decoded.runtimeType}');
+      return SimilarityResult.empty();
     } catch (e, st) {
       debugPrint('[SimEngine] ❌ Exception: $e\n$st');
       return SimilarityResult.empty();
     } finally {
+      NativeBindings.npStringFree(outputPtr);
       malloc.free(itemsPtr);
       malloc.free(configPtr);
       calloc.free(outputPtr);

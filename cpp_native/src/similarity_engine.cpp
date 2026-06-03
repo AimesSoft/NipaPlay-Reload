@@ -1,11 +1,9 @@
 #include "similarity_engine.h"
-#include "nipaplay_native/nipaplay_native.h"
 
-#include <cmath>
+#include <climits>
 #include <cstdio>
-#include <new>
-#include <stdexcept>
-#include <functional>
+#include <string_view>
+#include <type_traits>
 
 // ══════════════════════════════════════════════
 // ──── SimilarityEngine 构造函数 ────
@@ -25,9 +23,12 @@ SimilarityEngine::SimilarityEngine()
 // ──── UTF-8 → UTF-16 转换 ────
 // ══════════════════════════════════════════════
 
-static std::vector<sim_ushort> utf8_to_utf16(const std::string& text) {
+static std::vector<sim_ushort> utf8_to_utf16(std::string_view text) {
     std::vector<sim_ushort> result;
     result.reserve(text.size());
+    static_assert(CHAR_BIT == 8, "UTF-8 byte processing requires 8-bit bytes");
+    static_assert(std::is_same_v<std::string_view::value_type, char>,
+                  "text.data() must yield const char* for reinterpret_cast to const uint8_t*");
     const uint8_t* s = reinterpret_cast<const uint8_t*>(text.data());
     const uint8_t* end = s + text.size();
 
@@ -68,11 +69,11 @@ static std::vector<sim_ushort> utf8_to_utf16(const std::string& text) {
 
 // ──── compute_score ────
 // 从 Rust similarity.rs 的 compute_score 移植
-static double compute_score(sim_uint reason_code, int dist, size_t text_len) {
+constexpr double compute_score(sim_uint reason_code, int dist, size_t text_len) {
     switch (reason_code) {
     case 0: return 1.0;                                              // identical
     case 1: case 2:                                                  // edit/pinyin distance
-        if (text_len == 0) return 0.0;
+        if (text_len == 0) [[unlikely]] return 0.0;
         return 1.0 - (dist / (std::max(static_cast<double>(text_len) * 2.0, 1.0)));
     case 3: return dist / 100.0;                                     // cosine similarity
     default: return 0.0;
@@ -80,7 +81,7 @@ static double compute_score(sim_uint reason_code, int dist, size_t text_len) {
 }
 
 // ──── 饱和减法 ────
-static sim_uint saturating_sub(sim_uint a, sim_uint b) {
+constexpr sim_uint saturating_sub(sim_uint a, sim_uint b) {
     return a >= b ? a - b : 0;
 }
 
@@ -91,34 +92,35 @@ static void update_groups(
     std::vector<std::vector<int>>& groups,
     int a, int b)
 {
-    auto it_a = group_map.find(a);
-    auto it_b = group_map.find(b);
-    bool has_a = it_a != group_map.end();
-    bool has_b = it_b != group_map.end();
+    // C++17 if-with-initializer — 迭代器作用域限制在 if/else 内
+    const auto it_a = group_map.find(a);
+    const auto it_b = group_map.find(b);
+    const bool has_a = it_a != group_map.end();
+    const bool has_b = it_b != group_map.end();
 
     if (has_a && has_b && it_a->second == it_b->second) {
         // Same group
     } else if (has_a && has_b) {
-        int ra = it_a->second;
-        int rb = it_b->second;
+        const int ra = it_a->second;
+        const int rb = it_b->second;
         auto merged = std::move(groups[static_cast<size_t>(ra)]);
-        auto other = std::move(groups[static_cast<size_t>(rb)]);
+        const auto other = std::move(groups[static_cast<size_t>(rb)]);
         merged.insert(merged.end(), other.begin(), other.end());
-        for (int idx : merged) {
+        for (const int idx : merged) {
             group_map[idx] = ra;
         }
         groups[static_cast<size_t>(ra)] = std::move(merged);
         groups[static_cast<size_t>(rb)].clear(); // leave empty slot
     } else if (has_a) {
-        int ra = it_a->second;
+        const int ra = it_a->second;
         groups[static_cast<size_t>(ra)].push_back(b);
         group_map[b] = ra;
     } else if (has_b) {
-        int rb = it_b->second;
+        const int rb = it_b->second;
         groups[static_cast<size_t>(rb)].push_back(a);
         group_map[a] = rb;
     } else {
-        int group_idx = static_cast<int>(groups.size());
+        const int group_idx = static_cast<int>(groups.size());
         groups.push_back({b, a});
         group_map[a] = group_idx;
         group_map[b] = group_idx;
@@ -141,7 +143,7 @@ SimResult danmaku_similarity_check(
     // switching to a streaming approach to avoid pathological performance.
 
     auto engine = std::make_unique<SimilarityEngine>();
-    if (!engine) return result;
+    if (!engine) [[unlikely]] return result;
 
     constexpr size_t MAX_STRING_LEN = 16005;
     auto str_buf = std::vector<sim_ushort>(MAX_STRING_LEN + 4, 0);
@@ -244,12 +246,12 @@ SimResult danmaku_similarity_check(
 // ══════════════════════════════════════════════
 
 double danmaku_pair_similarity(
-    const std::string& text_a,
-    const std::string& text_b,
+    std::string_view text_a,
+    std::string_view text_b,
     bool use_pinyin)
 {
     auto engine = std::make_unique<SimilarityEngine>();
-    if (!engine) return 0.0;
+    if (!engine) [[unlikely]] return 0.0;
 
     constexpr size_t MAX_STRING_LEN = 16005;
     auto str_buf = std::vector<sim_ushort>(MAX_STRING_LEN + 4, 0);
@@ -265,7 +267,7 @@ double danmaku_pair_similarity(
     size_t copy_len = std::min(utf16_0.size(), MAX_STRING_LEN - 1);
     std::copy(utf16_0.begin(), utf16_0.begin() + static_cast<std::ptrdiff_t>(copy_len), str_buf.begin());
     str_buf[copy_len] = 0;
-    engine->check_similar(0, 0);
+    (void)engine->check_similar(0, 0);
 
     // 送入第二条并获取结果
     auto utf16_1 = utf8_to_utf16(text_b);
@@ -425,7 +427,7 @@ static void skip_value(const char*& p) {
 }
 
 // JSON 字符串转义
-static std::string escape_json(const std::string& s) {
+static std::string escape_json(std::string_view s) {
     std::string result;
     result.reserve(s.size() + 4);
     for (char c : s) {
@@ -569,17 +571,20 @@ static std::string result_to_json(const SimResult& result) {
 }
 
 std::string similarity_check_batch_json(
-    const std::string& items_json,
-    const std::string& config_json)
+    std::string_view items_json,
+    std::string_view config_json)
 {
     try {
-        auto items = parse_items_json(items_json);
-        auto config = parse_config_json(config_json);
+        // 内部解析器需要 null-terminated string，string_view 不保证
+        const std::string items_str(items_json);
+        const std::string config_str(config_json);
+        auto items = parse_items_json(items_str);
+        auto config = parse_config_json(config_str);
 
 #ifndef NDEBUG
         // 诊断：输出解析后的 items 数量和配置
         fprintf(stderr, "[SIM-CPP] parse_items_json: json_len=%zu items=%zu\n",
-                items_json.size(), items.size());
+                items_str.size(), items.size());
         if (!items.empty()) {
             fprintf(stderr, "[SIM-CPP] first_item: text='%s' mode=%d time=%.1f\n",
                     items[0].text.substr(0, 30).c_str(), items[0].mode, items[0].time_seconds);
