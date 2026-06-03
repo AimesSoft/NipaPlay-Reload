@@ -1,8 +1,11 @@
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/l10n/l10n.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
 
 import 'package:nipaplay/utils/cupertino_settings_colors.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
+import 'package:provider/provider.dart';
 
 import '../widgets/appearance_setting_tile.dart';
 import '../widgets/language_setting_tile.dart';
@@ -23,6 +26,8 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<PluginService>();
+    final showDownloaderSettings = globals.isDownloaderSupportedPlatform;
     final textStyle = CupertinoTheme.of(context).textTheme.textStyle.copyWith(
           fontSize: 13,
           color: CupertinoDynamicColor.resolve(
@@ -43,20 +48,20 @@ class CupertinoSettingsGeneralSection extends StatelessWidget {
         CupertinoSettingsGroupCard(
           addDividers: true,
           backgroundColor: resolveSettingsSectionBackground(context),
-          children: const [
-            CupertinoAppearanceSettingTile(),
-            CupertinoLanguageSettingTile(),
-            CupertinoUpdateCheckSettingTile(),
-            CupertinoPlayerSettingTile(),
-            CupertinoDanmakuSettingTile(),
-            CupertinoExternalPlayerSettingTile(),
-            CupertinoNetworkSettingTile(),
-            CupertinoRemoteControllerSettingTile(),
-            CupertinoStorageSettingTile(),
-            CupertinoDownloaderSettingTile(),
-            CupertinoMediaServerSettingTile(),
-            CupertinoPluginSettingTile(),
-            CupertinoDeveloperSettingTile(),
+          children: [
+            const CupertinoAppearanceSettingTile(),
+            const CupertinoLanguageSettingTile(),
+            const CupertinoUpdateCheckSettingTile(),
+            const CupertinoPlayerSettingTile(),
+            const CupertinoDanmakuSettingTile(),
+            const CupertinoExternalPlayerSettingTile(),
+            const CupertinoNetworkSettingTile(),
+            const CupertinoRemoteControllerSettingTile(),
+            const CupertinoStorageSettingTile(),
+            if (showDownloaderSettings) const CupertinoDownloaderSettingTile(),
+            const CupertinoMediaServerSettingTile(),
+            const CupertinoPluginSettingTile(),
+            const CupertinoDeveloperSettingTile(),
           ],
         ),
       ],

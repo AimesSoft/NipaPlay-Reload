@@ -12,8 +12,6 @@
   <string>6.0</string>
   <key>CFBundleName</key>
   <string>App</string>
-  <key>MinimumOSVersion</key>
-  <string>13.0</string>
   <key>CFBundlePackageType</key>
   <string>FMWK</string>
   <key>CFBundleShortVersionString</key>

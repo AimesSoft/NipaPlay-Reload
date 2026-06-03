@@ -252,6 +252,8 @@ dependency_overrides:
     path: third_party/smb_connect
   kmbal_ionicons:
     path: third_party/kmbal_ionicons
+  volume_controller:
+    path: third_party/volume_controller
 
 
 
