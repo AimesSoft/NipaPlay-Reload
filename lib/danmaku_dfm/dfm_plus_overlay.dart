@@ -72,8 +72,15 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   bool _updateInFlight = false;
   bool _updateQueued = false;
 
-  int _lastQuantizedTick = -1 << 31;
+  double _lastTimeSeconds = -1.0;
   bool _forceLayout = false;
+  bool _configurePending = false;
+
+  // Optimized texture update state: avoid redundant per-frame async calls
+  // when texture ID is already stable. Only re-acquire when size changes.
+  int _lastTextureWidth = 0;
+  int _lastTextureHeight = 0;
+  String _lastTextureSurfaceId = '';
 
   int? _textureId;
   bool _textureReady = false;
@@ -87,6 +94,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   void initState() {
     super.initState();
     _surfaceId = 'dfm-${identityHashCode(this)}';
+    _lastTextureSurfaceId = _surfaceId;
   }
 
   @override
@@ -202,6 +210,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     Future.microtask(_runUpdateLoop);
   }
 
+  /// Update loop: layout is now synchronous (Dart-side), so the per-frame
+  /// position computation has zero async overhead. Only configure() and
+  /// texture upload remain async.
   Future<void> _runUpdateLoop() async {
     _updateScheduled = false;
     if (_updateInFlight) {
@@ -219,34 +230,38 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
 
         final currentTime =
             widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
-        final quantizedTick = (currentTime * 60.0).round().toInt();
 
-        if (!_forceLayout && quantizedTick == _lastQuantizedTick) {
+        if (!_forceLayout && (currentTime - _lastTimeSeconds).abs() < 0.0001) {
           continue;
         }
 
-        _lastQuantizedTick = quantizedTick;
-        _forceLayout = false;
+        _lastTimeSeconds = currentTime;
 
-        await _bridge.configure(
-          danmakuList: widget.danmakuList,
-          danmakuListVersion: widget.danmakuListVersion,
-          size: _layoutSize,
-          fontSize: widget.fontSize,
-          displayArea: widget.displayArea,
-          scrollDurationSeconds: widget.scrollDurationSeconds,
-          allowStacking: widget.allowStacking,
-          mergeDanmaku: widget.mergeDanmaku,
-          maxQuantity: widget.maxQuantity,
-          maxLinesPerType: widget.maxLinesPerType,
-          trackGapRatio: widget.trackGapRatio,
-          outlineWidth: widget.outlineWidth,
-          customFontFamily: widget.customFontFamily,
-          customFontFilePath: widget.customFontFilePath,
-          blockWords: widget.blockWords,
-        );
+        // If config changed, run async configure first
+        if (_forceLayout || _configurePending) {
+          _forceLayout = false;
+          _configurePending = false;
+          await _bridge.configure(
+            danmakuList: widget.danmakuList,
+            danmakuListVersion: widget.danmakuListVersion,
+            size: _layoutSize,
+            fontSize: widget.fontSize,
+            displayArea: widget.displayArea,
+            scrollDurationSeconds: widget.scrollDurationSeconds,
+            allowStacking: widget.allowStacking,
+            mergeDanmaku: widget.mergeDanmaku,
+            maxQuantity: widget.maxQuantity,
+            maxLinesPerType: widget.maxLinesPerType,
+            trackGapRatio: widget.trackGapRatio,
+            outlineWidth: widget.outlineWidth,
+            customFontFamily: widget.customFontFamily,
+            customFontFilePath: widget.customFontFilePath,
+            blockWords: widget.blockWords,
+          );
+        }
 
-        final frame = await _bridge.layout(currentTime);
+        // Synchronous layout — no await, no microtask delay
+        final frame = _bridge.layout(currentTime);
 
         await _tryUpdateTexture(frame);
         widget.onLayoutCalculated?.call(frame);
@@ -279,41 +294,53 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     final int pixelHeight =
         (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
 
-    final info = await _textureBridge.ensureTexture(
-      surfaceId: _surfaceId,
-      width: pixelWidth,
-      height: pixelHeight,
-    );
+    // Optimized: only re-acquire texture if size changed (avoids redundant
+    // ensureTexture await on every frame when texture ID is already stable)
+    bool needsNewTexture = _textureId == null ||
+        pixelWidth != _lastTextureWidth ||
+        pixelHeight != _lastTextureHeight ||
+        _surfaceId != _lastTextureSurfaceId;
 
-    if (info == null) {
-      if (_textureReady || _textureId != null) {
+    if (needsNewTexture) {
+      _lastTextureWidth = pixelWidth;
+      _lastTextureHeight = pixelHeight;
+      _lastTextureSurfaceId = _surfaceId;
+
+      final info = await _textureBridge.ensureTexture(
+        surfaceId: _surfaceId,
+        width: pixelWidth,
+        height: pixelHeight,
+      );
+
+      if (info == null) {
+        if (_textureReady || _textureId != null) {
+          setState(() {
+            _textureReady = false;
+            _textureId = null;
+          });
+        }
+        return false;
+      }
+
+      if (!mounted) {
+        return false;
+      }
+
+      if (_textureId != info.textureId || !_textureReady) {
         setState(() {
-          _textureReady = false;
-          _textureId = null;
+          _textureId = info.textureId;
+          _textureReady = true;
         });
       }
-      return false;
+
+      if (info.isNewEngine) {
+        await _textureBridge.resetScene();
+        _emojiPipeline.markAtlasDirty();
+      }
     }
 
-    if (!mounted) {
-      return false;
-    }
-
-    if (_textureId != info.textureId || !_textureReady) {
-      setState(() {
-        _textureId = info.textureId;
-        _textureReady = true;
-      });
-    }
-
-    if (info.isNewEngine) {
-      await _textureBridge.resetScene();
-      _emojiPipeline.markAtlasDirty();
-    }
-
-    final widthScale = info.width > 0 ? info.width / _layoutSize.width : 1.0;
-    final heightScale =
-        info.height > 0 ? info.height / _layoutSize.height : 1.0;
+    final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
+    final heightScale = pixelHeight > 0 ? pixelHeight / _layoutSize.height : 1.0;
     final fontScale =
         ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
 

@@ -6,8 +6,6 @@
 /// Output format is compatible with Next2's FrameItemPayload (JSON),
 /// allowing direct reuse of Next2's GPU rendering pipeline.
 use rustc_hash::FxHashMap;
-use std::collections::VecDeque;
-use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -65,7 +63,6 @@ pub struct DfmPlusPreparedLayout {
     pub items: Vec<DfmPlusPreparedItem>,
     pub item_times: Vec<f64>,
     pub track_count: i32,
-    pub cache_key: u64,
 }
 
 impl DfmPlusPreparedLayout {
@@ -129,50 +126,6 @@ pub struct DfmPlusFrameItem {
 
 const STATIC_DURATION_MS: i64 = 3800;
 
-const FRAME_CACHE_CAPACITY: usize = 256;
-
-struct FrameCache {
-    entries: FxHashMap<u64, DfmPlusFrameLayout>,
-    insertion_order: VecDeque<u64>,
-}
-
-impl FrameCache {
-    fn new() -> Self {
-        Self {
-            entries: FxHashMap::default(),
-            insertion_order: VecDeque::with_capacity(FRAME_CACHE_CAPACITY),
-        }
-    }
-
-    fn get(&mut self, key: u64) -> Option<DfmPlusFrameLayout> {
-        self.entries.get(&key).cloned()
-    }
-
-    fn insert(&mut self, key: u64, value: DfmPlusFrameLayout) {
-        if self.entries.insert(key, value).is_none() {
-            self.insertion_order.push_back(key);
-        }
-        while self.entries.len() > FRAME_CACHE_CAPACITY {
-            if let Some(evict_key) = self.insertion_order.pop_front() {
-                self.entries.remove(&evict_key);
-            } else {
-                break;
-            }
-        }
-    }
-}
-
-static FRAME_CACHE: OnceLock<Mutex<FrameCache>> = OnceLock::new();
-
-fn with_frame_cache<F, R>(f: F) -> R
-where
-    F: FnOnce(&mut FrameCache) -> R,
-{
-    let cache = FRAME_CACHE.get_or_init(|| Mutex::new(FrameCache::new()));
-    let mut guard = cache.lock().unwrap();
-    f(&mut *guard)
-}
-
 static LAYOUT_STORE: OnceLock<Mutex<FxHashMap<u64, Arc<DfmPlusPreparedLayout>>>> = OnceLock::new();
 static NEXT_LAYOUT_HANDLE: AtomicU64 = AtomicU64::new(1);
 
@@ -189,14 +142,6 @@ fn fxhash_str(s: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = rustc_hash::FxHasher::default();
     s.hash(&mut hasher);
-    hasher.finish()
-}
-
-fn calc_frame_cache_key(layout: &DfmPlusPreparedLayout, current_time_seconds: f64) -> u64 {
-    let quantized_tick = (current_time_seconds * 60.0).round() as i64;
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    layout.cache_key.hash(&mut hasher);
-    quantized_tick.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -408,23 +353,6 @@ pub fn dfm_plus_prepare_layout(
     });
     let sorted_times: Vec<f64> = prepared_items.iter().map(|i| i.time_seconds).collect();
 
-    let cache_key = {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        (width as f64).to_bits().hash(&mut hasher);
-        (height as f64).to_bits().hash(&mut hasher);
-        font_size.to_bits().hash(&mut hasher);
-        display_area.to_bits().hash(&mut hasher);
-        scroll_dur_secs.to_bits().hash(&mut hasher);
-        let visible_count = items.iter().filter(|i| !i.is_filtered).count();
-        visible_count.hash(&mut hasher);
-        for item in items.iter().filter(|i| !i.is_filtered).take(64) {
-            item.time_ms.hash(&mut hasher);
-            item.paint_width.to_bits().hash(&mut hasher);
-            item.danmaku_type.hash(&mut hasher);
-        }
-        hasher.finish()
-    };
-
     Ok(DfmPlusPreparedLayout {
         handle: 0,
         width: width as f64,
@@ -434,7 +362,6 @@ pub fn dfm_plus_prepare_layout(
         items: prepared_items,
         item_times: sorted_times,
         track_count: ((height * display_area) / (font_size * 1.2 * 1.25)).max(1.0) as i32,
-        cache_key,
     }
     .with_handle())
 }
@@ -451,14 +378,7 @@ pub fn dfm_plus_layout_frame(request: DfmPlusFrameRequest) -> DfmPlusFrameLayout
         None => return DfmPlusFrameLayout { items: vec![] },
     };
 
-    let frame_key = calc_frame_cache_key(&layout, request.current_time_seconds);
-    let cached = with_frame_cache(|cache| cache.get(frame_key));
-    if let Some(cached) = cached {
-        return cached;
-    }
-    let result = build_dfm_plus_frame(&layout, request.current_time_seconds);
-    with_frame_cache(|cache| cache.insert(frame_key, result.clone()));
-    result
+    build_dfm_plus_frame(&layout, request.current_time_seconds)
 }
 
 pub fn dfm_plus_drop_layout(handle: u64) {

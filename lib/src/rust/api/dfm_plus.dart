@@ -6,8 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `build_dfm_plus_frame`, `calc_frame_cache_key`, `fxhash_str`, `get`, `insert`, `lower_bound`, `new`, `resolve_outline_px`, `upper_bound`, `with_frame_cache`, `with_handle`, `with_layout_store`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FrameCache`
+// These functions are ignored because they are not marked as `pub`: `build_dfm_plus_frame`, `fxhash_str`, `lower_bound`, `resolve_outline_px`, `upper_bound`, `with_handle`, `with_layout_store`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One-time layout preparation.
@@ -401,7 +400,6 @@ class DfmPlusPreparedLayout {
   final List<DfmPlusPreparedItem> items;
   final Float64List itemTimes;
   final int trackCount;
-  final BigInt cacheKey;
 
   const DfmPlusPreparedLayout({
     required this.handle,
@@ -412,7 +410,6 @@ class DfmPlusPreparedLayout {
     required this.items,
     required this.itemTimes,
     required this.trackCount,
-    required this.cacheKey,
   });
 
   @override
@@ -424,8 +421,7 @@ class DfmPlusPreparedLayout {
       staticDurationSeconds.hashCode ^
       items.hashCode ^
       itemTimes.hashCode ^
-      trackCount.hashCode ^
-      cacheKey.hashCode;
+      trackCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -439,8 +435,7 @@ class DfmPlusPreparedLayout {
           staticDurationSeconds == other.staticDurationSeconds &&
           items == other.items &&
           itemTimes == other.itemTimes &&
-          trackCount == other.trackCount &&
-          cacheKey == other.cacheKey;
+          trackCount == other.trackCount;
 }
 
 class DfmPlusRawDanmakuItem {

@@ -369,6 +369,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _progress = 0.0;
       _bufferedPositionMs = 0;
       _playbackTimeMs.value = 0;
+      _lastRawPlayerMs = -1; // 重置平滑时钟，下次 Ticker 重新对齐
+      _seekTargetMs = null;
       _notifyListeners();
       player.seek(position: 0);
       if (_status != PlayerStatus.playing) {
@@ -580,8 +582,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     _progress = 0.0;
     _duration = Duration.zero;
     _bufferedPositionMs = 0;
-    _playbackTimeMs.value = 0;
-    _lastPlaybackStartMs = 0;
+      _playbackTimeMs.value = 0;
+      _lastRawPlayerMs = -1; // 重置平滑时钟
+      _seekTargetMs = null;
+      _lastPlaybackStartMs = 0;
     if (!_isErrorStopping) {
       // <<< MODIFIED HERE
       _error = null;
@@ -664,6 +668,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _position = clampedPosition;
       // 同步高频时间轴，确保弹幕立即跳转
       _playbackTimeMs.value = _position.inMilliseconds.toDouble();
+      // 锚定到 seek 目标位置，避免 player.position 延迟导致弹幕闪回
+      _smoothAnchorMs = _position.inMilliseconds.toDouble();
+      _smoothAnchorElapsedUs = _lastElapsedUs;
+      _seekTargetMs = _position.inMilliseconds.toDouble();
       if (_duration.inMilliseconds > 0) {
         _progress = clampedPosition.inMilliseconds / _duration.inMilliseconds;
       }

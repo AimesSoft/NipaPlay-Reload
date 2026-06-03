@@ -504,6 +504,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     _lastUiNotifyMs = _lastTickTime;
     _lastSaveTimeMs = _lastTickTime;
     _lastSavedPositionMs = _position.inMilliseconds;
+    // 重置平滑时钟锚点，下次 Ticker 回调时重新对齐
+    _lastRawPlayerMs = -1;
 
     // 🔥 关键优化：使用Ticker代替Timer.periodic
     // Ticker会与显示刷新率同步，更精确地控制帧率
@@ -554,8 +556,69 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 : (_duration.inMilliseconds > 0
                     ? bufferedMs.clamp(0, _duration.inMilliseconds).toInt()
                     : bufferedMs);
-            // 高频时间轴：每帧更新弹幕时间
-            _playbackTimeMs.value = _position.inMilliseconds.toDouble();
+            // 高频时间轴：每帧更新弹幕时间（Ticker elapsed 插值，微秒精度）
+            // player.position 返回整数 ms，直接使用会导致 16/17ms 交替增量，
+            // 造成滚动弹幕每帧约 1px 的位置抖动（频闪）。
+            // 解决方案：以 player.position 为锚点，用 Ticker.elapsed（微秒精度、
+            // 与 vsync 精确同步）在锚点间线性插值，获得均匀的亚毫秒推进；
+            // 漂移过大时（seek/暂停恢复）立即对齐。
+            final currentElapsedUs = elapsed.inMicroseconds;
+            _lastElapsedUs = currentElapsedUs;
+            final playerMs = playerPosition.toDouble();
+
+            // seek 保护：player.position 更新有延迟，在它追上 seekTarget 之前
+            // 保持锚定在 seek 目标位置，避免弹幕闪回旧位置
+            if (_seekTargetMs != null) {
+              if ((playerMs - _seekTargetMs!).abs() < 100.0) {
+                // player.position 已追上 seek 目标，恢复正常插值
+                _seekTargetMs = null;
+                _smoothAnchorMs = playerMs;
+                _smoothAnchorElapsedUs = currentElapsedUs;
+                _lastRawPlayerMs = playerPosition;
+              } else {
+                // 还在等待 player.position 追上，从 seekTarget 插值推进
+                final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+                _playbackTimeMs.value = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate)
+                    .clamp(0.0, _duration.inMilliseconds.toDouble());
+              }
+            } else if (_lastRawPlayerMs < 0) {
+              // 首帧或重置后：直接锚定
+              _smoothAnchorMs = playerMs;
+              _smoothAnchorElapsedUs = currentElapsedUs;
+              _lastRawPlayerMs = playerPosition;
+              _playbackTimeMs.value = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+            } else {
+              // 正常播放：检测锚点是否过期（seek/暂停恢复后第一帧）
+              final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+              if (elapsedDeltaUs > 50000) {
+                // 锚点距今超过 50ms，说明经历了 seek/暂停等中断，
+                // 重新锚定到当前 player.position，避免插值跳变
+                _smoothAnchorMs = playerMs;
+                _smoothAnchorElapsedUs = currentElapsedUs;
+                _lastRawPlayerMs = playerPosition;
+                _playbackTimeMs.value = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+              } else if (playerPosition != _lastRawPlayerMs) {
+                // player.position 更新了：检查平滑时钟与实际位置的漂移
+                final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate;
+                final drift = smoothMs - playerMs;
+                if (drift.abs() > 30.0) {
+                  // 大跳变：立即对齐
+                  _smoothAnchorMs = playerMs;
+                } else {
+                  // 小漂移：渐进修正（每帧修正 5%），避免突变
+                  _smoothAnchorMs = smoothMs - drift * 0.05;
+                }
+                _smoothAnchorElapsedUs = currentElapsedUs;
+                _lastRawPlayerMs = playerPosition;
+                final newDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+                _playbackTimeMs.value = (_smoothAnchorMs + newDeltaUs / 1000.0 * _playbackRate)
+                    .clamp(0.0, _duration.inMilliseconds.toDouble());
+              } else {
+                // player.position 未变，正常插值推进
+                _playbackTimeMs.value = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate)
+                    .clamp(0.0, _duration.inMilliseconds.toDouble());
+              }
+            }
 
             // 节流保存播放位置：时间或位移达到阈值时才写
             if (_currentVideoPath != null) {
@@ -712,9 +775,13 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           }
         } else if (_status == PlayerStatus.paused &&
             _lastSeekPosition != null) {
-          // 暂停状态：使用最后一次seek的位置
+          // 暂停状态：使用最后一次seek的位置，同时重置平滑时钟锚点
           _position = _lastSeekPosition!;
           _playbackTimeMs.value = _position.inMilliseconds.toDouble();
+          _smoothAnchorMs = _position.inMilliseconds.toDouble();
+          _smoothAnchorElapsedUs = _lastElapsedUs;
+          _lastRawPlayerMs = _position.inMilliseconds;
+          _seekTargetMs = null;
           if (_duration.inMilliseconds > 0) {
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
             final bufferedMs = player.bufferedPosition;
