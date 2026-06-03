@@ -17,6 +17,7 @@ import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/scan_service.dart';

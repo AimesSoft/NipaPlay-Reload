@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 
 /// Bangumi API服务
 ///
@@ -15,11 +16,24 @@ import 'package:nipaplay/services/dandanplay_service.dart';
 ///
 /// 遵循DandanplayService的设计模式，使用静态方法
 class BangumiApiService {
-  static const String _baseUrl = 'https://api.bgm.tv';
+  static const String _defaultBaseUrl = 'https://api.bgm.tv';
+  static const String _defaultNextBaseUrl = 'https://next.bgm.tv';
   static const String _userAgent = 'NipaPlay/1.0';
   static const String _tokenKey = 'bangumi_access_token';
   static const String _userInfoKey = 'bangumi_user_info';
   static const String _isLoggedInKey = 'bangumi_logged_in';
+
+  static Future<String> getBaseUrl() async {
+    return await NetworkSettings.getBangumiServer();
+  }
+
+  static Future<String> getNextBaseUrl() async {
+    final customServer = await NetworkSettings.getBangumiServer();
+    if (customServer != _defaultBaseUrl) {
+      return customServer;
+    }
+    return _defaultNextBaseUrl;
+  }
 
   static bool _initialized = false;
   static String? _accessToken;
@@ -173,8 +187,9 @@ class BangumiApiService {
     if (_accessToken == null) return false;
 
     try {
+      final baseUrl = await getBaseUrl();
       final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse('$_baseUrl/v0/me')),
+        WebRemoteAccessService.proxyUri(Uri.parse('$baseUrl/v0/me')),
         headers: {
           'Authorization': 'Bearer $_accessToken',
           'User-Agent': _userAgent,
@@ -210,8 +225,9 @@ class BangumiApiService {
   static Future<Map<String, dynamic>> saveAccessToken(String token) async {
     try {
       // 验证Token有效性
+      final baseUrl = await getBaseUrl();
       final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse('$_baseUrl/v0/me')),
+        WebRemoteAccessService.proxyUri(Uri.parse('$baseUrl/v0/me')),
         headers: {
           'Authorization': 'Bearer $token',
           'User-Agent': _userAgent,
@@ -315,7 +331,8 @@ class BangumiApiService {
     }
 
     try {
-      Uri targetUri = Uri.parse('$_baseUrl$path');
+      final baseUrl = await getBaseUrl();
+      Uri targetUri = Uri.parse('$baseUrl$path');
       if (queryParams != null && queryParams.isNotEmpty) {
         targetUri = targetUri.replace(queryParameters: queryParams);
       }
@@ -751,8 +768,9 @@ class BangumiApiService {
     Duration timeout = const Duration(seconds: 4),
   }) async {
     try {
+      final nextBaseUrl = await getNextBaseUrl();
       final targetUri = Uri.parse(
-              'https://next.bgm.tv/p1/subjects/$subjectId/comments')
+              '$nextBaseUrl/p1/subjects/$subjectId/comments')
           .replace(queryParameters: {
         'limit': limit.toString(),
         'offset': offset.toString(),

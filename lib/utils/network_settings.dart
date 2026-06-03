@@ -3,13 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 网络设置管理类
 class NetworkSettings {
   static const String _dandanplayServerKey = 'dandanplay_server_url';
+  static const String _bangumiServerKey = 'bangumi_server_url';
 
-  // 服务器常量
+  // 弹弹play 服务器常量
   static const String primaryServer = 'https://api.dandanplay.net';
   static const String backupServer = 'http://139.224.252.88:16001';
 
   // 默认服务器（主服务器）
   static const String defaultServer = primaryServer;
+
+  // Bangumi 服务器常量
+  static const String bangumiDefaultServer = 'https://api.bgm.tv';
 
   /// 获取当前弹弹play服务器地址
   static Future<String> getDandanplayServer() async {
@@ -26,9 +30,40 @@ class NetworkSettings {
     print('[网络设置] 弹弹play服务器已切换到: $normalized');
   }
 
-  /// 重置为默认服务器
+  /// 获取当前 Bangumi 服务器地址
+  static Future<String> getBangumiServer() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_bangumiServerKey) ?? bangumiDefaultServer;
+    return _normalizeServerUrl(stored);
+  }
+
+  /// 设置 Bangumi 服务器地址
+  static Future<void> setBangumiServer(String serverUrl) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = _normalizeServerUrl(serverUrl);
+    await prefs.setString(_bangumiServerKey, normalized);
+    print('[网络设置] Bangumi服务器已切换到: $normalized');
+  }
+
+  /// 检查当前 Bangumi 服务器是否为自定义服务器
+  static bool isCustomBangumiServer(String serverUrl) {
+    if (serverUrl.trim().isEmpty) {
+      return false;
+    }
+    final normalized = _normalizeServerUrl(serverUrl);
+    return normalized != bangumiDefaultServer;
+  }
+
+  /// 重置弹弹play为默认服务器
   static Future<void> resetToDefaultServer() async {
     await setDandanplayServer(defaultServer);
+  }
+
+  /// 重置Bangumi为默认服务器
+  static Future<void> resetBangumiServer() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_bangumiServerKey);
+    print('[网络设置] Bangumi服务器已重置为默认: $bangumiDefaultServer');
   }
 
   /// 检查是否使用备用服务器

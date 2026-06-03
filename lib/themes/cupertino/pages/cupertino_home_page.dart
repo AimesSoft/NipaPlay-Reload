@@ -25,6 +25,7 @@ import 'package:nipaplay/providers/home_sections_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/services/search_service.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
@@ -912,8 +913,9 @@ class _CupertinoHomePageState extends State<CupertinoHomePage> {
 
   Future<String?> _fetchBangumiHighQualityCover(String bangumiId) async {
     try {
+      final bangumiServer = await NetworkSettings.getBangumiServer();
       final uri = Uri.parse(
-          'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large');
+          '$bangumiServer/v0/subjects/$bangumiId/image?type=large');
       final response = await http.head(
         WebRemoteAccessService.proxyUri(uri),
         headers: const {'User-Agent': 'NipaPlay/1.0'},

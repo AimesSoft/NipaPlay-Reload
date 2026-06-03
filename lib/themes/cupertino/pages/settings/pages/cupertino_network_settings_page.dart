@@ -20,9 +20,12 @@ class CupertinoNetworkSettingsPage extends StatefulWidget {
 class _CupertinoNetworkSettingsPageState
     extends State<CupertinoNetworkSettingsPage> {
   String _currentServer = '';
+  String _currentBangumiServer = '';
   bool _isLoading = true;
   bool _isSavingCustom = false;
+  bool _isSavingBangumiCustom = false;
   late final TextEditingController _customServerController;
+  late final TextEditingController _customBangumiServerController;
 
   final _connectivity = ServerConnectivityService.instance;
 
@@ -30,6 +33,7 @@ class _CupertinoNetworkSettingsPageState
   void initState() {
     super.initState();
     _customServerController = TextEditingController();
+    _customBangumiServerController = TextEditingController();
     _loadCurrentServer();
     _connectivity.dandanplayNotifier.addListener(_onConnectivityChanged);
     _connectivity.bangumiNotifier.addListener(_onConnectivityChanged);
@@ -42,6 +46,7 @@ class _CupertinoNetworkSettingsPageState
     _connectivity.bangumiNotifier.removeListener(_onConnectivityChanged);
     _connectivity.checkingNotifier.removeListener(_onConnectivityChanged);
     _customServerController.dispose();
+    _customBangumiServerController.dispose();
     super.dispose();
   }
 
@@ -51,14 +56,21 @@ class _CupertinoNetworkSettingsPageState
 
   Future<void> _loadCurrentServer() async {
     final server = await NetworkSettings.getDandanplayServer();
+    final bangumiServer = await NetworkSettings.getBangumiServer();
     if (!mounted) return;
     setState(() {
       _currentServer = server;
+      _currentBangumiServer = bangumiServer;
       _isLoading = false;
       if (NetworkSettings.isCustomServer(server)) {
         _customServerController.text = server;
       } else {
         _customServerController.clear();
+      }
+      if (NetworkSettings.isCustomBangumiServer(bangumiServer)) {
+        _customBangumiServerController.text = bangumiServer;
+      } else {
+        _customBangumiServerController.clear();
       }
     });
   }
@@ -87,11 +99,28 @@ class _CupertinoNetworkSettingsPageState
   Future<void> _saveCustomServer() async {
     final input = _customServerController.text.trim();
     if (input.isEmpty) {
-      AdaptiveSnackBar.show(
-        context,
-        message: context.l10n.enterServerAddress,
-        type: AdaptiveSnackBarType.warning,
-      );
+      setState(() {
+        _isSavingCustom = true;
+      });
+      try {
+        await NetworkSettings.resetToDefaultServer();
+        final server = await NetworkSettings.getDandanplayServer();
+        if (!mounted) return;
+        setState(() {
+          _currentServer = server;
+        });
+        AdaptiveSnackBar.show(
+          context,
+          message: '已切换到默认服务器',
+          type: AdaptiveSnackBarType.success,
+        );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSavingCustom = false;
+          });
+        }
+      }
       return;
     }
     if (!NetworkSettings.isValidServerUrl(input)) {
@@ -123,6 +152,67 @@ class _CupertinoNetworkSettingsPageState
       if (mounted) {
         setState(() {
           _isSavingCustom = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveCustomBangumiServer() async {
+    final input = _customBangumiServerController.text.trim();
+    if (input.isEmpty) {
+      setState(() {
+        _isSavingBangumiCustom = true;
+      });
+      try {
+        await NetworkSettings.resetBangumiServer();
+        final server = await NetworkSettings.getBangumiServer();
+        if (!mounted) return;
+        setState(() {
+          _currentBangumiServer = server;
+        });
+        AdaptiveSnackBar.show(
+          context,
+          message: '已切换到默认服务器',
+          type: AdaptiveSnackBarType.success,
+        );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSavingBangumiCustom = false;
+          });
+        }
+      }
+      return;
+    }
+    if (!NetworkSettings.isValidServerUrl(input)) {
+      AdaptiveSnackBar.show(
+        context,
+        message: context.l10n.invalidServerAddress,
+        type: AdaptiveSnackBarType.error,
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingBangumiCustom = true;
+    });
+
+    try {
+      await NetworkSettings.setBangumiServer(input);
+      final server = await NetworkSettings.getBangumiServer();
+      if (!mounted) return;
+      setState(() {
+        _currentBangumiServer = server;
+      });
+      AdaptiveSnackBar.show(
+        context,
+        message: 'Bangumi 服务器已切换到自定义服务器',
+        type: AdaptiveSnackBarType.success,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingBangumiCustom = false;
         });
       }
     }
@@ -234,9 +324,9 @@ class _CupertinoNetworkSettingsPageState
                   children: [
                     _buildConnectivityCard(context),
                     const SizedBox(height: 24),
-                    _buildServerSelectorCard(context),
+                    _buildBangumiSectionCard(context),
                     const SizedBox(height: 24),
-                    _buildCustomServerCard(context),
+                    _buildDandanplaySectionCard(context),
                     const SizedBox(height: 24),
                     _buildServerInfoCard(context),
                   ],
@@ -355,20 +445,128 @@ class _CupertinoNetworkSettingsPageState
     );
   }
 
-  Widget _buildServerSelectorCard(BuildContext context) {
-    final Color tileColor = resolveSettingsTileBackground(context);
+  Widget _buildBangumiSectionCard(BuildContext context) {
     final Color sectionColor = resolveSettingsSectionBackground(context);
+    final Color tileColor = resolveSettingsTileBackground(context);
+    final Color iconColor = resolveSettingsIconColor(context);
+    final Color separatorColor = resolveSettingsSeparatorColor(context);
+    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
+    final Color subtitleColor = resolveSettingsSecondaryTextColor(context);
 
     return CupertinoSettingsGroupCard(
       margin: EdgeInsets.zero,
       backgroundColor: sectionColor,
-      addDividers: true,
-      dividerIndent: 56,
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.book, size: 16, color: iconColor),
+              const SizedBox(width: 6),
+              Text(
+                'Bangumi',
+                style: textTheme.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: subtitleColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '自定义 Bangumi API 服务器',
+                style: textTheme.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '输入自定义 Bangumi API 服务器地址，留空使用默认服务器 (${NetworkSettings.bangumiDefaultServer})',
+                style: textTheme.copyWith(
+                  fontSize: 13,
+                  color: subtitleColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                controller: _customBangumiServerController,
+                placeholder: 'https://example.com',
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                enableSuggestions: false,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: CupertinoDynamicColor.resolve(
+                    CupertinoColors.tertiarySystemFill,
+                    context,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                  height: 36,
+                  child: CupertinoButton.filled(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    onPressed:
+                        _isSavingBangumiCustom ? null : _saveCustomBangumiServer,
+                    child: _isSavingBangumiCustom
+                        ? const CupertinoActivityIndicator(radius: 8)
+                        : Text(context.l10n.useThisServer),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDandanplaySectionCard(BuildContext context) {
+    final Color sectionColor = resolveSettingsSectionBackground(context);
+    final Color tileColor = resolveSettingsTileBackground(context);
+    final Color iconColor = resolveSettingsIconColor(context);
+    final Color separatorColor = resolveSettingsSeparatorColor(context);
+    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
+    final Color subtitleColor = resolveSettingsSecondaryTextColor(context);
+
+    return CupertinoSettingsGroupCard(
+      margin: EdgeInsets.zero,
+      backgroundColor: sectionColor,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.chat_bubble_text_fill, size: 16, color: iconColor),
+              const SizedBox(width: 6),
+              Text(
+                '弹弹play',
+                style: textTheme.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: subtitleColor,
+                ),
+              ),
+            ],
+          ),
+        ),
         CupertinoSettingsTile(
           leading: Icon(
             CupertinoIcons.cloud,
-            color: resolveSettingsIconColor(context),
+            color: iconColor,
           ),
           title: Text(context.l10n.dandanplayServer),
           subtitle: Text(
@@ -380,40 +578,20 @@ class _CupertinoNetworkSettingsPageState
           showChevron: true,
           onTap: _showServerPicker,
         ),
-      ],
-    );
-  }
-
-  Widget _buildCustomServerCard(BuildContext context) {
-    final Color sectionColor = resolveSettingsSectionBackground(context);
-    final textTheme = CupertinoTheme.of(context).textTheme.textStyle;
-    final Color subtitleColor = resolveSettingsSecondaryTextColor(context);
-    final Color iconColor = resolveSettingsIconColor(context);
-
-    return CupertinoSettingsGroupCard(
-      margin: EdgeInsets.zero,
-      backgroundColor: sectionColor,
-      children: [
+        Container(height: 0.5, color: separatorColor),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(CupertinoIcons.pencil_outline,
-                      size: 18, color: iconColor),
-                  const SizedBox(width: 8),
-                  Text(
-                    context.l10n.customServer,
-                    style: textTheme.copyWith(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              Text(
+                '自定义弹弹play API 服务器',
+                style: textTheme.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Text(
                 context.l10n.customServerInputHint,
                 style: textTheme.copyWith(
@@ -501,14 +679,40 @@ class _CupertinoNetworkSettingsPageState
               ),
               const SizedBox(height: 12),
               Text(
+                'Bangumi',
+                style: textTheme.copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: secondaryColor,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _currentBangumiServer,
+                style: textTheme.copyWith(
+                  fontSize: 13,
+                  color: secondaryColor,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '弹弹play',
+                style: textTheme.copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: secondaryColor,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
                 context.l10n.serverField(
                   _getServerDisplayName(context, _currentServer),
                 ),
                 style: textTheme.copyWith(fontSize: 14),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
-                context.l10n.urlField(_currentServer),
+                _currentServer,
                 style: textTheme.copyWith(
                   fontSize: 13,
                   color: secondaryColor,

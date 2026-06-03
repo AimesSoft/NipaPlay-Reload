@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 
 class ServerConnectivityService {
   static final ServerConnectivityService instance =
@@ -39,10 +40,11 @@ class ServerConnectivityService {
 
     try {
       final dandanplayServer = await DandanplayService.getApiBaseUrl();
+      final bangumiServer = await NetworkSettings.getBangumiServer();
 
       final results = await Future.wait([
         _checkDandanplay(dandanplayServer),
-        _checkBangumi(),
+        _checkBangumi(bangumiServer),
       ]);
 
       _dandanplayAvailable = results[0];
@@ -95,8 +97,8 @@ class ServerConnectivityService {
     }
   }
 
-  Future<bool> _checkBangumi() async {
-    final uri = Uri.parse('https://api.bgm.tv/v0/subjects/1');
+  Future<bool> _checkBangumi(String serverUrl) async {
+    final uri = Uri.parse('$serverUrl/v0/subjects/1');
     const headers = {'User-Agent': 'NipaPlay/1.0'};
     try {
       final response =
