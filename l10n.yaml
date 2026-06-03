@@ -5,3 +5,4 @@ output-class: AppLocalizations
 preferred-supported-locales:
   - zh
   - zh_Hant
+  - en
