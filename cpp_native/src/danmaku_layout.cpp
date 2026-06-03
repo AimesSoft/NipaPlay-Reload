@@ -1,6 +1,7 @@
 #include "danmaku_layout.h"
 
 #include <algorithm>
+#include <iterator>
 
 namespace nipaplay::native {
 
@@ -26,12 +27,11 @@ void DanmakuLayoutEngine::configure(
     base_danmaku_height_ = base_danmaku_height;
     base_track_height_ = base_track_height;
 
-    // 构建时间索引
+    // 构建时间索引 — C++20 ranges::transform 替代手动循环
     item_times_.clear();
     item_times_.reserve(items_.size());
-    for (const auto& item : items_) {
-        item_times_.push_back(item.time_seconds);
-    }
+    std::ranges::transform(items_, std::back_inserter(item_times_),
+                           &LayoutItem::time_seconds);
 
     rebuildLayout();
 }
@@ -39,7 +39,7 @@ void DanmakuLayoutEngine::configure(
 // ──── 完整布局重建（对应 Dart _rebuildLayout） ────
 
 void DanmakuLayoutEngine::rebuildLayout() {
-    if (items_.empty() || width_ <= 0 || height_ <= 0) {
+    if (items_.empty() || width_ <= 0 || height_ <= 0) [[unlikely]] {
         return;
     }
 
@@ -178,14 +178,11 @@ int32_t DanmakuLayoutEngine::selectScrollTrack(
     for (int32_t i = 0; i < track_count; i++) {
         auto& trackItemIndices = scroll_tracks[static_cast<size_t>(i)];
 
-        // 移除已过期弹幕
+        // 移除已过期弹幕 — C++20 std::erase_if 替代 erase-remove 惯用法
         if (!trackItemIndices.empty()) {
-            auto eraseFrom = std::remove_if(
-                trackItemIndices.begin(), trackItemIndices.end(),
-                [this, time](int32_t idx) {
-                    return time - items_[static_cast<size_t>(idx)].time_seconds > scroll_duration_;
-                });
-            trackItemIndices.erase(eraseFrom, trackItemIndices.end());
+            std::erase_if(trackItemIndices, [this, time](int32_t idx) {
+                return time - items_[static_cast<size_t>(idx)].time_seconds > scroll_duration_;
+            });
         }
 
         if (scrollCanAddToTrack(trackItemIndices, new_width, time)) {
@@ -219,17 +216,18 @@ bool DanmakuLayoutEngine::scrollCanAddToTrack(
             continue;
         }
 
-        const double existingX = width_ -
-            (elapsed / scroll_duration_) * (width_ + existing.text_width);
+        // 缓存 width_ + text_width，避免重复计算；用乘法替代除法
+        const double existingFullSpan = width_ + existing.text_width;
+        const double existingX = width_ - (elapsed / scroll_duration_) * existingFullSpan;
         const double existingEnd = existingX + existing.text_width;
 
-        if (width_ - existingEnd < 0) {
+        if (existingEnd > width_) {
             return false;
         }
         if (existing.text_width < new_width) {
-            const double progress =
-                (width_ - existingX) / (existing.text_width + width_);
-            if ((1.0 - progress) > (width_ / (width_ + new_width))) {
+            const double progress = (width_ - existingX) / existingFullSpan;
+            // 等价变换: (1-p) > W/(W+N) ⟺ (1-p)*(W+N) > W，一次乘法替代一次除法
+            if ((1.0 - progress) * (width_ + new_width) > width_) {
                 return false;
             }
         }
@@ -271,14 +269,17 @@ int32_t DanmakuLayoutEngine::frame(
     LayoutResult* output_items,
     int32_t output_capacity) const
 {
-    if (items_.empty() || width_ <= 0 || height_ <= 0) {
+    if (items_.empty() || width_ <= 0 || height_ <= 0) [[unlikely]] {
         return 0;
     }
 
     const double maxDuration = std::max(scroll_duration_, static_duration_);
     const double windowStart = current_time - maxDuration;
-    const int32_t left = lowerBound(windowStart);
-    const int32_t right = upperBound(current_time);
+    // C++20 ranges::lower_bound / upper_bound 直接作用于 vector<double>
+    const int32_t left = static_cast<int32_t>(
+        std::ranges::lower_bound(item_times_, windowStart) - item_times_.begin());
+    const int32_t right = static_cast<int32_t>(
+        std::ranges::upper_bound(item_times_, current_time) - item_times_.begin());
 
     int32_t outCount = 0;
 
@@ -307,36 +308,6 @@ int32_t DanmakuLayoutEngine::frame(
     }
 
     return outCount;
-}
-
-// ──── 二分查找工具 ────
-
-int32_t DanmakuLayoutEngine::lowerBound(double value) const {
-    int32_t lo = 0;
-    int32_t hi = static_cast<int32_t>(item_times_.size());
-    while (lo < hi) {
-        const int32_t mid = (lo + hi) >> 1;
-        if (item_times_[static_cast<size_t>(mid)] < value) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    return lo;
-}
-
-int32_t DanmakuLayoutEngine::upperBound(double value) const {
-    int32_t lo = 0;
-    int32_t hi = static_cast<int32_t>(item_times_.size());
-    while (lo < hi) {
-        const int32_t mid = (lo + hi) >> 1;
-        if (item_times_[static_cast<size_t>(mid)] <= value) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    return lo;
 }
 
 } // namespace nipaplay::native

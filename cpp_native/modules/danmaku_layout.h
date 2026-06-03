@@ -1,24 +1,21 @@
 #pragma once
 #include <cstdint>
-#include <cstring>
+#include <bit>
 #include <vector>
 
 namespace nipaplay::native {
 
 // ──── -ffast-math-safe NaN / Inf checks via bit inspection ────
 // std::isnan / std::isinf are undefined under -ffast-math (-ffinite-math-only).
-// These use raw IEEE 754 bit patterns and are immune to FP semantics flags.
-
-inline bool np_isnan(double v) noexcept {
-    uint64_t bits;
-    std::memcpy(&bits, &v, sizeof(bits));
+// C++20 std::bit_cast replaces memcpy-based type punning with a well-defined operation.
+constexpr bool np_isnan(double v) noexcept {
+    const auto bits = std::bit_cast<uint64_t>(v);
     // NaN: exponent all-1s (bits 52..62), mantissa non-zero (bits 0..51)
     return ((bits >> 52) & 0x7FFu) == 0x7FFu && (bits & 0x000FFFFFFFFFFFFFull) != 0;
 }
 
-inline bool np_isinf(double v) noexcept {
-    uint64_t bits;
-    std::memcpy(&bits, &v, sizeof(bits));
+constexpr bool np_isinf(double v) noexcept {
+    const auto bits = std::bit_cast<uint64_t>(v);
     // Inf: exponent all-1s, mantissa zero
     return ((bits >> 52) & 0x7FFu) == 0x7FFu && (bits & 0x000FFFFFFFFFFFFFull) == 0;
 }
@@ -46,12 +43,12 @@ struct LayoutItem {
     double scroll_speed = 0.0;
 };
 
-/// 布局结果输出
+/// 布局结果输出（字段顺序与 NpLayoutResult 一致，确保 FFI 零拷贝直写）
 struct LayoutResult {
-    int32_t item_index = -1;
-    int32_t track_index = -1;
     double y_position = 0.0;
     double scroll_speed = 0.0;
+    int32_t item_index = -1;
+    int32_t track_index = -1;
 };
 
 /// 弹幕布局引擎 — C++20 实现
@@ -80,37 +77,34 @@ public:
 
     /// 每帧调用：获取指定时刻的活跃弹幕布局结果。
     /// 结果写入 output_items，返回实际数量。
-    int32_t frame(
+    [[nodiscard]] int32_t frame(
         double current_time,
         LayoutResult* output_items,
         int32_t output_capacity) const;
 
     /// 获取已配置的弹幕条目数
-    int32_t itemCount() const {
+    [[nodiscard]] int32_t itemCount() const {
         return static_cast<int32_t>(items_.size());
     }
 
 private:
     void rebuildLayout();
 
-    int32_t selectScrollTrack(
+    [[nodiscard]] int32_t selectScrollTrack(
         int32_t item_idx, double time, double new_width,
         int32_t track_count,
         std::vector<std::vector<int32_t>>& scroll_tracks);
 
-    bool scrollCanAddToTrack(
+    [[nodiscard]] bool scrollCanAddToTrack(
         const std::vector<int32_t>& track_item_indices,
         double new_width, double time) const;
 
-    int32_t selectStaticTrack(
+    [[nodiscard]] int32_t selectStaticTrack(
         double time,
         const std::vector<int32_t>& track_items,
         int32_t track_count) const;
 
-    static int32_t pickStackedTrack(int32_t stack_hash, int32_t track_count);
-
-    int32_t lowerBound(double value) const;
-    int32_t upperBound(double value) const;
+    [[nodiscard]] static int32_t pickStackedTrack(int32_t stack_hash, int32_t track_count);
 
     // 配置参数
     double width_ = 0.0;

@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <algorithm>
 
 namespace nipaplay::native {
@@ -58,8 +59,8 @@ public:
             }
         }
         void cleanup() {
-            for(auto& p: data) {
-                ed_a[p.first] = 0;
+            for(auto& [key, _count]: data) {
+                ed_a[key] = 0;
             }
         }
         void dispose() {
@@ -94,11 +95,12 @@ public:
             if(engine->config_.use_pinyin) {
                 const auto& pd = get_pinyin_dict();
                 for(sim_ushort c: orig) {
-                    auto cs = pd.find(c);
-                    if(cs != pd.end()) {
-                        pinyin.push(static_cast<sim_ushort>(SIM_PINYIN_BASE + cs->second.first));
-                        if(cs->second.second)
-                            pinyin.push(static_cast<sim_ushort>(SIM_PINYIN_BASE + cs->second.second));
+                    const auto it = pd.find(c);
+                    if(it != pd.end()) {
+                        const auto& [initial, finals] = it->second;
+                        pinyin.push(static_cast<sim_ushort>(SIM_PINYIN_BASE + initial));
+                        if(finals)
+                            pinyin.push(static_cast<sim_ushort>(SIM_PINYIN_BASE + finals));
                     } else {
                         if(c >= 'A' && c <= 'Z') c += 'a' - 'A';
                         pinyin.push(c);
@@ -143,7 +145,7 @@ public:
     } config_;
 
     // ──── 精确匹配哈希 ────
-    sim_ulong precise_matcher_hash(const sim_ushort* s, sim_ushort mode) {
+    [[nodiscard]] constexpr sim_ulong precise_matcher_hash(const sim_ushort* s, sim_ushort mode) const {
         sim_ulong ret = mode;
         for(sim_ushort c = *s; c; c = *(++s)) {
             ret ^= c + 0x9e3779b9 + (ret << 6) + (ret >> 2);
@@ -152,32 +154,32 @@ public:
     }
 
     // ──── 编辑距离 ────
-    int edit_distance(const UnorderedContainer<sim_ushort>& p,
-                      const UnorderedContainer<sim_ushort>& q) {
+    [[nodiscard]] int edit_distance(const UnorderedContainer<sim_ushort>& p,
+                                    const UnorderedContainer<sim_ushort>& q) {
         short* ea = ed_a_.get();
-        for(const auto& item: p.data) ea[item.first] = static_cast<short>(ea[item.first] + item.second);
-        for(const auto& item: q.data) ea[item.first] = static_cast<short>(ea[item.first] - item.second);
+        for(const auto& [key, count]: p.data) ea[key] = static_cast<short>(ea[key] + count);
+        for(const auto& [key, count]: q.data) ea[key] = static_cast<short>(ea[key] - count);
         int ans = 0;
-        for(const auto& item: p.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
-        for(const auto& item: q.data) { ans += std::abs(ea[item.first]); ea[item.first] = 0; }
+        for(const auto& [key, _count]: p.data) { ans += std::abs(ea[key]); ea[key] = 0; }
+        for(const auto& [key, _count]: q.data) { ans += std::abs(ea[key]); ea[key] = 0; }
         return ans;
     }
 
     // ──── 余弦距离 ────
-    float cosine_distance(const UnorderedContainer<sim_uint>& p,
-                          const UnorderedContainer<sim_uint>& q) {
+    [[nodiscard]] float cosine_distance(const UnorderedContainer<sim_uint>& p,
+                                        const UnorderedContainer<sim_uint>& q) {
         short* ea = ed_a_.get();
         short* eb = ed_b_.get();
-        for(const auto& item: p.data) ea[item.first] = static_cast<short>(ea[item.first] + item.second);
-        for(const auto& item: q.data) eb[item.first] = static_cast<short>(eb[item.first] + item.second);
+        for(const auto& [key, count]: p.data) ea[key] = static_cast<short>(ea[key] + count);
+        for(const auto& [key, count]: q.data) eb[key] = static_cast<short>(eb[key] + count);
         int x=0, y=0, z=0;
-        for(const auto& item: p.data) {
-            int xa = ea[item.first], xb = eb[item.first];
+        for(const auto& [key, _count]: p.data) {
+            int xa = ea[key], xb = eb[key];
             x += xa*xb; y += xa*xa; z += xb*xb;
-            ea[item.first] = 0; eb[item.first] = 0;
+            ea[key] = 0; eb[key] = 0;
         }
-        for(const auto& item: q.data) {
-            int xb = eb[item.first]; z += xb*xb; eb[item.first] = 0;
+        for(const auto& [key, _count]: q.data) {
+            int xb = eb[key]; z += xb*xb; eb[key] = 0;
         }
         if(y<=0 || z<=0) return 0.0f;
         return static_cast<float>(x) * static_cast<float>(x)
@@ -192,14 +194,14 @@ public:
         combined_cosine_distance = 3,
     };
 
-    static sim_uint sim_result(CombinedReason reason, sim_uint dist, sim_uint target_idx) {
+    [[nodiscard]] static constexpr sim_uint sim_result(CombinedReason reason, sim_uint dist, sim_uint target_idx) {
         return (reason << 30) | (std::min(dist, SIM_MAX_DIST_VAL) << 19) | target_idx;
     }
 
     // ──── 单对比较 ────
-    sim_uint check_similar_single(const DanmuCacheline& p,
-                                  const DanmuCacheline& q) {
-        if(!config_.cross_mode && p.mode != q.mode)
+    [[nodiscard]] sim_uint check_similar_single(const DanmuCacheline& p,
+                                                const DanmuCacheline& q) {
+        if(!config_.cross_mode && p.mode != q.mode) [[unlikely]]
             return 0;
 
         sim_uint idx_delta = p.idx - q.idx;
@@ -270,7 +272,7 @@ public:
         precise_matcher_.clear();
     }
 
-    sim_uint check_similar(sim_uint mode, sim_uint index_l) {
+    [[nodiscard]] sim_uint check_similar(sim_uint mode, sim_uint index_l) {
         sim_uint index_r = static_cast<sim_uint>(nearby_danmu_.size());
         auto p = DanmuCacheline(this, config_.str_buf, mode, index_r);
         sim_ulong h = precise_matcher_hash(config_.str_buf,
@@ -372,19 +374,19 @@ struct SimResult {
 // ══════════════════════════════════════════════
 
 /// 批量查重：对 N 条弹幕做全对比较，返回相似对和分组
-SimResult danmaku_similarity_check(
+[[nodiscard]] SimResult danmaku_similarity_check(
     const std::vector<DanmakuSimItem>& items,
     const SimConfig& config);
 
 /// 单对相似度：输入两段文本，返回 0.0-1.0 分数
-double danmaku_pair_similarity(
-    const std::string& text_a,
-    const std::string& text_b,
+[[nodiscard]] double danmaku_pair_similarity(
+    std::string_view text_a,
+    std::string_view text_b,
     bool use_pinyin);
 
 /// JSON 便捷接口：输入弹幕 JSON + 配置 JSON，返回结果 JSON
-std::string similarity_check_batch_json(
-    const std::string& items_json,
-    const std::string& config_json);
+[[nodiscard]] std::string similarity_check_batch_json(
+    std::string_view items_json,
+    std::string_view config_json);
 
 } // namespace nipaplay::native

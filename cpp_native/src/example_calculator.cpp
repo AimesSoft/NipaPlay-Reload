@@ -1,13 +1,8 @@
 #include "example_calculator.h"
 
 #include <cctype>
-#include <cstdint>
 
 namespace nipaplay::native {
-
-int32_t ExampleCalculator::add(int32_t a, int32_t b) const {
-    return a + b;
-}
 
 std::string ExampleCalculator::processText(std::string_view input) const {
     std::string result;

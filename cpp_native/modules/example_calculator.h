@@ -18,10 +18,12 @@ public:
     ExampleCalculator& operator=(ExampleCalculator&&) = default;
 
     /// 简单加法
-    int32_t add(int32_t a, int32_t b) const;
+    [[nodiscard]] constexpr int32_t add(int32_t a, int32_t b) const {
+        return a + b;
+    }
 
     /// 处理文本：将输入转为大写并添加前缀
-    std::string processText(std::string_view input) const;
+    [[nodiscard]] std::string processText(std::string_view input) const;
 };
 
 } // namespace nipaplay::native
