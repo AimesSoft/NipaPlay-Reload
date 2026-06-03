@@ -23,6 +23,13 @@ class DfmPlusLayoutBridge {
   Uint8List? _cachedFontBytes;
   String? _cachedFontFilePath;
 
+  /// Reusable buffer for layout results — avoids per-frame allocation/GC.
+  final List<PositionedDanmakuItem> _layoutBuffer = [];
+
+  /// Content item cache keyed by prepared item index — avoids recreating
+  /// DanmakuContentItem (with Color object) every frame for the same item.
+  final Map<int, DanmakuContentItem> _contentCache = {};
+
   Future<void> configure({
     required List<Map<String, dynamic>> danmakuList,
     required int danmakuListVersion,
@@ -118,42 +125,119 @@ class DfmPlusLayoutBridge {
     _lastCustomFontFamily = customFontFamily;
     _lastCustomFontFilePath = customFontFilePath;
     _lastBlockWords = List.unmodifiable(blockWords);
+    // Layout changed — content cache is stale, clear it
+    _contentCache.clear();
   }
 
-  Future<List<PositionedDanmakuItem>> layout(double currentTimeSeconds) async {
+  /// Synchronous layout: computes frame positions in Dart using the
+  /// prepared layout data. This avoids the async Rust FFI call that was
+  /// the primary source of frame-to-frame jitter (each await introduces
+  /// at least one microtask delay, and the 3-await chain could exceed
+  /// the 16.67ms frame budget).
+  ///
+  /// The position calculation is identical to Rust's `build_dfm_plus_frame`:
+  /// binary search for visible window + per-item x/y computation.
+  /// Object reuse: PositionedDanmakuItem and DanmakuContentItem are cached
+  /// and mutated in-place, avoiding per-frame allocation and GC pressure.
+  List<PositionedDanmakuItem> layout(double currentTimeSeconds) {
     final prepared = _prepared;
     if (prepared == null) {
       return const [];
     }
 
-    final frame = await rust_dfm.dfmPlusLayoutFrame(
-      request: rust_dfm.DfmPlusFrameRequest(
-        layoutHandle: prepared.handle,
-        currentTimeSeconds: currentTimeSeconds,
-      ),
-    );
+    final items = prepared.items;
+    final itemTimes = prepared.itemTimes;
+    final width = prepared.width;
+    final scrollDur = prepared.scrollDurationSeconds;
+    final staticDur = prepared.staticDurationSeconds;
+    final maxDur = scrollDur > staticDur ? scrollDur : staticDur;
 
-    return frame.items
-        .map(
-          (fi) {
-            final pi = prepared.items[fi.itemIndex];
-            return PositionedDanmakuItem(
-            content: DanmakuContentItem(
-              pi.text,
-              type: _toItemType(pi.typeCode),
-              color: Color(pi.colorArgb),
-              isMe: pi.isMe,
-              fontSizeMultiplier: pi.fontSizeMultiplier,
-              countText: pi.countText,
-            ),
-            x: fi.x,
-            y: fi.y,
-            offstageX: fi.offstageX,
-            time: pi.timeSeconds,
-          );
-          },
-        )
-        .toList(growable: false);
+    final windowStart = currentTimeSeconds - maxDur;
+    final startIdx = _lowerBound(itemTimes, windowStart);
+    final endIdx = _upperBound(itemTimes, currentTimeSeconds);
+
+    // Reuse buffer — clear without deallocating
+    final result = _layoutBuffer..clear();
+
+    for (int i = startIdx; i < endIdx; i++) {
+      final pi = items[i];
+      final elapsed = currentTimeSeconds - pi.timeSeconds;
+      if (elapsed < 0.0) continue;
+
+      if (!pi.isScroll && elapsed > pi.durationSeconds) continue;
+
+      double x;
+      double offstageX;
+
+      if (pi.isScroll) {
+        final speed = pi.scrollSpeed;
+        if (pi.typeCode == 6) {
+          // ScrollLR
+          x = speed * elapsed - pi.width;
+          offstageX = -pi.width;
+        } else {
+          // ScrollRL
+          x = width - speed * elapsed;
+          offstageX = width + pi.width;
+        }
+      } else {
+        x = pi.centeredX;
+        offstageX = width;
+      }
+
+      if (pi.isScroll && x < -pi.width) continue;
+      if (pi.yPosition < 0.0) continue;
+
+      // Reuse DanmakuContentItem from cache (avoids Color() allocation)
+      final content = _contentCache.putIfAbsent(i, () => DanmakuContentItem(
+        pi.text,
+        type: _toItemType(pi.typeCode),
+        color: Color(pi.colorArgb),
+        isMe: pi.isMe,
+        fontSizeMultiplier: pi.fontSizeMultiplier,
+        countText: pi.countText,
+      ));
+
+      result.add(PositionedDanmakuItem(
+        content: content,
+        x: x,
+        y: pi.yPosition,
+        offstageX: offstageX,
+        time: pi.timeSeconds,
+      ));
+    }
+
+    return result;
+  }
+
+  /// Binary search: first index where itemTimes[i] >= target.
+  int _lowerBound(Float64List times, double target) {
+    int lo = 0;
+    int hi = times.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (times[mid] < target) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
+
+  /// Binary search: first index where itemTimes[i] > target.
+  int _upperBound(Float64List times, double target) {
+    int lo = 0;
+    int hi = times.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (times[mid] <= target) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
   }
 
   void dispose() {

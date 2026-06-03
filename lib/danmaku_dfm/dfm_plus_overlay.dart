@@ -74,6 +74,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
 
   double _lastTimeSeconds = -1.0;
   bool _forceLayout = false;
+  bool _configurePending = false;
 
   int? _textureId;
   bool _textureReady = false;
@@ -202,6 +203,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     Future.microtask(_runUpdateLoop);
   }
 
+  /// Update loop: layout is now synchronous (Dart-side), so the per-frame
+  /// position computation has zero async overhead. Only configure() and
+  /// texture upload remain async.
   Future<void> _runUpdateLoop() async {
     _updateScheduled = false;
     if (_updateInFlight) {
@@ -225,27 +229,32 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         }
 
         _lastTimeSeconds = currentTime;
-        _forceLayout = false;
 
-        await _bridge.configure(
-          danmakuList: widget.danmakuList,
-          danmakuListVersion: widget.danmakuListVersion,
-          size: _layoutSize,
-          fontSize: widget.fontSize,
-          displayArea: widget.displayArea,
-          scrollDurationSeconds: widget.scrollDurationSeconds,
-          allowStacking: widget.allowStacking,
-          mergeDanmaku: widget.mergeDanmaku,
-          maxQuantity: widget.maxQuantity,
-          maxLinesPerType: widget.maxLinesPerType,
-          trackGapRatio: widget.trackGapRatio,
-          outlineWidth: widget.outlineWidth,
-          customFontFamily: widget.customFontFamily,
-          customFontFilePath: widget.customFontFilePath,
-          blockWords: widget.blockWords,
-        );
+        // If config changed, run async configure first
+        if (_forceLayout || _configurePending) {
+          _forceLayout = false;
+          _configurePending = false;
+          await _bridge.configure(
+            danmakuList: widget.danmakuList,
+            danmakuListVersion: widget.danmakuListVersion,
+            size: _layoutSize,
+            fontSize: widget.fontSize,
+            displayArea: widget.displayArea,
+            scrollDurationSeconds: widget.scrollDurationSeconds,
+            allowStacking: widget.allowStacking,
+            mergeDanmaku: widget.mergeDanmaku,
+            maxQuantity: widget.maxQuantity,
+            maxLinesPerType: widget.maxLinesPerType,
+            trackGapRatio: widget.trackGapRatio,
+            outlineWidth: widget.outlineWidth,
+            customFontFamily: widget.customFontFamily,
+            customFontFilePath: widget.customFontFilePath,
+            blockWords: widget.blockWords,
+          );
+        }
 
-        final frame = await _bridge.layout(currentTime);
+        // Synchronous layout — no await, no microtask delay
+        final frame = _bridge.layout(currentTime);
 
         await _tryUpdateTexture(frame);
         widget.onLayoutCalculated?.call(frame);
