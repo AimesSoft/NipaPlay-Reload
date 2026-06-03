@@ -575,32 +575,50 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 _smoothAnchorMs = playerMs;
                 _smoothAnchorElapsedUs = currentElapsedUs;
                 _lastRawPlayerMs = playerPosition;
+              } else {
+                // 还在等待 player.position 追上，从 seekTarget 插值推进
+                final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+                _playbackTimeMs.value = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate)
+                    .clamp(0.0, _duration.inMilliseconds.toDouble());
               }
-              // 否则继续从 seekTarget 插值，忽略过时的 player.position
             } else if (_lastRawPlayerMs < 0) {
               // 首帧或重置后：直接锚定
               _smoothAnchorMs = playerMs;
               _smoothAnchorElapsedUs = currentElapsedUs;
               _lastRawPlayerMs = playerPosition;
-            } else if (playerPosition != _lastRawPlayerMs) {
-              // player.position 更新了：检查平滑时钟与实际位置的漂移
+              _playbackTimeMs.value = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+            } else {
+              // 正常播放：检测锚点是否过期（seek/暂停恢复后第一帧）
               final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
-              final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0;
-              final drift = smoothMs - playerMs;
-              if (drift.abs() > 30.0) {
-                // 大跳变（seek/暂停恢复）：立即对齐
+              if (elapsedDeltaUs > 50000) {
+                // 锚点距今超过 50ms，说明经历了 seek/暂停等中断，
+                // 重新锚定到当前 player.position，避免插值跳变
                 _smoothAnchorMs = playerMs;
+                _smoothAnchorElapsedUs = currentElapsedUs;
+                _lastRawPlayerMs = playerPosition;
+                _playbackTimeMs.value = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+              } else if (playerPosition != _lastRawPlayerMs) {
+                // player.position 更新了：检查平滑时钟与实际位置的漂移
+                final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate;
+                final drift = smoothMs - playerMs;
+                if (drift.abs() > 30.0) {
+                  // 大跳变：立即对齐
+                  _smoothAnchorMs = playerMs;
+                } else {
+                  // 小漂移：渐进修正（每帧修正 5%），避免突变
+                  _smoothAnchorMs = smoothMs - drift * 0.05;
+                }
+                _smoothAnchorElapsedUs = currentElapsedUs;
+                _lastRawPlayerMs = playerPosition;
+                final newDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+                _playbackTimeMs.value = (_smoothAnchorMs + newDeltaUs / 1000.0 * _playbackRate)
+                    .clamp(0.0, _duration.inMilliseconds.toDouble());
               } else {
-                // 小漂移：渐进修正（每帧修正 5%），避免突变
-                _smoothAnchorMs = smoothMs - drift * 0.05;
+                // player.position 未变，正常插值推进
+                _playbackTimeMs.value = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate)
+                    .clamp(0.0, _duration.inMilliseconds.toDouble());
               }
-              _smoothAnchorElapsedUs = currentElapsedUs;
-              _lastRawPlayerMs = playerPosition;
             }
-            // 用 Ticker elapsed 插值计算当前平滑时间
-            final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
-            final smoothTimeMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0;
-            _playbackTimeMs.value = smoothTimeMs.clamp(0.0, _duration.inMilliseconds.toDouble());
 
             // 节流保存播放位置：时间或位移达到阈值时才写
             if (_currentVideoPath != null) {
