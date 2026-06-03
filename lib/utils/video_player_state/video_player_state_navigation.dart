@@ -563,8 +563,21 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             // 与 vsync 精确同步）在锚点间线性插值，获得均匀的亚毫秒推进；
             // 漂移过大时（seek/暂停恢复）立即对齐。
             final currentElapsedUs = elapsed.inMicroseconds;
+            _lastElapsedUs = currentElapsedUs;
             final playerMs = playerPosition.toDouble();
-            if (_lastRawPlayerMs < 0) {
+
+            // seek 保护：player.position 更新有延迟，在它追上 seekTarget 之前
+            // 保持锚定在 seek 目标位置，避免弹幕闪回旧位置
+            if (_seekTargetMs != null) {
+              if ((playerMs - _seekTargetMs!).abs() < 100.0) {
+                // player.position 已追上 seek 目标，恢复正常插值
+                _seekTargetMs = null;
+                _smoothAnchorMs = playerMs;
+                _smoothAnchorElapsedUs = currentElapsedUs;
+                _lastRawPlayerMs = playerPosition;
+              }
+              // 否则继续从 seekTarget 插值，忽略过时的 player.position
+            } else if (_lastRawPlayerMs < 0) {
               // 首帧或重置后：直接锚定
               _smoothAnchorMs = playerMs;
               _smoothAnchorElapsedUs = currentElapsedUs;
@@ -748,8 +761,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           _position = _lastSeekPosition!;
           _playbackTimeMs.value = _position.inMilliseconds.toDouble();
           _smoothAnchorMs = _position.inMilliseconds.toDouble();
-          _smoothAnchorElapsedUs = elapsed.inMicroseconds;
+          _smoothAnchorElapsedUs = _lastElapsedUs;
           _lastRawPlayerMs = _position.inMilliseconds;
+          _seekTargetMs = null;
           if (_duration.inMilliseconds > 0) {
             _progress = _position.inMilliseconds / _duration.inMilliseconds;
             final bufferedMs = player.bufferedPosition;

@@ -295,6 +295,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   double _smoothAnchorMs = 0.0; // 上次锚定的播放位置（ms）
   int _smoothAnchorElapsedUs = 0; // 锚定时的 Ticker elapsed（微秒）
   int _lastRawPlayerMs = -1; // 上次 player.position 原始值，用于检测变化
+  int _lastElapsedUs = 0; // 最近一次 Ticker elapsed（微秒），供 seek 时使用
+  double? _seekTargetMs; // seek 目标位置，player.position 追上后清除
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
