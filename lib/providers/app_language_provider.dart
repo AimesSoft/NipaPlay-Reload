@@ -7,6 +7,7 @@ enum AppLanguageMode {
   auto,
   simplifiedChinese,
   traditionalChinese,
+  english,
 }
 
 class AppLanguageProvider with ChangeNotifier {
@@ -66,6 +67,8 @@ class AppLanguageProvider with ChangeNotifier {
         return AppLocaleUtils.simplifiedChinese;
       case AppLanguageMode.traditionalChinese:
         return AppLocaleUtils.traditionalChinese;
+      case AppLanguageMode.english:
+        return AppLocaleUtils.english;
       case AppLanguageMode.auto:
         return AppLocaleUtils.resolveLocaleFromSystem(
           WidgetsBinding.instance.platformDispatcher.locale,
@@ -79,6 +82,8 @@ class AppLanguageProvider with ChangeNotifier {
         return AppLanguageMode.simplifiedChinese;
       case 'traditional':
         return AppLanguageMode.traditionalChinese;
+      case 'english':
+        return AppLanguageMode.english;
       case 'auto':
       default:
         return AppLanguageMode.auto;
@@ -91,6 +96,8 @@ class AppLanguageProvider with ChangeNotifier {
         return 'simplified';
       case AppLanguageMode.traditionalChinese:
         return 'traditional';
+      case AppLanguageMode.english:
+        return 'english';
       case AppLanguageMode.auto:
         return 'auto';
     }

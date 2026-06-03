@@ -46,6 +46,16 @@ class LanguagePage extends StatelessWidget {
                 mode: AppLanguageMode.traditionalChinese,
                 title: context.l10n.languageTraditionalChinese,
               ),
+              Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1,
+              ),
+              _buildOption(
+                context: context,
+                provider: provider,
+                mode: AppLanguageMode.english,
+                title: context.l10n.languageEnglish,
+              ),
             ],
           ),
         ),
