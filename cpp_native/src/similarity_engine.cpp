@@ -1,11 +1,6 @@
 #include "similarity_engine.h"
-#include "nipaplay_native/nipaplay_native.h"
 
-#include <cmath>
 #include <cstdio>
-#include <new>
-#include <stdexcept>
-#include <functional>
 
 // ══════════════════════════════════════════════
 // ──── SimilarityEngine 构造函数 ────

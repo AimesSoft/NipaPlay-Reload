@@ -1,6 +1,5 @@
 #include "example_calculator.h"
 
-#include <algorithm>
 #include <cctype>
 #include <cstdint>
 
