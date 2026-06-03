@@ -57,7 +57,8 @@ impl Next2Renderer {
                     occlusion_query_set: None,
                 });
 
-                pass.set_pipeline(glyph_pipeline);
+                let shadow_pipeline = self.offscreen_pipeline.clone();
+                pass.set_pipeline(&shadow_pipeline);
                 pass.set_bind_group(0, &self.atlas_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.shadow_vertex_buffer.slice(..));
                 pass.draw(0..self.shadow_vertices.len() as u32, 0..1);
@@ -594,21 +595,6 @@ impl Next2Renderer {
 
         self.vertices.extend_from_slice(&[v0, v1, v2, v0, v2, v3]);
     }
-}
-
-fn create_render_texture(
-    device: &wgpu::Device,
-    width: u32,
-    height: u32,
-    label: Option<&'static str>,
-) -> wgpu::Texture {
-    create_render_texture_with_usage(
-        device,
-        width,
-        height,
-        label,
-        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-    )
 }
 
 fn create_render_texture_with_usage(

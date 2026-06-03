@@ -1,6 +1,5 @@
 /// Adaptive frame rate timer.
 /// Ported from DrawHandler.syncTimer() to handle frame drops and maintain smooth animation.
-
 use std::collections::VecDeque;
 
 /// Maximum number of frame times to track for averaging.
@@ -27,7 +26,7 @@ impl Default for AdaptiveTimer {
         Self {
             draw_times: VecDeque::with_capacity(MAX_DRAW_TIMES),
             frame_update_rate: 16.67, // ~60fps
-            cordon_time: 33.33,        // ~30fps
+            cordon_time: 33.33,       // ~30fps
             remaining_time: 0.0,
             prev_increment: 16.67,
         }

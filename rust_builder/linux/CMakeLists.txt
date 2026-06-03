@@ -10,6 +10,7 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
 
 include("../cargokit/cmake/cargokit.cmake")
 set(_RUST_MANIFEST_REL "../../rust")
@@ -35,6 +36,7 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter)
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::GTK)
+target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::EPOXY)
 target_link_libraries(${PLUGIN_NAME} PRIVATE "${${PROJECT_NAME}_cargokit_lib}")
 
 # List of absolute paths to libraries that should be bundled with the plugin.

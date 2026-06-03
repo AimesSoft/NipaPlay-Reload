@@ -428,9 +428,8 @@ fn sample_process_memory_windows() -> Result<RustMemorySample, String> {
 
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Performance::{
-    PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData,
-    PdhGetFormattedCounterArrayW, PdhOpenQueryW,
-    PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE,
+    PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW,
+    PdhOpenQueryW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE,
 };
 
 #[cfg(target_os = "windows")]
@@ -445,11 +444,7 @@ fn sample_gpu_windows() -> Result<RustGpuSample, String> {
     unsafe {
         if PDH_QUERY.is_none() {
             let mut query: isize = 0;
-            let result = PdhOpenQueryW(
-                windows::core::PCWSTR(std::ptr::null()),
-                0,
-                &mut query,
-            );
+            let result = PdhOpenQueryW(windows::core::PCWSTR(std::ptr::null()), 0, &mut query);
             if result != 0 {
                 return Err(format!("PdhOpenQueryW failed with code {result}"));
             }
@@ -460,12 +455,8 @@ fn sample_gpu_windows() -> Result<RustGpuSample, String> {
                 .collect();
 
             let mut counter: isize = 0;
-            let result = PdhAddEnglishCounterW(
-                query,
-                windows::core::PCWSTR(path.as_ptr()),
-                0,
-                &mut counter,
-            );
+            let result =
+                PdhAddEnglishCounterW(query, windows::core::PCWSTR(path.as_ptr()), 0, &mut counter);
             if result != 0 {
                 let _ = PdhCloseQuery(query);
                 return Err(format!("PdhAddEnglishCounterW failed with code {result}"));
@@ -479,14 +470,18 @@ fn sample_gpu_windows() -> Result<RustGpuSample, String> {
 
         let result = PdhCollectQueryData(query);
         if result != 0 {
-            return Err(format!("PdhCollectQueryData (1st) failed with code {result}"));
+            return Err(format!(
+                "PdhCollectQueryData (1st) failed with code {result}"
+            ));
         }
 
         std::thread::sleep(std::time::Duration::from_millis(250));
 
         let result = PdhCollectQueryData(query);
         if result != 0 {
-            return Err(format!("PdhCollectQueryData (2nd) failed with code {result}"));
+            return Err(format!(
+                "PdhCollectQueryData (2nd) failed with code {result}"
+            ));
         }
 
         let mut buf_size: u32 = 0;
@@ -499,7 +494,9 @@ fn sample_gpu_windows() -> Result<RustGpuSample, String> {
             None,
         );
         if result != 0 && result != PDH_MORE_DATA {
-            return Err(format!("PdhGetFormattedCounterArrayW (size) failed with code {result}"));
+            return Err(format!(
+                "PdhGetFormattedCounterArrayW (size) failed with code {result}"
+            ));
         }
 
         if item_count == 0 || buf_size == 0 {
@@ -522,7 +519,9 @@ fn sample_gpu_windows() -> Result<RustGpuSample, String> {
             Some(items.as_mut_ptr()),
         );
         if result != 0 {
-            return Err(format!("PdhGetFormattedCounterArrayW (data) failed with code {result}"));
+            return Err(format!(
+                "PdhGetFormattedCounterArrayW (data) failed with code {result}"
+            ));
         }
 
         let values: Vec<f64> = items[..item_count as usize]

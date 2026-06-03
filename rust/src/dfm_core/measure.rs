@@ -48,7 +48,12 @@ mod tests {
     fn test_measure_cjk() {
         let w_cjk = measure_text_width_heuristic("你好世界", 25.0);
         let w_ascii = measure_text_width_heuristic("Hello", 25.0);
-        assert!(w_cjk > w_ascii, "CJK ({}) should be wider than ASCII ({})", w_cjk, w_ascii);
+        assert!(
+            w_cjk > w_ascii,
+            "CJK ({}) should be wider than ASCII ({})",
+            w_cjk,
+            w_ascii
+        );
     }
 
     #[test]
@@ -61,13 +66,21 @@ mod tests {
     #[test]
     fn test_empty_string() {
         let w = measure_text_width_heuristic("", 25.0);
-        assert!((w - 1.0).abs() < 0.001, "empty string should return 1.0, got {}", w);
+        assert!(
+            (w - 1.0).abs() < 0.001,
+            "empty string should return 1.0, got {}",
+            w
+        );
     }
 
     #[test]
     fn test_font_metrics() {
         let height = measure_line_height_heuristic(25.0);
-        assert!((height - 30.0).abs() < 0.001, "height should be 30.0, got {}", height);
+        assert!(
+            (height - 30.0).abs() < 0.001,
+            "height should be 30.0, got {}",
+            height
+        );
     }
 
     #[test]
@@ -75,6 +88,10 @@ mod tests {
         let h25 = measure_line_height_heuristic(25.0);
         let h50 = measure_line_height_heuristic(50.0);
         let ratio = h50 / h25;
-        assert!((ratio - 2.0).abs() < 0.01, "ratio should be 2.0, got {}", ratio);
+        assert!(
+            (ratio - 2.0).abs() < 0.01,
+            "ratio should be 2.0, got {}",
+            ratio
+        );
     }
 }

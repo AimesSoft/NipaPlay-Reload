@@ -1,6 +1,5 @@
 /// Duration computation and viewport scaling.
 /// Ported from DanmakuFactory.java.
-
 use crate::dfm_core::model::Duration;
 
 /// Reference Bilibili player width for duration scaling.
@@ -35,10 +34,7 @@ pub fn create_fixed_duration() -> Duration {
 }
 
 /// Compute the global maximum danmaku duration across all types.
-pub fn compute_max_duration(
-    scroll_duration: i64,
-    special_durations: &[i64],
-) -> i64 {
+pub fn compute_max_duration(scroll_duration: i64, special_durations: &[i64]) -> i64 {
     let mut max_dur = scroll_duration;
     max_dur = max_dur.max(COMMON_DANMAKU_DURATION as i64);
     max_dur = max_dur.max(compute_fixed_duration());
@@ -50,11 +46,21 @@ pub fn compute_max_duration(
 
 /// Compute scale factors for viewport changes (used by SpecialDanmaku).
 pub fn compute_scale_factors(
-    old_width: f32, old_height: f32,
-    new_width: f32, new_height: f32,
+    old_width: f32,
+    old_height: f32,
+    new_width: f32,
+    new_height: f32,
 ) -> (f32, f32) {
-    let sx = if old_width > 0.0 { new_width / old_width } else { 1.0 };
-    let sy = if old_height > 0.0 { new_height / old_height } else { 1.0 };
+    let sx = if old_width > 0.0 {
+        new_width / old_width
+    } else {
+        1.0
+    };
+    let sy = if old_height > 0.0 {
+        new_height / old_height
+    } else {
+        1.0
+    };
     (sx, sy)
 }
 

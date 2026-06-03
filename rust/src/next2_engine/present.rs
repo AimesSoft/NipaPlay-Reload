@@ -8,6 +8,32 @@ use metal::MTLTextureType;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use wgpu_hal::{api::Metal, CopyExtent};
 
+#[cfg(target_os = "linux")]
+use std::num::NonZeroU32;
+#[cfg(target_os = "linux")]
+use wgpu_hal::api::Gles;
+
+#[cfg(target_os = "windows")]
+use wgpu_hal::api::Dx12;
+#[cfg(target_os = "windows")]
+use windows::{
+    core::PCWSTR,
+    Win32::{
+        Foundation::GENERIC_ALL,
+        Graphics::{
+            Direct3D12::{
+                ID3D12Resource, D3D12_CLEAR_VALUE, D3D12_CLEAR_VALUE_0,
+                D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_HEAP_FLAG_SHARED, D3D12_HEAP_PROPERTIES,
+                D3D12_HEAP_TYPE_DEFAULT, D3D12_MEMORY_POOL_UNKNOWN, D3D12_RESOURCE_DESC,
+                D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+                D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_RESOURCE_STATE_COMMON,
+                D3D12_TEXTURE_LAYOUT_UNKNOWN,
+            },
+            Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC},
+        },
+    },
+};
+
 #[cfg(target_os = "android")]
 use std::{ffi::c_void, ptr::NonNull};
 #[cfg(target_os = "android")]
@@ -37,12 +63,17 @@ pub(crate) struct PresentTextureTarget {
     render_texture: wgpu::Texture,
     pub(crate) width: u32,
     pub(crate) height: u32,
+    pub(crate) format: wgpu::TextureFormat,
     _bytes_per_row: u32,
 }
 
 impl PresentTextureTarget {
     pub(crate) fn render_texture(&self) -> &wgpu::Texture {
         &self.render_texture
+    }
+
+    pub(crate) fn format(&self) -> wgpu::TextureFormat {
+        self.format
     }
 }
 
@@ -278,6 +309,7 @@ pub(crate) fn attach_present_texture(
             render_texture: texture,
             width,
             height,
+            format: wgpu::TextureFormat::Bgra8Unorm,
             _bytes_per_row: bytes_per_row,
         }));
     }
@@ -286,4 +318,174 @@ pub(crate) fn attach_present_texture(
         let _ = (device, mtl_texture_ptr, width, height, bytes_per_row);
         None
     }
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn create_dx12_shared_present_texture(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+) -> Option<(PresentTarget, usize)> {
+    if width == 0 || height == 0 {
+        return None;
+    }
+
+    let raw_device = unsafe {
+        device
+            .as_hal::<Dx12>()
+            .map(|hal_device| hal_device.raw_device().clone())
+    }?;
+
+    let heap_properties = D3D12_HEAP_PROPERTIES {
+        Type: D3D12_HEAP_TYPE_DEFAULT,
+        CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+        MemoryPoolPreference: D3D12_MEMORY_POOL_UNKNOWN,
+        CreationNodeMask: 1,
+        VisibleNodeMask: 1,
+    };
+    let resource_desc = D3D12_RESOURCE_DESC {
+        Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        Alignment: 0,
+        Width: width as u64,
+        Height: height,
+        DepthOrArraySize: 1,
+        MipLevels: 1,
+        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        SampleDesc: DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
+        Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
+        Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
+            | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+    };
+    let clear_value = D3D12_CLEAR_VALUE {
+        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        Anonymous: D3D12_CLEAR_VALUE_0 {
+            Color: [0.0, 0.0, 0.0, 0.0],
+        },
+    };
+
+    let mut resource: Option<ID3D12Resource> = None;
+    unsafe {
+        raw_device
+            .CreateCommittedResource(
+                &heap_properties,
+                D3D12_HEAP_FLAG_SHARED,
+                &resource_desc,
+                D3D12_RESOURCE_STATE_COMMON,
+                Some(&clear_value as *const _),
+                &mut resource,
+            )
+            .ok()?;
+    }
+    let resource = resource?;
+    let shared_handle = unsafe {
+        raw_device
+            .CreateSharedHandle(&resource, None, GENERIC_ALL.0, PCWSTR::null())
+            .ok()?
+    };
+    if shared_handle.is_invalid() {
+        return None;
+    }
+
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let hal_texture = unsafe {
+        wgpu_hal::dx12::Device::texture_from_raw(
+            resource,
+            wgpu::TextureFormat::Bgra8Unorm,
+            wgpu::TextureDimension::D2,
+            size,
+            1,
+            1,
+        )
+    };
+    let desc = wgpu::TextureDescriptor {
+        label: Some("next2 present texture (DXGI shared D3D12 resource)"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Bgra8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST,
+        view_formats: BGRA8_UNORM_VIEW_FORMATS,
+    };
+    let texture = unsafe { device.create_texture_from_hal::<Dx12>(hal_texture, &desc) };
+    Some((
+        PresentTarget::Texture(PresentTextureTarget {
+            render_texture: texture,
+            width,
+            height,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            _bytes_per_row: 0,
+        }),
+        shared_handle.0 as usize,
+    ))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn attach_present_gl_texture(
+    device: &wgpu::Device,
+    texture_name: u32,
+    width: u32,
+    height: u32,
+) -> Option<PresentTarget> {
+    let name = NonZeroU32::new(texture_name)?;
+    if width == 0 || height == 0 {
+        return None;
+    }
+
+    let format = wgpu::TextureFormat::Rgba8Unorm;
+    let hal_desc = wgpu_hal::TextureDescriptor {
+        label: Some("next2 present texture (external GL texture)"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUses::COLOR_TARGET | wgpu::TextureUses::RESOURCE,
+        memory_flags: wgpu_hal::MemoryFlags::empty(),
+        view_formats: vec![],
+    };
+
+    let hal_texture = unsafe {
+        device
+            .as_hal::<Gles>()
+            .map(|hal_device| hal_device.texture_from_raw(name, &hal_desc, Some(Box::new(|| {}))))
+    }?;
+
+    let desc = wgpu::TextureDescriptor {
+        label: Some("next2 present texture (external GL texture)"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    };
+
+    let texture = unsafe { device.create_texture_from_hal::<Gles>(hal_texture, &desc) };
+    Some(PresentTarget::Texture(PresentTextureTarget {
+        render_texture: texture,
+        width,
+        height,
+        format,
+        _bytes_per_row: 0,
+    }))
 }

@@ -15,6 +15,12 @@ uint64_t next2_engine_create(uint32_t width, uint32_t height);
 uint8_t next2_engine_resize(uint64_t handle, uint32_t width, uint32_t height);
 void next2_engine_dispose(uint64_t handle);
 bool next2_engine_poll_frame_ready(uint64_t handle);
+uint8_t next2_engine_create_dxgi_shared_texture(uint64_t handle,
+                                                uint32_t width,
+                                                uint32_t height,
+                                                uintptr_t* out_shared_handle,
+                                                uint32_t* out_width,
+                                                uint32_t* out_height);
 uint8_t next2_engine_set_frame(uint64_t handle,
                                const char* frame_json,
                                float font_size,
@@ -24,11 +30,6 @@ uint8_t next2_engine_set_frame(uint64_t handle,
                                const char* custom_font_family,
                                const char* custom_font_file_path);
 uint8_t next2_engine_reset_scene(uint64_t handle);
-uint8_t next2_engine_copy_bgra_frame(uint64_t handle,
-                                     uint8_t* out_pixels,
-                                     uint32_t out_len,
-                                     uint32_t* out_width,
-                                     uint32_t* out_height);
 }
 
 namespace rust_lib_nipaplay {
@@ -151,20 +152,31 @@ std::string ReadSurfaceId(const flutter::EncodableMap& args) {
 }  // namespace
 
 struct RustLibNipaplayPlugin::TextureBinding {
-  explicit TextureBinding(size_t size = 0) {
-    pixel_buffer.buffer = nullptr;
-    pixel_buffer.width = 0;
-    pixel_buffer.height = 0;
-    pixel_buffer.release_context = nullptr;
-    pixel_buffer.release_callback = nullptr;
-    if (size > 0) {
-      rgba.resize(size);
-      pixel_buffer.buffer = rgba.data();
+  TextureBinding(uintptr_t raw_shared_handle, uint32_t width, uint32_t height)
+      : shared_handle(reinterpret_cast<HANDLE>(raw_shared_handle)),
+        descriptor(std::make_unique<FlutterDesktopGpuSurfaceDescriptor>()) {
+    descriptor->struct_size = sizeof(FlutterDesktopGpuSurfaceDescriptor);
+    descriptor->handle = shared_handle;
+    descriptor->width = width;
+    descriptor->height = height;
+    descriptor->visible_width = width;
+    descriptor->visible_height = height;
+    descriptor->release_context = nullptr;
+    descriptor->release_callback = [](void*) {};
+    descriptor->format = kFlutterDesktopPixelFormatBGRA8888;
+  }
+
+  ~TextureBinding() {
+    if (shared_handle != nullptr && shared_handle != INVALID_HANDLE_VALUE) {
+      ::CloseHandle(shared_handle);
     }
   }
 
-  std::vector<uint8_t> rgba;
-  FlutterDesktopPixelBuffer pixel_buffer{};
+  TextureBinding(const TextureBinding&) = delete;
+  TextureBinding& operator=(const TextureBinding&) = delete;
+
+  HANDLE shared_handle = nullptr;
+  std::unique_ptr<FlutterDesktopGpuSurfaceDescriptor> descriptor;
 };
 
 struct RustLibNipaplayPlugin::SurfaceState {
@@ -200,25 +212,19 @@ RustLibNipaplayPlugin::RustLibNipaplayPlugin(
 RustLibNipaplayPlugin::~RustLibNipaplayPlugin() {
   StopTickThread();
 
-  std::vector<uint64_t> handles;
-  std::vector<int64_t> texture_ids;
+  std::vector<std::unique_ptr<SurfaceState>> removed_surfaces;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& kv : surfaces_) {
-      if (kv.second->engine_handle != 0) {
-        handles.push_back(kv.second->engine_handle);
-      }
-      if (kv.second->texture_id >= 0) {
-        texture_ids.push_back(kv.second->texture_id);
-      }
+      removed_surfaces.push_back(std::move(kv.second));
     }
     surfaces_.clear();
   }
-  for (auto id : texture_ids) {
-    texture_registrar_->UnregisterTexture(id, []() {});
-  }
-  for (auto handle : handles) {
-    next2_engine_dispose(handle);
+  for (auto& surface : removed_surfaces) {
+    ReleaseTexture(surface.get());
+    if (surface->engine_handle != 0) {
+      next2_engine_dispose(surface->engine_handle);
+    }
   }
 }
 
@@ -277,27 +283,34 @@ void RustLibNipaplayPlugin::HandleMethodCall(
       is_new_engine = true;
       state->width = width;
       state->height = height;
-      state->binding.reset();
-      if (state->texture_id >= 0) {
-        texture_registrar_->UnregisterTexture(state->texture_id, []() {});
-        state->texture_id = -1;
-        state->texture_variant.reset();
-      }
+      ReleaseTexture(state);
     }
 
     if (state->texture_id < 0 || !state->binding || !state->texture_variant) {
-      const size_t size = static_cast<size_t>(state->width) *
-                          static_cast<size_t>(state->height) * 4;
-      state->binding = std::make_unique<TextureBinding>(size);
+      uintptr_t shared_handle = 0;
+      uint32_t out_width = state->width;
+      uint32_t out_height = state->height;
+      const uint8_t ok = next2_engine_create_dxgi_shared_texture(
+          state->engine_handle, state->width, state->height, &shared_handle,
+          &out_width, &out_height);
+      if (ok == 0 || shared_handle == 0) {
+        result->Error("texture_create_failed",
+                      "next2_engine_create_dxgi_shared_texture failed");
+        return;
+      }
+
+      state->width = out_width;
+      state->height = out_height;
+      state->binding =
+          std::make_unique<TextureBinding>(shared_handle, state->width, state->height);
       auto* binding = state->binding.get();
       state->texture_variant = std::make_unique<flutter::TextureVariant>(
-          flutter::PixelBufferTexture(
-              [binding](size_t, size_t) -> const FlutterDesktopPixelBuffer* {
-                return &binding->pixel_buffer;
+          flutter::GpuSurfaceTexture(
+              kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle,
+              [binding](size_t, size_t)
+                  -> const FlutterDesktopGpuSurfaceDescriptor* {
+                return binding->descriptor.get();
               }));
-      state->binding->pixel_buffer.width = state->width;
-      state->binding->pixel_buffer.height = state->height;
-      state->binding->pixel_buffer.buffer = state->binding->rgba.data();
       state->texture_id =
           texture_registrar_->RegisterTexture(state->texture_variant.get());
       is_new_engine = true;
@@ -383,11 +396,34 @@ void RustLibNipaplayPlugin::DisposeSurface(const std::string& surface_id) {
     }
   }
   if (removed->texture_id >= 0) {
-    texture_registrar_->UnregisterTexture(removed->texture_id, []() {});
+    ReleaseTexture(removed.get());
   }
   if (removed->engine_handle != 0) {
     next2_engine_dispose(removed->engine_handle);
   }
+}
+
+void RustLibNipaplayPlugin::ReleaseTexture(SurfaceState* state) {
+  if (!state) {
+    return;
+  }
+  if (state->texture_id < 0) {
+    state->texture_variant.reset();
+    state->binding.reset();
+    return;
+  }
+
+  struct RetiredTexture {
+    std::unique_ptr<flutter::TextureVariant> texture_variant;
+    std::unique_ptr<TextureBinding> binding;
+  };
+
+  const int64_t texture_id = state->texture_id;
+  state->texture_id = -1;
+  auto retired = std::make_shared<RetiredTexture>();
+  retired->texture_variant = std::move(state->texture_variant);
+  retired->binding = std::move(state->binding);
+  texture_registrar_->UnregisterTexture(texture_id, [retired]() {});
 }
 
 void RustLibNipaplayPlugin::Tick() {
@@ -400,17 +436,6 @@ void RustLibNipaplayPlugin::Tick() {
     if (!next2_engine_poll_frame_ready(state->engine_handle)) {
       continue;
     }
-    uint32_t out_w = 0;
-    uint32_t out_h = 0;
-    const uint32_t out_len =
-        static_cast<uint32_t>(state->binding->rgba.size());
-    const uint8_t ok = next2_engine_copy_bgra_frame(
-        state->engine_handle, state->binding->rgba.data(), out_len, &out_w, &out_h);
-    if (ok == 0 || out_w == 0 || out_h == 0) {
-      continue;
-    }
-    state->binding->pixel_buffer.width = out_w;
-    state->binding->pixel_buffer.height = out_h;
     texture_registrar_->MarkTextureFrameAvailable(state->texture_id);
   }
 }

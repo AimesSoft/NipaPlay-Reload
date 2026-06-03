@@ -1116,13 +1116,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
     final baseTextStyle = DefaultTextStyle.of(context).style;
     final valueStyle = baseTextStyle.copyWith(
-        color: textColor.withOpacity(0.85), fontSize: 13, height: 1.5);
+      color: textColor.withOpacity(0.85),
+      fontSize: 13,
+      height: 1.5,
+      fontWeight: FontWeight.normal,
+      decoration: TextDecoration.none,
+      decorationColor: Colors.transparent,
+    );
     final boldWhiteKeyStyle =
         valueStyle.copyWith(color: textColor, fontWeight: FontWeight.w600);
-    final sectionTitleStyle = Theme.of(context)
-        .textTheme
-        .titleMedium
-        ?.copyWith(color: textColor, fontWeight: FontWeight.bold);
+    final sectionTitleStyle =
+        baseTextStyle.merge(Theme.of(context).textTheme.titleMedium).copyWith(
+              color: textColor,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+              decorationColor: Colors.transparent,
+            );
 
     List<Widget> metadataWidgets = [];
     if (anime.metadata != null && anime.metadata!.isNotEmpty) {
@@ -1158,8 +1167,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       titlesWidgets.add(SizedBox(height: 8));
       titlesWidgets.add(Text('其他标题:', style: sectionTitleStyle));
       titlesWidgets.add(SizedBox(height: 4));
-      TextStyle aliasTextStyle =
-          baseTextStyle.copyWith(color: secondaryTextColor, fontSize: 12);
+      TextStyle aliasTextStyle = valueStyle.copyWith(
+        color: secondaryTextColor,
+        fontSize: 12,
+        fontWeight: FontWeight.normal,
+      );
       for (var titleEntry in anime.titles!) {
         String titleText = titleEntry['title'] ?? '未知标题';
         String languageText = '';

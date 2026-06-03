@@ -654,9 +654,8 @@ fn scroll_items_will_collide_in_duration(
     if end_t <= start_t {
         return false;
     }
-    let d_start =
-        scroll_item_x_at_time(new_item, start_t, width, scroll_duration_seconds)
-            - scroll_item_x_at_time(existing, start_t, width, scroll_duration_seconds);
+    let d_start = scroll_item_x_at_time(new_item, start_t, width, scroll_duration_seconds)
+        - scroll_item_x_at_time(existing, start_t, width, scroll_duration_seconds);
     let d_end = scroll_item_x_at_time(new_item, end_t, width, scroll_duration_seconds)
         - scroll_item_x_at_time(existing, end_t, width, scroll_duration_seconds);
 
@@ -743,12 +742,8 @@ fn static_will_collide_with_any(
             existing.font_size_multiplier,
             base_danmaku_height,
             base_track_height,
-        ) && static_items_will_collide(
-            new_item,
-            existing,
-            static_duration_seconds,
-            width,
-        ) {
+        ) && static_items_will_collide(new_item, existing, static_duration_seconds, width)
+        {
             return true;
         }
     }
@@ -1152,10 +1147,7 @@ mod tests {
         let new_item = mk_working_scroll_item(1.0, "wide", 420.0, 1.0, -1, None);
 
         assert!(scroll_items_will_collide_in_duration(
-            &new_item,
-            &existing,
-            width,
-            duration,
+            &new_item, &existing, width, duration,
         ));
     }
 

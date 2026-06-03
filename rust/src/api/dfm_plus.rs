@@ -5,7 +5,6 @@
 ///
 /// Output format is compatible with Next2's FrameItemPayload (JSON),
 /// allowing direct reuse of Next2's GPU rendering pipeline.
-
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
@@ -208,7 +207,9 @@ fn calc_frame_cache_key(layout: &DfmPlusPreparedLayout, current_time_seconds: f6
 /// One-time layout preparation.
 /// Computes track assignments, collision avoidance, filtering, and merge.
 /// Ported from DanmakuFlameMaster's DrawTask + DanmakusRetainer pipeline.
-pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlusPreparedLayout, String> {
+pub fn dfm_plus_prepare_layout(
+    request: DfmPlusPrepareRequest,
+) -> Result<DfmPlusPreparedLayout, String> {
     let width = request.width.max(1.0) as f32;
     let height = request.height.max(1.0) as f32;
     let font_size = request.font_size.max(1.0) as f32;
@@ -376,7 +377,11 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         }
         let type_code = item.danmaku_type as i32;
         let is_scroll = item.danmaku_type.is_scroll();
-        let centered_x = if is_scroll { 0.0 } else { (width as f64 - item.paint_width as f64) / 2.0 };
+        let centered_x = if is_scroll {
+            0.0
+        } else {
+            (width as f64 - item.paint_width as f64) / 2.0
+        };
         prepared_items.push(DfmPlusPreparedItem {
             time_seconds: item.time_ms as f64 / 1000.0,
             text: std::mem::take(&mut item.text),
@@ -396,7 +401,11 @@ pub fn dfm_plus_prepare_layout(request: DfmPlusPrepareRequest) -> Result<DfmPlus
         });
     }
 
-    prepared_items.sort_by(|a, b| a.time_seconds.partial_cmp(&b.time_seconds).unwrap_or(std::cmp::Ordering::Equal));
+    prepared_items.sort_by(|a, b| {
+        a.time_seconds
+            .partial_cmp(&b.time_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let sorted_times: Vec<f64> = prepared_items.iter().map(|i| i.time_seconds).collect();
 
     let cache_key = {
@@ -711,42 +720,52 @@ mod tests {
             outline_width: 0.0,
             block_words: vec![],
         };
-        
+
         let layout = dfm_plus_prepare_layout(req).expect("prepare should work");
         eprintln!("Prepared {} items", layout.items.len());
-        
+
         for item in &layout.items {
-            eprintln!(" - text={}, y={}, type={}", item.text, item.y_position, item.type_code);
+            eprintln!(
+                " - text={}, y={}, type={}",
+                item.text, item.y_position, item.type_code
+            );
         }
-        
+
         assert_eq!(layout.items.len(), 2, "should have 2 items");
-        
+
         let frame = dfm_plus_layout_frame(DfmPlusFrameRequest {
             layout_handle: layout.handle,
             current_time_seconds: 0.5,
         });
-        
+
         eprintln!("Frame at 0.5s has {} items", frame.items.len());
         for fi in &frame.items {
             let pi = &layout.items[fi.item_index as usize];
-            eprintln!(" - text={}, y={}, x={}, type={}", pi.text, fi.y, fi.x, pi.type_code);
+            eprintln!(
+                " - text={}, y={}, x={}, type={}",
+                pi.text, fi.y, fi.x, pi.type_code
+            );
         }
-        
+
         assert_eq!(frame.items.len(), 2, "frame should have 2 items");
     }
 
     #[test]
     fn test_real_danmaku_no_top_overlap() {
-        let json_str = fs::read_to_string("/Users/retr0/Documents/program_works/NipaPlay-Reload/测试弹幕.json")
-            .expect("Failed to read danmaku data");
-        let data: serde_json::Value = serde_json::from_str(&json_str)
-            .expect("Failed to parse JSON");
-        let comments = data.get("comments")
+        let json_str = fs::read_to_string(
+            "/Users/retr0/Documents/program_works/NipaPlay-Reload/测试弹幕.json",
+        )
+        .expect("Failed to read danmaku data");
+        let data: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Failed to parse JSON");
+        let comments = data
+            .get("comments")
             .expect("No comments field")
             .as_array()
             .expect("Comments is not an array");
 
-        let items: Vec<DfmPlusDanmakuItem> = comments.iter()
+        let items: Vec<DfmPlusDanmakuItem> = comments
+            .iter()
             .filter_map(|c| {
                 let ctype = c.get("type")?.as_str()?;
                 if ctype != "top" {
@@ -754,18 +773,27 @@ mod tests {
                 }
                 let time = c.get("time")?.as_f64()?;
                 let text = c.get("content")?.as_str()?.to_string();
-                let color = c.get("color").and_then(|v| {
-                    let s = v.as_str()?;
-                    let rgb = s.trim_start_matches("rgb(").trim_end_matches(")");
-                    let parts: Vec<u8> = rgb.split(',')
-                        .map(|p| p.trim().parse().unwrap_or(255))
-                        .collect();
-                    if parts.len() >= 3 {
-                        Some((((255u32) << 24) | ((parts[0] as u32) << 16) | ((parts[1] as u32) << 8) | (parts[2] as u32)) as i32)
-                    } else {
-                        Some(-1i32)
-                    }
-                }).unwrap_or(-1);
+                let color = c
+                    .get("color")
+                    .and_then(|v| {
+                        let s = v.as_str()?;
+                        let rgb = s.trim_start_matches("rgb(").trim_end_matches(")");
+                        let parts: Vec<u8> = rgb
+                            .split(',')
+                            .map(|p| p.trim().parse().unwrap_or(255))
+                            .collect();
+                        if parts.len() >= 3 {
+                            Some(
+                                (((255u32) << 24)
+                                    | ((parts[0] as u32) << 16)
+                                    | ((parts[1] as u32) << 8)
+                                    | (parts[2] as u32)) as i32,
+                            )
+                        } else {
+                            Some(-1i32)
+                        }
+                    })
+                    .unwrap_or(-1);
 
                 Some(DfmPlusDanmakuItem {
                     time_seconds: time,
@@ -786,7 +814,7 @@ mod tests {
             width: 1920.0,
             height: 1080.0,
             font_size: 25.0,
-            display_area: 1.0,  // Use full screen for top danmaku
+            display_area: 1.0, // Use full screen for top danmaku
             scroll_duration_seconds: 5.0,
             allow_stacking: false,
             merge_danmaku: false,
@@ -806,35 +834,55 @@ mod tests {
         // Print the first few items in the layout with their times
         eprintln!("First 10 items in layout:");
         for (i, item) in layout.items.iter().take(10).enumerate() {
-            eprintln!("  [{}] text={:.30}, time={:.2}s, y={:.1}, track={}", 
-                i, item.text, item.time_seconds, item.y_position, item.track_index);
+            eprintln!(
+                "  [{}] text={:.30}, time={:.2}s, y={:.1}, track={}",
+                i, item.text, item.time_seconds, item.y_position, item.track_index
+            );
         }
 
         // Test at a time where we have prepared items (around 1042-1050 seconds)
-        for test_time in [1042.0, 1043.0, 1046.0, 1346.0, 1350.0, 1399.0, 1400.0, 1409.0, 1420.0, 1432.0, 1448.0] {
+        for test_time in [
+            1042.0, 1043.0, 1046.0, 1346.0, 1350.0, 1399.0, 1400.0, 1409.0, 1420.0, 1432.0, 1448.0,
+        ] {
             let frame = dfm_plus_layout_frame(DfmPlusFrameRequest {
                 layout_handle: layout.handle,
                 current_time_seconds: test_time,
             });
 
-            let top_items: Vec<_> = frame.items.iter()
+            let top_items: Vec<_> = frame
+                .items
+                .iter()
                 .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
                 .collect();
 
-            eprintln!("Frame at t={:.2}s, total items: {}, top items: {}", test_time, frame.items.len(), top_items.len());
+            eprintln!(
+                "Frame at t={:.2}s, total items: {}, top items: {}",
+                test_time,
+                frame.items.len(),
+                top_items.len()
+            );
             for fi in &top_items {
                 let pi = &layout.items[fi.item_index as usize];
-                eprintln!("  text={:.20}, y={:.1}, time={:.2}", pi.text, fi.y, pi.time_seconds);
+                eprintln!(
+                    "  text={:.20}, y={:.1}, time={:.2}",
+                    pi.text, fi.y, pi.time_seconds
+                );
             }
 
             for i in 0..top_items.len() {
-                for j in (i+1)..top_items.len() {
+                for j in (i + 1)..top_items.len() {
                     let y_diff = (top_items[i].y - top_items[j].y).abs();
                     let pi_i = &layout.items[top_items[i].item_index as usize];
                     let pi_j = &layout.items[top_items[j].item_index as usize];
-                    assert!(y_diff > 1.0,
+                    assert!(
+                        y_diff > 1.0,
                         "At t={:.2}s, top items '{}' (y={:.1}) and '{}' (y={:.1}) share same y!",
-                        test_time, pi_i.text, top_items[i].y, pi_j.text, top_items[j].y);
+                        test_time,
+                        pi_i.text,
+                        top_items[i].y,
+                        pi_j.text,
+                        top_items[j].y
+                    );
                 }
             }
         }
@@ -887,17 +935,15 @@ mod tests {
     #[test]
     fn test_layout_frame() {
         let req = DfmPlusPrepareRequest {
-            items: vec![
-                DfmPlusDanmakuItem {
-                    time_seconds: 1.0,
-                    text: "test".into(),
-                    type_code: 0,
-                    color_argb: -1i32,
-                    is_me: false,
-                    paint_width: 0.0,
-                    paint_height: 0.0,
-                },
-            ],
+            items: vec![DfmPlusDanmakuItem {
+                time_seconds: 1.0,
+                text: "test".into(),
+                type_code: 0,
+                color_argb: -1i32,
+                is_me: false,
+                paint_width: 0.0,
+                paint_height: 0.0,
+            }],
             width: 1920.0,
             height: 1080.0,
             font_size: 25.0,
@@ -982,7 +1028,9 @@ mod tests {
             current_time_seconds: 1.0,
         });
 
-        let top_items: Vec<_> = frame.items.iter()
+        let top_items: Vec<_> = frame
+            .items
+            .iter()
             .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
             .collect();
 
@@ -993,13 +1041,17 @@ mod tests {
         }
 
         for i in 0..top_items.len() {
-            for j in (i+1)..top_items.len() {
+            for j in (i + 1)..top_items.len() {
                 let y_diff = (top_items[i].y - top_items[j].y).abs();
                 let pi_i = &layout.items[top_items[i].item_index as usize];
                 let pi_j = &layout.items[top_items[j].item_index as usize];
-                assert!(y_diff > 1.0, 
-                    "TOP items {} and {} share y={}, causing visual overlap!", 
-                    pi_i.text, pi_j.text, top_items[i].y);
+                assert!(
+                    y_diff > 1.0,
+                    "TOP items {} and {} share y={}, causing visual overlap!",
+                    pi_i.text,
+                    pi_j.text,
+                    top_items[i].y
+                );
             }
         }
     }
@@ -1008,36 +1060,47 @@ mod tests {
     fn debug_real_danmaku() {
         let json_str = std::fs::read_to_string("/Users/retr0/Documents/program_works/NipaPlay-Reload/上伊那牡丹，酒醉身姿似百合花般_danmaku_20260527_233650.json")
             .expect("Failed to read real danmaku data");
-        let data: serde_json::Value = serde_json::from_str(&json_str)
-            .expect("Failed to parse JSON");
-        let comments = data.get("comments")
+        let data: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Failed to parse JSON");
+        let comments = data
+            .get("comments")
             .expect("No comments field")
             .as_array()
             .expect("Comments is not an array");
 
-        let items: Vec<DfmPlusDanmakuItem> = comments.iter()
+        let items: Vec<DfmPlusDanmakuItem> = comments
+            .iter()
             .filter_map(|c| {
                 let time = c.get("time")?.as_f64()?;
                 let text = c.get("content")?.as_str()?.to_string();
                 let type_str = c.get("type")?.as_str()?;
                 let type_code = match type_str {
                     "top" => 5,
-                    "bottom" =>4,
-                    "scroll" =>1,
+                    "bottom" => 4,
+                    "scroll" => 1,
                     _ => 1,
                 };
-                let color = c.get("color").and_then(|v| {
-                    let s = v.as_str()?;
-                    let rgb = s.trim_start_matches("rgb(").trim_end_matches(")");
-                    let parts: Vec<u8> = rgb.split(',')
-                        .map(|p| p.trim().parse().unwrap_or(255))
-                        .collect();
-                    if parts.len() >= 3 {
-                        Some((((255u32) << 24) | ((parts[0] as u32) << 16) | ((parts[1] as u32) << 8) | (parts[2] as u32)) as i32)
-                    } else {
-                        Some(-1i32)
-                    }
-                }).unwrap_or(-1);
+                let color = c
+                    .get("color")
+                    .and_then(|v| {
+                        let s = v.as_str()?;
+                        let rgb = s.trim_start_matches("rgb(").trim_end_matches(")");
+                        let parts: Vec<u8> = rgb
+                            .split(',')
+                            .map(|p| p.trim().parse().unwrap_or(255))
+                            .collect();
+                        if parts.len() >= 3 {
+                            Some(
+                                (((255u32) << 24)
+                                    | ((parts[0] as u32) << 16)
+                                    | ((parts[1] as u32) << 8)
+                                    | (parts[2] as u32)) as i32,
+                            )
+                        } else {
+                            Some(-1i32)
+                        }
+                    })
+                    .unwrap_or(-1);
 
                 Some(DfmPlusDanmakuItem {
                     time_seconds: time,
@@ -1056,7 +1119,7 @@ mod tests {
         let width = 1920.0_f64.max(1.0) as f32;
         let height = 1080.0_f64.max(1.0) as f32;
         let font_size = 25.0_f64.max(1.0) as f32;
-        let display_area = 0.5_f64.clamp(0.1,1.0) as f32;
+        let display_area = 0.5_f64.clamp(0.1, 1.0) as f32;
         let scroll_dur_secs = 8.0_f64.max(1.0);
         let scroll_dur_ms = (scroll_dur_secs * 1000.0) as i64;
         let global_flags = crate::dfm_core::model::GlobalFlags::default();
@@ -1082,8 +1145,8 @@ mod tests {
                     dur_ms,
                 );
                 item.index = i as u32;
-                if raw.paint_width > 0.0 && raw.paint_height >0.0 {
-                    item.paint_width = raw.paint_width as f32 + outline_px *2.0;
+                if raw.paint_width > 0.0 && raw.paint_height > 0.0 {
+                    item.paint_width = raw.paint_width as f32 + outline_px * 2.0;
                     item.paint_height = raw.paint_height as f32;
                     item.flags.measure = global_flags.measure_flag;
                 }
@@ -1092,7 +1155,7 @@ mod tests {
             .collect();
 
         // 检查是否被 filter_primary，不应用过滤器，而是直接打印它们的 type
-        let mut top_filtered_by_param = [0;7].map(|_| 0);
+        let mut top_filtered_by_param = [0; 7].map(|_| 0);
         let mut top_total = 0;
         for item in &danmaku_items {
             if item.danmaku_type == crate::dfm_core::model::DanmakuType::FixTop {
@@ -1124,14 +1187,22 @@ mod tests {
             if was_top {
                 param_counts[item.filter_param as usize] += 1;
                 if item.is_filtered {
-                    eprintln!("FILTERED TOP danmaku at {}: param={}", item.text, item.filter_param);
+                    eprintln!(
+                        "FILTERED TOP danmaku at {}: param={}",
+                        item.text, item.filter_param
+                    );
                 }
             }
         }
 
         eprintln!("TOP filter params: {:?}", param_counts);
 
-        let mut top_after_filter = danmaku_items.iter().filter(|i| i.danmaku_type == crate::dfm_core::model::DanmakuType::FixTop && !i.is_filtered).count();
+        let mut top_after_filter = danmaku_items
+            .iter()
+            .filter(|i| {
+                i.danmaku_type == crate::dfm_core::model::DanmakuType::FixTop && !i.is_filtered
+            })
+            .count();
 
         eprintln!("TOP AFTER filter_primary: {}", top_after_filter);
 
@@ -1154,25 +1225,22 @@ mod tests {
             }
             item.measure(width, height, &global_flags);
             let is_top = item.danmaku_type == crate::dfm_core::model::DanmakuType::FixTop;
-            let (placed, _displaced_index) = retainer.fix(
-                item,
-                width,
-                height,
-                &global_flags,
-                display_area,
-                false,
-            );
+            let (placed, _displaced_index) =
+                retainer.fix(item, width, height, &global_flags, display_area, false);
             if is_top {
                 if placed {
-                    top_placed +=1;
+                    top_placed += 1;
                     eprintln!("PLACED TOP: {}", item.text);
                 } else {
-                    top_skipped +=1;
+                    top_skipped += 1;
                 }
             }
         }
 
-        eprintln!("Top before: {}, placed: {}, skipped: {}", top_count_before_retainer, top_placed, top_skipped);
+        eprintln!(
+            "Top before: {}, placed: {}, skipped: {}",
+            top_count_before_retainer, top_placed, top_skipped
+        );
     }
 
     #[test]
@@ -1182,36 +1250,47 @@ mod tests {
 
         let json_str = std::fs::read_to_string("/Users/retr0/Documents/program_works/NipaPlay-Reload/上伊那牡丹，酒醉身姿似百合花般_danmaku_20260527_233650.json")
             .expect("Failed to read real danmaku data");
-        let data: serde_json::Value = serde_json::from_str(&json_str)
-            .expect("Failed to parse JSON");
-        let comments = data.get("comments")
+        let data: serde_json::Value =
+            serde_json::from_str(&json_str).expect("Failed to parse JSON");
+        let comments = data
+            .get("comments")
             .expect("No comments field")
             .as_array()
             .expect("Comments is not an array");
 
-        let items: Vec<DfmPlusDanmakuItem> = comments.iter()
+        let items: Vec<DfmPlusDanmakuItem> = comments
+            .iter()
             .filter_map(|c| {
                 let time = c.get("time")?.as_f64()?;
                 let text = c.get("content")?.as_str()?.to_string();
                 let type_str = c.get("type")?.as_str()?;
                 let type_code = match type_str {
                     "top" => 5,
-                    "bottom" =>4,
-                    "scroll" =>1,
+                    "bottom" => 4,
+                    "scroll" => 1,
                     _ => 1,
                 };
-                let color = c.get("color").and_then(|v| {
-                    let s = v.as_str()?;
-                    let rgb = s.trim_start_matches("rgb(").trim_end_matches(")");
-                    let parts: Vec<u8> = rgb.split(',')
-                        .map(|p| p.trim().parse().unwrap_or(255))
-                        .collect();
-                    if parts.len() >=3 {
-                        Some((((255u32) << 24) | ((parts[0] as u32) << 16) | ((parts[1] as u32) << 8) | (parts[2] as u32)) as i32)
-                    } else {
-                        Some(-1i32)
-                    }
-                }).unwrap_or(-1);
+                let color = c
+                    .get("color")
+                    .and_then(|v| {
+                        let s = v.as_str()?;
+                        let rgb = s.trim_start_matches("rgb(").trim_end_matches(")");
+                        let parts: Vec<u8> = rgb
+                            .split(',')
+                            .map(|p| p.trim().parse().unwrap_or(255))
+                            .collect();
+                        if parts.len() >= 3 {
+                            Some(
+                                (((255u32) << 24)
+                                    | ((parts[0] as u32) << 16)
+                                    | ((parts[1] as u32) << 8)
+                                    | (parts[2] as u32)) as i32,
+                            )
+                        } else {
+                            Some(-1i32)
+                        }
+                    })
+                    .unwrap_or(-1);
 
                 Some(DfmPlusDanmakuItem {
                     time_seconds: time,
@@ -1219,8 +1298,8 @@ mod tests {
                     type_code,
                     color_argb: color,
                     is_me: false,
-                    paint_width:100.0,
-                    paint_height:30.0,
+                    paint_width: 100.0,
+                    paint_height: 30.0,
                 })
             })
             .collect();
@@ -1229,25 +1308,28 @@ mod tests {
 
         let req = DfmPlusPrepareRequest {
             items,
-            width:1920.0,
-            height:1080.0,
-            font_size:25.0,
-            display_area:0.5,
-            scroll_duration_seconds:8.0,
+            width: 1920.0,
+            height: 1080.0,
+            font_size: 25.0,
+            display_area: 0.5,
+            scroll_duration_seconds: 8.0,
             allow_stacking: false,
             merge_danmaku: false,
             max_quantity: None,
             max_lines_per_type: None,
-            track_gap_ratio:0.5,
-            outline_width:0.0,
+            track_gap_ratio: 0.5,
+            outline_width: 0.0,
             block_words: vec![],
         };
 
         let layout = dfm_plus_prepare_layout(req).expect("prepare layout failed");
         eprintln!("Prepared items: {}", layout.items.len());
-        let top_prepared = layout.items.iter().filter(|i| i.type_code ==5).count();
-        let bottom_prepared = layout.items.iter().filter(|i| i.type_code ==4).count();
-        eprintln!("Top prepared: {}, Bottom prepared: {}", top_prepared, bottom_prepared);
+        let top_prepared = layout.items.iter().filter(|i| i.type_code == 5).count();
+        let bottom_prepared = layout.items.iter().filter(|i| i.type_code == 4).count();
+        eprintln!(
+            "Top prepared: {}, Bottom prepared: {}",
+            top_prepared, bottom_prepared
+        );
 
         // Test t= 1.0 看看有没有
         let test_time = 1.0;
@@ -1255,16 +1337,45 @@ mod tests {
             layout_handle: layout.handle,
             current_time_seconds: test_time,
         });
-        eprintln!("Frame at {}s has {} items total", test_time, frame.items.len());
-        let top_in_frame = frame.items.iter().filter(|fi| layout.items[fi.item_index as usize].type_code ==5).count();
-        let bottom_in_frame = frame.items.iter().filter(|fi| layout.items[fi.item_index as usize].type_code ==4).count();
-        let scroll_in_frame = frame.items.iter().filter(|fi| { let tc = layout.items[fi.item_index as usize].type_code; tc ==1 || tc ==6 }).count();
-        eprintln!("Top in frame: {}, bottom: {}, scroll: {}", top_in_frame, bottom_in_frame, scroll_in_frame);
+        eprintln!(
+            "Frame at {}s has {} items total",
+            test_time,
+            frame.items.len()
+        );
+        let top_in_frame = frame
+            .items
+            .iter()
+            .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
+            .count();
+        let bottom_in_frame = frame
+            .items
+            .iter()
+            .filter(|fi| layout.items[fi.item_index as usize].type_code == 4)
+            .count();
+        let scroll_in_frame = frame
+            .items
+            .iter()
+            .filter(|fi| {
+                let tc = layout.items[fi.item_index as usize].type_code;
+                tc == 1 || tc == 6
+            })
+            .count();
+        eprintln!(
+            "Top in frame: {}, bottom: {}, scroll: {}",
+            top_in_frame, bottom_in_frame, scroll_in_frame
+        );
 
         eprintln!("Top in frame:");
-        for fi in frame.items.iter().filter(|fi| layout.items[fi.item_index as usize].type_code ==5) {
+        for fi in frame
+            .items
+            .iter()
+            .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
+        {
             let pi = &layout.items[fi.item_index as usize];
-            eprintln!("  text=\"{}\", y={}, time={}", pi.text, fi.y, pi.time_seconds);
+            eprintln!(
+                "  text=\"{}\", y={}, time={}",
+                pi.text, fi.y, pi.time_seconds
+            );
         }
     }
 
@@ -1329,7 +1440,9 @@ mod tests {
             layout_handle: layout.handle,
             current_time_seconds: 1.0,
         });
-        let top_at_1s: Vec<_> = frame_at_1s.items.iter()
+        let top_at_1s: Vec<_> = frame_at_1s
+            .items
+            .iter()
             .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
             .collect();
 
@@ -1343,7 +1456,9 @@ mod tests {
             layout_handle: layout.handle,
             current_time_seconds: 5.0,
         });
-        let top_at_5s: Vec<_> = frame_at_5s.items.iter()
+        let top_at_5s: Vec<_> = frame_at_5s
+            .items
+            .iter()
             .filter(|fi| layout.items[fi.item_index as usize].type_code == 5)
             .collect();
 
@@ -1354,24 +1469,32 @@ mod tests {
         }
 
         for i in 0..top_at_1s.len() {
-            for j in (i+1)..top_at_1s.len() {
+            for j in (i + 1)..top_at_1s.len() {
                 let y_diff = (top_at_1s[i].y - top_at_1s[j].y).abs();
                 let pi_i = &layout.items[top_at_1s[i].item_index as usize];
                 let pi_j = &layout.items[top_at_1s[j].item_index as usize];
-                assert!(y_diff > 1.0, 
-                    "At t=1.0, top items {} and {} share y={}!", 
-                    pi_i.text, pi_j.text, top_at_1s[i].y);
+                assert!(
+                    y_diff > 1.0,
+                    "At t=1.0, top items {} and {} share y={}!",
+                    pi_i.text,
+                    pi_j.text,
+                    top_at_1s[i].y
+                );
             }
         }
 
         for i in 0..top_at_5s.len() {
-            for j in (i+1)..top_at_5s.len() {
+            for j in (i + 1)..top_at_5s.len() {
                 let y_diff = (top_at_5s[i].y - top_at_5s[j].y).abs();
                 let pi_i = &layout.items[top_at_5s[i].item_index as usize];
                 let pi_j = &layout.items[top_at_5s[j].item_index as usize];
-                assert!(y_diff > 1.0, 
-                    "At t=5.0, top items {} and {} share y={}!", 
-                    pi_i.text, pi_j.text, top_at_5s[i].y);
+                assert!(
+                    y_diff > 1.0,
+                    "At t=5.0, top items {} and {} share y={}!",
+                    pi_i.text,
+                    pi_j.text,
+                    top_at_5s[i].y
+                );
             }
         }
     }

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/providers/developer_options_provider.dart';
 import 'package:nipaplay/utils/app_theme.dart';
 import 'package:nipaplay/utils/system_resource_monitor.dart';
@@ -19,6 +20,7 @@ class SystemResourceDisplay extends StatefulWidget {
 
 class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
   Timer? _refreshTimer;
+  StreamSubscription<DanmakuRenderEngine>? _danmakuKernelSubscription;
   bool _registered = false;
 
   double _cpuUsage = 0.0;
@@ -54,12 +56,15 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
       _registered = false;
       _refreshTimer?.cancel();
       _refreshTimer = null;
+      _danmakuKernelSubscription?.cancel();
+      _danmakuKernelSubscription = null;
     }
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _danmakuKernelSubscription?.cancel();
     if (_registered) {
       SystemResourceMonitor.unregisterConsumer();
       _registered = false;
@@ -84,6 +89,14 @@ class _SystemResourceDisplayState extends State<SystemResourceDisplay> {
       });
     }
 
+    _danmakuKernelSubscription?.cancel();
+    _danmakuKernelSubscription =
+        DanmakuKernelFactory.onKernelChanged.listen((_) {
+      SystemResourceMonitor().updateDanmakuKernelType();
+      refreshMetrics();
+    });
+
+    SystemResourceMonitor().updateDanmakuKernelType();
     refreshMetrics();
     if (_isMacOSNativeVideoActive) return;
 

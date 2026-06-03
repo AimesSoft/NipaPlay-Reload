@@ -1,6 +1,5 @@
 /// Danmaku type-specific position computation.
 /// Ported from R2LDanmaku, L2RDanmaku, FTDanmaku, FBDanmaku, SpecialDanmaku.
-
 use crate::dfm_core::model::{DanmakuItem, DanmakuType, GlobalFlags, LinePath};
 
 /// Layout result for a single danmaku item.
@@ -12,7 +11,12 @@ pub struct LayoutResult {
 }
 
 /// Compute the X position for a danmaku at a given time.
-pub fn get_x_at_time(item: &DanmakuItem, view_width: f32, time_ms: i64, flags: &GlobalFlags) -> f32 {
+pub fn get_x_at_time(
+    item: &DanmakuItem,
+    view_width: f32,
+    time_ms: i64,
+    flags: &GlobalFlags,
+) -> f32 {
     match item.danmaku_type {
         DanmakuType::ScrollRL => get_r2l_x(item, view_width, time_ms, flags),
         DanmakuType::ScrollLR => get_l2r_x(item, view_width, time_ms, flags),
@@ -65,7 +69,8 @@ fn get_special_x(item: &DanmakuItem, _view_width: f32, time_ms: i64, flags: &Glo
         elapsed / item.duration_ms as f32
     } else {
         1.0
-    }.clamp(0.0, 1.0);
+    }
+    .clamp(0.0, 1.0);
 
     interpolate_path_x(paths, progress, item.x)
 }
@@ -111,7 +116,14 @@ pub fn get_special_alpha(item: &DanmakuItem, time_ms: i64, flags: &GlobalFlags) 
 
 /// Layout a danmaku item: compute position and set visibility.
 /// Ported from R2LDanmaku.layout().
-pub fn layout_item(item: &mut DanmakuItem, view_width: f32, _x: f32, y: f32, timer_ms: i64, flags: &GlobalFlags) {
+pub fn layout_item(
+    item: &mut DanmakuItem,
+    view_width: f32,
+    _x: f32,
+    y: f32,
+    timer_ms: i64,
+    flags: &GlobalFlags,
+) {
     let actual_time = item.get_actual_time(flags);
     let delta = timer_ms - actual_time;
 
@@ -139,7 +151,14 @@ mod tests {
     #[test]
     fn test_r2l_x_at_start() {
         let flags = GlobalFlags::default();
-        let mut item = DanmakuItem::new(0, "test".into(), 0xFFFFFFFF, 25.0, DanmakuType::ScrollRL, 5000);
+        let mut item = DanmakuItem::new(
+            0,
+            "test".into(),
+            0xFFFFFFFF,
+            25.0,
+            DanmakuType::ScrollRL,
+            5000,
+        );
         item.measure(1920.0, 1080.0, &flags);
         let x = get_r2l_x(&item, 1920.0, 0, &flags);
         assert!((x - 1920.0).abs() < 1.0);
@@ -148,7 +167,14 @@ mod tests {
     #[test]
     fn test_r2l_x_at_end() {
         let flags = GlobalFlags::default();
-        let mut item = DanmakuItem::new(0, "test".into(), 0xFFFFFFFF, 25.0, DanmakuType::ScrollRL, 5000);
+        let mut item = DanmakuItem::new(
+            0,
+            "test".into(),
+            0xFFFFFFFF,
+            25.0,
+            DanmakuType::ScrollRL,
+            5000,
+        );
         item.measure(1920.0, 1080.0, &flags);
         let x = get_r2l_x(&item, 1920.0, 5000, &flags);
         assert!(x <= 0.0);
@@ -157,7 +183,14 @@ mod tests {
     #[test]
     fn test_l2r_x_at_start() {
         let flags = GlobalFlags::default();
-        let mut item = DanmakuItem::new(0, "test".into(), 0xFFFFFFFF, 25.0, DanmakuType::ScrollLR, 5000);
+        let mut item = DanmakuItem::new(
+            0,
+            "test".into(),
+            0xFFFFFFFF,
+            25.0,
+            DanmakuType::ScrollLR,
+            5000,
+        );
         item.measure(1920.0, 1080.0, &flags);
         let x = get_l2r_x(&item, 1920.0, 0, &flags);
         assert!(x <= 0.0); // starts offscreen left
@@ -167,7 +200,14 @@ mod tests {
     fn test_fixed_centered() {
         let item = DanmakuItem {
             paint_width: 100.0,
-            ..DanmakuItem::new(0, "test".into(), 0xFFFFFFFF, 25.0, DanmakuType::FixTop, 3800)
+            ..DanmakuItem::new(
+                0,
+                "test".into(),
+                0xFFFFFFFF,
+                25.0,
+                DanmakuType::FixTop,
+                3800,
+            )
         };
         let x = get_fixed_x(&item, 1920.0);
         assert!((x - 910.0).abs() < 1.0); // (1920 - 100) / 2

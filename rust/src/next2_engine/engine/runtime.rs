@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
+#[cfg(target_os = "linux")]
+use std::ffi::{c_char, CString};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
@@ -35,7 +37,11 @@ use nalgebra::{Affine2, Similarity2, Vector2};
 use serde::Deserialize;
 use ttf_parser::{Face, GlyphId};
 
-use super::present::{attach_present_texture, PresentTarget};
+#[cfg(target_os = "linux")]
+use super::present::attach_present_gl_texture;
+#[cfg(target_os = "windows")]
+use super::present::create_dx12_shared_present_texture;
+use super::present::{attach_present_texture, signal_frame_ready, PresentTarget};
 
 #[cfg(target_os = "android")]
 use ndk_sys::ANativeWindow;
@@ -84,11 +90,12 @@ pub struct RenderFrameInput {
     pub custom_font_file_path: String,
 }
 
-#[derive(Clone)]
-pub struct Next2ReadbackFrame {
+#[cfg(target_os = "windows")]
+#[derive(Clone, Copy)]
+pub struct DxgiSharedTextureInfo {
+    pub shared_handle: usize,
     pub width: u32,
     pub height: u32,
-    pub pixels: Vec<u8>,
 }
 
 pub enum EngineCommand {
@@ -98,6 +105,12 @@ pub enum EngineCommand {
         height: u32,
         bytes_per_row: u32,
         reply: Option<mpsc::Sender<bool>>,
+    },
+    #[cfg(target_os = "windows")]
+    CreateDxgiSharedTexture {
+        width: u32,
+        height: u32,
+        reply: mpsc::Sender<Option<DxgiSharedTextureInfo>>,
     },
     Resize {
         width: u32,
@@ -113,7 +126,7 @@ pub enum EngineCommand {
 
 pub struct EngineEntry {
     pub cmd_tx: mpsc::Sender<EngineCommand>,
-    pub latest_frame: Arc<Mutex<Option<Next2ReadbackFrame>>>,
+    pub frame_ready: Arc<AtomicBool>,
     pub mtl_device_ptr: usize,
 }
 
@@ -145,7 +158,7 @@ pub fn lookup_engine(handle: u64) -> Option<EngineEntry> {
     let entry = guard.get(&handle)?;
     Some(EngineEntry {
         cmd_tx: entry.cmd_tx.clone(),
-        latest_frame: Arc::clone(&entry.latest_frame),
+        frame_ready: Arc::clone(&entry.frame_ready),
         mtl_device_ptr: entry.mtl_device_ptr,
     })
 }
@@ -162,20 +175,295 @@ pub fn poll_frame_ready(handle: u64) -> bool {
     let Some(entry) = lookup_engine(handle) else {
         return false;
     };
-    let latest_frame = Arc::clone(&entry.latest_frame);
-    drop(entry);
-    latest_frame
-        .try_lock()
-        .map(|guard| guard.is_some())
+    entry.frame_ready.swap(false, Ordering::AcqRel)
+}
+
+#[cfg(target_os = "linux")]
+pub type GlProcLoader = unsafe extern "C" fn(*const c_char) -> *const c_void;
+
+#[cfg(target_os = "linux")]
+struct LinuxGlEngineEntry {
+    width: u32,
+    height: u32,
+    frame_ready: Arc<AtomicBool>,
+    pending_input: Option<RenderFrameInput>,
+    pending_reset: bool,
+    ctx: Option<Arc<EngineDeviceContext>>,
+    renderer: Option<Next2Renderer>,
+}
+
+#[cfg(target_os = "linux")]
+struct LinuxGlEngineRegistry {
+    next_handle: AtomicU64,
+    entries: Mutex<HashMap<u64, LinuxGlEngineEntry>>,
+}
+
+#[cfg(target_os = "linux")]
+static LINUX_GL_REGISTRY: OnceLock<LinuxGlEngineRegistry> = OnceLock::new();
+
+#[cfg(target_os = "linux")]
+fn linux_gl_registry() -> &'static LinuxGlEngineRegistry {
+    LINUX_GL_REGISTRY.get_or_init(|| LinuxGlEngineRegistry {
+        next_handle: AtomicU64::new(1),
+        entries: Mutex::new(HashMap::new()),
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub fn create_linux_gl_engine(width: u32, height: u32) -> Result<u64, String> {
+    let handle = linux_gl_registry()
+        .next_handle
+        .fetch_add(1, Ordering::Relaxed)
+        .max(1);
+
+    let mut guard = linux_gl_registry()
+        .entries
+        .lock()
+        .map_err(|_| "linux GL engine registry lock poisoned".to_string())?;
+    guard.insert(
+        handle,
+        LinuxGlEngineEntry {
+            width: width.max(INITIAL_WIDTH),
+            height: height.max(INITIAL_HEIGHT),
+            frame_ready: Arc::new(AtomicBool::new(true)),
+            pending_input: None,
+            pending_reset: false,
+            ctx: None,
+            renderer: None,
+        },
+    );
+
+    n2log(&format!(
+        "linux GL engine created: {}x{}",
+        width.max(INITIAL_WIDTH),
+        height.max(INITIAL_HEIGHT)
+    ));
+    Ok(handle)
+}
+
+#[cfg(target_os = "linux")]
+pub fn remove_linux_gl_engine(handle: u64) -> bool {
+    if handle == 0 {
+        return false;
+    }
+    match linux_gl_registry().entries.lock() {
+        Ok(mut guard) => guard.remove(&handle).is_some(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn poll_linux_gl_frame_ready(handle: u64) -> bool {
+    if handle == 0 {
+        return false;
+    }
+    let Ok(guard) = linux_gl_registry().entries.lock() else {
+        return false;
+    };
+    guard
+        .get(&handle)
+        .map(|entry| entry.frame_ready.load(Ordering::Acquire))
         .unwrap_or(false)
 }
 
-pub fn readback_frame_bgra(handle: u64) -> Option<Next2ReadbackFrame> {
-    let entry = lookup_engine(handle)?;
-    let latest_frame = Arc::clone(&entry.latest_frame);
-    drop(entry);
-    let guard = latest_frame.try_lock().ok()?;
-    guard.clone()
+#[cfg(target_os = "linux")]
+pub fn resize_linux_gl_engine(handle: u64, width: u32, height: u32) -> bool {
+    if handle == 0 {
+        return false;
+    }
+    let Ok(mut guard) = linux_gl_registry().entries.lock() else {
+        return false;
+    };
+    let Some(entry) = guard.get_mut(&handle) else {
+        return false;
+    };
+    entry.width = width.max(INITIAL_WIDTH);
+    entry.height = height.max(INITIAL_HEIGHT);
+    entry.frame_ready.store(true, Ordering::Release);
+    true
+}
+
+#[cfg(target_os = "linux")]
+pub fn reset_linux_gl_engine(handle: u64) -> bool {
+    if handle == 0 {
+        return false;
+    }
+    let Ok(mut guard) = linux_gl_registry().entries.lock() else {
+        return false;
+    };
+    let Some(entry) = guard.get_mut(&handle) else {
+        return false;
+    };
+    entry.pending_reset = true;
+    entry.frame_ready.store(true, Ordering::Release);
+    true
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_linux_gl_frame(handle: u64, input: RenderFrameInput) -> bool {
+    if handle == 0 {
+        return false;
+    }
+    let Ok(mut guard) = linux_gl_registry().entries.lock() else {
+        return false;
+    };
+    let Some(entry) = guard.get_mut(&handle) else {
+        return false;
+    };
+    entry.pending_input = Some(input);
+    entry.frame_ready.store(true, Ordering::Release);
+    true
+}
+
+#[cfg(target_os = "linux")]
+fn create_linux_gl_device_context(loader: GlProcLoader) -> Result<Arc<EngineDeviceContext>, String> {
+    use wgpu_hal::Adapter as _;
+
+    let exposed = unsafe {
+        <wgpu_hal::api::Gles as wgpu_hal::Api>::Adapter::new_external(
+            |name| {
+                let Ok(name) = CString::new(name) else {
+                    return std::ptr::null();
+                };
+                loader(name.as_ptr())
+            },
+            wgpu::GlBackendOptions::default(),
+        )
+    }
+    .ok_or_else(|| "wgpu-hal: external GLES adapter init failed".to_string())?;
+
+    let limits = exposed.capabilities.limits.clone();
+    let open = unsafe {
+        exposed.adapter.open(
+            wgpu::Features::empty(),
+            &limits,
+            &wgpu::MemoryHints::Performance,
+        )
+    }
+    .map_err(|err| format!("wgpu-hal: open external GLES device failed: {err:?}"))?;
+
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::GL,
+        flags: wgpu::InstanceFlags::default(),
+        memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+        backend_options: wgpu::BackendOptions::default(),
+    });
+    let adapter = unsafe { instance.create_adapter_from_hal::<wgpu_hal::api::Gles>(exposed) };
+    let device_desc = wgpu::DeviceDescriptor {
+        label: Some("next2 linux external GL device"),
+        required_features: wgpu::Features::empty(),
+        required_limits: limits,
+        experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        memory_hints: wgpu::MemoryHints::Performance,
+        trace: wgpu::Trace::Off,
+    };
+    let (device, queue) = unsafe {
+        adapter.create_device_from_hal::<wgpu_hal::api::Gles>(open, &device_desc)
+    }
+    .map_err(|err| format!("wgpu: create external GLES device failed: {err:?}"))?;
+
+    device.on_uncaptured_error(Arc::new(|err| {
+        eprintln!("wgpu linux GL uncaptured error: {err}");
+    }));
+
+    Ok(Arc::new(EngineDeviceContext {
+        device: Arc::new(device),
+        queue: Arc::new(queue),
+    }))
+}
+
+#[cfg(target_os = "linux")]
+pub fn render_linux_gl_texture(
+    handle: u64,
+    texture_name: u32,
+    width: u32,
+    height: u32,
+    loader: GlProcLoader,
+) -> bool {
+    if handle == 0 || texture_name == 0 {
+        return false;
+    }
+
+    let width = width.max(INITIAL_WIDTH);
+    let height = height.max(INITIAL_HEIGHT);
+    let Ok(mut guard) = linux_gl_registry().entries.lock() else {
+        return false;
+    };
+    let Some(entry) = guard.get_mut(&handle) else {
+        return false;
+    };
+
+    if entry.ctx.is_none() {
+        let ctx = match create_linux_gl_device_context(loader) {
+            Ok(ctx) => ctx,
+            Err(err) => {
+                n2log(&format!("linux GL context init failed: {err}"));
+                return false;
+            }
+        };
+        entry.ctx = Some(ctx);
+    }
+    let ctx = Arc::clone(entry.ctx.as_ref().unwrap());
+
+    if entry.renderer.is_none() {
+        let renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
+            Ok(renderer) => renderer,
+            Err(err) => {
+                n2log(&format!("linux GL renderer init failed: {err}"));
+                return false;
+            }
+        };
+        entry.renderer = Some(renderer);
+        entry.width = width;
+        entry.height = height;
+        entry.frame_ready.store(true, Ordering::Release);
+    }
+
+    let size_changed = entry.width != width || entry.height != height;
+    if size_changed {
+        entry.width = width;
+        entry.height = height;
+    }
+    let pending_reset = std::mem::take(&mut entry.pending_reset);
+    let pending_input = entry.pending_input.take();
+    let mut should_draw = entry.frame_ready.load(Ordering::Acquire) || size_changed;
+
+    let renderer = entry.renderer.as_mut().unwrap();
+    if size_changed {
+        let _ = renderer.resize(width, height);
+    }
+    if pending_reset {
+        renderer.reset_scene();
+        should_draw = true;
+    }
+    if let Some(input) = pending_input {
+        let font_source = load_custom_font_source(
+            input.custom_font_family.as_str(),
+            input.custom_font_file_path.as_str(),
+        )
+        .ok()
+        .flatten();
+        if renderer.update_frame(input, font_source) {
+            should_draw = true;
+        } else {
+            entry.frame_ready.store(false, Ordering::Release);
+            return false;
+        }
+    }
+
+    if !should_draw {
+        return true;
+    }
+
+    let Some(mut target) = attach_present_gl_texture(ctx.device.as_ref(), texture_name, width, height)
+    else {
+        n2log("linux GL attach present texture failed");
+        return false;
+    };
+    renderer.draw_to_present(&mut target);
+    let _ = ctx.device.poll(wgpu::PollType::wait_indefinitely());
+    entry.frame_ready.store(false, Ordering::Release);
+    true
 }
 
 pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
@@ -189,14 +477,14 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
     let mtl_device_ptr = extract_mtl_device_ptr(ctx.device.as_ref()) as usize;
 
     let (cmd_tx, cmd_rx) = mpsc::channel::<EngineCommand>();
-    let latest_frame: Arc<Mutex<Option<Next2ReadbackFrame>>> = Arc::new(Mutex::new(None));
-    let latest_frame_thread = Arc::clone(&latest_frame);
+    let frame_ready = Arc::new(AtomicBool::new(false));
+    let frame_ready_thread = Arc::clone(&frame_ready);
 
     thread::Builder::new()
         .name("next2-engine".to_string())
         .spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_engine_loop(ctx, width, height, latest_frame_thread, cmd_rx);
+                run_engine_loop(ctx, width, height, frame_ready_thread, cmd_rx);
             }));
             if let Err(e) = result {
                 if let Some(s) = e.downcast_ref::<String>() {
@@ -223,7 +511,7 @@ pub fn create_engine(width: u32, height: u32) -> Result<u64, String> {
         handle,
         EngineEntry {
             cmd_tx,
-            latest_frame,
+            frame_ready,
             mtl_device_ptr,
         },
     );
@@ -367,11 +655,30 @@ pub fn attach_present_surface(
     false
 }
 
+#[cfg(target_os = "windows")]
+pub fn create_windows_dxgi_shared_texture(
+    handle: u64,
+    width: u32,
+    height: u32,
+) -> Option<DxgiSharedTextureInfo> {
+    let entry = lookup_engine(handle)?;
+    let (reply_tx, reply_rx) = mpsc::channel();
+    entry
+        .cmd_tx
+        .send(EngineCommand::CreateDxgiSharedTexture {
+            width,
+            height,
+            reply: reply_tx,
+        })
+        .ok()?;
+    reply_rx.recv_timeout(Duration::from_secs(2)).ok().flatten()
+}
+
 fn run_engine_loop(
     ctx: Arc<EngineDeviceContext>,
     mut width: u32,
     mut height: u32,
-    latest_frame: Arc<Mutex<Option<Next2ReadbackFrame>>>,
+    frame_ready: Arc<AtomicBool>,
     cmd_rx: mpsc::Receiver<EngineCommand>,
 ) {
     let mut renderer = match Next2Renderer::new(Arc::clone(&ctx), width, height, None) {
@@ -461,6 +768,33 @@ fn run_engine_loop(
                     let _ = renderer.resize(width, height);
                     has_pending_frame = true;
                 }
+                #[cfg(target_os = "windows")]
+                EngineCommand::CreateDxgiSharedTexture {
+                    width: w,
+                    height: h,
+                    reply,
+                } => {
+                    let w = w.max(1);
+                    let h = h.max(1);
+                    let response = if let Some((target, shared_handle)) =
+                        create_dx12_shared_present_texture(ctx.device.as_ref(), w, h)
+                    {
+                        present_target = Some(target);
+                        width = w;
+                        height = h;
+                        let _ = renderer.resize(width, height);
+                        has_pending_frame = true;
+                        Some(DxgiSharedTextureInfo {
+                            shared_handle,
+                            width,
+                            height,
+                        })
+                    } else {
+                        present_target = None;
+                        None
+                    };
+                    let _ = reply.send(response);
+                }
                 EngineCommand::Resize {
                     width: w,
                     height: h,
@@ -501,13 +835,10 @@ fn run_engine_loop(
         if has_pending_frame {
             if let Some(target) = present_target.as_mut() {
                 renderer.draw_to_present(target);
-                renderer.draw_to_offscreen();
+                signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));
             } else {
-                renderer.draw_to_offscreen();
+                frame_ready.store(false, Ordering::Release);
             }
-
-            let frame = renderer.readback_pixels();
-            *latest_frame.lock().unwrap() = frame;
 
             has_pending_frame = false;
         }

@@ -37,6 +37,7 @@ class RustLibNipaplayPlugin : public flutter::Plugin {
   void EnsureTickThreadRunning();
   void StopTickThread();
   void DisposeSurface(const std::string& surface_id);
+  void ReleaseTexture(SurfaceState* state);
   void Tick();
 
   flutter::PluginRegistrarWindows* registrar_;

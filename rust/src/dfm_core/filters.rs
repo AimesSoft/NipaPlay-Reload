@@ -1,3 +1,5 @@
+use aho_corasick::AhoCorasick;
+use regex::Regex;
 /// Danmaku filtering system.
 /// Ported from DanmakuFilters.java with support for:
 /// - Type blocking
@@ -7,10 +9,7 @@
 /// - Duplicate merging
 /// - Overlapping detection
 /// - Keyword/user blocking
-
 use rustc_hash::{FxHashMap, FxHashSet};
-use regex::Regex;
-use aho_corasick::AhoCorasick;
 
 use crate::dfm_core::model::{DanmakuItem, DanmakuType, Duration, GlobalFlags};
 
@@ -94,7 +93,9 @@ impl FilterSystem {
         }
 
         // Elapsed time filter (performance protection)
-        if ctx.frame_elapsed_ms >= self.elapsed_time_limit_ms && item.is_outside(ctx.timer_ms, &ctx.global_flags) {
+        if ctx.frame_elapsed_ms >= self.elapsed_time_limit_ms
+            && item.is_outside(ctx.timer_ms, &ctx.global_flags)
+        {
             item.is_filtered = true;
             item.filter_param = 3;
             item.flags.filter = ctx.global_flags.filter_flag;
@@ -125,7 +126,12 @@ impl FilterSystem {
     /// Secondary filter: runs after collision avoidance.
     /// Returns true if the danmaku should be filtered.
     /// Ported from DanmakuFilters.filterSecondary().
-    pub fn filter_secondary(&self, item: &mut DanmakuItem, state: &RetainerState, _flags: &GlobalFlags) -> bool {
+    pub fn filter_secondary(
+        &self,
+        item: &mut DanmakuItem,
+        state: &RetainerState,
+        _flags: &GlobalFlags,
+    ) -> bool {
         // Maximum lines filter
         if let Some(&max) = self.max_lines.get(&item.danmaku_type) {
             if state.line_number >= max {
@@ -193,9 +199,8 @@ impl FilterSystem {
         let text = &item.text;
 
         if self.current_duplicates.len() > 128 {
-            self.current_duplicates.retain(|_, &mut time| {
-                ctx.timer_ms - time < 10000
-            });
+            self.current_duplicates
+                .retain(|_, &mut time| ctx.timer_ms - time < 10000);
         }
 
         if self.blocked_duplicates.contains(text) {
@@ -211,7 +216,8 @@ impl FilterSystem {
             return true;
         }
 
-        self.current_duplicates.insert(text.clone(), item.get_actual_time(&ctx.global_flags));
+        self.current_duplicates
+            .insert(text.clone(), item.get_actual_time(&ctx.global_flags));
         self.passed_duplicates.insert(text.clone());
         false
     }
@@ -284,7 +290,14 @@ mod tests {
         let mut filters = FilterSystem::default();
         filters.blocked_types.insert(DanmakuType::FixTop);
         let ctx = make_ctx(0);
-        let mut item = DanmakuItem::new(0, "test".into(), 0xFFFFFFFF, 25.0, DanmakuType::FixTop, 3800);
+        let mut item = DanmakuItem::new(
+            0,
+            "test".into(),
+            0xFFFFFFFF,
+            25.0,
+            DanmakuType::FixTop,
+            3800,
+        );
         assert!(filters.filter_primary(&mut item, &ctx));
     }
 
@@ -293,7 +306,14 @@ mod tests {
         let mut filters = FilterSystem::default();
         filters.set_block_words(&["bad".to_string()]);
         let ctx = make_ctx(0);
-        let mut item = DanmakuItem::new(0, "this is bad content".into(), 0xFFFFFFFF, 25.0, DanmakuType::ScrollRL, 5000);
+        let mut item = DanmakuItem::new(
+            0,
+            "this is bad content".into(),
+            0xFFFFFFFF,
+            25.0,
+            DanmakuType::ScrollRL,
+            5000,
+        );
         assert!(filters.filter_primary(&mut item, &ctx));
     }
 
@@ -303,7 +323,14 @@ mod tests {
         filters.elapsed_time_limit_ms = 20;
         let mut ctx = make_ctx(0);
         ctx.frame_elapsed_ms = 25; // exceeded limit
-        let mut item = DanmakuItem::new(10000, "future".into(), 0xFFFFFFFF, 25.0, DanmakuType::ScrollRL, 5000);
+        let mut item = DanmakuItem::new(
+            10000,
+            "future".into(),
+            0xFFFFFFFF,
+            25.0,
+            DanmakuType::ScrollRL,
+            5000,
+        );
         // item.is_outside(0) = true (time 10000 > 0, dtime > 0 and dtime < duration → not outside)
         // Actually is_outside checks dtime <= 0 || dtime >= duration
         // dtime = 0 - 10000 = -10000 <= 0 → outside

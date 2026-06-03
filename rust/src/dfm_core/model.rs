@@ -98,12 +98,24 @@ impl GlobalFlags {
         self.prepare_flag = 0;
     }
 
-    pub fn update_measure(&mut self) { self.measure_flag += 1; }
-    pub fn update_visible(&mut self) { self.visible_flag += 1; }
-    pub fn update_filter(&mut self) { self.filter_flag += 1; }
-    pub fn update_first_shown(&mut self) { self.first_shown_flag += 1; }
-    pub fn update_sync_offset(&mut self) { self.sync_offset_flag += 1; }
-    pub fn update_prepare(&mut self) { self.prepare_flag += 1; }
+    pub fn update_measure(&mut self) {
+        self.measure_flag += 1;
+    }
+    pub fn update_visible(&mut self) {
+        self.visible_flag += 1;
+    }
+    pub fn update_filter(&mut self) {
+        self.filter_flag += 1;
+    }
+    pub fn update_first_shown(&mut self) {
+        self.first_shown_flag += 1;
+    }
+    pub fn update_sync_offset(&mut self) {
+        self.sync_offset_flag += 1;
+    }
+    pub fn update_prepare(&mut self) {
+        self.prepare_flag += 1;
+    }
 }
 
 /// Per-item epoch flags, matching GlobalFlags for dirty-checking.
@@ -270,7 +282,13 @@ impl DanmakuItem {
     }
 
     /// Measure with explicit outline width for accurate collision detection.
-    pub fn measure_with_outline(&mut self, view_width: f32, _view_height: f32, global_flags: &GlobalFlags, outline_width: f32) {
+    pub fn measure_with_outline(
+        &mut self,
+        view_width: f32,
+        _view_height: f32,
+        global_flags: &GlobalFlags,
+        outline_width: f32,
+    ) {
         if self.is_measured(global_flags) {
             return;
         }
@@ -289,7 +307,12 @@ impl DanmakuItem {
 
     /// Get the bounding rectangle at a specific time.
     /// Returns [left, top, right, bottom].
-    pub fn get_rect_at_time(&self, view_width: f32, time_ms: i64, global_flags: &GlobalFlags) -> [f32; 4] {
+    pub fn get_rect_at_time(
+        &self,
+        view_width: f32,
+        time_ms: i64,
+        global_flags: &GlobalFlags,
+    ) -> [f32; 4] {
         let actual_time = self.get_actual_time(global_flags);
         let elapsed = time_ms - actual_time;
         let left = match self.danmaku_type {
@@ -307,17 +330,23 @@ impl DanmakuItem {
                     elapsed as f32 * self.step_x - self.paint_width
                 }
             }
-            DanmakuType::FixTop | DanmakuType::FixBottom => {
-                (view_width - self.paint_width) / 2.0
-            }
-            DanmakuType::Special => {
-                self.get_special_x_at_time(view_width, time_ms, global_flags)
-            }
+            DanmakuType::FixTop | DanmakuType::FixBottom => (view_width - self.paint_width) / 2.0,
+            DanmakuType::Special => self.get_special_x_at_time(view_width, time_ms, global_flags),
         };
-        [left, self.y, left + self.paint_width, self.y + self.paint_height]
+        [
+            left,
+            self.y,
+            left + self.paint_width,
+            self.y + self.paint_height,
+        ]
     }
 
-    fn get_special_x_at_time(&self, _view_width: f32, time_ms: i64, global_flags: &GlobalFlags) -> f32 {
+    fn get_special_x_at_time(
+        &self,
+        _view_width: f32,
+        time_ms: i64,
+        global_flags: &GlobalFlags,
+    ) -> f32 {
         let actual_time = self.get_actual_time(global_flags);
         let elapsed = (time_ms - actual_time).max(0) as f32;
         let Some(ref paths) = self.line_paths else {
@@ -327,12 +356,14 @@ impl DanmakuItem {
             elapsed / self.duration_ms as f32
         } else {
             1.0
-        }.clamp(0.0, 1.0);
+        }
+        .clamp(0.0, 1.0);
 
         // Find the current path segment
-        let total_len: f32 = paths.iter().map(|p| {
-            ((p.end_x - p.begin_x).powi(2) + (p.end_y - p.begin_y).powi(2)).sqrt()
-        }).sum();
+        let total_len: f32 = paths
+            .iter()
+            .map(|p| ((p.end_x - p.begin_x).powi(2) + (p.end_y - p.begin_y).powi(2)).sqrt())
+            .sum();
         if total_len <= 0.0 {
             return self.x;
         }
@@ -340,7 +371,8 @@ impl DanmakuItem {
         let target_dist = progress * total_len;
         let mut accumulated = 0.0f32;
         for path in paths {
-            let seg_len = ((path.end_x - path.begin_x).powi(2) + (path.end_y - path.begin_y).powi(2)).sqrt();
+            let seg_len =
+                ((path.end_x - path.begin_x).powi(2) + (path.end_y - path.begin_y).powi(2)).sqrt();
             if accumulated + seg_len >= target_dist {
                 let seg_progress = if seg_len > 0.0 {
                     (target_dist - accumulated) / seg_len
@@ -449,7 +481,14 @@ mod tests {
     #[test]
     fn test_r2l_position() {
         let flags = GlobalFlags::default();
-        let mut item = DanmakuItem::new(0, "test".into(), 0xFFFFFFFF, 25.0, DanmakuType::ScrollRL, 5000);
+        let mut item = DanmakuItem::new(
+            0,
+            "test".into(),
+            0xFFFFFFFF,
+            25.0,
+            DanmakuType::ScrollRL,
+            5000,
+        );
         item.measure(1920.0, 1080.0, &flags);
         // At time 0, x should be at the right edge
         let rect = item.get_rect_at_time(1920.0, 0, &flags);

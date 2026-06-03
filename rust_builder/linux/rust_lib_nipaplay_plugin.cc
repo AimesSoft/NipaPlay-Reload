@@ -1,8 +1,11 @@
 #include "include/rust_lib_nipaplay/rust_lib_nipaplay_plugin.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <epoxy/egl.h>
+#include <epoxy/gl.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -12,10 +15,17 @@
 #include <vector>
 
 extern "C" {
+typedef const void* (*Next2GlProcLoader)(const char* name);
+
 uint64_t next2_engine_create(uint32_t width, uint32_t height);
 uint8_t next2_engine_resize(uint64_t handle, uint32_t width, uint32_t height);
 void next2_engine_dispose(uint64_t handle);
 bool next2_engine_poll_frame_ready(uint64_t handle);
+uint8_t next2_engine_render_gl_texture(uint64_t handle,
+                                       uint32_t texture_name,
+                                       uint32_t width,
+                                       uint32_t height,
+                                       Next2GlProcLoader loader);
 uint8_t next2_engine_set_frame(uint64_t handle,
                                const char* frame_json,
                                float font_size,
@@ -25,11 +35,6 @@ uint8_t next2_engine_set_frame(uint64_t handle,
                                const char* custom_font_family,
                                const char* custom_font_file_path);
 uint8_t next2_engine_reset_scene(uint64_t handle);
-uint8_t next2_engine_copy_bgra_frame(uint64_t handle,
-                                     uint8_t* out_pixels,
-                                     uint32_t out_len,
-                                     uint32_t* out_width,
-                                     uint32_t* out_height);
 }
 
 #define RUST_LIB_NIPAPLAY_PLUGIN(obj)                                      \
@@ -46,31 +51,31 @@ using SurfaceMutex = std::mutex;
 
 struct SurfaceState {
   std::string surface_id;
-  FlPixelBufferTexture* texture = nullptr;
+  FlTextureGL* texture = nullptr;
   FlTexture* texture_base = nullptr;
   int64_t texture_id = -1;
   uint64_t engine_handle = 0;
   uint32_t width = 0;
   uint32_t height = 0;
-  std::vector<uint8_t> rgba;
   std::mutex lock;
 };
 
-typedef struct _Next2PixelBufferTexture Next2PixelBufferTexture;
-typedef struct _Next2PixelBufferTextureClass Next2PixelBufferTextureClass;
+typedef struct _Next2GLTexture Next2GLTexture;
+typedef struct _Next2GLTextureClass Next2GLTextureClass;
 
-struct _Next2PixelBufferTexture {
-  FlPixelBufferTexture parent_instance;
+struct _Next2GLTexture {
+  FlTextureGL parent_instance;
   SurfaceState* state = nullptr;
+  GLuint texture_name = 0;
+  uint32_t texture_width = 0;
+  uint32_t texture_height = 0;
 };
 
-struct _Next2PixelBufferTextureClass {
-  FlPixelBufferTextureClass parent_class;
+struct _Next2GLTextureClass {
+  FlTextureGLClass parent_class;
 };
 
-G_DEFINE_TYPE(Next2PixelBufferTexture,
-              next2_pixel_buffer_texture,
-              fl_pixel_buffer_texture_get_type())
+G_DEFINE_TYPE(Next2GLTexture, next2_gl_texture, fl_texture_gl_get_type())
 
 struct _RustLibNipaplayPlugin {
   GObject parent_instance;
@@ -174,41 +179,202 @@ static std::string ReadSurfaceId(FlValue* map) {
   return "default";
 }
 
-static gboolean next2_texture_copy_pixels(FlPixelBufferTexture* texture,
-                                          const guint8** out_buffer,
-                                          guint32* width,
-                                          guint32* height,
+struct GlStateSnapshot {
+  GLint active_texture = GL_TEXTURE0;
+  GLint texture_binding_2d = 0;
+  GLint framebuffer_binding = 0;
+  GLint renderbuffer_binding = 0;
+  GLint current_program = 0;
+  GLint array_buffer_binding = 0;
+  GLint element_array_buffer_binding = 0;
+  GLint vertex_array_binding = 0;
+  GLint viewport[4] = {0, 0, 0, 0};
+  GLboolean blend = GL_FALSE;
+  GLboolean scissor = GL_FALSE;
+  GLboolean depth = GL_FALSE;
+  GLboolean cull = GL_FALSE;
+};
+
+static void SetGlEnabled(GLenum capability, GLboolean enabled) {
+  if (enabled == GL_TRUE) {
+    glEnable(capability);
+  } else {
+    glDisable(capability);
+  }
+}
+
+static GlStateSnapshot SaveGlState() {
+  GlStateSnapshot state;
+  glGetIntegerv(GL_ACTIVE_TEXTURE, &state.active_texture);
+  glActiveTexture(GL_TEXTURE0);
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &state.texture_binding_2d);
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &state.framebuffer_binding);
+  glGetIntegerv(GL_RENDERBUFFER_BINDING, &state.renderbuffer_binding);
+  glGetIntegerv(GL_CURRENT_PROGRAM, &state.current_program);
+  glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &state.array_buffer_binding);
+  glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &state.element_array_buffer_binding);
+#ifdef GL_VERTEX_ARRAY_BINDING
+  glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &state.vertex_array_binding);
+#endif
+  glGetIntegerv(GL_VIEWPORT, state.viewport);
+  state.blend = glIsEnabled(GL_BLEND);
+  state.scissor = glIsEnabled(GL_SCISSOR_TEST);
+  state.depth = glIsEnabled(GL_DEPTH_TEST);
+  state.cull = glIsEnabled(GL_CULL_FACE);
+  return state;
+}
+
+static void RestoreGlState(const GlStateSnapshot& state) {
+  SetGlEnabled(GL_BLEND, state.blend);
+  SetGlEnabled(GL_SCISSOR_TEST, state.scissor);
+  SetGlEnabled(GL_DEPTH_TEST, state.depth);
+  SetGlEnabled(GL_CULL_FACE, state.cull);
+  glUseProgram(static_cast<GLuint>(state.current_program));
+#ifdef GL_VERTEX_ARRAY_BINDING
+  glBindVertexArray(static_cast<GLuint>(state.vertex_array_binding));
+#endif
+  glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(state.array_buffer_binding));
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(state.element_array_buffer_binding));
+  glBindRenderbuffer(GL_RENDERBUFFER, static_cast<GLuint>(state.renderbuffer_binding));
+  glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(state.framebuffer_binding));
+  glViewport(state.viewport[0], state.viewport[1], state.viewport[2], state.viewport[3]);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(state.texture_binding_2d));
+  glActiveTexture(static_cast<GLenum>(state.active_texture));
+}
+
+static const void* next2_gl_proc_loader(const char* name) {
+  if (name == nullptr) {
+    return nullptr;
+  }
+  return reinterpret_cast<const void*>(eglGetProcAddress(name));
+}
+
+static bool EnsureTextureStorage(Next2GLTexture* self,
+                                 uint32_t width,
+                                 uint32_t height) {
+  if (self->texture_name == 0) {
+    glGenTextures(1, &self->texture_name);
+  }
+  if (self->texture_name == 0) {
+    return false;
+  }
+
+  glBindTexture(GL_TEXTURE_2D, self->texture_name);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  const bool resized = self->texture_width != width || self->texture_height != height;
+  if (resized) {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<GLsizei>(width),
+                 static_cast<GLsizei>(height), 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 nullptr);
+    self->texture_width = width;
+    self->texture_height = height;
+  }
+  return true;
+}
+
+static void ClearTexture(GLuint texture_name, uint32_t width, uint32_t height) {
+  if (texture_name == 0 || width == 0 || height == 0) {
+    return;
+  }
+
+  GLuint framebuffer = 0;
+  glGenFramebuffers(1, &framebuffer);
+  if (framebuffer == 0) {
+    return;
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         texture_name, 0);
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
+    glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+  }
+  glDeleteFramebuffers(1, &framebuffer);
+}
+
+static gboolean next2_gl_texture_populate(FlTextureGL* texture,
+                                          uint32_t* target,
+                                          uint32_t* name,
+                                          uint32_t* width,
+                                          uint32_t* height,
                                           GError** error) {
   (void)error;
-  auto* next2_texture = reinterpret_cast<Next2PixelBufferTexture*>(texture);
+  auto* next2_texture = reinterpret_cast<Next2GLTexture*>(texture);
   SurfaceState* state = next2_texture->state;
-  if (!state) {
+  if (state == nullptr) {
     return FALSE;
   }
-  std::lock_guard<std::mutex> guard(state->lock);
-  if (state->rgba.empty() || state->width == 0 || state->height == 0) {
+
+  uint64_t engine_handle = 0;
+  uint32_t desired_width = 0;
+  uint32_t desired_height = 0;
+  {
+    std::lock_guard<std::mutex> guard(state->lock);
+    engine_handle = state->engine_handle;
+    desired_width = state->width;
+    desired_height = state->height;
+  }
+
+  if (engine_handle == 0 || desired_width == 0 || desired_height == 0) {
     return FALSE;
   }
-  *out_buffer = state->rgba.data();
-  *width = state->width;
-  *height = state->height;
+
+  const GlStateSnapshot gl_state = SaveGlState();
+  const bool has_storage = EnsureTextureStorage(next2_texture, desired_width, desired_height);
+  bool rendered = false;
+  if (has_storage) {
+    rendered = next2_engine_render_gl_texture(engine_handle, next2_texture->texture_name,
+                                              desired_width, desired_height,
+                                              next2_gl_proc_loader) != 0;
+    if (!rendered) {
+      ClearTexture(next2_texture->texture_name, desired_width, desired_height);
+    }
+  }
+  RestoreGlState(gl_state);
+
+  if (!has_storage) {
+    return FALSE;
+  }
+
+  *target = GL_TEXTURE_2D;
+  *name = next2_texture->texture_name;
+  *width = desired_width;
+  *height = desired_height;
   return TRUE;
 }
 
-static void next2_pixel_buffer_texture_class_init(
-    Next2PixelBufferTextureClass* klass) {
-  FL_PIXEL_BUFFER_TEXTURE_CLASS(klass)->copy_pixels = next2_texture_copy_pixels;
+static void next2_gl_texture_dispose(GObject* object) {
+  auto* self = reinterpret_cast<Next2GLTexture*>(object);
+  if (self->texture_name != 0) {
+    glDeleteTextures(1, &self->texture_name);
+    self->texture_name = 0;
+  }
+  G_OBJECT_CLASS(next2_gl_texture_parent_class)->dispose(object);
 }
 
-static void next2_pixel_buffer_texture_init(Next2PixelBufferTexture* self) {
+static void next2_gl_texture_class_init(Next2GLTextureClass* klass) {
+  FL_TEXTURE_GL_CLASS(klass)->populate = next2_gl_texture_populate;
+  G_OBJECT_CLASS(klass)->dispose = next2_gl_texture_dispose;
+}
+
+static void next2_gl_texture_init(Next2GLTexture* self) {
   self->state = nullptr;
+  self->texture_name = 0;
+  self->texture_width = 0;
+  self->texture_height = 0;
 }
 
-static FlPixelBufferTexture* create_pixel_texture(SurfaceState* state) {
-  auto* texture = reinterpret_cast<Next2PixelBufferTexture*>(
-      g_object_new(next2_pixel_buffer_texture_get_type(), nullptr));
+static FlTextureGL* create_gl_texture(SurfaceState* state) {
+  auto* texture = reinterpret_cast<Next2GLTexture*>(
+      g_object_new(next2_gl_texture_get_type(), nullptr));
   texture->state = state;
-  return FL_PIXEL_BUFFER_TEXTURE(texture);
+  return FL_TEXTURE_GL(texture);
 }
 
 static gboolean tick_cb(gpointer user_data) {
@@ -222,20 +388,6 @@ static gboolean tick_cb(gpointer user_data) {
     if (!next2_engine_poll_frame_ready(state->engine_handle)) {
       continue;
     }
-    std::lock_guard<std::mutex> guard(state->lock);
-    if (state->rgba.empty() || state->width == 0 || state->height == 0) {
-      continue;
-    }
-    uint32_t out_w = 0;
-    uint32_t out_h = 0;
-    const uint8_t ok = next2_engine_copy_bgra_frame(
-        state->engine_handle, state->rgba.data(),
-        static_cast<uint32_t>(state->rgba.size()), &out_w, &out_h);
-    if (ok == 0 || out_w == 0 || out_h == 0) {
-      continue;
-    }
-    state->width = out_w;
-    state->height = out_h;
     fl_texture_registrar_mark_texture_frame_available(
         self->texture_registrar, state->texture_base);
   }
@@ -300,11 +452,12 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
         fl_method_call_respond(method_call, response, nullptr);
         return;
       }
-      created->rgba.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
-      created->texture = create_pixel_texture(created.get());
+      created->texture = create_gl_texture(created.get());
       created->texture_base = FL_TEXTURE(created->texture);
       if (!fl_texture_registrar_register_texture(self->texture_registrar,
                                                  created->texture_base)) {
+        next2_engine_dispose(created->engine_handle);
+        g_object_unref(created->texture);
         g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
             fl_method_error_response_new("register_texture_failed",
                                          "Failed to register texture", nullptr));
@@ -329,10 +482,20 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
           return;
         }
       }
-      state->width = width;
-      state->height = height;
-      state->rgba.assign(static_cast<size_t>(width) * static_cast<size_t>(height) * 4, 0);
+      {
+        std::lock_guard<std::mutex> state_guard(state->lock);
+        state->width = width;
+        state->height = height;
+      }
       is_new_engine = true;
+    }
+
+    uint32_t response_width = 0;
+    uint32_t response_height = 0;
+    {
+      std::lock_guard<std::mutex> state_guard(state->lock);
+      response_width = state->width;
+      response_height = state->height;
     }
 
     FlValue* response_map = fl_value_new_map();
@@ -341,9 +504,9 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
     fl_value_set_string_take(response_map, "engineHandle",
                              fl_value_new_int(static_cast<int64_t>(state->engine_handle)));
     fl_value_set_string_take(response_map, "width",
-                             fl_value_new_int(static_cast<int32_t>(state->width)));
+                             fl_value_new_int(static_cast<int32_t>(response_width)));
     fl_value_set_string_take(response_map, "height",
-                             fl_value_new_int(static_cast<int32_t>(state->height)));
+                             fl_value_new_int(static_cast<int32_t>(response_height)));
     fl_value_set_string_take(response_map, "isNewEngine",
                              fl_value_new_bool(is_new_engine));
     g_autoptr(FlMethodResponse) response =

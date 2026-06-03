@@ -269,12 +269,6 @@ impl Next2Renderer {
             mapped_at_creation: false,
         });
 
-        let offscreen_texture = create_render_texture(
-            ctx.device.as_ref(),
-            width.max(1),
-            height.max(1),
-            Some("next2 offscreen texture"),
-        );
         let shadow_width = width.max(1).saturating_mul(SHADOW_RENDER_SCALE);
         let shadow_height = height.max(1).saturating_mul(SHADOW_RENDER_SCALE);
         let shadow_mask_texture = create_render_texture_with_usage(
@@ -296,6 +290,9 @@ impl Next2Renderer {
             ctx,
             #[cfg(target_os = "android")]
             surface_pipeline: None,
+            texture_format: wgpu::TextureFormat::Bgra8Unorm,
+            texture_pipeline: None,
+            texture_screen_pipeline: None,
             offscreen_pipeline,
             blur_pipeline_horizontal,
             blur_pipeline_vertical,
@@ -316,7 +313,6 @@ impl Next2Renderer {
             clear_color: [0.0, 0.0, 0.0, 0.0],
             width: width.max(1),
             height: height.max(1),
-            offscreen_texture,
             shadow_mask_texture,
             shadow_blur_texture,
             shadow_width,
@@ -331,12 +327,6 @@ impl Next2Renderer {
     fn resize(&mut self, width: u32, height: u32) -> bool {
         self.width = width.max(1);
         self.height = height.max(1);
-        self.offscreen_texture = create_render_texture(
-            self.ctx.device.as_ref(),
-            self.width,
-            self.height,
-            Some("next2 offscreen texture"),
-        );
         self.shadow_width = self.width.saturating_mul(SHADOW_RENDER_SCALE);
         self.shadow_height = self.height.saturating_mul(SHADOW_RENDER_SCALE);
         self.shadow_mask_texture = create_render_texture_with_usage(
@@ -362,10 +352,6 @@ impl Next2Renderer {
         self.shadow_vertices.clear();
         self.atlas.clear();
         self.emoji_atlas.clear();
-    }
-
-    fn frame_items(&self) -> &[FrameItem] {
-        &self.frame_items
     }
 
     fn update_frame(&mut self, input: RenderFrameInput, custom_font: Option<FontSource>) -> bool {
@@ -499,135 +485,42 @@ impl Next2Renderer {
             PresentTarget::Texture(texture_target) => {
                 self.width = texture_target.width.max(1);
                 self.height = texture_target.height.max(1);
-                let glyph_pipeline = self.offscreen_pipeline.clone();
-                let screen_pipeline = self.screen_pipeline.clone();
-                let offscreen_view =
-                    self.offscreen_texture
-                        .create_view(&wgpu::TextureViewDescriptor {
-                            format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                            ..Default::default()
-                        });
-                self.draw_to_view(&offscreen_view, &glyph_pipeline, &screen_pipeline);
-
-                let mut encoder =
-                    self.ctx
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("next2 present blit encoder"),
-                        });
-                encoder.copy_texture_to_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &self.offscreen_texture,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::TexelCopyTextureInfo {
-                        texture: texture_target.render_texture(),
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::Extent3d {
-                        width: self.width.max(1),
-                        height: self.height.max(1),
-                        depth_or_array_layers: 1,
+                let target_format = texture_target.format();
+                let (glyph_pipeline, screen_pipeline) = if target_format == wgpu::TextureFormat::Bgra8Unorm {
+                    (self.offscreen_pipeline.clone(), self.screen_pipeline.clone())
+                } else {
+                    if self.texture_format != target_format
+                        || self.texture_pipeline.is_none()
+                        || self.texture_screen_pipeline.is_none()
+                    {
+                        self.texture_pipeline = Some(Self::create_pipeline(
+                            self.ctx.device.as_ref(),
+                            &self.atlas_bind_group_layout,
+                            target_format,
+                            "next2 texture render pipeline",
+                        ));
+                        self.texture_screen_pipeline = Some(Self::create_screen_pipeline(
+                            self.ctx.device.as_ref(),
+                            &self.screen_bind_group_layout,
+                            target_format,
+                            NEXT2_SCREEN_COPY_WGSL,
+                            "next2 texture composite pipeline",
+                        ));
+                        self.texture_format = target_format;
+                    }
+                    (
+                        self.texture_pipeline.as_ref().unwrap().clone(),
+                        self.texture_screen_pipeline.as_ref().unwrap().clone(),
+                    )
+                };
+                let view = texture_target.render_texture().create_view(
+                    &wgpu::TextureViewDescriptor {
+                        format: Some(target_format),
+                        ..Default::default()
                     },
                 );
-                self.ctx.queue.submit(std::iter::once(encoder.finish()));
+                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
             }
         }
-    }
-
-    fn draw_to_offscreen(&mut self) {
-        let view = self
-            .offscreen_texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                format: Some(wgpu::TextureFormat::Bgra8Unorm),
-                ..Default::default()
-            });
-        let glyph_pipeline = self.offscreen_pipeline.clone();
-        let screen_pipeline = self.screen_pipeline.clone();
-        self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
-    }
-
-    fn readback_pixels(&self) -> Option<Next2ReadbackFrame> {
-        let width = self.width.max(1);
-        let height = self.height.max(1);
-        let bytes_per_pixel = 4u32;
-        let unpadded_bytes_per_row = width.checked_mul(bytes_per_pixel)?;
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
-        let output_size = padded_bytes_per_row.checked_mul(height)? as u64;
-
-        let output_buffer = self.ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("next2 readback buffer"),
-            size: output_size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        let mut encoder = self
-            .ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("next2 readback encoder"),
-            });
-        encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.offscreen_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &output_buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(height),
-                },
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-        self.ctx.queue.submit(std::iter::once(encoder.finish()));
-
-        let slice = output_buffer.slice(..);
-        let (tx, rx) = mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = tx.send(result.is_ok());
-        });
-        let _ = self.ctx.device.poll(wgpu::PollType::wait_indefinitely());
-        if rx.recv().ok()? != true {
-            n2log("readback: map_async failed");
-            return None;
-        }
-
-        let mapped = slice.get_mapped_range();
-        let mut pixels = vec![0u8; unpadded_bytes_per_row.checked_mul(height)? as usize];
-        for row in 0..height as usize {
-            let src_start = row * padded_bytes_per_row as usize;
-            let src_end = src_start + unpadded_bytes_per_row as usize;
-            let dst_start = row * unpadded_bytes_per_row as usize;
-            let dst_end = dst_start + unpadded_bytes_per_row as usize;
-            pixels[dst_start..dst_end].copy_from_slice(&mapped[src_start..src_end]);
-        }
-        drop(mapped);
-        output_buffer.unmap();
-
-        Some(Next2ReadbackFrame {
-            width,
-            height,
-            pixels,
-        })
-    }
-
-    fn readback_frame_bgra(&mut self) -> Option<Next2ReadbackFrame> {
-        self.draw_to_offscreen();
-        self.readback_pixels()
     }
 }
