@@ -639,29 +639,62 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   Future<List<io.FileSystemEntity>> _getDirectoryContents(String path) async {
     final List<io.FileSystemEntity> contents = [];
-    final io.Directory directory = io.Directory(path);
-    if (await directory.exists()) {
+
+    // 处理 Android SAF content:// URI
+    if (io.Platform.isAndroid && AndroidSafService.isSafUri(path)) {
       try {
-        await for (var entity
-            in directory.list(recursive: false, followLinks: false)) {
-          if (entity is io.Directory) {
-            contents.add(entity);
-          } else if (entity is io.File) {
-            String extension = p.extension(entity.path).toLowerCase();
+        final List<AndroidSafFileEntry> safEntries =
+            await AndroidSafService.scanDirectory(path);
+        for (final entry in safEntries) {
+          if (entry.size == 0 && entry.relativePath.endsWith('/')) {
+            // 这是一个目录，创建一个虚拟的 Directory 对象
+            // 注意：SAF 目录无法直接转为 io.Directory，我们跳过它
+            // 实际的子目录展开需要通过 SAF 重新扫描
+            continue;
+          } else {
+            // 这是一个文件
+            String extension = p.extension(entry.name).toLowerCase();
             if (extension == '.mp4' || extension == '.mkv') {
-              contents.add(entity);
+              // 创建一个虚拟的 File 对象用于显示
+              // 使用 relativePath 构造一个本地路径用于显示
+              contents.add(io.File(entry.uri));
             }
           }
         }
       } catch (e) {
-        //debugPrint("Error listing directory contents for $path: $e");
         if (mounted) {
           setState(() {
-            // _scanMessage = "加载文件夹内容失败: $path ($e)";
+            // _scanMessage = "加载SAF文件夹内容失败: $path ($e)";
           });
         }
       }
+    } else {
+      // 处理普通文件系统路径
+      final io.Directory directory = io.Directory(path);
+      if (await directory.exists()) {
+        try {
+          await for (var entity
+              in directory.list(recursive: false, followLinks: false)) {
+            if (entity is io.Directory) {
+              contents.add(entity);
+            } else if (entity is io.File) {
+              String extension = p.extension(entity.path).toLowerCase();
+              if (extension == '.mp4' || extension == '.mkv') {
+                contents.add(entity);
+              }
+            }
+          }
+        } catch (e) {
+          //debugPrint("Error listing directory contents for $path: $e");
+          if (mounted) {
+            setState(() {
+              // _scanMessage = "加载文件夹内容失败: $path ($e)";
+            });
+          }
+        }
+      }
     }
+
     // 应用选择的排序方式
     _sortContents(contents);
     return contents;
