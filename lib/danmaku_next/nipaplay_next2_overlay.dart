@@ -6,6 +6,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 
 import 'next2_emoji_pipeline.dart';
 import 'next2_layout_bridge.dart';
+import 'next2_overlay_viewport.dart';
 import 'next2_texture_bridge.dart';
 
 class NipaPlayNext2Overlay extends StatefulWidget {
@@ -111,13 +112,24 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = Size(constraints.maxWidth, constraints.maxHeight);
-        if (size.isEmpty) {
+        final constrainedSize = Size(
+          constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : constraints.minWidth,
+          constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : constraints.minHeight,
+        );
+        final layoutSize = Next2OverlayViewport.resolveLayoutSize(
+          context,
+          constraints,
+        );
+        if (layoutSize.isEmpty) {
           return const SizedBox.expand();
         }
 
-        if (_layoutSize != size) {
-          _layoutSize = size;
+        if (_layoutSize != layoutSize) {
+          _layoutSize = layoutSize;
           _queueUpdate();
         }
 
@@ -139,9 +151,8 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
             final needsSupersample =
                 globals.isTablet || (globals.isDesktop && dpr < 2.0);
-            final filterQuality = needsSupersample
-                ? FilterQuality.low
-                : FilterQuality.none;
+            final filterQuality =
+                needsSupersample ? FilterQuality.low : FilterQuality.none;
             final Widget content = hasTexture
                 ? Texture(
                     textureId: _textureId!,
@@ -149,9 +160,13 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
                   )
                 : const SizedBox.expand();
 
-            return Opacity(
-              opacity: widget.opacity.clamp(0.0, 1.0).toDouble(),
-              child: SizedBox.expand(child: content),
+            return Next2OverlayViewport.buildLayer(
+              layoutSize: layoutSize,
+              constrainedSize: constrainedSize,
+              child: Opacity(
+                opacity: widget.opacity.clamp(0.0, 1.0).toDouble(),
+                child: content,
+              ),
             );
           },
         );
@@ -222,8 +237,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
     final needsSupersample =
         globals.isTablet || (globals.isDesktop && dpr < 2.0);
-    final supersample =
-        needsSupersample ? _supersampleMultiplier : 1.0;
+    final supersample = needsSupersample ? _supersampleMultiplier : 1.0;
     final double pixelRatio =
         (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
 

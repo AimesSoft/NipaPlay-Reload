@@ -1,0 +1,32 @@
+name: volume_controller
+description: A Flutter volume plugin for multiple platform to control system volume.
+version: 3.4.2
+homepage: https://github.com/kurenai7968/volume_controller
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.kurenai7968.volume_controller
+        pluginClass: VolumeControllerPlugin
+      ios:
+        pluginClass: VolumeControllerPlugin
+      macos:
+        pluginClass: VolumeControllerPlugin
+      linux:
+        pluginClass: VolumeControllerPlugin
+      windows:
+        pluginClass: VolumeControllerPluginCApi
