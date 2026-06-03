@@ -230,6 +230,7 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
         : screenSize.height * widget.maxHeightFactor;
     final double windowControlPadding =
         globals.isTablet ? _windowControlPadding + 3 : _windowControlPadding;
+    final BorderRadius windowBorderRadius = BorderRadius.circular(15);
 
     final baseTheme = Theme.of(context);
     final windowTheme = baseTheme.copyWith(
@@ -270,10 +271,8 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                           bottomMargin,
                         ),
                         child: Container(
-                          clipBehavior: Clip.antiAlias,
                           decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(15),
+                            borderRadius: windowBorderRadius,
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.2),
@@ -282,100 +281,105 @@ class _NipaplayWindowScaffoldState extends State<NipaplayWindowScaffold> {
                               ),
                             ],
                           ),
-                          child: Stack(
-                            children: [
-                              if (widget.backgroundImageUrl != null &&
-                                  widget.backgroundImageUrl!.isNotEmpty)
+                          child: Material(
+                            color: bgColor,
+                            borderRadius: windowBorderRadius,
+                            clipBehavior: Clip.antiAlias,
+                            child: Stack(
+                              children: [
+                                if (widget.backgroundImageUrl != null &&
+                                    widget.backgroundImageUrl!.isNotEmpty)
+                                  Positioned.fill(
+                                    child: ImageFiltered(
+                                      imageFilter: widget.blurBackground
+                                          ? ui.ImageFilter.blur(
+                                              sigmaX: 40, sigmaY: 40)
+                                          : ui.ImageFilter.blur(
+                                              sigmaX: 0, sigmaY: 0),
+                                      child: Opacity(
+                                        opacity: isDark ? 0.25 : 0.35,
+                                        child: CachedNetworkImageWidget(
+                                          imageUrl: widget.backgroundImageUrl!,
+                                          fit: BoxFit.cover,
+                                          shouldCompress: false,
+                                          loadMode: CachedImageLoadMode.hybrid,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 Positioned.fill(
-                                  child: ImageFiltered(
-                                    imageFilter: widget.blurBackground
-                                        ? ui.ImageFilter.blur(
-                                            sigmaX: 40, sigmaY: 40)
-                                        : ui.ImageFilter.blur(
-                                            sigmaX: 0, sigmaY: 0),
-                                    child: Opacity(
-                                      opacity: isDark ? 0.25 : 0.35,
-                                      child: CachedNetworkImageWidget(
-                                        imageUrl: widget.backgroundImageUrl!,
-                                        fit: BoxFit.cover,
-                                        shouldCompress: false,
-                                        loadMode: CachedImageLoadMode.hybrid,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          bgColor.withValues(alpha: 0.1),
+                                          bgColor.withValues(alpha: 0.4),
+                                        ],
                                       ),
                                     ),
                                   ),
                                 ),
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        bgColor.withValues(alpha: 0.1),
-                                        bgColor.withValues(alpha: 0.4),
-                                      ],
+                                DefaultTextStyle(
+                                  style: windowTextStyle,
+                                  child: NipaplayWindowPositionProvider(
+                                    onMove: _applyWindowOffset,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: _contentTopPadding,
+                                      ),
+                                      child: widget.child,
                                     ),
                                   ),
                                 ),
-                              ),
-                              DefaultTextStyle(
-                                style: windowTextStyle,
-                                child: NipaplayWindowPositionProvider(
-                                  onMove: _applyWindowOffset,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: _contentTopPadding,
-                                    ),
-                                    child: widget.child,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                height: _contentTopPadding,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.translucent,
-                                  onPanUpdate: (details) =>
-                                      _applyWindowOffset(details.delta),
-                                ),
-                              ),
-                              if (showCloseButton && useMacStyleCloseButton)
                                 Positioned(
                                   top: 0,
                                   left: 0,
-                                  child: _buildMacCloseButton(context),
-                                )
-                              else if (showCloseButton &&
-                                  topRightAction == null)
-                                Positioned(
-                                  top: windowControlPadding,
-                                  right: windowControlPadding,
-                                  child: _buildFluentCloseButton(context),
+                                  right: 0,
+                                  height: _contentTopPadding,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.translucent,
+                                    onPanUpdate: (details) =>
+                                        _applyWindowOffset(details.delta),
+                                  ),
                                 ),
-                              if (topRightAction != null)
-                                Positioned(
-                                  top: windowControlPadding,
-                                  right: windowControlPadding,
-                                  child: showCloseButton
-                                      ? (useMacStyleCloseButton
-                                          ? topRightAction
-                                          : Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                topRightAction,
-                                                const SizedBox(
-                                                  width: _windowControlGap,
-                                                ),
-                                                _buildFluentCloseButton(
-                                                  context,
-                                                ),
-                                              ],
-                                            ))
-                                      : topRightAction,
-                                ),
-                            ],
+                                if (showCloseButton && useMacStyleCloseButton)
+                                  Positioned(
+                                    top: 0,
+                                    left: 0,
+                                    child: _buildMacCloseButton(context),
+                                  )
+                                else if (showCloseButton &&
+                                    topRightAction == null)
+                                  Positioned(
+                                    top: windowControlPadding,
+                                    right: windowControlPadding,
+                                    child: _buildFluentCloseButton(context),
+                                  ),
+                                if (topRightAction != null)
+                                  Positioned(
+                                    top: windowControlPadding,
+                                    right: windowControlPadding,
+                                    child: showCloseButton
+                                        ? (useMacStyleCloseButton
+                                            ? topRightAction
+                                            : Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  topRightAction,
+                                                  const SizedBox(
+                                                    width: _windowControlGap,
+                                                  ),
+                                                  _buildFluentCloseButton(
+                                                    context,
+                                                  ),
+                                                ],
+                                              ))
+                                        : topRightAction,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
