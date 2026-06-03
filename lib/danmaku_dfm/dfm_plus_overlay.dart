@@ -76,6 +76,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   bool _forceLayout = false;
   bool _configurePending = false;
 
+  // Optimized texture update state: avoid redundant per-frame async calls
+  // when texture ID is already stable. Only re-acquire when size changes.
+  int _lastTextureWidth = 0;
+  int _lastTextureHeight = 0;
+  String _lastTextureSurfaceId = '';
+
   int? _textureId;
   bool _textureReady = false;
   String _surfaceId = 'dfm-default';
@@ -88,6 +94,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   void initState() {
     super.initState();
     _surfaceId = 'dfm-${identityHashCode(this)}';
+    _lastTextureSurfaceId = _surfaceId;
   }
 
   @override
@@ -287,41 +294,53 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     final int pixelHeight =
         (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
 
-    final info = await _textureBridge.ensureTexture(
-      surfaceId: _surfaceId,
-      width: pixelWidth,
-      height: pixelHeight,
-    );
+    // Optimized: only re-acquire texture if size changed (avoids redundant
+    // ensureTexture await on every frame when texture ID is already stable)
+    bool needsNewTexture = _textureId == null ||
+        pixelWidth != _lastTextureWidth ||
+        pixelHeight != _lastTextureHeight ||
+        _surfaceId != _lastTextureSurfaceId;
 
-    if (info == null) {
-      if (_textureReady || _textureId != null) {
+    if (needsNewTexture) {
+      _lastTextureWidth = pixelWidth;
+      _lastTextureHeight = pixelHeight;
+      _lastTextureSurfaceId = _surfaceId;
+
+      final info = await _textureBridge.ensureTexture(
+        surfaceId: _surfaceId,
+        width: pixelWidth,
+        height: pixelHeight,
+      );
+
+      if (info == null) {
+        if (_textureReady || _textureId != null) {
+          setState(() {
+            _textureReady = false;
+            _textureId = null;
+          });
+        }
+        return false;
+      }
+
+      if (!mounted) {
+        return false;
+      }
+
+      if (_textureId != info.textureId || !_textureReady) {
         setState(() {
-          _textureReady = false;
-          _textureId = null;
+          _textureId = info.textureId;
+          _textureReady = true;
         });
       }
-      return false;
+
+      if (info.isNewEngine) {
+        await _textureBridge.resetScene();
+        _emojiPipeline.markAtlasDirty();
+      }
     }
 
-    if (!mounted) {
-      return false;
-    }
-
-    if (_textureId != info.textureId || !_textureReady) {
-      setState(() {
-        _textureId = info.textureId;
-        _textureReady = true;
-      });
-    }
-
-    if (info.isNewEngine) {
-      await _textureBridge.resetScene();
-      _emojiPipeline.markAtlasDirty();
-    }
-
-    final widthScale = info.width > 0 ? info.width / _layoutSize.width : 1.0;
-    final heightScale =
-        info.height > 0 ? info.height / _layoutSize.height : 1.0;
+    final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
+    final heightScale = pixelHeight > 0 ? pixelHeight / _layoutSize.height : 1.0;
     final fontScale =
         ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
 
