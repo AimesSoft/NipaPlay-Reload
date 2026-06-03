@@ -13,6 +13,7 @@ import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
+import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/services/bangumi_api_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
@@ -2566,8 +2567,9 @@ class _CupertinoSharedAnimeDetailPageState
 
   Future<String?> _requestBangumiHighQualityImage(String bangumiId) async {
     try {
+      final bangumiServer = await NetworkSettings.getBangumiServer();
       final uri = Uri.parse(
-        'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large',
+        '$bangumiServer/v0/subjects/$bangumiId/image?type=large',
       );
       debugPrint('[共享番剧详情] 请求Bangumi高清封面: $uri');
       final response = await http.head(

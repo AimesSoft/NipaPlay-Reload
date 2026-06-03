@@ -109,8 +109,9 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     try {
       // 使用Bangumi API的图片接口获取large尺寸的图片
       // GET /v0/subjects/{subject_id}/image?type=large
+      final bangumiServer = await NetworkSettings.getBangumiServer();
       final String imageApiUrl =
-          'https://api.bgm.tv/v0/subjects/$bangumiId/image?type=large';
+          '$bangumiServer/v0/subjects/$bangumiId/image?type=large';
 
       final response = await http.head(
         WebRemoteAccessService.proxyUri(Uri.parse(imageApiUrl)),

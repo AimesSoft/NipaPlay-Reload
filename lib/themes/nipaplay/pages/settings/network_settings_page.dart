@@ -18,10 +18,14 @@ class NetworkSettingsPage extends StatefulWidget {
 
 class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
   String _currentServer = '';
+  String _currentBangumiServer = '';
   bool _isLoading = true;
   final GlobalKey _serverDropdownKey = GlobalKey();
   final TextEditingController _customServerController = TextEditingController();
+  final TextEditingController _customBangumiServerController =
+      TextEditingController();
   bool _isSavingCustom = false;
+  bool _isSavingBangumiCustom = false;
 
   final _connectivity = ServerConnectivityService.instance;
 
@@ -40,6 +44,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     _connectivity.bangumiNotifier.removeListener(_onConnectivityChanged);
     _connectivity.checkingNotifier.removeListener(_onConnectivityChanged);
     _customServerController.dispose();
+    _customBangumiServerController.dispose();
     super.dispose();
   }
 
@@ -49,13 +54,20 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
 
   Future<void> _loadCurrentServer() async {
     final server = await NetworkSettings.getDandanplayServer();
+    final bangumiServer = await NetworkSettings.getBangumiServer();
     setState(() {
       _currentServer = server;
+      _currentBangumiServer = bangumiServer;
       _isLoading = false;
       if (NetworkSettings.isCustomServer(server)) {
         _customServerController.text = server;
       } else {
         _customServerController.clear();
+      }
+      if (NetworkSettings.isCustomBangumiServer(bangumiServer)) {
+        _customBangumiServerController.text = bangumiServer;
+      } else {
+        _customBangumiServerController.clear();
       }
     });
   }
@@ -84,7 +96,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
   Future<void> _saveCustomServer() async {
     final input = _customServerController.text.trim();
     if (input.isEmpty) {
-      BlurSnackBar.show(context, context.l10n.enterServerAddress);
+      setState(() {
+        _isSavingCustom = true;
+      });
+      await NetworkSettings.resetToDefaultServer();
+      final server = await NetworkSettings.getDandanplayServer();
+      if (!mounted) return;
+      setState(() {
+        _currentServer = server;
+        _isSavingCustom = false;
+      });
+      BlurSnackBar.show(context, '已切换到默认服务器');
       return;
     }
 
@@ -107,6 +129,44 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     });
 
     BlurSnackBar.show(context, context.l10n.switchedToCustomServer);
+  }
+
+  Future<void> _saveCustomBangumiServer() async {
+    final input = _customBangumiServerController.text.trim();
+    if (input.isEmpty) {
+      setState(() {
+        _isSavingBangumiCustom = true;
+      });
+      await NetworkSettings.resetBangumiServer();
+      final server = await NetworkSettings.getBangumiServer();
+      if (!mounted) return;
+      setState(() {
+        _currentBangumiServer = server;
+        _isSavingBangumiCustom = false;
+      });
+      BlurSnackBar.show(context, '已切换到默认服务器');
+      return;
+    }
+
+    if (!NetworkSettings.isValidServerUrl(input)) {
+      BlurSnackBar.show(context, context.l10n.invalidServerAddress);
+      return;
+    }
+
+    setState(() {
+      _isSavingBangumiCustom = true;
+    });
+
+    await NetworkSettings.setBangumiServer(input);
+    final server = await NetworkSettings.getBangumiServer();
+    if (!mounted) return;
+
+    setState(() {
+      _currentBangumiServer = server;
+      _isSavingBangumiCustom = false;
+    });
+
+    BlurSnackBar.show(context, 'Bangumi 服务器已切换到自定义服务器');
   }
 
   String _getServerDisplayName(BuildContext context, String serverUrl) {
@@ -163,6 +223,82 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     );
   }
 
+  Widget _buildCustomServerSection({
+    required String title,
+    required String hint,
+    required TextEditingController controller,
+    required bool isSaving,
+    required VoidCallback onSave,
+    required ColorScheme colorScheme,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Ionicons.create_outline,
+                  color: colorScheme.onSurface, size: 18),
+              SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            hint,
+            style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.7), fontSize: 12),
+          ),
+          SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            cursorColor: AppAccentColors.current,
+            decoration: InputDecoration(
+              hintText: 'https://example.com',
+              hintStyle:
+                  TextStyle(color: colorScheme.onSurface.withOpacity(0.38)),
+              filled: true,
+              fillColor: colorScheme.onSurface.withOpacity(0.1),
+              border: OutlineInputBorder(
+                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide:
+                    BorderSide(color: AppAccentColors.current, width: 2),
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+            ),
+            style: TextStyle(color: colorScheme.onSurface),
+          ),
+          SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: BlurButton(
+              icon: isSaving ? null : Ionicons.checkmark_outline,
+              text: isSaving ? context.l10n.saving : context.l10n.useThisServer,
+              onTap: isSaving ? () {} : onSave,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              fontSize: 13,
+              iconSize: 16,
+              foregroundColor: colorScheme.onSurface,
+              hoverForegroundColor: AppAccentColors.current,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<DropdownMenuItemData> _getServerDropdownItems(BuildContext context) {
     final items = [
       DropdownMenuItemData(
@@ -211,6 +347,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       backgroundColor: Colors.transparent,
       body: ListView(
         children: [
+          // 网络诊断
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -274,6 +411,61 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             ),
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+          // Bangumi 服务器配置
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                Icon(
+                  Ionicons.book_outline,
+                  color: colorScheme.onSurface,
+                  size: 16,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'Bangumi',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildCustomServerSection(
+            title: '自定义 Bangumi API 服务器',
+            hint: '输入自定义 Bangumi API 服务器地址，留空使用默认服务器 (${NetworkSettings.bangumiDefaultServer})',
+            controller: _customBangumiServerController,
+            isSaving: _isSavingBangumiCustom,
+            onSave: _saveCustomBangumiServer,
+            colorScheme: colorScheme,
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+          // 弹弹play 服务器配置
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                Icon(
+                  Ionicons.chatbubble_ellipses_outline,
+                  color: colorScheme.onSurface,
+                  size: 16,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  '弹弹play',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
           SettingsItem.dropdown(
             title: l10n.dandanplayServer,
             subtitle: l10n.networkServerSelectSubtitle,
@@ -283,75 +475,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             dropdownKey: _serverDropdownKey,
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Ionicons.create_outline,
-                        color: colorScheme.onSurface, size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      l10n.customServer,
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 8),
-                Text(
-                  l10n.customServerInputHint,
-                  style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.7),
-                      fontSize: 12),
-                ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: _customServerController,
-                  cursorColor: AppAccentColors.current,
-                  decoration: InputDecoration(
-                    hintText: l10n.customServerPlaceholder,
-                    hintStyle: TextStyle(
-                        color: colorScheme.onSurface.withOpacity(0.38)),
-                    filled: true,
-                    fillColor: colorScheme.onSurface.withOpacity(0.1),
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide.none,
-                      borderRadius: BorderRadius.all(Radius.circular(8)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide:
-                          BorderSide(color: AppAccentColors.current, width: 2),
-                      borderRadius: BorderRadius.all(Radius.circular(8)),
-                    ),
-                  ),
-                  style: TextStyle(color: colorScheme.onSurface),
-                ),
-                SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: BlurButton(
-                    icon: _isSavingCustom ? null : Ionicons.checkmark_outline,
-                    text: _isSavingCustom ? l10n.saving : l10n.useThisServer,
-                    onTap: _isSavingCustom ? () {} : _saveCustomServer,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    fontSize: 13,
-                    iconSize: 16,
-                    foregroundColor: colorScheme.onSurface,
-                    hoverForegroundColor: AppAccentColors.current,
-                  ),
-                ),
-              ],
-            ),
+          _buildCustomServerSection(
+            title: '自定义弹弹play API 服务器',
+            hint: l10n.customServerInputHint,
+            controller: _customServerController,
+            isSaving: _isSavingCustom,
+            onSave: _saveCustomServer,
+            colorScheme: colorScheme,
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+
+          // 服务器信息
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -366,7 +500,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     ),
                     SizedBox(width: 8),
                     Text(
-                      l10n.currentServerInfo,
+                      '当前服务器信息',
                       style: TextStyle(
                         color: colorScheme.onSurface,
                         fontSize: 14,
@@ -375,7 +509,34 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     ),
                   ],
                 ),
-                SizedBox(height: 8),
+                SizedBox(height: 10),
+                Text(
+                  'Bangumi',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.5),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  _currentBangumiServer,
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  '弹弹play',
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.5),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 2),
                 Text(
                   l10n.serverField(
                       _getServerDisplayName(context, _currentServer)),
@@ -384,9 +545,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fontSize: 13,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: 2),
                 Text(
-                  l10n.urlField(_currentServer),
+                  _currentServer,
                   style: TextStyle(
                     color: colorScheme.onSurface.withOpacity(0.6),
                     fontSize: 12,
