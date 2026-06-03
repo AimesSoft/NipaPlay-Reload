@@ -28,10 +28,13 @@ import android.content.res.Configuration
 import android.graphics.SurfaceTexture
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
+import androidx.documentfile.provider.DocumentFile
+import java.security.MessageDigest
 
 class MainActivity: FlutterActivity() {
     private val STORAGE_CHANNEL = "custom_storage_channel"
     private val FILE_SELECTOR_CHANNEL = "plugins.flutter.io/file_selector"
+    private val SAF_CHANNEL = "nipaplay/android_saf"
     private val FILE_ASSOCIATION_CHANNEL = "file_association_channel"
     private val SYSTEM_SHARE_CHANNEL = "nipaplay/system_share"
     private val DEVICE_PROFILE_CHANNEL = "nipaplay/device_profile"
@@ -178,6 +181,82 @@ class MainActivity: FlutterActivity() {
                                 "smallestScreenWidthDp" to configuration.smallestScreenWidthDp,
                             )
                         )
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SAF_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "pickDirectory" -> {
+                        if (safDirectoryPickerResult != null) {
+                            result.error("SAF_PICKER_BUSY", "A directory picker is already active", null)
+                            return@setMethodCallHandler
+                        }
+
+                        try {
+                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                                addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                                addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+                            }
+                            safDirectoryPickerResult = result
+                            startActivityForResult(intent, SAF_DIRECTORY_PICKER_REQUEST_CODE)
+                        } catch (e: Exception) {
+                            safDirectoryPickerResult = null
+                            Log.e("MainActivity", "Error launching SAF directory picker", e)
+                            result.error("SAF_PICKER_ERROR", e.message, null)
+                        }
+                    }
+                    "scanDirectory" -> {
+                        val treeUri = call.argument<String>("treeUri")
+                        if (treeUri.isNullOrBlank()) {
+                            result.error("INVALID_ARGUMENT", "treeUri is required", null)
+                            return@setMethodCallHandler
+                        }
+
+                        Thread {
+                            try {
+                                val entries = scanSafDirectory(treeUri)
+                                runOnUiThread { result.success(entries) }
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "Error scanning SAF directory", e)
+                                runOnUiThread { result.error("SAF_SCAN_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+                    "getFileMetadata" -> {
+                        val uri = call.argument<String>("uri")
+                        if (uri.isNullOrBlank()) {
+                            result.error("INVALID_ARGUMENT", "uri is required", null)
+                            return@setMethodCallHandler
+                        }
+
+                        Thread {
+                            try {
+                                val metadata = getSafFileMetadata(uri)
+                                runOnUiThread { result.success(metadata) }
+                            } catch (e: Exception) {
+                                Log.e("MainActivity", "Error reading SAF file metadata", e)
+                                runOnUiThread { result.error("SAF_METADATA_ERROR", e.message, null) }
+                            }
+                        }.start()
+                    }
+                    "canAccessTree" -> {
+                        val treeUri = call.argument<String>("treeUri")
+                        if (treeUri.isNullOrBlank()) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+
+                        try {
+                            result.success(canAccessSafTree(treeUri))
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Error checking SAF tree access", e)
+                            result.success(false)
+                        }
                     }
                     else -> result.notImplemented()
                 }
@@ -358,11 +437,39 @@ class MainActivity: FlutterActivity() {
     
     // 文件选择请求码和结果回调
     private val FILE_PICKER_REQUEST_CODE = 9421
+    private val SAF_DIRECTORY_PICKER_REQUEST_CODE = 9422
     private var filePickerResult: MethodChannel.Result? = null
+    private var safDirectoryPickerResult: MethodChannel.Result? = null
     
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         
+        if (requestCode == SAF_DIRECTORY_PICKER_REQUEST_CODE && safDirectoryPickerResult != null) {
+            if (resultCode == RESULT_OK && data != null && data.data != null) {
+                val uri = data.data!!
+                try {
+                    val takeFlags = data.flags and (
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    val persistFlags = if (takeFlags != 0) {
+                        takeFlags
+                    } else {
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    }
+                    contentResolver.takePersistableUriPermission(uri, persistFlags)
+                    safDirectoryPickerResult?.success(uri.toString())
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error persisting SAF directory permission", e)
+                    safDirectoryPickerResult?.error("SAF_PERMISSION_ERROR", e.message, null)
+                }
+            } else {
+                safDirectoryPickerResult?.success(null)
+            }
+            safDirectoryPickerResult = null
+            return
+        }
+
         if (requestCode == FILE_PICKER_REQUEST_CODE && filePickerResult != null) {
             if (resultCode == RESULT_OK && data != null && data.data != null) {
                 // 获取文件的真实路径
@@ -407,6 +514,141 @@ class MainActivity: FlutterActivity() {
 
         Log.e("MainActivity", "Failed to resolve file path from URI: $uri")
         return null
+    }
+
+    private fun canAccessSafTree(treeUriString: String): Boolean {
+        val treeUri = Uri.parse(treeUriString)
+        val root = DocumentFile.fromTreeUri(this, treeUri) ?: return false
+        return root.exists() && root.isDirectory && root.canRead()
+    }
+
+    private fun scanSafDirectory(treeUriString: String): List<Map<String, Any>> {
+        val treeUri = Uri.parse(treeUriString)
+        val root = DocumentFile.fromTreeUri(this, treeUri)
+            ?: throw IllegalArgumentException("Cannot open SAF tree URI: $treeUriString")
+        if (!root.exists() || !root.isDirectory || !root.canRead()) {
+            throw IllegalStateException("SAF tree is not readable: $treeUriString")
+        }
+
+        val output = mutableListOf<Map<String, Any>>()
+        collectSafVideoFiles(root, "", output)
+        return output.sortedBy { it["relativePath"] as String }
+    }
+
+    private fun collectSafVideoFiles(
+        current: DocumentFile,
+        relativePrefix: String,
+        output: MutableList<Map<String, Any>>
+    ) {
+        for (entry in current.listFiles()) {
+            val name = entry.name ?: continue
+            val relativePath = if (relativePrefix.isEmpty()) {
+                name
+            } else {
+                "$relativePrefix$name"
+            }
+
+            if (entry.isDirectory) {
+                collectSafVideoFiles(entry, "$relativePath/", output)
+                continue
+            }
+
+            if (!entry.isFile || !isSupportedVideoFileName(name)) {
+                continue
+            }
+
+            val size = entry.length().coerceAtLeast(0L)
+            val modifiedMillis = entry.lastModified().coerceAtLeast(0L)
+            val fileHash = sha256Hex("$size|$modifiedMillis".toByteArray(Charsets.UTF_8))
+                .take(16)
+
+            output.add(
+                mapOf(
+                    "relativePath" to relativePath,
+                    "uri" to entry.uri.toString(),
+                    "name" to name,
+                    "size" to size,
+                    "modifiedMillis" to modifiedMillis,
+                    "fileHash" to fileHash
+                )
+            )
+        }
+    }
+
+    private fun isSupportedVideoFileName(name: String): Boolean {
+        val extension = name.substringAfterLast('.', "").lowercase()
+        return extension == "mp4" || extension == "mkv"
+    }
+
+    private fun getSafFileMetadata(uriString: String): Map<String, Any> {
+        val uri = Uri.parse(uriString)
+        val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "video"
+        val size = queryFileSize(uri).coerceAtLeast(0L)
+        val contentHash = md5FirstBytes(uri, 16 * 1024 * 1024)
+
+        return mapOf(
+            "uri" to uriString,
+            "name" to name,
+            "size" to size,
+            "contentHash" to contentHash
+        )
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) {
+                        return cursor.getString(index)
+                    }
+                }
+            }
+        return null
+    }
+
+    private fun queryFileSize(uri: Uri): Long {
+        contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (index >= 0 && !cursor.isNull(index)) {
+                        return cursor.getLong(index)
+                    }
+                }
+            }
+
+        return try {
+            contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                descriptor.length
+            } ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    private fun md5FirstBytes(uri: Uri, maxBytes: Int): String {
+        val digest = MessageDigest.getInstance("MD5")
+        contentResolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArray(64 * 1024)
+            var remaining = maxBytes
+            while (remaining > 0) {
+                val read = input.read(buffer, 0, minOf(buffer.size, remaining))
+                if (read <= 0) {
+                    break
+                }
+                digest.update(buffer, 0, read)
+                remaining -= read
+            }
+        } ?: throw IllegalStateException("Cannot open SAF file: $uri")
+
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    private fun sha256Hex(input: ByteArray): String {
+        return MessageDigest.getInstance("SHA-256")
+            .digest(input)
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     private fun getPathFromUri(context: Context, uri: Uri): String? {

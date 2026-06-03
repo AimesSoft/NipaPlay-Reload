@@ -11,6 +11,7 @@ import 'package:glassmorphism/glassmorphism.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/services/scan_service.dart';
+import 'package:nipaplay/services/android_saf_service.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart'; // Import Ionicons
 import 'package:nipaplay/services/file_picker_service.dart';
 import 'package:nipaplay/utils/storage_service.dart'; // 导入StorageService
@@ -452,7 +453,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
       // 验证选择的目录是否可访问
       bool accessCheck = false;
-      if (io.Platform.isAndroid) {
+      if (io.Platform.isAndroid &&
+          !AndroidSafService.isSafUri(selectedDirectory)) {
         // 使用原生方法检查目录权限
         final dirCheck = await AndroidStorageHelper.checkDirectoryPermissions(
             selectedDirectory);
@@ -550,7 +552,8 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
     }
 
     // Android平台检查是否有访问所选文件夹的权限
-    if (io.Platform.isAndroid) {
+    if (io.Platform.isAndroid &&
+        !AndroidSafService.isSafUri(selectedDirectory)) {
       try {
         // 尝试读取文件夹内容以检查权限
         final dir = io.Directory(selectedDirectory);

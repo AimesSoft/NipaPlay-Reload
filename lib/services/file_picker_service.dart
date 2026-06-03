@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:universal_html/html.dart' as web_html;
+import 'android_saf_service.dart';
 import 'security_bookmark_service.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'dart:io' as io;
@@ -33,6 +34,12 @@ class FilePickerService {
 
   // 内部方法：规范化文件路径（处理iOS的/private前缀）
   String _normalizePath(String path) {
+    if (AndroidSafService.isSafUri(path) ||
+        path.startsWith('http://') ||
+        path.startsWith('https://')) {
+      return path;
+    }
+
     // 移除可能的重复斜杠
     String normalizedPath = path.replaceAll('//', '/');
 
@@ -618,6 +625,15 @@ class FilePickerService {
       // 获取上次目录
       initialDirectory ??= await _getLastDirectory(_lastDirKey);
 
+      if (io.Platform.isAndroid) {
+        final selectedDirectory = await AndroidSafService.pickDirectory();
+        if (selectedDirectory == null) {
+          return null;
+        }
+        await _saveLastDirectory(selectedDirectory, _lastDirKey);
+        return _normalizePath(selectedDirectory);
+      }
+
       // macOS上尝试恢复之前的书签访问
       if (io.Platform.isMacOS && initialDirectory != null) {
         final resolvedPath =
@@ -669,7 +685,8 @@ class FilePickerService {
   Future<void> _saveLastDirectory(String filePath, String primaryKey,
       [String? secondaryKey]) async {
     try {
-      final directory = p.dirname(filePath);
+      final directory =
+          AndroidSafService.isSafUri(filePath) ? filePath : p.dirname(filePath);
       final prefs = await SharedPreferences.getInstance();
 
       // 保存主键

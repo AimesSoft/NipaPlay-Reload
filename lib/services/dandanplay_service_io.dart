@@ -9,6 +9,7 @@ import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'danmaku_cache_manager.dart';
 import 'debug_log_service.dart';
+import 'android_saf_service.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
 
@@ -936,6 +937,15 @@ class DandanplayService {
           debugPrint('DandanplayService: 获取远程媒体信息失败: $e');
           rethrow;
         }
+      }
+
+      if (AndroidSafService.isSafUri(videoPath)) {
+        final metadata = await AndroidSafService.getFileMetadata(videoPath);
+        return _getVideoInfoWithMetadata(
+          fileName: metadata.name,
+          fileHash: metadata.contentHash,
+          fileSize: metadata.size,
+        );
       }
 
       final file = File(videoPath);

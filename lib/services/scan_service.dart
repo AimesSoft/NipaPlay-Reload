@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/concurrent_video_processor.dart';
 import 'package:nipaplay/services/rust_file_scan_service.dart';
+import 'package:nipaplay/services/android_saf_service.dart';
 import 'package:nipaplay/utils/ios_container_path_fixer.dart';
 import 'dart:convert';
 // Import Provider if ScanService needs to directly refresh other providers,
@@ -93,6 +94,7 @@ class _FolderFileDiff {
   final List<String> modifiedFiles;
   final List<String> deletedFiles;
   final Map<String, String>? currentHashes;
+  final Map<String, String>? filePathsByRelativePath;
 
   _FolderFileDiff({
     required this.currentCount,
@@ -102,6 +104,7 @@ class _FolderFileDiff {
     required this.modifiedFiles,
     required this.deletedFiles,
     this.currentHashes,
+    this.filePathsByRelativePath,
   });
 
   List<String> get filesToProcess => [...newFiles, ...modifiedFiles];
@@ -175,6 +178,10 @@ class ScanService with ChangeNotifier {
     _loadSubFolderHashCache();
     // 启动时自动检测变化
     _performStartupChangeDetection();
+  }
+
+  bool _isAndroidSafPath(String path) {
+    return !kIsWeb && Platform.isAndroid && AndroidSafService.isSafUri(path);
   }
 
   Future<void> _loadScannedFolders() async {
@@ -287,6 +294,10 @@ class ScanService with ChangeNotifier {
   Future<_FolderFileDiff> _calculateFolderFileDiffWithRust(
     String folderPath,
   ) async {
+    if (_isAndroidSafPath(folderPath)) {
+      return _calculateFolderFileDiffWithSaf(folderPath);
+    }
+
     final result = await RustFileScanService.calculateDiff(
       folderPath: folderPath,
       cachedHashes: _subFolderHashCache[folderPath] ?? {},
@@ -295,6 +306,52 @@ class ScanService with ChangeNotifier {
       "Rust 文件扫描完成 $folderPath: ${result.currentCount} 个视频文件",
     );
     return _diffFromRustResult(result);
+  }
+
+  Future<_FolderFileDiff> _calculateFolderFileDiffWithSaf(
+    String folderUri,
+  ) async {
+    final entries = await AndroidSafService.scanDirectory(folderUri);
+    final cachedHashes = _subFolderHashCache[folderUri] ?? {};
+    final currentHashes = <String, String>{
+      for (final entry in entries) entry.relativePath: entry.fileHash,
+    };
+    final currentFiles = currentHashes.keys.toList()..sort();
+    final newFiles = <String>[];
+    final modifiedFiles = <String>[];
+
+    for (final entry in entries) {
+      final cachedHash = cachedHashes[entry.relativePath];
+      if (cachedHash == null) {
+        newFiles.add(entry.relativePath);
+      } else if (cachedHash != entry.fileHash) {
+        modifiedFiles.add(entry.relativePath);
+      }
+    }
+
+    final deletedFiles = cachedHashes.keys
+        .where((relativePath) => !currentHashes.containsKey(relativePath))
+        .toList()
+      ..sort();
+    newFiles.sort();
+    modifiedFiles.sort();
+
+    debugPrint(
+      "Android SAF 文件扫描完成 $folderUri: ${entries.length} 个视频文件",
+    );
+
+    return _FolderFileDiff(
+      currentCount: currentFiles.length,
+      cachedCount: cachedHashes.length,
+      currentFiles: currentFiles,
+      newFiles: newFiles,
+      modifiedFiles: modifiedFiles,
+      deletedFiles: deletedFiles,
+      currentHashes: currentHashes,
+      filePathsByRelativePath: {
+        for (final entry in entries) entry.relativePath: entry.uri,
+      },
+    );
   }
 
   Future<void> _storeFileHashes(
@@ -332,8 +389,16 @@ class ScanService with ChangeNotifier {
     final keysToRemove = <String>[];
 
     for (final folderPath in _subFolderHashCache.keys) {
-      if (!_scannedFolders.contains(folderPath) ||
-          !await Directory(folderPath).exists()) {
+      if (!_scannedFolders.contains(folderPath)) {
+        keysToRemove.add(folderPath);
+        continue;
+      }
+
+      if (_isAndroidSafPath(folderPath)) {
+        if (!await AndroidSafService.canAccessTree(folderPath)) {
+          keysToRemove.add(folderPath);
+        }
+      } else if (!await Directory(folderPath).exists()) {
         keysToRemove.add(folderPath);
       }
     }
@@ -389,8 +454,17 @@ class ScanService with ChangeNotifier {
   Future<FolderChangeInfo?> _detectDetailedFolderChanges(
       String folderPath) async {
     if (kIsWeb) return null;
-    final directory = Directory(folderPath);
-    if (!await directory.exists()) {
+    if (!_isAndroidSafPath(folderPath)) {
+      final directory = Directory(folderPath);
+      if (!await directory.exists()) {
+        // 文件夹已删除
+        return FolderChangeInfo(
+          folderPath: folderPath,
+          changeType: 'deleted',
+          detectedAt: DateTime.now(),
+        );
+      }
+    } else if (!await AndroidSafService.canAccessTree(folderPath)) {
       // 文件夹已删除
       return FolderChangeInfo(
         folderPath: folderPath,
@@ -572,8 +646,7 @@ class ScanService with ChangeNotifier {
       } catch (e) {
         // Rust diff failed for this folder — fall back to a full scan
         // instead of aborting the entire batch.
-        debugPrint(
-            'Rust 文件 diff 失败，回退到全量扫描: $folderPath — $e');
+        debugPrint('Rust 文件 diff 失败，回退到全量扫描: $folderPath — $e');
         foldersNeedingScan.add(folderPath);
       }
     }
@@ -761,8 +834,11 @@ class ScanService with ChangeNotifier {
     _updateScanState(
         message: "发现 ${filesToProcess.length} 个需要处理的视频文件$detail，开始并发扫描...");
 
-    final List<File> videoFiles = filesToProcess
-        .map((relativePath) => File(p.join(directoryPath, relativePath)))
+    final filePathsByRelativePath = diff.filePathsByRelativePath;
+    final List<String> videoPaths = filesToProcess
+        .map((relativePath) =>
+            filePathsByRelativePath?[relativePath] ??
+            p.join(directoryPath, relativePath))
         .toList();
 
     if (!_isScanning && !isPartOfBatch) {
@@ -772,7 +848,7 @@ class ScanService with ChangeNotifier {
     }
 
     // 第二阶段：并发处理视频文件
-    final results = await ConcurrentVideoProcessor.processVideos(videoFiles,
+    final results = await ConcurrentVideoProcessor.processVideoPaths(videoPaths,
         skipPreviouslyMatchedUnwatched: skipPreviouslyMatchedUnwatched,
         onProgress: (processed, total, currentFile) {
       if (!_isScanning) return;
@@ -795,10 +871,10 @@ class ScanService with ChangeNotifier {
         .where((r) => r.animeTitle != null)
         .map((r) => r.animeTitle!)
         .toSet();
-    final skippedFilesCount = videoFiles.length - results.length;
+    final skippedFilesCount = videoPaths.length - results.length;
 
     if (!isPartOfBatch && _isScanning) {
-      _totalFilesFound = videoFiles.length;
+      _totalFilesFound = videoPaths.length;
 
       String completionMessage = "";
       if (failedResults.isNotEmpty) {
@@ -820,7 +896,7 @@ class ScanService with ChangeNotifier {
           message: completionMessage,
           completed: true);
     } else if (isPartOfBatch) {
-      _totalFilesFound += videoFiles.length;
+      _totalFilesFound += videoPaths.length;
       await _updateFileHashes(directoryPath, precomputedDiff: diff);
     }
   }
@@ -922,6 +998,13 @@ class ScanService with ChangeNotifier {
 
     final missingFolders = <String>[];
     for (final folderPath in List<String>.from(_scannedFolders)) {
+      if (_isAndroidSafPath(folderPath)) {
+        if (!await AndroidSafService.canAccessTree(folderPath)) {
+          missingFolders.add(folderPath);
+        }
+        continue;
+      }
+
       final directory = Directory(folderPath);
       if (!await directory.exists()) {
         missingFolders.add(folderPath);
