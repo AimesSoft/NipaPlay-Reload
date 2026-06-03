@@ -1,0 +1,908 @@
+{
+  "@@locale": "en",
+  "appTitle": "NipaPlay",
+  "tabHome": "Home",
+  "tabVideoPlay": "Video Player",
+  "tabMediaLibrary": "Media Library",
+  "tabTorrentDownload": "Downloader",
+  "tabAccount": "Account",
+  "tabSettings": "Settings",
+  "settingsLabel": "Settings",
+  "toggleToLightMode": "Switch to Light Mode",
+  "toggleToDarkMode": "Switch to Dark Mode",
+  "language": "Language",
+  "languageSettingsTitle": "Language Settings",
+  "languageSettingsSubtitle": "Choose the display language",
+  "languageAuto": "Auto (Follow System)",
+  "languageSimplifiedChinese": "简体中文",
+  "languageTraditionalChinese": "繁體中文",
+  "languageEnglish": "English",
+  "currentLanguage": "Current: {language}",
+  "@currentLanguage": {
+    "placeholders": {
+      "language": {}
+    }
+  },
+  "currentServer": "Current: {server}",
+  "@currentServer": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "currentTheme": "Current: {theme}",
+  "@currentTheme": {
+    "placeholders": {
+      "theme": {}
+    }
+  },
+  "languageTileSubtitle": "Switch between Simplified Chinese, Traditional Chinese, or English",
+  "settingsBasicSection": "Basic Settings",
+  "settingsAboutSection": "About",
+  "appearance": "Appearance",
+  "lightMode": "Light Mode",
+  "appearanceLightModeSubtitle": "Bright interface with good contrast.",
+  "darkMode": "Dark Mode",
+  "appearanceDarkModeSubtitle": "Reduces brightness, protects eyes and saves battery.",
+  "followSystem": "Follow System",
+  "appearanceFollowSystemSubtitle": "Automatically switch appearance based on system settings.",
+  "appearancePreviewTitle": "Preview",
+  "appearancePreviewFollowSystemDescription": "Automatically switch between light and dark mode based on system appearance.",
+  "appearancePreviewDarkDescription": "Uses a dark color scheme, suitable for nighttime or low-light environments.",
+  "appearancePreviewLightDescription": "Uses a bright color scheme, suitable for daytime or bright environments.",
+  "appearanceAnimeDetailStyle": "Anime Detail Style",
+  "appearanceDetailSimple": "Simple",
+  "appearanceDetailSimpleSubtitle": "Classic layout with information in separate columns.",
+  "appearanceDetailVivid": "Vivid",
+  "appearanceDetailVividSubtitle": "Poster-driven visuals with horizontal episode cards.",
+  "appearanceRecentWatchingStyle": "Recently Watched Style",
+  "appearanceRecentSimple": "Simple",
+  "appearanceRecentSimpleSubtitle": "Plain text list, saves space.",
+  "appearanceRecentDetailed": "Detailed",
+  "appearanceRecentDetailedSubtitle": "Horizontal scrolling cards with screenshots.",
+  "appearanceHomeSections": "Home Sections",
+  "restoreDefaults": "Restore Defaults",
+  "restoreDefaultsSubtitle": "Restore default sorting and display states",
+  "uiThemeExperimental": "Theme (Experimental)",
+  "uiThemeRestartHint": "Tip: Restart the app after switching themes for full effect.",
+  "uiThemeSwitchDialogTitle": "Theme Switch Notice",
+  "uiThemeSwitchDialogMessage": "Switching to the {theme} theme requires a restart to take full effect.\n\nWould you like to restart the app now?",
+  "@uiThemeSwitchDialogMessage": {
+    "placeholders": {
+      "theme": {}
+    }
+  },
+  "restartApp": "Restart App",
+  "refreshPageApplyTheme": "Please manually refresh the page to apply the new theme",
+  "player": "Player",
+  "playerKernel": "Player Kernel",
+  "playerKernelCurrentMdk": "Current: MDK",
+  "playerKernelCurrentVideoPlayer": "Current: Video Player",
+  "playerKernelCurrentLibmpv": "Current: Libmpv",
+  "playerKernelSwitched": "Player kernel switched",
+  "playerKernelDescriptionMdk": "MDK Multimedia Development Kit, supports hardware decoding (default priority; falls back to software decoding when unsupported).",
+  "playerKernelDescriptionVideoPlayer": "Flutter official Video Player, with good compatibility.",
+  "playerKernelDescriptionLibmpv": "MediaKit (Libmpv) player, supports hardware decoding and advanced features.",
+  "externalCall": "External Player",
+  "externalPlayerEnabled": "External player enabled",
+  "externalPlayerDisabled": "External player disabled",
+  "externalPlayerIntroDesktop": "When enabled, all playback will be opened through an external player.",
+  "externalPlayerIntroUnsupported": "External player is only supported on desktop.",
+  "externalPlayerEnableTitle": "Enable External Player",
+  "externalPlayerEnableSubtitle": "Use an external player for video playback",
+  "externalPlayerSelectTitle": "Select External Player",
+  "externalPlayerNotSelected": "No external player selected",
+  "externalPlayerSelectionCanceled": "External player selection canceled",
+  "externalPlayerUpdated": "External player updated",
+  "desktopOnlySupported": "Desktop only",
+  "networkSettings": "Network Settings",
+  "networkSettingsSubtitle": "DanDanPlay server and custom addresses",
+  "storage": "Storage",
+  "storageSettingsSubtitle": "Manage danmaku cache and cleanup policies",
+  "networkMediaLibrary": "Network Media Library",
+  "mediaServerStatusConnected": "Connected",
+  "mediaServerStatusDisconnected": "Disconnected",
+  "mediaServerInfoServerUrl": "Server URL",
+  "mediaServerInfoUsername": "Logged in as",
+  "mediaServerInfoItemCount": "Media items",
+  "mediaServerInfoSelectedLibraries": "Selected libraries",
+  "mediaServerUnknown": "Unknown",
+  "mediaServerAnonymous": "Anonymous",
+  "mediaServerViewLibrary": "View Library",
+  "mediaServerRefresh": "Refresh",
+  "mediaServerManageServer": "Manage Server",
+  "mediaServerConnectServer": "Connect to Server",
+  "mediaServerDisconnectedHint": "Not connected to this media server yet. Tap the button below to log in.",
+  "retry": "Retry",
+  "save": "Save",
+  "disconnect": "Disconnect",
+  "loadFailed": "Load failed",
+  "loadFailedWithError": "Load failed: {error}",
+  "@loadFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "operationFailed": "Operation failed: {error}",
+  "@operationFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "saveFailedWithError": "Save failed: {error}",
+  "@saveFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "connectFailedWithError": "Connection failed: {error}",
+  "@connectFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "refreshFailedWithError": "Refresh failed: {error}",
+  "@refreshFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "disconnectFailedWithError": "Disconnect failed: {error}",
+  "@disconnectFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "deviceIdTitle": "Device ID (DeviceId)",
+  "deviceIdDescription": "Used by Jellyfin / Emby to distinguish different devices and avoid being kicked out.",
+  "deviceIdCurrent": "Current DeviceId",
+  "deviceIdGenerated": "Auto-generated ID",
+  "deviceIdCustom": "Custom DeviceId",
+  "deviceIdCustomSet": "Set to: {deviceId}",
+  "@deviceIdCustomSet": {
+    "placeholders": {
+      "deviceId": {}
+    }
+  },
+  "deviceIdCustomUnset": "Not set (using auto-generated)",
+  "deviceIdRestoreAuto": "Restore Auto-Generated",
+  "deviceIdRestoreAutoSubtitle": "Clear custom DeviceId",
+  "deviceIdRestoreSuccess": "Restored auto-generated device ID",
+  "deviceIdDialogTitle": "Custom DeviceId",
+  "deviceIdDialogHint": "Leave empty to use the auto-generated device ID.",
+  "deviceIdDialogPlaceholder": "e.g. My-iPhone-01",
+  "deviceIdDialogValidationHint": "Do not include double quotes or newlines; max length 128.",
+  "deviceIdUpdatedHint": "Device ID updated. It is recommended to disconnect and reconnect to the server.",
+  "deviceIdInvalid": "Invalid DeviceId: avoid double quotes/newlines and keep length ≤ 128",
+  "networkServerConnected": "{server} server connected",
+  "@networkServerConnected": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "networkServerSettingsUpdated": "{server} server settings updated",
+  "@networkServerSettingsUpdated": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "disconnectServerConfirm": "Are you sure you want to disconnect from the {server} server?",
+  "@disconnectServerConfirm": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "networkServerDisconnected": "{server} disconnected",
+  "@networkServerDisconnected": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "disconnectServerFailed": "Failed to disconnect from {server}: {error}",
+  "@disconnectServerFailed": {
+    "placeholders": {
+      "server": {},
+      "error": {}
+    }
+  },
+  "networkServerNotConnected": "Not connected to {server} server yet",
+  "@networkServerNotConnected": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "networkLibraryRefreshed": "{server} library refreshed",
+  "@networkLibraryRefreshed": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "connectServerDialogTitle": "Connect to {server} Server",
+  "@connectServerDialogTitle": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "serverUrlInputPlaceholder": "e.g. http://192.168.1.100:8096",
+  "inputUsernamePlaceholder": "Enter username",
+  "inputPasswordPlaceholder": "Enter password",
+  "nextStep": "Next",
+  "connectAction": "Connect",
+  "testConnection": "Test Connection",
+  "canBeEmpty": "Can be empty",
+  "leaveEmptyAutoGenerate": "Leave empty to auto-generate",
+  "usernameOptional": "Username (optional)",
+  "passwordOptional": "Password (optional)",
+  "connectFailedCheckCredentials": "Connection failed. Please check the server address and credentials.",
+  "webdavAddServer": "Add WebDAV Server",
+  "webdavEditServer": "Edit WebDAV Server",
+  "webdavEnterAddress": "Enter WebDAV address",
+  "webdavInvalidUrl": "Please enter a valid URL (http/https)",
+  "webdavConnection": "WebDAV Connection",
+  "webdavTestFailedWithError": "Test failed: {error}",
+  "@webdavTestFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "webdavTestFailedCheckInfo": "Connection test failed. Please check the address and credentials.",
+  "webdavTestSuccess": "Connection test successful",
+  "webdavTestFailed": "Connection test failed",
+  "webdavSaveFailedCheckInfo": "Save failed. Please check the address and credentials.",
+  "webdavConnectHint": "After connecting to a WebDAV server, you can browse directories and select media folders.",
+  "webdavConnectionNameOptional": "Connection name (optional)",
+  "webdavAddress": "WebDAV Address",
+  "smbAddServer": "Add SMB Server",
+  "smbEditServer": "Edit SMB Server",
+  "smbEnterHostOrIp": "Enter hostname or IP address",
+  "smbInvalidPortRange": "Invalid port. Please enter a value between 1 and 65535.",
+  "smbAnonymousHint": "Leave username/password empty for anonymous access. Domain name is supported.",
+  "smbHostOrIp": "Host / IP",
+  "smbHostOrIpPlaceholder": "e.g. 192.168.1.10 or nas.local",
+  "smbPort": "Port",
+  "smbDefaultPort445": "Default: 445",
+  "smbDomainOptional": "Domain (optional)",
+  "smbDomainPlaceholder": "e.g. WORKGROUP",
+  "connectJellyfinOrEmbyFirst": "Please connect to a Jellyfin or Emby server first",
+  "networkMediaLibraryIntro": "Manage Jellyfin / Emby server connections and set up DanDanPlay remote libraries here.",
+  "currentServerNotConnectedHint": "Current server is not connected. Please go back and select again.",
+  "loadingRemoteMediaLibrary": "Loading remote media library...",
+  "noRemoteMediaItems": "No remote media items found",
+  "recordedAtDate": "Added on {date}",
+  "@recordedAtDate": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "jellyfinMediaServerTitle": "Jellyfin Media Server",
+  "jellyfinDisconnectedDescription": "Connect to a Jellyfin server to sync your media library and playback history.",
+  "embyMediaServerTitle": "Emby Media Server",
+  "embyDisconnectedDescription": "Connect to an Emby server to browse your media library and play remotely.",
+  "dandanRemoteCardTitle": "DanDanPlay Remote Access",
+  "dandanRemoteManageAccessTitle": "Manage DanDanPlay Remote Access",
+  "dandanRemoteConnectAccessTitle": "Connect to DanDanPlay Remote Access",
+  "dandanRemoteAddressPrompt": "Enter the remote service address shown on your desktop.",
+  "dandanRemoteAddressPlaceholder": "e.g. http://192.168.1.2:23333",
+  "dandanRemoteApiTokenOptionalTitle": "API Key (optional)",
+  "dandanRemoteApiTokenPrompt": "If you have enabled API authentication in the DanDanPlay desktop app, enter the corresponding key. Otherwise, just tap {actionLabel}.",
+  "@dandanRemoteApiTokenPrompt": {
+    "placeholders": {
+      "actionLabel": {}
+    }
+  },
+  "enterApiToken": "Enter API key",
+  "optionalApiTokenHint": "Optional, fill in if needed",
+  "dandanRemoteStatusSynced": "Synced",
+  "dandanRemoteStatusConnectFailed": "Connection failed",
+  "dandanRemoteStatusNotConfigured": "Not configured",
+  "unknownErrorOccurred": "An unknown error occurred",
+  "dandanRemoteServerAddressLabel": "Server address",
+  "dandanRemoteLastSyncedLabel": "Last synced",
+  "dandanRemoteAnimeEntries": "Anime entries",
+  "dandanRemoteVideoFiles": "Video files",
+  "dandanRemoteNoRecordsHint": "No remote media records found. Try refreshing or check your remote access settings.",
+  "dandanRemoteRecentUpdates": "Recent Updates",
+  "dandanRemoteEpisodeCount": "{count} episodes total",
+  "@dandanRemoteEpisodeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dandanRemoteManageConnection": "Manage Connection",
+  "dandanRemoteSyncing": "Syncing...",
+  "dandanRemoteRefreshLibrary": "Refresh Library",
+  "dandanRemoteDisconnectedHintLong": "Enable remote access in the DanDanPlay desktop app to sync anime records from your home PC or NAS and play directly here.",
+  "pleaseWait": "Please wait...",
+  "connectDandanRemoteService": "Connect to DanDanPlay Remote Service",
+  "noRecordYet": "No records yet",
+  "justNow": "Just now",
+  "minutesAgo": "{minutes} min ago",
+  "@minutesAgo": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgo": "{hours} hr ago",
+  "@hoursAgo": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "daysAgo": "{days} days ago",
+  "@daysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "dandanRemoteConfigUpdated": "DanDanPlay remote service configuration updated",
+  "dandanRemoteConnected": "DanDanPlay remote service connected",
+  "dandanRemoteDisconnected": "Disconnected from DanDanPlay remote service",
+  "disconnectDandanRemoteTitle": "Disconnect DanDanPlay Remote Service",
+  "disconnectDandanRemoteContent": "Are you sure you want to disconnect from the DanDanPlay remote service?\n\nThis will clear the saved server address and API key.",
+  "remoteLibraryRefreshed": "Remote library refreshed",
+  "noConnectedServer": "No server connected",
+  "mediaLibraryNotSelected": "No library selected",
+  "mediaLibraryNotMatched": "No library matched",
+  "mediaLibraryAndCount": "{first} and {count} others",
+  "@mediaLibraryAndCount": {
+    "placeholders": {
+      "first": {},
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mediaServerSummary": "{server} · {summary}",
+  "@mediaServerSummary": {
+    "placeholders": {
+      "server": {},
+      "summary": {}
+    }
+  },
+  "serverMediaLibraryTitle": "{server} Library",
+  "@serverMediaLibraryTitle": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "serverLabel": "Server",
+  "accountLabel": "Account",
+  "mediaLibrary": "Media Library",
+  "noMediaLibrary": "No libraries available",
+  "checkServerConnection": "Please check the server connection",
+  "transcodeSettings": "Transcoding Settings",
+  "currentDefaultQuality": "Current default quality: {quality}",
+  "@currentDefaultQuality": {
+    "placeholders": {
+      "quality": {}
+    }
+  },
+  "enableTranscode": "Enable Transcoding",
+  "defaultQuality": "Default Quality",
+  "tvShowsLibrary": "TV Shows",
+  "moviesLibrary": "Movies",
+  "boxsetsLibrary": "Collections",
+  "folderLibrary": "Folders",
+  "mixedLibrary": "Mixed Library",
+  "userActivityTitle": "My Activity",
+  "userActivityTabWatched": "Watched",
+  "userActivityTabFavorites": "Favorites",
+  "userActivityTabRated": "Rated",
+  "userActivityTabWatchedCount": "Watched ({count})",
+  "@userActivityTabWatchedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityTabFavoritesCount": "Favorites ({count})",
+  "@userActivityTabFavoritesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityTabRatedCount": "Rated ({count})",
+  "@userActivityTabRatedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityNoWatchedRecords": "No watch history",
+  "userActivityNoFavorites": "No favorites",
+  "userActivityNoRatings": "No ratings yet",
+  "userActivityNotLoggedIn": "Not logged in to DanDanPlay",
+  "userActivityWatchedEpisode": "Watched: {episode}",
+  "@userActivityWatchedEpisode": {
+    "placeholders": {
+      "episode": {}
+    }
+  },
+  "userActivityWatchedUpdatedTime": "Updated: {time}",
+  "@userActivityWatchedUpdatedTime": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "userActivityWatchedOnly": "Watched",
+  "userActivityStatusWithValue": "Status: {status}",
+  "@userActivityStatusWithValue": {
+    "placeholders": {
+      "status": {}
+    }
+  },
+  "userActivityRatingWithValue": "Rating: {rating}",
+  "@userActivityRatingWithValue": {
+    "placeholders": {
+      "rating": {
+        "type": "int"
+      }
+    }
+  },
+  "userActivityUnknownTitle": "Unknown Title",
+  "ratingLevelMasterpiece": "Masterpiece",
+  "ratingLevelGreat": "Great",
+  "ratingLevelGood": "Good",
+  "ratingLevelAverage": "Average",
+  "ratingLevelOkay": "Okay",
+  "ratingLevelPoor": "Poor",
+  "ratingLevelVeryPoor": "Very Poor",
+  "ratingLevelTerrible": "Terrible",
+  "favoriteStatusFollowing": "Following",
+  "favoriteStatusFinished": "Finished",
+  "favoriteStatusAbandoned": "Dropped",
+  "favoriteStatusFavorited": "Favorited",
+  "weekdaySunday": "Sun",
+  "weekdayMonday": "Mon",
+  "weekdayTuesday": "Tue",
+  "weekdayWednesday": "Wed",
+  "weekdayThursday": "Thu",
+  "weekdayFriday": "Fri",
+  "weekdaySaturday": "Sat",
+  "newSeriesNoTodayAnime": "No new anime today",
+  "newSeriesUpdateTimeTbd": "Update time TBD",
+  "newSeriesSearchDescription": "Search new anime\nFilter by tags and genres\nFind anime you're interested in",
+  "newSeriesSortDescriptionAscending": "Switch to ascending order\nToday's new anime shown first",
+  "newSeriesSortDescriptionDescending": "Switch to descending order\nToday's new anime shown last",
+  "newSeriesInitializingPlayer": "Initializing player...",
+  "newSeriesPlayerLoadFailedWithError": "Player load failed: {error}",
+  "@newSeriesPlayerLoadFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "newSeriesErrorOccurredWithError": "Error occurred: {error}",
+  "@newSeriesErrorOccurredWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "newSeriesHandlePlayRequestFailedWithError": "Error handling play request: {error}",
+  "@newSeriesHandlePlayRequestFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "newSeriesAnimeCount": "{count} anime",
+  "@newSeriesAnimeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "newSeriesRemoteAddressNotConfigured": "Remote access address not configured",
+  "newSeriesNetworkTimeout": "Network request timed out. Please check your connection and try again.",
+  "newSeriesNetworkConnectionFailed": "Network connection failed. Please check your network settings.",
+  "newSeriesServerUnavailableRetryLater": "Server is unavailable. Please try again later.",
+  "newSeriesServerDataFormatError": "Invalid data format received from server",
+  "developerOptions": "Developer Options",
+  "developerOptionsSubtitle": "Terminal output, dependency versions, build info",
+  "terminalOutput": "Terminal Output",
+  "terminalOutputSubtitle": "View logs, copy content, or generate QR code to share",
+  "dependencyVersions": "Dependency Versions",
+  "dependencyVersionsSubtitle": "View dependencies and version numbers (with GitHub links)",
+  "invalidLink": "Invalid link",
+  "unknown": "Unknown",
+  "localSource": "Local",
+  "dependencyTypeDirectMain": "Direct dependency",
+  "dependencyTypeDirectDev": "Dev dependency",
+  "dependencyTypeTransitive": "Transitive dependency",
+  "dependencyTypeUnknown": "Unknown source",
+  "parsingDependencyInfo": "Parsing dependency info...",
+  "readDependencyListFailed": "Failed to read dependency list",
+  "dependencySummaryWithOther": "{total} total · Direct {directMain} / Dev {directDev} / Transitive {transitive} / Other {other}",
+  "@dependencySummaryWithOther": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "directMain": {
+        "type": "int"
+      },
+      "directDev": {
+        "type": "int"
+      },
+      "transitive": {
+        "type": "int"
+      },
+      "other": {
+        "type": "int"
+      }
+    }
+  },
+  "dependencySummaryNoOther": "{total} total · Direct {directMain} / Dev {directDev} / Transitive {transitive}",
+  "@dependencySummaryNoOther": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "directMain": {
+        "type": "int"
+      },
+      "directDev": {
+        "type": "int"
+      },
+      "transitive": {
+        "type": "int"
+      }
+    }
+  },
+  "dependencyEntrySubtitle": "Version: {version} · {dependencyType} · {sourceType}",
+  "@dependencyEntrySubtitle": {
+    "placeholders": {
+      "version": {},
+      "dependencyType": {},
+      "sourceType": {}
+    }
+  },
+  "buildInfo": "Build Info",
+  "buildInfoSubtitle": "View build time, processor, memory, and system architecture",
+  "fileLogWriteTitle": "Write Logs to File",
+  "fileLogWriteSubtitle": "Writes to disk every 1 second, keeps the last 5 log files",
+  "fileLogWriteEnabled": "Log file writing enabled",
+  "fileLogWriteDisabled": "Log file writing disabled",
+  "openLogDirectoryTitle": "Open Log Directory",
+  "openLogDirectorySubtitle": "Open the log directory in file manager",
+  "logDirectoryOpened": "Log directory opened",
+  "openLogDirectoryFailed": "Failed to open log directory",
+  "spoilerAiDebugPrintTitle": "Debug: Print AI Response",
+  "spoilerAiDebugPrintEnabledHint": "When enabled, raw AI response text and matched danmaku will be printed to logs.",
+  "spoilerAiDebugPrintNeedSpoilerMode": "Enable spoiler prevention mode first",
+  "spoilerAiDebugPrintEnabled": "AI debug printing enabled",
+  "spoilerAiDebugPrintDisabled": "AI debug printing disabled",
+  "playerUnavailableOnWeb": "Player settings are not available on the web platform",
+  "danmakuRenderEngine": "Danmaku Render Engine",
+  "danmakuRenderEngineSwitched": "Danmaku render engine switched",
+  "danmakuRenderEngineDescriptionCpu": "CPU Rendering: Best compatibility, suitable for most scenarios.",
+  "danmakuRenderEngineDescriptionGpuExperimental": "GPU Rendering (Experimental): Higher performance, still under development.",
+  "danmakuRenderEngineDescriptionCanvasExperimental": "Canvas Danmaku (Experimental): High performance, low power consumption.",
+  "danmakuRenderEngineDescriptionNipaplayNext": "NipaPlay Next: Combines the strengths of both CPU and Canvas danmaku, featuring all advantages of both.",
+  "danmakuRenderEngineTitleCpu": "CPU Rendering",
+  "danmakuRenderEngineTitleGpuExperimental": "GPU Rendering (Experimental)",
+  "danmakuRenderEngineTitleCanvasExperimental": "Canvas Danmaku (Experimental)",
+  "danmakuRenderEngineTitleNipaplayNext": "NipaPlay Next",
+  "qualityProfileOff": "Off",
+  "qualityProfileLite": "Lite",
+  "qualityProfileStandard": "Standard",
+  "qualityProfileHigh": "High Quality",
+  "doubleResolutionPlaybackTitle": "Double Resolution Playback",
+  "doubleResolutionPlaybackSubtitle": "Render at 2x resolution for sharper embedded subtitles (Libmpv only, not combinable with Anime4K)",
+  "settingSavedReopenVideoToApply": "Saved. Reopen the video to apply.",
+  "doubleResolutionPlaybackEnabled": "Double resolution playback enabled",
+  "doubleResolutionPlaybackDisabled": "Double resolution playback disabled",
+  "anime4kSuperResolutionTitle": "Anime4K Super Resolution (Experimental)",
+  "anime4kProfileDescriptionOff": "Keep original image, no super resolution processing.",
+  "anime4kProfileDescriptionLite": "Moderate super resolution and denoising with low performance impact.",
+  "anime4kProfileDescriptionStandard": "Balanced quality and performance.",
+  "anime4kProfileDescriptionHigh": "Best image quality, highest performance requirements.",
+  "anime4kDisabled": "Anime4K disabled",
+  "anime4kSwitchedTo": "Anime4K switched to {option}",
+  "@anime4kSwitchedTo": {
+    "placeholders": {
+      "option": {}
+    }
+  },
+  "crtDisplayEffectTitle": "CRT Display Effect",
+  "crtProfileDescriptionOff": "Keep original image, no CRT effect.",
+  "crtProfileDescriptionLite": "Scanlines + vignette, minimal performance impact.",
+  "crtProfileDescriptionStandard": "Adds curvature and grid for a more authentic CRT look.",
+  "crtProfileDescriptionHigh": "Adds glow and color fringing, best effect but higher performance cost.",
+  "crtDisabled": "CRT disabled",
+  "crtSwitchedTo": "CRT switched to {option}",
+  "@crtSwitchedTo": {
+    "placeholders": {
+      "option": {}
+    }
+  },
+  "enterAiApiUrl": "Enter AI API URL",
+  "enterModelName": "Enter model name",
+  "enterApiKey": "Enter API Key",
+  "spoilerAiSettingsSaved": "Spoiler prevention AI settings saved",
+  "spoilerPreventionMode": "Spoiler Prevention",
+  "spoilerPreventionModeSubtitle": "When enabled, AI will identify and filter suspected spoiler danmaku after loading.",
+  "fillAndSaveAiConfigFirst": "Please fill in and save the AI API configuration first",
+  "spoilerPreventionModeEnabled": "Spoiler prevention enabled",
+  "spoilerPreventionModeDisabled": "Spoiler prevention disabled",
+  "autoMatchDanmakuOnPlayTitle": "Auto-Match Danmaku on Play",
+  "autoMatchDanmakuOnPlaySubtitle": "When disabled, danmaku won't be auto-matched on playback. You can manually match in danmaku settings.",
+  "autoMatchDanmakuOnPlayEnabled": "Auto-match danmaku on play enabled",
+  "autoMatchDanmakuOnPlayDisabledManual": "Auto-match on play disabled (manual matching available)",
+  "autoMatchOnHashFailTitle": "Auto-Match on Hash Failure",
+  "autoMatchOnHashFailSubtitle": "When hash matching fails, automatically use the first filename search result. When disabled, the search danmaku menu will be shown instead.",
+  "autoMatchOnHashFailEnabled": "Auto-match on hash failure enabled",
+  "autoMatchOnHashFailDisabledShowSearch": "Auto-match on hash failure disabled (search menu will be shown)",
+  "hardwareDecoding": "Hardware Decoding",
+  "hardwareDecodingSubtitle": "Only applies to MDK / Libmpv kernels",
+  "hardwareDecodingEnabled": "Hardware decoding enabled",
+  "hardwareDecodingDisabled": "Hardware decoding disabled",
+  "pauseOnBackgroundTitle": "Pause on Background",
+  "pauseOnBackgroundSubtitle": "Automatically pause playback when switching to background or locking screen",
+  "pauseOnBackgroundEnabled": "Pause on background enabled",
+  "pauseOnBackgroundDisabled": "Pause on background disabled",
+  "playbackEndActionTitle": "Action After Playback",
+  "playbackEndActionAutoNextMessage": "Automatically play the next episode after playback ends",
+  "playbackEndActionLoopMessage": "Loop from the beginning after playback ends",
+  "playbackEndActionPauseMessage": "Stay on the current page after playback ends",
+  "playbackEndActionExitMessage": "Return to the previous page after playback ends",
+  "autoNextCountdownTitle": "Auto-Next Countdown",
+  "autoNextCountdownWaitSeconds": "Wait {seconds} seconds before auto-playing next episode",
+  "@autoNextCountdownWaitSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "autoNextCountdownNeedAutoNext": "Enable auto-play next episode first",
+  "timelinePreviewTitle": "Timeline Preview Thumbnails",
+  "timelinePreviewSubtitle": "Show thumbnails when hovering over the progress bar (works for local/WebDAV/SMB/shared libraries)",
+  "enableWarning": "Warning",
+  "timelinePreviewEnableWarningContent": "Enabling timeline preview will generate screenshots in real-time during playback, which may cause stuttering or performance degradation. Continue?",
+  "timelinePreviewEnabled": "Timeline preview enabled",
+  "timelinePreviewDisabled": "Timeline preview disabled",
+  "playPrecacheDuration": "Pre-cache Duration",
+  "playPrecacheSize": "Pre-cache Size",
+  "currentPrecacheDurationSeconds": "Current: {seconds} seconds. Changes take effect immediately.",
+  "@currentPrecacheDurationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "currentPrecacheSizeMb": "Current: {mb} MB. Reopen the video to apply changes.",
+  "@currentPrecacheSizeMb": {
+    "placeholders": {
+      "mb": {
+        "type": "int"
+      }
+    }
+  },
+  "libmpvKernelOnly": "Only applies to Libmpv kernel",
+  "spoilerAiSettingsTitle": "Spoiler Prevention AI Settings",
+  "spoilerAiSettingsDescription": "Fill in and save the configuration before enabling spoiler prevention (API URL / Key / Model are required).",
+  "spoilerAiGeminiUrlNote": "Gemini: URL can end at /v1beta/models. The request path /<model>:generateContent will be appended automatically.",
+  "spoilerAiOpenAiUrlNote": "OpenAI: URL should be /v1/chat/completions (compatible endpoints also work).",
+  "apiFormatLabel": "API Format",
+  "openAiCompatible": "OpenAI Compatible",
+  "enterYourApiKey": "Enter your API Key",
+  "temperatureLabel": "Temperature: {value}",
+  "@temperatureLabel": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "saveConfiguration": "Save Configuration",
+  "about": "About",
+  "loading": "Loading…",
+  "currentVersion": "Current version: {version}",
+  "@currentVersion": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "versionLoadFailed": "Failed to load version info",
+  "general": "General",
+  "backupAndRestore": "Backup & Restore",
+  "shortcuts": "Shortcuts",
+  "remoteAccess": "Remote Access",
+  "remoteMediaLibrary": "Remote Media Library",
+  "appearanceSettings": "Appearance Settings",
+  "generalSettings": "General Settings",
+  "storageSettings": "Storage Settings",
+  "playerSettings": "Player Settings",
+  "shortcutsSettings": "Shortcuts Settings",
+  "rememberDanmakuOffset": "Remember Danmaku Offset",
+  "rememberDanmakuOffsetSubtitle": "Keep the current manual offset when switching videos (auto-matched offset will still reset).",
+  "rememberDanmakuOffsetEnabled": "Danmaku offset memory enabled",
+  "rememberDanmakuOffsetDisabled": "Danmaku offset memory disabled",
+  "danmakuConvertToSimplified": "Convert Danmaku to Simplified Chinese",
+  "danmakuConvertToSimplifiedSubtitle": "When enabled, Traditional Chinese danmaku will be displayed in Simplified Chinese.",
+  "danmakuConvertToSimplifiedEnabled": "Danmaku conversion to Simplified Chinese enabled",
+  "danmakuConvertToSimplifiedDisabled": "Danmaku conversion to Simplified Chinese disabled",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "close": "Close",
+  "saving": "Saving...",
+  "networkServerSwitchedTo": "DanDanPlay server switched to {server}",
+  "@networkServerSwitchedTo": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "enterServerAddress": "Enter server address",
+  "invalidServerAddress": "Invalid server address. Must start with http/https.",
+  "switchedToCustomServer": "Switched to custom server",
+  "networkPrimaryServerRecommended": "Primary Server (Recommended)",
+  "networkBackupServer": "Backup Server",
+  "networkCurrentCustomServer": "Current Custom Server",
+  "networkSelectServer": "Select DanDanPlay Server",
+  "primaryServer": "Primary Server",
+  "backupServer": "Backup Server",
+  "dandanplayServer": "DanDanPlay Server",
+  "customServer": "Custom Server",
+  "customServerInputHint": "Enter a danmaku server address compatible with DanDanPlay API, e.g. https://example.com",
+  "customServerPlaceholder": "https://your-danmaku-server.com",
+  "useThisServer": "Use This Server",
+  "currentServerInfo": "Current Server Info",
+  "serverDescriptionTitle": "Server Description",
+  "serverField": "Server: {server}",
+  "@serverField": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "urlField": "URL: {url}",
+  "@urlField": {
+    "placeholders": {
+      "url": {}
+    }
+  },
+  "serverBullet": "• {name}: {description}",
+  "@serverBullet": {
+    "placeholders": {
+      "name": {},
+      "description": {}
+    }
+  },
+  "networkServerDescriptionPrimary": "api.dandanplay.net (Official server, recommended)",
+  "networkServerDescriptionBackup": "139.224.252.88:16001 (Mirror server, use when the primary server is unavailable)",
+  "networkServerSelectSubtitle": "Select a DanDanPlay danmaku server. The backup server can be used when the primary server is unavailable.",
+  "customServerWithValue": "Custom: {server}",
+  "@customServerWithValue": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "enabledClearOnLaunchSnack": "Danmaku cache cleanup on launch enabled",
+  "danmakuCacheCleared": "Danmaku cache cleared",
+  "clearFailed": "Clear failed: {error}",
+  "@clearFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "imageCacheCleared": "Image cache cleared",
+  "confirmClearCacheTitle": "Confirm Cache Clear",
+  "confirmClearImageCacheContent": "Are you sure you want to clear the cover and thumbnail image cache?",
+  "clearDanmakuCacheOnLaunchTitle": "Clear Danmaku Cache on Launch",
+  "clearDanmakuCacheOnLaunchSubtitle": "Automatically delete danmaku cache in the cache/danmaku/ directory",
+  "screenshotSaveLocation": "Screenshot Save Location",
+  "defaultDownloadDir": "Default: Downloads",
+  "screenshotSaveLocationUpdated": "Screenshot save location updated",
+  "screenshotDefaultSaveTarget": "Default Screenshot Save Target",
+  "screenshotDefaultSaveTargetMessage": "Choose how screenshots are saved by default",
+  "clearDanmakuCacheNow": "Clear Danmaku Cache Now",
+  "clearingInProgress": "Clearing...",
+  "clearDanmakuCacheManualHint": "Manually clear when danmaku is abnormal or using too much space",
+  "clearImageCache": "Clear Image Cache",
+  "clearImageCacheHint": "Clear cover and thumbnail image cache",
+  "danmakuCacheDescription": "Danmaku cache is stored in the app cache directory cache/danmaku/. Enable auto-cleanup to reduce storage usage.",
+  "imageCacheDescription": "Image cache includes covers and playback thumbnails, stored in the app cache directory. Can be cleared as needed.",
+  "clearDanmakuCacheOnLaunchSubtitleNipaplay": "Automatically delete all cached danmaku files when restarting the app to ensure fresh data",
+  "clearDanmakuCacheManualHintNipaplay": "Manually clear when cache is deleted or abnormal",
+  "danmakuCacheDescriptionNipaplay": "Danmaku cache files are stored in the cache/danmaku/ directory. Clear anytime if taking up too much space.",
+  "imageCacheDescriptionNipaplay": "Image cache includes covers and playback thumbnails, stored in the app cache directory. Can be cleared periodically.",
+  "clearDanmakuCacheFailed": "Failed to clear danmaku cache: {error}",
+  "@clearDanmakuCacheFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "clearImageCacheFailed": "Failed to clear image cache: {error}",
+  "@clearImageCacheFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "screenshotSaveAskDescription": "Show save dialog each time you take a screenshot",
+  "screenshotSavePhotosDescription": "Save screenshots directly to the photo gallery",
+  "screenshotSaveFileDescription": "Save screenshots directly as files",
+  "aboutNoReleaseNotes": "No release notes available",
+  "aboutFoundNewVersion": "New version {version} available",
+  "@aboutFoundNewVersion": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "aboutCurrentIsLatest": "You are on the latest version",
+  "aboutCurrentVersionLabel": "Current version: {version}",
+  "@aboutCurrentVersionLabel": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "aboutLatestVersionLabel": "Latest version: {version}",
+  "@aboutLatestVersionLabel": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "aboutReleaseNameLabel": "Release name: {name}",
+  "@aboutReleaseNameLabel": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "aboutPublishedAtLabel": "Published: {publishedAt}",
+  "@aboutPublishedAtLabel": {
+    "placeholders": {
+      "publishedAt": {}
+    }
+  },
+  "aboutReleaseNotesTitle": "Release Notes",
+  "aboutOpenReleasePage": "View Release Page",
+  "updateCheckFailed": "Update check failed",
+  "pleaseTryAgainLater": "Please try again later",
+  "cannotOpenLink": "Cannot open link: {url}",
+  "@cannotOpenLink": {
+    "placeholders": {
+      "url": {}
+    }
+  },
+  "appreciationCode": "Tip Jar",
+  "appreciationImageLoadFailed": "Failed to load tip jar image",
+  "acknowledgements": "Acknowledgements",
+  "aboutStoryPrefix": "NipaPlay's name comes from Furude Rika's catchphrase \"",
+  "aboutStorySuffix": "\" from Higurashi: When They Cry. I created NipaPlay to solve the inconvenience of watching anime on macOS, Linux, and iOS.",
+  "aboutThanksDandanplayPrefix": "Thanks to DanDanPlay and developer ",
+  "aboutThanksDandanplaySuffix": " for providing the API and development support.",
+  "aboutThanksSakikoPrefix": "Thanks to developer ",
+  "aboutThanksSakikoSuffix": " for helping implement Emby and Jellyfin media library support.",
+  "thanksSponsorUsers": "Thanks to the following users for their sponsorship:",
+  "aboutVersionBanner": "NipaPlay Reload Version: {version}",
+  "@aboutVersionBanner": {
+    "placeholders": {
+      "version": {}
+    }
+  },
+  "aboutCheckingUpdates": "Checking…",
+  "aboutCheckUpdates": "Check for Updates",
+  "aboutAutoCheckUpdates": "Auto-check for Updates",
+  "aboutManualOnlyWhenDisabled": "Manual check only when disabled",
+  "aboutQqGroup": "QQ Group: {id}",
+  "@aboutQqGroup": {
+    "placeholders": {
+      "id": {}
+    }
+  },
+  "aboutOfficialWebsite": "NipaPlay Official Website",
+  "openSourceCommunity": "Open Source & Community",
+  "aboutCommunityHint": "Contributions are welcome! Feel free to port the app to more platforms. No Dart experience needed — AI-assisted programming works too.",
+  "sponsorSupport": "Sponsor Support",
+  "aboutSponsorParagraph1": "If you enjoy NipaPlay and want to support its continued development, consider sponsoring via Afdian.",
+  "aboutSponsorParagraph2": "Sponsors' names will appear in the project's README file and the About page after each update.",
+  "aboutAfdianSponsorPage": "Afdian Sponsorship Page"
+}

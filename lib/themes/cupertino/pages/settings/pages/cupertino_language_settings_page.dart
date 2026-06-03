@@ -59,6 +59,12 @@ class CupertinoLanguageSettingsPage extends StatelessWidget {
                     mode: AppLanguageMode.traditionalChinese,
                     title: context.l10n.languageTraditionalChinese,
                   ),
+                  _buildOptionTile(
+                    context: context,
+                    provider: provider,
+                    mode: AppLanguageMode.english,
+                    title: context.l10n.languageEnglish,
+                  ),
                 ],
               ),
               const SizedBox(height: 12),

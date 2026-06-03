@@ -41,6 +41,8 @@ class CupertinoLanguageSettingTile extends StatelessWidget {
         return context.l10n.languageSimplifiedChinese;
       case AppLanguageMode.traditionalChinese:
         return context.l10n.languageTraditionalChinese;
+      case AppLanguageMode.english:
+        return context.l10n.languageEnglish;
       case AppLanguageMode.auto:
         return context.l10n.languageAuto;
     }

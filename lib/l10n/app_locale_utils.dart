@@ -7,10 +7,12 @@ class AppLocaleUtils {
       Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans');
   static const Locale traditionalChinese =
       Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant');
+  static const Locale english = Locale('en');
 
   static const List<Locale> supportedLocales = [
     simplifiedChinese,
     traditionalChinese,
+    english,
   ];
 
   static bool isTraditionalChineseLocale(Locale locale) {
@@ -31,6 +33,9 @@ class AppLocaleUtils {
   }
 
   static Locale resolveLocaleFromSystem(Locale systemLocale) {
+    if (systemLocale.languageCode.toLowerCase() == 'en') {
+      return english;
+    }
     return isTraditionalChineseLocale(systemLocale)
         ? traditionalChinese
         : simplifiedChinese;
