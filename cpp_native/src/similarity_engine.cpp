@@ -1,7 +1,9 @@
 #include "similarity_engine.h"
 
+#include <climits>
 #include <cstdio>
 #include <string_view>
+#include <type_traits>
 
 // ══════════════════════════════════════════════
 // ──── SimilarityEngine 构造函数 ────
@@ -24,6 +26,9 @@ SimilarityEngine::SimilarityEngine()
 static std::vector<sim_ushort> utf8_to_utf16(std::string_view text) {
     std::vector<sim_ushort> result;
     result.reserve(text.size());
+    static_assert(CHAR_BIT == 8, "UTF-8 byte processing requires 8-bit bytes");
+    static_assert(std::is_same_v<std::string_view::value_type, char>,
+                  "text.data() must yield const char* for reinterpret_cast to const uint8_t*");
     const uint8_t* s = reinterpret_cast<const uint8_t*>(text.data());
     const uint8_t* end = s + text.size();
 
