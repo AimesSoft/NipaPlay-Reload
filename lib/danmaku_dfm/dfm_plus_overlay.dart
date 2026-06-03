@@ -72,7 +72,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   bool _updateInFlight = false;
   bool _updateQueued = false;
 
-  int _lastQuantizedTick = -1 << 31;
+  double _lastTimeSeconds = -1.0;
   bool _forceLayout = false;
 
   int? _textureId;
@@ -219,13 +219,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
 
         final currentTime =
             widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
-        final quantizedTick = (currentTime * 60.0).round().toInt();
 
-        if (!_forceLayout && quantizedTick == _lastQuantizedTick) {
+        if (!_forceLayout && (currentTime - _lastTimeSeconds).abs() < 0.0001) {
           continue;
         }
 
-        _lastQuantizedTick = quantizedTick;
+        _lastTimeSeconds = currentTime;
         _forceLayout = false;
 
         await _bridge.configure(

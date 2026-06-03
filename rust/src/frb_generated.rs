@@ -1215,7 +1215,6 @@ impl SseDecode for crate::api::dfm_plus::DfmPlusPreparedLayout {
             <Vec<crate::api::dfm_plus::DfmPlusPreparedItem>>::sse_decode(deserializer);
         let mut var_itemTimes = <Vec<f64>>::sse_decode(deserializer);
         let mut var_trackCount = <i32>::sse_decode(deserializer);
-        let mut var_cacheKey = <u64>::sse_decode(deserializer);
         return crate::api::dfm_plus::DfmPlusPreparedLayout {
             handle: var_handle,
             width: var_width,
@@ -1225,7 +1224,6 @@ impl SseDecode for crate::api::dfm_plus::DfmPlusPreparedLayout {
             items: var_items,
             item_times: var_itemTimes,
             track_count: var_trackCount,
-            cache_key: var_cacheKey,
         };
     }
 }
@@ -2062,7 +2060,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::dfm_plus::DfmPlusPreparedLayo
             self.items.into_into_dart().into_dart(),
             self.item_times.into_into_dart().into_dart(),
             self.track_count.into_into_dart().into_dart(),
-            self.cache_key.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2549,7 +2546,6 @@ impl SseEncode for crate::api::dfm_plus::DfmPlusPreparedLayout {
         <Vec<crate::api::dfm_plus::DfmPlusPreparedItem>>::sse_encode(self.items, serializer);
         <Vec<f64>>::sse_encode(self.item_times, serializer);
         <i32>::sse_encode(self.track_count, serializer);
-        <u64>::sse_encode(self.cache_key, serializer);
     }
 }
 

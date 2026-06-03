@@ -1143,8 +1143,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DfmPlusPreparedLayout dco_decode_dfm_plus_prepared_layout(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return DfmPlusPreparedLayout(
       handle: dco_decode_u_64(arr[0]),
       width: dco_decode_f_64(arr[1]),
@@ -1154,7 +1154,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       items: dco_decode_list_dfm_plus_prepared_item(arr[5]),
       itemTimes: dco_decode_list_prim_f_64_strict(arr[6]),
       trackCount: dco_decode_i_32(arr[7]),
-      cacheKey: dco_decode_u_64(arr[8]),
     );
   }
 
@@ -1742,7 +1741,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_items = sse_decode_list_dfm_plus_prepared_item(deserializer);
     var var_itemTimes = sse_decode_list_prim_f_64_strict(deserializer);
     var var_trackCount = sse_decode_i_32(deserializer);
-    var var_cacheKey = sse_decode_u_64(deserializer);
     return DfmPlusPreparedLayout(
         handle: var_handle,
         width: var_width,
@@ -1751,8 +1749,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         staticDurationSeconds: var_staticDurationSeconds,
         items: var_items,
         itemTimes: var_itemTimes,
-        trackCount: var_trackCount,
-        cacheKey: var_cacheKey);
+        trackCount: var_trackCount);
   }
 
   @protected
@@ -2387,7 +2384,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_dfm_plus_prepared_item(self.items, serializer);
     sse_encode_list_prim_f_64_strict(self.itemTimes, serializer);
     sse_encode_i_32(self.trackCount, serializer);
-    sse_encode_u_64(self.cacheKey, serializer);
   }
 
   @protected
