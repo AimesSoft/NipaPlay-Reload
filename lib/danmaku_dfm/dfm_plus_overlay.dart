@@ -4,8 +4,10 @@ import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/next2_emoji_pipeline.dart';
 import 'package:nipaplay/danmaku_next/next2_overlay_viewport.dart';
 import 'package:nipaplay/danmaku_next/next2_texture_bridge.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:provider/provider.dart';
 
 import 'dfm_plus_layout_bridge.dart';
 
@@ -177,7 +179,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
                 Next2TextureBridge.isSupported;
 
             final needsSupersample =
-                globals.isTablet || (globals.isDesktop && dpr < 2.0);
+                (globals.isTablet || (globals.isDesktop && dpr < 2.0)) &&
+                    context.watch<SettingsProvider>().danmakuSupersample;
             final filterQuality =
                 needsSupersample ? FilterQuality.low : FilterQuality.none;
             final Widget content = hasTexture
@@ -284,7 +287,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
 
     final needsSupersample =
-        globals.isTablet || (globals.isDesktop && dpr < 2.0);
+        (globals.isTablet || (globals.isDesktop && dpr < 2.0)) &&
+            context.read<SettingsProvider>().danmakuSupersample;
     final supersample = needsSupersample ? _supersampleMultiplier : 1.0;
     final double pixelRatio =
         (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
