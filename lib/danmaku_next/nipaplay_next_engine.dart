@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint, listEquals, kIsWeb, kReleaseMode;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, listEquals, kIsWeb, kReleaseMode;
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
@@ -14,6 +14,9 @@ const String _logTag = 'NipaPlayNextEngine';
 
 /// Frame log throttle: last time a frame log was emitted (global, ms)
 int _lastFrameLogTimeMs = 0;
+
+/// [NEXT-DIAG] layout 日志节流：上次输出时间（ms）
+int _lastDiagLayoutTimeMs = 0;
 
 /// Time-driven danmaku layout engine that keeps positions stable after seeking.
 class NipaPlayNextEngine {
@@ -191,10 +194,23 @@ class NipaPlayNextEngine {
       return const [];
     }
 
+    // [NEXT-DIAG] 测量 layout 总耗时（含 FFI 或 Dart 路径），阈值500μs + 2秒节流
+    final diagLayoutSw = kDebugMode ? Stopwatch() : null;
+    diagLayoutSw?.start();
+
     // Try native C++ path
     if (_nativeEngineAvailable && _nativeEngine != null) {
       try {
-        return _layoutNative(currentTimeSeconds);
+        final result = _layoutNative(currentTimeSeconds);
+        diagLayoutSw?.stop();
+        if (diagLayoutSw != null && diagLayoutSw.elapsedMicroseconds > 500) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagLayoutTimeMs >= 2000) {
+            _lastDiagLayoutTimeMs = now;
+            debugPrint('[NEXT-DIAG] SLOW LAYOUT(native): ${diagLayoutSw.elapsedMicroseconds}μs time=${currentTimeSeconds.toStringAsFixed(2)}');
+          }
+        }
+        return result;
       } catch (e) {
         _logFrame('[ERR] native frame EXCEPTION, falling back to Dart: $e');
         _disableNativeEngine();
@@ -204,13 +220,25 @@ class NipaPlayNextEngine {
     }
 
     // Dart fallback
-    return _layoutDart(currentTimeSeconds);
+    final dartResult = _layoutDart(currentTimeSeconds);
+    diagLayoutSw?.stop();
+    if (diagLayoutSw != null && diagLayoutSw.elapsedMicroseconds > 500) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastDiagLayoutTimeMs >= 2000) {
+        _lastDiagLayoutTimeMs = now;
+        debugPrint('[NEXT-DIAG] SLOW LAYOUT(dart): ${diagLayoutSw.elapsedMicroseconds}μs time=${currentTimeSeconds.toStringAsFixed(2)}');
+      }
+    }
+    return dartResult;
   }
 
   /// Native C++ layout: query frame results from the C++ engine
   /// and map them to [PositionedDanmakuItem].
+  /// Native C++ layout: zero-allocation path using frameRaw + index accessors.
+  /// Reads directly from native buffer, bypasses intermediate
+  /// List + DanmakuLayoutResult object creation.
   List<PositionedDanmakuItem> _layoutNative(double currentTimeSeconds) {
-    final frameResult = _nativeEngine!.frame(currentTimeSeconds);
+    final frameResult = _nativeEngine!.frameRaw(currentTimeSeconds);
     if (!frameResult.isOk) {
       _logFrame('[ERR] native frame ERROR: ${frameResult.errorMessage}, falling back to Dart');
       _disableNativeEngine();
@@ -219,26 +247,32 @@ class NipaPlayNextEngine {
       return _layoutDart(currentTimeSeconds);
     }
 
-    final layoutResults = frameResult.requireValue;
-    _logFrame('native frame(t=${currentTimeSeconds.toStringAsFixed(2)}) -> ${layoutResults.length} visible items');
+    final int count = frameResult.requireValue;
+    _logFrame('native frame(t=${currentTimeSeconds.toStringAsFixed(2)}) -> $count visible items');
     _positionedBuffer.clear();
 
-    for (final r in layoutResults) {
-      if (r.itemIndex < 0 || r.itemIndex >= _items.length) continue;
-      if (r.trackIndex < 0) continue;
+    final native = _nativeEngine!;
+    for (int i = 0; i < count; i++) {
+      final itemIndex = native.rawItemIndex(i);
+      final trackIndex = native.rawTrackIndex(i);
+      if (itemIndex < 0 || itemIndex >= _items.length) continue;
+      if (trackIndex < 0) continue;
 
-      final item = _items[r.itemIndex];
+      final item = _items[itemIndex];
       final elapsed = currentTimeSeconds - item.timeSeconds;
       if (elapsed < 0) continue;
+
+      final yPosition = native.rawYPosition(i);
+      final scrollSpeed = native.rawScrollSpeed(i);
 
       switch (item.type) {
         case DanmakuItemType.scroll:
           if (elapsed > _scrollDurationSeconds) continue;
-          final x = _size.width - r.scrollSpeed * elapsed;
+          final x = _size.width - scrollSpeed * elapsed;
           _positionedBuffer.add(_toPositionedItem(
             source: item,
             x: x,
-            y: r.yPosition,
+            y: yPosition,
             offstageX: _size.width + item.width,
           ));
           break;
@@ -249,7 +283,7 @@ class NipaPlayNextEngine {
           _positionedBuffer.add(_toPositionedItem(
             source: item,
             x: x,
-            y: r.yPosition,
+            y: yPosition,
             offstageX: _size.width,
           ));
           break;

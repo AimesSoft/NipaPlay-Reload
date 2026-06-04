@@ -506,6 +506,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     _lastSavedPositionMs = _position.inMilliseconds;
     // 重置平滑时钟锚点，下次 Ticker 回调时重新对齐
     _lastRawPlayerMs = -1;
+    // [NEXT-DIAG] 重置帧间隔基线，避免跨 Ticker 实例的假阳性
+    _lastElapsedUs = 0;
+    _diagBaselineFrameUs = 0;
+    _diagFrameSampleCount = 0;
 
     // 🔥 关键优化：使用Ticker代替Timer.periodic
     // Ticker会与显示刷新率同步，更精确地控制帧率
@@ -563,6 +567,28 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             // 与 vsync 精确同步）在锚点间线性插值，获得均匀的亚毫秒推进；
             // 漂移过大时（seek/暂停恢复）立即对齐。
             final currentElapsedUs = elapsed.inMicroseconds;
+            // [NEXT-DIAG] 检测帧丢失：自适应基线，前30帧采样最小帧间隔，
+            // 超过基线2倍则判定跳帧，2秒节流
+            if (kDebugMode && _lastElapsedUs > 0) {
+              final frameDeltaUs = currentElapsedUs - _lastElapsedUs;
+              if (_diagFrameSampleCount < 30) {
+                // 采样阶段：收集最小帧间隔作为基线
+                _diagFrameSampleCount++;
+                if (frameDeltaUs > 0 &&
+                    (_diagBaselineFrameUs == 0 || frameDeltaUs < _diagBaselineFrameUs)) {
+                  _diagBaselineFrameUs = frameDeltaUs;
+                }
+              } else if (_diagBaselineFrameUs > 0 &&
+                  frameDeltaUs > _diagBaselineFrameUs * 2) {
+                final now = DateTime.now().millisecondsSinceEpoch;
+                if (now - _lastDiagFrameSkipTimeMs >= 2000) {
+                  _lastDiagFrameSkipTimeMs = now;
+                  debugPrint('[NEXT-DIAG] FRAME SKIP: $frameDeltaUs μs '
+                      '(baseline=${_diagBaselineFrameUs}μs) '
+                      'at playback=${playerPosition}ms');
+                }
+              }
+            }
             _lastElapsedUs = currentElapsedUs;
             final playerMs = playerPosition.toDouble();
 

@@ -125,5 +125,14 @@ class DanmakuLayoutEngine {
     throw UnsupportedError('DanmakuLayoutEngine is not available on Web');
   }
 
+  NativeResult<int> frameRaw(double currentTime) {
+    throw UnsupportedError('DanmakuLayoutEngine is not available on Web');
+  }
+
+  int rawItemIndex(int i) => throw UnsupportedError('DanmakuLayoutEngine is not available on Web');
+  int rawTrackIndex(int i) => throw UnsupportedError('DanmakuLayoutEngine is not available on Web');
+  double rawYPosition(int i) => throw UnsupportedError('DanmakuLayoutEngine is not available on Web');
+  double rawScrollSpeed(int i) => throw UnsupportedError('DanmakuLayoutEngine is not available on Web');
+
   void dispose() {}
 }
