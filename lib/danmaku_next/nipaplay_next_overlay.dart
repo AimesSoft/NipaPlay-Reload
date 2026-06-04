@@ -28,6 +28,8 @@ class NipaPlayNextOverlay extends StatefulWidget {
   final DanmakuOutlineStyle outlineStyle;
   final DanmakuShadowStyle shadowStyle;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
+  final bool isPlaying;
+  final double playbackRate;
 
   const NipaPlayNextOverlay({
     super.key,
@@ -46,23 +48,40 @@ class NipaPlayNextOverlay extends StatefulWidget {
     required this.outlineStyle,
     required this.shadowStyle,
     this.onLayoutCalculated,
+    required this.isPlaying,
+    required this.playbackRate,
   });
 
   @override
   State<NipaPlayNextOverlay> createState() => _NipaPlayNextOverlayState();
 }
 
-class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
+class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
+    with SingleTickerProviderStateMixin {
   final NipaPlayNextEngine _engine = NipaPlayNextEngine();
   int _listIdentity = 0;
   Size _lastConfiguredSize = Size.zero;
   bool _layoutSnapshotPending = false;
+
+  /// vsync 驱动动画控制器 — 保证弹幕以屏幕刷新率重绘
+  late final AnimationController _vsyncController;
 
   @override
   void initState() {
     super.initState();
     _listIdentity = identityHashCode(widget.danmakuList);
     _layoutSnapshotPending = true;
+
+    // 创建 vsync 动画控制器（与 Canvas 引擎的 AnimationController.repeat() 一致）
+    _vsyncController = AnimationController(
+      vsync: this,
+      duration: const Duration(days: 365), // 极长 duration + repeat = 永久循环
+    );
+
+    if (widget.isVisible && widget.isPlaying) {
+      _vsyncController.repeat();
+    }
+
     DanmakuNextLog.d(
       'Overlay',
       'init list=${widget.danmakuList.length} font=${widget.fontSize} visible=${widget.isVisible}',
@@ -92,10 +111,19 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
         throttle: Duration.zero,
       );
     }
+
+    // 根据可见性和播放状态启停 vsync 控制器
+    final shouldAnimate = widget.isVisible && widget.isPlaying;
+    if (shouldAnimate && !_vsyncController.isAnimating) {
+      _vsyncController.repeat();
+    } else if (!shouldAnimate && _vsyncController.isAnimating) {
+      _vsyncController.stop();
+    }
   }
 
   @override
   void dispose() {
+    _vsyncController.dispose();
     super.dispose();
   }
 
@@ -159,8 +187,10 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay> {
           opacity: widget.opacity.clamp(0.0, 1.0),
           child: CustomPaint(
             painter: NipaPlayNextCanvasPainter(
+              vsyncNotifier: _vsyncController,
               engine: _engine,
               playbackTimeMs: widget.playbackTimeMs,
+              playbackRate: widget.playbackRate,
               timeOffsetSeconds: widget.timeOffset,
               fontSize: widget.fontSize,
               fontFamily: fontFamily,

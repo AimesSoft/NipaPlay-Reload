@@ -138,6 +138,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             customFontFamily: videoState.danmakuFontFamily,
             outlineStyle: videoState.danmakuOutlineStyle,
             shadowStyle: videoState.danmakuShadowStyle,
+            isPlaying: widget.isPlaying,
+            playbackRate: videoState.effectivePlaybackRate,
           );
         }
 

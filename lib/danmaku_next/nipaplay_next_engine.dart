@@ -274,6 +274,7 @@ class NipaPlayNextEngine {
             x: x,
             y: yPosition,
             offstageX: _size.width + item.width,
+            scrollSpeed: scrollSpeed,
           ));
           break;
         case DanmakuItemType.top:
@@ -285,6 +286,7 @@ class NipaPlayNextEngine {
             x: x,
             y: yPosition,
             offstageX: _size.width,
+            scrollSpeed: 0.0,
           ));
           break;
       }
@@ -330,6 +332,7 @@ class NipaPlayNextEngine {
             x: x,
             y: item.yPosition,
             offstageX: _size.width + item.width,
+            scrollSpeed: item.scrollSpeed,
           ));
           break;
         case DanmakuItemType.top:
@@ -341,6 +344,7 @@ class NipaPlayNextEngine {
             x: x,
             y: item.yPosition,
             offstageX: _size.width,
+            scrollSpeed: 0.0,
           ));
           break;
       }
@@ -360,6 +364,7 @@ class NipaPlayNextEngine {
     required double x,
     required double y,
     required double offstageX,
+    required double scrollSpeed,
   }) {
     final existing = source.positionedItem;
     if (existing == null) {
@@ -369,6 +374,7 @@ class NipaPlayNextEngine {
         y: y,
         offstageX: offstageX,
         time: source.timeSeconds,
+        scrollSpeed: scrollSpeed,
       );
       source.positionedItem = created;
       return created;
@@ -377,6 +383,7 @@ class NipaPlayNextEngine {
     existing.x = x;
     existing.y = y;
     existing.offstageX = offstageX;
+    existing.scrollSpeed = scrollSpeed;
     return existing;
   }
 
