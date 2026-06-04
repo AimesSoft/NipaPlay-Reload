@@ -152,8 +152,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
                 Next2TextureBridge.isSupported;
 
             final needsSupersample =
-                (globals.isTablet || (globals.isDesktop && dpr < 2.0)) &&
-                    context.watch<SettingsProvider>().danmakuSupersample;
+                context.watch<SettingsProvider>().danmakuSupersample;
             final filterQuality =
                 needsSupersample ? FilterQuality.low : FilterQuality.none;
             final Widget content = hasTexture
@@ -239,8 +238,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
         views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
 
     final needsSupersample =
-        (globals.isTablet || (globals.isDesktop && dpr < 2.0)) &&
-            context.read<SettingsProvider>().danmakuSupersample;
+        context.read<SettingsProvider>().danmakuSupersample;
     final supersample = needsSupersample ? _supersampleMultiplier : 1.0;
     final double pixelRatio =
         (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
