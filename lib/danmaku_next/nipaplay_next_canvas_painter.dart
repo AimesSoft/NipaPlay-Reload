@@ -12,6 +12,13 @@ import 'nipaplay_next_engine.dart';
 /// [NEXT-DIAG] paint 日志节流
 int _lastDiagPaintTimeMs = 0;
 
+/// [NEXT-DIAG] 诊断日志节流
+int _lastDiagSnapTimeMs = 0;
+int _lastDiagDriftTimeMs = 0;
+
+/// playbackRate 变化追踪（用于倍速切换时同步 displayX）
+double _lastDiagPlaybackRate = -1.0;
+
 /// 高性能弹幕画师 — vsync 驱动 + Paragraph 预光栅化 + 增量定位
 ///
 /// ┌──────────────────────┬──────────────────────────┬──────────────────────────┐
@@ -187,18 +194,78 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       _cacheDpr = devicePixelRatio;
     }
 
+    // ── playbackRate 变化检测：倍速切换时重置所有 displayX → item.x ──
+    // 防止倍速切换后 displayX 与 item.x 产生大偏差导致鬼畜回弹。
+    // 原因：displayX 按墙钟dt×rate推进，item.x按视频时间推进，
+    // 倍速切换时两个时间源短暂不同步，偏差可超50px触发硬snap。
+    // 重置后所有弹幕从引擎绝对位置重新开始增量推进，消除偏差。
+    if (playbackRate != _lastDiagPlaybackRate) {
+      if (!kReleaseMode) {
+        debugPrint('[NEXT-DIAG] RATE CHANGE: $_lastDiagPlaybackRate → $playbackRate');
+      }
+      _lastDiagPlaybackRate = playbackRate;
+      // 倍速切换：将所有可见滚动弹幕的 displayX 强制同步到 item.x
+      for (final item in items) {
+        if (item.scrollSpeed > 0.0) {
+          item.displayX = item.x;
+        }
+      }
+    }
+
+    // [NEXT-DIAG] 偏差采样计数器（每100个滚动弹幕采样1个）
+    int diagScrollItemCount = 0;
+
     for (final item in items) {
       final content = item.content;
 
       // ── 增量定位：滚动弹幕用 displayX + 墙钟dt × playbackRate 推进 ──
+      // 渐进式校正策略：
+      //   - 首次出现(NaN) / seek大跳变(>200px)：硬snap（无视觉干扰）
+      //   - 偏差 50~200px：渐进式校正 lerp(displayX→item.x, 0.15/帧)
+      //     每帧缩减偏差15%，~10帧(≈40ms@240Hz)收敛到<5px不可感知
+      //   - 偏差 <50px：不校正，保持增量定位的视觉流畅性
+      // 这消除了旧版硬snap 50px阈值导致的鬼畜/回弹，
+      // 同时保持增量定位在倍速/暂停恢复时的视觉平滑。
       final double drawX;
       if (item.scrollSpeed > 0.0) {
-        if (item.displayX.isNaN || (item.displayX - item.x).abs() > 50.0) {
-          // 首次出现 / seek 大跳变：从引擎绝对位置初始化
+        if (item.displayX.isNaN) {
+          // 首次出现：从引擎绝对位置初始化
           item.displayX = item.x;
         } else {
           // 正常播放：墙钟增量 × playbackRate = 真实视觉推进量
           item.displayX -= item.scrollSpeed * dtSeconds * playbackRate;
+
+          // 渐进式校正：将 displayX 逐渐拉向 item.x
+          final drift = item.displayX - item.x;
+          final absDrift = drift.abs();
+          if (absDrift > 200.0) {
+            // seek级大跳变：硬snap（用户预期跳变，无视觉干扰）
+            item.displayX = item.x;
+            if (!kReleaseMode) {
+              final now = DateTime.now().millisecondsSinceEpoch;
+              if (now - _lastDiagSnapTimeMs >= 1000) {
+                debugPrint('[NEXT-DIAG] HARD SNAP: drift=${drift.toStringAsFixed(1)}px → 0');
+                _lastDiagSnapTimeMs = now;
+              }
+            }
+          } else if (absDrift > 50.0) {
+            // 中等偏差：渐进式校正（每帧缩减15%，约10帧≈40ms收敛）
+            // 使用固定lerp因子而非dt相关因子，确保收敛速度
+            // 与帧率无关（高帧率=更快收敛，低帧率=更慢但单步更大）
+            item.displayX = item.displayX + (item.x - item.displayX) * 0.15;
+            if (!kReleaseMode) {
+              diagScrollItemCount++;
+              if (diagScrollItemCount % 200 == 0) {
+                final now = DateTime.now().millisecondsSinceEpoch;
+                if (now - _lastDiagDriftTimeMs >= 2000) {
+                  debugPrint('[NEXT-DIAG] SOFT CORRECT: drift=${drift.toStringAsFixed(1)}px '
+                      'rate=$playbackRate');
+                  _lastDiagDriftTimeMs = now;
+                }
+              }
+            }
+          }
+          // absDrift <= 50px：不校正，保持增量定位视觉流畅性
         }
         drawX = item.displayX;
       } else {
