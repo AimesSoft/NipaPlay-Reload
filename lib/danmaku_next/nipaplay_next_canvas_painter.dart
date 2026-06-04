@@ -48,6 +48,7 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     required this.engine,
     required this.playbackTimeMs,
     required this.playbackRate,
+    required this.isPlaying,
     required this.timeOffsetSeconds,
     required this.fontSize,
     required this.fontFamily,
@@ -64,6 +65,16 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
   final NipaPlayNextEngine engine;
   final ValueListenable<double> playbackTimeMs;
   final double playbackRate;
+
+  /// 视频是否正在播放 — 暂停时强制 dtSeconds=0，阻止 displayX 推进。
+  ///
+  /// 根因修复：暂停状态下，Consumer rebuild 仍可能触发 paint()（因为
+  /// Flutter 框架在新旧 painter 对象引用不同时调用 markNeedsPaint），
+  /// 而墙钟 Stopwatch 始终运行，导致 dtSeconds > 0，displayX 被推进，
+  /// 与冻结的 item.x 产生 drift → 渐进式校正拉回 → 下次 rebuild 又推进
+  /// → 振荡/鬼畜。将 isPlaying 纳入 dt 计算，暂停时 dt=0 彻底消除此问题。
+  final bool isPlaying;
+
   final double timeOffsetSeconds;
   final double fontSize;
   final String? fontFamily;
@@ -156,9 +167,19 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     // ── EMA 平滑 dt — 消除帧间隔微抖导致的视觉滚动速度不均 ──
     // 大跳变（暂停恢复/后台切换：rawDt=0 → 恢复后首帧 rawDt 正常）
     // 时重置平滑器，避免滞后拖尾
+    // ── 暂停状态感知：暂停时强制 dt=0，阻止 displayX 推进 ──
+    // 根因修复：暂停时 vsyncController.stop()，但 Consumer rebuild 仍可能
+    // 触发 paint()（Flutter 框架因 painter 对象引用变化调用 markNeedsPaint），
+    // 墙钟 Stopwatch 始终运行 → dtSeconds > 0 → displayX 被推进 →
+    // 与冻结的 item.x 产生 drift → 渐进式校正拉回 → 振荡/鬼畜。
+    // 暂停时 dt=0 彻底消除 displayX 的任何增量推进。
     final double dtSeconds;
-    if (rawDtSeconds == 0.0) {
-      dtSeconds = 0.0; // 暂停/跳变帧不推进
+    if (!isPlaying) {
+      // 暂停状态：dt 强制为 0，displayX 不会被推进
+      dtSeconds = 0.0;
+      // 不更新 _smoothedDtSeconds，保留历史值供恢复后平滑过渡
+    } else if (rawDtSeconds == 0.0) {
+      dtSeconds = 0.0; // 跳变帧不推进
       // 不更新 _smoothedDtSeconds，保留历史值供恢复后平滑过渡
     } else if (_smoothedDtSeconds == 0.0) {
       // 首帧或恢复后首帧：直接采用原始值
@@ -681,6 +702,7 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     return oldDelegate._layoutVersion != _layoutVersion ||
         oldDelegate.engine != engine ||
         oldDelegate.playbackRate != playbackRate ||
+        oldDelegate.isPlaying != isPlaying ||
         oldDelegate.timeOffsetSeconds != timeOffsetSeconds ||
         oldDelegate.fontSize != fontSize ||
         oldDelegate.fontFamily != fontFamily ||

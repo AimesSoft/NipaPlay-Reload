@@ -195,6 +195,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
             engine: _engine,
             playbackTimeMs: widget.playbackTimeMs,
             playbackRate: widget.playbackRate,
+            isPlaying: widget.isPlaying,
             timeOffsetSeconds: widget.timeOffset,
             fontSize: widget.fontSize,
             fontFamily: fontFamily,
