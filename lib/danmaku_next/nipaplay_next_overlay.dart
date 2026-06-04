@@ -183,25 +183,34 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
           });
         }
 
-        return Opacity(
-          opacity: widget.opacity.clamp(0.0, 1.0),
-          child: CustomPaint(
-            painter: NipaPlayNextCanvasPainter(
-              vsyncNotifier: _vsyncController,
-              engine: _engine,
-              playbackTimeMs: widget.playbackTimeMs,
-              playbackRate: widget.playbackRate,
-              timeOffsetSeconds: widget.timeOffset,
-              fontSize: widget.fontSize,
-              fontFamily: fontFamily,
-              fontFamilyFallback: fontFamilyFallback,
-              locale: _danmakuLocale,
-              outlineStyle: widget.outlineStyle,
-              shadowStyle: widget.shadowStyle,
-            ),
-            size: size,
+        // ── GPU 优化：opacity=1.0 时跳过 Opacity widget ──
+        // Impeller/Skia 中 Opacity<1.0 会触发 saveLayer（离屏渲染通道），
+        // 即使 opacity=1.0，Opacity widget 也可能导致多余的 compositing 操作。
+        // 条件跳过可消除此开销，减少 GPU render pass 切换。
+        final effectiveOpacity = widget.opacity.clamp(0.0, 1.0);
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        final customPaint = CustomPaint(
+          painter: NipaPlayNextCanvasPainter(
+            vsyncNotifier: _vsyncController,
+            engine: _engine,
+            playbackTimeMs: widget.playbackTimeMs,
+            playbackRate: widget.playbackRate,
+            timeOffsetSeconds: widget.timeOffset,
+            fontSize: widget.fontSize,
+            fontFamily: fontFamily,
+            fontFamilyFallback: fontFamilyFallback,
+            locale: _danmakuLocale,
+            outlineStyle: widget.outlineStyle,
+            shadowStyle: widget.shadowStyle,
+            devicePixelRatio: dpr,
           ),
+          size: size,
         );
+
+        if (effectiveOpacity < 1.0) {
+          return Opacity(opacity: effectiveOpacity, child: customPaint);
+        }
+        return customPaint;
       },
     );
   }

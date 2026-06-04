@@ -16,6 +16,10 @@ class PositionedDanmakuItem {
   /// 抖动而产生视觉跳跃。非滚动弹幕此值为 0。
   double scrollSpeed;
 
+  /// 弹幕文本宽度（像素）。Painter 利用此值做视口剔除，
+  /// 跳过完全不可见的弹幕，避免无谓的 Paragraph 查找与绘制。
+  double width;
+
   /// Painter 增量定位使用的显示 X 坐标。
   /// 初始值为 NaN，Painter 首次渲染时从 [x] 初始化；
   /// 之后每帧按 `displayX -= scrollSpeed * dt` 递减，
@@ -30,5 +34,6 @@ class PositionedDanmakuItem {
     required this.offstageX,
     required this.time,
     this.scrollSpeed = 0.0,
+    this.width = 0.0,
   });
 }

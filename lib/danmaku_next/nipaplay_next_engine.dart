@@ -53,6 +53,11 @@ class NipaPlayNextEngine {
   bool _layoutDirty = true;
   int _layoutVersion = 0;
 
+  /// layout 结果缓存：vsync 帧以 60-240Hz 调 layout()，
+  /// 但 playbackTimeMs 通常仅以 8-30Hz 更新，
+  /// 相同时间（±1ms）直接返回缓存，避免冗余 FFI/Dart 计算。
+  double _lastLayoutTime = -1e9;
+
   NipaPlayNextEngine() : _id = 'C++';
 
   int get layoutVersion => _layoutVersion;
@@ -193,6 +198,14 @@ class NipaPlayNextEngine {
       );
       return const [];
     }
+
+    // ── layout 缓存：相同时间（±1ms）直接复用上一帧结果 ──
+    // vsync 以屏幕刷新率调用，但 playbackTimeMs 更新频率远低于此
+    if ((currentTimeSeconds - _lastLayoutTime).abs() < 0.001 &&
+        !_layoutDirty) {
+      return _positionedBuffer;
+    }
+    _lastLayoutTime = currentTimeSeconds;
 
     // [NEXT-DIAG] 测量 layout 总耗时（含 FFI 或 Dart 路径），阈值500μs + 2秒节流
     final diagLayoutSw = kDebugMode ? Stopwatch() : null;
@@ -375,6 +388,7 @@ class NipaPlayNextEngine {
         offstageX: offstageX,
         time: source.timeSeconds,
         scrollSpeed: scrollSpeed,
+        width: source.width,
       );
       source.positionedItem = created;
       return created;
@@ -384,6 +398,7 @@ class NipaPlayNextEngine {
     existing.y = y;
     existing.offstageX = offstageX;
     existing.scrollSpeed = scrollSpeed;
+    existing.width = source.width;
     return existing;
   }
 
