@@ -269,6 +269,26 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
           dropdownKey: _danmakuRenderEngineDropdownKey,
         ),
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        Consumer<SettingsProvider>(
+          builder: (context, settingsProvider, child) {
+            return SettingsItem.toggle(
+              title: '弹幕超采样渲染',
+              subtitle: '在部分设备上以更高像素密度渲染弹幕，使文字更清晰，但会增加 GPU 负担',
+              icon: Ionicons.expand_outline,
+              value: settingsProvider.danmakuSupersample,
+              onChanged: (bool value) {
+                settingsProvider.setDanmakuSupersample(value);
+                if (context.mounted) {
+                  BlurSnackBar.show(
+                    context,
+                    value ? '已开启弹幕超采样渲染' : '已关闭弹幕超采样渲染',
+                  );
+                }
+              },
+            );
+          },
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             return SettingsItem.toggle(
@@ -592,26 +612,6 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
                   BlurSnackBar.show(
                     context,
                     value ? '已开启播放时自动匹配弹幕' : '已关闭播放时自动匹配弹幕（可手动匹配）',
-                  );
-                }
-              },
-            );
-          },
-        ),
-        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
-        Consumer<SettingsProvider>(
-          builder: (context, settingsProvider, child) {
-            return SettingsItem.toggle(
-              title: '弹幕超采样渲染',
-              subtitle: '在部分设备上以更高像素密度渲染弹幕，使文字更清晰，但会增加 GPU 负担',
-              icon: Ionicons.expand_outline,
-              value: settingsProvider.danmakuSupersample,
-              onChanged: (bool value) {
-                settingsProvider.setDanmakuSupersample(value);
-                if (context.mounted) {
-                  BlurSnackBar.show(
-                    context,
-                    value ? '已开启弹幕超采样渲染' : '已关闭弹幕超采样渲染',
                   );
                 }
               },
