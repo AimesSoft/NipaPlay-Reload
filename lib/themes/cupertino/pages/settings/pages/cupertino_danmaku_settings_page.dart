@@ -426,7 +426,7 @@ class _CupertinoDanmakuSettingsPageState
               ),
               CupertinoSettingsTile(
                 leading: Icon(
-                  CupertinoIcons.expand,
+                  CupertinoIcons.fullscreen,
                   color: resolveSettingsIconColor(context),
                 ),
                 title: const Text('弹幕超采样渲染'),
