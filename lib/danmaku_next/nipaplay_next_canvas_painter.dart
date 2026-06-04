@@ -317,8 +317,11 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       if (outlineStyle == DanmakuOutlineStyle.uniform) {
         // uniform 描边：8方向零模糊 Shadow 烘入 fill Paragraph
         final radius = _resolveUniformOutlineRadius(adjFontSize);
-        final uKey = _key(content, adjFontSize, strokeColorVal,
-            'u${radius.toStringAsFixed(1)}');
+        // ⚠️ 缓存键必须包含 colorVal（填充色），否则不同颜色的同文本弹幕
+        // 会命中同一缓存条目，导致颜色被"染"成先缓存弹幕的颜色。
+        // strokeColorVal 仅有黑/白两种，无法区分不同填充色。
+        final uKey = _key(content, adjFontSize, colorVal,
+            'u${radius.toStringAsFixed(1)}|$strokeColorVal');
         fillP = _getOrBuild(uKey, () => _buildUniformOutlineParagraph(
               content, adjFontSize, content.color, itemStrokeColor,
               radius, shadowParams,
@@ -373,14 +376,31 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
       }
 
       // 单次 GPU 纹理 blit — 替代 drawParagraph 的逐字形 quad
-      dc.drawImageRect(
-        raster.image,
-        Rect.fromLTWH(0, 0,
-            raster.image.width.toDouble(), raster.image.height.toDouble()),
-        Rect.fromLTWH(drawX, drawY,
-            raster.logicalWidth, raster.logicalHeight),
-        _imagePaint,
+      // ── 边缘裁剪：手动将 dstRect 裁剪到 canvas 可见范围内 ──
+      // Impeller 渲染器在 dstRect 部分超出 canvas clip rect 时，
+      // 可能整个丢弃 drawImageRect（GPU whole-quad rejection），
+      // 导致弹幕到边界时整个消失而非逐渐滑出。
+      // 手动裁剪 src/dst rect 可确保目标矩形完全在 canvas 内，
+      // 弹幕滑出边界时只有超出部分不可见，实现平滑的边缘过渡。
+      final dstRect = Rect.fromLTWH(
+          drawX, drawY, raster.logicalWidth, raster.logicalHeight);
+      final canvasRect = Rect.fromLTWH(0, 0, size.width, size.height);
+      final clippedDst = dstRect.intersect(canvasRect);
+      if (clippedDst.isEmpty) continue; // 双重保险
+
+      // 按比例裁剪 srcRect，确保纹理采样与可见区域对应
+      final scaleX =
+          raster.image.width.toDouble() / raster.logicalWidth;
+      final scaleY =
+          raster.image.height.toDouble() / raster.logicalHeight;
+      final srcRect = Rect.fromLTWH(
+        (clippedDst.left - dstRect.left) * scaleX,
+        (clippedDst.top - dstRect.top) * scaleY,
+        clippedDst.width * scaleX,
+        clippedDst.height * scaleY,
       );
+
+      dc.drawImageRect(raster.image, srcRect, clippedDst, _imagePaint);
     }
 
     // 单次 drawPicture 提交全部绘制命令 — GPU 命令缓冲整体优化
