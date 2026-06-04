@@ -57,6 +57,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageTraditionalChinese => '繁體中文';
 
   @override
+  String get languageEnglish => 'English';
+
+  @override
   String currentLanguage(Object language) {
     return '当前：$language';
   }
@@ -72,7 +75,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get languageTileSubtitle => '切换简体中文或繁體中文';
+  String get languageTileSubtitle => '切换简体中文、繁體中文或English';
 
   @override
   String get settingsBasicSection => '基础设置';
@@ -1762,6 +1765,9 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get languageTraditionalChinese => '繁體中文';
 
   @override
+  String get languageEnglish => 'English';
+
+  @override
   String currentLanguage(Object language) {
     return '目前：$language';
   }
@@ -1777,7 +1783,7 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   }
 
   @override
-  String get languageTileSubtitle => '切換簡體中文或繁體中文';
+  String get languageTileSubtitle => '切換簡體中文、繁體中文或English';
 
   @override
   String get settingsBasicSection => '基礎設定';

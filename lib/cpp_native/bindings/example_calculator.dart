@@ -56,9 +56,9 @@ class ExampleCalculator implements Finalizable {
       final text = outString.ref.data.cast<Utf8>().toDartString(
             length: outString.ref.length,
           );
-      NativeBindings.npStringFree(outString);
       return NativeResult.ok(text);
     } finally {
+      NativeBindings.npStringFree(outString);
       calloc.free(cInput);
       calloc.free(outString);
     }

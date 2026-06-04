@@ -3,6 +3,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CPP_NATIVE_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Xcode Run Script 阶段的 PATH 不会继承 shell 配置，显式补上 Homebrew 路径
+# 让 Apple Silicon (/opt/homebrew) 和 Intel (/usr/local) 都能找到 cmake 等工具
+export PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}"
+
 # Map Xcode configuration to CMake build type
 if [ "${CONFIGURATION}" = "Debug" ]; then
     CMAKE_BUILD_TYPE="Debug"
@@ -20,7 +24,7 @@ for ARCH in ${ARCHS}; do
         -DNP_LIB_TYPE=STATIC \
         -DCMAKE_OSX_ARCHITECTURES="${ARCH}" \
         -DCMAKE_SYSTEM_NAME=iOS \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-12.0}"
+        -DCMAKE_OSX_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-13.0}"
 
     cmake --build "${BUILD_DIR}/${ARCH}" -j$(sysctl -n hw.ncpu)
 done
