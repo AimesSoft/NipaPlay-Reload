@@ -121,14 +121,16 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         oldWidget.outlineWidth != widget.outlineWidth ||
         oldWidget.shadowStyle != widget.shadowStyle ||
         oldWidget.trackGapRatio != widget.trackGapRatio ||
-        oldWidget.opacity != widget.opacity ||
-        oldWidget.isVisible != widget.isVisible ||
         oldWidget.maxQuantity != widget.maxQuantity ||
         oldWidget.maxLinesPerType != widget.maxLinesPerType ||
         !listEquals(oldWidget.blockWords, widget.blockWords)) {
       _forceLayout = true;
       _queueUpdate();
+    } else if (oldWidget.isVisible != widget.isVisible) {
+      // Visibility only affects display layer, not layout — skip full reconfigure
+      _queueUpdate();
     }
+    // opacity changes are handled in build() via Opacity widget, no update needed
   }
 
   @override
