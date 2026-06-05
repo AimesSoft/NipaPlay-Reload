@@ -145,7 +145,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
       case DanmakuRenderEngine.canvas:
         return 'Canvas 弹幕渲染引擎\n来自软件kazumi的开发者\n使用Canvas绘制弹幕，高性能，低功耗，支持大量弹幕同时显示。';
       case DanmakuRenderEngine.nipaplayNext:
-        return 'NipaPlay Next\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
+        return '${DanmakuKernelFactory.nipaplayNextDisplayName}\n是CPU弹幕和Canvas弹幕优点的集合体，包含两边的全部优点。';
       case DanmakuRenderEngine.next2:
         return Next2PlatformSupport.description;
       case DanmakuRenderEngine.dfmPlus:
@@ -181,7 +181,7 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
             _getDanmakuRenderEngineDescription(DanmakuRenderEngine.canvas),
       ),
       DropdownMenuItemData(
-        title: 'NipaPlay Next',
+        title: DanmakuKernelFactory.nipaplayNextDisplayName,
         value: DanmakuRenderEngine.nipaplayNext,
         isSelected:
             _selectedDanmakuRenderEngine == DanmakuRenderEngine.nipaplayNext,

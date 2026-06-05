@@ -55,6 +55,19 @@ class LabsPage extends StatelessWidget {
               color: colorScheme.onSurface.withValues(alpha: 0.12),
               height: 1,
             ),
+            SettingsItem.toggle(
+              title: 'Next++ 激进优化引擎',
+              subtitle: '激进优化，推荐。关闭则回退至 Next 原始引擎路径',
+              icon: Ionicons.rocket_outline,
+              value: labsSettings.enableNextPlusPlusEngine,
+              onChanged: (bool value) {
+                labsSettings.setEnableNextPlusPlusEngine(value);
+              },
+            ),
+            Divider(
+              color: colorScheme.onSurface.withValues(alpha: 0.12),
+              height: 1,
+            ),
             SettingsItem.button(
               title: 'WebDAV 快捷设置',
               subtitle: '配置底部 WebDAV 快捷 Tab，快速访问 WebDAV 服务器',

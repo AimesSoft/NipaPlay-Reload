@@ -30,6 +30,9 @@ class SettingsKeys {
   static const String labsEnableNext2DanmakuKernel =
       'labs_enable_next2_danmaku_kernel';
 
+  static const String labsEnableNextPlusPlusEngine =
+      'labs_enable_next_plus_plus_engine';
+
   static const String torrentDownloadDirectory = 'torrent_download_directory';
 
   static const String downloaderEnabled = 'downloader_enabled';

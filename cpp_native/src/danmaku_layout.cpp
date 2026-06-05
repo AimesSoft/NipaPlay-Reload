@@ -1,6 +1,7 @@
 #include "danmaku_layout.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
 
 namespace nipaplay::native {
@@ -317,6 +318,11 @@ int32_t DanmakuLayoutEngine::frameRaw(
     FrameRawOutput* output_items,
     int32_t output_capacity) const
 {
+#ifndef NDEBUG
+    static int32_t dbgFrameCount = 0;
+    dbgFrameCount++;
+#endif
+
     if (items_.empty() || width_ <= 0 || height_ <= 0) [[unlikely]] {
         return 0;
     }
@@ -374,6 +380,15 @@ int32_t DanmakuLayoutEngine::frameRaw(
         out.type          = typeCode;
         outCount++;
     }
+
+#ifndef NDEBUG
+    // [C++] 唯一修饰符 debug 输出 — 每 120 帧输出一次（约 2 秒 @60fps）
+    if (dbgFrameCount % 120 == 0) {
+        std::printf("[C++] frameRaw: t=%.2f visible=%d window=[%d,%d) total=%d\n",
+                    current_time, outCount, left, right,
+                    static_cast<int32_t>(items_.size()));
+    }
+#endif
 
     return outCount;
 }
