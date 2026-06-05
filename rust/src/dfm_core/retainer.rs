@@ -223,10 +223,30 @@ impl DanmakuRetainer {
 
 /// Select a track for a scroll danmaku.
 /// Returns (track_index, displaced_indices) or None if the item should be dropped.
-/// When all tracks collide, uses DFM's overwriteInsert strategy: pick the track
-/// whose items have the smallest right edge (furthest left), clear it, and place
-/// the new danmaku there. Returns indices of all cleared entries so the caller
-/// can mark them as filtered.
+///
+/// Track selection uses a two-phase strategy to implement overwriteInsert:
+///
+/// **Phase 1 — Stable zone** (upper 40% of tracks):
+///   Place danmaku in the first empty or non-colliding track in the top 40%.
+///   These tracks are NEVER overwritten, ensuring visual stability for the
+///   upper portion of the screen even under extreme density.
+///
+/// **Phase 2 — Overflow zone** (bottom 60% of tracks):
+///   When the stable zone is completely full (all tracks collide), overflow
+///   danmaku into the lower 60%. Within this zone, placement works the same
+///   way (empty track → non-colliding track), but also tracks the best
+///   overwrite candidate (track with minimum right edge — the danmaku furthest
+///   along its scroll path).
+///
+/// **Phase 3 — Overwrite** (all tracks full):
+///   Clear the best candidate track in the overflow zone and place the new
+///   danmaku there. The displaced (cleared) danmaku items are returned as
+///   indices so the caller can mark them filtered.
+///
+/// **Special: is_me** — user's own danmaku always forces placement on track 0.
+///
+/// Ported from DanmakuFlameMaster's DanmakusRetainer with the top-40%-stable
+/// extension to match Bilibili's overwriteInsert visual behavior.
 fn select_scroll_track(
     new_entry: &TrackEntry,
     track_data: &mut TrackData,
@@ -244,7 +264,30 @@ fn select_scroll_track(
     let mut best_track = overwrite_start;
     let mut min_right_edge = f32::MAX;
 
-    for i in 0..track_count {
+    // Phase 1: Place in stable zone (upper 40% of tracks)
+    // These tracks are never overwritten — danmaku here stay until they
+    // naturally exit the screen, providing visual stability.
+    for i in 0..overwrite_start {
+        if track_data.tracks[i].is_empty() {
+            track_data.tracks[i].push(new_entry.clone());
+            return Some((i, SmallVec::new()));
+        }
+        let mut collides = false;
+        for existing in &track_data.tracks[i] {
+            if scroll_entries_collide(new_entry, existing, view_width) {
+                collides = true;
+                break;
+            }
+        }
+        if !collides {
+            track_data.tracks[i].push(new_entry.clone());
+            return Some((i, SmallVec::new()));
+        }
+    }
+
+    // Phase 2: Stable zone full — overflow to sacrifice zone (bottom 60%)
+    // These tracks can be overwritten when capacity is exhausted.
+    for i in overwrite_start..track_count {
         if track_data.tracks[i].is_empty() {
             track_data.tracks[i].push(new_entry.clone());
             return Some((i, SmallVec::new()));
@@ -264,12 +307,16 @@ fn select_scroll_track(
             track_data.tracks[i].push(new_entry.clone());
             return Some((i, SmallVec::new()));
         }
-        if i >= overwrite_start && track_min_right < min_right_edge {
+        // Track best overwrite candidate in this zone
+        if track_min_right < min_right_edge {
             min_right_edge = track_min_right;
             best_track = i;
         }
     }
 
+    // Phase 3: All tracks collide — overwrite the best candidate in sacrifice zone.
+    // The overwrite picks the track whose danmaku has the smallest right edge
+    // (closest to exiting the screen), minimizing visual disruption.
     if is_me && track_count > 0 {
         let displaced: DisplacedIndices = track_data.tracks[0]
             .iter()
@@ -1080,6 +1127,123 @@ mod tests {
         assert!(
             scroll_entries_collide(&d1_fast, &d2_slow, 1920.0),
             "long fast danmaku should collide with short slow danmaku"
+        );
+    }
+
+    #[test]
+    fn test_overwrite_insert_overflow_to_lower_60_percent() {
+        // Verifies that when the upper 40% of tracks (stable zone) is full,
+        // danmaku overflow into the lower 60% (overflow zone), creating the
+        // expected visual pattern: stable upper region, dynamic lower region.
+        let flags = GlobalFlags::default();
+        // track_height = 30 + 30*0.5 = 45, effective_height = 1080 * 0.75 = 810
+        // track_count = floor(810 / 45) = 18
+        let mut retainer = DanmakuRetainer::new(2.0, 0.5);
+        let view_width = 1920.0f32;
+        let view_height = 1080.0f32;
+        let display_area = 1.0f32;
+
+        // Generate many same-time danmaku to force overflow
+        let mut items: Vec<DanmakuItem> = (0..30)
+            .map(|i| {
+                let mut item = make_scroll_item(
+                    0,
+                    &format!("dm{}", i),
+                    150.0,
+                    DanmakuType::ScrollRL,
+                    5000,
+                    view_width,
+                );
+                item.index = i;
+                item
+            })
+            .collect();
+
+        // Place all items through the retainer, collecting displaced indices
+        // to apply filtering afterwards (avoids borrow conflicts).
+        let mut displaced_all: Vec<usize> = Vec::new();
+        for item in &mut items {
+            let (placed, displaced) = retainer.fix(item, view_width, view_height, &flags, display_area, false);
+            if !placed {
+                item.is_filtered = true;
+                item.filter_param = 99;
+            }
+            displaced_all.extend(displaced.iter().copied());
+        }
+        for &displaced_idx in &displaced_all {
+            if displaced_idx < items.len() {
+                items[displaced_idx].is_filtered = true;
+                items[displaced_idx].filter_param = 99;
+            }
+        }
+
+        // Collect Y positions of non-filtered (visible) items
+        let visible: Vec<(&str, f32)> = items
+            .iter()
+            .filter(|i| !i.is_filtered)
+            .map(|i| (i.text.as_str(), i.y))
+            .collect();
+
+        eprintln!("Visible {} items out of {}", visible.len(), items.len());
+        for (text, y) in &visible {
+            eprintln!("  {}: y={}", text, y);
+        }
+
+        // Compute track properties for assertions
+        let track_height = 30.0 + 30.0 * 0.5; // 45.0
+        let effective_height = view_height * display_area.min(0.75); // 810.0
+        let track_count = (effective_height / track_height).floor() as usize; // 18
+        let overwrite_count = ((track_count as f32 * 0.6).ceil() as usize)
+            .max(1)
+            .min(track_count);
+        let overwrite_start = track_count - overwrite_count;
+        let stable_zone_max_y = 2.0 + (overwrite_start - 1) as f32 * track_height;
+        let overflow_zone_min_y = 2.0 + overwrite_start as f32 * track_height;
+
+        eprintln!(
+            "track_count={}, overwrite_start={}, overwrite_count={}, stable_max_y={:.0}, overflow_min_y={:.0}",
+            track_count, overwrite_start, overwrite_count, stable_zone_max_y, overflow_zone_min_y
+        );
+
+        // Verify overflow: at least one VISIBLE item should be placed in the overflow zone
+        // (y >= overflow_zone_min_y). This is the key behavior the fix enables:
+        // when the stable zone is full, danmaku must appear in the lower 60%.
+        let overflow_visible: Vec<_> = visible
+            .iter()
+            .filter(|(_, y)| *y >= overflow_zone_min_y)
+            .collect();
+
+        assert!(
+            !overflow_visible.is_empty(),
+            "Expected danmaku in overflow zone (y >= {:.0}), but all {} visible items are in stable zone only. \
+             This means the overwriteInsert overflow mechanism is not working correctly.",
+            overflow_zone_min_y,
+            visible.len(),
+        );
+
+        eprintln!(
+            "Overflow zone contains {} visible items (expected > 0)",
+            overflow_visible.len()
+        );
+
+        // Verify the stable zone still has items (protected from overwrite)
+        let stable_visible: Vec<_> = visible
+            .iter()
+            .filter(|(_, y)| *y <= stable_zone_max_y)
+            .collect();
+        eprintln!("Stable zone contains {} visible items", stable_visible.len());
+        assert!(
+            !stable_visible.is_empty(),
+            "Stable zone should also contain items"
+        );
+
+        // Verify no more items than tracks can be simultaneously visible
+        // (each track can host at most one visible item at a time with all-same-time danmaku)
+        assert!(
+            visible.len() <= track_count,
+            "Expected at most {} visible items (one per track), got {}",
+            track_count,
+            visible.len()
         );
     }
 }

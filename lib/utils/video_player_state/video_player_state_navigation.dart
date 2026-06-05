@@ -602,13 +602,23 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate;
                 final drift = smoothMs - playerMs;
                 if (drift.abs() > 30.0) {
-                  // 大跳变：立即对齐
+                  // 大跳变（seek/暂停恢复后）：立即对齐
                   _smoothAnchorMs = playerMs;
+                  _smoothAnchorElapsedUs = currentElapsedUs;
                 } else {
-                  // 小漂移：渐进修正（每帧修正 5%），避免突变
-                  _smoothAnchorMs = smoothMs - drift * 0.05;
+                  // 小漂移：渐进修正锚点（每帧修正 5%）
+                  // 关键：同时按比例调整锚点时间，使当前帧输出完全连续（无阶跃），
+                  // 修正效果在后续帧中自然渐入。这消除了旧代码中 reset
+                  // _smoothAnchorElapsedUs 导致的周期性"抽帧"现象。
+                  final correctionMs = drift * 0.05;
+                  _smoothAnchorMs = smoothMs - correctionMs;
+                  // 锚点时间调整：锚点位置被修正了 correctionMs，
+                  // 锚点时间需设置为 currentElapsedUs - correctionMs*1000/rate，
+                  // 使得当前帧输出 = smoothMs（保持连续性），
+                  // 下一帧的插值从修正后的锚点自然推进。
+                  _smoothAnchorElapsedUs =
+                      currentElapsedUs - (correctionMs * 1000.0 / _playbackRate).round();
                 }
-                _smoothAnchorElapsedUs = currentElapsedUs;
                 _lastRawPlayerMs = playerPosition;
                 final newDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
                 _playbackTimeMs.value = (_smoothAnchorMs + newDeltaUs / 1000.0 * _playbackRate)

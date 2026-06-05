@@ -221,16 +221,7 @@ class _CupertinoSharedAnimeDetailPageState
   }
 
   void _onScroll() {
-    if (_currentSegment != _commentsSegment) return;
-    if (!_scrollController.hasClients) return;
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.position.pixels;
-    if (maxScroll > 0 && currentScroll >= maxScroll - 200) {
-      final state = _commentsWidgetKey.currentState;
-      if (state is CupertinoBangumiCommentsWidgetState) {
-        state.tryLoadMore();
-      }
-    }
+    // 评论段的滚动检测已移至 CupertinoBangumiCommentsWidget 内部
   }
 
   @override
@@ -1229,7 +1220,7 @@ class _CupertinoSharedAnimeDetailPageState
               )
             else if (_currentSegment == _commentsSegment)
               SliverFillRemaining(
-                hasScrollBody: false,
+                hasScrollBody: true,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                   child: _buildCommentsSection(context),

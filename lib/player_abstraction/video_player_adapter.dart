@@ -29,7 +29,9 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   Ticker? _ticker;
   Duration _interpolatedPosition = Duration.zero;
   Duration _lastActualPosition = Duration.zero;
-  int _lastPositionTimestamp = 0;
+  /// 高精度时钟戳（微秒），用于播放位置插值的 delta 计算。
+  /// 使用 microsecond 精度消除移动端时钟粒度过粗导致的位置跳变。
+  int _lastPositionTimestampUs = 0;
   bool _wasPlaying = false; // 新增状态跟踪标志
 
   final List<int> _activeSubtitleTracks = [];
@@ -70,12 +72,12 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   void _onTick(Duration elapsed) {
     if (_controller?.value.isPlaying ?? false) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (_lastPositionTimestamp == 0) { // Safety check
-        _lastPositionTimestamp = now;
+      final nowUs = DateTime.now().microsecondsSinceEpoch;
+      if (_lastPositionTimestampUs == 0) { // Safety check
+        _lastPositionTimestampUs = nowUs;
       }
-      final delta = now - _lastPositionTimestamp;
-      _interpolatedPosition = _lastActualPosition + Duration(milliseconds: (delta * _playbackRate).toInt());
+      final deltaUs = nowUs - _lastPositionTimestampUs;
+      _interpolatedPosition = _lastActualPosition + Duration(microseconds: (deltaUs * _playbackRate).toInt());
 
       if (_controller!.value.duration > Duration.zero && _interpolatedPosition > _controller!.value.duration) {
         _interpolatedPosition = _controller!.value.duration;
@@ -101,7 +103,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     final currentPosition = _interpolatedPosition;
     _lastActualPosition = currentPosition;
     _interpolatedPosition = currentPosition;
-    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+    _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
 
     _playbackRate = value;
     try {
@@ -152,7 +154,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
           // 否则VideoPlayerState可能无法识别状态变化
           _controller!.play();
           // _lastActualPosition = _controller?.value.position ?? _lastActualPosition; // 移除这里的校准
-          // _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch; // 移除这里的校准
+          // _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch; // 移除这里的校准
           // _ticker?.start(); // Ticker的启动交给监听器
           
           // 确保异步方法也被调用，以进行验证和重试
@@ -174,7 +176,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
           _controller!.seekTo(Duration.zero);
           _interpolatedPosition = Duration.zero;
           _lastActualPosition = Duration.zero;
-          _lastPositionTimestamp = 0;
+          _lastPositionTimestampUs = 0;
           break;
       }
     } catch (e) {
@@ -231,7 +233,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
         // 重置位置
         _interpolatedPosition = Duration.zero;
         _lastActualPosition = Duration.zero;
-        _lastPositionTimestamp = 0;
+        _lastPositionTimestampUs = 0;
         _mediaInfo = PlayerMediaInfo(duration: 0, specificErrorMessage: _mediaInfo.specificErrorMessage); // 保留可能已设置的错误信息
       }
     } catch (e) {
@@ -541,7 +543,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     _controller!.seekTo(duration);
     _interpolatedPosition = duration;
     _lastActualPosition = duration;
-    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+    _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
   }
 
   @override
@@ -971,7 +973,7 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
           // 状态从 暂停 -> 播放
           _lastActualPosition = value.position;
           _interpolatedPosition = value.position;
-          _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+          _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
           _ticker?.start();
         } else {
           // 状态从 播放 -> 暂停

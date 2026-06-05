@@ -44,4 +44,6 @@ class SettingsKeys {
       'downloader_auto_scanned_completed_task_keys';
 
   static const String githubProxyUrl = 'github_proxy_url';
+
+  static const String danmakuSupersample = 'danmaku_supersample';
 }

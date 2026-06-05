@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 class SettingsProvider with ChangeNotifier {
   late SharedPreferences _prefs;
@@ -27,7 +28,10 @@ class SettingsProvider with ChangeNotifier {
 
   // GitHub 代理设置
   String _githubProxyUrl = '';
-  
+
+  // 弹幕超采样设置
+  bool _danmakuSupersample = true; // 默认值在 _loadSettings 中根据设备类型决定
+
   // --- Getters ---
   double get blurPower => _blurPower;
   bool get isBlurEnabled => _blurPower > 0;
@@ -38,6 +42,7 @@ class SettingsProvider with ChangeNotifier {
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
   String get githubProxyUrl => _githubProxyUrl;
+  bool get danmakuSupersample => _danmakuSupersample;
 
   SettingsProvider() {
     _loadSettings();
@@ -72,10 +77,26 @@ class SettingsProvider with ChangeNotifier {
         _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
     _githubProxyUrl =
         _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
+    // 弹幕超采样：默认对平板和低 DPR 桌面设备开启
+    final defaultSupersample =
+        globals.isTablet || (globals.isDesktop && _defaultDprBelow2());
+    _danmakuSupersample =
+        _prefs.getBool(SettingsKeys.danmakuSupersample) ?? defaultSupersample;
     notifyListeners();
   }
 
   // --- Setters ---
+
+  /// 判断当前设备默认 DPR 是否低于 2.0
+  static bool _defaultDprBelow2() {
+    try {
+      final dpr = WidgetsBinding.instance.platformDispatcher.views.first
+          .devicePixelRatio;
+      return dpr < 2.0;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Toggles the background blur effect.
   ///
@@ -144,6 +165,12 @@ class SettingsProvider with ChangeNotifier {
       SettingsKeys.githubProxyUrl,
       _githubProxyUrl,
     );
+    notifyListeners();
+  }
+
+  Future<void> setDanmakuSupersample(bool enable) async {
+    _danmakuSupersample = enable;
+    await _prefs.setBool(SettingsKeys.danmakuSupersample, enable);
     notifyListeners();
   }
 
