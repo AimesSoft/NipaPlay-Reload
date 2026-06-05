@@ -12,6 +12,7 @@ import 'debug_log_service.dart';
 import 'android_saf_service.dart';
 import 'package:nipaplay/utils/remote_media_fetcher.dart';
 import 'package:nipaplay/utils/media_filename_parser.dart';
+import 'package:nipaplay/services/web_remote_access_service.dart';
 
 class DandanplayService {
   static const String appId = "nipaplayv1";
@@ -1386,6 +1387,7 @@ class DandanplayService {
           }
         }
 
+<<<<<<< Updated upstream
         if (isBackupServer) {
           debugPrint('尝试回退到主服务器获取弹幕...');
           try {
@@ -1407,7 +1409,29 @@ class DandanplayService {
         }
 
         rethrow;
+=======
+      // 第二层：主服务器与代理并发竞速，10s超时，失败重试一次
+      for (var round = 1; round <= 2; round++) {
+        debugPrint('竞速第$round轮: 主服务器 vs nipaplay代理...');
+        try {
+          final result = await _raceFetchDanmaku(
+            episodeId, animeId,
+          ).timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw TimeoutException('竞速超时'),
+          );
+          return result;
+        } catch (e) {
+          debugPrint('竞速第$round轮失败: $e');
+          if (round == 2) {
+            throw Exception('主服务器与代理均无法获取弹幕，请稍后再试。（$e）');
+          }
+          debugPrint('准备重试...');
+        }
+>>>>>>> Stashed changes
       }
+      // should not reach here — round 2 always throws
+      throw Exception('获取弹幕失败');
     } catch (e) {
       ////debugPrint('获取弹幕时出错: $e');
       rethrow;
@@ -1463,14 +1487,15 @@ class DandanplayService {
     final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
         .round();
     final apiPath = '/api/v2/comment/$episodeId';
-
     final chConvert = await _getDanmakuChConvertFlag();
 
-    final apiUrl = '$serverUrl$apiPath?withRelated=true&chConvert=$chConvert';
+    final targetUri = Uri.parse(
+        '$serverUrl$apiPath?withRelated=true&chConvert=$chConvert');
+    final uri = WebRemoteAccessService.proxyUri(targetUri);
 
-    debugPrint('发送弹幕请求到: $apiUrl');
-    ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');
+    debugPrint('发送弹幕请求到: $uri');
 
+<<<<<<< Updated upstream
     final response = await _getDanmakuResponseWithRetry(Uri.parse(apiUrl), {
       'Accept': 'application/json',
       'User-Agent': userAgent,
@@ -1479,8 +1504,54 @@ class DandanplayService {
       'X-Timestamp': '$timestamp',
       if (_token != null) 'Authorization': 'Bearer $_token',
     });
+=======
+    final response = await _getDanmakuResponseWithRetry(
+      uri,
+      {
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-AppSecret': appSecret,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+      },
+      maxAttempts: 1,
+    );
+>>>>>>> Stashed changes
 
     return _handleDanmakuResponse(response, episodeId, animeId);
+  }
+
+  /// 主服务器与代理并发竞速，只取第一个成功的
+  static Future<Map<String, dynamic>> _raceFetchDanmaku(
+    String episodeId,
+    int animeId,
+  ) async {
+    final completer = Completer<Map<String, dynamic>>();
+    final participants = <String, Future<Map<String, dynamic>> Function()>{
+      '主服务器': () => _fetchDanmakuFromServer(
+          episodeId, animeId, NetworkSettings.primaryServer),
+      'nipaplay代理': () => _fetchDanmakuViaProxy(episodeId, animeId),
+    };
+    var remaining = participants.length;
+
+    for (final entry in participants.entries) {
+      entry.value().then((result) {
+        if (!completer.isCompleted) {
+          debugPrint('竞速成功: ${entry.key} 先返回');
+          completer.complete(result);
+        }
+      }).catchError((e) {
+        debugPrint('竞速: ${entry.key} 失败: $e');
+        remaining--;
+        if (remaining == 0 && !completer.isCompleted) {
+          completer.completeError(
+              Exception('主服务器与代理竞速全部失败'));
+        }
+      });
+    }
+
+    return completer.future;
   }
 
   static Map<String, dynamic> _handleDanmakuResponse(
@@ -1599,9 +1670,9 @@ class DandanplayService {
       'Accept': 'application/json',
       'User-Agent': userAgent,
       'X-AppId': appId,
+      'X-AppSecret': appSecret,
       'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
       'X-Timestamp': '$timestamp',
-      if (_token != null) 'Authorization': 'Bearer $_token',
     });
 
     return _handleDanmakuResponse(response, episodeId, animeId);
