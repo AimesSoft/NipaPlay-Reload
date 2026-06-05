@@ -53,6 +53,7 @@ class DanmakuLayoutEngine implements Finalizable {
 
   // 缓存的帧输出缓冲区，避免每帧 calloc/free 引起堆碎片化与尾延迟飙升
   Pointer<NpLayoutResult>? _outputItemsPtr;
+  Pointer<NpFrameRawOutput>? _rawOutputPtr;
   Pointer<Int32>? _outputCountPtr;
   int _outputCapacity = 0;
 
@@ -107,8 +108,10 @@ class DanmakuLayoutEngine implements Finalizable {
     // 若弹幕数量增大导致现有输出缓冲区不足，则重新分配
     if (count > _outputCapacity) {
       if (_outputItemsPtr != null) calloc.free(_outputItemsPtr!);
+      if (_rawOutputPtr != null) calloc.free(_rawOutputPtr!);
       if (_outputCountPtr != null) calloc.free(_outputCountPtr!);
       _outputItemsPtr = calloc<NpLayoutResult>(count);
+      _rawOutputPtr = calloc<NpFrameRawOutput>(count);
       _outputCountPtr = calloc<Int32>();
       _outputCapacity = count;
     }
@@ -242,6 +245,46 @@ class DanmakuLayoutEngine implements Finalizable {
   double rawYPosition(int i) => (_outputItemsPtr! + i).ref.yPosition;
   double rawScrollSpeed(int i) => (_outputItemsPtr! + i).ref.scrollSpeed;
 
+  /// 零拷贝帧查询 V2：C++ 端预计算 x / offstageX / textWidth / type，
+  /// Dart 侧无需回查 _items[] 数组做 elapsed/switch/除法运算。
+  /// 返回可见条目数，调用方通过 rawX/rawYPosition 等索引访问器读取。
+  NativeResult<int> frameRawData(double currentTime) {
+    _checkReleased();
+
+    if (_itemCount == 0) {
+      return const NativeResult.ok(0);
+    }
+
+    final result = NativeBindings.npLayoutFrameRaw(
+      _handle,
+      currentTime,
+      _rawOutputPtr!,
+      _outputCapacity,
+      _outputCountPtr!,
+    );
+
+    final code = npResultCodeFromInt(result.code);
+    if (code != NpResultCode.ok) {
+      final msg = result.message != nullptr
+          ? result.message.cast<Utf8>().toDartString()
+          : null;
+      return NativeResult.err(code, msg);
+    }
+
+    return NativeResult.ok(_outputCountPtr!.value);
+  }
+
+  /// 索引访问器 V2：frameRawData() 调用后，直接从 NpFrameRawOutput 缓冲区读取。
+  /// C++ 端已预计算 x / offstageX / textWidth / type，
+  /// Dart 侧无需回查 _items[] 数组，无需 elapsed/switch/除法运算。
+  double rawYPositionV2(int i) => (_rawOutputPtr! + i).ref.yPosition;
+  double rawX(int i) => (_rawOutputPtr! + i).ref.x;
+  double rawScrollSpeedV2(int i) => (_rawOutputPtr! + i).ref.scrollSpeed;
+  double rawOffstageX(int i) => (_rawOutputPtr! + i).ref.offstageX;
+  double rawTextWidth(int i) => (_rawOutputPtr! + i).ref.textWidth;
+  int rawItemIndexV2(int i) => (_rawOutputPtr! + i).ref.itemIndex;
+  int rawType(int i) => (_rawOutputPtr! + i).ref.type;
+
   /// 获取已配置的弹幕条目数
   int get itemCount => _itemCount;
 
@@ -253,6 +296,10 @@ class DanmakuLayoutEngine implements Finalizable {
       if (_outputItemsPtr != null) {
         calloc.free(_outputItemsPtr!);
         _outputItemsPtr = null;
+      }
+      if (_rawOutputPtr != null) {
+        calloc.free(_rawOutputPtr!);
+        _rawOutputPtr = null;
       }
       if (_outputCountPtr != null) {
         calloc.free(_outputCountPtr!);

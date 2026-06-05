@@ -310,4 +310,72 @@ int32_t DanmakuLayoutEngine::frame(
     return outCount;
 }
 
+// ──── 零拷贝帧查询（C++ 端预计算 x / offstageX / textWidth / type） ────
+
+int32_t DanmakuLayoutEngine::frameRaw(
+    double current_time,
+    FrameRawOutput* output_items,
+    int32_t output_capacity) const
+{
+    if (items_.empty() || width_ <= 0 || height_ <= 0) [[unlikely]] {
+        return 0;
+    }
+
+    const double maxDuration = std::max(scroll_duration_, static_duration_);
+    const double windowStart = current_time - maxDuration;
+    const int32_t left = static_cast<int32_t>(
+        std::ranges::lower_bound(item_times_, windowStart) - item_times_.begin());
+    const int32_t right = static_cast<int32_t>(
+        std::ranges::upper_bound(item_times_, current_time) - item_times_.begin());
+
+    int32_t outCount = 0;
+
+    for (int32_t i = left; i < right && outCount < output_capacity; i++) {
+        const LayoutItem& item = items_[static_cast<size_t>(i)];
+        if (item.track_index < 0) continue;
+
+        const double elapsed = current_time - item.time_seconds;
+        if (elapsed < 0) continue;
+
+        // 预计算 x / offstageX，消除 Dart 侧的 elapsed/switch/除法
+        double x, offstageX;
+        int32_t typeCode;
+
+        switch (item.type) {
+        case DanmakuType::Scroll:
+            if (elapsed > scroll_duration_) continue;
+            x = width_ - item.scroll_speed * elapsed;
+            offstageX = width_ + item.text_width;
+            typeCode = 0;
+            break;
+        case DanmakuType::Top:
+            if (elapsed > static_duration_) continue;
+            x = (width_ - item.text_width) * 0.5;
+            offstageX = width_;
+            typeCode = 1;
+            break;
+        case DanmakuType::Bottom:
+            if (elapsed > static_duration_) continue;
+            x = (width_ - item.text_width) * 0.5;
+            offstageX = width_;
+            typeCode = 2;
+            break;
+        default:
+            continue;
+        }
+
+        auto& out = output_items[outCount];
+        out.y_position   = item.y_position;
+        out.x             = x;
+        out.scroll_speed  = item.scroll_speed;
+        out.offstage_x    = offstageX;
+        out.text_width    = item.text_width;
+        out.item_index    = i;
+        out.type          = typeCode;
+        outCount++;
+    }
+
+    return outCount;
+}
+
 } // namespace nipaplay::native

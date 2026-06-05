@@ -245,13 +245,15 @@ class NipaPlayNextEngine {
     return dartResult;
   }
 
-  /// Native C++ layout: query frame results from the C++ engine
-  /// and map them to [PositionedDanmakuItem].
-  /// Native C++ layout: zero-allocation path using frameRaw + index accessors.
-  /// Reads directly from native buffer, bypasses intermediate
-  /// List + DanmakuLayoutResult object creation.
+  /// Native C++ layout: zero-allocation path using frameRawData V2 + index accessors.
+  /// C++ 端预计算 x / offstageX / textWidth / type，
+  /// Dart 侧无需回查 _items[] 数组做 elapsed/switch/除法运算。
+  /// 直接从 NpFrameRawOutput native 缓冲区读取，消除 4N 次 FFI 字段访问。
   List<PositionedDanmakuItem> _layoutNative(double currentTimeSeconds) {
-    final frameResult = _nativeEngine!.frameRaw(currentTimeSeconds);
+    final native = _nativeEngine!;
+
+    // Phase 3: 使用 frameRawData V2 — C++ 端预计算 x/offstageX/textWidth/type
+    final frameResult = native.frameRawData(currentTimeSeconds);
     if (!frameResult.isOk) {
       _logFrame('[ERR] native frame ERROR: ${frameResult.errorMessage}, falling back to Dart');
       _disableNativeEngine();
@@ -261,54 +263,38 @@ class NipaPlayNextEngine {
     }
 
     final int count = frameResult.requireValue;
-    _logFrame('native frame(t=${currentTimeSeconds.toStringAsFixed(2)}) -> $count visible items');
+    _logFrame('native frameRawData(t=${currentTimeSeconds.toStringAsFixed(2)}) -> $count visible items');
     _positionedBuffer.clear();
 
-    final native = _nativeEngine!;
     for (int i = 0; i < count; i++) {
-      final itemIndex = native.rawItemIndex(i);
-      final trackIndex = native.rawTrackIndex(i);
+      final itemIndex = native.rawItemIndexV2(i);
       if (itemIndex < 0 || itemIndex >= _items.length) continue;
-      if (trackIndex < 0) continue;
 
       final item = _items[itemIndex];
-      final elapsed = currentTimeSeconds - item.timeSeconds;
-      if (elapsed < 0) continue;
+      final yPosition = native.rawYPositionV2(i);
+      final x = native.rawX(i);
+      final scrollSpeed = native.rawScrollSpeedV2(i);
+      final offstageX = native.rawOffstageX(i);
+      final textWidth = native.rawTextWidth(i);
+      final typeCode = native.rawType(i);
 
-      final yPosition = native.rawYPosition(i);
-      final scrollSpeed = native.rawScrollSpeed(i);
-
-      switch (item.type) {
-        case DanmakuItemType.scroll:
-          if (elapsed > _scrollDurationSeconds) continue;
-          final x = _size.width - scrollSpeed * elapsed;
-          _positionedBuffer.add(_toPositionedItem(
-            source: item,
-            x: x,
-            y: yPosition,
-            offstageX: _size.width + item.width,
-            scrollSpeed: scrollSpeed,
-          ));
-          break;
-        case DanmakuItemType.top:
-        case DanmakuItemType.bottom:
-          if (elapsed > _staticDurationSeconds) continue;
-          final x = (_size.width - item.width) / 2;
-          _positionedBuffer.add(_toPositionedItem(
-            source: item,
-            x: x,
-            y: yPosition,
-            offstageX: _size.width,
-            scrollSpeed: 0.0,
-          ));
-          break;
-      }
+      // C++ 已完成 elapsed/switch/duration 过滤，直接构建结果
+      final positionedItem = _toPositionedItemV2(
+        source: item,
+        x: x,
+        y: yPosition,
+        offstageX: offstageX,
+        scrollSpeed: scrollSpeed,
+        textWidth: textWidth,
+        typeCode: typeCode,
+      );
+      _positionedBuffer.add(positionedItem);
     }
 
     if (!kReleaseMode) {
       DanmakuNextLog.d(
         'Engine',
-        'layout(native) time=${currentTimeSeconds.toStringAsFixed(2)} out=${_positionedBuffer.length}',
+        'layout(native-zerocopy) time=${currentTimeSeconds.toStringAsFixed(2)} out=${_positionedBuffer.length}',
         throttle: const Duration(seconds: 1),
       );
     }
@@ -399,6 +385,40 @@ class NipaPlayNextEngine {
     existing.offstageX = offstageX;
     existing.scrollSpeed = scrollSpeed;
     existing.width = source.width;
+    return existing;
+  }
+
+  /// Phase 3 零拷贝版本：使用 C++ 端预计算的 textWidth 而非 source.width，
+  /// 避免回查 _items[] 数组。typeCode 由 C++ 端直接输出（0=scroll,1=top,2=bottom）。
+  PositionedDanmakuItem _toPositionedItemV2({
+    required _NextItem source,
+    required double x,
+    required double y,
+    required double offstageX,
+    required double scrollSpeed,
+    required double textWidth,
+    required int typeCode,
+  }) {
+    final existing = source.positionedItem;
+    if (existing == null) {
+      final created = PositionedDanmakuItem(
+        content: source.content,
+        x: x,
+        y: y,
+        offstageX: offstageX,
+        time: source.timeSeconds,
+        scrollSpeed: scrollSpeed,
+        width: textWidth,
+      );
+      source.positionedItem = created;
+      return created;
+    }
+
+    existing.x = x;
+    existing.y = y;
+    existing.offstageX = offstageX;
+    existing.scrollSpeed = scrollSpeed;
+    existing.width = textWidth;
     return existing;
   }
 
