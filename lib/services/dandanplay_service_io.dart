@@ -159,8 +159,8 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 开始预加载最近更新的番剧数据');
 
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/bangumi/recent';
       final baseUrl = await getApiBaseUrl();
       final apiUrl = '$baseUrl/api/v2/bangumi/recent?limit=20';
@@ -253,8 +253,8 @@ class DandanplayService {
       try {
         const apiPath = '/api/v2/login/renew';
         final appSecret = await getAppSecret();
-        final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-            .round();
+        final timestamp =
+            (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
         final apiBaseUrl = await getAccountApiBaseUrl();
         final requestUri = Uri.parse('$apiBaseUrl$apiPath');
@@ -385,12 +385,10 @@ class DandanplayService {
       //debugPrint('[DandanplayService] getAppSecret: Trying server: $server');
       try {
         ////debugPrint('尝试从服务器 $server 获取appSecret');
-        final response = await http
-            .get(
-              Uri.parse('$server/nipaplay.php'),
-              headers: {'User-Agent': userAgent, 'Accept': 'application/json'},
-            )
-            .timeout(const Duration(seconds: 5));
+        final response = await http.get(
+          Uri.parse('$server/nipaplay.php'),
+          headers: {'User-Agent': userAgent, 'Accept': 'application/json'},
+        ).timeout(const Duration(seconds: 5));
 
         // 强制打印服务器返回的原始内容以供调试
         print(
@@ -430,17 +428,14 @@ class DandanplayService {
   }
 
   static String _b(String a) {
-    String b = a
-        .split('')
-        .map((c) {
-          if (c.toLowerCase() != c.toUpperCase()) {
-            final d = c == c.toUpperCase();
-            final e = d ? 'A'.codeUnitAt(0) : 'a'.codeUnitAt(0);
-            return String.fromCharCode(e + 25 - (c.codeUnitAt(0) - e));
-          }
-          return c;
-        })
-        .join('');
+    String b = a.split('').map((c) {
+      if (c.toLowerCase() != c.toUpperCase()) {
+        final d = c == c.toUpperCase();
+        final e = d ? 'A'.codeUnitAt(0) : 'a'.codeUnitAt(0);
+        return String.fromCharCode(e + 25 - (c.codeUnitAt(0) - e));
+      }
+      return c;
+    }).join('');
 
     String f;
     if (b.length >= 5) {
@@ -450,26 +445,20 @@ class DandanplayService {
       f = b;
     }
 
-    String h = f
-        .split('')
-        .map((i) {
-          if (i.codeUnitAt(0) >= '0'.codeUnitAt(0) &&
-              i.codeUnitAt(0) <= '9'.codeUnitAt(0)) {
-            return String.fromCharCode('0'.codeUnitAt(0) + (10 - int.parse(i)));
-          }
-          return i;
-        })
-        .join('');
+    String h = f.split('').map((i) {
+      if (i.codeUnitAt(0) >= '0'.codeUnitAt(0) &&
+          i.codeUnitAt(0) <= '9'.codeUnitAt(0)) {
+        return String.fromCharCode('0'.codeUnitAt(0) + (10 - int.parse(i)));
+      }
+      return i;
+    }).join('');
 
-    return h
-        .split('')
-        .map((j) {
-          if (j.toLowerCase() != j.toUpperCase()) {
-            return j == j.toLowerCase() ? j.toUpperCase() : j.toLowerCase();
-          }
-          return j;
-        })
-        .join('');
+    return h.split('').map((j) {
+      if (j.toLowerCase() != j.toUpperCase()) {
+        return j == j.toLowerCase() ? j.toUpperCase() : j.toLowerCase();
+      }
+      return j;
+    }).join('');
   }
 
   static String generateSignature(
@@ -568,8 +557,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/oauthprovider/bangumi/login';
       final baseUrl = await getAccountApiBaseUrl();
       final normalizedRedirect = redirectUrl?.trim();
@@ -636,8 +625,8 @@ class DandanplayService {
       final apiBaseUrl = await getAccountApiBaseUrl();
       const apiPath = '/api/v2/login/renew';
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final requestUri = Uri.parse('$apiBaseUrl$apiPath');
       final headers = _buildLoginRenewHeaders(
         timestamp: timestamp,
@@ -664,7 +653,7 @@ class DandanplayService {
           'requestMethod': requestMethod,
           'message':
               '刷新绑定状态失败 (${response.statusCode}) [source=dandan-api method=$requestMethod path=$apiPath]'
-              ': $errorMessage',
+                  ': $errorMessage',
         };
       }
 
@@ -871,8 +860,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/playhistory';
 
       final response = await http.post(
@@ -997,8 +986,8 @@ class DandanplayService {
     }
 
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-        .round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
 
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
@@ -1059,8 +1048,7 @@ class DandanplayService {
 
         return data;
       } else {
-        final bool autoMatchEnabled =
-            prefs.getBool(
+        final bool autoMatchEnabled = prefs.getBool(
               SettingsKeys.autoMatchDanmakuFirstSearchResultOnHashFail,
             ) ??
             true;
@@ -1190,8 +1178,8 @@ class DandanplayService {
     if (keyword.trim().isEmpty) return [];
 
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-        .round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     const apiPath = '/api/v2/search/anime';
     final baseUrl = await getApiBaseUrl();
     final url =
@@ -1228,8 +1216,8 @@ class DandanplayService {
     int animeId,
   ) async {
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-        .round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     final apiPath = '/api/v2/bangumi/$animeId';
     final baseUrl = await getApiBaseUrl();
     final url = '$baseUrl$apiPath';
@@ -1300,9 +1288,9 @@ class DandanplayService {
     Map<String, dynamic>? selectedEpisode;
     if (episodeNumber != null) {
       selectedEpisode = episodes.cast<Map<String, dynamic>>().firstWhere(
-        (ep) => _tryParsePositiveInt(ep['episodeNumber']) == episodeNumber,
-        orElse: () => <String, dynamic>{},
-      );
+            (ep) => _tryParsePositiveInt(ep['episodeNumber']) == episodeNumber,
+            orElse: () => <String, dynamic>{},
+          );
       if (selectedEpisode.isEmpty) {
         selectedEpisode = null;
       }
@@ -1338,10 +1326,8 @@ class DandanplayService {
   static Future<String> _d(File file) async {
     if (kIsWeb) return '';
     const int maxBytes = 16 * 1024 * 1024; // 16MB
-    final bytes = await file
-        .openRead(0, maxBytes)
-        .expand((chunk) => chunk)
-        .toList();
+    final bytes =
+        await file.openRead(0, maxBytes).expand((chunk) => chunk).toList();
     return md5.convert(bytes).toString();
   }
 
@@ -1387,7 +1373,6 @@ class DandanplayService {
           }
         }
 
-<<<<<<< Updated upstream
         if (isBackupServer) {
           debugPrint('尝试回退到主服务器获取弹幕...');
           try {
@@ -1409,26 +1394,6 @@ class DandanplayService {
         }
 
         rethrow;
-=======
-      // 第二层：主服务器与代理并发竞速，10s超时，失败重试一次
-      for (var round = 1; round <= 2; round++) {
-        debugPrint('竞速第$round轮: 主服务器 vs nipaplay代理...');
-        try {
-          final result = await _raceFetchDanmaku(
-            episodeId, animeId,
-          ).timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => throw TimeoutException('竞速超时'),
-          );
-          return result;
-        } catch (e) {
-          debugPrint('竞速第$round轮失败: $e');
-          if (round == 2) {
-            throw Exception('主服务器与代理均无法获取弹幕，请稍后再试。（$e）');
-          }
-          debugPrint('准备重试...');
-        }
->>>>>>> Stashed changes
       }
       // should not reach here — round 2 always throws
       throw Exception('获取弹幕失败');
@@ -1461,8 +1426,7 @@ class DandanplayService {
             .get(uri, headers: headers)
             .timeout(_danmakuRequestTimeout);
       } catch (e, st) {
-        final shouldRetry =
-            _shouldRetryDanmakuRequest(e) &&
+        final shouldRetry = _shouldRetryDanmakuRequest(e) &&
             attempt < _danmakuRequestMaxAttempts;
         if (!shouldRetry) {
           Error.throwWithStackTrace(e, st);
@@ -1484,27 +1448,17 @@ class DandanplayService {
     String serverUrl,
   ) async {
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-        .round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     final apiPath = '/api/v2/comment/$episodeId';
     final chConvert = await _getDanmakuChConvertFlag();
 
-    final targetUri = Uri.parse(
-        '$serverUrl$apiPath?withRelated=true&chConvert=$chConvert');
+    final targetUri =
+        Uri.parse('$serverUrl$apiPath?withRelated=true&chConvert=$chConvert');
     final uri = WebRemoteAccessService.proxyUri(targetUri);
 
     debugPrint('发送弹幕请求到: $uri');
 
-<<<<<<< Updated upstream
-    final response = await _getDanmakuResponseWithRetry(Uri.parse(apiUrl), {
-      'Accept': 'application/json',
-      'User-Agent': userAgent,
-      'X-AppId': appId,
-      'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
-      'X-Timestamp': '$timestamp',
-      if (_token != null) 'Authorization': 'Bearer $_token',
-    });
-=======
     final response = await _getDanmakuResponseWithRetry(
       uri,
       {
@@ -1515,9 +1469,7 @@ class DandanplayService {
         'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
         'X-Timestamp': '$timestamp',
       },
-      maxAttempts: 1,
     );
->>>>>>> Stashed changes
 
     return _handleDanmakuResponse(response, episodeId, animeId);
   }
@@ -1545,8 +1497,7 @@ class DandanplayService {
         debugPrint('竞速: ${entry.key} 失败: $e');
         remaining--;
         if (remaining == 0 && !completer.isCompleted) {
-          completer.completeError(
-              Exception('主服务器与代理竞速全部失败'));
+          completer.completeError(Exception('主服务器与代理竞速全部失败'));
         }
       });
     }
@@ -1600,8 +1551,8 @@ class DandanplayService {
           'type': mode == 1
               ? 'scroll'
               : mode == 5
-              ? 'top'
-              : 'bottom',
+                  ? 'top'
+                  : 'bottom',
           'color': colorValue,
           'isMe': false,
         };
@@ -1656,8 +1607,8 @@ class DandanplayService {
     int animeId,
   ) async {
     final appSecret = await getAppSecret();
-    final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-        .round();
+    final timestamp =
+        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     final apiPath = '/api/v2/comment/$episodeId';
     final chConvert = await _getDanmakuChConvertFlag();
     final proxyPath = '$apiPath?withRelated=true&chConvert=$chConvert';
@@ -1735,8 +1686,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/playhistory';
 
       // 构建查询参数
@@ -1755,27 +1706,25 @@ class DandanplayService {
 
       debugPrint('[弹弹play服务] 获取播放历史: $uri');
 
-      final response = await http
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': userAgent,
-              'X-AppId': appId,
-              'X-Signature': generateSignature(
-                appId,
-                timestamp,
-                apiPath,
-                appSecret,
-              ),
-              'X-Timestamp': '$timestamp',
-              'Authorization': 'Bearer $_token',
-            },
-          )
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => throw TimeoutException('获取播放历史超时'),
-          );
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('获取播放历史超时'),
+      );
 
       debugPrint('[弹弹play服务] 播放历史响应: ${response.statusCode}');
 
@@ -1816,8 +1765,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/playhistory';
 
       final requestBody = {
@@ -1871,8 +1820,8 @@ class DandanplayService {
   static Future<Map<String, dynamic>> getBangumiDetails(int bangumiId) async {
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/bangumi/$bangumiId';
 
       final headers = {
@@ -1914,11 +1863,12 @@ class DandanplayService {
   ///
   /// 调用 /api/v2/bangumi/bgmtv/{bgmtvSubjectId} 接口
   /// 返回包含 animeId、episodes 等信息的完整响应
-  static Future<Map<String, dynamic>?> getBangumiByBgmId(int bgmtvSubjectId) async {
+  static Future<Map<String, dynamic>?> getBangumiByBgmId(
+      int bgmtvSubjectId) async {
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/bangumi/bgmtv/$bgmtvSubjectId';
 
       final headers = {
@@ -1962,15 +1912,18 @@ class DandanplayService {
   ///
   /// [seasonNumber] 可选，用于多 anime 结果时按季度选择（S1→第1个, S2→第2个）
   /// 返回与 bgmid API 结构一致的 bangumi 数据
-  static Future<Map<String, dynamic>?> getBangumiByTmdbId(int tmdbId, {int? seasonNumber}) async {
+  static Future<Map<String, dynamic>?> getBangumiByTmdbId(int tmdbId,
+      {int? seasonNumber}) async {
     try {
       final appSecret = await getAppSecret();
       final baseUrl = await getApiBaseUrl();
 
       // 第一步：通过 tmdbId 搜索正确的 animeId
-      final timestamp1 = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp1 =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const searchApiPath = '/api/v2/search/episodes';
-      final searchQuery = Uri(queryParameters: {'tmdbId': tmdbId.toString()}).query;
+      final searchQuery =
+          Uri(queryParameters: {'tmdbId': tmdbId.toString()}).query;
       final searchUrl = '$baseUrl$searchApiPath?$searchQuery';
 
       debugPrint('[弹弹play服务] 通过 tmdbId 搜索剧集: $tmdbId');
@@ -1981,7 +1934,8 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp1, searchApiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp1, searchApiPath, appSecret),
           'X-Timestamp': '$timestamp1',
           if (_isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
         },
@@ -2007,13 +1961,15 @@ class DandanplayService {
       final candidates = animes.cast<Map<String, dynamic>>().toList();
       int selectedIndex = 0;
       if (candidates.length > 1) {
-        candidates.sort((a, b) => (a['animeId'] as int).compareTo(b['animeId'] as int));
+        candidates.sort(
+            (a, b) => (a['animeId'] as int).compareTo(b['animeId'] as int));
         selectedIndex = seasonNumber != null &&
                 seasonNumber >= 1 &&
                 seasonNumber <= candidates.length
             ? seasonNumber! - 1
             : 0;
-        debugPrint('[弹弹play服务] tmdbId 搜索到 ${candidates.length} 个番剧，选择第 ${selectedIndex + 1} 个');
+        debugPrint(
+            '[弹弹play服务] tmdbId 搜索到 ${candidates.length} 个番剧，选择第 ${selectedIndex + 1} 个');
       }
 
       final animeId = candidates[selectedIndex]['animeId'] as int?;
@@ -2025,7 +1981,8 @@ class DandanplayService {
       debugPrint('[弹弹play服务] tmdbId 搜索到 animeId: $animeId');
 
       // 第二步：通过 animeId 获取完整番剧详情（含 episodeNumber）
-      final timestamp2 = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
+      final timestamp2 =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final detailApiPath = '/api/v2/bangumi/$animeId';
 
       final detailResponse = await http.get(
@@ -2034,7 +1991,8 @@ class DandanplayService {
           'Accept': 'application/json',
           'User-Agent': userAgent,
           'X-AppId': appId,
-          'X-Signature': generateSignature(appId, timestamp2, detailApiPath, appSecret),
+          'X-Signature':
+              generateSignature(appId, timestamp2, detailApiPath, appSecret),
           'X-Timestamp': '$timestamp2',
           if (_isLoggedIn && _token != null) 'Authorization': 'Bearer $_token',
         },
@@ -2047,7 +2005,8 @@ class DandanplayService {
         }
       }
 
-      debugPrint('[弹弹play服务] tmdbId 获取番剧详情失败: HTTP ${detailResponse.statusCode}');
+      debugPrint(
+          '[弹弹play服务] tmdbId 获取番剧详情失败: HTTP ${detailResponse.statusCode}');
       return null;
     } on TimeoutException {
       debugPrint('[弹弹play服务] tmdbId 匹配超时');
@@ -2128,8 +2087,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/favorite';
 
       final queryParams = <String, String>{};
@@ -2144,27 +2103,25 @@ class DandanplayService {
 
       debugPrint('[弹弹play服务] 获取用户收藏列表: $uri');
 
-      final response = await http
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': userAgent,
-              'X-AppId': appId,
-              'X-Signature': generateSignature(
-                appId,
-                timestamp,
-                apiPath,
-                appSecret,
-              ),
-              'X-Timestamp': '$timestamp',
-              'Authorization': 'Bearer $_token',
-            },
-          )
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => throw TimeoutException('获取收藏列表超时'),
-          );
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': userAgent,
+          'X-AppId': appId,
+          'X-Signature': generateSignature(
+            appId,
+            timestamp,
+            apiPath,
+            appSecret,
+          ),
+          'X-Timestamp': '$timestamp',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('获取收藏列表超时'),
+      );
 
       debugPrint('[弹弹play服务] 收藏列表响应: ${response.statusCode}');
 
@@ -2198,8 +2155,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       const apiPath = '/api/v2/favorite';
 
       final requestBody = {
@@ -2258,8 +2215,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/favorite/$animeId';
 
       debugPrint('[弹弹play服务] 取消收藏: animeId=$animeId');
@@ -2391,8 +2348,8 @@ class DandanplayService {
 
     try {
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/comment/$episodeId';
 
       final requestBody = {
@@ -2442,8 +2399,8 @@ class DandanplayService {
             'type': mode == 1
                 ? 'scroll'
                 : mode == 5
-                ? 'top'
-                : 'bottom',
+                    ? 'top'
+                    : 'bottom',
             'color': colorValue,
             'isMe': true,
           };
@@ -2474,8 +2431,8 @@ class DandanplayService {
       debugPrint('[弹弹play服务] 获取WebToken: business=$business');
 
       final appSecret = await getAppSecret();
-      final timestamp = (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
-          .round();
+      final timestamp =
+          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
       final apiPath = '/api/v2/oauth/webToken';
 
       final response = await http.get(
@@ -2534,9 +2491,8 @@ class DandanplayService {
     Map<String, dynamic>? account, {
     int? loginTimestamp,
   }) async {
-    _linkedBangumiAccount = account == null
-        ? null
-        : Map<String, dynamic>.from(account);
+    _linkedBangumiAccount =
+        account == null ? null : Map<String, dynamic>.from(account);
     _loginTimestamp = loginTimestamp;
 
     final prefs = await SharedPreferences.getInstance();
