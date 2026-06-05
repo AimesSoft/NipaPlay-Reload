@@ -1380,15 +1380,35 @@ class DandanplayService {
         }
       }
 
-      // 第二层：主副服务器并发竞速，谁先返回用谁
+      // 第二层：主副服务器并发竞速，只取第一个成功的，忽略错误
       debugPrint('尝试主副服务器并发竞速获取弹幕...');
+      final completer = Completer<Map<String, dynamic>>();
+      final servers = <String, String>{
+        NetworkSettings.primaryServer: '主服务器',
+        NetworkSettings.backupServer: '备用服务器',
+      };
+      var remaining = servers.length;
+
+      for (final entry in servers.entries) {
+        _fetchDanmakuFromServer(episodeId, animeId, entry.key).then((result) {
+          if (!completer.isCompleted) {
+            debugPrint('竞速成功: ${entry.value}(${entry.key}) 先返回');
+            completer.complete(result);
+          }
+        }).catchError((e) {
+          debugPrint('竞速: ${entry.value}(${entry.key}) 失败: $e');
+          remaining--;
+          if (remaining == 0 && !completer.isCompleted) {
+            completer.completeError(Exception('主副服务器竞速全部失败'));
+          }
+        });
+      }
+
       try {
-        final result = await Future.any([
-          _fetchDanmakuFromServer(
-              episodeId, animeId, NetworkSettings.primaryServer),
-          _fetchDanmakuFromServer(
-              episodeId, animeId, NetworkSettings.backupServer),
-        ]);
+        final result = await completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw TimeoutException('主副服务器竞速超时'),
+        );
         return result;
       } catch (raceError) {
         debugPrint('主副服务器竞速全部失败: $raceError');
@@ -1487,14 +1507,14 @@ class DandanplayService {
     String episodeId,
     int animeId,
   ) {
-    ////debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
+    debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
 
     if (response.statusCode == 200) {
       return _parseDanmakuBody(response.body, episodeId, animeId);
     }
 
     final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
-    ////debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
+    debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
     throw Exception('获取弹幕失败: $errorMessage');
   }
 
