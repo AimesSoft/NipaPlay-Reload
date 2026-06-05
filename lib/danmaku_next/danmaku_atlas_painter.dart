@@ -62,6 +62,18 @@ int _diagCulledItems = 0;
 int _diagAtlasFullItems = 0;
 int _diagEdgeClipItems = 0;
 
+/// [EDGE-BUG] 边缘裁剪诊断 — 验证假设1: atlas路径drawImageRect缺少clip保护
+int _lastDiagEdgeBugTimeMs = 0;
+int _diagEdgeNearRightCount = 0;  // dstRect.right 接近 canvasRect.right 的弹幕数
+int _diagEdgeNearLeftCount = 0;   // dstRect.left 接近 0 的弹幕数
+int _diagAtlasDstOutOfBoundsCount = 0; // atlas路径dstRect实际超出画布的弹幕数
+int _diagEdgeClipRenderedCount = 0;   // 边缘裁剪路径渲染的弹幕数
+
+/// [DRIFT-BUG] 漂移校正诊断 — 验证假设2: 增量定位漂移校正导致鬼畜
+int _diagDriftCorrectionCount = 0;    // 本帧触发漂移校正的弹幕数
+int _diagHardSnapCount = 0;           // 本帧触发硬snap的弹幕数
+double _diagMaxDrift = 0.0;           // 本帧最大漂移值
+
 // ════════════════════════════════════════════════════════════════
 //  主画笔
 // ════════════════════════════════════════════════════════════════
@@ -310,6 +322,17 @@ class DanmakuAtlasPainter extends CustomPainter {
     _diagAtlasFullItems = 0;
     _diagEdgeClipItems = 0;
 
+    // ── [EDGE-BUG] 边缘裁剪诊断计数器重置 ──
+    _diagEdgeNearRightCount = 0;
+    _diagEdgeNearLeftCount = 0;
+    _diagAtlasDstOutOfBoundsCount = 0;
+    _diagEdgeClipRenderedCount = 0;
+
+    // ── [DRIFT-BUG] 漂移校正诊断计数器重置 ──
+    _diagDriftCorrectionCount = 0;
+    _diagHardSnapCount = 0;
+    _diagMaxDrift = 0.0;
+
     // ── 视口矩形（用于边缘裁剪判断） ──
     final canvasRect = ui.Rect.fromLTWH(0, 0, size.width, size.height);
 
@@ -331,8 +354,11 @@ class DanmakuAtlasPainter extends CustomPainter {
           item.displayX -= item.scrollSpeed * dtSeconds * playbackRate;
           final drift = item.displayX - item.x;
           final absDrift = drift.abs();
+          // [DRIFT-BUG] 漂移诊断：追踪最大漂移和校正频率
+          if (absDrift > _diagMaxDrift) _diagMaxDrift = absDrift;
           if (absDrift > 200.0) {
             item.displayX = item.x;
+            _diagHardSnapCount++; // [DRIFT-BUG]
             if (!kReleaseMode) {
               final now = DateTime.now().millisecondsSinceEpoch;
               if (now - _lastDiagSnapTimeMs >= 1000) {
@@ -342,6 +368,7 @@ class DanmakuAtlasPainter extends CustomPainter {
             }
           } else if (absDrift > 50.0) {
             item.displayX = item.displayX + (item.x - item.displayX) * 0.15;
+            _diagDriftCorrectionCount++; // [DRIFT-BUG]
             if (!kReleaseMode) {
               diagScrollItemCount++;
               if (diagScrollItemCount % 200 == 0) {
@@ -361,9 +388,13 @@ class DanmakuAtlasPainter extends CustomPainter {
       final drawY = item.y;
 
       // ── 视口剔除 ──
+      // Bug 5/6 修复: 左侧剔除阈值放宽 12px（描边/阴影最大额外宽度），
+      // 防止描边/阴影部分仍可见的弹幕被过早剔除（item.width 不含描边/阴影）。
+      // 右侧 drawX > size.width 条件不受影响（弹幕左边缘在画布右侧外）。
+      // 光栅化后使用 raster.logicalWidth 进行精确剔除。
       final itemWidth = item.width;
       if (itemWidth > 0.0) {
-        if (drawX + itemWidth < 0.0 || drawX > size.width) {
+        if (drawX + itemWidth < -12.0 || drawX > size.width) {
           _diagCulledItems++; // [ATLAS-DIAG-BUG2]
           continue;
         }
@@ -470,23 +501,69 @@ class DanmakuAtlasPainter extends CustomPainter {
       final bool needsEdgeClip = clippedDst != dstRect;
 
       if (needsEdgeClip) {
-        // 部分裁剪 — 回退到 drawImageRect（仅边缘弹幕，2-3 条，开销可忽略）
+        // Bug 5/6 修复: 边缘弹幕改用 atlas 共享纹理 + canvas.clipRect 裁剪。
+        // 旧方案使用独立 raster.image + 手动 srcRect 裁剪，Impeller 下
+        // 该路径渲染为全透明/被丢弃，导致左右边缘 5-10% 非渲染带。
+        // 新方案使用与 atlas 主路径相同的纹理和绘制方式，
+        // 仅在 drawImageRect 前后加 canvas.clipRect 保护，
+        // 确保 Impeller 能正确渲染边缘部分。
         _diagEdgeClipItems++; // [ATLAS-DIAG-BUG2]
+        _diagEdgeClipRenderedCount++; // [EDGE-BUG] 边缘裁剪路径计数
         _edgeClipSprites.add(_EdgeClipSprite(
-          raster: raster,
+          slot: slot,
           drawX: drawX,
           drawY: drawY,
           dstRect: dstRect,
           clippedDst: clippedDst,
           isMe: content.isMe,
         ));
+        // [EDGE-BUG] 详细日志：边缘弹幕的裁剪细节（节流输出）
+        if (!kReleaseMode) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagEdgeBugTimeMs >= 1000) {
+            _lastDiagEdgeBugTimeMs = now;
+            debugPrint('[EDGE-BUG] CLIP: drawX=${drawX.toStringAsFixed(1)} '
+                'rasterW=${raster.logicalWidth.toStringAsFixed(1)} '
+                'itemW=${item.width.toStringAsFixed(1)} '
+                'dstRect=$dstRect clippedDst=$clippedDst '
+                'canvasW=${size.width.toStringAsFixed(1)}');
+          }
+        }
         continue;
+      }
+
+      // [EDGE-BUG] 检测：atlas路径弹幕的dstRect是否实际超出画布
+      // 理论上 needsEdgeClip=false 意味着 dstRect 完全在画布内，
+      // 但由于 float 精度或 item.width vs raster.logicalWidth 差异，
+      // atlas 渲染路径的 dstRect 可能实际超出画布边界。
+      {
+        final atlasDstRight = drawX + raster.logicalWidth;
+        final atlasDstLeft = drawX;
+        if (atlasDstRight > size.width + 0.01) {
+          _diagAtlasDstOutOfBoundsCount++; // [EDGE-BUG] atlas路径越界计数
+          _diagEdgeNearRightCount++;
+        }
+        if (atlasDstLeft < -0.01) {
+          _diagAtlasDstOutOfBoundsCount++;
+          _diagEdgeNearLeftCount++;
+        }
+        // [EDGE-BUG] 宽度差异诊断：item.width vs raster.logicalWidth
+        if (!kReleaseMode && (raster.logicalWidth - item.width).abs() > 1.0) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagEdgeBugTimeMs >= 2000) {
+            _lastDiagEdgeBugTimeMs = now;
+            debugPrint('[EDGE-BUG] WIDTH MISMATCH: itemW=${item.width.toStringAsFixed(1)} '
+                'rasterW=${raster.logicalWidth.toStringAsFixed(1)} '
+                'diff=${(raster.logicalWidth - item.width).toStringAsFixed(1)}px '
+                'text="${content.text.substring(0, content.text.length > 10 ? 10 : content.text.length)}"');
+          }
+        }
       }
 
       // ── 自发弹幕边框（在 drawRawAtlas 之外绘制） ──
       if (content.isMe) {
         _edgeClipSprites.add(_EdgeClipSprite(
-          raster: raster,
+          slot: slot,
           drawX: drawX,
           drawY: drawY,
           dstRect: dstRect,
@@ -519,6 +596,18 @@ class DanmakuAtlasPainter extends CustomPainter {
             'CULL=$_diagCulledItems ATLAS_FULL=$_diagAtlasFullItems '
             'EDGE=$_diagEdgeClipItems EMOJI=$_emojiBypassCount '
             'RENDERED=$_spriteCount SLOTS=${_spriteAtlas?.slotCount ?? 0}');
+
+        // [EDGE-BUG] 边缘裁剪诊断输出
+        debugPrint('[EDGE-BUG] ATLAS_OOB=$_diagAtlasDstOutOfBoundsCount '
+            'NEAR_R=$_diagEdgeNearRightCount NEAR_L=$_diagEdgeNearLeftCount '
+            'CLIP_RENDERED=$_diagEdgeClipRenderedCount '
+            'CANVAS_W=${size.width.toStringAsFixed(1)}');
+
+        // [DRIFT-BUG] 漂移校正诊断输出
+        debugPrint('[DRIFT-BUG] CORRECTIONS=$_diagDriftCorrectionCount '
+            'HARD_SNAPS=$_diagHardSnapCount '
+            'MAX_DRIFT=${_diagMaxDrift.toStringAsFixed(1)}px '
+            'RATE=$playbackRate dt=${dtSeconds.toStringAsFixed(4)}s');
       }
     }
 
@@ -544,30 +633,29 @@ class DanmakuAtlasPainter extends CustomPainter {
     }
 
     // ── 2. 边缘裁剪回退 + 自发弹幕边框 ──
-    for (final edge in _edgeClipSprites) {
-      // 自发弹幕边框
-      if (edge.isMe) {
-        canvas.drawRect(
-          ui.Rect.fromLTWH(edge.drawX - 2, edge.drawY - 2,
-              edge.raster.logicalWidth + 4, edge.raster.logicalHeight + 4),
-          _selfSendPaint,
-        );
-      }
+    // Bug 5/6 修复: 弃用独立 raster.image + 手动 srcRect 裁剪
+    // （Impeller 下该路径渲染为全透明/被丢弃），改用 atlas 共享纹理
+    // + canvas.clipRect 保护，与 atlas 主路径一致。GPU 开销仅增加
+    // save/restore + clipRect（边缘弹幕通常 2-3 条，压测最多 ~100 条）。
+    if (_edgeClipSprites.isNotEmpty && atlas != null) {
+      for (final edge in _edgeClipSprites) {
+        // 自发弹幕边框
+        if (edge.isMe) {
+          canvas.drawRect(
+            ui.Rect.fromLTWH(edge.drawX - 2, edge.drawY - 2,
+                edge.slot.logicalW + 4, edge.slot.logicalH + 4),
+            _selfSendPaint,
+          );
+        }
 
-      // 边缘裁剪 — 仅在需要时用 drawImageRect
-      if (edge.clippedDst != edge.dstRect) {
-        final scaleX =
-            edge.raster.image.width.toDouble() / edge.raster.logicalWidth;
-        final scaleY =
-            edge.raster.image.height.toDouble() / edge.raster.logicalHeight;
-        final srcRect = ui.Rect.fromLTWH(
-          (edge.clippedDst.left - edge.dstRect.left) * scaleX,
-          (edge.clippedDst.top - edge.dstRect.top) * scaleY,
-          edge.clippedDst.width * scaleX,
-          edge.clippedDst.height * scaleY,
-        );
-        canvas.drawImageRect(
-            edge.raster.image, srcRect, edge.clippedDst, _imagePaint);
+        // 边缘裁剪 — 用 canvas.clipRect 裁剪 + atlas drawImageRect 绘制
+        if (edge.clippedDst != edge.dstRect) {
+          canvas.save();
+          canvas.clipRect(edge.clippedDst);
+          canvas.drawImageRect(
+              atlas, edge.slot.srcRect, edge.dstRect, _imagePaint);
+          canvas.restore();
+        }
       }
     }
 
@@ -627,16 +715,18 @@ class DanmakuAtlasPainter extends CustomPainter {
       );
     }
 
+    // Bug 5/6 修复: 弃用手动 srcRect 裁剪（Impeller 下独立纹理 + 部分
+    // srcRect 渲染为全透明/被丢弃），改用 canvas.clipRect + 全量
+    // drawImageRect，与边缘裁剪路径一致。
     if (clippedDst != dstRect) {
-      final scaleX = raster.image.width.toDouble() / raster.logicalWidth;
-      final scaleY = raster.image.height.toDouble() / raster.logicalHeight;
-      final srcRect = ui.Rect.fromLTWH(
-        (clippedDst.left - dstRect.left) * scaleX,
-        (clippedDst.top - dstRect.top) * scaleY,
-        clippedDst.width * scaleX,
-        clippedDst.height * scaleY,
-      );
-      canvas.drawImageRect(raster.image, srcRect, clippedDst, _imagePaint);
+      canvas.save();
+      canvas.clipRect(clippedDst);
+      canvas.drawImageRect(raster.image,
+          ui.Rect.fromLTWH(0, 0,
+              raster.image.width.toDouble(),
+              raster.image.height.toDouble()),
+          dstRect, _imagePaint);
+      canvas.restore();
     } else {
       canvas.drawImageRect(raster.image,
           ui.Rect.fromLTWH(0, 0,
@@ -976,8 +1066,11 @@ class _ShadowParams {
 }
 
 /// 边缘裁剪/自发弹幕回退绘制信息
+/// Bug 5/6 修复: 使用 SpriteSlot 替代 _RasterEntry — 边缘弹幕也从
+/// atlas 共享纹理绘制（canvas.clipRect 保护），不再使用独立 raster.image
+/// （Impeller 下独立纹理 + 部分 srcRect 裁剪渲染为全透明/被丢弃）。
 class _EdgeClipSprite {
-  final _RasterEntry raster;
+  final SpriteSlot slot;
   final double drawX;
   final double drawY;
   final ui.Rect dstRect;
@@ -985,7 +1078,7 @@ class _EdgeClipSprite {
   final bool isMe;
 
   _EdgeClipSprite({
-    required this.raster,
+    required this.slot,
     required this.drawX,
     required this.drawY,
     required this.dstRect,
