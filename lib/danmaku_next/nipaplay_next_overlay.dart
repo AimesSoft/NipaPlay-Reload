@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
-import 'package:nipaplay/danmaku_next/nipaplay_next_canvas_painter.dart';
+import 'package:nipaplay/danmaku_next/danmaku_atlas_painter.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_engine.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -148,7 +148,16 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
         final fontFamily = customFontFamily.isNotEmpty
             ? customFontFamily
             : (textStyle.fontFamily ?? themeFontFamily);
-        final fontFamilyFallback = textStyle.fontFamilyFallback;
+        // ⚠️ Bug 3 修复: 合并系统 Emoji 字体到 fallback 列表
+        // 压测日志 ATLAS-DIAG-BUG3 显示 Emoji 尺寸正常(zeroSize=0)但画面不可见，
+        // 最可能原因是 Impeller toImageSync 路径下彩色 Emoji(CBDT/COLRv1)光栅化失败。
+        // 显式添加系统 Emoji 字体名可触发不同的 Fallback 路径选择。
+        final fontFamilyFallback = <String>[
+          ...?textStyle.fontFamilyFallback,
+          'Apple Color Emoji',  // macOS/iOS
+          'Segoe UI Emoji',     // Windows
+          'Noto Color Emoji',   // Linux/Android
+        ];
 
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) {
@@ -190,7 +199,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
         final effectiveOpacity = widget.opacity.clamp(0.0, 1.0);
         final dpr = MediaQuery.devicePixelRatioOf(context);
         final customPaint = CustomPaint(
-          painter: NipaPlayNextCanvasPainter(
+          painter: DanmakuAtlasPainter(
             vsyncNotifier: _vsyncController,
             engine: _engine,
             playbackTimeMs: widget.playbackTimeMs,
