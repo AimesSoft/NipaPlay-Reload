@@ -75,13 +75,23 @@ class ArrowMenuContainer extends StatelessWidget {
       boxShadow: shadows,
     );
 
+    // Wrap child with Material(type: MaterialType.transparency) so that any
+    // ListTile inside the menu has a Material ancestor.  Without this, the
+    // DecoratedBox(color:) that paints the menu background would sit between
+    // the ListTile and its nearest Material ancestor, triggering Flutter's
+    // debug assertion "ListTile background color or ink splashes may be invisible".
+    final Widget materialChild = Material(
+      type: MaterialType.transparency,
+      child: child,
+    );
+
     final Widget blurredBody = isWeb
         ? (useSimpleClip
             ? Container(
                 decoration: backgroundDecoration,
                 child: Padding(
                   padding: contentPadding,
-                  child: child,
+                  child: materialChild,
                 ),
               )
             : DecoratedBox(
@@ -92,7 +102,7 @@ class ArrowMenuContainer extends StatelessWidget {
                 ),
                 child: Padding(
                   padding: contentPadding,
-                  child: child,
+                  child: materialChild,
                 ),
               ))
         : (useSimpleClip
@@ -105,7 +115,7 @@ class ArrowMenuContainer extends StatelessWidget {
                     decoration: backgroundDecoration,
                     child: Padding(
                       padding: contentPadding,
-                      child: child,
+                      child: materialChild,
                     ),
                   ),
                 ),
@@ -123,7 +133,7 @@ class ArrowMenuContainer extends StatelessWidget {
                     ),
                     child: Padding(
                       padding: contentPadding,
-                      child: child,
+                      child: materialChild,
                     ),
                   ),
                 ),

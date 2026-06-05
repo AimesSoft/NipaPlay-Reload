@@ -1615,22 +1615,25 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                     color: Colors.white.withOpacity(0.05),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: ListTile(
-                                    title: Text(
-                                      match['animeTitle'] ?? '未知动画',
-                                      style:
-                                          const TextStyle(color: Colors.white),
-                                    ),
-                                    subtitle: match['typeDescription'] != null
-                                        ? Text(
-                                            match['typeDescription'],
-                                            style: const TextStyle(
-                                                color: Colors.white70),
-                                          )
-                                        : null,
-                                    onTap: () => _loadAnimeEpisodes(match),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(6),
+                                  child: Material(
+                                    type: MaterialType.transparency,
+                                    child: ListTile(
+                                      title: Text(
+                                        match['animeTitle'] ?? '未知动画',
+                                        style:
+                                            const TextStyle(color: Colors.white),
+                                      ),
+                                      subtitle: match['typeDescription'] != null
+                                          ? Text(
+                                              match['typeDescription'],
+                                              style: const TextStyle(
+                                                  color: Colors.white70),
+                                            )
+                                          : null,
+                                      onTap: () => _loadAnimeEpisodes(match),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
                                     ),
                                   ),
                                 );
@@ -1683,24 +1686,27 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                     color: Colors.white.withOpacity(0.05),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: ListTile(
-                                    title: Text(
-                                      '第${episode['episodeIndex'] ?? '?'}集: ${episode['episodeTitle'] ?? '未知剧集'}',
-                                      style:
-                                          const TextStyle(color: Colors.white),
-                                    ),
-                                    trailing: isSelected
-                                        ? const Icon(Icons.check_circle,
-                                            color: Colors.green)
-                                        : null,
-                                    selected: isSelected,
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedEpisode = episode;
-                                      });
-                                    },
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(6),
+                                  child: Material(
+                                    type: MaterialType.transparency,
+                                    child: ListTile(
+                                      title: Text(
+                                        '第${episode['episodeIndex'] ?? '?'}集: ${episode['episodeTitle'] ?? '未知剧集'}',
+                                        style:
+                                            const TextStyle(color: Colors.white),
+                                      ),
+                                      trailing: isSelected
+                                          ? const Icon(Icons.check_circle,
+                                              color: Colors.green)
+                                          : null,
+                                      selected: isSelected,
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedEpisode = episode;
+                                        });
+                                      },
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
                                     ),
                                   ),
                                 );

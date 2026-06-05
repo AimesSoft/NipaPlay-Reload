@@ -38,7 +38,10 @@ class LibraryManagementCard extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: child,
+      child: Material(
+        type: MaterialType.transparency,
+        child: child,
+      ),
     );
   }
 }
