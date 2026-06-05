@@ -198,7 +198,7 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                 // 从网络加载弹幕
                 final danmakuData =
                     await DandanplayService.getDanmaku(episodeId, animeId)
-                        .timeout(const Duration(seconds: 15), onTimeout: () {
+                        .timeout(const Duration(seconds: 32), onTimeout: () {
                   //debugPrint('加载弹幕超时');
                   throw TimeoutException('加载弹幕超时');
                 });
