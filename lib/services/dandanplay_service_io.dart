@@ -1368,49 +1368,39 @@ class DandanplayService {
 
       // 获取当前配置的服务器
       final currentServer = await getApiBaseUrl();
-      final isPrimaryServer = currentServer == NetworkSettings.primaryServer;
-      final isBackupServer = currentServer == NetworkSettings.backupServer;
+      final isCustomServer = currentServer != NetworkSettings.primaryServer &&
+          currentServer != NetworkSettings.backupServer;
 
-      try {
-        return await _fetchDanmakuFromServer(episodeId, animeId, currentServer);
-      } catch (e) {
-        debugPrint('从当前服务器($currentServer)获取弹幕失败: $e');
-
-        // 统一回退链：主服务器 → 备用服务器 → 代理
-        if (isPrimaryServer) {
-          // 主服务器失败，尝试备用服务器
-          debugPrint('尝试回退到备用服务器获取弹幕...');
-          try {
-            return await _fetchDanmakuFromServer(
-              episodeId,
-              animeId,
-              NetworkSettings.backupServer,
-            );
-          } catch (backupError) {
-            debugPrint('从备用服务器获取弹幕也失败: $backupError');
-          }
-        } else if (isBackupServer) {
-          // 备用服务器失败，回退到主服务器
-          debugPrint('尝试回退到主服务器获取弹幕...');
-          try {
-            return await _fetchDanmakuFromServer(
-              episodeId,
-              animeId,
-              NetworkSettings.primaryServer,
-            );
-          } catch (fallbackError) {
-            debugPrint('从主服务器获取弹幕也失败: $fallbackError');
-          }
-        }
-
-        // 最后兜底：nipaplay 代理
-        debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
+      if (isCustomServer) {
+        // 第一层：用户自定义服务器
         try {
-          return await _fetchDanmakuViaProxy(episodeId, animeId);
-        } catch (proxyError) {
-          debugPrint('通过代理服务器获取弹幕失败: $proxyError');
-          throw Exception('所有服务器均无法获取弹幕，请稍后再试。（$proxyError）');
+          return await _fetchDanmakuFromServer(episodeId, animeId, currentServer);
+        } catch (e) {
+          debugPrint('从自定义服务器($currentServer)获取弹幕失败: $e');
         }
+      }
+
+      // 第二层：主副服务器并发竞速，谁先返回用谁
+      debugPrint('尝试主副服务器并发竞速获取弹幕...');
+      try {
+        final result = await Future.any([
+          _fetchDanmakuFromServer(
+              episodeId, animeId, NetworkSettings.primaryServer),
+          _fetchDanmakuFromServer(
+              episodeId, animeId, NetworkSettings.backupServer),
+        ]);
+        return result;
+      } catch (raceError) {
+        debugPrint('主副服务器竞速全部失败: $raceError');
+      }
+
+      // 第三层：nipaplay 代理兜底
+      debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
+      try {
+        return await _fetchDanmakuViaProxy(episodeId, animeId);
+      } catch (proxyError) {
+        debugPrint('通过代理服务器获取弹幕失败: $proxyError');
+        throw Exception('所有服务器均无法获取弹幕，请稍后再试。（$proxyError）');
       }
     } catch (e) {
       ////debugPrint('获取弹幕时出错: $e');
