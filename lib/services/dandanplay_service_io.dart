@@ -35,7 +35,7 @@ class DandanplayService {
   ];
   static const String _danmakuProxyEndpoint =
       'https://nipaplay.aimes-soft.com/danmaku_proxy.php';
-  static const Duration _danmakuRequestTimeout = Duration(seconds: 5);
+  static const Duration _danmakuRequestTimeout = Duration(seconds: 10);
   static const int _danmakuRequestMaxAttempts = 2;
   static const Duration _danmakuRetryDelay = Duration(milliseconds: 600);
   static bool get isLoggedIn => _isLoggedIn;
@@ -1376,17 +1376,21 @@ class DandanplayService {
       } catch (e) {
         debugPrint('从当前服务器($currentServer)获取弹幕失败: $e');
 
+        // 统一回退链：主服务器 → 备用服务器 → 代理
         if (isPrimaryServer) {
-          debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
+          // 主服务器失败，尝试备用服务器
+          debugPrint('尝试回退到备用服务器获取弹幕...');
           try {
-            return await _fetchDanmakuViaProxy(episodeId, animeId);
-          } catch (proxyError) {
-            debugPrint('通过代理服务器获取弹幕失败: $proxyError');
-            throw Exception('主服务器与代理服务器均无法获取弹幕，请稍后再试。（$proxyError）');
+            return await _fetchDanmakuFromServer(
+              episodeId,
+              animeId,
+              NetworkSettings.backupServer,
+            );
+          } catch (backupError) {
+            debugPrint('从备用服务器获取弹幕也失败: $backupError');
           }
-        }
-
-        if (isBackupServer) {
+        } else if (isBackupServer) {
+          // 备用服务器失败，回退到主服务器
           debugPrint('尝试回退到主服务器获取弹幕...');
           try {
             return await _fetchDanmakuFromServer(
@@ -1396,17 +1400,17 @@ class DandanplayService {
             );
           } catch (fallbackError) {
             debugPrint('从主服务器获取弹幕也失败: $fallbackError');
-            debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
-            try {
-              return await _fetchDanmakuViaProxy(episodeId, animeId);
-            } catch (proxyError) {
-              debugPrint('通过代理服务器获取弹幕失败: $proxyError');
-              throw Exception('备用服务器、主服务器与代理服务器均无法获取弹幕，请检查网络连接。（$proxyError）');
-            }
           }
         }
 
-        rethrow;
+        // 最后兜底：nipaplay 代理
+        debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
+        try {
+          return await _fetchDanmakuViaProxy(episodeId, animeId);
+        } catch (proxyError) {
+          debugPrint('通过代理服务器获取弹幕失败: $proxyError');
+          throw Exception('所有服务器均无法获取弹幕，请稍后再试。（$proxyError）');
+        }
       }
     } catch (e) {
       ////debugPrint('获取弹幕时出错: $e');
@@ -1429,9 +1433,10 @@ class DandanplayService {
 
   static Future<http.Response> _getDanmakuResponseWithRetry(
     Uri uri,
-    Map<String, String> headers,
-  ) async {
-    for (var attempt = 1; attempt <= _danmakuRequestMaxAttempts; attempt++) {
+    Map<String, String> headers, {
+    int maxAttempts = _danmakuRequestMaxAttempts,
+  }) async {
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await http
             .get(uri, headers: headers)
@@ -1439,12 +1444,12 @@ class DandanplayService {
       } catch (e, st) {
         final shouldRetry =
             _shouldRetryDanmakuRequest(e) &&
-            attempt < _danmakuRequestMaxAttempts;
+            attempt < maxAttempts;
         if (!shouldRetry) {
           Error.throwWithStackTrace(e, st);
         }
         final nextAttempt = attempt + 1;
-        debugPrint('弹幕请求失败，准备重试($nextAttempt/$_danmakuRequestMaxAttempts): $e');
+        debugPrint('弹幕请求失败，准备重试($nextAttempt/$maxAttempts): $e');
         await Future.delayed(
           Duration(milliseconds: _danmakuRetryDelay.inMilliseconds * attempt),
         );
@@ -1471,14 +1476,18 @@ class DandanplayService {
     debugPrint('发送弹幕请求到: $apiUrl');
     ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');
 
-    final response = await _getDanmakuResponseWithRetry(Uri.parse(apiUrl), {
-      'Accept': 'application/json',
-      'User-Agent': userAgent,
-      'X-AppId': appId,
-      'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
-      'X-Timestamp': '$timestamp',
-      if (_token != null) 'Authorization': 'Bearer $_token',
-    });
+    final response = await _getDanmakuResponseWithRetry(
+      Uri.parse(apiUrl),
+      {
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+      maxAttempts: 1,
+    );
 
     return _handleDanmakuResponse(response, episodeId, animeId);
   }
