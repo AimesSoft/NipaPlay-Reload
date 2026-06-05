@@ -35,7 +35,7 @@ class DandanplayService {
   ];
   static const String _danmakuProxyEndpoint =
       'https://nipaplay.aimes-soft.com/danmaku_proxy.php';
-  static const Duration _danmakuRequestTimeout = Duration(seconds: 10);
+  static const Duration _danmakuRequestTimeout = Duration(seconds: 5);
   static const int _danmakuRequestMaxAttempts = 2;
   static const Duration _danmakuRetryDelay = Duration(milliseconds: 600);
   static bool get isLoggedIn => _isLoggedIn;
