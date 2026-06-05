@@ -36,6 +36,7 @@ class CupertinoBangumiCommentsWidget extends StatefulWidget {
 class CupertinoBangumiCommentsWidgetState
     extends State<CupertinoBangumiCommentsWidget> {
   final List<BangumiComment> _comments = [];
+  final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   bool _hasMore = true;
   bool _usingFallback = false;
@@ -46,6 +47,7 @@ class CupertinoBangumiCommentsWidgetState
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     if (widget.subjectId != null || widget.dandanplayId != 0) {
       _loadComments();
     }
@@ -67,6 +69,22 @@ class CupertinoBangumiCommentsWidgetState
       if (widget.subjectId != null || widget.dandanplayId != 0) {
         _loadComments();
       }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (maxScroll > 0 && currentScroll >= maxScroll - 200) {
+      tryLoadMore();
     }
   }
 
@@ -375,115 +393,158 @@ class CupertinoBangumiCommentsWidgetState
 
     final int commentItemCount = _comments.length + (hasMyComment ? 1 : 0);
 
-    final List<Widget> items = [];
+    // 布局索引：
+    // 0: 标题行
+    // 1: 间距
+    // 2 (如果hasMyComment): 我的评论
+    // 2+myCommentOffset ~ 2+myCommentOffset+_comments.length-1: 评论列表
+    // 最后: 底部加载/错误
+    const int headerCount = 2;
+    final int myCommentCount = hasMyComment ? 1 : 0;
+    final bool hasFooter = _isLoading || (_error != null && _comments.isNotEmpty);
+    final int totalItems = headerCount + myCommentCount + _comments.length + (hasFooter ? 1 : 0);
 
-    // Header
-    items.add(
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('全部短评',
-              style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  height: 1.5)),
-          if (widget.onEditRating != null)
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minSize: 0,
-              onPressed: widget.onEditRating,
+    return ListView.builder(
+      controller: _scrollController,
+      padding: EdgeInsets.zero,
+      itemCount: totalItems,
+      itemBuilder: (context, index) {
+        // 标题行
+        if (index == 0) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('全部短评',
+                  style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      height: 1.5)),
+              if (widget.onEditRating != null)
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minSize: 0,
+                  onPressed: widget.onEditRating,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.chat_bubble,
+                          size: 15, color: accentColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        '评论',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: accentColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        }
+
+        // 间距
+        if (index == 1) {
+          return const SizedBox(height: 12);
+        }
+
+        // 我的评论
+        if (hasMyComment && index == 2) {
+          final my = widget.myComment!;
+          return Padding(
+            padding: EdgeInsets.only(bottom: commentItemCount > 1 ? 8 : 0),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: accentColor.withOpacity(isDark ? 0.12 : 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: accentColor.withOpacity(0.3), width: 0.8),
+              ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(CupertinoIcons.chat_bubble,
-                      size: 15, color: accentColor),
-                  const SizedBox(width: 4),
-                  Text(
-                    '评论',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: accentColor,
+                  _buildAvatar(
+                      my.avatarUrl, systemFillColor, secondaryTextColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                my.nickname.isNotEmpty ? my.nickname : '我',
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              _formatRelativeTime(my.updatedAt),
+                              style: TextStyle(
+                                  color: secondaryTextColor, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                        if (my.rate > 0) ...[
+                          const SizedBox(height: 3),
+                          _buildMiniStars(my.rate, accentColor, mutedColor),
+                        ],
+                        if (my.comment.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(my.comment, style: valueStyle),
+                        ],
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-        ],
-      ),
-    );
-    items.add(const SizedBox(height: 12));
+          );
+        }
 
-    // My comment
-    if (hasMyComment) {
-      final my = widget.myComment!;
-      items.add(
-        Padding(
-          padding: EdgeInsets.only(bottom: commentItemCount > 1 ? 8 : 0),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: accentColor.withOpacity(isDark ? 0.12 : 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: accentColor.withOpacity(0.3), width: 0.8),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildAvatar(
-                    my.avatarUrl, systemFillColor, secondaryTextColor),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              my.nickname.isNotEmpty ? my.nickname : '我',
-                              style: TextStyle(
-                                color: textColor,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            _formatRelativeTime(my.updatedAt),
-                            style: TextStyle(
-                                color: secondaryTextColor, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                      if (my.rate > 0) ...[
-                        const SizedBox(height: 3),
-                        _buildMiniStars(my.rate, accentColor, mutedColor),
-                      ],
-                      if (my.comment.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(my.comment, style: valueStyle),
-                      ],
-                    ],
-                  ),
+        // 底部加载/错误
+        if (index == totalItems - 1 && hasFooter) {
+          if (_isLoading) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CupertinoActivityIndicator(radius: 10),
                 ),
-              ],
+              ),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Center(
+              child: CupertinoButton(
+                onPressed: _loadComments,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+                child: Text('加载失败，点击重试',
+                    style: TextStyle(color: accentColor, fontSize: 12)),
+              ),
             ),
-          ),
-        ),
-      );
-    }
+          );
+        }
 
-    // Comments list
-    for (int i = 0; i < _comments.length; i++) {
-      final comment = _comments[i];
-      final bool isLast = i == _comments.length - 1 && !_hasMore && _error == null;
-      items.add(
-        Padding(
+        // 评论列表项
+        final int commentIndex = index - headerCount - myCommentCount;
+        final comment = _comments[commentIndex];
+        final bool isLast = commentIndex == _comments.length - 1 && !_hasMore && _error == null;
+        return Padding(
           padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
           child: Container(
             padding: const EdgeInsets.all(10),
@@ -541,45 +602,8 @@ class CupertinoBangumiCommentsWidgetState
               ],
             ),
           ),
-        ),
-      );
-    }
-
-    // Footer: loading or error
-    if (_isLoading) {
-      items.add(
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 16),
-          child: Center(
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CupertinoActivityIndicator(radius: 10),
-            ),
-          ),
-        ),
-      );
-    } else if (_error != null && _comments.isNotEmpty) {
-      items.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Center(
-            child: CupertinoButton(
-              onPressed: _loadComments,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 8),
-              child: Text('加载失败，点击重试',
-                  style: TextStyle(color: accentColor, fontSize: 12)),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: items,
+        );
+      },
     );
   }
 }

@@ -203,7 +203,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   Ticker? _ticker;
   Duration _interpolatedPosition = Duration.zero;
   Duration _lastActualPosition = Duration.zero;
-  int _lastPositionTimestamp = 0;
+  /// 高精度时钟戳（微秒），用于播放位置插值的 delta 计算。
+  /// 使用 microsecond 精度替代原来的 millisecond 精度，
+  /// 消除 Windows 平台上时钟粒度过粗（~15.6ms）导致的位置跳变。
+  int _lastPositionTimestampUs = 0;
 
   final Map<PlayerMediaType, List<String>> _decoders = {
     PlayerMediaType.video: [],
@@ -515,7 +518,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
               : PlayerPlaybackState.stopped);
       if (playing) {
         _lastActualPosition = _player.state.position;
-        _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+        _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
         if (_ticker != null && !_ticker!.isActive) {
           _ticker!.start();
         }
@@ -1321,7 +1324,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     final currentPosition = _interpolatedPosition;
     _lastActualPosition = currentPosition;
     _interpolatedPosition = currentPosition;
-    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+    _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
 
     _playbackRate = value;
     try {
@@ -1840,7 +1843,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _player.seek(seekPosition);
     _interpolatedPosition = seekPosition;
     _lastActualPosition = seekPosition;
-    _lastPositionTimestamp = DateTime.now().millisecondsSinceEpoch;
+    _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
   }
 
   @override
@@ -2361,13 +2364,17 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   void _onTick(Duration elapsed) {
     if (_player.state.playing) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (_lastPositionTimestamp == 0) {
-        _lastPositionTimestamp = now;
+      // 使用微秒精度的 DateTime.now() 替代原来的毫秒精度。
+      // Windows 平台上毫秒级时钟默认粒度约 15.6ms，导致插值 delta
+      // 在连续帧之间跳变，造成弹幕可见的"抽帧"。微秒精度（~1µs）
+      // 远小于帧间隔（~16667µs @60fps），消除了量化噪声。
+      final nowUs = DateTime.now().microsecondsSinceEpoch;
+      if (_lastPositionTimestampUs == 0) {
+        _lastPositionTimestampUs = nowUs;
       }
-      final delta = now - _lastPositionTimestamp;
+      final deltaUs = nowUs - _lastPositionTimestampUs;
       _interpolatedPosition = _lastActualPosition +
-          Duration(milliseconds: (delta * _player.state.rate).toInt());
+          Duration(microseconds: (deltaUs * _player.state.rate).toInt());
 
       if (_player.state.duration > Duration.zero &&
           _interpolatedPosition > _player.state.duration) {

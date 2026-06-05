@@ -1368,45 +1368,59 @@ class DandanplayService {
 
       // 获取当前配置的服务器
       final currentServer = await getApiBaseUrl();
-      final isPrimaryServer = currentServer == NetworkSettings.primaryServer;
-      final isBackupServer = currentServer == NetworkSettings.backupServer;
+      final isCustomServer = currentServer != NetworkSettings.primaryServer &&
+          currentServer != NetworkSettings.backupServer;
+
+      if (isCustomServer) {
+        // 第一层：用户自定义服务器
+        try {
+          return await _fetchDanmakuFromServer(episodeId, animeId, currentServer);
+        } catch (e) {
+          debugPrint('从自定义服务器($currentServer)获取弹幕失败: $e');
+        }
+      }
+
+      // 第二层：主副服务器并发竞速，只取第一个成功的，忽略错误
+      debugPrint('尝试主副服务器并发竞速获取弹幕...');
+      final completer = Completer<Map<String, dynamic>>();
+      final servers = <String, String>{
+        NetworkSettings.primaryServer: '主服务器',
+        NetworkSettings.backupServer: '备用服务器',
+      };
+      var remaining = servers.length;
+
+      for (final entry in servers.entries) {
+        _fetchDanmakuFromServer(episodeId, animeId, entry.key).then((result) {
+          if (!completer.isCompleted) {
+            debugPrint('竞速成功: ${entry.value}(${entry.key}) 先返回');
+            completer.complete(result);
+          }
+        }).catchError((e) {
+          debugPrint('竞速: ${entry.value}(${entry.key}) 失败: $e');
+          remaining--;
+          if (remaining == 0 && !completer.isCompleted) {
+            completer.completeError(Exception('主副服务器竞速全部失败'));
+          }
+        });
+      }
 
       try {
-        return await _fetchDanmakuFromServer(episodeId, animeId, currentServer);
-      } catch (e) {
-        debugPrint('从当前服务器($currentServer)获取弹幕失败: $e');
+        final result = await completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw TimeoutException('主副服务器竞速超时'),
+        );
+        return result;
+      } catch (raceError) {
+        debugPrint('主副服务器竞速全部失败: $raceError');
+      }
 
-        if (isPrimaryServer) {
-          debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
-          try {
-            return await _fetchDanmakuViaProxy(episodeId, animeId);
-          } catch (proxyError) {
-            debugPrint('通过代理服务器获取弹幕失败: $proxyError');
-            throw Exception('主服务器与代理服务器均无法获取弹幕，请稍后再试。（$proxyError）');
-          }
-        }
-
-        if (isBackupServer) {
-          debugPrint('尝试回退到主服务器获取弹幕...');
-          try {
-            return await _fetchDanmakuFromServer(
-              episodeId,
-              animeId,
-              NetworkSettings.primaryServer,
-            );
-          } catch (fallbackError) {
-            debugPrint('从主服务器获取弹幕也失败: $fallbackError');
-            debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
-            try {
-              return await _fetchDanmakuViaProxy(episodeId, animeId);
-            } catch (proxyError) {
-              debugPrint('通过代理服务器获取弹幕失败: $proxyError');
-              throw Exception('备用服务器、主服务器与代理服务器均无法获取弹幕，请检查网络连接。（$proxyError）');
-            }
-          }
-        }
-
-        rethrow;
+      // 第三层：nipaplay 代理兜底
+      debugPrint('尝试通过 nipaplay.aimes-soft.com 代理服务器获取弹幕...');
+      try {
+        return await _fetchDanmakuViaProxy(episodeId, animeId);
+      } catch (proxyError) {
+        debugPrint('通过代理服务器获取弹幕失败: $proxyError');
+        throw Exception('所有服务器均无法获取弹幕，请稍后再试。（$proxyError）');
       }
     } catch (e) {
       ////debugPrint('获取弹幕时出错: $e');
@@ -1429,9 +1443,10 @@ class DandanplayService {
 
   static Future<http.Response> _getDanmakuResponseWithRetry(
     Uri uri,
-    Map<String, String> headers,
-  ) async {
-    for (var attempt = 1; attempt <= _danmakuRequestMaxAttempts; attempt++) {
+    Map<String, String> headers, {
+    int maxAttempts = _danmakuRequestMaxAttempts,
+  }) async {
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await http
             .get(uri, headers: headers)
@@ -1439,12 +1454,12 @@ class DandanplayService {
       } catch (e, st) {
         final shouldRetry =
             _shouldRetryDanmakuRequest(e) &&
-            attempt < _danmakuRequestMaxAttempts;
+            attempt < maxAttempts;
         if (!shouldRetry) {
           Error.throwWithStackTrace(e, st);
         }
         final nextAttempt = attempt + 1;
-        debugPrint('弹幕请求失败，准备重试($nextAttempt/$_danmakuRequestMaxAttempts): $e');
+        debugPrint('弹幕请求失败，准备重试($nextAttempt/$maxAttempts): $e');
         await Future.delayed(
           Duration(milliseconds: _danmakuRetryDelay.inMilliseconds * attempt),
         );
@@ -1471,14 +1486,18 @@ class DandanplayService {
     debugPrint('发送弹幕请求到: $apiUrl');
     ////debugPrint('请求头: X-AppId: $appId, X-Timestamp: $timestamp, 是否包含token: ${_token != null}');
 
-    final response = await _getDanmakuResponseWithRetry(Uri.parse(apiUrl), {
-      'Accept': 'application/json',
-      'User-Agent': userAgent,
-      'X-AppId': appId,
-      'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
-      'X-Timestamp': '$timestamp',
-      if (_token != null) 'Authorization': 'Bearer $_token',
-    });
+    final response = await _getDanmakuResponseWithRetry(
+      Uri.parse(apiUrl),
+      {
+        'Accept': 'application/json',
+        'User-Agent': userAgent,
+        'X-AppId': appId,
+        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
+        'X-Timestamp': '$timestamp',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+      maxAttempts: 1,
+    );
 
     return _handleDanmakuResponse(response, episodeId, animeId);
   }
@@ -1488,14 +1507,14 @@ class DandanplayService {
     String episodeId,
     int animeId,
   ) {
-    ////debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
+    debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
 
     if (response.statusCode == 200) {
       return _parseDanmakuBody(response.body, episodeId, animeId);
     }
 
     final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
-    ////debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
+    debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
     throw Exception('获取弹幕失败: $errorMessage');
   }
 
