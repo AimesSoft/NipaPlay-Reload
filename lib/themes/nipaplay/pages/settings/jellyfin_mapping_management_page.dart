@@ -285,82 +285,80 @@ style: TextStyle(
           width: 0.5,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Ionicons.settings_outline, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Text(
-                  '映射管理',
-                  locale:Locale("zh-Hans","zh"),
-style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Ionicons.settings_outline, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '映射管理',
+                    locale: Locale("zh-Hans", "zh"),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          
-          ListTile(
-            leading: const Icon(Ionicons.refresh_outline, color: Colors.white),
-            title: const Text(
-              '重新加载统计',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            ListTile(
+              leading: const Icon(Ionicons.refresh_outline, color: Colors.white),
+              title: const Text(
+                '重新加载统计',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+              ),
+              subtitle: const Text(
+                '刷新映射统计信息',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: () {
+                setState(() {
+                  _isLoading = true;
+                });
+                _loadMappingStats();
+              },
             ),
-            subtitle: const Text(
-              '刷新映射统计信息',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
+            const Divider(color: Colors.white12, height: 1),
+            ListTile(
+              leading: const Icon(Ionicons.analytics_outline, color: Colors.white),
+              title: const Text(
+                '映射分析',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+              ),
+              subtitle: const Text(
+                '查看映射准确性和使用情况',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: _showMappingAnalysis,
             ),
-            onTap: () {
-              setState(() {
-                _isLoading = true;
-              });
-              _loadMappingStats();
-            },
-          ),
-          
-          const Divider(color: Colors.white12, height: 1),
-          
-          ListTile(
-            leading: const Icon(Ionicons.analytics_outline, color: Colors.white),
-            title: const Text(
-              '映射分析',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            const Divider(color: Colors.white12, height: 1),
+            ListTile(
+              leading: const Icon(Ionicons.trash_outline, color: Colors.red),
+              title: const Text(
+                '清除所有映射',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+              ),
+              subtitle: const Text(
+                '删除所有已建立的映射关系',
+                locale: Locale("zh-Hans", "zh"),
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: _clearAllMappings,
             ),
-            subtitle: const Text(
-              '查看映射准确性和使用情况',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-            ),
-            onTap: _showMappingAnalysis,
-          ),
-          
-          const Divider(color: Colors.white12, height: 1),
-          
-          ListTile(
-            leading: const Icon(Ionicons.trash_outline, color: Colors.red),
-            title: const Text(
-              '清除所有映射',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
-            ),
-            subtitle: const Text(
-              '删除所有已建立的映射关系',
-              locale:Locale("zh-Hans","zh"),
-style: TextStyle(color: Colors.white70),
-            ),
-            onTap: _clearAllMappings,
-          ),
-        ],
+          ],
+        ),
       ),
     );
 

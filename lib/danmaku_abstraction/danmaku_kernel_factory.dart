@@ -30,6 +30,22 @@ class DanmakuKernelFactory {
   static DanmakuRenderEngine _cachedEngine = DanmakuRenderEngine.nipaplayNext;
   static bool _initialized = false;
 
+  /// Next++ 激进优化引擎开关（由 LabsSettingsProvider 同步）
+  static bool _enableNextPlusPlus = true;
+
+  /// 同步 Next++ 开关状态（由 LabsSettingsProvider 调用）
+  static void setEnableNextPlusPlus(bool enabled) {
+    if (_enableNextPlusPlus == enabled) return;
+    _enableNextPlusPlus = enabled;
+    // 通知 UI 更新显示名称（如开发者模式右上角）
+    _kernelChangeController.add(DanmakuRenderEngine.nipaplayNext);
+  }
+
+  /// 获取 NipaPlay Next 引擎的显示名称
+  /// Next++ 打开时显示 "NipaPlay Next++"，关闭时显示 "NipaPlay Next"
+  static String get nipaplayNextDisplayName =>
+      _enableNextPlusPlus ? 'NipaPlay Next++' : 'NipaPlay Next';
+
   // 添加StreamController用于广播内核切换事件
   static final StreamController<DanmakuRenderEngine> _kernelChangeController =
       StreamController<DanmakuRenderEngine>.broadcast();

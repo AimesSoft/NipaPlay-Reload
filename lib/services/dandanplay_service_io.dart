@@ -1413,9 +1413,10 @@ class DandanplayService {
 
   static Future<http.Response> _getDanmakuResponseWithRetry(
     Uri uri,
-    Map<String, String> headers,
-  ) async {
-    for (var attempt = 1; attempt <= _danmakuRequestMaxAttempts; attempt++) {
+    Map<String, String> headers, {
+    int maxAttempts = _danmakuRequestMaxAttempts,
+  }) async {
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await http
             .get(uri, headers: headers)
@@ -1427,7 +1428,7 @@ class DandanplayService {
           Error.throwWithStackTrace(e, st);
         }
         final nextAttempt = attempt + 1;
-        debugPrint('弹幕请求失败，准备重试($nextAttempt/$_danmakuRequestMaxAttempts): $e');
+        debugPrint('弹幕请求失败，准备重试($nextAttempt/$maxAttempts): $e');
         await Future.delayed(
           Duration(milliseconds: _danmakuRetryDelay.inMilliseconds * attempt),
         );
@@ -1505,14 +1506,14 @@ class DandanplayService {
     String episodeId,
     int animeId,
   ) {
-    ////debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
+    debugPrint('弹幕API响应: 状态码=${response.statusCode}, 内容长度=${response.body.length}');
 
     if (response.statusCode == 200) {
       return _parseDanmakuBody(response.body, episodeId, animeId);
     }
 
     final errorMessage = response.headers['x-error-message'] ?? '请检查网络连接';
-    ////debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
+    debugPrint('获取弹幕失败: 状态码=${response.statusCode}, 错误信息=$errorMessage');
     throw Exception('获取弹幕失败: $errorMessage');
   }
 

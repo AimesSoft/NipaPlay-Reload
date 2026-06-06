@@ -41,6 +41,20 @@ typedef struct NpLayoutResult {
     int32_t track_index;             // 分配的轨道编号（-1=未分配）
 } NpLayoutResult;
 
+// 零拷贝帧输出结构（C++ 端预计算 x / offstageX / textWidth / type，
+// Dart 侧无需回查 items 数组做 elapsed/switch/除法运算）
+typedef struct NpFrameRawOutput {
+    double y_position;               // y 坐标
+    double x;                        // C++ 预计算 x 坐标
+    double scroll_speed;             // 滚动速度（scroll 有效，static=0）
+    double offstage_x;               // 初始屏幕外位置
+    double text_width;               // 文本宽度（视口剔除 + PositionedDanmakuItem.width）
+    int32_t item_index;              // 对应输入数组索引
+    int32_t type;                    // 0=scroll, 1=top, 2=bottom
+    int32_t _reserved1;              // 对齐保留
+    int32_t _reserved2;              // 对齐保留
+} NpFrameRawOutput;
+
 // 引擎生命周期
 NIPAPLAY_NATIVE_EXPORT NpHandle np_layout_create(void);
 NIPAPLAY_NATIVE_EXPORT void     np_layout_destroy(NpHandle handle);
@@ -62,6 +76,14 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_configure(
 NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
     NpHandle handle, double current_time,
     NpLayoutResult* output_items, int32_t output_capacity,
+    int32_t* output_count);
+
+// 零拷贝帧查询：C++ 端预计算 x / offstageX / textWidth / type，
+// Dart 侧无需回查 items 数组做 elapsed/switch/除法运算
+// output_items 由调用者预分配，output_count 返回实际数量
+NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame_raw(
+    NpHandle handle, double current_time,
+    NpFrameRawOutput* output_items, int32_t output_capacity,
     int32_t* output_count);
 
 // ──── 弹幕相似度引擎：SimilarityEngine ────

@@ -1497,7 +1497,9 @@ class _ServerSelectorSheet extends StatelessWidget {
         color: backgroundColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // 拖动指示器
@@ -1564,6 +1566,7 @@ class _ServerSelectorSheet extends StatelessWidget {
           // 底部安全区域
           SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
+      ),
       ),
     );
   }

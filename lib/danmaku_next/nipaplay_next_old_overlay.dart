@@ -1,18 +1,28 @@
+// ════════════════════════════════════════════════════════════════════
+//  Next Old Overlay — c4ceacbd 版 playbackTimeMs 驱动重绘
+//
+//  与 NipaPlayNextOverlay 的区别：
+//  - playbackTimeMs 驱动重绘（8-30Hz），无 vsync AnimationController
+//  - 始终使用 Opacity widget 包裹（不做 opacity bypass）
+//  - 无 Emoji fontFamilyFallback 添加
+//  - 使用 NipaPlayNextOldEngine（纯Dart布局）+ NipaPlayNextOldCanvasPainter
+// ════════════════════════════════════════════════════════════════════
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
-import 'package:nipaplay/danmaku_next/danmaku_atlas_painter.dart';
-import 'package:nipaplay/danmaku_next/nipaplay_next_engine.dart';
+import 'package:nipaplay/danmaku_next/nipaplay_next_old_canvas_painter.dart';
+import 'package:nipaplay/danmaku_next/nipaplay_next_old_engine.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
-const Locale _danmakuLocale = Locale.fromSubtags(
+const Locale _danmakuOldLocale = Locale.fromSubtags(
   languageCode: 'zh',
   scriptCode: 'Hans',
   countryCode: 'CN',
 );
 
-class NipaPlayNextOverlay extends StatefulWidget {
+class NipaPlayNextOldOverlay extends StatefulWidget {
   final List<Map<String, dynamic>> danmakuList;
   final ValueListenable<double> playbackTimeMs;
   final double currentTimeSeconds;
@@ -29,9 +39,8 @@ class NipaPlayNextOverlay extends StatefulWidget {
   final DanmakuShadowStyle shadowStyle;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
   final bool isPlaying;
-  final double playbackRate;
 
-  const NipaPlayNextOverlay({
+  const NipaPlayNextOldOverlay({
     super.key,
     required this.danmakuList,
     required this.playbackTimeMs,
@@ -49,22 +58,23 @@ class NipaPlayNextOverlay extends StatefulWidget {
     required this.shadowStyle,
     this.onLayoutCalculated,
     required this.isPlaying,
-    required this.playbackRate,
   });
 
   @override
-  State<NipaPlayNextOverlay> createState() => _NipaPlayNextOverlayState();
+  State<NipaPlayNextOldOverlay> createState() => _NipaPlayNextOldOverlayState();
 }
 
-class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
-    with SingleTickerProviderStateMixin {
-  final NipaPlayNextEngine _engine = NipaPlayNextEngine();
+class _NipaPlayNextOldOverlayState extends State<NipaPlayNextOldOverlay> {
+  final NipaPlayNextOldEngine _engine = NipaPlayNextOldEngine();
   int _listIdentity = 0;
   Size _lastConfiguredSize = Size.zero;
   bool _layoutSnapshotPending = false;
 
-  /// vsync 驱动动画控制器 — 保证弹幕以屏幕刷新率重绘
-  late final AnimationController _vsyncController;
+  /// playbackTimeMs 变化时触发 painter 重绘
+  final ValueNotifier<int> _repaintNotifier = ValueNotifier(0);
+
+  /// 最近一次 layout 结果
+  List<PositionedDanmakuItem> _lastItems = const [];
 
   @override
   void initState() {
@@ -72,30 +82,23 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
     _listIdentity = identityHashCode(widget.danmakuList);
     _layoutSnapshotPending = true;
 
-    // 创建 vsync 动画控制器（与 Canvas 引擎的 AnimationController.repeat() 一致）
-    _vsyncController = AnimationController(
-      vsync: this,
-      duration: const Duration(days: 365), // 极长 duration + repeat = 永久循环
-    );
-
-    if (widget.isVisible && widget.isPlaying) {
-      _vsyncController.repeat();
-    }
+    // 监听 playbackTimeMs 变化 → 重新 layout + 通知 painter 重绘
+    widget.playbackTimeMs.addListener(_onPlaybackTimeChanged);
 
     DanmakuNextLog.d(
-      'Overlay',
+      'OldOverlay',
       'init list=${widget.danmakuList.length} font=${widget.fontSize} visible=${widget.isVisible}',
       throttle: Duration.zero,
     );
   }
 
   @override
-  void didUpdateWidget(covariant NipaPlayNextOverlay oldWidget) {
+  void didUpdateWidget(covariant NipaPlayNextOldOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.fontSize != widget.fontSize) {
       DanmakuNextLog.d(
-        'Overlay',
+        'OldOverlay',
         'font size changed ${oldWidget.fontSize} -> ${widget.fontSize}',
         throttle: Duration.zero,
       );
@@ -106,24 +109,34 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
       _listIdentity = listIdentity;
       _layoutSnapshotPending = true;
       DanmakuNextLog.d(
-        'Overlay',
+        'OldOverlay',
         'danmaku list changed size=${widget.danmakuList.length}',
         throttle: Duration.zero,
       );
     }
 
-    // 根据可见性和播放状态启停 vsync 控制器
-    final shouldAnimate = widget.isVisible && widget.isPlaying;
-    if (shouldAnimate && !_vsyncController.isAnimating) {
-      _vsyncController.repeat();
-    } else if (!shouldAnimate && _vsyncController.isAnimating) {
-      _vsyncController.stop();
+    // playbackTimeMs listenable 切换
+    if (oldWidget.playbackTimeMs != widget.playbackTimeMs) {
+      oldWidget.playbackTimeMs.removeListener(_onPlaybackTimeChanged);
+      widget.playbackTimeMs.addListener(_onPlaybackTimeChanged);
     }
+  }
+
+  void _onPlaybackTimeChanged() {
+    if (!mounted || !widget.isVisible) return;
+    _doLayout();
+  }
+
+  void _doLayout() {
+    final timeSeconds = widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
+    _lastItems = _engine.layout(timeSeconds);
+    _repaintNotifier.value++; // 触发 painter 重绘
   }
 
   @override
   void dispose() {
-    _vsyncController.dispose();
+    widget.playbackTimeMs.removeListener(_onPlaybackTimeChanged);
+    _repaintNotifier.dispose();
     super.dispose();
   }
 
@@ -131,7 +144,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
   Widget build(BuildContext context) {
     if (!widget.isVisible) {
       DanmakuNextLog.d(
-        'Overlay',
+        'OldOverlay',
         'hidden, skip build',
         throttle: const Duration(seconds: 2),
       );
@@ -148,16 +161,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
         final fontFamily = customFontFamily.isNotEmpty
             ? customFontFamily
             : (textStyle.fontFamily ?? themeFontFamily);
-        // ⚠️ Bug 3 修复: 合并系统 Emoji 字体到 fallback 列表
-        // 压测日志 ATLAS-DIAG-BUG3 显示 Emoji 尺寸正常(zeroSize=0)但画面不可见，
-        // 最可能原因是 Impeller toImageSync 路径下彩色 Emoji(CBDT/COLRv1)光栅化失败。
-        // 显式添加系统 Emoji 字体名可触发不同的 Fallback 路径选择。
-        final fontFamilyFallback = <String>[
-          ...?textStyle.fontFamilyFallback,
-          'Apple Color Emoji',  // macOS/iOS
-          'Segoe UI Emoji',     // Windows
-          'Noto Color Emoji',   // Linux/Android
-        ];
+        // 旧版不添加 Emoji fontFamilyFallback — TextPainter 自然支持 Emoji 渲染
 
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) {
@@ -176,15 +180,18 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
           allowStacking: widget.allowStacking,
           mergeDanmaku: widget.mergeDanmaku,
           fontFamily: fontFamily,
-          fontFamilyFallback: fontFamilyFallback,
-          locale: _danmakuLocale,
+          fontFamilyFallback: textStyle.fontFamilyFallback,
+          locale: _danmakuOldLocale,
         );
+
+        // 首次配置或尺寸变化时，执行一次 layout
+        if (_layoutSnapshotPending || previousSize != size || _lastItems.isEmpty) {
+          _doLayout();
+        }
 
         if (widget.onLayoutCalculated != null &&
             (_layoutSnapshotPending || previousSize != size)) {
-          final snapshot = List<PositionedDanmakuItem>.from(
-            _engine.layout(widget.currentTimeSeconds + widget.timeOffset),
-          );
+          final snapshot = List<PositionedDanmakuItem>.from(_lastItems);
           _layoutSnapshotPending = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
@@ -192,35 +199,26 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
           });
         }
 
-        // ── GPU 优化：opacity=1.0 时跳过 Opacity widget ──
-        // Impeller/Skia 中 Opacity<1.0 会触发 saveLayer（离屏渲染通道），
-        // 即使 opacity=1.0，Opacity widget 也可能导致多余的 compositing 操作。
-        // 条件跳过可消除此开销，减少 GPU render pass 切换。
+        // ── 旧版始终使用 Opacity widget 包裹 ──
+        // 不做 opacity bypass（c4ceacbd 原始行为）
         final effectiveOpacity = widget.opacity.clamp(0.0, 1.0);
-        final dpr = MediaQuery.devicePixelRatioOf(context);
-        final customPaint = CustomPaint(
-          painter: DanmakuAtlasPainter(
-            vsyncNotifier: _vsyncController,
-            engine: _engine,
-            playbackTimeMs: widget.playbackTimeMs,
-            playbackRate: widget.playbackRate,
-            isPlaying: widget.isPlaying,
-            timeOffsetSeconds: widget.timeOffset,
-            fontSize: widget.fontSize,
-            fontFamily: fontFamily,
-            fontFamilyFallback: fontFamilyFallback,
-            locale: _danmakuLocale,
-            outlineStyle: widget.outlineStyle,
-            shadowStyle: widget.shadowStyle,
-            devicePixelRatio: dpr,
+        return Opacity(
+          opacity: effectiveOpacity,
+          child: CustomPaint(
+            painter: NipaPlayNextOldCanvasPainter(
+              repaintNotifier: _repaintNotifier,
+              engine: _engine,
+              items: _lastItems,
+              fontSize: widget.fontSize,
+              fontFamily: fontFamily,
+              fontFamilyFallback: textStyle.fontFamilyFallback,
+              locale: _danmakuOldLocale,
+              outlineStyle: widget.outlineStyle,
+              shadowStyle: widget.shadowStyle,
+            ),
+            size: size,
           ),
-          size: size,
         );
-
-        if (effectiveOpacity < 1.0) {
-          return Opacity(opacity: effectiveOpacity, child: customPaint);
-        }
-        return customPaint;
       },
     );
   }

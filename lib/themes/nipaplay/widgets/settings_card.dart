@@ -70,7 +70,10 @@ class SettingsCard extends StatelessWidget {
         ),
       ),
       padding: effectivePadding,
-      child: child,
+      child: Material(
+        type: MaterialType.transparency,
+        child: child,
+      ),
     );
 
     Widget cardContent = ClipRRect(

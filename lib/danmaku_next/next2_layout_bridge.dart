@@ -195,6 +195,15 @@ class Next2LayoutBridge {
       }
     }
 
+    // 纯十进制数字字符串（如 B站弹幕 color=16711680 → 红色）
+    // danmaku_parser.dart 可能将整数颜色 toString() 后传入，
+    // 此时值如 "16711680" 不带任何前缀，需要作为十进制整数解析。
+    // 格式为 0xRRGGBB（与B站弹幕协议一致）。
+    final asInt = int.tryParse(value);
+    if (asInt != null) {
+      return (0xFF000000 | (asInt & 0xFFFFFF)).toSigned(32);
+    }
+
     return Colors.white.toARGB32();
   }
 
