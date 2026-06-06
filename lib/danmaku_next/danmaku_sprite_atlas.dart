@@ -5,6 +5,20 @@
 
 import 'dart:collection';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
+
+/// [MEM-GC/SEEK-PERF] 图集重建计数器 — 全局追踪atlas重建频率
+/// DanmakuAtlasPainter 每2秒读取并重置
+int globalAtlasRebuildCount = 0;
+
+/// [ATLAS-REBUILD-DETAIL] 图集重建累计耗时（μs）— 追踪重建开销
+int globalAtlasRebuildTotalUs = 0;
+
+/// [ATLAS-REBUILD-DETAIL] 上次重建耗时（μs）
+int globalAtlasLastRebuildUs = 0;
+
+/// [ATLAS-REBUILD-DETAIL] 上次重建触发来源
+String globalAtlasLastDirtySource = 'init';
 
 /// 精灵槽位 — 记录每个弹幕在图集中的位置与逻辑尺寸
 class SpriteSlot {
@@ -26,12 +40,17 @@ class SpriteSlot {
   /// 是否可复用（淘汰后标记为 true）
   bool reusable = false;
 
+  /// [P1] 是否已提交到 atlas 纹理 — committed=true 时可从 atlas 正常绘制，
+  /// committed=false 时图像尚未写入 atlas 纹理，painter 需用 fallback 渲染
+  bool committed = false;
+
   SpriteSlot({
     required this.srcRect,
     required this.logicalW,
     required this.logicalH,
     required this.hashKey,
     required this.rasterImage,
+    this.committed = false,
   });
 }
 
@@ -74,6 +93,17 @@ class DanmakuSpriteAtlas {
   /// 图集是否需要重建
   bool _dirty = true;
 
+  /// [ATLAS-REBUILD-DETAIL] 上次标记 dirty 的来源
+  String _lastDirtySource = 'init';
+
+  /// [P1] 上次重建的墙钟时间（毫秒）— 用于节流
+  int _lastRebuildMs = 0;
+
+  /// [P1] 最小重建间隔（毫秒）— 限制 atlas 重建频率，防止帧跳帧
+  /// 压测数据: 12秒80次重建(每次1.1-2ms)导致帧跳帧2-3.3× + HARD_SNAP drift
+  /// 节流至100ms后预期: 80次/12s → ~12次/12s，消除帧跳帧+drift
+  static const int _rebuildThrottleMs = 100;
+
   /// 设备像素比 — 用于逻辑→像素坐标转换
   final double devicePixelRatio;
 
@@ -85,6 +115,13 @@ class DanmakuSpriteAtlas {
     this.atlasHeight = 4096.0,
     required this.devicePixelRatio,
   });
+
+  /// [ATLAS-REBUILD-DETAIL] 标记图集 dirty 并记录来源
+  void _markDirty(String source) {
+    _dirty = true;
+    _lastDirtySource = source;
+    globalAtlasLastDirtySource = source;
+  }
 
   /// 当前图集纹理（可能为 null，需要调用 ensureAtlas）
   ui.Image? get atlasTexture => _atlasTexture;
@@ -124,7 +161,8 @@ class DanmakuSpriteAtlas {
       // 复用槽位位置，更新图像引用
       existing.rasterImage = rasterImage;
       existing.reusable = false;
-      _dirty = true;
+      existing.committed = false; // [P1] 图像已更新但atlas纹理中仍是旧图像
+      _markDirty('addSprite:reuse');
       return existing;
     }
 
@@ -164,7 +202,8 @@ class DanmakuSpriteAtlas {
 
     _slots[hashKey] = slot;
     _slotOrder.add(hashKey);
-    _dirty = true;
+    _markDirty('addSprite:new');
+    // [P1] 新slot的committed=false（构造函数默认值），等待下次atlas重建后变为true
     return slot;
   }
 
@@ -178,11 +217,21 @@ class DanmakuSpriteAtlas {
     }
   }
 
-  /// 确保图集纹理可用 — 若 dirty 则重建
+  /// 确保图集纹理可用 — 若 dirty 则重建（带节流）
+  ///
+  /// [P1] 节流策略：dirty 但距上次重建 < _rebuildThrottleMs 时跳过重建，
+  /// 返回当前 atlas 纹理（未提交的 slot 用 committed=false 标记，
+  /// painter 会走 fallback 渲染路径）。
   ///
   /// 返回可用的图集纹理，或 null（重建失败时）
   ui.Image? ensureAtlas() {
     if (!_dirty && _atlasTexture != null) {
+      return _atlasTexture;
+    }
+    // [P1] 节流：距上次重建不足 _rebuildThrottleMs 时跳过
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_lastRebuildMs > 0 && nowMs - _lastRebuildMs < _rebuildThrottleMs) {
+      // 跳过重建 — 返回当前 atlas 纹理（可能部分 slot 未提交）
       return _atlasTexture;
     }
     _rebuildAtlas();
@@ -196,6 +245,7 @@ class DanmakuSpriteAtlas {
     _slots.clear();
     _slotOrder.clear();
     _dirty = true;
+    _lastRebuildMs = 0; // [P1] 重置节流时间戳
   }
 
   /// DPR 变更时清除所有缓存
@@ -251,7 +301,7 @@ class DanmakuSpriteAtlas {
       _slots.remove(oldestKey);
       // 旧槽位的 rasterImage 不在此 dispose — 由外部 _rasterCache 管理
       // 标记 dirty 因为图集内容变化
-      _dirty = true;
+      _markDirty('evict');
       break; // 一次淘汰一个，调用方循环即可
     }
   }
@@ -292,11 +342,20 @@ class DanmakuSpriteAtlas {
         _slots[slot.hashKey] = newSlot;
       }
     }
-    _dirty = true;
+    _markDirty('compact');
   }
 
   /// 重建图集纹理 — 将所有活跃槽位的 rasterImage 绘制到一张共享纹理
   void _rebuildAtlas() {
+    // [ATLAS-REBUILD-DETAIL] 重建计时
+    final rebuildSw = !kReleaseMode ? Stopwatch() : null;
+    rebuildSw?.start();
+
+    globalAtlasRebuildCount++; // [MEM-GC/SEEK-PERF] 追踪atlas重建
+    if (!kReleaseMode) {
+      debugPrint('[ATLAS-REBUILD] #${globalAtlasRebuildCount} slots=${_slots.length} '
+          'source=$_lastDirtySource dirty=$_dirty');
+    }
     if (_slots.isEmpty) {
       _dirty = false;
       return;
@@ -351,5 +410,27 @@ class DanmakuSpriteAtlas {
     );
 
     _dirty = false;
+
+    // [P1] 记录重建时间戳，用于节流判断
+    _lastRebuildMs = DateTime.now().millisecondsSinceEpoch;
+
+    // [P1] 标记所有活跃槽位为已提交 — 图像已写入 atlas 纹理
+    for (final slot in _slots.values) {
+      if (!slot.reusable) {
+        slot.committed = true;
+      }
+    }
+
+    // [ATLAS-REBUILD-DETAIL] 重建耗时输出
+    rebuildSw?.stop();
+    if (rebuildSw != null) {
+      final us = rebuildSw.elapsedMicroseconds;
+      globalAtlasLastRebuildUs = us;
+      globalAtlasRebuildTotalUs += us;
+      debugPrint('[ATLAS-REBUILD-DETAIL] #${globalAtlasRebuildCount} '
+          'took=${us}μs slots=${_slots.length} '
+          'source=$_lastDirtySource '
+          'totalRebuildUs=${globalAtlasRebuildTotalUs}μs');
+    }
   }
 }

@@ -207,6 +207,22 @@ class NipaPlayNextEngine {
         !_layoutDirty) {
       return _positionedBuffer;
     }
+
+    // ── 时序回退检测（Loop/Seek Back）或大跨度跳变（Seek Forward >1s）──
+    // 循环播放后同ID弹幕重新入场时，_toPositionedItemV2 的 existing 分支
+    // 仅更新 x/y 但保留旧 displayX → drift = displayX - x 巨大 → HARD_SNAP。
+    // 遍历 _items 全量重置 displayX=NaN，确保所有弹幕（含未入场的）
+    // 在下一帧 Painter 中走首帧初始化路径（displayX = item.x）。
+    if (currentTimeSeconds < _lastLayoutTime ||
+        (currentTimeSeconds - _lastLayoutTime).abs() > 1.0) {
+      for (final item in _items) {
+        final p = item.positionedItem;
+        if (p != null) {
+          p.displayX = double.nan;
+        }
+      }
+    }
+
     _lastLayoutTime = currentTimeSeconds;
 
     // [NEXT-DIAG] 测量 layout 总耗时（含 FFI 或 Dart 路径），阈值500μs + 2秒节流

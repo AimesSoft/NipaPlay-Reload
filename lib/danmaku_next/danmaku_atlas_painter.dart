@@ -55,6 +55,14 @@ int _lastDiagSnapTimeMs = 0;
 int _lastDiagDriftTimeMs = 0;
 double _lastDiagPlaybackRate = 1.0;
 
+/// [PAUSE-RESUME] 上次 isPlaying 状态 — 追踪暂停恢复过渡
+bool _lastIsPlaying = true;
+
+/// [PAUSE-RESUME] 暂停恢复诊断 — 追踪恢复首帧 drift 分布
+int _diagResumeMaxDriftBeforePx = 0;  // 恢复首帧强制同步前的最大drift(px)
+int _diagResumeDriftOver50Count = 0;   // 恢复首帧drift>50px的弹幕数
+int _diagResumeDriftOver200Count = 0;  // 恢复首帧drift>200px的弹幕数
+
 /// 渲染管线瓶颈计数器
 int _lastDiagBottleneckTimeMs = 0;
 int _diagLayoutItems = 0;
@@ -73,6 +81,55 @@ int _diagEdgeClipRenderedCount = 0;   // 边缘裁剪路径渲染的弹幕数
 int _diagDriftCorrectionCount = 0;    // 本帧触发漂移校正的弹幕数
 int _diagHardSnapCount = 0;           // 本帧触发硬snap的弹幕数
 double _diagMaxDrift = 0.0;           // 本帧最大漂移值
+
+/// ════════════════════════════════════════════════════════════════
+///  [DIAG-V6] V6.0 四大问题诊断计数器
+/// ════════════════════════════════════════════════════════════════
+
+/// [TIME-ALIGN] 问题1: 弹幕时间对齐/回弹 — playbackTimeMs更新频率追踪
+double _lastDiagPlaybackTimeMsValue = -1e9;
+int _lastDiagPlaybackTimeUpdateMs = 0;  // 上次playbackTimeMs变化的墙钟时间
+int _diagPlaybackTimeUpdates = 0;       // 诊断窗口内playbackTimeMs更新次数
+int _diagPlaybackTimeMaxIntervalMs = 0;  // 最大更新间隔
+int _diagPlaybackTimeMinIntervalMs = 0x7FFFFFFF; // 最小更新间隔
+int _diagDrift50to200Count = 0;          // drift在50-200px范围的弹幕数
+int _diagDriftOver200Count = 0;          // drift超过200px的弹幕数
+double _diagDriftUnder50Max = 0.0;       // drift<50px时的最大值（记录轻微漂移）
+
+/// [MEM-GC] 问题2: 内存回收 — GC压力追踪
+int _diagSpriteAllocCount = 0;           // 本帧_SpriteDrawInfo分配数
+int _diagRasterCacheMissCount = 0;       // 本帧rasterCache miss数
+int _diagRasterCacheHitCount = 0;        // 本帧rasterCache hit数
+int _diagAtlasRebuildAccum = 0;          // 累计atlas重建次数（诊断窗口）
+int _diagRasterEvictAccum = 0;           // 累计rasterCache淘汰次数（诊断窗口）
+
+/// [P1] 未提交slot fallback渲染计数 — 追踪atlas节流期间的fallback路径
+int _diagUncommittedFallbackCount = 0;
+
+/// [ATLAS-REBUILD-DETAIL] 每帧新增slot计数 vs 已有slot命中计数
+int _diagSlotNewCount = 0;               // 本帧新增slot数（addSprite调用）
+int _diagSlotHitCount = 0;               // 本帧已有slot命中数（getSlot命中）
+int _diagParagraphNewCount = 0;          // 本帧Paragraph新构建数（pCache miss）
+int _diagEnsureAtlasUs = 0;              // 本帧ensureAtlas耗时(μs)
+int _diagDrawUs = 0;                     // 本帧draw阶段耗时(μs)
+
+/// [FIRST-FRAME] 问题3: 首帧卡顿 — 首帧各阶段计时
+bool _diagFirstFrameDone = false;
+int _diagFirstFramePaintUs = 0;          // 首帧paint总耗时
+int _diagFirstFrameLayoutUs = 0;         // 首帧layout耗时
+int _diagFirstFrameRasterizeUs = 0;     // 首帧toImageSync耗时
+int _diagFirstFrameEnsureAtlasUs = 0;    // 首帧ensureAtlas耗时
+int _diagFirstFrameDrawUs = 0;           // 首帧draw阶段耗时
+int _diagFirstFrameParagraphBuildUs = 0; // 首帧Paragraph构建耗时
+
+/// [SEEK-PERF] 问题4: 进度条拖拽 — seek期间性能追踪
+int _diagSeekPaintOver2msCount = 0;      // paint耗时>2ms的帧数
+int _diagSeekAtlasRebuildCount = 0;      // seek期间atlas重建次数
+double _diagLastPlaybackTimeMsJump = 0.0; // 上次playbackTimeMs跳变量(ms)
+
+/// [DRIFT-DETAIL] HARD_SNAP 瞬间的 dt 值追踪
+double _diagHardSnapDtSeconds = 0.0;     // 最近HARD_SNAP帧的dt值
+int _diagHardSnapDtAnomalyCount = 0;     // dt异常(>20ms)导致HARD_SNAP的次数
 
 // ════════════════════════════════════════════════════════════════
 //  主画笔
@@ -202,6 +259,14 @@ class DanmakuAtlasPainter extends CustomPainter {
   /// 当前帧精灵数
   static int _spriteCount = 0;
 
+  /// [P0] 首帧分帧构建 — 每帧允许的缓存miss上限（Paragraph新构建 + rasterize miss）
+  /// 首帧150，后续帧递增150，连续3帧无miss后取消限制(=0)
+  /// 统一描边(uniform)下150≈75条弹幕/帧，递增后约10帧(@80Hz≈125ms)补全全部弹幕
+  static int _frameBuildBudget = 150;
+
+  /// [P0] 连续无缓存miss帧计数 — 连续3帧无miss后取消预算限制
+  static int _consecutiveNoMissFrames = 0;
+
   /// drawImageRect 共享 Paint
   static final Paint _imagePaint = Paint()
     ..filterQuality = ui.FilterQuality.none;
@@ -276,8 +341,43 @@ class DanmakuAtlasPainter extends CustomPainter {
       dtSeconds = _smoothedDtSeconds;
     }
 
+    // ── [TIME-ALIGN] 问题1诊断: 追踪 playbackTimeMs 更新频率 ──
+    // vsync以60-240Hz调用paint()，但playbackTimeMs可能仅8-30Hz更新。
+    // 记录更新间隔，验证双时间源drift假设。
+    final currentPlaybackTimeMs = playbackTimeMs.value;
+    if (!kReleaseMode && currentPlaybackTimeMs != _lastDiagPlaybackTimeMsValue) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_lastDiagPlaybackTimeUpdateMs > 0) {
+        final intervalMs = now - _lastDiagPlaybackTimeUpdateMs;
+        if (intervalMs > _diagPlaybackTimeMaxIntervalMs) {
+          _diagPlaybackTimeMaxIntervalMs = intervalMs;
+        }
+        if (intervalMs < _diagPlaybackTimeMinIntervalMs) {
+          _diagPlaybackTimeMinIntervalMs = intervalMs;
+        }
+        // [SEEK-PERF] 问题4诊断: 追踪 playbackTimeMs 跳变量
+        final jumpMs = (currentPlaybackTimeMs - _lastDiagPlaybackTimeMsValue).abs();
+        if (jumpMs > _diagLastPlaybackTimeMsJump) {
+          _diagLastPlaybackTimeMsJump = jumpMs;
+        }
+      }
+      _lastDiagPlaybackTimeUpdateMs = now;
+      _diagPlaybackTimeUpdates++;
+      _lastDiagPlaybackTimeMsValue = currentPlaybackTimeMs;
+    }
+
+    // ── [FIRST-FRAME] 问题3诊断: layout计时 ──
+    final diagLayoutSw = (kDebugMode && !_diagFirstFrameDone) ? Stopwatch() : null;
+    diagLayoutSw?.start();
+
     final items =
         engine.layout(playbackTimeMs.value / 1000.0 + timeOffsetSeconds);
+
+    diagLayoutSw?.stop();
+    if (diagLayoutSw != null) {
+      _diagFirstFrameLayoutUs = diagLayoutSw.elapsedMicroseconds;
+    }
+
     if (items.isEmpty) {
       diagPaintSw?.stop();
       return;
@@ -291,6 +391,9 @@ class DanmakuAtlasPainter extends CustomPainter {
       _clearRasterCache();
       _cacheDpr = devicePixelRatio;
       _spriteAtlas?.invalidate();
+      // [P0] DPR变更导致缓存清空，重置构建预算
+      _frameBuildBudget = 150;
+      _consecutiveNoMissFrames = 0;
     }
 
     // ── 初始化/重建精灵图集 ──
@@ -307,6 +410,55 @@ class DanmakuAtlasPainter extends CustomPainter {
           item.displayX = item.x;
         }
       }
+    }
+
+    // ── [PAUSE-RESUME] isPlaying 变化检测 ──
+    // 诊断假设: 暂停恢复后 playbackTimeMs 大跳变 → item.x 突变 → displayX 未同步
+    // → drift 瞬间超 200px → HARD_SNAP → 弹幕跳位
+    // 验证方法: 记录恢复首帧所有可见滚动弹幕的 drift 分布
+    if (isPlaying != _lastIsPlaying) {
+      if (!kReleaseMode) {
+        final deltaPtm = (playbackTimeMs.value - _lastDiagPlaybackTimeMsValue).abs();
+        debugPrint('[PAUSE-RESUME] isPlaying: $_lastIsPlaying → $isPlaying '
+            'ptm=${playbackTimeMs.value.toStringAsFixed(0)}ms '
+            'deltaPtm=${deltaPtm.toStringAsFixed(0)}ms');
+      }
+
+      if (isPlaying) {
+        // ── 恢复播放：诊断漂移 + 重置墙钟 ──
+        // 重置 _lastWallUs 防止恢复首帧 dt 包含暂停间隔
+        _lastWallUs = _wallClock.elapsedMicroseconds;
+        _smoothedDtSeconds = 0.0; // EMA 从零开始收敛
+
+        // 诊断：恢复首帧强制同步前的 drift 分布
+        _diagResumeMaxDriftBeforePx = 0;
+        _diagResumeDriftOver50Count = 0;
+        _diagResumeDriftOver200Count = 0;
+        for (final item in items) {
+          if (item.scrollSpeed > 0.0) {
+            if (item.displayX.isNaN) continue;
+            final driftBefore = (item.displayX - item.x).abs();
+            if (driftBefore > _diagResumeMaxDriftBeforePx) {
+              _diagResumeMaxDriftBeforePx = driftBefore.round();
+            }
+            if (driftBefore > 50.0) _diagResumeDriftOver50Count++;
+            if (driftBefore > 200.0) _diagResumeDriftOver200Count++;
+            // ✅ P1-NEW 修复：恢复播放时强制同步 displayX → item.x
+            // 根因：暂停恢复后 playbackTimeMs 跳变 → item.x 突变 → displayX 未同步
+            // → drift 瞬间超 200px → HARD_SNAP → 弹幕跳位
+            item.displayX = item.x;
+          }
+        }
+        if (!kReleaseMode) {
+          debugPrint('[PAUSE-RESUME] DRIFT-BEFORE-SYNC: '
+              'maxDrift=$_diagResumeMaxDriftBeforePx px '
+              'drift>50=$_diagResumeDriftOver50Count '
+              'drift>200=$_diagResumeDriftOver200Count '
+              'scrollItems=${items.where((i) => i.scrollSpeed > 0.0).length}');
+        }
+      }
+
+      _lastIsPlaying = isPlaying;
     }
 
     // ── 重置精灵计数与绘制列表 ──
@@ -333,6 +485,20 @@ class DanmakuAtlasPainter extends CustomPainter {
     _diagHardSnapCount = 0;
     _diagMaxDrift = 0.0;
 
+    // ── [DIAG-V6] V6.0 四大问题诊断计数器重置 ──
+    _diagDrift50to200Count = 0;
+    _diagDriftOver200Count = 0;
+    _diagDriftUnder50Max = 0;
+    _diagSpriteAllocCount = 0;
+    _diagRasterCacheMissCount = 0;
+    _diagRasterCacheHitCount = 0;
+    _diagSlotNewCount = 0;
+    _diagSlotHitCount = 0;
+    _diagParagraphNewCount = 0;
+    _diagEnsureAtlasUs = 0;
+    _diagDrawUs = 0;
+    _diagUncommittedFallbackCount = 0; // [P1] 未提交fallback计数重置
+
     // ── 视口矩形（用于边缘裁剪判断） ──
     final canvasRect = ui.Rect.fromLTWH(0, 0, size.width, size.height);
 
@@ -355,20 +521,30 @@ class DanmakuAtlasPainter extends CustomPainter {
           final drift = item.displayX - item.x;
           final absDrift = drift.abs();
           // [DRIFT-BUG] 漂移诊断：追踪最大漂移和校正频率
+          // [TIME-ALIGN] 问题1诊断: 追踪drift分布
           if (absDrift > _diagMaxDrift) _diagMaxDrift = absDrift;
           if (absDrift > 200.0) {
             item.displayX = item.x;
             _diagHardSnapCount++; // [DRIFT-BUG]
+            _diagDriftOver200Count++; // [TIME-ALIGN]
+            // [DRIFT-DETAIL] 记录 HARD_SNAP 瞬间的 dt 值
+            _diagHardSnapDtSeconds = dtSeconds;
+            if (rawDtSeconds > 0.020) _diagHardSnapDtAnomalyCount++;
             if (!kReleaseMode) {
               final now = DateTime.now().millisecondsSinceEpoch;
               if (now - _lastDiagSnapTimeMs >= 1000) {
-                debugPrint('[ATLAS-DIAG] HARD SNAP: drift=${drift.toStringAsFixed(1)}px');
+                debugPrint('[ATLAS-DIAG] HARD SNAP: drift=${drift.toStringAsFixed(1)}px '
+                    'dt=${dtSeconds.toStringAsFixed(4)}s rawDt=${rawDtSeconds.toStringAsFixed(4)}s '
+                    'dtAnomaly=$_diagHardSnapDtAnomalyCount');
                 _lastDiagSnapTimeMs = now;
               }
             }
           } else if (absDrift > 50.0) {
             item.displayX = item.displayX + (item.x - item.displayX) * 0.15;
             _diagDriftCorrectionCount++; // [DRIFT-BUG]
+            _diagDrift50to200Count++; // [TIME-ALIGN]
+          } else if (absDrift > _diagDriftUnder50Max) {
+            _diagDriftUnder50Max = absDrift; // [TIME-ALIGN] 追踪轻微漂移峰值
             if (!kReleaseMode) {
               diagScrollItemCount++;
               if (diagScrollItemCount % 200 == 0) {
@@ -404,6 +580,14 @@ class DanmakuAtlasPainter extends CustomPainter {
       final itemStrokeColor = _getStrokeColor(textColor: content.color);
       final int colorVal = content.color.toARGB32();
       final int strokeColorVal = itemStrokeColor.toARGB32();
+
+      // ── [P0] 首帧分帧构建: 预算耗尽时跳过构建 ──
+      // 预算限制缓存miss总数（Paragraph新构建 + rasterize miss），
+      // 缓存命中不消耗预算，确保已缓存弹幕正常渲染。
+      if (_frameBuildBudget > 0 &&
+          _diagParagraphNewCount + _diagRasterCacheMissCount >= _frameBuildBudget) {
+        continue; // 预算耗尽，本帧跳过此弹幕的Paragraph/toImageSync构建
+      }
 
       // ── 获取或构建 Paragraph（int 键） ──
       final ui.Paragraph fillP;
@@ -471,21 +655,41 @@ class DanmakuAtlasPainter extends CustomPainter {
       }
 
       // ── 光栅化：Paragraph → ui.Image ──
+      // [MEM-GC] 问题2诊断: 追踪rasterCache hit/miss
       final raster = _getOrRasterize(rasterHash, fillP, strokeP);
 
       // ── 精灵图集槽位查找/分配 ──
       var slot = _spriteAtlas!.getSlot(rasterHash);
-      // 缓存未命中：分配新槽位
-      slot ??= _spriteAtlas!.addSprite(
-        hashKey: rasterHash,
-        rasterImage: raster.image,
-        logicalW: raster.logicalWidth,
-        logicalH: raster.logicalHeight,
-      );
+      if (slot != null) {
+        _diagSlotHitCount++; // [ATLAS-REBUILD-DETAIL] slot命中计数
+      } else {
+        // 缓存未命中：分配新槽位
+        slot = _spriteAtlas!.addSprite(
+          hashKey: rasterHash,
+          rasterImage: raster.image,
+          logicalW: raster.logicalWidth,
+          logicalH: raster.logicalHeight,
+        );
+        if (slot != null) {
+          _diagSlotNewCount++; // [ATLAS-REBUILD-DETAIL] 新增slot计数
+        }
+      }
 
       if (slot == null) {
         // 图集空间不足 — 回退到直接 drawImageRect
         _diagAtlasFullItems++; // [ATLAS-DIAG-BUG2]
+        _drawFallbackImage(canvas, raster, drawX, drawY, canvasRect,
+            content.isMe, size);
+        continue;
+      }
+
+      // ── [P1] Atlas节流: 未提交slot走fallback渲染 ──
+      // Atlas重建被节流(100ms间隔)时，新分配/复用的slot图像尚未写入
+      // atlas纹理(committed=false)，直接从atlas采样会得到错误内容。
+      // 此时用 _drawFallbackImage 从独立 raster.image 绘制（与 atlas-full 路径一致，
+      // 使用 canvas.clipRect 保护，避免 Bug 5/6 Impeller 独立纹理裁剪缺陷）。
+      if (!slot.committed) {
+        _diagUncommittedFallbackCount++;
         _drawFallbackImage(canvas, raster, drawX, drawY, canvasRect,
             content.isMe, size);
         continue;
@@ -583,8 +787,25 @@ class DanmakuAtlasPainter extends CustomPainter {
         drawY: drawY,
         isMe: content.isMe,
       ));
+      _diagSpriteAllocCount++; // [MEM-GC] 问题2诊断: 追踪_SpriteDrawInfo分配数
 
       _spriteCount++;
+    }
+
+    // ── [P0] 首帧分帧构建: 预算更新 ──
+    {
+      final missCount = _diagParagraphNewCount + _diagRasterCacheMissCount;
+      if (missCount == 0) {
+        _consecutiveNoMissFrames++;
+        if (_consecutiveNoMissFrames >= 3) {
+          _frameBuildBudget = 0; // 连续3帧无miss，取消预算限制
+        }
+      } else {
+        _consecutiveNoMissFrames = 0;
+        if (_frameBuildBudget > 0 && _frameBuildBudget < 5000) {
+          _frameBuildBudget += 150; // 每帧递增预算，加速补全
+        }
+      }
     }
 
     // ── [ATLAS-DIAG-BUG2] 渲染管线瓶颈诊断输出 ──
@@ -607,7 +828,50 @@ class DanmakuAtlasPainter extends CustomPainter {
         debugPrint('[DRIFT-BUG] CORRECTIONS=$_diagDriftCorrectionCount '
             'HARD_SNAPS=$_diagHardSnapCount '
             'MAX_DRIFT=${_diagMaxDrift.toStringAsFixed(1)}px '
-            'RATE=$playbackRate dt=${dtSeconds.toStringAsFixed(4)}s');
+            'RATE=$playbackRate dt=${dtSeconds.toStringAsFixed(4)}s '
+            'lastHardSnapDt=${_diagHardSnapDtSeconds.toStringAsFixed(4)}s '
+            'dtAnomaly=$_diagHardSnapDtAnomalyCount');
+        _diagHardSnapDtAnomalyCount = 0; // 重置dt异常计数
+
+        // ══════════════════════════════════════════════════════════
+        //  [DIAG-V6] V6.0 四大问题诊断输出
+        // ══════════════════════════════════════════════════════════
+
+        // [TIME-ALIGN] 问题1: 弹幕时间对齐/回弹 — 双时间源drift分布
+        debugPrint('[TIME-ALIGN] PTM_UPDATES=$_diagPlaybackTimeUpdates/2s '
+            'PTM_INTERVAL=${_diagPlaybackTimeMinIntervalMs == 0x7FFFFFFF ? "N/A" : "${_diagPlaybackTimeMinIntervalMs}~${_diagPlaybackTimeMaxIntervalMs}ms"} '
+            'DRIFT_50_200=$_diagDrift50to200Count DRIFT_200+=$_diagDriftOver200Count '
+            'DRIFT_PEAK_UNDER50=${_diagDriftUnder50Max.toStringAsFixed(1)}px');
+        // 重置playbackTimeMs诊断计数器
+        _diagPlaybackTimeUpdates = 0;
+        _diagPlaybackTimeMaxIntervalMs = 0;
+        _diagPlaybackTimeMinIntervalMs = 0x7FFFFFFF;
+        _diagLastPlaybackTimeMsJump = 0.0;
+
+        // [MEM-GC] 问题2: 内存回收 — GC压力追踪
+        // 读取全局atlas重建计数器
+        final atlasRebuilds = globalAtlasRebuildCount;
+        _diagAtlasRebuildAccum = atlasRebuilds - _diagAtlasRebuildAccum;
+        debugPrint('[MEM-GC] SPRITE_ALLOC=$_diagSpriteAllocCount/帧 '
+            'RASTER_HIT=$_diagRasterCacheHitCount MISS=$_diagRasterCacheMissCount '
+            'RASTER_CACHE_SIZE=${_rasterCache.length}/${_rasterCacheLimit} '
+            'PCACHE_SIZE=${_pCache.length}/${_pCacheLimit} '
+            'ATLAS_REBUILD=$_diagAtlasRebuildAccum/2s EVICT=$_diagRasterEvictAccum/2s\n'
+            '  [ATLAS-DETAIL] SLOT_NEW=$_diagSlotNewCount/帧 SLOT_HIT=$_diagSlotHitCount/帧 '
+            'P_NEW=$_diagParagraphNewCount/帧 '
+            'ENSURE_ATLAS=${_diagEnsureAtlasUs}μs DRAW=${_diagDrawUs}μs '
+            'UNCOMMITTED_FB=$_diagUncommittedFallbackCount/帧 ' // [P1] 节流fallback计数
+            'LAST_REBUILD=${globalAtlasLastRebuildUs}μs($globalAtlasLastDirtySource)');
+
+        // [SEEK-PERF] 问题4: 进度条拖拽 — seek性能追踪
+        _diagSeekAtlasRebuildCount = atlasRebuilds - _diagSeekAtlasRebuildCount;
+        debugPrint('[SEEK-PERF] SLOW_PAINT_FRAMES=$_diagSeekPaintOver2msCount/2s '
+            'ATLAS_REBUILD=$_diagSeekAtlasRebuildCount/2s '
+            'MAX_PTM_JUMP=${_diagLastPlaybackTimeMsJump.toStringAsFixed(0)}ms\n'
+            '  [SEEK-DETAIL] ATLAS_TOTAL_REBUILD_US=${globalAtlasRebuildTotalUs}μs '
+            'LAST_REBUILD=${globalAtlasLastRebuildUs}μs($globalAtlasLastDirtySource)');
+        _diagSeekPaintOver2msCount = 0;
+        _diagSeekAtlasRebuildCount = atlasRebuilds; // 记住当前累计值，下次差分
       }
     }
 
@@ -616,7 +880,19 @@ class DanmakuAtlasPainter extends CustomPainter {
     // ══════════════════════════════════════════════════════════════
 
     // ── 确保图集纹理可用 ──
+    // [ATLAS-REBUILD-DETAIL] ensureAtlas 计时
+    final ensureAtlasSw = (kDebugMode && !_diagFirstFrameDone) ? Stopwatch() : null;
+    ensureAtlasSw?.start();
     final atlas = _spriteAtlas!.ensureAtlas();
+    ensureAtlasSw?.stop();
+    if (ensureAtlasSw != null) {
+      _diagEnsureAtlasUs = ensureAtlasSw.elapsedMicroseconds;
+      _diagFirstFrameEnsureAtlasUs = _diagEnsureAtlasUs;
+    }
+
+    // [ATLAS-REBUILD-DETAIL] draw阶段计时
+    final diagDrawSw = (kDebugMode && !_diagFirstFrameDone) ? Stopwatch() : null;
+    diagDrawSw?.start();
 
     // ── 1. drawImageRect 逐精灵绘制 — 从共享 atlas 纹理采样 ──
     // Bug 1 修复: 弃用 drawRawAtlas（Impeller srcOver 混合对源纹理
@@ -674,8 +950,47 @@ class DanmakuAtlasPainter extends CustomPainter {
       }
     }
 
+    // [ATLAS-REBUILD-DETAIL] draw阶段计时结束
+    diagDrawSw?.stop();
+    if (diagDrawSw != null) {
+      _diagDrawUs = diagDrawSw.elapsedMicroseconds;
+      _diagFirstFrameDrawUs = _diagDrawUs;
+    }
+
     // [ATLAS-DIAG]
     diagPaintSw?.stop();
+
+    // ── [FIRST-FRAME] 问题3诊断: 首帧paint各阶段耗时汇总 ──
+    if (!kReleaseMode && !_diagFirstFrameDone && diagPaintSw != null) {
+      _diagFirstFramePaintUs = diagPaintSw.elapsedMicroseconds;
+      _diagFirstFrameDone = true;
+      debugPrint('[FIRST-FRAME] 首帧paint总耗时: ${_diagFirstFramePaintUs}μs\n'
+          '  layout: ${_diagFirstFrameLayoutUs}μs\n'
+          '  paragraphBuild(估算): ${_diagFirstFrameParagraphBuildUs}μs\n'
+          '  toImageSync累计: ${_diagFirstFrameRasterizeUs}μs\n'
+          '  ensureAtlas: ${_diagFirstFrameEnsureAtlasUs}μs\n'
+          '  draw: ${_diagFirstFrameDrawUs}μs\n'
+          '  rasterCache大小: ${_rasterCache.length}\n'
+          '  pCache大小: ${_pCache.length}\n'
+          '  atlasSlots: ${_spriteAtlas?.slotCount ?? 0}\n'
+          '  slotNew=$_diagSlotNewCount slotHit=$_diagSlotHitCount\n'
+          '  pNew=$_diagParagraphNewCount rasterMiss=$_diagRasterCacheMissCount\n'
+          '  可见弹幕数: ${items.length} → rendered=$_spriteCount\n' // [P2] 修复: ${items.length} 替代 $items.length
+          '  budget=$_frameBuildBudget missUsed=${_diagParagraphNewCount + _diagRasterCacheMissCount}\n'
+          '  ═══════════════════════════════════════════════\n'
+          '  如果首帧>16ms(60Hz)或>8ms(120Hz)，说明需要:\n'
+          '   - 预热缓存（播放前预构建Paragraph+toImageSync）\n'
+          '   - 分帧构建（首帧只构建部分弹幕）\n'
+          '   - 异步configure（C++轨道分配不在build中同步）');
+    }
+
+    // ── [SEEK-PERF] 问题4诊断: 追踪paint耗时>2ms的帧数 ──
+    if (!kReleaseMode && diagPaintSw != null) {
+      if (diagPaintSw.elapsedMicroseconds > 2000) {
+        _diagSeekPaintOver2msCount++;
+      }
+    }
+
     if (diagPaintSw != null && diagPaintSw.elapsedMicroseconds > 2000) {
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - _lastDiagPaintTimeMs >= 2000) {
@@ -747,8 +1062,14 @@ class DanmakuAtlasPainter extends CustomPainter {
   ) {
     final cached = _rasterCache[hashKey];
     if (cached != null) {
+      _diagRasterCacheHitCount++; // [MEM-GC] 问题2诊断: rasterCache hit
       return cached; // FIFO: 不重排
     }
+    _diagRasterCacheMissCount++; // [MEM-GC] 问题2诊断: rasterCache miss
+
+    // [FIRST-FRAME] 问题3诊断: toImageSync计时
+    final diagRasterSw = (kDebugMode && !_diagFirstFrameDone) ? Stopwatch() : null;
+    diagRasterSw?.start();
 
     final logicalW = strokeP != null
         ? math.max(fillP.maxIntrinsicWidth, strokeP.maxIntrinsicWidth)
@@ -783,6 +1104,12 @@ class DanmakuAtlasPainter extends CustomPainter {
 
     final image = picture.toImageSync(pixelW, pixelH);
 
+    // [FIRST-FRAME] 问题3诊断: 累计toImageSync耗时
+    diagRasterSw?.stop();
+    if (diagRasterSw != null) {
+      _diagFirstFrameRasterizeUs += diagRasterSw.elapsedMicroseconds;
+    }
+
     final entry = _RasterEntry(
       image: image,
       logicalWidth: logicalW,
@@ -797,6 +1124,7 @@ class DanmakuAtlasPainter extends CustomPainter {
       oldest?.image.dispose();
       // 同步标记图集槽位为可复用
       _spriteAtlas?.markReusable(oldestKey);
+      _diagRasterEvictAccum++; // [MEM-GC] 问题2诊断: 淘汰计数
     }
     _rasterCache[hashKey] = entry;
     _rasterCacheOrder.add(hashKey);
@@ -967,7 +1295,18 @@ class DanmakuAtlasPainter extends CustomPainter {
     if (cached != null) {
       return cached; // FIFO: 不重排，O(1) 命中
     }
+    // [ATLAS-REBUILD-DETAIL] Paragraph新构建计数
+    _diagParagraphNewCount++;
+    final diagParagraphSw = (kDebugMode && !_diagFirstFrameDone) ? Stopwatch() : null;
+    diagParagraphSw?.start();
+
     final p = builder();
+
+    diagParagraphSw?.stop();
+    if (diagParagraphSw != null) {
+      _diagFirstFrameParagraphBuildUs += diagParagraphSw.elapsedMicroseconds;
+    }
+
     // FIFO 淘汰：满时淘汰最旧条目
     if (_pCache.length >= _pCacheLimit && _pCacheOrder.isNotEmpty) {
       final oldestKey = _pCacheOrder.removeAt(0);
