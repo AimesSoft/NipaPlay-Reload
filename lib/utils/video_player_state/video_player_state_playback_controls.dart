@@ -523,6 +523,14 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _startUiUpdateTimer();
       }
       if (!(_uiUpdateTicker?.isActive ?? false)) {
+        // ✅ P2 修复：恢复播放时重设锚点，避免 Ticker elapsed 重置导致 elapsedDeltaUs 负值
+        // Flutter Ticker stop()+start() 后 elapsed 从 0 重新开始，
+        // 但 _smoothAnchorElapsedUs 保留暂停前的值（如 5,000,000μs），
+        // 导致恢复首帧 elapsedDeltaUs = 16,667 - 5,000,000 = 负数 → smoothMs 大幅落后
+        // 修复：重设 _lastRawPlayerMs 让首帧走"重新锚定"路径（line 645+），
+        // 该路径会正确设置 _smoothAnchorMs = playerMs, _smoothAnchorElapsedUs = currentElapsedUs
+        _lastRawPlayerMs = -1;
+        _lastElapsedUs = 0; // Ticker elapsed 重置后基线也要重置
         _uiUpdateTicker!.start();
       }
     }

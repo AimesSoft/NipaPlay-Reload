@@ -513,6 +513,17 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // 重置平滑时钟锚点，下次 Ticker 回调时重新对齐
     _lastRawPlayerMs = -1;
     _anchorSetBySeek = false; // 新 Ticker 实例首帧锚点非 seek 设置
+    // [VIDEO-OPEN-PTM-DIAG] 根因2辅助：追踪 _startUiUpdateTimer 时的 playbackTimeMs 状态
+    // 假设：此时 playbackTimeMs=0（由 _resetVideoState 设置），
+    // Ticker 首帧锚定到 player.position（可能也是0），导致弹幕从头播放
+    if (!kReleaseMode) {
+      debugPrint('[VIDEO-OPEN-PTM-DIAG] _startUiUpdateTimer: '
+          'playbackTimeMs=${_playbackTimeMs.value.toStringAsFixed(1)} '
+          '_position=${_position.inMilliseconds} '
+          '_smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+          '_seekTargetMs=$_seekTargetMs '
+          '_status=$_status ← Ticker will anchor to player.position on first frame');
+    }
     // [NEXT-DIAG] 重置帧间隔基线，避免跨 Ticker 实例的假阳性
     _lastElapsedUs = 0;
     _diagBaselineFrameUs = 0;
@@ -677,10 +688,45 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               if (elapsedDeltaUs > 50000) {
                 // 锚点距今超过 50ms，说明经历了 seek/暂停等中断，
                 // 重新锚定到当前 player.position，避免插值跳变
+                // [PTM-ANCHOR-EXPIRE-DIAG] 根因1辅助诊断：追踪锚点过期重锚定
+                // 假设：暂停后恢复，锚点过期 → 直接对齐到 playerMs →
+                // 如果 playerMs < playbackTimeMs（player.position 回退），playbackTimeMs 回跳
+                if (!kReleaseMode) {
+                  final prevPtm = _playbackTimeMs.value;
+                  final anchorAgeMs = elapsedDeltaUs / 1000.0;
+                  if (playerMs < prevPtm - 1.0 && prevPtm > 100.0) {
+                    final now = DateTime.now().millisecondsSinceEpoch;
+                    if (now - _lastDiagPtmBackwardMs >= 500) {
+                      _lastDiagPtmBackwardMs = now;
+                      debugPrint('[PTM-ANCHOR-EXPIRE-DIAG] ANCHOR EXPIRE causes ptm BACKWARD: '
+                          'anchorAge=${anchorAgeMs.toStringAsFixed(1)}ms > 50ms → snap to playerMs '
+                          'prevPtm=${prevPtm.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
+                          'delta=${(playerMs - prevPtm).toStringAsFixed(1)}ms '
+                          'rate=$_playbackRate');
+                    }
+                  }
+                }
                 _smoothAnchorMs = playerMs;
                 _smoothAnchorElapsedUs = currentElapsedUs;
                 _lastRawPlayerMs = playerPosition;
-                _playbackTimeMs.value = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+                // ✅ P1 单调递增保护：锚点过期重锚定时，确保 playbackTimeMs 不回退
+                final _anchorExpireNewPtm = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
+                if (_anchorExpireNewPtm < _playbackTimeMs.value && _playbackTimeMs.value > 100.0) {
+                  // playerMs 回退 → 保持 prevPtm，锚定到 prevPtm 使后续帧正常推进
+                  _smoothAnchorMs = _playbackTimeMs.value;
+                  _playbackTimeMs.value = _playbackTimeMs.value; // hold
+                  if (!kReleaseMode) {
+                    final now = DateTime.now().millisecondsSinceEpoch;
+                    if (now - _lastDiagPtmBackwardMs >= 500) {
+                      _lastDiagPtmBackwardMs = now;
+                      debugPrint('[PTM-MONOTONICITY-DIAG] ANCHOR-EXPIRE backward prevented: '
+                          'prevPtm=${_playbackTimeMs.value.toStringAsFixed(1)} '
+                          'playerMs=${playerMs.toStringAsFixed(1)} → held at prevPtm');
+                    }
+                  }
+                } else {
+                  _playbackTimeMs.value = _anchorExpireNewPtm;
+                }
               } else if (playerPosition != _lastRawPlayerMs) {
                 // player.position 更新了：检查平滑时钟与实际位置的漂移
                 final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate;
@@ -696,20 +742,41 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   final isBackward = playerMs < prevPtm - 5.0; // playerMs 比 playbackTimeMs 小 >5ms
                   if (isBackward) {
                     // ✅ 回退保护：渐进修正而非立即对齐
-                    // 使用较快的修正系数（20%/帧），但不会导致 playbackTimeMs 回跳
+                    // ⚠️ [PTM-MONOTONICITY-DIAG] 根因1核心诊断：
+                    // 渐进修正 correctionMs = drift * 0.20 → _smoothAnchorMs = smoothMs - correctionMs
+                    // 如果 smoothMs > prevPtm（平滑时钟超前），修正后 newPtm < prevPtm → playbackTimeMs 回退！
+                    // 这违反了 playbackTimeMs 单调递增原则，导致 item.x 增大 → 弹幕回弹。
                     final correctionMs = drift * 0.20;
                     _smoothAnchorMs = smoothMs - correctionMs;
                     final correctionUsExact = correctionMs * 1000.0 / _playbackRate;
                     _smoothAnchorElapsedUs =
                         currentElapsedUs - correctionUsExact.round();
+                    // [PTM-MONOTONICITY-DIAG] 检测渐进修正是否导致 playbackTimeMs 回退
                     if (!kReleaseMode) {
-                      final now = DateTime.now().millisecondsSinceEpoch;
-                      if (now - _lastDiagDriftSnapMs >= 500) {
-                        _lastDiagDriftSnapMs = now;
+                      final newDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+                      final newPtm = (_smoothAnchorMs + newDeltaUs / 1000.0 * _playbackRate)
+                          .clamp(0.0, _duration.inMilliseconds.toDouble());
+                      if (newPtm < prevPtm - 0.5 && prevPtm > 100.0) {
+                        final now = DateTime.now().millisecondsSinceEpoch;
+                        if (now - _lastDiagPtmBackwardMs >= 200) {
+                          _lastDiagPtmBackwardMs = now;
+                          debugPrint('[PTM-MONOTONICITY-DIAG] PROGRESSIVE CORRECTION causes ptm BACKWARD: '
+                              'prevPtm=${prevPtm.toStringAsFixed(1)} → newPtm=${newPtm.toStringAsFixed(1)} '
+                              'delta=${(newPtm - prevPtm).toStringAsFixed(3)}ms '
+                              'drift=${drift.toStringAsFixed(1)}ms correction=${correctionMs.toStringAsFixed(1)}ms '
+                              'smoothMs=${smoothMs.toStringAsFixed(1)} playerMs=${playerMs.toStringAsFixed(1)} '
+                              'rate=$_playbackRate ← ROOT CAUSE: drift correction violates monotonicity');
+                        }
+                      }
+                      // 保留原有 DRIFT-SNAP-DIAG
+                      final now2 = DateTime.now().millisecondsSinceEpoch;
+                      if (now2 - _lastDiagDriftSnapMs >= 500) {
+                        _lastDiagDriftSnapMs = now2;
                         debugPrint('[DRIFT-SNAP-DIAG] BACKWARD PROTECTED: '
                             'drift=${drift.toStringAsFixed(1)}ms > 30ms BUT playerMs(${playerMs.toStringAsFixed(1)}) < ptm(${prevPtm.toStringAsFixed(1)}) '
                             '→ progressive correction 20% instead of snap '
-                            'smoothMs=${smoothMs.toStringAsFixed(1)} rate=$_playbackRate');
+                            'smoothMs=${smoothMs.toStringAsFixed(1)} rate=$_playbackRate '
+                            'ptmWillBackward=${newPtm < prevPtm ? "YES←BUG" : "no"}');
                       }
                     }
                   } else {
@@ -793,11 +860,35 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     }
                   }
                 }
-                _playbackTimeMs.value = newPtm;
+                // ✅ P1 单调递增保护：漂移修正后确保 playbackTimeMs 不回退
+                if (newPtm < _playbackTimeMs.value && _playbackTimeMs.value > 100.0) {
+                  _smoothAnchorMs = _playbackTimeMs.value;
+                  _smoothAnchorElapsedUs = currentElapsedUs;
+                  // playbackTimeMs 保持不变（hold），锚点重设到 prevPtm 使后续帧正常推进
+                  if (!kReleaseMode) {
+                    final now = DateTime.now().millisecondsSinceEpoch;
+                    if (now - _lastDiagPtmBackwardMs >= 200) {
+                      _lastDiagPtmBackwardMs = now;
+                      debugPrint('[PTM-MONOTONICITY-DIAG] DRIFT-CORRECTION backward prevented: '
+                          'prevPtm=${_playbackTimeMs.value.toStringAsFixed(1)} '
+                          'newPtm=${newPtm.toStringAsFixed(1)} → held at prevPtm, anchor reset');
+                    }
+                  }
+                } else {
+                  _playbackTimeMs.value = newPtm;
+                }
               } else {
                 // player.position 未变，正常插值推进
-                _playbackTimeMs.value = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate)
+                // ✅ P1 单调递增保护：正常插值也确保不回退
+                final _interpPtm = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * _playbackRate)
                     .clamp(0.0, _duration.inMilliseconds.toDouble());
+                if (_interpPtm < _playbackTimeMs.value && _playbackTimeMs.value > 100.0) {
+                  // 插值回退 → 重锚到 prevPtm
+                  _smoothAnchorMs = _playbackTimeMs.value;
+                  _smoothAnchorElapsedUs = currentElapsedUs;
+                } else {
+                  _playbackTimeMs.value = _interpPtm;
+                }
               }
             }
 
