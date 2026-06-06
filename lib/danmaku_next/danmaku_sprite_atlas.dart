@@ -176,12 +176,12 @@ class DanmakuSpriteAtlas {
     final pixelH = (logicalH * devicePixelRatio).ceil() + _slotPadding * 2;
 
     // Shelf-pack 分配
-    final slotRect = _allocateSlot(pixelW, pixelH);
+    var slotRect = _allocateSlot(pixelW, pixelH);
     if (slotRect == null) {
       // 图集空间不足 — 尝试紧凑化重建
       _compactAndRebuild();
-      final retryRect = _allocateSlot(pixelW, pixelH);
-      if (retryRect == null) {
+      slotRect = _allocateSlot(pixelW, pixelH);
+      if (slotRect == null) {
         return null; // 仍然不够，放弃此精灵
       }
     }
@@ -189,7 +189,7 @@ class DanmakuSpriteAtlas {
     final slot = SpriteSlot(
       // srcRect 包含 padding 偏移
       srcRect: ui.Rect.fromLTWH(
-        slotRect!.left + _slotPadding,
+        slotRect.left + _slotPadding,
         slotRect.top + _slotPadding,
         (logicalW * devicePixelRatio).ceil().toDouble(),
         (logicalH * devicePixelRatio).ceil().toDouble(),

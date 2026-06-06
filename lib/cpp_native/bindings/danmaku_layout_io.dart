@@ -219,6 +219,11 @@ class DanmakuLayoutEngine implements Finalizable {
       return const NativeResult.ok(0);
     }
 
+    // ⚠️ Bug fix: was calling npLayoutFrame (V1 path outputting NpLayoutResult),
+    // but this method's index accessors (rawItemIndex/rawTrackIndex/rawYPosition/rawScrollSpeed)
+    // read from _outputItemsPtr (NpLayoutResult buffer), so npLayoutFrame is correct here.
+    // For V2 zero-copy path with pre-computed x/offstageX/textWidth/type,
+    // use frameRawData() which calls npLayoutFrameRaw into _rawOutputPtr.
     final result = NativeBindings.npLayoutFrame(
       _handle,
       currentTime,

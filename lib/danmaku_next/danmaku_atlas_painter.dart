@@ -189,9 +189,13 @@ class DanmakuAtlasPainter extends CustomPainter {
   /// locale 预计算哈希
   late final int _localeHash = locale?.hashCode ?? 0;
 
-  /// 不变前缀组合哈希 = fontFamily + ffb + locale
+  /// shadowStyle 预计算哈希 — 不同阴影风格产生不同缓存键，
+  /// 避免切换 shadowStyle 后命中旧 Paragraph/Raster 缓存
+  late final int _shadowStyleHash = shadowStyle.index.hashCode;
+
+  /// 不变前缀组合哈希 = fontFamily + ffb + locale + shadowStyle
   late final int _keyPrefixHash =
-      _combineHashes([_fontFamilyHash, _ffbHash, _localeHash]);
+      _combineHashes([_fontFamilyHash, _ffbHash, _localeHash, _shadowStyleHash]);
 
   /// 生成整数哈希缓存键 — 替代旧版 _key() 字符串拼接
   ///
@@ -523,7 +527,13 @@ class DanmakuAtlasPainter extends CustomPainter {
           // [DRIFT-BUG] 漂移诊断：追踪最大漂移和校正频率
           // [TIME-ALIGN] 问题1诊断: 追踪drift分布
           if (absDrift > _diagMaxDrift) _diagMaxDrift = absDrift;
+          // ✅ 修复问题2：漂移校正阈值从 50px 降至 15px + 连续渐进校正
+          // 根因：playbackTimeMs 低频更新（最长444ms）+ 墙钟高频推进 →
+          // playbackTimeMs 冻结期 displayX 推进但 item.x 不变 → drift 累积负方向
+          // playbackTimeMs 更新时 item.x 跳变 → drift 瞬间反转正方向 → 弹幕左右微颤
+          // 旧阈值 50px 太高，47px 的振荡不被修正 → 视觉可见的回跳
           if (absDrift > 200.0) {
+            // 硬snap：drift > 200px（极端异常，seek/循环）
             item.displayX = item.x;
             _diagHardSnapCount++; // [DRIFT-BUG]
             _diagDriftOver200Count++; // [TIME-ALIGN]
@@ -539,10 +549,17 @@ class DanmakuAtlasPainter extends CustomPainter {
                 _lastDiagSnapTimeMs = now;
               }
             }
-          } else if (absDrift > 50.0) {
-            item.displayX = item.displayX + (item.x - item.displayX) * 0.15;
+          } else if (absDrift > 15.0) {
+            // ✅ 渐进校正：drift > 15px（原阈值 50px → 15px）
+            // 修正系数随 drift 大小自适应：15px 时 ≈8%，100px 时 ≈30%
+            // 公式：correction = 0.05 + 0.25 * (absDrift - 15) / 185
+            // 15px → 5%, 50px → 9.7%, 100px → 16.4%, 200px → 30%
+            final correctionRate = 0.05 + 0.25 * (absDrift - 15.0) / 185.0;
+            item.displayX = item.displayX + (item.x - item.displayX) * correctionRate;
             _diagDriftCorrectionCount++; // [DRIFT-BUG]
-            _diagDrift50to200Count++; // [TIME-ALIGN]
+            if (absDrift > 50.0) {
+              _diagDrift50to200Count++; // [TIME-ALIGN]
+            }
           } else if (absDrift > _diagDriftUnder50Max) {
             _diagDriftUnder50Max = absDrift; // [TIME-ALIGN] 追踪轻微漂移峰值
             if (!kReleaseMode) {

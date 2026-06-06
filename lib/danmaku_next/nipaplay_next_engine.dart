@@ -18,6 +18,9 @@ int _lastFrameLogTimeMs = 0;
 /// [NEXT-DIAG] layout 日志节流：上次输出时间（ms）
 int _lastDiagLayoutTimeMs = 0;
 
+/// [MICRO-ROLLBACK-DIAG] 根因B诊断：微回退日志节流
+int _lastDiagMicroRollbackMs = 0;
+
 /// Time-driven danmaku layout engine that keeps positions stable after seeking.
 class NipaPlayNextEngine {
   /// Unique instance identifier for log disambiguation
@@ -213,12 +216,41 @@ class NipaPlayNextEngine {
     // 仅更新 x/y 但保留旧 displayX → drift = displayX - x 巨大 → HARD_SNAP。
     // 遍历 _items 全量重置 displayX=NaN，确保所有弹幕（含未入场的）
     // 在下一帧 Painter 中走首帧初始化路径（displayX = item.x）。
+    // [MICRO-ROLLBACK-DIAG] 根因B诊断：追踪微回退（<1s）不触发检测的情况
+    final timeDelta = currentTimeSeconds - _lastLayoutTime;
     if (currentTimeSeconds < _lastLayoutTime ||
-        (currentTimeSeconds - _lastLayoutTime).abs() > 1.0) {
+        timeDelta.abs() > 1.0) {
       for (final item in _items) {
         final p = item.positionedItem;
         if (p != null) {
           p.displayX = double.nan;
+        }
+      }
+    } else if (timeDelta < 0.0 && timeDelta.abs() <= 1.0) {
+      // [MICRO-ROLLBACK-DIAG] 微回退检测：0 < |timeDelta| <= 1.0
+      // 假设：平滑时钟 .round() 舍入误差导致 playbackTimeMs 微回退
+      // → currentTimeSeconds 微回退 → x 短暂变大 → displayX 未同步 → 回弹
+      // 当前阈值 >1.0s 不覆盖微回退，需要降低阈值或在此处处理
+      if (!kReleaseMode) {
+        final rollbackMs = (timeDelta * 1000.0).abs();
+        if (rollbackMs > 1.0) { // > 1ms 的微回退才记录
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagMicroRollbackMs >= 500) {
+            _lastDiagMicroRollbackMs = now;
+            // 统计受影响的弹幕数（x 增大的滚动弹幕）
+            int affectedCount = 0;
+            for (final item in _items) {
+              final p = item.positionedItem;
+              if (p != null && p.scrollSpeed > 0.0 && !p.displayX.isNaN) {
+                affectedCount++;
+              }
+            }
+            debugPrint('[MICRO-ROLLBACK-DIAG] time rollback: '
+                '${_lastLayoutTime.toStringAsFixed(4)}s → ${currentTimeSeconds.toStringAsFixed(4)}s '
+                'rollback=${rollbackMs.toStringAsFixed(2)}ms '
+                'affectedScrollItems=$affectedCount '
+                'NOT resetting displayX (threshold >1.0s)');
+          }
         }
       }
     }
