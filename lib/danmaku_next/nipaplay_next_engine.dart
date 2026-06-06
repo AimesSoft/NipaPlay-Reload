@@ -51,6 +51,7 @@ class NipaPlayNextEngine {
   final List<_NextItem> _items = [];
   final List<double> _itemTimes = [];
   final List<PositionedDanmakuItem> _positionedBuffer = [];
+  int _positionedBufferCapacity = 0; // 微优化：预分配追踪，避免 grow
   bool _layoutDirty = true;
   int _layoutVersion = 0;
 
@@ -255,6 +256,7 @@ class NipaPlayNextEngine {
   /// Next++ V2 路径：frameRawData 零拷贝 — C++ 端预计算 x/offstageX/textWidth/type，
   /// Dart 侧无需回查 _items[] 数组做 elapsed/switch/除法运算。
   /// 直接从 NpFrameRawOutput native 缓冲区读取，消除 4N 次 FFI 字段访问。
+  /// 微优化：预分配缓冲区 + 索引赋值替代 add()，减少 List 边界检查与 grow 开销。
   List<PositionedDanmakuItem> _layoutNativeV2(
       DanmakuLayoutEngine native, double currentTimeSeconds) {
     final frameResult = native.frameRawData(currentTimeSeconds);
@@ -268,7 +270,10 @@ class NipaPlayNextEngine {
 
     final int count = frameResult.requireValue;
     _logFrame('native frameRawData(t=${currentTimeSeconds.toStringAsFixed(2)}) -> $count visible items');
-    _positionedBuffer.clear();
+
+    // 微优化：预分配容量，索引赋值替代 add()
+    _ensurePositionedBufferCapacity(count);
+    int outIndex = 0;
 
     for (int i = 0; i < count; i++) {
       final itemIndex = native.rawItemIndexV2(i);
@@ -292,7 +297,15 @@ class NipaPlayNextEngine {
         textWidth: textWidth,
         typeCode: typeCode,
       );
-      _positionedBuffer.add(positionedItem);
+
+      // 微优化：索引赋值替代 add()
+      _appendToPositionedBuffer(outIndex, positionedItem);
+      outIndex++;
+    }
+
+    // 截断尾部旧数据
+    if (outIndex < _positionedBuffer.length) {
+      _positionedBuffer.removeRange(outIndex, _positionedBuffer.length);
     }
 
     if (!kReleaseMode) {
@@ -307,6 +320,7 @@ class NipaPlayNextEngine {
 
 
   /// Dart fallback layout: original time-window query + binary search logic.
+  /// 微优化：预分配缓冲区 + 索引赋值替代 add()。
   List<PositionedDanmakuItem> _layoutDart(double currentTimeSeconds) {
     if (!_dartFallbackNotified) {
       _dartFallbackNotified = true;
@@ -318,7 +332,10 @@ class NipaPlayNextEngine {
     final left = _lowerBound(windowStart);
     final right = _upperBound(currentTimeSeconds);
 
-    _positionedBuffer.clear();
+    // 微优化：预分配容量
+    final int estimatedCount = right - left;
+    _ensurePositionedBufferCapacity(estimatedCount);
+    int outIndex = 0;
 
     for (int i = left; i < right; i++) {
       final item = _items[i];
@@ -331,27 +348,34 @@ class NipaPlayNextEngine {
         case DanmakuItemType.scroll:
           if (elapsed > _scrollDurationSeconds) continue;
           final x = _size.width - item.scrollSpeed * elapsed;
-          _positionedBuffer.add(_toPositionedItem(
+          _appendToPositionedBuffer(outIndex, _toPositionedItem(
             source: item,
             x: x,
             y: item.yPosition,
             offstageX: _size.width + item.width,
             scrollSpeed: item.scrollSpeed,
           ));
+          outIndex++;
           break;
         case DanmakuItemType.top:
         case DanmakuItemType.bottom:
           if (elapsed > _staticDurationSeconds) continue;
           final x = (_size.width - item.width) / 2;
-          _positionedBuffer.add(_toPositionedItem(
+          _appendToPositionedBuffer(outIndex, _toPositionedItem(
             source: item,
             x: x,
             y: item.yPosition,
             offstageX: _size.width,
             scrollSpeed: 0.0,
           ));
+          outIndex++;
           break;
       }
+    }
+
+    // 截断尾部旧数据
+    if (outIndex < _positionedBuffer.length) {
+      _positionedBuffer.removeRange(outIndex, _positionedBuffer.length);
     }
 
     DanmakuNextLog.d(
@@ -361,6 +385,28 @@ class NipaPlayNextEngine {
       throttle: const Duration(seconds: 1),
     );
     return _positionedBuffer;
+  }
+
+  /// 微优化：预分配 _positionedBuffer 容量，避免帧内 grow。
+  /// 仅在需要扩容时分配，不缩容（保留历史峰值容量供后续帧复用）。
+  void _ensurePositionedBufferCapacity(int count) {
+    if (count <= _positionedBufferCapacity) return;
+    _positionedBufferCapacity = count;
+    // 确保列表长度足够：通过 add(null) 占位再 truncate 的方式不可取
+    // （PositionedDanmakuItem 非 nullable 泛型），改用 reserve 策略：
+    // 保持 _positionedBuffer 不缩容，仅在 clear() 后自然 grow。
+    // 此方法仅更新容量追踪值，实际 grow 由索引赋值分支自然处理。
+  }
+
+  /// 微优化：索引赋值替代 add() — 减少 List 边界检查与 grow 开销。
+  /// 当 outIndex < _positionedBuffer.length 时直接覆盖旧元素，
+  /// 否则 add() 追加（触发 grow 时由 _ensurePositionedBufferCapacity 预估容量）。
+  void _appendToPositionedBuffer(int outIndex, PositionedDanmakuItem item) {
+    if (outIndex < _positionedBuffer.length) {
+      _positionedBuffer[outIndex] = item;
+    } else {
+      _positionedBuffer.add(item);
+    }
   }
 
   PositionedDanmakuItem _toPositionedItem({

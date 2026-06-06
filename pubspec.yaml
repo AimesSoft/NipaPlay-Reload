@@ -195,6 +195,7 @@ flutter:
   # GPU着色器文件
   shaders:
     - assets/shaders/danmaku/msdf_text.frag
+    - assets/shaders/danmaku/msdf_text_next.frag
     
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
