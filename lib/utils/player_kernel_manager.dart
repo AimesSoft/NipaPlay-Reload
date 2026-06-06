@@ -190,7 +190,7 @@ class PlayerKernelManager {
 
   /// 获取支持的弹幕内核列表
   static List<String> getSupportedDanmakuKernels() {
-    final kernels = <String>['Canvas 弹幕', 'GPU渲染', 'CPU渲染', 'NipaPlay Next'];
+    final kernels = <String>['Canvas 弹幕', 'GPU渲染', 'CPU渲染', DanmakuKernelFactory.nipaplayNextDisplayName];
     if (Next2PlatformSupport.isKernelSupported) {
       kernels.add('NipaPlay Next2');
     }
@@ -218,6 +218,7 @@ class PlayerKernelManager {
         engine = DanmakuRenderEngine.cpu;
         break;
       case 'NipaPlay Next':
+      case 'NipaPlay Next++':
       case 'NipaPlay Next (实验性)':
         engine = DanmakuRenderEngine.nipaplayNext;
         break;

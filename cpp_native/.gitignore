@@ -1,2 +1,3 @@
 build_test/
 .clangd
+*.o

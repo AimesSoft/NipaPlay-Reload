@@ -104,6 +104,27 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                       ),
                       CupertinoSettingsTile(
                         leading: Icon(
+                          CupertinoIcons.bolt,
+                          color: resolveSettingsIconColor(context),
+                        ),
+                        title: const Text('Next++ 激进优化引擎'),
+                        subtitle: const Text(
+                            '激进优化，推荐。关闭则回退至 Next 原始引擎路径'),
+                        trailing: AdaptiveSwitch(
+                          value: labsSettings.enableNextPlusPlusEngine,
+                          onChanged: (value) {
+                            labsSettings.setEnableNextPlusPlusEngine(value);
+                          },
+                        ),
+                        onTap: () {
+                          labsSettings.setEnableNextPlusPlusEngine(
+                            !labsSettings.enableNextPlusPlusEngine,
+                          );
+                        },
+                        backgroundColor: resolveSettingsTileBackground(context),
+                      ),
+                      CupertinoSettingsTile(
+                        leading: Icon(
                           CupertinoIcons.cloud,
                           color: resolveSettingsIconColor(context),
                         ),

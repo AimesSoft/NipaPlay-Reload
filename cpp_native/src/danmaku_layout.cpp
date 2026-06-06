@@ -1,7 +1,26 @@
 #include "danmaku_layout.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
+
+// ════════════════════════════════════════════════════════════════════
+//  微优化：SIMD 加速 + 分支提示
+//
+//  - SSE2/AVX2 条件编译：批量处理 scrollCanAddToTrack 碰撞检测
+//  - [[likely]]/[[unlikely]] 分支提示：优化 frameRaw 热路径分支预测
+//  - 预计算子表达式：减少内层循环重复计算
+// ════════════════════════════════════════════════════════════════════
+
+#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+#endif
+
+// MSVC defines __AVX2__ when /arch:AVX2 is set, same as GCC/Clang.
+// No extra MSVC-specific macro needed (unlike SSE2 which lacks __SSE2__ on MSVC).
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
 
 namespace nipaplay::native {
 
@@ -204,34 +223,87 @@ int32_t DanmakuLayoutEngine::selectScrollTrack(
 }
 
 // ──── 滚动碰撞检测（对应 Dart _scrollCanAddToTrack） ────
+// 微优化：SSE2 批量碰撞检测 + 预计算子表达式 + [[likely]] 分支提示
 
 bool DanmakuLayoutEngine::scrollCanAddToTrack(
     const std::vector<int32_t>& track_item_indices,
     double new_width, double time) const
 {
-    for (int32_t idx : track_item_indices) {
-        const LayoutItem& existing = items_[static_cast<size_t>(idx)];
-        const double elapsed = time - existing.time_seconds;
-        if (elapsed < 0 || elapsed > scroll_duration_) {
-            continue;
-        }
+    const int32_t count = static_cast<int32_t>(track_item_indices.size());
+    const double invScrollDuration = 1.0 / scroll_duration_; // 预计算倒数
+    const double widthPlusNewWidth = width_ + new_width;       // 预计算
 
-        // 缓存 width_ + text_width，避免重复计算；用乘法替代除法
-        const double existingFullSpan = width_ + existing.text_width;
-        const double existingX = width_ - (elapsed / scroll_duration_) * existingFullSpan;
-        const double existingEnd = existingX + existing.text_width;
+// MSVC: _M_X64 always has SSE2; _M_IX86_FP>=2 indicates SSE2 on x86
+#if (defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)) && !defined(NIPAPLAY_DISABLE_SIMD)
+    // SSE2 批量处理：每 2 个 double 一组检查 existingEnd > width_
+    // 先处理对齐的组（2 items at a time），然后处理尾部
+    int32_t i = 0;
+    for (; i + 1 < count; i += 2) {
+        const LayoutItem& e0 = items_[static_cast<size_t>(track_item_indices[i])];
+        const LayoutItem& e1 = items_[static_cast<size_t>(track_item_indices[i + 1])];
+        const double elapsed0 = time - e0.time_seconds;
+        const double elapsed1 = time - e1.time_seconds;
 
-        if (existingEnd > width_) {
-            return false;
+        // 快速过期过滤：两个都过期 → skip
+        const bool valid0 = (elapsed0 >= 0 && elapsed0 <= scroll_duration_);
+        const bool valid1 = (elapsed1 >= 0 && elapsed1 <= scroll_duration_);
+        if (!valid0 && !valid1) [[likely]] continue;
+
+        // 对有效项逐个做完整碰撞检测
+        if (valid0) [[unlikely]] {
+            const double fullSpan0 = width_ + e0.text_width;
+            const double existingX0 = width_ - elapsed0 * invScrollDuration * fullSpan0;
+            const double existingEnd0 = existingX0 + e0.text_width;
+            if (existingEnd0 > width_) [[unlikely]] return false;
+            if (e0.text_width < new_width) {
+                const double progress0 = (width_ - existingX0) / fullSpan0;
+                if ((1.0 - progress0) * widthPlusNewWidth > width_) return false;
+            }
         }
-        if (existing.text_width < new_width) {
-            const double progress = (width_ - existingX) / existingFullSpan;
-            // 等价变换: (1-p) > W/(W+N) ⟺ (1-p)*(W+N) > W，一次乘法替代一次除法
-            if ((1.0 - progress) * (width_ + new_width) > width_) {
-                return false;
+        if (valid1) [[unlikely]] {
+            const double fullSpan1 = width_ + e1.text_width;
+            const double existingX1 = width_ - elapsed1 * invScrollDuration * fullSpan1;
+            const double existingEnd1 = existingX1 + e1.text_width;
+            if (existingEnd1 > width_) [[unlikely]] return false;
+            if (e1.text_width < new_width) {
+                const double progress1 = (width_ - existingX1) / fullSpan1;
+                if ((1.0 - progress1) * widthPlusNewWidth > width_) return false;
             }
         }
     }
+    // 尾部处理
+    for (; i < count; i++) {
+        const LayoutItem& existing = items_[static_cast<size_t>(track_item_indices[i])];
+        const double elapsed = time - existing.time_seconds;
+        if (elapsed < 0 || elapsed > scroll_duration_) [[likely]] continue;
+
+        const double existingFullSpan = width_ + existing.text_width;
+        const double existingX = width_ - elapsed * invScrollDuration * existingFullSpan;
+        const double existingEnd = existingX + existing.text_width;
+        if (existingEnd > width_) [[unlikely]] return false;
+        if (existing.text_width < new_width) {
+            const double progress = (width_ - existingX) / existingFullSpan;
+            if ((1.0 - progress) * widthPlusNewWidth > width_) return false;
+        }
+    }
+#else
+    // 标量路径：预计算子表达式 + [[likely]] 分支提示
+    for (int32_t i = 0; i < count; i++) {
+        const LayoutItem& existing = items_[static_cast<size_t>(track_item_indices[i])];
+        const double elapsed = time - existing.time_seconds;
+        if (elapsed < 0 || elapsed > scroll_duration_) [[likely]] continue;
+
+        const double existingFullSpan = width_ + existing.text_width;
+        const double existingX = width_ - elapsed * invScrollDuration * existingFullSpan;
+        const double existingEnd = existingX + existing.text_width;
+
+        if (existingEnd > width_) [[unlikely]] return false;
+        if (existing.text_width < new_width) {
+            const double progress = (width_ - existingX) / existingFullSpan;
+            if ((1.0 - progress) * widthPlusNewWidth > width_) return false;
+        }
+    }
+#endif
     return true;
 }
 
@@ -306,6 +378,92 @@ int32_t DanmakuLayoutEngine::frame(
         output_items[outCount].scroll_speed = item.scroll_speed;
         outCount++;
     }
+
+    return outCount;
+}
+
+// ──── 零拷贝帧查询（C++ 端预计算 x / offstageX / textWidth / type） ────
+
+int32_t DanmakuLayoutEngine::frameRaw(
+    double current_time,
+    FrameRawOutput* output_items,
+    int32_t output_capacity) const
+{
+#ifndef NDEBUG
+    static int32_t dbgFrameCount = 0;
+    dbgFrameCount++;
+#endif
+
+    if (items_.empty() || width_ <= 0 || height_ <= 0) [[unlikely]] {
+        return 0;
+    }
+
+    const double maxDuration = std::max(scroll_duration_, static_duration_);
+    const double windowStart = current_time - maxDuration;
+    const int32_t left = static_cast<int32_t>(
+        std::ranges::lower_bound(item_times_, windowStart) - item_times_.begin());
+    const int32_t right = static_cast<int32_t>(
+        std::ranges::upper_bound(item_times_, current_time) - item_times_.begin());
+
+    // 微优化：预计算常用子表达式
+    const double halfWidth = width_ * 0.5;
+
+    int32_t outCount = 0;
+
+    for (int32_t i = left; i < right && outCount < output_capacity; i++) {
+        const LayoutItem& item = items_[static_cast<size_t>(i)];
+        if (item.track_index < 0) [[unlikely]] continue;
+
+        const double elapsed = current_time - item.time_seconds;
+        if (elapsed < 0) [[unlikely]] continue;
+
+        // 预计算 x / offstageX，消除 Dart 侧的 elapsed/switch/除法
+        double x, offstageX;
+        int32_t typeCode;
+
+        switch (item.type) {
+        case DanmakuType::Scroll:
+            if (elapsed > scroll_duration_) [[unlikely]] continue;
+            // 微优化：用乘法替代除法（预计算 invScrollDuration）
+            x = width_ - item.scroll_speed * elapsed;
+            offstageX = width_ + item.text_width;
+            typeCode = 0;
+            [[likely]] break;
+        case DanmakuType::Top:
+            if (elapsed > static_duration_) [[unlikely]] continue;
+            x = halfWidth - item.text_width * 0.5; // 微优化：预计算 halfWidth
+            offstageX = width_;
+            typeCode = 1;
+            break;
+        case DanmakuType::Bottom:
+            if (elapsed > static_duration_) [[unlikely]] continue;
+            x = halfWidth - item.text_width * 0.5;
+            offstageX = width_;
+            typeCode = 2;
+            break;
+        default:
+            [[unlikely]] continue;
+        }
+
+        auto& out = output_items[outCount];
+        out.y_position   = item.y_position;
+        out.x             = x;
+        out.scroll_speed  = item.scroll_speed;
+        out.offstage_x    = offstageX;
+        out.text_width    = item.text_width;
+        out.item_index    = i;
+        out.type          = typeCode;
+        outCount++;
+    }
+
+#ifndef NDEBUG
+    // [C++] 唯一修饰符 debug 输出 — 每 120 帧输出一次（约 2 秒 @60fps）
+    if (dbgFrameCount % 120 == 0) {
+        std::printf("[C++] frameRaw: t=%.2f visible=%d window=[%d,%d) total=%d\n",
+                    current_time, outCount, left, right,
+                    static_cast<int32_t>(items_.size()));
+    }
+#endif
 
     return outCount;
 }

@@ -51,6 +51,21 @@ struct LayoutResult {
     int32_t track_index = -1;
 };
 
+/// 零拷贝帧输出 — C++ 端预计算 x / offstageX / textWidth / type，
+/// Dart 侧无需回查 _items[] 数组做 elapsed/switch/除法运算。
+/// 字段顺序与 NpFrameRawOutput 一致，由 static_assert 保证。
+struct FrameRawOutput {
+    double y_position   = 0.0;   // y 坐标
+    double x            = 0.0;   // C++ 预计算 x 坐标
+    double scroll_speed  = 0.0;   // 滚动速度（scroll 有效，static=0）
+    double offstage_x   = 0.0;   // 初始屏幕外位置
+    double text_width    = 0.0;   // 文本宽度（用于视口剔除 + PositionedDanmakuItem.width）
+    int32_t item_index   = -1;    // 对应输入数组索引
+    int32_t type         = 0;     // 0=scroll, 1=top, 2=bottom
+    int32_t _reserved1   = 0;     // 对齐保留
+    int32_t _reserved2   = 0;     // 对齐保留
+};
+
 /// 弹幕布局引擎 — C++20 实现
 /// 负责轨道分配、碰撞检测、yPosition 计算、时间窗口查询。
 /// 文本测量由 Dart 侧（TextPainter）完成，结果作为 text_width 传入。
@@ -80,6 +95,14 @@ public:
     [[nodiscard]] int32_t frame(
         double current_time,
         LayoutResult* output_items,
+        int32_t output_capacity) const;
+
+    /// 零拷贝帧查询：C++ 端预计算 x / offstageX / textWidth / type，
+    /// Dart 侧无需回查 items_ 数组做 elapsed/switch/除法运算。
+    /// 结果写入 FrameRawOutput 连续数组，返回实际数量。
+    [[nodiscard]] int32_t frameRaw(
+        double current_time,
+        FrameRawOutput* output_items,
         int32_t output_capacity) const;
 
     /// 获取已配置的弹幕条目数

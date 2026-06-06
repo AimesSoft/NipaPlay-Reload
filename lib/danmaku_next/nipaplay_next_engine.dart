@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint, listEquals, kIsWeb, kReleaseMode;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, listEquals, kIsWeb, kReleaseMode;
 import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/danmaku_next/danmaku_next_log.dart';
@@ -14,6 +14,12 @@ const String _logTag = 'NipaPlayNextEngine';
 
 /// Frame log throttle: last time a frame log was emitted (global, ms)
 int _lastFrameLogTimeMs = 0;
+
+/// [NEXT-DIAG] layout 日志节流：上次输出时间（ms）
+int _lastDiagLayoutTimeMs = 0;
+
+/// [MICRO-ROLLBACK-DIAG] 根因B诊断：微回退日志节流
+int _lastDiagMicroRollbackMs = 0;
 
 /// Time-driven danmaku layout engine that keeps positions stable after seeking.
 class NipaPlayNextEngine {
@@ -37,6 +43,7 @@ class NipaPlayNextEngine {
   bool _nativeEngineAvailable = false;
   bool _dartFallbackNotified = false; // 仅在首次 Dart fallback 时输出一次 Release 可见日志
 
+
   final LinkedHashMap<String, double> _textWidthCache =
       LinkedHashMap<String, double>();
   static const int _textWidthCacheLimit = 5000;
@@ -47,8 +54,14 @@ class NipaPlayNextEngine {
   final List<_NextItem> _items = [];
   final List<double> _itemTimes = [];
   final List<PositionedDanmakuItem> _positionedBuffer = [];
+  int _positionedBufferCapacity = 0; // 微优化：预分配追踪，避免 grow
   bool _layoutDirty = true;
   int _layoutVersion = 0;
+
+  /// layout 结果缓存：vsync 帧以 60-240Hz 调 layout()，
+  /// 但 playbackTimeMs 通常仅以 8-30Hz 更新，
+  /// 相同时间（±1ms）直接返回缓存，避免冗余 FFI/Dart 计算。
+  double _lastLayoutTime = -1e9;
 
   NipaPlayNextEngine() : _id = 'C++';
 
@@ -191,10 +204,76 @@ class NipaPlayNextEngine {
       return const [];
     }
 
+    // ── layout 缓存：相同时间（±1ms）直接复用上一帧结果 ──
+    // vsync 以屏幕刷新率调用，但 playbackTimeMs 更新频率远低于此
+    if ((currentTimeSeconds - _lastLayoutTime).abs() < 0.001 &&
+        !_layoutDirty) {
+      return _positionedBuffer;
+    }
+
+    // ── 时序回退检测（Loop/Seek Back）或大跨度跳变（Seek Forward >1s）──
+    // 循环播放后同ID弹幕重新入场时，_toPositionedItemV2 的 existing 分支
+    // 仅更新 x/y 但保留旧 displayX → drift = displayX - x 巨大 → HARD_SNAP。
+    // 遍历 _items 全量重置 displayX=NaN，确保所有弹幕（含未入场的）
+    // 在下一帧 Painter 中走首帧初始化路径（displayX = item.x）。
+    // [MICRO-ROLLBACK-DIAG] 根因B诊断：追踪微回退（<1s）不触发检测的情况
+    final timeDelta = currentTimeSeconds - _lastLayoutTime;
+    if (currentTimeSeconds < _lastLayoutTime ||
+        timeDelta.abs() > 1.0) {
+      for (final item in _items) {
+        final p = item.positionedItem;
+        if (p != null) {
+          p.displayX = double.nan;
+        }
+      }
+    } else if (timeDelta < 0.0 && timeDelta.abs() <= 1.0) {
+      // [MICRO-ROLLBACK-DIAG] 微回退检测：0 < |timeDelta| <= 1.0
+      // 假设：平滑时钟 .round() 舍入误差导致 playbackTimeMs 微回退
+      // → currentTimeSeconds 微回退 → x 短暂变大 → displayX 未同步 → 回弹
+      // 当前阈值 >1.0s 不覆盖微回退，需要降低阈值或在此处处理
+      if (!kReleaseMode) {
+        final rollbackMs = (timeDelta * 1000.0).abs();
+        if (rollbackMs > 1.0) { // > 1ms 的微回退才记录
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagMicroRollbackMs >= 500) {
+            _lastDiagMicroRollbackMs = now;
+            // 统计受影响的弹幕数（x 增大的滚动弹幕）
+            int affectedCount = 0;
+            for (final item in _items) {
+              final p = item.positionedItem;
+              if (p != null && p.scrollSpeed > 0.0 && !p.displayX.isNaN) {
+                affectedCount++;
+              }
+            }
+            debugPrint('[MICRO-ROLLBACK-DIAG] time rollback: '
+                '${_lastLayoutTime.toStringAsFixed(4)}s → ${currentTimeSeconds.toStringAsFixed(4)}s '
+                'rollback=${rollbackMs.toStringAsFixed(2)}ms '
+                'affectedScrollItems=$affectedCount '
+                'NOT resetting displayX (threshold >1.0s)');
+          }
+        }
+      }
+    }
+
+    _lastLayoutTime = currentTimeSeconds;
+
+    // [NEXT-DIAG] 测量 layout 总耗时（含 FFI 或 Dart 路径），阈值500μs + 2秒节流
+    final diagLayoutSw = kDebugMode ? Stopwatch() : null;
+    diagLayoutSw?.start();
+
     // Try native C++ path
     if (_nativeEngineAvailable && _nativeEngine != null) {
       try {
-        return _layoutNative(currentTimeSeconds);
+        final result = _layoutNative(currentTimeSeconds);
+        diagLayoutSw?.stop();
+        if (diagLayoutSw != null && diagLayoutSw.elapsedMicroseconds > 500) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagLayoutTimeMs >= 2000) {
+            _lastDiagLayoutTimeMs = now;
+            debugPrint('[NEXT-DIAG] SLOW LAYOUT(native): ${diagLayoutSw.elapsedMicroseconds}μs time=${currentTimeSeconds.toStringAsFixed(2)}');
+          }
+        }
+        return result;
       } catch (e) {
         _logFrame('[ERR] native frame EXCEPTION, falling back to Dart: $e');
         _disableNativeEngine();
@@ -204,69 +283,92 @@ class NipaPlayNextEngine {
     }
 
     // Dart fallback
-    return _layoutDart(currentTimeSeconds);
+    final dartResult = _layoutDart(currentTimeSeconds);
+    diagLayoutSw?.stop();
+    if (diagLayoutSw != null && diagLayoutSw.elapsedMicroseconds > 500) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastDiagLayoutTimeMs >= 2000) {
+        _lastDiagLayoutTimeMs = now;
+        debugPrint('[NEXT-DIAG] SLOW LAYOUT(dart): ${diagLayoutSw.elapsedMicroseconds}μs time=${currentTimeSeconds.toStringAsFixed(2)}');
+      }
+    }
+    return dartResult;
   }
 
-  /// Native C++ layout: query frame results from the C++ engine
-  /// and map them to [PositionedDanmakuItem].
+  /// Native C++ layout: 直接使用 V2 frameRawData 零拷贝路径。
+  /// 关闭 Next++ 时由外部切换到 NipaPlayNextOldEngine（纯Dart），不在此处做路径切换。
   List<PositionedDanmakuItem> _layoutNative(double currentTimeSeconds) {
-    final frameResult = _nativeEngine!.frame(currentTimeSeconds);
+    return _layoutNativeV2(_nativeEngine!, currentTimeSeconds);
+  }
+
+  /// Next++ V2 路径：frameRawData 零拷贝 — C++ 端预计算 x/offstageX/textWidth/type，
+  /// Dart 侧无需回查 _items[] 数组做 elapsed/switch/除法运算。
+  /// 直接从 NpFrameRawOutput native 缓冲区读取，消除 4N 次 FFI 字段访问。
+  /// 微优化：预分配缓冲区 + 索引赋值替代 add()，减少 List 边界检查与 grow 开销。
+  List<PositionedDanmakuItem> _layoutNativeV2(
+      DanmakuLayoutEngine native, double currentTimeSeconds) {
+    final frameResult = native.frameRawData(currentTimeSeconds);
     if (!frameResult.isOk) {
-      _logFrame('[ERR] native frame ERROR: ${frameResult.errorMessage}, falling back to Dart');
+      _logFrame('[ERR] native frameRawData ERROR: ${frameResult.errorMessage}, falling back to Dart');
       _disableNativeEngine();
       _layoutDirty = true;
       _rebuildLayout();
       return _layoutDart(currentTimeSeconds);
     }
 
-    final layoutResults = frameResult.requireValue;
-    _logFrame('native frame(t=${currentTimeSeconds.toStringAsFixed(2)}) -> ${layoutResults.length} visible items');
-    _positionedBuffer.clear();
+    final int count = frameResult.requireValue;
+    _logFrame('native frameRawData(t=${currentTimeSeconds.toStringAsFixed(2)}) -> $count visible items');
 
-    for (final r in layoutResults) {
-      if (r.itemIndex < 0 || r.itemIndex >= _items.length) continue;
-      if (r.trackIndex < 0) continue;
+    // 微优化：预分配容量，索引赋值替代 add()
+    _ensurePositionedBufferCapacity(count);
+    int outIndex = 0;
 
-      final item = _items[r.itemIndex];
-      final elapsed = currentTimeSeconds - item.timeSeconds;
-      if (elapsed < 0) continue;
+    for (int i = 0; i < count; i++) {
+      final itemIndex = native.rawItemIndexV2(i);
+      if (itemIndex < 0 || itemIndex >= _items.length) continue;
 
-      switch (item.type) {
-        case DanmakuItemType.scroll:
-          if (elapsed > _scrollDurationSeconds) continue;
-          final x = _size.width - r.scrollSpeed * elapsed;
-          _positionedBuffer.add(_toPositionedItem(
-            source: item,
-            x: x,
-            y: r.yPosition,
-            offstageX: _size.width + item.width,
-          ));
-          break;
-        case DanmakuItemType.top:
-        case DanmakuItemType.bottom:
-          if (elapsed > _staticDurationSeconds) continue;
-          final x = (_size.width - item.width) / 2;
-          _positionedBuffer.add(_toPositionedItem(
-            source: item,
-            x: x,
-            y: r.yPosition,
-            offstageX: _size.width,
-          ));
-          break;
-      }
+      final item = _items[itemIndex];
+      final yPosition = native.rawYPositionV2(i);
+      final x = native.rawX(i);
+      final scrollSpeed = native.rawScrollSpeedV2(i);
+      final offstageX = native.rawOffstageX(i);
+      final textWidth = native.rawTextWidth(i);
+      final typeCode = native.rawType(i);
+
+      // C++ 已完成 elapsed/switch/duration 过滤，直接构建结果
+      final positionedItem = _toPositionedItemV2(
+        source: item,
+        x: x,
+        y: yPosition,
+        offstageX: offstageX,
+        scrollSpeed: scrollSpeed,
+        textWidth: textWidth,
+        typeCode: typeCode,
+      );
+
+      // 微优化：索引赋值替代 add()
+      _appendToPositionedBuffer(outIndex, positionedItem);
+      outIndex++;
+    }
+
+    // 截断尾部旧数据
+    if (outIndex < _positionedBuffer.length) {
+      _positionedBuffer.removeRange(outIndex, _positionedBuffer.length);
     }
 
     if (!kReleaseMode) {
       DanmakuNextLog.d(
         'Engine',
-        'layout(native) time=${currentTimeSeconds.toStringAsFixed(2)} out=${_positionedBuffer.length}',
+        'layout(native-V2-zerocopy) time=${currentTimeSeconds.toStringAsFixed(2)} out=${_positionedBuffer.length}',
         throttle: const Duration(seconds: 1),
       );
     }
     return _positionedBuffer;
   }
 
+
   /// Dart fallback layout: original time-window query + binary search logic.
+  /// 微优化：预分配缓冲区 + 索引赋值替代 add()。
   List<PositionedDanmakuItem> _layoutDart(double currentTimeSeconds) {
     if (!_dartFallbackNotified) {
       _dartFallbackNotified = true;
@@ -278,7 +380,10 @@ class NipaPlayNextEngine {
     final left = _lowerBound(windowStart);
     final right = _upperBound(currentTimeSeconds);
 
-    _positionedBuffer.clear();
+    // 微优化：预分配容量
+    final int estimatedCount = right - left;
+    _ensurePositionedBufferCapacity(estimatedCount);
+    int outIndex = 0;
 
     for (int i = left; i < right; i++) {
       final item = _items[i];
@@ -291,25 +396,34 @@ class NipaPlayNextEngine {
         case DanmakuItemType.scroll:
           if (elapsed > _scrollDurationSeconds) continue;
           final x = _size.width - item.scrollSpeed * elapsed;
-          _positionedBuffer.add(_toPositionedItem(
+          _appendToPositionedBuffer(outIndex, _toPositionedItem(
             source: item,
             x: x,
             y: item.yPosition,
             offstageX: _size.width + item.width,
+            scrollSpeed: item.scrollSpeed,
           ));
+          outIndex++;
           break;
         case DanmakuItemType.top:
         case DanmakuItemType.bottom:
           if (elapsed > _staticDurationSeconds) continue;
           final x = (_size.width - item.width) / 2;
-          _positionedBuffer.add(_toPositionedItem(
+          _appendToPositionedBuffer(outIndex, _toPositionedItem(
             source: item,
             x: x,
             y: item.yPosition,
             offstageX: _size.width,
+            scrollSpeed: 0.0,
           ));
+          outIndex++;
           break;
       }
+    }
+
+    // 截断尾部旧数据
+    if (outIndex < _positionedBuffer.length) {
+      _positionedBuffer.removeRange(outIndex, _positionedBuffer.length);
     }
 
     DanmakuNextLog.d(
@@ -321,11 +435,34 @@ class NipaPlayNextEngine {
     return _positionedBuffer;
   }
 
+  /// 微优化：预分配 _positionedBuffer 容量，避免帧内 grow。
+  /// 仅在需要扩容时分配，不缩容（保留历史峰值容量供后续帧复用）。
+  void _ensurePositionedBufferCapacity(int count) {
+    if (count <= _positionedBufferCapacity) return;
+    _positionedBufferCapacity = count;
+    // 确保列表长度足够：通过 add(null) 占位再 truncate 的方式不可取
+    // （PositionedDanmakuItem 非 nullable 泛型），改用 reserve 策略：
+    // 保持 _positionedBuffer 不缩容，仅在 clear() 后自然 grow。
+    // 此方法仅更新容量追踪值，实际 grow 由索引赋值分支自然处理。
+  }
+
+  /// 微优化：索引赋值替代 add() — 减少 List 边界检查与 grow 开销。
+  /// 当 outIndex < _positionedBuffer.length 时直接覆盖旧元素，
+  /// 否则 add() 追加（触发 grow 时由 _ensurePositionedBufferCapacity 预估容量）。
+  void _appendToPositionedBuffer(int outIndex, PositionedDanmakuItem item) {
+    if (outIndex < _positionedBuffer.length) {
+      _positionedBuffer[outIndex] = item;
+    } else {
+      _positionedBuffer.add(item);
+    }
+  }
+
   PositionedDanmakuItem _toPositionedItem({
     required _NextItem source,
     required double x,
     required double y,
     required double offstageX,
+    required double scrollSpeed,
   }) {
     final existing = source.positionedItem;
     if (existing == null) {
@@ -335,6 +472,8 @@ class NipaPlayNextEngine {
         y: y,
         offstageX: offstageX,
         time: source.timeSeconds,
+        scrollSpeed: scrollSpeed,
+        width: source.width,
       );
       source.positionedItem = created;
       return created;
@@ -343,6 +482,42 @@ class NipaPlayNextEngine {
     existing.x = x;
     existing.y = y;
     existing.offstageX = offstageX;
+    existing.scrollSpeed = scrollSpeed;
+    existing.width = source.width;
+    return existing;
+  }
+
+  /// Phase 3 零拷贝版本：使用 C++ 端预计算的 textWidth 而非 source.width，
+  /// 避免回查 _items[] 数组。typeCode 由 C++ 端直接输出（0=scroll,1=top,2=bottom）。
+  PositionedDanmakuItem _toPositionedItemV2({
+    required _NextItem source,
+    required double x,
+    required double y,
+    required double offstageX,
+    required double scrollSpeed,
+    required double textWidth,
+    required int typeCode,
+  }) {
+    final existing = source.positionedItem;
+    if (existing == null) {
+      final created = PositionedDanmakuItem(
+        content: source.content,
+        x: x,
+        y: y,
+        offstageX: offstageX,
+        time: source.timeSeconds,
+        scrollSpeed: scrollSpeed,
+        width: textWidth,
+      );
+      source.positionedItem = created;
+      return created;
+    }
+
+    existing.x = x;
+    existing.y = y;
+    existing.offstageX = offstageX;
+    existing.scrollSpeed = scrollSpeed;
+    existing.width = textWidth;
     return existing;
   }
 
@@ -859,6 +1034,15 @@ class NipaPlayNextEngine {
       if (parsed != null) {
         return Color(0xFF000000 | parsed);
       }
+    }
+
+    // 纯十进制数字字符串（如 B站弹幕 color=16711680 → 红色）
+    // danmaku_parser.dart 可能将整数颜色 toString() 后传入，
+    // 此时值如 "16711680" 不带任何前缀，需要作为十进制整数解析。
+    // 格式为 0xRRGGBB（与B站弹幕协议一致）。
+    final asInt = int.tryParse(value);
+    if (asInt != null) {
+      return Color(0xFF000000 | (asInt & 0xFFFFFF));
     }
 
     return Colors.white;

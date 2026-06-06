@@ -1384,37 +1384,40 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                           color: Colors.white.withValues(alpha: 0.5), width: 1)
                       : null,
                 ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  title: Text(
-                    displayName,
-                    locale: const Locale("zh-Hans", "zh"),
-                    style: TextStyle(
-                      color: isCurrentEpisode
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.87),
-                      fontSize: 14,
-                      fontWeight: isCurrentEpisode
-                          ? FontWeight.bold
-                          : FontWeight.normal,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    title: Text(
+                      displayName,
+                      locale: const Locale("zh-Hans", "zh"),
+                      style: TextStyle(
+                        color: isCurrentEpisode
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.87),
+                        fontSize: 14,
+                        fontWeight: isCurrentEpisode
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: isCurrentEpisode
+                        ? const Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 20,
+                          )
+                        : null,
+                    onTap: isCurrentEpisode
+                        ? null // 当前剧集不可点击
+                        : () => _playEpisode(filePath),
+                    enabled: !isCurrentEpisode,
                   ),
-                  trailing: isCurrentEpisode
-                      ? const Icon(
-                          Icons.play_arrow,
-                          color: Colors.white,
-                          size: 20,
-                        )
-                      : null,
-                  onTap: isCurrentEpisode
-                      ? null // 当前剧集不可点击
-                      : () => _playEpisode(filePath),
-                  enabled: !isCurrentEpisode,
                 ),
               );
             },

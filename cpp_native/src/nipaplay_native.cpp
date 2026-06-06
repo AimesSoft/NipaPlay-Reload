@@ -191,6 +191,31 @@ static_assert(offsetof(nipaplay::native::LayoutResult, track_index) ==
 static_assert(sizeof(nipaplay::native::LayoutResult) == sizeof(NpLayoutResult),
               "LayoutResult size mismatch with NpLayoutResult");
 
+// 编译期校验：FrameRawOutput 与 NpFrameRawOutput 字段布局一致，允许零拷贝直写
+static_assert(offsetof(nipaplay::native::FrameRawOutput, y_position) ==
+              offsetof(NpFrameRawOutput, y_position),
+              "FrameRawOutput::y_position offset mismatch");
+static_assert(offsetof(nipaplay::native::FrameRawOutput, x) ==
+              offsetof(NpFrameRawOutput, x),
+              "FrameRawOutput::x offset mismatch");
+static_assert(offsetof(nipaplay::native::FrameRawOutput, scroll_speed) ==
+              offsetof(NpFrameRawOutput, scroll_speed),
+              "FrameRawOutput::scroll_speed offset mismatch");
+static_assert(offsetof(nipaplay::native::FrameRawOutput, offstage_x) ==
+              offsetof(NpFrameRawOutput, offstage_x),
+              "FrameRawOutput::offstage_x offset mismatch");
+static_assert(offsetof(nipaplay::native::FrameRawOutput, text_width) ==
+              offsetof(NpFrameRawOutput, text_width),
+              "FrameRawOutput::text_width offset mismatch");
+static_assert(offsetof(nipaplay::native::FrameRawOutput, item_index) ==
+              offsetof(NpFrameRawOutput, item_index),
+              "FrameRawOutput::item_index offset mismatch");
+static_assert(offsetof(nipaplay::native::FrameRawOutput, type) ==
+              offsetof(NpFrameRawOutput, type),
+              "FrameRawOutput::type offset mismatch");
+static_assert(sizeof(nipaplay::native::FrameRawOutput) == sizeof(NpFrameRawOutput),
+              "FrameRawOutput size mismatch with NpFrameRawOutput");
+
 NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
     NpHandle handle, double current_time,
     NpLayoutResult* output_items, int32_t output_capacity,
@@ -214,6 +239,42 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame(
         // 直接写入 Dart 预分配缓冲区，消除每帧堆分配 + 逐字段拷贝
         auto* results = reinterpret_cast<nipaplay::native::LayoutResult*>(output_items);
         const int32_t count = engine->frame(current_time, results, output_capacity);
+
+        *output_count = count;
+
+        return {NP_OK, nullptr};
+    } catch (const std::bad_alloc&) {
+        return {NP_ERR_OOM, "out of memory"};
+    } catch (const std::exception& e) {
+        return {NP_ERR_INTERNAL, saveErrorMessage(e.what())};
+    } catch (...) {
+        return {NP_ERR_INTERNAL, "unknown C++ exception"};
+    }
+}
+
+NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame_raw(
+    NpHandle handle, double current_time,
+    NpFrameRawOutput* output_items, int32_t output_capacity,
+    int32_t* output_count)
+{
+    try {
+        if (!handle) [[unlikely]] {
+            return {NP_ERR_NULL_PTR, "null handle"};
+        }
+        if (!output_items || !output_count) [[unlikely]] {
+            return {NP_ERR_NULL_PTR, "null output pointer"};
+        }
+        if (output_capacity <= 0) [[unlikely]] {
+            *output_count = 0;
+            return {NP_OK, nullptr};
+        }
+
+        auto* engine = static_cast<nipaplay::native::DanmakuLayoutEngine*>(handle);
+
+        // FrameRawOutput 与 NpFrameRawOutput 布局完全一致（由 static_assert 保证），
+        // 直接写入 Dart 预分配缓冲区 — 零拷贝直写
+        auto* results = reinterpret_cast<nipaplay::native::FrameRawOutput*>(output_items);
+        const int32_t count = engine->frameRaw(current_time, results, output_capacity);
 
         *output_count = count;
 

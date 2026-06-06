@@ -57,6 +57,12 @@ class NativeBindings {
       NpResult Function(NpHandle, double,
           Pointer<NpLayoutResult>, int, Pointer<Int32>)>('np_layout_frame');
 
+  static final npLayoutFrameRaw = _dylib.lookupFunction<
+      NpResult Function(Pointer<Void>, Double,
+          Pointer<NpFrameRawOutput>, Int32, Pointer<Int32>),
+      NpResult Function(NpHandle, double,
+          Pointer<NpFrameRawOutput>, int, Pointer<Int32>)>('np_layout_frame_raw');
+
   // ──── SimilarityEngine ────
   static final npSimCheckBatch = _dylib.lookupFunction<
       NpResult Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<NpString>),

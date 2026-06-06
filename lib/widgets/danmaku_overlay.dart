@@ -5,11 +5,13 @@ import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_overlay.dart';
 import 'package:nipaplay/danmaku_gpu/lib/gpu_danmaku_config.dart';
 import 'package:danmaku_canvas/canvas_danmaku_renderer.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next_overlay.dart';
+import 'package:nipaplay/danmaku_next/nipaplay_next_old_overlay.dart';
 import 'package:nipaplay/danmaku_next/nipaplay_next2_overlay.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/danmaku_dfm/dfm_plus_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import '../danmaku_abstraction/danmaku_kernel_factory.dart';
 
 class DanmakuOverlay extends StatefulWidget {
@@ -123,22 +125,47 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
         }
 
         if (kernelType == DanmakuRenderEngine.nipaplayNext) {
-          return NipaPlayNextOverlay(
-            danmakuList: activeDanmakuList,
-            playbackTimeMs: videoState.playbackTimeMs,
-            currentTimeSeconds: widget.currentPosition / 1000,
-            fontSize: widget.fontSize,
-            isVisible: widget.isVisible,
-            opacity: widget.opacity,
-            displayArea: videoState.danmakuDisplayArea,
-            timeOffset: combinedTimeOffset,
-            scrollDurationSeconds: scrollDuration,
-            allowStacking: false,
-            mergeDanmaku: widget.isVisible && videoState.mergeDanmaku,
-            customFontFamily: videoState.danmakuFontFamily,
-            outlineStyle: videoState.danmakuOutlineStyle,
-            shadowStyle: videoState.danmakuShadowStyle,
-          );
+          final labsSettings = context.watch<LabsSettingsProvider>();
+          // Next++ ON → NipaPlayNextOverlay (C++ FFI + atlas + vsync)
+          // Next++ OFF → NipaPlayNextOldOverlay (纯Dart + TextPainter逐条 + playbackTimeMs驱动)
+          if (labsSettings.enableNextPlusPlusEngine) {
+            return NipaPlayNextOverlay(
+              danmakuList: activeDanmakuList,
+              playbackTimeMs: videoState.playbackTimeMs,
+              currentTimeSeconds: widget.currentPosition / 1000,
+              fontSize: widget.fontSize,
+              isVisible: widget.isVisible,
+              opacity: widget.opacity,
+              displayArea: videoState.danmakuDisplayArea,
+              timeOffset: combinedTimeOffset,
+              scrollDurationSeconds: scrollDuration,
+              allowStacking: false,
+              mergeDanmaku: widget.isVisible && videoState.mergeDanmaku,
+              customFontFamily: videoState.danmakuFontFamily,
+              outlineStyle: videoState.danmakuOutlineStyle,
+              shadowStyle: videoState.danmakuShadowStyle,
+              isPlaying: widget.isPlaying,
+              playbackRate: videoState.effectivePlaybackRate,
+            );
+          } else {
+            return NipaPlayNextOldOverlay(
+              danmakuList: activeDanmakuList,
+              playbackTimeMs: videoState.playbackTimeMs,
+              currentTimeSeconds: widget.currentPosition / 1000,
+              fontSize: widget.fontSize,
+              isVisible: widget.isVisible,
+              opacity: widget.opacity,
+              displayArea: videoState.danmakuDisplayArea,
+              timeOffset: combinedTimeOffset,
+              scrollDurationSeconds: scrollDuration,
+              allowStacking: false,
+              mergeDanmaku: widget.isVisible && videoState.mergeDanmaku,
+              customFontFamily: videoState.danmakuFontFamily,
+              outlineStyle: videoState.danmakuOutlineStyle,
+              shadowStyle: videoState.danmakuShadowStyle,
+              isPlaying: widget.isPlaying,
+            );
+          }
         }
 
         if (kernelType == DanmakuRenderEngine.next2 &&

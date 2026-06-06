@@ -1052,7 +1052,10 @@ class _WebDAVQuickSettingsPageState extends State<WebDAVQuickSettingsPage> {
         color: cardColor,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: child,
+      child: Material(
+        type: MaterialType.transparency,
+        child: child,
+      ),
     );
   }
 

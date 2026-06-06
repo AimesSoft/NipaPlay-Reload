@@ -560,89 +560,92 @@ class _MultiAddressManagerWidgetState extends State<MultiAddressManagerWidget> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _borderColor),
           ),
-          child: ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _sortedAddresses.length,
-            separatorBuilder: (context, index) => Divider(
-              color: _borderColor,
-              height: 1,
-            ),
-            itemBuilder: (context, index) {
-              final address = _sortedAddresses[index];
-              final isCurrent = address.id == widget.currentAddressId;
+          child: Material(
+            type: MaterialType.transparency,
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _sortedAddresses.length,
+              separatorBuilder: (context, index) => Divider(
+                color: _borderColor,
+                height: 1,
+              ),
+              itemBuilder: (context, index) {
+                final address = _sortedAddresses[index];
+                final isCurrent = address.id == widget.currentAddressId;
 
-              return ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                title: Row(
-                  children: [
-                    // 优先级标记
-                    _buildPriorityBadge(address),
-                    if (widget.addresses.length > 1) SizedBox(width: 8),
-                    Text(
-                      address.name,
-                      style: TextStyle(
-                        color: isCurrent ? Colors.green : _textColor,
-                        fontWeight:
-                            isCurrent ? FontWeight.w600 : FontWeight.normal,
+                return ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  title: Row(
+                    children: [
+                      // 优先级标记
+                      _buildPriorityBadge(address),
+                      if (widget.addresses.length > 1) SizedBox(width: 8),
+                      Text(
+                        address.name,
+                        style: TextStyle(
+                          color: isCurrent ? Colors.green : _textColor,
+                          fontWeight:
+                              isCurrent ? FontWeight.w600 : FontWeight.normal,
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 8),
-                    _buildAddressStatus(address),
-                  ],
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    address.url,
-                    style: TextStyle(
-                      color: _mutedTextColor,
-                      fontSize: 13,
+                      SizedBox(width: 8),
+                      _buildAddressStatus(address),
+                    ],
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      address.url,
+                      style: TextStyle(
+                        color: _mutedTextColor,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 优先级设置按钮
-                    if (widget.onUpdatePriority != null &&
-                        widget.addresses.length > 1)
-                      IconButton(
-                        icon: Icon(Icons.tune, color: _subTextColor),
-                        tooltip: '设置优先级',
-                        onPressed: () => _showPriorityDialog(address),
-                        style: IconButton.styleFrom(
-                          overlayColor: Colors.transparent,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 优先级设置按钮
+                      if (widget.onUpdatePriority != null &&
+                          widget.addresses.length > 1)
+                        IconButton(
+                          icon: Icon(Icons.tune, color: _subTextColor),
+                          tooltip: '设置优先级',
+                          onPressed: () => _showPriorityDialog(address),
+                          style: IconButton.styleFrom(
+                            overlayColor: Colors.transparent,
+                          ),
                         ),
-                      ),
-                    // 切换按钮
-                    if (!isCurrent && address.isEnabled)
-                      IconButton(
-                        icon: Icon(Icons.swap_horiz, color: _subTextColor),
-                        tooltip: '切换到此地址',
-                        onPressed: () => widget.onSwitchAddress(address.id),
-                        style: IconButton.styleFrom(
-                          overlayColor: Colors.transparent,
+                      // 切换按钮
+                      if (!isCurrent && address.isEnabled)
+                        IconButton(
+                          icon: Icon(Icons.swap_horiz, color: _subTextColor),
+                          tooltip: '切换到此地址',
+                          onPressed: () => widget.onSwitchAddress(address.id),
+                          style: IconButton.styleFrom(
+                            overlayColor: Colors.transparent,
+                          ),
                         ),
-                      ),
-                    // 删除按钮
-                    if (widget.addresses.length > 1)
-                      IconButton(
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: Colors.redAccent.withOpacity(0.8),
+                      // 删除按钮
+                      if (widget.addresses.length > 1)
+                        IconButton(
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: Colors.redAccent.withOpacity(0.8),
+                          ),
+                          tooltip: '删除地址',
+                          onPressed: () => _confirmRemoveAddress(address),
+                          style: IconButton.styleFrom(
+                            overlayColor: Colors.transparent,
+                          ),
                         ),
-                        tooltip: '删除地址',
-                        onPressed: () => _confirmRemoveAddress(address),
-                        style: IconButton.styleFrom(
-                          overlayColor: Colors.transparent,
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
 

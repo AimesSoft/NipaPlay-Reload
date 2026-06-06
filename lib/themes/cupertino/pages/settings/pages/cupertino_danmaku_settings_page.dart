@@ -160,7 +160,7 @@ class _CupertinoDanmakuSettingsPageState
       case DanmakuRenderEngine.canvas:
         return context.l10n.danmakuRenderEngineDescriptionCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
-        return context.l10n.danmakuRenderEngineDescriptionNipaplayNext;
+        return '${DanmakuKernelFactory.nipaplayNextDisplayName}：${context.l10n.danmakuRenderEngineDescriptionNipaplayNext.replaceAll('NipaPlay Next：', '')}';
       case DanmakuRenderEngine.next2:
         return Next2PlatformSupport.description;
       case DanmakuRenderEngine.dfmPlus:
@@ -177,7 +177,7 @@ class _CupertinoDanmakuSettingsPageState
       case DanmakuRenderEngine.canvas:
         return context.l10n.danmakuRenderEngineTitleCanvasExperimental;
       case DanmakuRenderEngine.nipaplayNext:
-        return context.l10n.danmakuRenderEngineTitleNipaplayNext;
+        return DanmakuKernelFactory.nipaplayNextDisplayName;
       case DanmakuRenderEngine.next2:
         return 'NipaPlay Next2';
       case DanmakuRenderEngine.dfmPlus:

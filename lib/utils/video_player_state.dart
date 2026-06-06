@@ -296,7 +296,14 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _smoothAnchorElapsedUs = 0; // 锚定时的 Ticker elapsed（微秒）
   int _lastRawPlayerMs = -1; // 上次 player.position 原始值，用于检测变化
   int _lastElapsedUs = 0; // 最近一次 Ticker elapsed（微秒），供 seek 时使用
+  int _lastDiagFrameSkipTimeMs = 0; // [NEXT-DIAG] FRAME SKIP 日志节流：上次输出时间（ms）
+  int _diagBaselineFrameUs = 0; // [NEXT-DIAG] 自适应帧间隔基线（取最小帧间隔）
+  int _diagFrameSampleCount = 0; // [NEXT-DIAG] 基线采样帧数
+  int _lastDiagRoundTimeMs = 0; // [DRIFT-ROUND-DIAG] 根因A诊断：round舍入误差日志节流
+  int _lastDiagPtmBackwardMs = 0; // [PTM-BACKWARD-DIAG] playbackTimeMs回退日志节流
+  int _lastDiagDriftSnapMs = 0; // [DRIFT-SNAP-DIAG] 大漂移对齐日志节流
   double? _seekTargetMs; // seek 目标位置，player.position 追上后清除
+  bool _anchorSetBySeek = false; // ✅ 标记 _smoothAnchorMs 是否由 seek/loop 操作设置（区分首帧加载 vs seek 后旧 playerMs）
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
