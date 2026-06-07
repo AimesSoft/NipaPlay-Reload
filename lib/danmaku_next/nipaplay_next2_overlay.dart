@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 import 'next2_emoji_pipeline.dart';
@@ -70,6 +69,9 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
   bool _textureReady = false;
   String _surfaceId = 'next2-default';
   double _lastDevicePixelRatio = 1.0;
+  int _lastTextureWidth = 0;
+  int _lastTextureHeight = 0;
+  String _lastTextureSurfaceId = '';
 
   /// Low-DPR screens render at 2x then downscale to fix aliasing.
   static const double _supersampleMultiplier = 2.0;
@@ -137,6 +139,11 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
         final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
+        // DPR can micro-jitter on Windows when the window loses focus.
+        // DPR only affects texture pixel size, not danmaku layout.
+        // Update the cached DPR silently — the texture path will pick up
+        // the new DPR on its own. Re-running configure here would cause
+        // visible flicker.
         if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
           _lastDevicePixelRatio = dpr;
           _queueUpdate();
@@ -233,9 +240,12 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     }
 
     final locale = Localizations.maybeLocaleOf(context);
-    final views = WidgetsBinding.instance.platformDispatcher.views;
-    final dpr =
-        views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
+
+    // Use cached DPR from build() instead of reading platformDispatcher.views
+    // directly. On Windows, DPR can micro-jitter when the window loses focus,
+    // causing pixelWidth/pixelHeight to oscillate by ±1 pixel, which triggers
+    // ensureTexture → isNewEngine → resetScene → flicker.
+    final dpr = _lastDevicePixelRatio;
 
     final needsSupersample =
         context.read<SettingsProvider>().danmakuSupersample;
@@ -248,41 +258,59 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     final int pixelHeight =
         (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
 
-    final info = await _textureBridge.ensureTexture(
-      surfaceId: _surfaceId,
-      width: pixelWidth,
-      height: pixelHeight,
-    );
+    // Only re-acquire texture if pixel size changed significantly (>=2 pixels).
+    // Windows DPR micro-jitter on focus loss can cause ±1 pixel oscillation,
+    // which would trigger a full engine rebuild → resetScene → flicker.
+    final int pwDelta = (pixelWidth - _lastTextureWidth).abs();
+    final int phDelta = (pixelHeight - _lastTextureHeight).abs();
+    bool needsNewTexture = _textureId == null ||
+        (pwDelta >= 2) ||
+        (phDelta >= 2) ||
+        _surfaceId != _lastTextureSurfaceId;
 
-    if (info == null) {
-      if (_textureReady || _textureId != null) {
+    if (needsNewTexture) {
+      _lastTextureWidth = pixelWidth;
+      _lastTextureHeight = pixelHeight;
+      _lastTextureSurfaceId = _surfaceId;
+
+      final info = await _textureBridge.ensureTexture(
+        surfaceId: _surfaceId,
+        width: pixelWidth,
+        height: pixelHeight,
+      );
+
+      if (info == null) {
+        if (_textureReady || _textureId != null) {
+          setState(() {
+            _textureReady = false;
+            _textureId = null;
+          });
+        }
+        return false;
+      }
+
+      if (!mounted) {
+        return false;
+      }
+
+      if (_textureId != info.textureId || !_textureReady) {
         setState(() {
-          _textureReady = false;
-          _textureId = null;
+          _textureId = info.textureId;
+          _textureReady = true;
         });
       }
-      return false;
+
+      if (info.isNewEngine) {
+        // Don't call resetScene() — it clears the glyph atlas, causing
+        // all characters to need re-rasterization and a visible black flash.
+        // Let the next setFrame naturally render new content.
+        _emojiPipeline.markAtlasDirty();
+      }
     }
 
-    if (!mounted) {
-      return false;
-    }
-
-    if (_textureId != info.textureId || !_textureReady) {
-      setState(() {
-        _textureId = info.textureId;
-        _textureReady = true;
-      });
-    }
-
-    if (info.isNewEngine) {
-      await _textureBridge.resetScene();
-      _emojiPipeline.markAtlasDirty();
-    }
-
-    final widthScale = info.width > 0 ? info.width / _layoutSize.width : 1.0;
+    final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
     final heightScale =
-        info.height > 0 ? info.height / _layoutSize.height : 1.0;
+        pixelHeight > 0 ? pixelHeight / _layoutSize.height : 1.0;
     final fontScale =
         ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
 

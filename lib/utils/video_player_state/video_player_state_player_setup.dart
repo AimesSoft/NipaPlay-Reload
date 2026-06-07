@@ -625,11 +625,20 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         // 更新状态
         _position = Duration(milliseconds: lastPosition);
         _progress = lastPosition / _duration.inMilliseconds;
+        // 同步高频时间轴到恢复位置。否则在 Ticker 首次回调（仅 status=playing
+        // 之后启动）之前 _playbackTimeMs.value 停留在 0，依赖该值的弹幕引擎
+        // （DFM+）会把整集弹幕渲染成 t=0 时刻的画面，直到用户手动 seek。
+        _playbackTimeMs.value = lastPosition.toDouble();
+        _smoothAnchorMs = lastPosition.toDouble();
+        _anchorSetBySeek = true;
+        _seekTargetMs = lastPosition.toDouble();
       } else {
         _position = Duration.zero;
         _progress = 0.0;
         _bufferedPositionMs = 0;
         player.seek(position: 0);
+        _playbackTimeMs.value = 0;
+        _smoothAnchorMs = 0;
       }
 
       // debugPrint('9. 检查播放器实际状态...');
