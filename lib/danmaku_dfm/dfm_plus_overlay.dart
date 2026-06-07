@@ -165,8 +165,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           // layout size change is meaningful (>= 1 logical pixel) or this
           // is the initial layout.
           if (oldSize.isEmpty ||
-              (oldSize.width - layoutSize.width).abs() >= 1.0 ||
-              (oldSize.height - layoutSize.height).abs() >= 1.0) {
+              (oldSize.width - layoutSize.width).abs() >= 2.0 ||
+              (oldSize.height - layoutSize.height).abs() >= 2.0) {
             _forceLayout = true;
           }
         }
@@ -378,8 +378,13 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         });
       }
 
+      // When isNewEngine is true, the Rust engine was recreated or resized.
+      // Do NOT call resetScene() here — it clears the glyph atlas, causing
+      // all characters to need re-rasterization (MSDF generation), which
+      // blocks the render thread and causes a visible black flash.
+      // Instead, just mark the emoji atlas dirty and let the next setFrame
+      // call naturally render new content on top of the fresh engine.
       if (info.isNewEngine) {
-        await _textureBridge.resetScene();
         _emojiPipeline.markAtlasDirty();
       }
     }

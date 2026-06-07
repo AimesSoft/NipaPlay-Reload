@@ -301,7 +301,9 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
       }
 
       if (info.isNewEngine) {
-        await _textureBridge.resetScene();
+        // Don't call resetScene() — it clears the glyph atlas, causing
+        // all characters to need re-rasterization and a visible black flash.
+        // Let the next setFrame naturally render new content.
         _emojiPipeline.markAtlasDirty();
       }
     }
