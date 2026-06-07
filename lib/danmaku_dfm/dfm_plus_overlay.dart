@@ -6,7 +6,6 @@ import 'package:nipaplay/danmaku_next/next2_overlay_viewport.dart';
 import 'package:nipaplay/danmaku_next/next2_texture_bridge.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 import 'dfm_plus_layout_bridge.dart';
@@ -158,17 +157,33 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         }
 
         if (_layoutSize != layoutSize) {
+          final oldSize = _layoutSize;
           _layoutSize = layoutSize;
-          _forceLayout = true;
           _queueUpdate();
+          // Sub-pixel jitter (e.g. Windows focus-loss) should not trigger
+          // the async configure() pipeline. Only force re-prepare when the
+          // layout size change is meaningful (>= 1 logical pixel) or this
+          // is the initial layout.
+          if (oldSize.isEmpty ||
+              (oldSize.width - layoutSize.width).abs() >= 1.0 ||
+              (oldSize.height - layoutSize.height).abs() >= 1.0) {
+            _forceLayout = true;
+          }
         }
 
         final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
+        // DPR can micro-jitter on Windows when the window loses focus or the
+        // user clicks the taskbar (didChangeMetrics fires with a slightly
+        // different value). DPR only affects the texture's pixel size, not the
+        // danmaku layout (layout uses logical pixels). So we update the cached
+        // DPR for the next texture-acquire path, but we do NOT trigger
+        // _forceLayout — the texture path will pick up the new DPR on its own
+        // and re-acquire a different-sized texture if needed. Re-running
+        // prepareLayout here would re-execute overwriteInsert and cause
+        // visible flicker.
         if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
           _lastDevicePixelRatio = dpr;
-          _forceLayout = true;
-          _queueUpdate();
         }
 
         return ValueListenableBuilder<double>(
@@ -232,16 +247,19 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           continue;
         }
 
-        final currentTime =
+        double currentTime =
             widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
 
         if (!_forceLayout && (currentTime - _lastTimeSeconds).abs() < 0.0001) {
           continue;
         }
 
-        _lastTimeSeconds = currentTime;
-
-        // If config changed, run async configure first
+        // If config changed, run async configure first. configure() takes
+        // tens to hundreds of milliseconds (Rust prepare + font load), and
+        // the player position may advance significantly during that time.
+        // The worst case: a resumed video where playbackTimeMs is briefly 0
+        // while the player is loading, then jumps to the saved position.
+        // Using the pre-configure currentTime would paint t=0 danmaku.
         if (_forceLayout || _configurePending) {
           _forceLayout = false;
           _configurePending = false;
@@ -262,6 +280,16 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
             customFontFilePath: widget.customFontFilePath,
             blockWords: widget.blockWords,
           );
+          if (!mounted) {
+            return;
+          }
+          // Re-read playback position — it may have jumped from 0 to the
+          // saved resume point while configure was running.
+          currentTime =
+              widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
+          _lastTimeSeconds = currentTime;
+        } else {
+          _lastTimeSeconds = currentTime;
         }
 
         // Synchronous layout — no await, no microtask delay

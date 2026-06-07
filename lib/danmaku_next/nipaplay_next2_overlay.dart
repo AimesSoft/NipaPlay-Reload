@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:provider/provider.dart';
 
 import 'next2_emoji_pipeline.dart';
@@ -137,9 +136,13 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
 
         final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
+        // DPR can micro-jitter on Windows when the window loses focus.
+        // DPR only affects texture pixel size, not danmaku layout.
+        // Update the cached DPR silently — the texture path will pick up
+        // the new DPR on its own. Re-running configure here would cause
+        // visible flicker.
         if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
           _lastDevicePixelRatio = dpr;
-          _queueUpdate();
         }
 
         return ValueListenableBuilder<double>(
