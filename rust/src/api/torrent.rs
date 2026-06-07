@@ -49,9 +49,6 @@ fn torrent_runtime() -> &'static TorrentRuntime {
 pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
     let normalized_dir = normalize_download_dir(download_dir)?;
     let state = torrent_runtime();
-    torrent_log(format_args!(
-        "init_session start: download_dir={normalized_dir:?}"
-    ));
     std::fs::create_dir_all(&normalized_dir)
         .map_err(|error| format!("failed to create download directory: {error}"))?;
 
@@ -65,9 +62,6 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
             .lock()
             .map_err(|_| "torrent API lock poisoned".to_string())?;
         if api_slot.is_some() {
-            torrent_log(format_args!(
-                "init_session reuse existing session: download_dir={normalized_dir:?}"
-            ));
             let mut current_dir = state
                 .download_dir
                 .lock()
@@ -116,7 +110,6 @@ pub fn torrent_init_session(download_dir: String) -> Result<(), String> {
         .map_err(|_| "torrent download directory lock poisoned".to_string())?;
     *current_dir = Some(normalized_dir);
 
-    torrent_log(format_args!("init_session success"));
     Ok(())
 }
 
@@ -298,6 +291,20 @@ pub fn torrent_add_file(
             }
         }
     })
+}
+
+pub fn torrent_preview_magnet(magnet_uri: String, download_dir: String) -> Result<String, String> {
+    let magnet_uri = magnet_uri.trim().to_string();
+    if magnet_uri.is_empty() {
+        return Err("magnet URI is empty".to_string());
+    }
+    Magnet::parse(&magnet_uri).map_err(|error| format!("invalid magnet URI: {error:#}"))?;
+
+    let normalized_dir = normalize_download_dir(download_dir)?;
+    torrent_init_session(normalized_dir)?;
+    let state = torrent_runtime();
+    let metadata = resolve_magnet_metadata_for_add(state, &magnet_uri)?;
+    torrent_preview_to_json(&metadata)
 }
 
 pub fn torrent_list(download_dir: String) -> Result<String, String> {
@@ -801,6 +808,58 @@ fn torrent_metadata_folder_name(metadata: &ListOnlyResponse) -> Option<String> {
     }
 
     largest_file.map(|(_, folder_name)| folder_name)
+}
+
+fn torrent_metadata_display_name(metadata: &ListOnlyResponse) -> Option<String> {
+    metadata.info.name.as_ref().and_then(|name| {
+        let name = String::from_utf8_lossy(name.as_slice()).trim().to_string();
+        if name.is_empty() {
+            None
+        } else {
+            Some(name)
+        }
+    })
+}
+
+fn torrent_preview_to_json(metadata: &ListOnlyResponse) -> Result<String, String> {
+    let files = metadata
+        .info
+        .iter_file_details()
+        .map_err(|error| format!("failed to list torrent files: {error:#}"))?;
+    let mut total_size = 0_u64;
+    let files_json = files
+        .enumerate()
+        .map(|(index, file)| {
+            total_size = total_size.saturating_add(file.len);
+            let path = file
+                .filename
+                .to_string()
+                .unwrap_or_else(|_| format!("file-{}", index + 1));
+            serde_json::json!({
+                "index": index,
+                "path": path,
+                "length": file.len,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let suggested_folder_name = torrent_metadata_folder_name(metadata).unwrap_or_default();
+    let name = torrent_metadata_display_name(metadata)
+        .or_else(|| {
+            if suggested_folder_name.is_empty() {
+                None
+            } else {
+                Some(suggested_folder_name.clone())
+            }
+        })
+        .unwrap_or_else(|| "未命名任务".to_string());
+
+    response_to_json(&serde_json::json!({
+        "name": name,
+        "suggested_folder_name": suggested_folder_name,
+        "total_size": total_size,
+        "files": files_json,
+    }))
 }
 
 fn url_path_segment_encode(input: &str) -> String {

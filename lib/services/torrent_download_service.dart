@@ -2,6 +2,7 @@ import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/constants/settings_keys.dart';
+import 'package:nipaplay/models/torrent_magnet_preview.dart';
 import 'package:nipaplay/models/torrent_task.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/security_bookmark_service.dart';
@@ -15,6 +16,8 @@ class TorrentDownloadService {
   TorrentDownloadService._();
 
   static final TorrentDownloadService instance = TorrentDownloadService._();
+
+  static const int _maxRecentDownloadDirectories = 8;
 
   bool _sessionInitialized = false;
   String _sessionDownloadDir = '';
@@ -42,7 +45,72 @@ class TorrentDownloadService {
       SettingsKeys.torrentDownloadDirectory,
       resolved,
     );
+    await rememberRecentDownloadDirectory(resolved);
     _sessionDownloadDir = resolved;
+  }
+
+  Future<List<String>> loadRecentDownloadDirectories() async {
+    await _migrateRecentDownloadDirectoriesIfNeeded();
+    final saved = await SettingsStorage.loadStringList(
+      SettingsKeys.torrentRecentDownloadDirectories,
+    );
+    return _normalizeRecentDirectories(saved);
+  }
+
+  Future<void> rememberRecentDownloadDirectory(String directory) async {
+    final trimmed = directory.trim();
+    if (trimmed.isEmpty) return;
+    final existing = await loadRecentDownloadDirectories();
+    final updated = <String>[
+      trimmed,
+      ...existing.where((value) => value != trimmed),
+    ].take(_maxRecentDownloadDirectories).toList(growable: false);
+    await SettingsStorage.saveStringList(
+      SettingsKeys.torrentRecentDownloadDirectories,
+      updated,
+    );
+  }
+
+  Future<void> removeRecentDownloadDirectory(String directory) async {
+    final trimmed = directory.trim();
+    if (trimmed.isEmpty) return;
+    final existing = await loadRecentDownloadDirectories();
+    final updated = existing.where((value) => value != trimmed).toList();
+    await SettingsStorage.saveStringList(
+      SettingsKeys.torrentRecentDownloadDirectories,
+      updated,
+    );
+  }
+
+  Future<void> _migrateRecentDownloadDirectoriesIfNeeded() async {
+    final migrated = await SettingsStorage.loadBool(
+      SettingsKeys.torrentRecentDownloadDirectoriesMigrated,
+    );
+    if (migrated) return;
+
+    final saved = await SettingsStorage.loadString(
+      SettingsKeys.torrentDownloadDirectory,
+    );
+    final initial = saved.trim().isEmpty ? <String>[] : <String>[saved.trim()];
+    await SettingsStorage.saveStringList(
+      SettingsKeys.torrentRecentDownloadDirectories,
+      initial,
+    );
+    await SettingsStorage.saveBool(
+      SettingsKeys.torrentRecentDownloadDirectoriesMigrated,
+      true,
+    );
+  }
+
+  List<String> _normalizeRecentDirectories(List<String> directories) {
+    final normalized = <String>[];
+    for (final directory in directories) {
+      final trimmed = directory.trim();
+      if (trimmed.isEmpty || normalized.contains(trimmed)) continue;
+      normalized.add(trimmed);
+      if (normalized.length >= _maxRecentDownloadDirectories) break;
+    }
+    return normalized;
   }
 
   Future<void> initialize() async {
@@ -69,6 +137,25 @@ class TorrentDownloadService {
     return details.files
         .where((file) => file.included && file.isVideo)
         .toList(growable: false);
+  }
+
+  Future<List<WatchHistoryItem>> listCompletedFileScanHistoryItems(
+    TorrentTask task,
+  ) async {
+    if (!task.finished) return const <WatchHistoryItem>[];
+
+    final playableFiles = await listPlayableFiles(task);
+    final historyItems = <WatchHistoryItem>[];
+    for (final file in playableFiles) {
+      final filePath = await _findCompletedFilePath(task, file);
+      if (filePath == null) continue;
+
+      final historyItem = await WatchHistoryManager.getHistoryItem(filePath);
+      if (historyItem != null) {
+        historyItems.add(historyItem);
+      }
+    }
+    return historyItems;
   }
 
   Future<String> getStreamUrl(TorrentTask task, TorrentTaskFile file) async {
@@ -105,9 +192,30 @@ class TorrentDownloadService {
     );
   }
 
-  Future<void> addMagnet(String magnetUri) async {
-    final downloadDir = await getDownloadDirectory();
-    final createFolder = await _createFolderForTask();
+  Future<TorrentMagnetPreview> previewMagnet(
+    String magnetUri, {
+    String? downloadDirectory,
+  }) async {
+    final downloadDir = await _resolveDownloadDirectoryForAction(
+      downloadDirectory,
+    );
+    await _initSession(downloadDir);
+    final jsonText = await rust_torrent.torrentPreviewMagnet(
+      magnetUri: magnetUri,
+      downloadDir: downloadDir,
+    );
+    return TorrentMagnetPreview.fromJson(jsonText);
+  }
+
+  Future<void> addMagnet(
+    String magnetUri, {
+    String? downloadDirectory,
+    bool? createFolderForTask,
+  }) async {
+    final downloadDir = await _resolveDownloadDirectoryForAction(
+      downloadDirectory,
+    );
+    final createFolder = createFolderForTask ?? await _createFolderForTask();
     _log(
       'addMagnet start: ${_summarizeMagnetForLog(magnetUri)}, '
       'downloadDir="$downloadDir", createFolderForTask=$createFolder',
@@ -127,9 +235,15 @@ class TorrentDownloadService {
     }
   }
 
-  Future<void> addTorrentFile(String torrentFilePath) async {
-    final downloadDir = await getDownloadDirectory();
-    final createFolder = await _createFolderForTask();
+  Future<void> addTorrentFile(
+    String torrentFilePath, {
+    String? downloadDirectory,
+    bool? createFolderForTask,
+  }) async {
+    final downloadDir = await _resolveDownloadDirectoryForAction(
+      downloadDirectory,
+    );
+    final createFolder = createFolderForTask ?? await _createFolderForTask();
     _log(
       'addTorrentFile start: path="$torrentFilePath", '
       'downloadDir="$downloadDir", createFolderForTask=$createFolder',
@@ -171,18 +285,20 @@ class TorrentDownloadService {
 
   Future<void> _initSession(String downloadDir) async {
     if (_sessionInitialized && _sessionDownloadDir == downloadDir) {
-      _log('initSession skipped: already initialized for "$downloadDir"');
       return;
     }
-    _log(
-      'initSession start: downloadDir="$downloadDir", '
-      'previousDir="$_sessionDownloadDir", initialized=$_sessionInitialized',
-    );
     await ensureRustInitialized();
     await rust_torrent.torrentInitSession(downloadDir: downloadDir);
     _sessionInitialized = true;
     _sessionDownloadDir = downloadDir;
-    _log('initSession success: downloadDir="$downloadDir"');
+  }
+
+  Future<String> _resolveDownloadDirectoryForAction(String? directory) async {
+    final trimmed = directory?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return getDownloadDirectory();
+    }
+    return _resolveDownloadDirectoryAccess(trimmed);
   }
 
   Future<bool> _createFolderForTask() {
@@ -283,18 +399,8 @@ class TorrentDownloadService {
     try {
       final resolved = await SecurityBookmarkService.resolveBookmark(directory);
       if (resolved != null && resolved.trim().isNotEmpty) {
-        if (resolved != directory) {
-          _log(
-            'download directory bookmark resolved: "$directory" -> "$resolved"',
-          );
-        } else {
-          _log('download directory bookmark restored: "$directory"');
-        }
         return resolved;
       }
-
-      _log(
-          'download directory has no bookmark, using path directly: "$directory"');
     } catch (error) {
       _log('download directory bookmark restore failed: "$directory", $error');
     }

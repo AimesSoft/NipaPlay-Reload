@@ -35,6 +35,12 @@ class SettingsKeys {
 
   static const String torrentDownloadDirectory = 'torrent_download_directory';
 
+  static const String torrentRecentDownloadDirectories =
+      'torrent_recent_download_directories';
+
+  static const String torrentRecentDownloadDirectoriesMigrated =
+      'torrent_recent_download_directories_migrated';
+
   static const String downloaderEnabled = 'downloader_enabled';
 
   static const String downloaderCreateFolderForTask =
