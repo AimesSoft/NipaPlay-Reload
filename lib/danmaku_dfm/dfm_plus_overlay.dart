@@ -184,6 +184,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         // visible flicker.
         if ((_lastDevicePixelRatio - dpr).abs() > 0.001) {
           _lastDevicePixelRatio = dpr;
+          // DPR change may affect pixelWidth/pixelHeight → needsNewTexture.
+          // Queue an update so the texture size is re-evaluated, but do NOT
+          // set _forceLayout (that would re-run configure/overwriteInsert).
+          _queueUpdate();
         }
 
         return ValueListenableBuilder<double>(
@@ -311,9 +315,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     }
 
     final locale = Localizations.maybeLocaleOf(context);
-    final views = WidgetsBinding.instance.platformDispatcher.views;
-    final dpr =
-        views.isNotEmpty ? views.first.devicePixelRatio : _lastDevicePixelRatio;
+
+    // Use cached DPR from build() instead of reading platformDispatcher.views
+    // directly. On Windows, DPR can micro-jitter when the window loses focus,
+    // causing pixelWidth/pixelHeight to oscillate by ±1 pixel, which triggers
+    // needsNewTexture → ensureTexture → isNewEngine → resetScene → flicker.
+    final dpr = _lastDevicePixelRatio;
 
     final needsSupersample =
         context.read<SettingsProvider>().danmakuSupersample;
@@ -327,10 +334,16 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
         (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
 
     // Optimized: only re-acquire texture if size changed (avoids redundant
-    // ensureTexture await on every frame when texture ID is already stable)
+    // ensureTexture await on every frame when texture ID is already stable).
+    // Also apply a pixel threshold: Windows DPR micro-jitter on focus loss can
+    // cause pixelWidth/pixelHeight to oscillate by ±1 pixel, which would
+    // trigger a full texture/engine rebuild (isNewEngine → resetScene → flicker).
+    // Only rebuild when the pixel size change is significant (>=2 pixels).
+    final int pwDelta = (pixelWidth - _lastTextureWidth).abs();
+    final int phDelta = (pixelHeight - _lastTextureHeight).abs();
     bool needsNewTexture = _textureId == null ||
-        pixelWidth != _lastTextureWidth ||
-        pixelHeight != _lastTextureHeight ||
+        (pwDelta >= 2) ||
+        (phDelta >= 2) ||
         _surfaceId != _lastTextureSurfaceId;
 
     if (needsNewTexture) {
