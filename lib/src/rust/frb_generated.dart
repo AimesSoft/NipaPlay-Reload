@@ -74,7 +74,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1494214116;
+  int get rustContentHash => 1429887362;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -173,6 +173,9 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiTorrentTorrentList({required String downloadDir});
 
   Future<void> crateApiTorrentTorrentPause({required int id});
+
+  Future<String> crateApiTorrentTorrentPreviewMagnet(
+      {required String magnetUri, required String downloadDir});
 
   Future<void> crateApiTorrentTorrentResume({required int id});
 
@@ -919,13 +922,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String> crateApiTorrentTorrentPreviewMagnet(
+      {required String magnetUri, required String downloadDir}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(magnetUri, serializer);
+        sse_encode_String(downloadDir, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 27, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_String,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiTorrentTorrentPreviewMagnetConstMeta,
+      argValues: [magnetUri, downloadDir],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiTorrentTorrentPreviewMagnetConstMeta =>
+      const TaskConstMeta(
+        debugName: "torrent_preview_magnet",
+        argNames: ["magnetUri", "downloadDir"],
+      );
+
+  @override
   Future<void> crateApiTorrentTorrentResume({required int id}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_i_32(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 27, port: port_);
+            funcId: 28, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -953,7 +983,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(fileId, serializer);
         sse_encode_String(filename, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 28, port: port_);
+            funcId: 29, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
