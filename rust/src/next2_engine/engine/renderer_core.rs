@@ -325,6 +325,7 @@ impl Next2Renderer {
             shadow_height,
             Some("next2 shadow mask texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            wgpu::TextureFormat::Bgra8Unorm,
         );
         let shadow_blur_texture = create_render_texture_with_usage(
             ctx.device.as_ref(),
@@ -332,14 +333,17 @@ impl Next2Renderer {
             shadow_height,
             Some("next2 shadow blur texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            wgpu::TextureFormat::Bgra8Unorm,
         );
 
+        let frame_texture_format = wgpu::TextureFormat::Bgra8Unorm;
         let frame_texture = create_render_texture_with_usage(
             ctx.device.as_ref(),
             width.max(1),
             height.max(1),
             Some("next2 frame buffer texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            frame_texture_format,
         );
 
         Ok(Self {
@@ -354,6 +358,7 @@ impl Next2Renderer {
             blur_pipeline_vertical,
             screen_pipeline,
             copy_pipeline,
+            texture_copy_pipeline: None,
             atlas_bind_group_layout,
             atlas_bind_group,
             screen_bind_group_layout,
@@ -375,6 +380,7 @@ impl Next2Renderer {
             shadow_width,
             shadow_height,
             frame_texture,
+            frame_texture_format,
             #[cfg(target_os = "android")]
             surface_format: None,
             #[cfg(target_os = "android")]
@@ -393,6 +399,7 @@ impl Next2Renderer {
             self.shadow_height,
             Some("next2 shadow mask texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            wgpu::TextureFormat::Bgra8Unorm,
         );
         self.shadow_blur_texture = create_render_texture_with_usage(
             self.ctx.device.as_ref(),
@@ -400,6 +407,7 @@ impl Next2Renderer {
             self.shadow_height,
             Some("next2 shadow blur texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            wgpu::TextureFormat::Bgra8Unorm,
         );
         self.frame_texture = create_render_texture_with_usage(
             self.ctx.device.as_ref(),
@@ -407,6 +415,7 @@ impl Next2Renderer {
             self.height,
             Some("next2 frame buffer texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            self.frame_texture_format,
         );
         true
     }
@@ -544,7 +553,7 @@ impl Next2Renderer {
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 let glyph_pipeline = self.surface_pipeline.as_ref().unwrap().clone();
                 let screen_pipeline = self.surface_screen_pipeline.as_ref().unwrap().clone();
-                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
+                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline, surface_format);
                 frame.present();
             }
             PresentTarget::Texture(texture_target) => {
@@ -584,7 +593,7 @@ impl Next2Renderer {
                         ..Default::default()
                     },
                 );
-                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline);
+                self.draw_to_view(&view, &glyph_pipeline, &screen_pipeline, target_format);
             }
         }
     }

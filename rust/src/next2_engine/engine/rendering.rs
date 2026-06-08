@@ -806,12 +806,15 @@ struct Next2Renderer {
     blur_pipeline_horizontal: wgpu::RenderPipeline,
     blur_pipeline_vertical: wgpu::RenderPipeline,
     screen_pipeline: wgpu::RenderPipeline,
-    /// Copy pipeline: identical to screen_pipeline but with NO blending.
+    /// Copy pipeline for Bgra8Unorm: identical to screen_pipeline but with NO blending.
     /// Used for the final atomic blit from offscreen frame_texture to the
     /// shared DXGI texture.  Without blending, every pixel is overwritten
     /// (transparent source pixels → zero/cleared), preventing "ghost"
     /// danmaku from lingering on target_view when using LoadOp::Load.
     copy_pipeline: wgpu::RenderPipeline,
+    /// Copy pipeline for non-Bgra8Unorm target formats (e.g. Rgba8Unorm on Android).
+    /// Lazily created when a non-Bgra8Unorm target is encountered.
+    texture_copy_pipeline: Option<wgpu::RenderPipeline>,
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: wgpu::BindGroup,
     screen_bind_group_layout: wgpu::BindGroupLayout,
@@ -837,6 +840,10 @@ struct Next2Renderer {
     /// shared texture (target_view).  This prevents Flutter's compositor
     /// from reading a partially-rendered frame via ALLOW_SIMULTANEOUS_ACCESS.
     frame_texture: wgpu::Texture,
+    /// The texture format of frame_texture.  Must match the target_format
+    /// passed to draw_to_view so that pipeline color target formats align
+    /// with the attachment view format (required by wgpu validation).
+    frame_texture_format: wgpu::TextureFormat,
     #[cfg(target_os = "android")]
     surface_format: Option<wgpu::TextureFormat>,
     #[cfg(target_os = "android")]
