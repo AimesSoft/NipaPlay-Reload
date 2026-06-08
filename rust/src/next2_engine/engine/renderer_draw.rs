@@ -4,7 +4,23 @@ impl Next2Renderer {
         target_view: &wgpu::TextureView,
         glyph_pipeline: &wgpu::RenderPipeline,
         screen_pipeline: &wgpu::RenderPipeline,
+        target_format: wgpu::TextureFormat,
     ) {
+        // Ensure frame_texture format matches target_format so that pipeline
+        // color target formats align with the attachment view format (required
+        // by wgpu validation).  Recreate if format changed (e.g. Bgra8Unorm on
+        // Windows/macOS vs Rgba8Unorm on Android).
+        if self.frame_texture_format != target_format {
+            self.frame_texture = create_render_texture_with_usage(
+                self.ctx.device.as_ref(),
+                self.width,
+                self.height,
+                Some("next2 frame buffer texture"),
+                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                target_format,
+            );
+            self.frame_texture_format = target_format;
+        }
         if self.shadow_mask_texture.size().width != self.shadow_width
             || self.shadow_mask_texture.size().height != self.shadow_height
             || self.shadow_blur_texture.size().width != self.shadow_width
@@ -27,6 +43,16 @@ impl Next2Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("next2 frame render encoder"),
             });
+
+        // ── Phase 1: render the complete frame into frame_texture (offscreen) ──
+        // frame_texture is a private texture that Flutter cannot read, so
+        // intermediate states (e.g. shadow-only before glyphs are drawn) are
+        // invisible to the compositor.  This eliminates the flickering caused
+        // by ALLOW_SIMULTANEOUS_ACCESS on the shared DXGI texture.
+
+        let frame_view = self
+            .frame_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         if !self.shadow_vertices.is_empty() {
             let shadow_mask_view = self
@@ -107,7 +133,7 @@ impl Next2Renderer {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("next2 shadow composite pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: target_view,
+                        view: &frame_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -129,42 +155,34 @@ impl Next2Renderer {
                 pass.set_bind_group(0, &blur_bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
-        } else {
-            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("next2 inline target clear pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.clear_color[0],
-                            g: self.clear_color[1],
-                            b: self.clear_color[2],
-                            a: self.clear_color[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
         }
 
+        // Main glyph pass — renders into frame_texture (offscreen).
+        // With shadow: Load the shadow layer already in frame_texture.
+        // Without shadow: Clear frame_texture and draw glyphs.
         let main_bytes = bytemuck::cast_slice(self.vertices.as_slice());
         self.ctx
             .queue
             .write_buffer(&self.vertex_buffer, 0, main_bytes);
         {
+            let has_shadow = !self.shadow_vertices.is_empty();
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("next2 main glyph pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target_view,
+                    view: &frame_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: if has_shadow {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(wgpu::Color {
+                                r: self.clear_color[0],
+                                g: self.clear_color[1],
+                                b: self.clear_color[2],
+                                a: self.clear_color[3],
+                            })
+                        },
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -179,7 +197,119 @@ impl Next2Renderer {
             pass.draw(0..self.vertices.len() as u32, 0..1);
         }
 
+        // ── Phase 2: atomic blit from frame_texture → target_view ──
+        // This is the ONLY render pass that touches the shared DXGI texture.
+        // A single draw call makes the window where ALLOW_SIMULTANEOUS_ACCESS
+        // could expose an intermediate state negligibly short.
+        {
+            let frame_blit_bg = self
+                .ctx
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("next2 frame blit bg"),
+                    layout: &self.screen_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&frame_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.screen_sampler),
+                        },
+                    ],
+                });
+
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("next2 frame blit pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // Use LoadOp::Load (not Clear) on the shared DXGI texture.
+                        // With ALLOW_SIMULTANEOUS_ACCESS, Flutter may read the texture
+                        // between render-pass start and our single draw call.  Load
+                        // preserves the previous complete frame during that gap;
+                        // Clear would expose a blank/invisible instant.
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            pass.set_pipeline(if target_format == wgpu::TextureFormat::Bgra8Unorm {
+                &self.copy_pipeline
+            } else {
+                if self.texture_copy_pipeline.is_none() {
+                    self.texture_copy_pipeline = Some(Self::create_copy_pipeline(
+                        self.ctx.device.as_ref(),
+                        &self.screen_bind_group_layout,
+                        target_format,
+                    ));
+                }
+                self.texture_copy_pipeline.as_ref().unwrap()
+            });
+            pass.set_bind_group(0, &frame_blit_bg, &[]);
+            pass.draw(0..3, 0..1);
+        }
+
         self.ctx.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Create a copy pipeline for the given target format.
+    /// Same shader as screen_pipeline but with NO blending — every pixel
+    /// from source overwrites destination (including transparent → zero).
+    fn create_copy_pipeline(
+        device: &wgpu::Device,
+        screen_bind_group_layout: &wgpu::BindGroupLayout,
+        target_format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("next2 copy shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(NEXT2_SCREEN_COPY_WGSL)),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("next2 copy pipeline layout"),
+            bind_group_layouts: &[screen_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("next2 copy pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+            cache: None,
+        })
     }
 
     fn blit_screen_texture(
@@ -603,6 +733,7 @@ fn create_render_texture_with_usage(
     height: u32,
     label: Option<&'static str>,
     usage: wgpu::TextureUsages,
+    format: wgpu::TextureFormat,
 ) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label,
@@ -614,7 +745,7 @@ fn create_render_texture_with_usage(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Bgra8Unorm,
+        format,
         usage,
         view_formats: &[],
     })
