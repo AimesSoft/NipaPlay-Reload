@@ -240,6 +240,54 @@ impl Next2Renderer {
             "next2 shadow composite pipeline",
         );
 
+        // Copy pipeline — same shader as screen_pipeline but NO blending.
+        // Every pixel from source overwrites destination (including
+        // transparent → zero), which is essential for the final blit
+        // from offscreen frame_texture to the shared DXGI texture when
+        // using LoadOp::Load to avoid flicker.
+        let copy_shader = ctx.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("next2 copy shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(NEXT2_SCREEN_COPY_WGSL)),
+        });
+        let copy_pipeline_layout = ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("next2 copy pipeline layout"),
+            bind_group_layouts: &[&screen_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+        let copy_pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("next2 copy pipeline"),
+            layout: Some(&copy_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &copy_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &copy_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    blend: None,  // ← NO blending — overwrite every pixel
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview: None,
+            cache: None,
+        });
+
         let screen_sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("next2 screen sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -286,6 +334,14 @@ impl Next2Renderer {
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         );
 
+        let frame_texture = create_render_texture_with_usage(
+            ctx.device.as_ref(),
+            width.max(1),
+            height.max(1),
+            Some("next2 frame buffer texture"),
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+
         Ok(Self {
             ctx,
             #[cfg(target_os = "android")]
@@ -297,6 +353,7 @@ impl Next2Renderer {
             blur_pipeline_horizontal,
             blur_pipeline_vertical,
             screen_pipeline,
+            copy_pipeline,
             atlas_bind_group_layout,
             atlas_bind_group,
             screen_bind_group_layout,
@@ -317,6 +374,7 @@ impl Next2Renderer {
             shadow_blur_texture,
             shadow_width,
             shadow_height,
+            frame_texture,
             #[cfg(target_os = "android")]
             surface_format: None,
             #[cfg(target_os = "android")]
@@ -341,6 +399,13 @@ impl Next2Renderer {
             self.shadow_width,
             self.shadow_height,
             Some("next2 shadow blur texture"),
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        self.frame_texture = create_render_texture_with_usage(
+            self.ctx.device.as_ref(),
+            self.width,
+            self.height,
+            Some("next2 frame buffer texture"),
             wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         );
         true

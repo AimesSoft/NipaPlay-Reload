@@ -28,6 +28,16 @@ impl Next2Renderer {
                 label: Some("next2 frame render encoder"),
             });
 
+        // ── Phase 1: render the complete frame into frame_texture (offscreen) ──
+        // frame_texture is a private texture that Flutter cannot read, so
+        // intermediate states (e.g. shadow-only before glyphs are drawn) are
+        // invisible to the compositor.  This eliminates the flickering caused
+        // by ALLOW_SIMULTANEOUS_ACCESS on the shared DXGI texture.
+
+        let frame_view = self
+            .frame_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
         if !self.shadow_vertices.is_empty() {
             let shadow_mask_view = self
                 .shadow_mask_texture
@@ -107,7 +117,7 @@ impl Next2Renderer {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("next2 shadow composite pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: target_view,
+                        view: &frame_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -129,42 +139,34 @@ impl Next2Renderer {
                 pass.set_bind_group(0, &blur_bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
-        } else {
-            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("next2 inline target clear pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.clear_color[0],
-                            g: self.clear_color[1],
-                            b: self.clear_color[2],
-                            a: self.clear_color[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
         }
 
+        // Main glyph pass — renders into frame_texture (offscreen).
+        // With shadow: Load the shadow layer already in frame_texture.
+        // Without shadow: Clear frame_texture and draw glyphs.
         let main_bytes = bytemuck::cast_slice(self.vertices.as_slice());
         self.ctx
             .queue
             .write_buffer(&self.vertex_buffer, 0, main_bytes);
         {
+            let has_shadow = !self.shadow_vertices.is_empty();
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("next2 main glyph pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target_view,
+                    view: &frame_view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: if has_shadow {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(wgpu::Color {
+                                r: self.clear_color[0],
+                                g: self.clear_color[1],
+                                b: self.clear_color[2],
+                                a: self.clear_color[3],
+                            })
+                        },
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -177,6 +179,55 @@ impl Next2Renderer {
             pass.set_bind_group(0, &self.atlas_bind_group, &[]);
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             pass.draw(0..self.vertices.len() as u32, 0..1);
+        }
+
+        // ── Phase 2: atomic blit from frame_texture → target_view ──
+        // This is the ONLY render pass that touches the shared DXGI texture.
+        // A single draw call makes the window where ALLOW_SIMULTANEOUS_ACCESS
+        // could expose an intermediate state negligibly short.
+        {
+            let frame_blit_bg = self
+                .ctx
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("next2 frame blit bg"),
+                    layout: &self.screen_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&frame_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.screen_sampler),
+                        },
+                    ],
+                });
+
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("next2 frame blit pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // Use LoadOp::Load (not Clear) on the shared DXGI texture.
+                        // With ALLOW_SIMULTANEOUS_ACCESS, Flutter may read the texture
+                        // between render-pass start and our single draw call.  Load
+                        // preserves the previous complete frame during that gap;
+                        // Clear would expose a blank/invisible instant.
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            pass.set_pipeline(&self.copy_pipeline);
+            pass.set_bind_group(0, &frame_blit_bg, &[]);
+            pass.draw(0..3, 0..1);
         }
 
         self.ctx.queue.submit(std::iter::once(encoder.finish()));
