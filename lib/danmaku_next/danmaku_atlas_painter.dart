@@ -68,6 +68,7 @@ int _diagResumeDriftOver200Count = 0;  // 恢复首帧drift>200px的弹幕数
 
 /// 渲染管线瓶颈计数器
 int _lastDiagBottleneckTimeMs = 0;
+int _lastDiagDprShrinkTimeMs = 0;
 int _diagLayoutItems = 0;
 int _diagCulledItems = 0;
 int _diagAtlasFullItems = 0;
@@ -1421,17 +1422,22 @@ class DanmakuAtlasPainter extends CustomPainter {
     final rRecorder = ui.PictureRecorder();
     final rCanvas = Canvas(rRecorder);
 
-    // ── 透明背景清除（Impeller toImageSync 纹理未初始化修复） ──
-    // ⚠️ [ATLAS-DIAG-BUG1] 根因诊断：
-    // 之前的修复使用 BlendMode.src + Color(0x00000000)，但 Impeller 可能将
-    // "写入 alpha=0 的像素"优化为 no-op（对最终画面无贡献），导致 toImageSync
-    // 生成的纹理中未被 drawParagraph 覆盖的区域仍包含未初始化的白色 GPU 内存。
-    // 现改用 BlendMode.clear — 其语义是"丢弃目标颜色，写入全透明"，
-    // 在 GPU 上对应 glClear/vkClearAttachment，不会被 no-op 优化掉。
+    // ── [DPR-SHRINK-BUG] 关键修复：Canvas.scale(DPR) ──
+    // PictureRecorder 的 Canvas 是虚拟画布，toImageSync(width, height) 以 1:1
+    // 像素映射渲染 Picture 内容（不自动缩放）。如果不 scale(DPR)，Paragraph 在
+    // 逻辑坐标空间排版（如 200×20），toImageSync(pixelW, pixelH) 中 Paragraph
+    // 只占图像左上角 200×20 像素（而非 500×50 = 200*2.5×20*2.5），导致
+    // drawImageRect 将整个图像（含大面积空白）映射到 dstRect 时弹幕缩小为 1/DPR。
+    // scale(DPR) 后，Paragraph 绘制在 (0,0)-(pixelW,pixelH) 像素区域，占满图像。
     final pixelW = (logicalW * devicePixelRatio).ceil().clamp(1, 4096);
     final pixelH = (logicalH * devicePixelRatio).ceil().clamp(1, 4096);
+    rCanvas.scale(devicePixelRatio, devicePixelRatio);
+
+    // ── 透明背景清除（Impeller toImageSync 纹理未初始化修复） ──
+    // clearRect 使用逻辑坐标（scale(DPR) 后自动覆盖 pixelW×pixelH 像素区域）。
+    // BlendMode.clear 语义为"丢弃目标颜色，写入全透明"，不会被 Impeller no-op 优化。
     rCanvas.drawRect(
-      ui.Rect.fromLTWH(0, 0, pixelW.toDouble(), pixelH.toDouble()),
+      ui.Rect.fromLTWH(0, 0, logicalW, logicalH),
       ui.Paint()..blendMode = ui.BlendMode.clear,
     );
 
@@ -1443,6 +1449,23 @@ class DanmakuAtlasPainter extends CustomPainter {
     final picture = rRecorder.endRecording();
 
     final image = picture.toImageSync(pixelW, pixelH);
+
+    // [DPR-SHRINK-DIAG] 诊断：验证 toImageSync 是否自动缩放 Picture 内容
+    // 关键指标：image.width/height 应该 = pixelW/pixelH
+    // 如果 toImageSync 不自动缩放，则 Paragraph 只占图像左上角 logicalW×logicalH 像素
+    // drawImageRect 将整个 image 映射到 dstRect(logicalW×logicalH 逻辑) → 弹幕缩小
+    if (!kReleaseMode) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastDiagDprShrinkTimeMs >= 2000) {
+        _lastDiagDprShrinkTimeMs = now;
+        debugPrint('[DPR-SHRINK-DIAG] DPR=$devicePixelRatio '
+            'logicalW=${logicalW.toStringAsFixed(1)} logicalH=${logicalH.toStringAsFixed(1)} '
+            'pixelW=$pixelW pixelH=$pixelH '
+            'imageW=${image.width} imageH=${image.height} '
+            'ratio=${(pixelW / math.max(logicalW, 0.01)).toStringAsFixed(2)} '
+            'fillP.maxIntrW=${fillP.maxIntrinsicWidth.toStringAsFixed(1)} fillP.h=${fillP.height.toStringAsFixed(1)}');
+      }
+    }
 
     // [FIRST-FRAME] 问题3诊断: 累计toImageSync耗时
     diagRasterSw?.stop();

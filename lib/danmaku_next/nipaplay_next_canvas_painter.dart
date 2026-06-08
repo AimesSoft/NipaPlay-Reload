@@ -453,6 +453,11 @@ class NipaPlayNextCanvasPainter extends CustomPainter {
     final rRecorder = ui.PictureRecorder();
     final rCanvas = Canvas(rRecorder);
 
+    // [DPR-SHRINK-BUG] 修复：Canvas.scale(DPR)
+    // toImageSync(width, height) 以 1:1 像素映射渲染 Picture 内容，不自动缩放。
+    // 不 scale(DPR) 时 Paragraph 只占图像左上角 1/DPR 比例 → 弹幕缩小。
+    rCanvas.scale(devicePixelRatio, devicePixelRatio);
+
     // stroke 先画（底层），fill 后画（顶层）
     if (strokeP != null) {
       rCanvas.drawParagraph(strokeP, Offset.zero);
