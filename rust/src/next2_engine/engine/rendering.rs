@@ -806,6 +806,12 @@ struct Next2Renderer {
     blur_pipeline_horizontal: wgpu::RenderPipeline,
     blur_pipeline_vertical: wgpu::RenderPipeline,
     screen_pipeline: wgpu::RenderPipeline,
+    /// Copy pipeline: identical to screen_pipeline but with NO blending.
+    /// Used for the final atomic blit from offscreen frame_texture to the
+    /// shared DXGI texture.  Without blending, every pixel is overwritten
+    /// (transparent source pixels → zero/cleared), preventing "ghost"
+    /// danmaku from lingering on target_view when using LoadOp::Load.
+    copy_pipeline: wgpu::RenderPipeline,
     atlas_bind_group_layout: wgpu::BindGroupLayout,
     atlas_bind_group: wgpu::BindGroup,
     screen_bind_group_layout: wgpu::BindGroupLayout,
@@ -826,6 +832,11 @@ struct Next2Renderer {
     shadow_blur_texture: wgpu::Texture,
     shadow_width: u32,
     shadow_height: u32,
+    /// Offscreen frame buffer: all rendering (shadow + glyphs) completes here
+    /// first, then a single atomic blit copies the finished frame to the
+    /// shared texture (target_view).  This prevents Flutter's compositor
+    /// from reading a partially-rendered frame via ALLOW_SIMULTANEOUS_ACCESS.
+    frame_texture: wgpu::Texture,
     #[cfg(target_os = "android")]
     surface_format: Option<wgpu::TextureFormat>,
     #[cfg(target_os = "android")]
