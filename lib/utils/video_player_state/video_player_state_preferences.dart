@@ -499,6 +499,19 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
     // 使用配置的倍速
     player.setPlaybackRate(_speedBoostRate);
+
+    // 🔴 [RATE-CHANGE-DIAG] 诊断：速率变化时锚点未重设 → playbackTimeMs跳变
+    // 计算：如果下一帧不重锚，smoothMs = anchorMs + elapsedDelta * newRate
+    // 跳变量 = elapsedDelta * (newRate - oldRate)
+    if (!kReleaseMode) {
+      final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
+      final predictedJumpMs = elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
+      debugPrint('[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x → ${_speedBoostRate}x '
+          'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+          'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
+          'PREDICTED_JUMP=${predictedJumpMs.toStringAsFixed(1)}ms ← IF>0: playbackTimeMs will jump forward');
+    }
+
     debugPrint('开始长按倍速播放: ${_speedBoostRate}x (之前: ${_normalPlaybackRate}x)');
 
     _notifyListeners();
@@ -507,6 +520,18 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 结束倍速播放（长按结束）
   void stopSpeedBoost() {
     if (!hasVideo || !_isSpeedBoostActive) return;
+
+    // 🔴 [RATE-CHANGE-DIAG] 诊断：速率下降时锚点未重设 → smoothMs增速骤降
+    // 2x→1x: smoothMs = anchorMs + elapsedDelta * 1.0 (之前*2.0)
+    // playbackTimeMs几乎不推进 → playerMs以1x继续推进 → negative drift
+    if (!kReleaseMode) {
+      final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
+      final predictedDriftMs = elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
+      debugPrint('[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x → ${_normalPlaybackRate}x '
+          'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+          'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
+          'PREDICTED_DRIFT=${predictedDriftMs.toStringAsFixed(1)}ms ← IF>0: playerMs will overtake smoothMs');
+    }
 
     _isSpeedBoostActive = false;
     // 恢复到长按前的播放速度
