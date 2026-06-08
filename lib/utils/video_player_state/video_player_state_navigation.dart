@@ -676,22 +676,31 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 }
               } else {
                 // playerMs 合法：首帧加载/恢复位置/从头播放 → 正常锚定
-                // 🔴 [FIRST-ANCHOR-DIAG] 诊断：首帧锚定缺少单调递增保护
-                // 如果 playerMs < prevPtm（暂停恢复时player.position回退），
-                // 直接赋值会导致 playbackTimeMs 回退 → 弹幕回弹
-                final prevPtmBeforeAnchor = _playbackTimeMs.value;
+                // ✅ P7修复：首帧锚定路径添加P1单调递增保护
+                // 根因：暂停恢复后 player.position 可能回退（比暂停前小），
+                // 直接赋值 _playbackTimeMs.value = playerMs 会导致 playbackTimeMs 回退 → 弹幕回弹。
+                // 修复：与锚点过期重锚路径（line 712-729）保持一致的单调递增保护逻辑。
                 final newPtmCandidate = playerMs.clamp(0.0, _duration.inMilliseconds.toDouble());
-                if (!kReleaseMode && newPtmCandidate < prevPtmBeforeAnchor - 0.5 && prevPtmBeforeAnchor > 100.0) {
-                  debugPrint('[FIRST-ANCHOR-DIAG] BACKWARD RISK: '
-                      'prevPtm=${prevPtmBeforeAnchor.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
-                      'delta=${(newPtmCandidate - prevPtmBeforeAnchor).toStringAsFixed(1)}ms '
-                      'rate=$effectivePlaybackRate ← NO monotonicity guard here!');
+                if (newPtmCandidate < _playbackTimeMs.value - 0.5 && _playbackTimeMs.value > 100.0) {
+                  // playerMs 回退 → 保持 prevPtm，锚定到 prevPtm 使后续帧正常推进
+                  _smoothAnchorMs = _playbackTimeMs.value;
+                  _smoothAnchorElapsedUs = currentElapsedUs;
+                  _lastRawPlayerMs = playerPosition;
+                  _anchorSetBySeek = false;
+                  // playbackTimeMs 保持不变（hold）
+                  if (!kReleaseMode) {
+                    debugPrint('[FIRST-ANCHOR-DIAG] BACKWARD PREVENTED: '
+                        'prevPtm=${_playbackTimeMs.value.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
+                        'delta=${(newPtmCandidate - _playbackTimeMs.value).toStringAsFixed(1)}ms '
+                        'rate=$effectivePlaybackRate ← held at prevPtm, anchor=prevPtm');
+                  }
+                } else {
+                  _smoothAnchorMs = playerMs;
+                  _smoothAnchorElapsedUs = currentElapsedUs;
+                  _lastRawPlayerMs = playerPosition;
+                  _anchorSetBySeek = false;
+                  _playbackTimeMs.value = newPtmCandidate;
                 }
-                _smoothAnchorMs = playerMs;
-                _smoothAnchorElapsedUs = currentElapsedUs;
-                _lastRawPlayerMs = playerPosition;
-                _anchorSetBySeek = false; // 锚定到 playerMs 后清除 seek 标记
-                _playbackTimeMs.value = newPtmCandidate;
               }
             } else {
               // 正常播放：检测锚点是否过期（seek/暂停恢复后第一帧）
