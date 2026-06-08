@@ -1,64 +1,62 @@
 // ════════════════════════════════════════════════════════════════════
-//  Next Old Canvas Painter — c4ceacbd 版 TextPainter 逐条绘制
+//  Next Old Canvas Painter — d6592232 版 TextPainter 逐条绘制
 //
-//  与 DanmakuAtlasPainter 的区别：
+//  与 DanmakuAtlasPainter (Next++) 的区别：
 //  - TextPainter.paint() 逐条绘制（O(glyphs)×N/帧 GPU 操作）
 //  - 绝对定位 x = width - scrollSpeed * elapsed（无 displayX 增量定位）
 //  - 8方向偏移重绘描边（_paintUniformOutline，非 Shadow 烘入）
 //  - 无精灵图集 / toImageSync / vsync AnimationController
-//  - repaint 由外部 ValueNotifier（playbackTimeMs 驱动）控制
+//  - repaint 由 playbackTimeMs ValueListenable 直接驱动
 // ════════════════════════════════════════════════════════════════════
 
+import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:nipaplay/danmaku_abstraction/positioned_danmaku_item.dart';
+import 'package:nipaplay/danmaku_abstraction/danmaku_content_item.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 
 import 'nipaplay_next_old_engine.dart';
 
-/// Next Old 引擎画笔 — c4ceacbd 版逐条 TextPainter 绘制。
+/// Next Old 引擎画笔 — d6592232 版逐条 TextPainter 绘制。
 /// 无 vsync、无图集、无增量定位，playbackTimeMs 驱动重绘。
 class NipaPlayNextOldCanvasPainter extends CustomPainter {
   NipaPlayNextOldCanvasPainter({
-    required this.repaintNotifier,
     required this.engine,
-    required this.items,
+    required this.playbackTimeMs,
+    required this.timeOffsetSeconds,
     required this.fontSize,
     required this.fontFamily,
     required this.fontFamilyFallback,
     required this.locale,
     required this.outlineStyle,
     required this.shadowStyle,
-  }) : super(repaint: repaintNotifier);
-
-  /// playbackTimeMs 变化时触发重绘
-  final ValueNotifier<int> repaintNotifier;
+  }) : super(repaint: playbackTimeMs);
 
   final NipaPlayNextOldEngine engine;
-  final List<PositionedDanmakuItem> items;
+  final ValueListenable<double> playbackTimeMs;
+  final double timeOffsetSeconds;
   final double fontSize;
   final String? fontFamily;
   final List<String>? fontFamilyFallback;
   final Locale? locale;
   final DanmakuOutlineStyle outlineStyle;
   final DanmakuShadowStyle shadowStyle;
-
   late final int _layoutVersion = engine.layoutVersion;
+  late final String? _fontFamilyFallbackKey =
+      fontFamilyFallback?.join('\u0000');
 
-  /// uniform 描边8方向偏移（与 c4ceacbd 旧版 _paintUniformOutline 一致）
-  static const List<(double, double)> _uniformOutlineDirs = [
-    (-1.0, 0.0),
-    (1.0, 0.0),
-    (0.0, -1.0),
-    (0.0, 1.0),
-    (-1.0, -1.0),
-    (1.0, -1.0),
-    (-1.0, 1.0),
-    (1.0, 1.0),
-  ];
-
-  /// 自发弹幕边框
+  static const int _cacheLimit = 2000;
+  static const int _emojiCacheLimit = 4000;
+  static final LinkedHashMap<_TextCacheKey, TextPainter> _fillCache =
+      LinkedHashMap<_TextCacheKey, TextPainter>();
+  static final LinkedHashMap<_TextCacheKey, TextPainter> _strokeCache =
+      LinkedHashMap<_TextCacheKey, TextPainter>();
+  static final LinkedHashMap<_TextCacheKey, TextPainter> _shadowCache =
+      LinkedHashMap<_TextCacheKey, TextPainter>();
+  static final LinkedHashMap<String, bool> _emojiCache =
+      LinkedHashMap<String, bool>();
   static final Paint _selfSendPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5
@@ -66,187 +64,297 @@ class NipaPlayNextOldCanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final items =
+        engine.layout(playbackTimeMs.value / 1000.0 + timeOffsetSeconds);
     if (items.isEmpty) return;
 
     for (final item in items) {
       final content = item.content;
-      final drawX = item.x;
-      final drawY = item.y;
-
-      // ── 视口剔除：跳过完全不可见的弹幕 ──
-      final itemWidth = item.width;
-      if (itemWidth > 0.0) {
-        if (drawX + itemWidth < 0.0 || drawX > size.width) {
-          continue;
-        }
-      }
-
-      final adjFontSize = fontSize * content.fontSizeMultiplier;
-      final strokeColor = _getStrokeColor(textColor: content.color);
-
-      // ── 构建 TextPainter ──
-      final textStyle = TextStyle(
-        fontSize: adjFontSize,
-        fontFamily: fontFamily,
-        fontFamilyFallback: fontFamilyFallback,
+      final adjustedFontSize = fontSize * content.fontSizeMultiplier;
+      final fillPainter = _getFillPainter(
+        content: content,
+        fontSize: adjustedFontSize,
         color: content.color,
-        locale: locale,
       );
 
-      final strokeTextStyle = TextStyle(
-        fontSize: adjFontSize,
-        fontFamily: fontFamily,
-        fontFamilyFallback: fontFamilyFallback,
-        color: strokeColor,
-        locale: locale,
-      );
-
-      // ── 描边绘制 ──
-      if (outlineStyle == DanmakuOutlineStyle.uniform) {
-        // c4ceacbd 版 uniform 描边：8方向偏移重绘
-        final radius = _resolveUniformOutlineRadius(adjFontSize);
-        _paintUniformOutline(
-          canvas, content.text, drawX, drawY,
-          strokeTextStyle, radius,
-        );
-      } else if (outlineStyle == DanmakuOutlineStyle.stroke) {
-        // thin stroke 描边：-1px stroke + fill
-        final strokeWidth = _resolveStrokeWidth(adjFontSize);
-        _paintStrokeOutline(
-          canvas, content.text, drawX, drawY,
-          strokeTextStyle, textStyle, strokeWidth,
-        );
-      }
-
-      // ── 阴影绘制（描边之后、填充之前） ──
+      final baseOffset = Offset(item.x, item.y);
       if (shadowStyle != DanmakuShadowStyle.none) {
-        final shadowParams = _resolveShadowParams(adjFontSize);
-        if (shadowParams != null) {
-          _paintShadow(
-            canvas, content.text, drawX, drawY,
-            textStyle, shadowParams,
+        final shadowConfig = _resolveShadowStyle(adjustedFontSize);
+        if (shadowConfig != null) {
+          final shadowPainter = _getShadowPainter(
+            content: content,
+            fontSize: adjustedFontSize,
+            color: Color.fromRGBO(0, 0, 0, shadowConfig.opacity),
+            blurSigma: shadowConfig.blurSigma,
           );
+          shadowPainter.paint(canvas, baseOffset + shadowConfig.offset);
         }
       }
 
-      // ── 填充绘制 ──
-      final fillTp = TextPainter(
-        text: TextSpan(text: content.text, style: textStyle),
-        maxLines: 1,
-        textDirection: TextDirection.ltr,
-        locale: locale,
-      )..layout(minWidth: 0, maxWidth: double.infinity);
-      fillTp.paint(canvas, Offset(drawX, drawY));
+      switch (outlineStyle) {
+        case DanmakuOutlineStyle.none:
+          break;
+        case DanmakuOutlineStyle.stroke:
+          final containsEmoji = _containsEmojiCached(content.text);
+          final strokeColor = _getStrokeColor(
+            textColor: content.color,
+          );
+          final strokeWidth = _resolveStrokeWidth(adjustedFontSize);
+          if (containsEmoji) {
+            _paintEmojiOutline(
+              canvas: canvas,
+              fillPainter: fillPainter,
+              baseOffset: baseOffset,
+              radius: strokeWidth,
+              outlineColor: strokeColor,
+            );
+          } else {
+            final strokePainter = _getStrokePainter(
+              content: content,
+              fontSize: adjustedFontSize,
+              color: strokeColor,
+              strokeWidth: strokeWidth,
+            );
+            strokePainter.paint(canvas, baseOffset);
+          }
+          break;
+        case DanmakuOutlineStyle.uniform:
+          final containsEmoji = _containsEmojiCached(content.text);
+          final strokeColor = _getStrokeColor(
+            textColor: content.color,
+          );
+          final uniformOutlineRadius =
+              _resolveUniformOutlineRadius(adjustedFontSize);
+          if (containsEmoji) {
+            _paintEmojiOutline(
+              canvas: canvas,
+              fillPainter: fillPainter,
+              baseOffset: baseOffset,
+              radius: uniformOutlineRadius,
+              outlineColor: strokeColor,
+            );
+          } else {
+            final outlinePainter = _getFillPainter(
+              content: content,
+              fontSize: adjustedFontSize,
+              color: strokeColor,
+            );
+            _paintUniformOutline(
+              canvas: canvas,
+              painter: outlinePainter,
+              baseOffset: baseOffset,
+              radius: uniformOutlineRadius,
+            );
+          }
+          break;
+      }
 
-      // 自发弹幕边框
       if (content.isMe) {
-        canvas.drawRect(
-          Rect.fromLTWH(drawX - 2, drawY - 2, fillTp.width + 4, fillTp.height + 4),
-          _selfSendPaint,
+        final rect = Rect.fromLTWH(
+          baseOffset.dx - 2,
+          baseOffset.dy - 2,
+          fillPainter.width + 4,
+          fillPainter.height + 4,
         );
+        canvas.drawRect(rect, _selfSendPaint);
+      }
+      fillPainter.paint(canvas, baseOffset);
+    }
+  }
+
+  TextPainter _getFillPainter({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required Color color,
+  }) {
+    return _getPainter(
+      content: content,
+      fontSize: fontSize,
+      color: color,
+      variant: _PainterVariant.fill,
+    );
+  }
+
+  TextPainter _getStrokePainter({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required Color color,
+    required double strokeWidth,
+  }) {
+    return _getPainter(
+      content: content,
+      fontSize: fontSize,
+      color: color,
+      variant: _PainterVariant.stroke,
+      effectValue: strokeWidth,
+    );
+  }
+
+  TextPainter _getShadowPainter({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required Color color,
+    required double blurSigma,
+  }) {
+    return _getPainter(
+      content: content,
+      fontSize: fontSize,
+      color: color,
+      variant: _PainterVariant.shadow,
+      effectValue: blurSigma,
+    );
+  }
+
+  TextPainter _getPainter({
+    required DanmakuContentItem content,
+    required double fontSize,
+    required Color color,
+    required _PainterVariant variant,
+    double effectValue = 0.0,
+  }) {
+    final key = _TextCacheKey(
+      text: content.text,
+      countText: content.countText,
+      fontSize: fontSize,
+      color: color.toARGB32(),
+      variant: variant,
+      effectValue: effectValue,
+      fontFamily: fontFamily,
+      fontFamilyFallbackKey: _fontFamilyFallbackKey,
+      locale: locale,
+    );
+
+    final cache = switch (variant) {
+      _PainterVariant.fill => _fillCache,
+      _PainterVariant.stroke => _strokeCache,
+      _PainterVariant.shadow => _shadowCache,
+    };
+    final cached = cache[key];
+    if (cached != null) {
+      cache.remove(key);
+      cache[key] = cached;
+      return cached;
+    }
+
+    final paint = Paint()
+      ..color = color
+      ..isAntiAlias = true;
+
+    if (variant == _PainterVariant.stroke) {
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = effectValue
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round;
+    } else {
+      paint.style = PaintingStyle.fill;
+      if (variant == _PainterVariant.shadow && effectValue > 0) {
+        paint.maskFilter = MaskFilter.blur(BlurStyle.normal, effectValue);
       }
     }
-  }
 
-  /// c4ceacbd 版 uniform 描边：8方向偏移重绘
-  /// 在8个方向各偏移 radius 像素画一次描边色文本，最后画填充色文本。
-  void _paintUniformOutline(
-    Canvas canvas,
-    String text,
-    double x,
-    double y,
-    TextStyle strokeStyle,
-    double radius,
-  ) {
-    for (final (dx, dy) in _uniformOutlineDirs) {
-      final tp = TextPainter(
-        text: TextSpan(text: text, style: strokeStyle),
-        maxLines: 1,
-        textDirection: TextDirection.ltr,
-        locale: locale,
-      )..layout(minWidth: 0, maxWidth: double.infinity);
-      tp.paint(canvas, Offset(x + dx * radius, y + dy * radius));
-    }
-  }
+    final bool isFill = variant == _PainterVariant.fill;
 
-  /// thin stroke 描边：先画 stroke 文本（比 fill 稍大），再画 fill 文本
-  void _paintStrokeOutline(
-    Canvas canvas,
-    String text,
-    double x,
-    double y,
-    TextStyle strokeStyle,
-    TextStyle fillStyle,
-    double strokeWidth,
-  ) {
-    // 使用 Paint stroke 模拟描边：在上下左右各偏移 strokeWidth/2 画4次
-    final offsets = [
-      Offset(-strokeWidth, 0),
-      Offset(strokeWidth, 0),
-      Offset(0, -strokeWidth),
-      Offset(0, strokeWidth),
-    ];
-    for (final offset in offsets) {
-      final tp = TextPainter(
-        text: TextSpan(text: text, style: strokeStyle),
-        maxLines: 1,
-        textDirection: TextDirection.ltr,
-        locale: locale,
-      )..layout(minWidth: 0, maxWidth: double.infinity);
-      tp.paint(canvas, Offset(x + offset.dx, y + offset.dy));
-    }
-  }
-
-  /// 阴影绘制：在偏移位置画一层半透明文本
-  void _paintShadow(
-    Canvas canvas,
-    String text,
-    double x,
-    double y,
-    TextStyle baseStyle,
-    _OldShadowParams params,
-  ) {
-    final shadowStyle = baseStyle.copyWith(
-      color: baseStyle.color?.withValues(alpha: params.opacity),
+    final baseStyle = TextStyle(
+      fontSize: fontSize,
+      fontWeight: FontWeight.normal,
+      color: isFill ? color : null,
+      foreground: isFill ? null : paint,
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
     );
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: shadowStyle),
-      maxLines: 1,
+
+    final span = _buildSpan(content, baseStyle, !isFill);
+
+    final painter = TextPainter(
+      text: span,
       textDirection: TextDirection.ltr,
+      textAlign: TextAlign.left,
       locale: locale,
     )..layout(minWidth: 0, maxWidth: double.infinity);
-    tp.paint(canvas, Offset(x + params.dx, y + params.dy));
+
+    _insertWithBound(cache, key, painter, _cacheLimit);
+    return painter;
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  样式计算
-  // ════════════════════════════════════════════════════════════════
+  static void _insertWithBound<K, V>(
+    LinkedHashMap<K, V> cache,
+    K key,
+    V value,
+    int limit,
+  ) {
+    if (cache.length >= limit && cache.isNotEmpty) {
+      cache.remove(cache.keys.first);
+    }
+    cache[key] = value;
+  }
 
-  _OldShadowParams? _resolveShadowParams(double targetFontSize) {
+  _ShadowConfig? _resolveShadowStyle(double targetFontSize) {
     final double unit = _resolveUniformOutlineRadius(targetFontSize);
     switch (shadowStyle) {
       case DanmakuShadowStyle.none:
         return null;
       case DanmakuShadowStyle.soft:
-        return _OldShadowParams(
-            dx: unit * 0.8, dy: unit * 0.8, opacity: 0.34);
+        return _ShadowConfig(
+          offset: Offset(unit * 0.8, unit * 0.8),
+          blurSigma: unit * 0.9,
+          opacity: 0.34,
+        );
       case DanmakuShadowStyle.medium:
-        return _OldShadowParams(dx: unit, dy: unit, opacity: 0.44);
+        return _ShadowConfig(
+          offset: Offset(unit, unit),
+          blurSigma: unit * 1.2,
+          opacity: 0.44,
+        );
       case DanmakuShadowStyle.strong:
-        return _OldShadowParams(
-            dx: unit * 1.2, dy: unit * 1.2, opacity: 0.55);
+        return _ShadowConfig(
+          offset: Offset(unit * 1.2, unit * 1.2),
+          blurSigma: unit * 1.5,
+          opacity: 0.55,
+        );
     }
   }
 
   double _resolveStrokeWidth(double targetFontSize) {
-    return (targetFontSize * 0.06).clamp(1.0, 2.6);
+    final width = targetFontSize * 0.06;
+    return width.clamp(1.0, 2.6);
   }
 
   double _resolveUniformOutlineRadius(double targetFontSize) {
-    return math.max(0.8, (targetFontSize * 0.045).clamp(0.8, 2.0));
+    final radius = targetFontSize * 0.045;
+    return math.max(0.8, radius.clamp(0.8, 2.0));
   }
 
-  Color _getStrokeColor({required Color textColor}) {
+  TextSpan _buildSpan(
+    DanmakuContentItem content,
+    TextStyle baseStyle,
+    bool isStroke,
+  ) {
+    final countText = content.countText;
+    if (countText == null || countText.isEmpty) {
+      return TextSpan(
+        text: content.text,
+        style: baseStyle,
+      );
+    }
+
+    final countStyle = baseStyle.copyWith(
+      fontSize: 25.0,
+      fontWeight: FontWeight.bold,
+      color: isStroke ? null : Colors.white,
+    );
+
+    return TextSpan(
+      children: [
+        TextSpan(text: content.text, style: baseStyle),
+        TextSpan(text: countText, style: countStyle),
+      ],
+    );
+  }
+
+  Color _getStrokeColor({
+    required Color textColor,
+  }) {
     if (_isPureBlack(textColor)) return Colors.white;
     return Colors.black;
   }
@@ -256,27 +364,197 @@ class NipaPlayNextOldCanvasPainter extends CustomPainter {
     return color.r <= epsilon && color.g <= epsilon && color.b <= epsilon;
   }
 
+  bool _containsEmojiCached(String text) {
+    final cached = _emojiCache[text];
+    if (cached != null) {
+      _emojiCache.remove(text);
+      _emojiCache[text] = cached;
+      return cached;
+    }
+    final result = _containsEmoji(text);
+    _insertWithBound(_emojiCache, text, result, _emojiCacheLimit);
+    return result;
+  }
+
+  bool _containsEmoji(String text) {
+    for (final rune in text.runes) {
+      if (_isEmojiRune(rune)) return true;
+    }
+    return false;
+  }
+
+  bool _isEmojiRune(int rune) {
+    return (rune >= 0x1F000 && rune <= 0x1FAFF) ||
+        (rune >= 0x2600 && rune <= 0x27BF) ||
+        (rune >= 0xFE00 && rune <= 0xFE0F) ||
+        rune == 0x200D ||
+        rune == 0x20E3;
+  }
+
+  void _paintEmojiOutline({
+    required Canvas canvas,
+    required TextPainter fillPainter,
+    required Offset baseOffset,
+    required double radius,
+    required Color outlineColor,
+  }) {
+    final expanded = (radius + 2.0).clamp(2.0, 6.0);
+    final baseBounds = Rect.fromLTWH(
+      baseOffset.dx - expanded,
+      baseOffset.dy - expanded,
+      fillPainter.width + expanded * 2,
+      fillPainter.height + expanded * 2,
+    );
+    final filterPaint = Paint()
+      ..colorFilter = ColorFilter.mode(outlineColor, BlendMode.srcIn);
+
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: -radius,
+      dy: 0,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: radius,
+      dy: 0,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: 0,
+      dy: -radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: 0,
+      dy: radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: -radius,
+      dy: -radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: radius,
+      dy: -radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: -radius,
+      dy: radius,
+    );
+    _paintEmojiOutlineDirection(
+      canvas: canvas,
+      fillPainter: fillPainter,
+      baseOffset: baseOffset,
+      baseBounds: baseBounds,
+      filterPaint: filterPaint,
+      dx: radius,
+      dy: radius,
+    );
+  }
+
+  void _paintUniformOutline({
+    required Canvas canvas,
+    required TextPainter painter,
+    required Offset baseOffset,
+    required double radius,
+  }) {
+    painter.paint(canvas, Offset(baseOffset.dx - radius, baseOffset.dy));
+    painter.paint(canvas, Offset(baseOffset.dx + radius, baseOffset.dy));
+    painter.paint(canvas, Offset(baseOffset.dx, baseOffset.dy - radius));
+    painter.paint(canvas, Offset(baseOffset.dx, baseOffset.dy + radius));
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx - radius, baseOffset.dy - radius),
+    );
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx + radius, baseOffset.dy - radius),
+    );
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx - radius, baseOffset.dy + radius),
+    );
+    painter.paint(
+      canvas,
+      Offset(baseOffset.dx + radius, baseOffset.dy + radius),
+    );
+  }
+
+  void _paintEmojiOutlineDirection({
+    required Canvas canvas,
+    required TextPainter fillPainter,
+    required Offset baseOffset,
+    required Rect baseBounds,
+    required Paint filterPaint,
+    required double dx,
+    required double dy,
+  }) {
+    final shift = Offset(dx, dy);
+    canvas.saveLayer(baseBounds.shift(shift), filterPaint);
+    fillPainter.paint(canvas, baseOffset + shift);
+    canvas.restore();
+  }
+
   @override
   bool shouldRepaint(covariant NipaPlayNextOldCanvasPainter oldDelegate) {
     return oldDelegate._layoutVersion != _layoutVersion ||
+        oldDelegate.engine != engine ||
+        oldDelegate.timeOffsetSeconds != timeOffsetSeconds ||
         oldDelegate.fontSize != fontSize ||
+        oldDelegate.fontFamily != fontFamily ||
         oldDelegate.outlineStyle != outlineStyle ||
         oldDelegate.shadowStyle != shadowStyle ||
-        oldDelegate.fontFamily != fontFamily ||
         oldDelegate.locale != locale ||
         !_listEquals(oldDelegate.fontFamilyFallback, fontFamilyFallback);
   }
 }
 
-class _OldShadowParams {
-  const _OldShadowParams({
-    required this.dx,
-    required this.dy,
+class _ShadowConfig {
+  const _ShadowConfig({
+    required this.offset,
+    required this.blurSigma,
     required this.opacity,
   });
-  final double dx;
-  final double dy;
+
+  final Offset offset;
+  final double blurSigma;
   final double opacity;
+}
+
+enum _PainterVariant {
+  fill,
+  stroke,
+  shadow,
 }
 
 bool _listEquals(List<String>? a, List<String>? b) {
@@ -287,4 +565,55 @@ bool _listEquals(List<String>? a, List<String>? b) {
     if (a[i] != b[i]) return false;
   }
   return true;
+}
+
+class _TextCacheKey {
+  const _TextCacheKey({
+    required this.text,
+    required this.countText,
+    required this.fontSize,
+    required this.color,
+    required this.variant,
+    required this.effectValue,
+    required this.fontFamily,
+    required this.fontFamilyFallbackKey,
+    required this.locale,
+  });
+
+  final String text;
+  final String? countText;
+  final double fontSize;
+  final int color;
+  final _PainterVariant variant;
+  final double effectValue;
+  final String? fontFamily;
+  final String? fontFamilyFallbackKey;
+  final Locale? locale;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _TextCacheKey &&
+        other.text == text &&
+        other.countText == countText &&
+        other.fontSize == fontSize &&
+        other.color == color &&
+        other.variant == variant &&
+        other.effectValue == effectValue &&
+        other.fontFamily == fontFamily &&
+        other.fontFamilyFallbackKey == fontFamilyFallbackKey &&
+        other.locale == locale;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        text,
+        countText,
+        fontSize,
+        color,
+        variant,
+        effectValue,
+        fontFamily,
+        fontFamilyFallbackKey,
+        locale,
+      );
 }
