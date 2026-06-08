@@ -64,7 +64,49 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         'resetPlayer start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
 
+      // 立即重置屏幕方向，不受后续等待阻塞，避免用户被卡在横屏状态
+      if (globals.isMobilePlatform) {
+        await ScreenOrientationManager.instance.resetOrientation();
+        await _restoreSystemUiOverlayStyleIfNeeded();
+      }
+
+      // 等待退出截图完成后再保存观看记录和停止播放器
+      // 截图依赖 player.snapshot()，播放器停止后截图会失败
+      // 须先等截图完成，_currentThumbnailPath 才是最新值，_updateWatchHistory 才能写入正确缩略图
+      if (_isCapturingFrame) {
+        _logMacOSHdrResetTrace('waiting for exit screenshot to complete');
+        try {
+          await Future.any([
+            _waitForScreenshotComplete(),
+            Future.delayed(const Duration(seconds: 4)),
+          ]);
+          _logMacOSHdrResetTrace(
+            'exit screenshot wait done, isCapturing=$_isCapturingFrame',
+          );
+        } catch (e) {
+          debugPrint('等待截图完成异常: $e');
+        } finally {
+          // 超时后强制重置截图状态，避免影响后续操作
+          if (_isCapturingFrame) {
+            _isCapturingFrame = false;
+            _screenshotCompleter = null;
+            _logMacOSHdrResetTrace('force reset screenshot state after timeout');
+          }
+        }
+      }
+
+      // 恢复播放器音量（handleBackButton 中可能静音了播放器）
+      // 移动端使用系统音量，player.volume 不需要改，但标志位需要重置
+      if (_mutedForExit) {
+        if (!_useSystemVolume) {
+          player.volume = _currentVolume;
+          _logMacOSHdrResetTrace('restored player volume to $_currentVolume');
+        }
+        _mutedForExit = false;
+      }
+
       // 在停止播放前保存最后的观看记录
+      // 截图已完成，_currentThumbnailPath 是最新值，不会被旧缩略图覆盖
       if (_currentVideoPath != null) {
         await _updateWatchHistory(forceRemoteSync: true);
       }
@@ -181,12 +223,6 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       _logMacOSHdrResetTrace(
         'status set idle path=$_currentVideoPath status=$_status playerState=${player.state}',
       );
-
-      // 使用屏幕方向管理器重置屏幕方向
-      if (globals.isMobilePlatform) {
-        await ScreenOrientationManager.instance.resetOrientation();
-        await _restoreSystemUiOverlayStyleIfNeeded();
-      }
 
       // 关闭唤醒锁
       try {
@@ -477,6 +513,13 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       } catch (_) {}
     }
     _ensurePlayerVolumeMatchesPlatformPolicy();
+    // 兜底恢复：若 handleBackButton 静音后未经 resetPlayer 进入新一轮播放（如错误弹窗流程）
+    if (_mutedForExit) {
+      if (!_useSystemVolume) {
+        player.volume = _currentVolume;
+      }
+      _mutedForExit = false;
+    }
     if (hasVideo &&
         (_status == PlayerStatus.paused || _status == PlayerStatus.ready)) {
       _lastPlaybackStartMs = DateTime.now().millisecondsSinceEpoch;

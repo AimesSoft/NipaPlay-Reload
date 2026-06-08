@@ -61,19 +61,31 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
       _logMacOSHdrExitTrace(
         'handleBackButton start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
-      // 保持顺序执行，避免与 resetPlayer 并发导致状态被提前清空。
-      try {
-        await _captureConditionalScreenshot("返回按钮时");
-      } catch (e) {
-        debugPrint('退出截图失败: $e');
+
+      // 触发返回后立即静音，避免退出期间播放器在后台发出声音
+      player.volume = 0;
+      _mutedForExit = true;
+      _logMacOSHdrExitTrace('handleBackButton muted player');
+
+      // 截图异步执行，不阻塞退出流程
+      // 截图依赖播放器状态，resetPlayer() 会在停止播放器前等待截图完成
+      if (_currentVideoPath != null && hasVideo && !_isCapturingFrame) {
+        unawaited(
+          _captureConditionalScreenshot("返回按钮时").catchError((e) {
+            debugPrint('退出截图失败: $e');
+          }),
+        );
       }
 
+      // 云同步异步执行，不阻塞退出流程
+      // 云同步不依赖播放器状态，独立读取 WatchHistoryManager 数据
+      // dispose() 中有备份调用，双重保险
       if (_currentVideoPath != null) {
-        try {
-          await AutoSyncService.instance.syncOnPlaybackEnd();
-        } catch (e) {
-          debugPrint('退出云同步失败: $e');
-        }
+        unawaited(
+          AutoSyncService.instance.syncOnPlaybackEnd().catchError((e) {
+            debugPrint('退出云同步失败: $e');
+          }),
+        );
       }
 
       _logMacOSHdrExitTrace(
@@ -92,7 +104,11 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
       return;
     }
 
+    // 捕获当前视频路径，用于截图完成后检查是否仍是同一个视频
+    final capturedVideoPath = _currentVideoPath;
+
     _isCapturingFrame = true;
+    _screenshotCompleter = Completer<void>();
     _logMacOSHdrExitTrace(
       'capture start trigger=$triggerEvent path=$_currentVideoPath status=$_status playerState=${player.state}',
     );
@@ -102,14 +118,19 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
         newThumbnailPath = await captureVideoFrame();
       }
       if (newThumbnailPath != null) {
-        _currentThumbnailPath = newThumbnailPath;
-        debugPrint('条件截图完成($triggerEvent): $_currentThumbnailPath');
+        // 检查视频是否已切换，避免更新错误的视频记录
+        if (_currentVideoPath == capturedVideoPath) {
+          _currentThumbnailPath = newThumbnailPath;
+          debugPrint('条件截图完成($triggerEvent): $_currentThumbnailPath');
 
-        // 更新观看记录中的缩略图
-        await _updateWatchHistoryWithNewThumbnail(newThumbnailPath);
+          // 更新观看记录中的缩略图
+          await _updateWatchHistoryWithNewThumbnail(newThumbnailPath);
 
-        // 截图后检查解码器状态
-        await _decoderManager.checkDecoderAfterScreenshot();
+          // 截图后检查解码器状态
+          await _decoderManager.checkDecoderAfterScreenshot();
+        } else {
+          debugPrint('截图完成时视频已切换，跳过缩略图更新($triggerEvent)');
+        }
       }
       _logMacOSHdrExitTrace(
         'capture end trigger=$triggerEvent thumbnail=$newThumbnailPath status=$_status playerState=${player.state}',
@@ -121,7 +142,15 @@ extension VideoPlayerStateStreaming on VideoPlayerState {
       );
     } finally {
       _isCapturingFrame = false;
+      _screenshotCompleter?.complete();
+      _screenshotCompleter = null;
     }
+  }
+
+  /// 等待截图完成（用于 resetPlayer 在停止播放器前等待）
+  /// 使用 Completer 替代轮询，响应更及时
+  Future<void> _waitForScreenshotComplete() async {
+    await _screenshotCompleter?.future;
   }
 
   // 处理流媒体URL的加载错误
