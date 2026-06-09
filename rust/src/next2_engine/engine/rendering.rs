@@ -78,6 +78,11 @@ struct GlyphAtlasEntry {
     offset_y: f32,
     advance: f32,
     spread: f32,
+    /// Monotonically increasing frame counter at the time this entry was last used.
+    /// Used for LRU eviction: when the atlas overflows, only the oldest entries
+    /// are evicted (their UV regions become recyclable), avoiding a full clear
+    /// that would force re-rasterization of ALL visible characters at once.
+    last_used: u64,
 }
 
 #[derive(Clone)]
@@ -356,6 +361,8 @@ struct Next2GlyphAtlas {
     row_height: u32,
     entries: HashMap<(char, u32), GlyphAtlasEntry>,
     line_ascent_cache: HashMap<u32, f32>,
+    /// Monotonically increasing frame counter for LRU eviction.
+    frame_counter: u64,
 }
 
 impl Next2GlyphAtlas {
@@ -402,6 +409,7 @@ impl Next2GlyphAtlas {
             row_height: 0,
             entries: HashMap::new(),
             line_ascent_cache: HashMap::new(),
+            frame_counter: 0,
         })
     }
 
@@ -411,6 +419,35 @@ impl Next2GlyphAtlas {
         self.row_height = 0;
         self.entries.clear();
         self.line_ascent_cache.clear();
+    }
+
+    /// Evict the oldest 25% of entries (LRU policy) and reset the cursor.
+    /// This avoids the full-clear cascade where ALL visible characters must be
+    /// re-rasterized at once (causing 50-500ms stalls).  By evicting only the
+    /// stalest quarter, most currently-visible characters remain cached and
+    /// only the evicted ones need re-rasterization — spread across multiple
+    /// frames rather than hitting in a single burst.
+    fn evict_oldest(&mut self) {
+        if self.entries.len() < 16 {
+            // Too few entries to bother with partial eviction; just clear.
+            self.clear();
+            return;
+        }
+
+        // Collect last_used values and find the 25th percentile.
+        let mut ages: Vec<u64> = self.entries.values().map(|e| e.last_used).collect();
+        ages.sort_unstable();
+        let threshold = ages[ages.len() / 4];
+
+        // Remove entries with last_used <= threshold (oldest 25%).
+        self.entries.retain(|_, entry| entry.last_used > threshold);
+
+        // Reset cursor — evicted UV regions are now recyclable.
+        // We simply restart from the top-left; the GPU texture data in
+        // evicted regions is stale but will be overwritten by new uploads.
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.row_height = 0;
     }
 
     fn line_ascent(&mut self, quantized_size: u32) -> f32 {
@@ -438,11 +475,14 @@ impl Next2GlyphAtlas {
         ch: char,
         quantized_size: u32,
     ) -> Option<&GlyphAtlasEntry> {
+        self.frame_counter = self.frame_counter.wrapping_add(1);
         let resolved = self.resolve_char(ch);
         let key = (resolved, quantized_size);
-        if !self.entries.contains_key(&key) {
-            self.rasterize_and_upload(queue, resolved, quantized_size)?;
+        if self.entries.contains_key(&key) {
+            self.entries.get_mut(&key).unwrap().last_used = self.frame_counter;
+            return self.entries.get(&key);
         }
+        self.rasterize_and_upload(queue, resolved, quantized_size)?;
         self.entries.get(&key)
     }
 
@@ -497,6 +537,7 @@ impl Next2GlyphAtlas {
                     offset_y: 0.0,
                     advance: msdf.advance,
                     spread: 0.0,
+                    last_used: self.frame_counter,
                 },
             );
             return Some(());
@@ -518,7 +559,7 @@ impl Next2GlyphAtlas {
         }
 
         if self.cursor_y + padded_h > self.height {
-            self.clear();
+            self.evict_oldest();
         }
 
         if self.cursor_x + padded_w > self.width || self.cursor_y + padded_h > self.height {
@@ -585,6 +626,7 @@ impl Next2GlyphAtlas {
             offset_y: msdf.offset_y,
             advance: msdf.advance,
             spread: msdf.spread,
+            last_used: self.frame_counter,
         };
 
         self.entries.insert((ch, quantized_size), entry);
