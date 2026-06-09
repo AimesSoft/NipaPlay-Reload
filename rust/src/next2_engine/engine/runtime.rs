@@ -55,7 +55,7 @@ extern "C" {
 const INITIAL_WIDTH: u32 = 2;
 const INITIAL_HEIGHT: u32 = 2;
 const TICK_INTERVAL: Duration = Duration::from_millis(16);
-const BASE_ATLAS_SIZE: u32 = 2048;
+const BASE_ATLAS_SIZE: u32 = 4096;
 const MSDF_RANGE: f64 = 6.0;
 const MAX_FONT_COLLECTION_FACES: u32 = 32;
 const EDGE_COLORING_CORNER_THRESHOLD: f64 = 0.03;

@@ -68,6 +68,15 @@ struct GlyphMsdfData {
     advance: f32,
 }
 
+/// A free rectangular region in the atlas, available for reuse after LRU eviction.
+#[derive(Clone, Copy)]
+struct FreeRect {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+}
+
 #[derive(Clone)]
 struct GlyphAtlasEntry {
     uv_min: [f32; 2],
@@ -78,6 +87,13 @@ struct GlyphAtlasEntry {
     offset_y: f32,
     advance: f32,
     spread: f32,
+    /// Monotonically increasing frame counter at last access (LRU tracking).
+    last_used: u64,
+    /// Padded position in atlas texture (for recycling into free_list on eviction).
+    atlas_x: u32,
+    atlas_y: u32,
+    padded_w: u32,
+    padded_h: u32,
 }
 
 #[derive(Clone)]
@@ -356,6 +372,10 @@ struct Next2GlyphAtlas {
     row_height: u32,
     entries: HashMap<(char, u32), GlyphAtlasEntry>,
     line_ascent_cache: HashMap<u32, f32>,
+    /// Free regions recycled from LRU-evicted entries, sorted by area (smallest first).
+    free_list: Vec<FreeRect>,
+    /// Monotonically increasing frame counter for LRU eviction.
+    frame_counter: u64,
 }
 
 impl Next2GlyphAtlas {
@@ -363,11 +383,14 @@ impl Next2GlyphAtlas {
         let font_key = custom_font_key(custom_font.as_ref());
         let fonts = load_font_chain(custom_font)?;
 
+        let max_dim = device.limits().max_texture_dimension_2d;
+        let atlas_size = BASE_ATLAS_SIZE.min(max_dim);
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("next2 msdf atlas"),
             size: wgpu::Extent3d {
-                width: BASE_ATLAS_SIZE,
-                height: BASE_ATLAS_SIZE,
+                width: atlas_size,
+                height: atlas_size,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -395,13 +418,15 @@ impl Next2GlyphAtlas {
             texture,
             texture_view,
             sampler,
-            width: BASE_ATLAS_SIZE,
-            height: BASE_ATLAS_SIZE,
+            width: atlas_size,
+            height: atlas_size,
             cursor_x: 0,
             cursor_y: 0,
             row_height: 0,
             entries: HashMap::new(),
             line_ascent_cache: HashMap::new(),
+            free_list: Vec::new(),
+            frame_counter: 0,
         })
     }
 
@@ -411,6 +436,121 @@ impl Next2GlyphAtlas {
         self.row_height = 0;
         self.entries.clear();
         self.line_ascent_cache.clear();
+        self.free_list.clear();
+    }
+
+    /// Try to find a free rect that fits (w, h). Prefers the smallest-fitting
+    /// rect to minimise fragmentation. Returns the chosen rect index and its
+    /// (x, y) position.
+    fn alloc_atlas_space(&mut self, w: u32, h: u32) -> Option<(u32, u32, usize)> {
+        // Search free_list for the smallest rect that fits (best-fit).
+        let mut best_idx: Option<usize> = None;
+        let mut best_area = u64::MAX;
+        for (i, rect) in self.free_list.iter().enumerate() {
+            if rect.w >= w && rect.h >= h {
+                let area = (rect.w as u64) * (rect.h as u64);
+                if area < best_area {
+                    best_area = area;
+                    best_idx = Some(i);
+                    if area == (w as u64) * (h as u64) {
+                        break; // perfect fit
+                    }
+                }
+            }
+        }
+
+        if let Some(idx) = best_idx {
+            let rect = self.free_list.swap_remove(idx);
+            let x = rect.x;
+            let y = rect.y;
+
+            // Split remaining space: right strip and bottom strip.
+            if rect.w > w {
+                self.free_list.push(FreeRect {
+                    x: rect.x + w,
+                    y: rect.y,
+                    w: rect.w - w,
+                    h,
+                });
+            }
+            if rect.h > h {
+                self.free_list.push(FreeRect {
+                    x: rect.x,
+                    y: rect.y + h,
+                    w,
+                    h: rect.h - h,
+                });
+            }
+            // Sort by area (ascending) to keep best-fit fast.
+            self.free_list
+                .sort_unstable_by_key(|r| (r.w as u64) * (r.h as u64));
+            return Some((x, y, idx));
+        }
+        None
+    }
+
+    /// Evict the oldest 25% of entries (LRU) and recycle their atlas space
+    /// into the free_list. This avoids the full-clear cascade where ALL visible
+    /// characters must be re-rasterized at once.
+    fn evict_oldest(&mut self) {
+        if self.entries.len() < 16 {
+            self.clear();
+            return;
+        }
+
+        // Collect last_used values and find the 25th percentile.
+        let mut ages: Vec<u64> = self.entries.values().map(|e| e.last_used).collect();
+        ages.sort_unstable();
+        let threshold = ages[ages.len() / 4];
+
+        // Recycle evicted entries' atlas space into free_list.
+        self.entries.retain(|_, entry| {
+            if entry.last_used <= threshold {
+                if entry.padded_w > 0 && entry.padded_h > 0 {
+                    self.free_list.push(FreeRect {
+                        x: entry.atlas_x,
+                        y: entry.atlas_y,
+                        w: entry.padded_w,
+                        h: entry.padded_h,
+                    });
+                }
+                false // remove
+            } else {
+                true // keep
+            }
+        });
+
+        // Merge adjacent free rects to reduce fragmentation.
+        self.free_list
+            .sort_unstable_by_key(|r| (r.y, r.x));
+        let mut i = 0;
+        while i < self.free_list.len() {
+            let mut merged = false;
+            let mut j = i + 1;
+            while j < self.free_list.len() {
+                let a = self.free_list[i];
+                let b = self.free_list[j];
+                // Same row and adjacent horizontally?
+                if a.y == b.y && a.h == b.h && a.x + a.w == b.x {
+                    self.free_list[i].w += b.w;
+                    self.free_list.swap_remove(j);
+                    merged = true;
+                } else {
+                    j += 1;
+                }
+            }
+            if !merged {
+                i += 1;
+            }
+        }
+        // Re-sort by area for best-fit allocation.
+        self.free_list
+            .sort_unstable_by_key(|r| (r.w as u64) * (r.h as u64));
+
+        // Reset cursor — new glyphs will prefer free_list first, then cursor.
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+        self.row_height = 0;
     }
 
     fn line_ascent(&mut self, quantized_size: u32) -> f32 {
@@ -438,11 +578,14 @@ impl Next2GlyphAtlas {
         ch: char,
         quantized_size: u32,
     ) -> Option<&GlyphAtlasEntry> {
+        self.frame_counter = self.frame_counter.wrapping_add(1);
         let resolved = self.resolve_char(ch);
         let key = (resolved, quantized_size);
-        if !self.entries.contains_key(&key) {
-            self.rasterize_and_upload(queue, resolved, quantized_size)?;
+        if self.entries.contains_key(&key) {
+            self.entries.get_mut(&key).unwrap().last_used = self.frame_counter;
+            return self.entries.get(&key);
         }
+        self.rasterize_and_upload(queue, resolved, quantized_size)?;
         self.entries.get(&key)
     }
 
@@ -497,6 +640,11 @@ impl Next2GlyphAtlas {
                     offset_y: 0.0,
                     advance: msdf.advance,
                     spread: 0.0,
+                    last_used: self.frame_counter,
+                    atlas_x: 0,
+                    atlas_y: 0,
+                    padded_w: 0,
+                    padded_h: 0,
                 },
             );
             return Some(());
@@ -511,19 +659,46 @@ impl Next2GlyphAtlas {
             .saturating_add(ATLAS_GLYPH_PADDING.saturating_mul(2))
             .max(1);
 
-        if self.cursor_x + padded_w > self.width {
-            self.cursor_x = 0;
-            self.cursor_y = self.cursor_y.saturating_add(self.row_height);
-            self.row_height = 0;
-        }
+        // Try free_list first (recycled space from evicted entries).
+        let (atlas_x, atlas_y) = if let Some((x, y, _)) = self.alloc_atlas_space(padded_w, padded_h) {
+            (x, y)
+        } else {
+            // Fall back to cursor-based allocation.
+            if self.cursor_x + padded_w > self.width {
+                self.cursor_x = 0;
+                self.cursor_y = self.cursor_y.saturating_add(self.row_height);
+                self.row_height = 0;
+            }
 
-        if self.cursor_y + padded_h > self.height {
-            self.clear();
-        }
-
-        if self.cursor_x + padded_w > self.width || self.cursor_y + padded_h > self.height {
-            return None;
-        }
+            if self.cursor_y + padded_h > self.height {
+                self.evict_oldest();
+                // Retry free_list after eviction.
+                if let Some((x, y, _)) = self.alloc_atlas_space(padded_w, padded_h) {
+                    (x, y)
+                } else {
+                    // Cursor was reset; try cursor path again.
+                    if self.cursor_x + padded_w > self.width {
+                        self.cursor_x = 0;
+                        self.cursor_y = self.cursor_y.saturating_add(self.row_height);
+                        self.row_height = 0;
+                    }
+                    if self.cursor_y + padded_h > self.height {
+                        return None;
+                    }
+                    let x = self.cursor_x;
+                    let y = self.cursor_y;
+                    self.cursor_x = self.cursor_x.saturating_add(padded_w);
+                    self.row_height = self.row_height.max(padded_h);
+                    (x, y)
+                }
+            } else {
+                let x = self.cursor_x;
+                let y = self.cursor_y;
+                self.cursor_x = self.cursor_x.saturating_add(padded_w);
+                self.row_height = self.row_height.max(padded_h);
+                (x, y)
+            }
+        };
 
         let mut padded_pixels = vec![0u8; (padded_w * padded_h * 4) as usize];
         let src_row_bytes = (msdf.width * 4) as usize;
@@ -542,8 +717,8 @@ impl Next2GlyphAtlas {
                 texture: &self.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
-                    x: self.cursor_x,
-                    y: self.cursor_y,
+                    x: atlas_x,
+                    y: atlas_y,
                     z: 0,
                 },
                 aspect: wgpu::TextureAspect::All,
@@ -561,8 +736,8 @@ impl Next2GlyphAtlas {
             },
         );
 
-        let glyph_x = self.cursor_x + ATLAS_GLYPH_PADDING;
-        let glyph_y = self.cursor_y + ATLAS_GLYPH_PADDING;
+        let glyph_x = atlas_x + ATLAS_GLYPH_PADDING;
+        let glyph_y = atlas_y + ATLAS_GLYPH_PADDING;
         let half_texel_u = 0.5 / self.width as f32;
         let half_texel_v = 0.5 / self.height as f32;
         let uv_min = [
@@ -577,20 +752,20 @@ impl Next2GlyphAtlas {
         let entry = GlyphAtlasEntry {
             uv_min,
             uv_max,
-            // Geometry must use real MTSDF bounds. Atlas padding is for sampling
-            // isolation only and should not be drawn, otherwise glyph edges blur.
             width: msdf.width,
             height: msdf.height,
             offset_x: msdf.offset_x,
             offset_y: msdf.offset_y,
             advance: msdf.advance,
             spread: msdf.spread,
+            last_used: self.frame_counter,
+            atlas_x,
+            atlas_y,
+            padded_w,
+            padded_h,
         };
 
         self.entries.insert((ch, quantized_size), entry);
-
-        self.cursor_x = self.cursor_x.saturating_add(padded_w);
-        self.row_height = self.row_height.max(padded_h);
 
         Some(())
     }

@@ -100,6 +100,11 @@ class Smb2NativeService {
   }
 
   final _Smb2Worker _worker = _Smb2Worker();
+
+  /// Dispose the SMB2 worker isolate. Call on app exit to prevent process lingering.
+  void dispose() {
+    _worker.dispose();
+  }
 }
 
 class Smb2Stat {
@@ -116,6 +121,7 @@ class Smb2Stat {
 
 class _Smb2Worker {
   SendPort? _sendPort;
+  Isolate? _isolate;
   final ReceivePort _receivePort = ReceivePort();
   final Map<int, Completer<Object?>> _pending = <int, Completer<Object?>>{};
   int _nextId = 1;
@@ -142,8 +148,22 @@ class _Smb2Worker {
       }
     });
 
-    await Isolate.spawn(_smb2WorkerMain, _receivePort.sendPort);
+    _isolate = await Isolate.spawn(_smb2WorkerMain, _receivePort.sendPort);
     _sendPort = await completer.future;
+  }
+
+  /// Kill the worker isolate and close the receive port.
+  /// Must be called on app exit to prevent the process from lingering.
+  void dispose() {
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
+    _receivePort.close();
+    _sendPort = null;
+    // Fail all pending requests so callers don't hang forever.
+    for (final completer in _pending.values) {
+      completer.completeError(StateError('SMB2 worker disposed'));
+    }
+    _pending.clear();
   }
 
   Future<String> requestList({

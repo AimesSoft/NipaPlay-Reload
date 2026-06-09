@@ -492,6 +492,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       } else {
         _captureConditionalScreenshot("暂停时");
       }
+      // 保存暂停时的 playbackTimeMs，用于恢复时平滑衔接
+      _pausedPlaybackTimeMs = _playbackTimeMs.value;
       // 停止UI更新Ticker，避免继续产帧
       _uiUpdateTicker?.stop();
       // WakelockPlus.disable(); // Already handled by _setStatus
@@ -570,9 +572,20 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         // Flutter Ticker stop()+start() 后 elapsed 从 0 重新开始，
         // 但 _smoothAnchorElapsedUs 保留暂停前的值（如 5,000,000μs），
         // 导致恢复首帧 elapsedDeltaUs = 16,667 - 5,000,000 = 负数 → smoothMs 大幅落后
-        // 修复：重设 _lastRawPlayerMs 让首帧走"重新锚定"路径（line 645+），
-        // 该路径会正确设置 _smoothAnchorMs = playerMs, _smoothAnchorElapsedUs = currentElapsedUs
-        _lastRawPlayerMs = -1;
+        //
+        // ✅ P3 修复：使用暂停时保存的 playbackTimeMs 作为锚点，
+        // 而不是让首帧走"重锚到 player.position"路径。
+        // mpv 恢复后 player.position 可能回退（比暂停前小几十ms），
+        // 直接锚定到 playerMs 会导致弹幕跳变到错误时间点。
+        // 使用暂停时的精确值确保弹幕从暂停位置无缝继续。
+        if (_pausedPlaybackTimeMs != null) {
+          _smoothAnchorMs = _pausedPlaybackTimeMs!;
+          _smoothAnchorElapsedUs = 0; // Ticker 重启后 elapsed 从 0 开始
+          _lastRawPlayerMs = -1; // 保持 -1，让漂移修正自然校准
+          _pausedPlaybackTimeMs = null;
+        } else {
+          _lastRawPlayerMs = -1;
+        }
         _lastElapsedUs = 0; // Ticker elapsed 重置后基线也要重置
         _uiUpdateTicker!.start();
       }

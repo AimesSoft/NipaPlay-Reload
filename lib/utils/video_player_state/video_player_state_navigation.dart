@@ -635,6 +635,28 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               }
             } else if (_lastRawPlayerMs < 0) {
               // 首帧或重置后：锚定
+              // ✅ P3 修复：暂停恢复场景下，play() 已设置 _smoothAnchorMs = 暂停时的值，
+              // _smoothAnchorElapsedUs = 0。此时不应让 player.position 覆盖锚点，
+              // 而是直接用已设置的锚点插值推进，让漂移修正自然校准。
+              final isResumeFromPause = _smoothAnchorElapsedUs == 0 && _playbackTimeMs.value > 100.0;
+
+              if (isResumeFromPause) {
+                // 暂停恢复：锚点已在 play() 中设置，直接插值推进
+                final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
+                final newPtm = (_smoothAnchorMs + elapsedDeltaUs / 1000.0 * effectivePlaybackRate)
+                    .clamp(0.0, _duration.inMilliseconds.toDouble());
+                _playbackTimeMs.value = newPtm;
+                // 标记 _lastRawPlayerMs 让下一帧走漂移修正路径
+                // 但不立即锚定到 playerMs，让漂移修正渐进收敛
+                _lastRawPlayerMs = playerPosition;
+                if (!kReleaseMode) {
+                  debugPrint('[RESUME-PAUSE-DIAG] Resume from pause: '
+                      'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+                      'playerMs=${playerMs.toStringAsFixed(1)} '
+                      'ptm=${newPtm.toStringAsFixed(1)} '
+                      'delta=${(newPtm - playerMs).toStringAsFixed(1)}ms');
+                }
+              } else {
               // ✅ 防御性修复(V3)：检测过期 playerMs
               // 核心判断：如果 playbackTimeMs ≈ 0（刚被重置）且 playerMs >> 0，
               // 则 playerMs 一定是过期数据（旧视频/旧位置），无论 _anchorSetBySeek 是什么值。
@@ -702,6 +724,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   _playbackTimeMs.value = newPtmCandidate;
                 }
               }
+              }
             } else {
               // 正常播放：检测锚点是否过期（seek/暂停恢复后第一帧）
               final elapsedDeltaUs = currentElapsedUs - _smoothAnchorElapsedUs;
@@ -762,11 +785,10 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   final isBackward = playerMs < prevPtm - 5.0; // playerMs 比 playbackTimeMs 小 >5ms
                   if (isBackward) {
                     // ✅ 回退保护：渐进修正而非立即对齐
-                    // ⚠️ [PTM-MONOTONICITY-DIAG] 根因1核心诊断：
-                    // 渐进修正 correctionMs = drift * 0.20 → _smoothAnchorMs = smoothMs - correctionMs
-                    // 如果 smoothMs > prevPtm（平滑时钟超前），修正后 newPtm < prevPtm → playbackTimeMs 回退！
-                    // 这违反了 playbackTimeMs 单调递增原则，导致 item.x 增大 → 弹幕回弹。
-                    final correctionMs = drift * 0.20;
+                    // P3 优化：提高修正速率到 35%，让暂停恢复后的时间偏差更快收敛。
+                    // 旧值 20% 在暂停恢复后需要 ~15 帧才能收敛 30ms 偏差，
+                    // 期间弹幕时间与视频不同步。35% 可在 ~8 帧内收敛。
+                    final correctionMs = drift * 0.35;
                     _smoothAnchorMs = smoothMs - correctionMs;
                     final correctionUsExact = correctionMs * 1000.0 / effectivePlaybackRate;
                     _smoothAnchorElapsedUs =
@@ -819,11 +841,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     }
                   }
                 } else {
-                  // 小漂移：渐进修正锚点（每帧修正 5%）
-                  // 关键：同时按比例调整锚点时间，使当前帧输出完全连续（无阶跃），
-                  // 修正效果在后续帧中自然渐入。这消除了旧代码中 reset
-                  // _smoothAnchorElapsedUs 导致的周期性"抽帧"现象。
-                  final correctionMs = drift * 0.05;
+                  // 小漂移：渐进修正锚点
+                  // P3 优化：提高修正速率到 15%，让正常播放中的微小偏差更快收敛。
+                  // 旧值 5% 收敛太慢，导致弹幕时间持续领先/落后视频几十毫秒。
+                  // 15% 可在 ~15 帧内收敛 30ms 偏差，同时保持帧间连续性。
+                  final correctionMs = drift * 0.15;
                   _smoothAnchorMs = smoothMs - correctionMs;
                   // 锚点时间调整：锚点位置被修正了 correctionMs，
                   // 锚点时间需设置为 currentElapsedUs - correctionMs*1000/rate，

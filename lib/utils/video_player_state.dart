@@ -304,6 +304,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _lastDiagDriftSnapMs = 0; // [DRIFT-SNAP-DIAG] 大漂移对齐日志节流
   double? _seekTargetMs; // seek 目标位置，player.position 追上后清除
   bool _anchorSetBySeek = false; // ✅ 标记 _smoothAnchorMs 是否由 seek/loop 操作设置（区分首帧加载 vs seek 后旧 playerMs）
+  double? _pausedPlaybackTimeMs; // 暂停时保存的 playbackTimeMs，用于恢复时平滑衔接
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
