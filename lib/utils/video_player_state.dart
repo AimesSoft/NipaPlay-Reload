@@ -595,6 +595,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _currentThumbnailPath; // 添加当前缩略图路径
   String? _currentVideoHash; // 缓存当前视频的哈希值，避免重复计算
   bool _isCapturingFrame = false; // 是否正在截图，避免并发截图
+  Completer<void>? _screenshotCompleter; // 截图完成信号，用于 resetPlayer 等待截图结束
+  bool _mutedForExit = false; // 退出流程中是否静音了播放器
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性

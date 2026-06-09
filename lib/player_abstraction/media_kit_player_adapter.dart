@@ -1858,6 +1858,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     if (_textureIdListenerAttached && _controller != null) {
       _controller!.id.removeListener(_handleTextureIdChange);
     }
+
     void disposePlayerCore() {
       try {
         _player.dispose();
@@ -1871,7 +1872,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
         detachPlatformVideoSurface().whenComplete(disposePlayerCore),
       );
     } else {
-      disposePlayerCore();
+      // ✨ 优化：异步执行销毁，不阻塞主线程
+      // Future.microtask 仍在当前事件循环执行，会阻塞 UI
+      // Future.delayed 让出一帧时间，确保页面过渡动画完成
+      unawaited(Future.delayed(const Duration(milliseconds: 16), disposePlayerCore));
     }
     _textureIdNotifier.dispose();
   }
