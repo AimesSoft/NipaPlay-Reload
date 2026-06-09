@@ -1317,11 +1317,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // Volume Getters
   double get currentSystemVolume => _currentVolume;
 
+  void _syncNativeDanmakuGlobalOffset() {
+    try {
+      if (!player.supportsNativeDanmaku) {
+        return;
+      }
+      final offsetMicros = ((_manualDanmakuOffset + _autoDanmakuOffset) *
+              Duration.microsecondsPerSecond)
+          .round();
+      unawaited(player.setNativeDanmakuGlobalOffset(
+        Duration(microseconds: offsetMicros),
+      ));
+    } catch (_) {
+      // The player is late-initialized; ignore calls made before it exists.
+    }
+  }
+
   void setManualDanmakuOffset(double offset) {
     if ((_manualDanmakuOffset - offset).abs() < 0.0001) {
       return;
     }
     _manualDanmakuOffset = offset;
+    _syncNativeDanmakuGlobalOffset();
     notifyListeners();
   }
 
@@ -1330,6 +1347,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       return;
     }
     _autoDanmakuOffset = offset;
+    _syncNativeDanmakuGlobalOffset();
     notifyListeners();
   }
 

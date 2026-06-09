@@ -72,6 +72,7 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       customFontFamily: fontFamily,
       customFontFilePath: fontPath,
     ));
+    _syncNativeDanmakuGlobalOffset();
   }
 
   Future<void> _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
