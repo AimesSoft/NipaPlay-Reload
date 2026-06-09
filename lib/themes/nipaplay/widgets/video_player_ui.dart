@@ -231,6 +231,14 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
       return VideoPlayer(controller);
     }
     if (videoState.player.prefersPlatformVideoSurface) {
+      final playerSurface = videoState.player.buildPlatformVideoSurface(
+        debugLabel: videoState.currentVideoPath?.split('/').last,
+        onPlatformViewIdChanged: _updateMacOSNativeVideoViewId,
+        onFrameRectChanged: _handleMacOSWindowHostedVideoRectChanged,
+      );
+      if (playerSurface != null) {
+        return playerSurface;
+      }
       if (_shouldUseMacOSWindowHostedVideoOverlay) {
         return MacOSWindowNativeVideoOverlaySurface(
           player: videoState.player,

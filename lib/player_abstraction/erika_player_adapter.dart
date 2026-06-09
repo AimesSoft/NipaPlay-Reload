@@ -1,0 +1,800 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:ui' show Rect;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Widget;
+import 'package:erika_flutter/erika_flutter.dart';
+
+import './abstract_player.dart';
+import './player_data_models.dart';
+import './player_enums.dart';
+
+class _ErikaDanmakuConfigPatch {
+  _ErikaDanmakuConfigPatch({
+    this.enabled,
+    this.fontSize,
+    this.opacity,
+    this.displayArea,
+    this.scrollDurationSeconds,
+    this.scrollSpeedFactor,
+    this.trackGapRatio,
+    this.outlineWidth,
+    this.shadowStyle,
+    this.customFontFamily,
+    this.customFontFilePath,
+    this.mergeDuplicates,
+    this.allowStacking,
+    this.maxQuantity,
+    this.maxLinesPerMode,
+    this.blockTop,
+    this.blockBottom,
+    this.blockScroll,
+    List<String>? blockWords,
+  }) : blockWords =
+            blockWords == null ? null : List<String>.unmodifiable(blockWords);
+
+  final bool? enabled;
+  final double? fontSize;
+  final double? opacity;
+  final double? displayArea;
+  final double? scrollDurationSeconds;
+  final double? scrollSpeedFactor;
+  final double? trackGapRatio;
+  final double? outlineWidth;
+  final int? shadowStyle;
+  final String? customFontFamily;
+  final String? customFontFilePath;
+  final bool? mergeDuplicates;
+  final bool? allowStacking;
+  final int? maxQuantity;
+  final int? maxLinesPerMode;
+  final bool? blockTop;
+  final bool? blockBottom;
+  final bool? blockScroll;
+  final List<String>? blockWords;
+
+  bool get isEmpty =>
+      enabled == null &&
+      fontSize == null &&
+      opacity == null &&
+      displayArea == null &&
+      scrollDurationSeconds == null &&
+      scrollSpeedFactor == null &&
+      trackGapRatio == null &&
+      outlineWidth == null &&
+      shadowStyle == null &&
+      customFontFamily == null &&
+      customFontFilePath == null &&
+      mergeDuplicates == null &&
+      allowStacking == null &&
+      maxQuantity == null &&
+      maxLinesPerMode == null &&
+      blockTop == null &&
+      blockBottom == null &&
+      blockScroll == null &&
+      blockWords == null;
+
+  _ErikaDanmakuConfigPatch merge(_ErikaDanmakuConfigPatch other) {
+    return _ErikaDanmakuConfigPatch(
+      enabled: other.enabled ?? enabled,
+      fontSize: other.fontSize ?? fontSize,
+      opacity: other.opacity ?? opacity,
+      displayArea: other.displayArea ?? displayArea,
+      scrollDurationSeconds:
+          other.scrollDurationSeconds ?? scrollDurationSeconds,
+      scrollSpeedFactor: other.scrollSpeedFactor ?? scrollSpeedFactor,
+      trackGapRatio: other.trackGapRatio ?? trackGapRatio,
+      outlineWidth: other.outlineWidth ?? outlineWidth,
+      shadowStyle: other.shadowStyle ?? shadowStyle,
+      customFontFamily: other.customFontFamily ?? customFontFamily,
+      customFontFilePath: other.customFontFilePath ?? customFontFilePath,
+      mergeDuplicates: other.mergeDuplicates ?? mergeDuplicates,
+      allowStacking: other.allowStacking ?? allowStacking,
+      maxQuantity: other.maxQuantity ?? maxQuantity,
+      maxLinesPerMode: other.maxLinesPerMode ?? maxLinesPerMode,
+      blockTop: other.blockTop ?? blockTop,
+      blockBottom: other.blockBottom ?? blockBottom,
+      blockScroll: other.blockScroll ?? blockScroll,
+      blockWords: other.blockWords ?? blockWords,
+    );
+  }
+
+  _ErikaDanmakuConfigPatch differenceFrom(
+    _ErikaDanmakuConfigPatch? previous,
+  ) {
+    return _ErikaDanmakuConfigPatch(
+      enabled: _changed(enabled, previous?.enabled) ? enabled : null,
+      fontSize: _changed(fontSize, previous?.fontSize) ? fontSize : null,
+      opacity: _changed(opacity, previous?.opacity) ? opacity : null,
+      displayArea:
+          _changed(displayArea, previous?.displayArea) ? displayArea : null,
+      scrollDurationSeconds: _changed(
+        scrollDurationSeconds,
+        previous?.scrollDurationSeconds,
+      )
+          ? scrollDurationSeconds
+          : null,
+      scrollSpeedFactor: _changed(
+        scrollSpeedFactor,
+        previous?.scrollSpeedFactor,
+      )
+          ? scrollSpeedFactor
+          : null,
+      trackGapRatio: _changed(trackGapRatio, previous?.trackGapRatio)
+          ? trackGapRatio
+          : null,
+      outlineWidth:
+          _changed(outlineWidth, previous?.outlineWidth) ? outlineWidth : null,
+      shadowStyle:
+          _changed(shadowStyle, previous?.shadowStyle) ? shadowStyle : null,
+      customFontFamily: _changed(customFontFamily, previous?.customFontFamily)
+          ? customFontFamily
+          : null,
+      customFontFilePath:
+          _changed(customFontFilePath, previous?.customFontFilePath)
+              ? customFontFilePath
+              : null,
+      mergeDuplicates: _changed(mergeDuplicates, previous?.mergeDuplicates)
+          ? mergeDuplicates
+          : null,
+      allowStacking: _changed(allowStacking, previous?.allowStacking)
+          ? allowStacking
+          : null,
+      maxQuantity:
+          _changed(maxQuantity, previous?.maxQuantity) ? maxQuantity : null,
+      maxLinesPerMode: _changed(maxLinesPerMode, previous?.maxLinesPerMode)
+          ? maxLinesPerMode
+          : null,
+      blockTop: _changed(blockTop, previous?.blockTop) ? blockTop : null,
+      blockBottom:
+          _changed(blockBottom, previous?.blockBottom) ? blockBottom : null,
+      blockScroll:
+          _changed(blockScroll, previous?.blockScroll) ? blockScroll : null,
+      blockWords:
+          _changedList(blockWords, previous?.blockWords) ? blockWords : null,
+    );
+  }
+
+  static bool _changed<T>(T? value, T? previous) =>
+      value != null && value != previous;
+
+  static bool _changedList(List<String>? value, List<String>? previous) =>
+      value != null && !listEquals(value, previous);
+}
+
+class ErikaPlayerAdapter implements AbstractPlayer {
+  ErikaPlayerAdapter() {
+    if (_isSupported) {
+      _eventSubscription = _player.events.listen(
+        _handleEvent,
+        onError: (Object error, StackTrace stackTrace) {
+          debugPrint('ErikaPlayerAdapter event error: $error');
+        },
+      );
+    }
+  }
+
+  final ErikaPlayer _player = ErikaPlayer();
+  final ValueNotifier<int?> _textureIdNotifier = ValueNotifier<int?>(null);
+  final Map<PlayerMediaType, List<String>> _decoders = {
+    PlayerMediaType.video: const <String>[],
+    PlayerMediaType.audio: const <String>[],
+    PlayerMediaType.subtitle: const <String>[],
+    PlayerMediaType.unknown: const <String>[],
+  };
+  final Map<String, String> _properties = <String, String>{};
+
+  StreamSubscription<ErikaPlayerEvent>? _eventSubscription;
+  PlayerPlaybackState _state = PlayerPlaybackState.stopped;
+  PlayerMediaInfo _mediaInfo = PlayerMediaInfo(duration: 0);
+  String _media = '';
+  double _volume = 1.0;
+  double _playbackRate = 1.0;
+  int _lastPositionMs = 0;
+  DateTime _lastPositionUpdate = DateTime.now();
+  int? _pendingSeekTargetMs;
+  DateTime? _seekFenceUntil;
+  bool _disposed = false;
+
+  static const Duration _danmakuConfigCoalesceDelay =
+      Duration(milliseconds: 50);
+  Timer? _danmakuConfigTimer;
+  bool _danmakuConfigInFlight = false;
+  _ErikaDanmakuConfigPatch? _pendingDanmakuConfig;
+  _ErikaDanmakuConfigPatch? _lastAppliedDanmakuConfig;
+  final List<Completer<void>> _pendingDanmakuConfigCompleters =
+      <Completer<void>>[];
+
+  // Real Erika track descriptors, kept so the UI's index-based
+  // activeAudioTracks/activeSubtitleTracks can be mapped back to native ids.
+  List<ErikaTrackInfo> _audioTrackInfos = const <ErikaTrackInfo>[];
+  List<ErikaTrackInfo> _subtitleTrackInfos = const <ErikaTrackInfo>[];
+  List<int> _activeAudioTracks = const <int>[];
+  List<int> _activeSubtitleTracks = const <int>[];
+
+  static bool get _isSupported =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  bool get prefersPlatformVideoSurface => _isSupported;
+
+  @override
+  double get volume => _volume;
+
+  @override
+  set volume(double value) {
+    _volume = value.clamp(0.0, 1.0).toDouble();
+    if (_isSupported) {
+      unawaited(_player.setVolume(_volume));
+    }
+  }
+
+  @override
+  double get playbackRate => _playbackRate;
+
+  @override
+  set playbackRate(double value) {
+    setPlaybackRate(value);
+  }
+
+  @override
+  PlayerPlaybackState get state => _state;
+
+  @override
+  set state(PlayerPlaybackState value) {
+    if (value == _state) {
+      return;
+    }
+    switch (value) {
+      case PlayerPlaybackState.playing:
+        unawaited(playDirectly());
+        break;
+      case PlayerPlaybackState.paused:
+        unawaited(pauseDirectly());
+        break;
+      case PlayerPlaybackState.stopped:
+        _state = PlayerPlaybackState.stopped;
+        _lastPositionMs = 0;
+        unawaited(_player.stop());
+        break;
+    }
+  }
+
+  @override
+  ValueListenable<int?> get textureId => _textureIdNotifier;
+
+  @override
+  String get media => _media;
+
+  @override
+  set media(String value) {
+    setMedia(value, PlayerMediaType.video);
+  }
+
+  @override
+  PlayerMediaInfo get mediaInfo => _mediaInfo;
+
+  @override
+  List<int> get activeSubtitleTracks => _activeSubtitleTracks;
+
+  @override
+  set activeSubtitleTracks(List<int> value) {
+    _activeSubtitleTracks = List<int>.from(value);
+    if (!_isSupported) {
+      return;
+    }
+    // Empty selection means "no subtitle".
+    if (value.isEmpty) {
+      unawaited(_player.selectSubtitleTrack(null));
+      return;
+    }
+    final index = value.first;
+    if (index >= 0 && index < _subtitleTrackInfos.length) {
+      unawaited(_player.selectSubtitleTrack(_subtitleTrackInfos[index].id));
+    }
+  }
+
+  @override
+  List<int> get activeAudioTracks => _activeAudioTracks;
+
+  @override
+  set activeAudioTracks(List<int> value) {
+    _activeAudioTracks = List<int>.from(value);
+    if (!_isSupported) {
+      return;
+    }
+    // Empty selection falls back to the first real audio track.
+    if (value.isEmpty) {
+      if (_audioTrackInfos.isNotEmpty) {
+        unawaited(_player.selectAudioTrack(_audioTrackInfos.first.id));
+      }
+      return;
+    }
+    final index = value.first;
+    if (index >= 0 && index < _audioTrackInfos.length) {
+      unawaited(_player.selectAudioTrack(_audioTrackInfos[index].id));
+    }
+  }
+
+  @override
+  int get position {
+    if (_state != PlayerPlaybackState.playing) {
+      return _lastPositionMs;
+    }
+    final elapsedMs =
+        DateTime.now().difference(_lastPositionUpdate).inMilliseconds;
+    return _lastPositionMs + (elapsedMs * _playbackRate).round();
+  }
+
+  @override
+  int get bufferedPosition => position;
+
+  @override
+  void setBufferRange({int minMs = -1, int maxMs = -1, bool drop = false}) {}
+
+  @override
+  bool get supportsExternalSubtitles => false;
+
+  @override
+  Future<int?> updateTexture() async => null;
+
+  @override
+  void setMedia(String path, PlayerMediaType type) {
+    if (type == PlayerMediaType.video || type == PlayerMediaType.unknown) {
+      _media = path;
+      _lastPositionMs = 0;
+      _lastPositionUpdate = DateTime.now();
+      _mediaInfo = PlayerMediaInfo(duration: 0);
+    }
+  }
+
+  @override
+  Future<void> prepare() async {
+    _ensureSupported();
+    if (_media.isEmpty) {
+      return;
+    }
+    await _player.ensureCreated();
+    await _player.open(_media);
+    _state = PlayerPlaybackState.paused;
+  }
+
+  @override
+  void seek({required int position}) {
+    final clamped = position < 0 ? 0 : position;
+    _lastPositionMs = clamped;
+    _lastPositionUpdate = DateTime.now();
+    _pendingSeekTargetMs = clamped;
+    _seekFenceUntil = DateTime.now().add(const Duration(milliseconds: 1500));
+    unawaited(_player.seek(Duration(milliseconds: clamped)));
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    _danmakuConfigTimer?.cancel();
+    _danmakuConfigTimer = null;
+    for (final completer in _pendingDanmakuConfigCompleters) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+    _pendingDanmakuConfigCompleters.clear();
+    _pendingDanmakuConfig = null;
+    unawaited(_eventSubscription?.cancel());
+    _eventSubscription = null;
+    unawaited(_player.dispose());
+    _textureIdNotifier.dispose();
+  }
+
+  @override
+  Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {
+    if (!_isSupported) {
+      return null;
+    }
+    try {
+      final Uint8List? bytes = await _player.screenshot();
+      if (bytes == null || bytes.isEmpty) {
+        return null;
+      }
+      final video = _mediaInfo.video;
+      final codec =
+          video != null && video.isNotEmpty ? video.first.codec : null;
+      return PlayerFrame(
+        width: width > 0 ? width : (codec?.width ?? 0),
+        height: height > 0 ? height : (codec?.height ?? 0),
+        bytes: bytes,
+      );
+    } catch (error) {
+      debugPrint('Erika: screenshot failed: $error');
+      return null;
+    }
+  }
+
+  @override
+  void setDecoders(PlayerMediaType type, List<String> decoders) {
+    _decoders[type] = List<String>.from(decoders);
+  }
+
+  @override
+  List<String> getDecoders(PlayerMediaType type) =>
+      List<String>.from(_decoders[type] ?? const <String>[]);
+
+  @override
+  String? getProperty(String key) => _properties[key];
+
+  @override
+  void setProperty(String key, String value) {
+    _properties[key] = value;
+  }
+
+  @override
+  Future<void> setVideoSurfaceSize({int? width, int? height}) async {}
+
+  @override
+  Future<void> playDirectly() async {
+    _ensureSupported();
+    await _player.ensureCreated();
+    await _player.play();
+    _state = PlayerPlaybackState.playing;
+    _lastPositionUpdate = DateTime.now();
+  }
+
+  @override
+  Future<void> pauseDirectly() async {
+    _ensureSupported();
+    await _player.ensureCreated();
+    _lastPositionMs = position;
+    await _player.pause();
+    _state = PlayerPlaybackState.paused;
+    _lastPositionUpdate = DateTime.now();
+  }
+
+  @override
+  void setPlaybackRate(double rate) {
+    _playbackRate = rate <= 0 ? 1.0 : rate;
+    if (_isSupported) {
+      unawaited(_player.setPlaybackRate(_playbackRate));
+    }
+  }
+
+  Widget buildPlatformVideoSurface({
+    String? debugLabel,
+    ValueChanged<int?>? onPlatformViewIdChanged,
+    ValueChanged<Rect?>? onFrameRectChanged,
+  }) {
+    _ensureSupported();
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return ErikaVideoView(
+        player: _player,
+        debugLabel: debugLabel,
+        onPlatformViewIdChanged: onPlatformViewIdChanged,
+      );
+    }
+    return ErikaWindowOverlayVideoView(
+      player: _player,
+      debugLabel: debugLabel,
+      onPlatformViewIdChanged: onPlatformViewIdChanged,
+      onFrameRectChanged: onFrameRectChanged,
+    );
+  }
+
+  // ---- Erika native danmaku passthrough ----
+  //
+  // Erika composites danmaku into the video frame natively, so when the Erika
+  // kernel is active NipaPlay feeds its danmaku list + settings here instead of
+  // driving its own Flutter danmaku overlay. The list uses NipaPlay's standard
+  // danmaku maps ({time, content, type, color, ...}); Erika's JSON parser
+  // accepts that shape directly, so it is forwarded as-is.
+
+  bool get supportsNativeDanmaku => _isSupported;
+
+  Future<void> loadDanmakuList(List<Map<String, dynamic>> danmakuList) async {
+    if (!_isSupported) {
+      return;
+    }
+    await _player.loadDanmakuJson(jsonEncode(danmakuList));
+  }
+
+  Future<void> clearDanmaku() async {
+    if (!_isSupported) {
+      return;
+    }
+    await _player.clearDanmaku();
+  }
+
+  Future<void> setDanmakuEnabled(bool enabled) async {
+    if (!_isSupported) {
+      return;
+    }
+    await _player.setDanmakuEnabled(enabled);
+  }
+
+  Future<void> setDanmakuGlobalOffset(Duration offset) async {
+    if (!_isSupported) {
+      return;
+    }
+    await _player.setDanmakuGlobalOffset(offset);
+  }
+
+  /// Bridges NipaPlay's danmaku display settings onto Erika's DFM+ config.
+  /// All arguments are optional; only the supplied ones are pushed down.
+  Future<void> setDanmakuConfig({
+    bool? enabled,
+    double? fontSize,
+    double? opacity,
+    double? displayArea,
+    double? scrollDurationSeconds,
+    double? scrollSpeedFactor,
+    double? trackGapRatio,
+    double? outlineWidth,
+    int? shadowStyle,
+    String? customFontFamily,
+    String? customFontFilePath,
+    bool? mergeDuplicates,
+    bool? allowStacking,
+    int? maxQuantity,
+    int? maxLinesPerMode,
+    bool? blockTop,
+    bool? blockBottom,
+    bool? blockScroll,
+    List<String>? blockWords,
+  }) async {
+    if (!_isSupported || _disposed) {
+      return;
+    }
+    final patch = _ErikaDanmakuConfigPatch(
+      enabled: enabled,
+      fontSize: fontSize,
+      opacity: opacity,
+      displayArea: displayArea,
+      scrollDurationSeconds: scrollDurationSeconds,
+      scrollSpeedFactor: scrollSpeedFactor,
+      trackGapRatio: trackGapRatio,
+      outlineWidth: outlineWidth,
+      shadowStyle: shadowStyle,
+      customFontFamily: customFontFamily,
+      customFontFilePath: customFontFilePath,
+      mergeDuplicates: mergeDuplicates,
+      allowStacking: allowStacking,
+      maxQuantity: maxQuantity,
+      maxLinesPerMode: maxLinesPerMode,
+      blockTop: blockTop,
+      blockBottom: blockBottom,
+      blockScroll: blockScroll,
+      blockWords: blockWords,
+    );
+    if (patch.isEmpty) {
+      return;
+    }
+
+    final completer = Completer<void>();
+    _pendingDanmakuConfig = _pendingDanmakuConfig?.merge(patch) ?? patch;
+    _pendingDanmakuConfigCompleters.add(completer);
+    _scheduleDanmakuConfigFlush();
+    return completer.future;
+  }
+
+  void _scheduleDanmakuConfigFlush() {
+    if (_disposed || _danmakuConfigInFlight || _danmakuConfigTimer != null) {
+      return;
+    }
+    _danmakuConfigTimer = Timer(_danmakuConfigCoalesceDelay, () {
+      _danmakuConfigTimer = null;
+      unawaited(_flushDanmakuConfig());
+    });
+  }
+
+  Future<void> _flushDanmakuConfig() async {
+    if (_disposed || _danmakuConfigInFlight) {
+      return;
+    }
+
+    final requestedPatch = _pendingDanmakuConfig;
+    if (requestedPatch == null) {
+      return;
+    }
+    final completers = List<Completer<void>>.from(
+      _pendingDanmakuConfigCompleters,
+    );
+    _pendingDanmakuConfigCompleters.clear();
+    _pendingDanmakuConfig = null;
+
+    final outgoingPatch = requestedPatch.differenceFrom(
+      _lastAppliedDanmakuConfig,
+    );
+    if (outgoingPatch.isEmpty) {
+      for (final completer in completers) {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      }
+      if (_pendingDanmakuConfig != null) {
+        _scheduleDanmakuConfigFlush();
+      }
+      return;
+    }
+
+    _danmakuConfigInFlight = true;
+    try {
+      await _player.setDanmakuConfig(
+        enabled: outgoingPatch.enabled,
+        fontSize: outgoingPatch.fontSize,
+        opacity: outgoingPatch.opacity,
+        displayArea: outgoingPatch.displayArea,
+        scrollDurationSeconds: outgoingPatch.scrollDurationSeconds,
+        scrollSpeedFactor: outgoingPatch.scrollSpeedFactor,
+        trackGapRatio: outgoingPatch.trackGapRatio,
+        outlineWidth: outgoingPatch.outlineWidth,
+        shadowStyle: outgoingPatch.shadowStyle,
+        customFontFamily: outgoingPatch.customFontFamily,
+        customFontFilePath: outgoingPatch.customFontFilePath,
+        mergeDuplicates: outgoingPatch.mergeDuplicates,
+        allowStacking: outgoingPatch.allowStacking,
+        maxQuantity: outgoingPatch.maxQuantity,
+        maxLinesPerMode: outgoingPatch.maxLinesPerMode,
+        blockTop: outgoingPatch.blockTop,
+        blockBottom: outgoingPatch.blockBottom,
+        blockScroll: outgoingPatch.blockScroll,
+        blockWords: outgoingPatch.blockWords,
+      );
+      _lastAppliedDanmakuConfig =
+          _lastAppliedDanmakuConfig?.merge(requestedPatch) ?? requestedPatch;
+      for (final completer in completers) {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      }
+    } catch (error, stackTrace) {
+      for (final completer in completers) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      }
+    } finally {
+      _danmakuConfigInFlight = false;
+      if (_pendingDanmakuConfig != null) {
+        _scheduleDanmakuConfigFlush();
+      }
+    }
+  }
+
+  Map<String, dynamic> getDetailedMediaInfo() {
+    return <String, dynamic>{
+      'kernel': 'Erika',
+      'state': _state.name,
+      'position': position,
+      'duration': _mediaInfo.duration,
+      'videoWidth': _mediaInfo.video?.isNotEmpty == true
+          ? _mediaInfo.video!.first.codec.width
+          : null,
+      'videoHeight': _mediaInfo.video?.isNotEmpty == true
+          ? _mediaInfo.video!.first.codec.height
+          : null,
+    };
+  }
+
+  Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async =>
+      getDetailedMediaInfo();
+
+  void _handleEvent(ErikaPlayerEvent event) {
+    if (event.kind == ErikaEventKind.stateChanged ||
+        event.kind == ErikaEventKind.error) {
+      switch (event.state) {
+        case ErikaPlaybackState.playing:
+          _state = PlayerPlaybackState.playing;
+          break;
+        case ErikaPlaybackState.paused:
+        case ErikaPlaybackState.ready:
+        case ErikaPlaybackState.opening:
+          _state = PlayerPlaybackState.paused;
+          break;
+        case ErikaPlaybackState.stopped:
+        case ErikaPlaybackState.closed:
+        case ErikaPlaybackState.idle:
+        case ErikaPlaybackState.error:
+          _state = PlayerPlaybackState.stopped;
+          break;
+      }
+    }
+
+    if (event.kind == ErikaEventKind.positionChanged &&
+        event.position >= Duration.zero) {
+      final eventPositionMs = event.position.inMilliseconds;
+      final now = DateTime.now();
+      final seekTarget = _pendingSeekTargetMs;
+      final fenceUntil = _seekFenceUntil;
+      if (seekTarget != null &&
+          fenceUntil != null &&
+          now.isBefore(fenceUntil)) {
+        final distance = (eventPositionMs - seekTarget).abs();
+        if (distance > 1500) {
+          return;
+        }
+        _pendingSeekTargetMs = null;
+        _seekFenceUntil = null;
+      } else if (fenceUntil != null && !now.isBefore(fenceUntil)) {
+        _pendingSeekTargetMs = null;
+        _seekFenceUntil = null;
+      }
+      _lastPositionMs = eventPositionMs;
+      _lastPositionUpdate = now;
+    }
+
+    var updatedInfo = _mediaInfo;
+    if (event.duration > Duration.zero) {
+      updatedInfo =
+          updatedInfo.copyWith(duration: event.duration.inMilliseconds);
+    }
+    if (event.video.width > 0 && event.video.height > 0) {
+      updatedInfo = updatedInfo.copyWith(
+        video: <PlayerVideoStreamInfo>[
+          PlayerVideoStreamInfo(
+            codec: PlayerVideoCodecParams(
+              width: event.video.width,
+              height: event.video.height,
+              name: 'Erika Video',
+            ),
+            codecName: 'unknown',
+          ),
+        ],
+      );
+    }
+    // Erika emits the full descriptor list (with native ids, titles and the
+    // selected flag) on TracksChanged/TrackSelectionChanged. Use it to build
+    // mediaInfo so the UI's index-based track selection maps to real ids.
+    if (event.trackList.isNotEmpty) {
+      final audioInfos = event.trackList
+          .where((t) => t.kind == ErikaTrackKind.audio)
+          .toList(growable: false);
+      final subtitleInfos = event.trackList
+          .where((t) => t.kind == ErikaTrackKind.subtitle)
+          .toList(growable: false);
+      _audioTrackInfos = audioInfos;
+      _subtitleTrackInfos = subtitleInfos;
+      updatedInfo = updatedInfo.copyWith(
+        audio: <PlayerAudioStreamInfo>[
+          for (var i = 0; i < audioInfos.length; i++)
+            PlayerAudioStreamInfo(
+              codec: PlayerAudioCodecParams(
+                name: audioInfos[i].codec ?? 'unknown',
+              ),
+              title: audioInfos[i].title ?? 'Audio ${i + 1}',
+              language: audioInfos[i].language,
+              metadata: <String, String>{'id': '${audioInfos[i].id}'},
+              rawRepresentation: 'Erika Audio ${i + 1}',
+            ),
+        ],
+        subtitle: <PlayerSubtitleStreamInfo>[
+          for (var i = 0; i < subtitleInfos.length; i++)
+            PlayerSubtitleStreamInfo(
+              title: subtitleInfos[i].title ?? 'Subtitle ${i + 1}',
+              language: subtitleInfos[i].language,
+              metadata: <String, String>{'id': '${subtitleInfos[i].id}'},
+              rawRepresentation: 'Erika Subtitle ${i + 1}',
+            ),
+        ],
+      );
+      _activeAudioTracks = <int>[
+        for (var i = 0; i < audioInfos.length; i++)
+          if (audioInfos[i].selected) i,
+      ];
+      _activeSubtitleTracks = <int>[
+        for (var i = 0; i < subtitleInfos.length; i++)
+          if (subtitleInfos[i].selected) i,
+      ];
+    }
+    _mediaInfo = updatedInfo;
+  }
+
+  void _ensureSupported() {
+    if (!_isSupported) {
+      throw UnsupportedError('Erika is currently only wired on macOS/iOS.');
+    }
+  }
+}

@@ -108,6 +108,9 @@ class SystemResourceMonitor {
         case PlayerKernelType.mediaKit:
           _playerKernelType = 'Libmpv';
           break;
+        case PlayerKernelType.erika:
+          _playerKernelType = 'Erika';
+          break;
       }
     } catch (e) {
       debugPrint('获取播放器内核类型出错: $e');

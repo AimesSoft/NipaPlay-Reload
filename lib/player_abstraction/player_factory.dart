@@ -1,10 +1,8 @@
-import 'package:fvp/mdk.dart'
-    if (dart.library.html) 'package:nipaplay/utils/mock_mdk.dart'
-    as mdk; // MDK import is isolated here
 import './abstract_player.dart';
 import './mdk_player_adapter.dart';
 import './video_player_adapter.dart'; // 导入新的适配器
 import './media_kit_player_adapter.dart'; // 导入新的MediaKit适配器
+import './erika_player_adapter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart'; // 用于 debugPrint
 import 'package:nipaplay/utils/system_resource_monitor.dart'; // 导入系统资源监控器
@@ -16,6 +14,7 @@ enum PlayerKernelType {
   mdk,
   videoPlayer, // 添加 video_player 内核类型
   mediaKit, // 添加 media_kit 内核类型
+  erika,
   // otherPlayer,
 }
 
@@ -39,6 +38,12 @@ class PlayerFactory {
       StreamController<PlayerKernelType>.broadcast();
   static Stream<PlayerKernelType> get onKernelChanged =>
       _kernelChangeController.stream;
+
+  static bool get isErikaKernelSupported {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+  }
 
   // 初始化方法，在应用启动时调用
   static Future<void> initialize() async {
@@ -232,16 +237,12 @@ class PlayerFactory {
           bufferSize: getPrecacheBufferSizeBytes(),
           androidAudioOutput: getAndroidAudioOutput(),
         );
+      case PlayerKernelType.erika:
+        debugPrint('[PlayerFactory] 创建 Erika 播放器');
+        return ErikaPlayerAdapter();
       // case PlayerKernelType.otherPlayer:
       //   // return OtherPlayerAdapter(ThirdPartyPlayerApi());
       //   throw UnimplementedError('Other player types not yet supported.');
-      default:
-        // Fallback or throw error
-        debugPrint('[PlayerFactory] 未知播放器内核类型，默认使用 MediaKit');
-        return MediaKitPlayerAdapter(
-          bufferSize: getPrecacheBufferSizeBytes(),
-          androidAudioOutput: getAndroidAudioOutput(),
-        );
     }
   }
 
@@ -269,8 +270,9 @@ class PlayerFactory {
         case PlayerKernelType.mediaKit:
           kernelTypeName = "Libmpv";
           break;
-        default:
-          kernelTypeName = "未知";
+        case PlayerKernelType.erika:
+          kernelTypeName = "Erika";
+          break;
       }
 
       // 设置显示名称

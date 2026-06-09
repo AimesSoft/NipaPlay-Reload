@@ -229,6 +229,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _danmakuOpacity = opacity;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_danmakuOpacityKey, opacity);
+    _syncErikaDanmakuConfig();
     _notifyListeners();
   }
 
@@ -250,6 +251,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _danmakuVisible = visible;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_danmakuVisibleKey, visible);
+      _syncErikaDanmakuConfig();
       _notifyListeners();
     }
   }
@@ -1220,12 +1222,18 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   // 设置弹幕字体大小
-  Future<void> setDanmakuFontSize(double fontSize) async {
+  Future<void> setDanmakuFontSize(
+    double fontSize, {
+    bool commit = false,
+  }) async {
     if (_danmakuFontSize != fontSize) {
       _danmakuFontSize = fontSize;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_danmakuFontSizeKey, fontSize);
+      _scheduleDanmakuFontSizePersistence(immediate: commit);
+      _syncErikaDanmakuConfig();
       _notifyListeners();
+    } else if (commit) {
+      _scheduleDanmakuFontSizePersistence(immediate: true);
+      _syncErikaDanmakuConfig();
     }
   }
 
@@ -2015,7 +2023,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
           // 远程视频（http/jellyfin/emby）下载的字幕字体存放在此目录
           try {
             final baseDir = await StorageService.getAppStorageDirectory();
-            final cacheFontsDir = Directory(p.join(baseDir.path, 'subtitle_fonts'));
+            final cacheFontsDir =
+                Directory(p.join(baseDir.path, 'subtitle_fonts'));
             if (await cacheFontsDir.exists()) {
               bool hasFontFiles = false;
               await for (final entity in cacheFontsDir.list()) {
@@ -2030,7 +2039,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
               if (hasFontFiles) {
                 effectiveFontDir = cacheFontsDir.path;
                 _subtitleFontDir = cacheFontsDir.path;
-                debugPrint('[VideoPlayerState] 使用 subtitle_fonts 缓存目录: $effectiveFontDir');
+                debugPrint(
+                    '[VideoPlayerState] 使用 subtitle_fonts 缓存目录: $effectiveFontDir');
               } else {
                 _subtitleFontDir = '';
               }
@@ -2044,21 +2054,27 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         }
       }
 
-      if (kDebugMode) debugPrint('[FONT_DEBUG] applySubtitleStylePreference: effectiveFontDir=$effectiveFontDir, _subtitleFontDir=$_subtitleFontDir, _currentVideoPath=$_currentVideoPath, hadPreviousFontDir=$hadPreviousFontDir');
+      if (kDebugMode)
+        debugPrint(
+            '[FONT_DEBUG] applySubtitleStylePreference: effectiveFontDir=$effectiveFontDir, _subtitleFontDir=$_subtitleFontDir, _currentVideoPath=$_currentVideoPath, hadPreviousFontDir=$hadPreviousFontDir');
       if (effectiveFontDir != null) {
         player.setProperty('sub-fonts-dir', effectiveFontDir);
-        if (kDebugMode) debugPrint('[FONT_DEBUG] 已设置 sub-fonts-dir=$effectiveFontDir');
+        if (kDebugMode)
+          debugPrint('[FONT_DEBUG] 已设置 sub-fonts-dir=$effectiveFontDir');
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', effectiveFontDir);
         }
       } else if (hadPreviousFontDir) {
         player.setProperty('sub-fonts-dir', '');
-        if (kDebugMode) debugPrint('[FONT_DEBUG] 清除 sub-fonts-dir（之前有设置但当前无字体目录）');
+        if (kDebugMode)
+          debugPrint('[FONT_DEBUG] 清除 sub-fonts-dir（之前有设置但当前无字体目录）');
         if (defaultTargetPlatform == TargetPlatform.iOS) {
           player.setProperty('sub-file-paths', '');
         }
       } else {
-        if (kDebugMode) debugPrint('[FONT_DEBUG] 无 effectiveFontDir 且无之前设置，sub-fonts-dir 未变更');
+        if (kDebugMode)
+          debugPrint(
+              '[FONT_DEBUG] 无 effectiveFontDir 且无之前设置，sub-fonts-dir 未变更');
       }
 
       final resolvedFontName = _subtitleFontName.isNotEmpty
@@ -2089,6 +2105,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       _danmakuDisplayArea = area;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_danmakuDisplayAreaKey, area);
+      _syncErikaDanmakuConfig();
       _notifyListeners();
     }
   }
@@ -2144,7 +2161,8 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> _loadDanmakuDfmPlusTrackGap() async {
     final prefs = await SharedPreferences.getInstance();
-    _danmakuDfmPlusTrackGap = prefs.getDouble(_danmakuDfmPlusTrackGapKey) ?? 0.15;
+    _danmakuDfmPlusTrackGap =
+        prefs.getDouble(_danmakuDfmPlusTrackGapKey) ?? 0.15;
     _notifyListeners();
   }
 

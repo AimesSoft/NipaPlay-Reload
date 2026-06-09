@@ -29,6 +29,51 @@ class _SpoilerAiRequestConfig {
 }
 
 extension VideoPlayerStateDanmaku on VideoPlayerState {
+  // Whether the active player kernel renders danmaku natively (Erika).
+  // When true, NipaPlay feeds its merged/filtered danmaku list to the kernel
+  // and keeps its own Flutter danmaku overlay empty to avoid drawing twice.
+  bool get _erikaNativeDanmaku {
+    try {
+      return player.supportsNativeDanmaku;
+    } catch (_) {
+      // `player` is `late`; before it is initialized treat as unsupported.
+      return false;
+    }
+  }
+
+  // True when the active player kernel renders danmaku natively (Erika).
+  // Public so the kernel hot-swap path can keep the Flutter overlay disabled.
+  bool get isNativeDanmakuActive => _erikaNativeDanmaku;
+
+  // Push the current danmaku display settings down to the native kernel.
+  // NipaPlay only does spoiler/block pre-filtering before feeding the list;
+  // Erika's DFM+ owns merge, density, stacking and track layout, so the
+  // matching settings are forwarded here.
+  void _syncErikaDanmakuConfig() {
+    if (!_erikaNativeDanmaku) return;
+    final fontFamily = danmakuFontFamily.isNotEmpty ? danmakuFontFamily : null;
+    final fontPath =
+        danmakuFontFilePath.isNotEmpty ? danmakuFontFilePath : null;
+    unawaited(player.setNativeDanmakuConfig(
+      enabled: _danmakuVisible,
+      opacity: _danmakuOpacity,
+      // actualDanmakuFontSize resolves the "0 = default" sentinel to the same
+      // logical font size used by NipaPlay's DFM+ path; Erika uses the same
+      // default danmaku font and applies surface scale internally.
+      fontSize: actualDanmakuFontSize,
+      displayArea: _danmakuDisplayArea,
+      mergeDuplicates: _mergeDanmaku,
+      allowStacking: _danmakuStacking,
+      // danmakuScrollDurationSeconds already folds in the speed multiplier,
+      // so the scroll-speed factor is left at the engine default.
+      scrollDurationSeconds: danmakuScrollDurationSeconds,
+      trackGapRatio: _danmakuDfmPlusTrackGap,
+      outlineWidth: _next2DanmakuOutlineWidth,
+      customFontFamily: fontFamily,
+      customFontFilePath: fontPath,
+    ));
+  }
+
   Future<void> _autoDetectAndLoadLocalDanmakuFromVideoDirectory(
       String videoPath) async {
     if (_isDisposed || kIsWeb) return;
@@ -258,8 +303,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           return;
         }
 
-        // 加载弹幕到控制器
-        danmakuController?.loadDanmaku(cachedDanmaku);
+        // 加载弹幕到控制器（Erika 原生弹幕由 _updateMergedDanmakuList 喂入，
+        // 此处不喂 Flutter 控制器，避免双画）
+        if (!_erikaNativeDanmaku) {
+          danmakuController?.loadDanmaku(cachedDanmaku);
+        }
         _setStatus(PlayerStatus.playing,
             message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
 
@@ -321,11 +369,14 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       if (danmakuData['comments'] != null && danmakuData['comments'] is List) {
         debugPrint('成功从网络加载弹幕，共${danmakuData['count']}条');
 
-        // 加载弹幕到控制器
+        // 加载弹幕到控制器（Erika 原生弹幕由 _updateMergedDanmakuList 喂入，
+        // 此处不喂 Flutter 控制器，避免双画）
         final filteredDanmaku = danmakuData['comments']
             .where((d) => !shouldBlockDanmaku(d))
             .toList();
-        danmakuController?.loadDanmaku(filteredDanmaku);
+        if (!_erikaNativeDanmaku) {
+          danmakuController?.loadDanmaku(filteredDanmaku);
+        }
 
         // 解析弹幕数据并添加到弹弹play轨道
         final parsedDanmaku = await compute(parseDanmakuListInBackground,
@@ -500,50 +551,71 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       final timeB = (b['time'] as num?)?.toDouble() ?? 0.0;
       return timeA.compareTo(timeB);
     });
-    
+
     debugPrint("[updateMerged] 合并后的总弹幕: ${mergedList.length}");
-    int mergedTopCount = 0, mergedBottomCount = 0, mergedScrollCount =0;
-    for(final d in mergedList) {
+    int mergedTopCount = 0, mergedBottomCount = 0, mergedScrollCount = 0;
+    for (final d in mergedList) {
       final t = d['type'];
-      if (t == 'top' || t ==5) mergedTopCount++;
-      else if (t == 'bottom' || t ==4) mergedBottomCount++;
-      else mergedScrollCount++;
+      if (t == 'top' || t == 5)
+        mergedTopCount++;
+      else if (t == 'bottom' || t == 4)
+        mergedBottomCount++;
+      else
+        mergedScrollCount++;
     }
-    debugPrint("[updateMerged] 合并后类型: 滚动:$mergedScrollCount, 顶部:$mergedTopCount, 底部:$mergedBottomCount");
+    debugPrint(
+        "[updateMerged] 合并后类型: 滚动:$mergedScrollCount, 顶部:$mergedTopCount, 底部:$mergedBottomCount");
 
     _totalDanmakuCount = mergedList.length;
     _maybeStartSpoilerDanmakuAnalysis(mergedList);
-    
-    int blockedTop =0, blockedBottom=0, blockedScroll=0;
+
+    int blockedTop = 0, blockedBottom = 0, blockedScroll = 0;
     final filteredList = mergedList
         .where((d) {
           final bool result = !shouldBlockDanmaku(d);
-          if(!result){
+          if (!result) {
             final t = d['type'];
-            if (t == 'top' || t ==5) blockedTop++;
-            else if (t == 'bottom' || t ==4) blockedBottom++;
-            else blockedScroll++;
+            if (t == 'top' || t == 5)
+              blockedTop++;
+            else if (t == 'bottom' || t == 4)
+              blockedBottom++;
+            else
+              blockedScroll++;
           }
           return result;
         })
         .map(_prepareDanmakuForDisplay)
         .toList();
-    
-    int filteredTopCount=0, filteredBottomCount=0, filteredScrollCount=0;
-    for(final d in filteredList) {
+
+    int filteredTopCount = 0, filteredBottomCount = 0, filteredScrollCount = 0;
+    for (final d in filteredList) {
       final t = d['type'];
-      if (t == 'top' || t ==5) filteredTopCount++;
-      else if (t == 'bottom' || t ==4) filteredBottomCount++;
-      else filteredScrollCount++;
+      if (t == 'top' || t == 5)
+        filteredTopCount++;
+      else if (t == 'bottom' || t == 4)
+        filteredBottomCount++;
+      else
+        filteredScrollCount++;
     }
-    debugPrint("[updateMerged] 被shouldBlockDanmaku过滤的: 顶部:$blockedTop, 底部:$blockedBottom, 滚动:$blockedScroll");
-    debugPrint("[updateMerged] 过滤后: 滚动:$filteredScrollCount, 顶部:$filteredTopCount, 底部:$filteredBottomCount");
+    debugPrint(
+        "[updateMerged] 被shouldBlockDanmaku过滤的: 顶部:$blockedTop, 底部:$blockedBottom, 滚动:$blockedScroll");
+    debugPrint(
+        "[updateMerged] 过滤后: 滚动:$filteredScrollCount, 顶部:$filteredTopCount, 底部:$filteredBottomCount");
 
     _danmakuList = filteredList;
     _danmakuListVersion++;
 
-    danmakuController?.clearDanmaku();
-    danmakuController?.loadDanmaku(filteredList);
+    if (_erikaNativeDanmaku) {
+      // Erika composites danmaku into the video frame natively. Feed it the
+      // already merged/filtered list and keep the Flutter overlay empty so
+      // danmaku isn't drawn twice.
+      _syncErikaDanmakuConfig();
+      unawaited(player.loadNativeDanmaku(filteredList));
+      danmakuController?.clearDanmaku();
+    } else {
+      danmakuController?.clearDanmaku();
+      danmakuController?.loadDanmaku(filteredList);
+    }
 
     // 通过更新key来强制刷新DanmakuOverlay
     _danmakuOverlayKey = 'danmaku_${DateTime.now().millisecondsSinceEpoch}';

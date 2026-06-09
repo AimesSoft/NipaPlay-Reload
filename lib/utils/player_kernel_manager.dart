@@ -108,8 +108,10 @@ class PlayerKernelManager {
     // 重新创建弹幕控制器
     videoPlayerState.danmakuController = _createDanmakuController(newKernel);
 
-    // 重新加载当前弹幕数据
-    if (videoPlayerState.danmakuList.isNotEmpty) {
+    // 重新加载当前弹幕数据（Erika 内核下弹幕由播放内核原生渲染，
+    // 不把数据喂回 Flutter 弹幕控制器，避免双画）
+    if (videoPlayerState.danmakuList.isNotEmpty &&
+        !videoPlayerState.isNativeDanmakuActive) {
       videoPlayerState.danmakuController
           ?.loadDanmaku(videoPlayerState.danmakuList);
       debugPrint(
@@ -145,12 +147,15 @@ class PlayerKernelManager {
       return ['Video Player'];
     } else if (Platform.isIOS) {
       // iOS平台支持的内核
-      return ['FVP', 'Video Player'];
+      return ['FVP', 'Video Player', 'Erika'];
     } else if (Platform.isAndroid) {
       // Android平台支持的内核
       return ['FVP', 'Media Kit', 'Video Player'];
     } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       // 桌面平台支持所有内核
+      if (PlayerFactory.isErikaKernelSupported) {
+        kernels.add('Erika');
+      }
       return kernels;
     }
 
@@ -179,6 +184,9 @@ class PlayerKernelManager {
         break;
       case 'Video Player':
         kernelType = PlayerKernelType.videoPlayer;
+        break;
+      case 'Erika':
+        kernelType = PlayerKernelType.erika;
         break;
       default:
         kernelType = PlayerKernelType.mdk;
@@ -256,6 +264,9 @@ class PlayerKernelManager {
         break;
       case PlayerKernelType.videoPlayer:
         playerKernelName = 'Video Player';
+        break;
+      case PlayerKernelType.erika:
+        playerKernelName = 'Erika';
         break;
       default:
         playerKernelName = 'Unknown';

@@ -472,6 +472,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕字体大小设置
   final String _danmakuFontSizeKey = 'danmaku_font_size';
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
+  Timer? _danmakuFontSizePersistenceTimer;
   final String _danmakuFontFilePathKey = 'danmaku_font_file_path';
   String _danmakuFontFilePath = '';
   final String _danmakuFontFamilyKey = 'danmaku_font_family';
@@ -744,6 +745,31 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _volumePersistenceTimer = null;
       unawaited(_savePlayerVolumePreference(_currentVolume));
     });
+  }
+
+  void _scheduleDanmakuFontSizePersistence({bool immediate = false}) {
+    _danmakuFontSizePersistenceTimer?.cancel();
+    if (immediate) {
+      _danmakuFontSizePersistenceTimer = null;
+      unawaited(_saveDanmakuFontSizePreference(_danmakuFontSize));
+      return;
+    }
+    _danmakuFontSizePersistenceTimer = Timer(
+      const Duration(milliseconds: 250),
+      () {
+        _danmakuFontSizePersistenceTimer = null;
+        unawaited(_saveDanmakuFontSizePreference(_danmakuFontSize));
+      },
+    );
+  }
+
+  Future<void> _saveDanmakuFontSizePreference(double fontSize) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_danmakuFontSizeKey, fontSize);
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 保存弹幕字号失败: $e');
+    }
   }
 
   Future<void> _savePlayerVolumePreference(double volume) async {
@@ -1395,6 +1421,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     _scheduleVolumePersistence(immediate: true);
     _volumePersistenceTimer?.cancel();
+    _scheduleDanmakuFontSizePersistence(immediate: true);
+    _danmakuFontSizePersistenceTimer?.cancel();
     _systemVolumeSubscription?.cancel();
     _systemVolumeSubscription = null;
     _systemVolumeController?.removeListener();

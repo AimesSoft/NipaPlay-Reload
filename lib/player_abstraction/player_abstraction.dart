@@ -6,7 +6,10 @@ export './abstract_player.dart'
 export './player_factory.dart'
     show PlayerKernelType; // Export PlayerKernelType enum
 
+import 'dart:ui' show Rect;
+
 import 'package:flutter/foundation.dart'; // For ValueListenable, used in AbstractPlayer
+import 'package:flutter/widgets.dart' show Widget;
 import 'package:video_player/video_player.dart';
 import './abstract_player.dart'
     as core_player; // Alias for the true AbstractPlayer
@@ -16,6 +19,7 @@ import './player_factory.dart'; // Import PlayerFactory directly
 import './mdk_player_adapter.dart'; // 导入具体适配器类
 import './video_player_adapter.dart'; // 导入具体适配器类
 import './media_kit_player_adapter.dart'; // 导入MediaKit适配器类
+import './erika_player_adapter.dart';
 
 /// MDK-compatible PlaybackState.
 /// Code using the abstraction layer can use `PlaybackState.paused`.
@@ -237,6 +241,30 @@ class Player {
     }
   }
 
+  Widget? buildPlatformVideoSurface({
+    String? debugLabel,
+    ValueChanged<int?>? onPlatformViewIdChanged,
+    ValueChanged<Rect?>? onFrameRectChanged,
+  }) {
+    try {
+      final dyn = _delegate as dynamic;
+      final surface = dyn.buildPlatformVideoSurface(
+        debugLabel: debugLabel,
+        onPlatformViewIdChanged: onPlatformViewIdChanged,
+        onFrameRectChanged: onFrameRectChanged,
+      );
+      if (surface is Widget) {
+        return surface;
+      }
+      return null;
+    } on NoSuchMethodError {
+      return null;
+    } catch (error) {
+      debugPrint('[Player] buildPlatformVideoSurface failed: $error');
+      rethrow;
+    }
+  }
+
   // 获取当前使用的播放器内核类型的名称
   String getPlayerKernelName() {
     if (_delegate is MdkPlayerAdapter) {
@@ -245,6 +273,8 @@ class Player {
       return "Video Player";
     } else if (_delegate is MediaKitPlayerAdapter) {
       return "Media Kit";
+    } else if (_delegate is ErikaPlayerAdapter) {
+      return "Erika";
     } else {
       return "未知";
     }
@@ -286,6 +316,72 @@ class Player {
     } catch (_) {}
     // 回退到同步版本
     return getDetailedMediaInfo();
+  }
+
+  // ---- Native danmaku passthrough ----
+  // Some kernels (Erika) composite danmaku into the video frame natively.
+  // These forward to the delegate via dynamic dispatch so the abstraction
+  // layer does not need to depend on a concrete adapter type.
+
+  bool get supportsNativeDanmaku {
+    try {
+      final v = (_delegate as dynamic).supportsNativeDanmaku;
+      return v is bool ? v : false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> loadNativeDanmaku(List<Map<String, dynamic>> danmakuList) async {
+    try {
+      final r = (_delegate as dynamic).loadDanmakuList(danmakuList);
+      if (r is Future) await r;
+    } catch (_) {}
+  }
+
+  Future<void> clearNativeDanmaku() async {
+    try {
+      final r = (_delegate as dynamic).clearDanmaku();
+      if (r is Future) await r;
+    } catch (_) {}
+  }
+
+  Future<void> setNativeDanmakuConfig({
+    bool? enabled,
+    double? opacity,
+    double? fontSize,
+    double? displayArea,
+    bool? mergeDuplicates,
+    bool? allowStacking,
+    double? scrollDurationSeconds,
+    double? trackGapRatio,
+    double? outlineWidth,
+    String? customFontFamily,
+    String? customFontFilePath,
+  }) async {
+    try {
+      final r = (_delegate as dynamic).setDanmakuConfig(
+        enabled: enabled,
+        opacity: opacity,
+        fontSize: fontSize,
+        displayArea: displayArea,
+        mergeDuplicates: mergeDuplicates,
+        allowStacking: allowStacking,
+        scrollDurationSeconds: scrollDurationSeconds,
+        trackGapRatio: trackGapRatio,
+        outlineWidth: outlineWidth,
+        customFontFamily: customFontFamily,
+        customFontFilePath: customFontFilePath,
+      );
+      if (r is Future) await r;
+    } catch (_) {}
+  }
+
+  Future<void> setNativeDanmakuGlobalOffset(Duration offset) async {
+    try {
+      final r = (_delegate as dynamic).setDanmakuGlobalOffset(offset);
+      if (r is Future) await r;
+    } catch (_) {}
   }
 }
 
