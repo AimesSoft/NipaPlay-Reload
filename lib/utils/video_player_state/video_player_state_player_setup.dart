@@ -618,27 +618,50 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 如果有上次的播放位置，恢复播放位置
       if (lastPosition > 0) {
         //debugPrint('8. 恢复上次播放位置...');
+        // [VIDEO-OPEN-PTM-DIAG] 根因2诊断：追踪视频打开时 playbackTimeMs 的时序
+        // 假设：player.seek() 不更新 _playbackTimeMs/_smoothAnchorMs/_seekTargetMs，
+        // 导致 Ticker 首帧锚定时 playbackTimeMs=0 → 弹幕从头播放
+        if (!kReleaseMode) {
+          debugPrint('[VIDEO-OPEN-PTM-DIAG] BEFORE player.seek: '
+              'playbackTimeMs=${_playbackTimeMs.value.toStringAsFixed(1)} '
+              'lastPosition=$lastPosition '
+              '_smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+              '_seekTargetMs=$_seekTargetMs '
+              '_lastRawPlayerMs=$_lastRawPlayerMs '
+              '← player.seek() does NOT update ptm/anchor fields');
+        }
         // 先设置播放位置
         player.seek(position: lastPosition);
+        // ✅ Bug-8-2 修复：player.seek() 只调用底层 API，不更新锚点字段，
+        // 导致 Ticker 首帧锚定到 playbackTimeMs=0 → 弹幕从头播放 + 回弹。
+        // 手动更新所有锚点字段，与 seekTo() 保持一致。
+        _playbackTimeMs.value = lastPosition.toDouble();
+        _smoothAnchorMs = lastPosition.toDouble();
+        _smoothAnchorElapsedUs = _lastElapsedUs;
+        _seekTargetMs = lastPosition.toDouble();
+        _anchorSetBySeek = true;
+        _lastRawPlayerMs = -1; // 保持 -1，让 Ticker 进入 seek 保护分支
         // 等待一小段时间确保位置设置完成
         await Future.delayed(const Duration(milliseconds: 100));
         // 更新状态
         _position = Duration(milliseconds: lastPosition);
         _progress = lastPosition / _duration.inMilliseconds;
-        // 同步高频时间轴到恢复位置。否则在 Ticker 首次回调（仅 status=playing
-        // 之后启动）之前 _playbackTimeMs.value 停留在 0，依赖该值的弹幕引擎
-        // （DFM+）会把整集弹幕渲染成 t=0 时刻的画面，直到用户手动 seek。
-        _playbackTimeMs.value = lastPosition.toDouble();
-        _smoothAnchorMs = lastPosition.toDouble();
-        _anchorSetBySeek = true;
-        _seekTargetMs = lastPosition.toDouble();
+        // [VIDEO-OPEN-PTM-DIAG] 追踪 player.seek 后 playbackTimeMs 是否被更新
+        if (!kReleaseMode) {
+          debugPrint('[VIDEO-OPEN-PTM-DIAG] AFTER player.seek+anchor-update: '
+              'playbackTimeMs=${_playbackTimeMs.value.toStringAsFixed(1)} '
+              '_position=${_position.inMilliseconds} '
+              'player.position=${player.position} '
+              '_smoothAnchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+              '_seekTargetMs=$_seekTargetMs '
+              '_lastRawPlayerMs=$_lastRawPlayerMs '
+              '← anchor fields NOW updated correctly');
+        }
       } else {
         _position = Duration.zero;
         _progress = 0.0;
         _bufferedPositionMs = 0;
         player.seek(position: 0);
-        _playbackTimeMs.value = 0;
-        _smoothAnchorMs = 0;
       }
 
       // debugPrint('9. 检查播放器实际状态...');

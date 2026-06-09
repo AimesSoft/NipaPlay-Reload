@@ -126,8 +126,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
 
         if (kernelType == DanmakuRenderEngine.nipaplayNext) {
           final labsSettings = context.watch<LabsSettingsProvider>();
-          // Next++ ON → NipaPlayNextOverlay (C++ FFI + atlas + vsync)
-          // Next++ OFF → NipaPlayNextOldOverlay (纯Dart + TextPainter逐条 + playbackTimeMs驱动)
+          // Next++ ON → NipaPlayNextOverlay (C++ FFI V2 + atlas + vsync + Emoji bypass)
+          // Next++ OFF → NipaPlayNextOldOverlay (d6592232版 C++ FFI + TextPainter逐条 + playbackTimeMs驱动)
           if (labsSettings.enableNextPlusPlusEngine) {
             return NipaPlayNextOverlay(
               danmakuList: activeDanmakuList,

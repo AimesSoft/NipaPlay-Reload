@@ -54,6 +54,9 @@ int _lastDiagPaintTimeMs = 0;
 int _lastDiagSnapTimeMs = 0;
 int _lastDiagDriftTimeMs = 0;
 double _lastDiagPlaybackRate = 1.0;
+int _lastDiagDtFreezeTimeMs = 0;      // [DT-FREEZE] 限流时间戳
+int _lastDiagDtAbnormalTimeMs = 0;    // [DT-ABNORMAL] 限流时间戳
+int _lastDiagDriftSpikeTimeMs = 0;    // [DRIFT-SPIKE] 限流时间戳
 
 /// [PAUSE-RESUME] 上次 isPlaying 状态 — 追踪暂停恢复过渡
 bool _lastIsPlaying = true;
@@ -65,6 +68,7 @@ int _diagResumeDriftOver200Count = 0;  // 恢复首帧drift>200px的弹幕数
 
 /// 渲染管线瓶颈计数器
 int _lastDiagBottleneckTimeMs = 0;
+int _lastDiagDprShrinkTimeMs = 0;
 int _diagLayoutItems = 0;
 int _diagCulledItems = 0;
 int _diagAtlasFullItems = 0;
@@ -130,6 +134,53 @@ double _diagLastPlaybackTimeMsJump = 0.0; // 上次playbackTimeMs跳变量(ms)
 /// [DRIFT-DETAIL] HARD_SNAP 瞬间的 dt 值追踪
 double _diagHardSnapDtSeconds = 0.0;     // 最近HARD_SNAP帧的dt值
 int _diagHardSnapDtAnomalyCount = 0;     // dt异常(>20ms)导致HARD_SNAP的次数
+
+/// [SPEED-JITTER-DIAG] 弹幕滚动速度抖动诊断 — 验证漂移修正导致速度突变假设
+/// 假设：漂移修正的修正量占正常帧移动量的比例过高（>10%），
+/// 导致弹幕滚动速度出现肉眼可感知的周期性微抖（"不丝滑"）。
+/// 验证方法：统计每帧修正弹幕的归一化速度变化比(correctionPx/normalMovePx)，
+/// 如果 maxRatio 持续 >10% 且 correctionCount > 0，则假设成立。
+int _diagSpeedJitterCorrectionCount = 0;    // 本帧触发漂移修正的弹幕数(15-200px)
+double _diagSpeedJitterMaxRatio = 0.0;      // 本帧最大归一化速度变化比(correction/normalMove)
+double _diagSpeedJitterMaxCorrectionPx = 0.0; // 本帧最大修正量(px)
+double _diagSpeedJitterSumRatio = 0.0;      // 本帧所有修正弹幕的速度变化比总和(用于计算均值)
+int _diagSpeedJitterOver5Count = 0;         // 速度变化>5%的修正次数(感知阈值)
+int _diagSpeedJitterOver10Count = 0;        // 速度变化>10%的修正次数(明显可见)
+int _diagSpeedJitterOver50Count = 0;        // 速度变化>50%的修正次数(极其明显)
+
+/// [DT-JITTER-DIAG] rawDt 抖动诊断 — 验证 rawDtSeconds 周期性为0导致弹幕停滞假设
+/// 假设：deltaUs >= 100ms 阈值过于保守，正常播放中某些帧间隔超过 100ms
+/// → rawDtSeconds=0 → displayX 不推进 → 弹幕停顿一帧 → "卡顿感"
+/// 验证方法：统计每帧 rawDtSeconds=0 的次数和实际 deltaUs 值
+int _diagDtZeroCount = 0;                    // rawDtSeconds=0 的帧数
+int _diagDtNormalCount = 0;                  // rawDtSeconds>0 的正常帧数
+int _diagDtMaxDeltaUs = 0;                   // 2秒内最大 deltaUs
+int _diagDtMinDeltaUs = 0x7FFFFFFF;          // 2秒内最小 deltaUs（排除0）
+int _diagDtOver100msCount = 0;              // deltaUs>=100ms（被丢弃）的帧数
+int _diagDtOver50msCount = 0;               // deltaUs>=50ms（异常但未被丢弃）的帧数
+double _diagDtRawMax = 0.0;                 // 2秒内最大 rawDtSeconds
+double _diagDtRawMin = 1.0;                 // 2秒内最小 rawDtSeconds（排除0）
+double _diagDtEmaLast = 0.0;                // 最后一个 EMA dtSeconds 值
+int _diagDtZeroReasonInit = 0;              // rawDt=0 原因：_lastWallUs==0（首帧/重置）
+int _diagDtZeroReasonBackward = 0;          // rawDt=0 原因：currentWallUs < _lastWallUs（时间回退）
+int _diagDtZeroReasonOver100ms = 0;         // rawDt=0 原因：deltaUs>=100ms（大跳变丢弃）
+
+// [EMA-VS-RAW] V3假设验证：EMA平滑导致displayX与墙钟不同步
+int _diagEmaUnderpushFrames = 0;            // emaDt < rawDt 的帧数（displayX少推→弹幕减速）
+int _diagEmaOverpushFrames = 0;             // emaDt > rawDt 的帧数（displayX多推→弹幕加速）
+double _diagEmaMaxUnderpushPx = 0.0;        // 最大少推量（px, @200px/s参考速度）
+double _diagEmaMaxOverpushPx = 0.0;         // 最大多推量（px, @200px/s参考速度）
+double _diagEmaTotalDiffPx = 0.0;           // 累计|emaDt-rawDt|*200*rate（总偏差量）
+int _lastDiagEmaVsRawTimeMs = 0;            // [EMA-VS-RAW] 逐帧日志限流
+
+/// [PAINT-CAUSAL-CHAIN] 验证根因A因果链：paint耗时→deltaUs>100ms→rawDt=0→卡顿
+/// 假设：paint()耗时超16ms→下一帧vsync deadline miss→deltaUs>100ms→rawDt=0→displayX不推进→卡顿
+/// 验证：rawDt=0时检查前一帧paint耗时，如果>16ms→因果链确认
+int _lastPaintDurationUs = 0;               // 上一帧paint耗时(μs)
+int _diagPaintCausalChainCount = 0;          // 因果链确认次数(rawDt=0且前帧paint>16ms)
+int _diagBudgetZeroMissSpikeCount = 0;       // budget=0时cache miss尖峰次数(miss>10)
+int _diagBudgetZeroMaxMiss = 0;              // budget=0时最大单帧cache miss数
+int _lastDiagPaintCausalTimeMs = 0;          // [PAINT-CAUSAL-CHAIN] 日志限流
 
 // ════════════════════════════════════════════════════════════════
 //  主画笔
@@ -298,6 +349,14 @@ class DanmakuAtlasPainter extends CustomPainter {
   static double _smoothedDtSeconds = 0.0;
   static const double _dtEmaAlpha = 0.3;
 
+  /// [V4] 暂停恢复过渡期帧计数器 — 仅在前N帧使用EMA，之后无条件切回rawDt
+  /// V3的emaDeviation>30%判定被日志证明过于激进：
+  /// 帧间隔波动（atlas rebuild等）导致偏差频繁>30% → EMA反复介入 → 速度波动 → "不丝滑"
+  /// V4改用固定帧数：暂停恢复后5帧内用EMA掩盖playbackTimeMs低频更新drift，
+  /// 5帧后EMA已收敛（α=0.3约5帧收敛到5%偏差以内），无条件切回rawDt保证丝滑。
+  static int _resumeFrameCount = 0;
+  static const int _resumeEmaFrames = 5;
+
   /// uniform 描边8方向偏移
   static const List<(double, double)> _uniformOutlineDirs = [
     (-1.0, 0.0),
@@ -322,27 +381,148 @@ class DanmakuAtlasPainter extends CustomPainter {
     // ── 墙钟 dt：真实帧间隔（与旧版完全一致） ──
     final currentWallUs = _wallClock.elapsedMicroseconds;
     final double rawDtSeconds;
+    final int deltaUs; // [DT-JITTER-DIAG] 保存实际帧间隔
     if (_lastWallUs == 0 || currentWallUs < _lastWallUs) {
       rawDtSeconds = 0.0;
+      deltaUs = 0; // [DT-JITTER-DIAG] 标记为无效
+      // [DT-JITTER-DIAG] 追踪 rawDt=0 的具体原因
+      if (!kReleaseMode) {
+        if (_lastWallUs == 0) {
+          _diagDtZeroReasonInit++;
+        } else {
+          _diagDtZeroReasonBackward++;
+        }
+      }
     } else {
-      final deltaUs = currentWallUs - _lastWallUs;
-      rawDtSeconds = (deltaUs < 100000) ? deltaUs / 1000000.0 : 0.0;
+      deltaUs = currentWallUs - _lastWallUs;
+      if (deltaUs < 100000) {
+        rawDtSeconds = deltaUs / 1000000.0;
+      } else {
+        rawDtSeconds = 0.0; // 大跳变帧不推进
+        if (!kReleaseMode) _diagDtZeroReasonOver100ms++; // [DT-JITTER-DIAG]
+      }
     }
     _lastWallUs = currentWallUs;
 
-    // ── EMA 平滑 dt ──
+    // ── [DT-JITTER-DIAG] rawDt 抖动追踪 ──
+    // ✅ 修复V3: 移除逐帧重置，改为2秒周期重置（在输出后），
+    // 使计数器能正确累积2秒窗口内的帧数据
+    if (!kReleaseMode && isPlaying) {
+      if (rawDtSeconds == 0.0) {
+        _diagDtZeroCount++;
+        // [PAINT-CAUSAL-CHAIN] 验证根因A：rawDt=0时检查前一帧paint耗时
+        // 如果 _lastPaintDurationUs > 16000(16ms)，说明paint()耗时导致vsync deadline miss
+        // → deltaUs > 100ms → rawDt=0 → displayX不推进 → 卡顿
+        if (_lastPaintDurationUs > 16000 && deltaUs >= 100000) {
+          _diagPaintCausalChainCount++;
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagPaintCausalTimeMs >= 500) { // 限流500ms
+            _lastDiagPaintCausalTimeMs = now;
+            debugPrint('[PAINT-CAUSAL-CHAIN] ✅ CONFIRMED: rawDt=0 caused by paint overhead '
+                'lastPaint=${_lastPaintDurationUs}μs(${(_lastPaintDurationUs / 1000).toStringAsFixed(1)}ms) '
+                'deltaUs=$deltaUs '
+                '→ paint耗时>16ms→vsync miss→deltaUs>100ms→rawDt=0→displayX frozen→STUTTER');
+          }
+        }
+        // [DT-FREEZE] 验证日志#2: 逐帧记录 rawDt=0 的"冻结帧"
+        // 这是原始卡顿假设的关键证据：rawDt=0 → displayX不推进 → 弹幕停顿
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if (now - _lastDiagDtFreezeTimeMs >= 200) { // 限流200ms，避免日志洪泛
+          _lastDiagDtFreezeTimeMs = now;
+          debugPrint('[DT-FREEZE] rawDt=0 isPlaying=true '
+              'deltaUs=$deltaUs '
+              'reason=${_lastWallUs == 0 ? "init" : currentWallUs < _lastWallUs ? "backward" : deltaUs >= 100000 ? "over100ms" : "unknown"} '
+              'emaDt=${(_smoothedDtSeconds * 1000).toStringAsFixed(2)}ms '
+              'lastPaint=${_lastPaintDurationUs}μs');
+        }
+      } else {
+        _diagDtNormalCount++;
+        if (deltaUs > _diagDtMaxDeltaUs) _diagDtMaxDeltaUs = deltaUs;
+        if (deltaUs < _diagDtMinDeltaUs) _diagDtMinDeltaUs = deltaUs;
+        if (deltaUs >= 50000) _diagDtOver50msCount++; // 50-100ms 异常帧
+        // [DT-ABNORMAL] 验证日志#4: 记录50-100ms区间的deltaUs
+        // 这些帧"异常但未被丢弃"，可能导致弹幕单帧位移过大
+        if (deltaUs >= 50000 && deltaUs < 100000) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - _lastDiagDtAbnormalTimeMs >= 500) { // 限流500ms
+            _lastDiagDtAbnormalTimeMs = now;
+            debugPrint('[DT-ABNORMAL] deltaUs=$deltaUs '
+                'rawDt=${(rawDtSeconds * 1000).toStringAsFixed(2)}ms '
+                'emaDt=${(_smoothedDtSeconds * 1000).toStringAsFixed(2)}ms '
+                '→ frame moves ${(rawDtSeconds * 1000).toStringAsFixed(1)}ms worth of distance');
+          }
+        }
+        if (rawDtSeconds > _diagDtRawMax) _diagDtRawMax = rawDtSeconds;
+        if (rawDtSeconds < _diagDtRawMin) _diagDtRawMin = rawDtSeconds;
+      }
+    }
+
+    // ── dt 计算：V4 — 稳态无条件rawDt，暂停恢复仅前5帧EMA ──
+    // V3问题（日志100%确认）：emaDeviation>30%判定过于激进 →
+    // 帧间隔波动（atlas rebuild等）导致偏差频繁>30% → EMA反复介入正常播放 →
+    // underpush 2-8px + overpush 1-2px → 弹幕速度"呼吸式"波动 → "不丝滑"
+    // V4修复：改用固定帧计数器，暂停恢复后仅前5帧用EMA掩盖drift，
+    // 5帧后EMA已收敛（α=0.3约5帧→偏差<5%），无条件切回rawDt。
+    // 这样EMA绝不干扰正常播放，只在真正需要的暂停恢复过渡期使用。
     final double dtSeconds;
     if (!isPlaying) {
       dtSeconds = 0.0;
     } else if (rawDtSeconds == 0.0) {
       dtSeconds = 0.0;
     } else if (_smoothedDtSeconds == 0.0) {
+      // 暂停恢复首帧：初始化EMA，直接用rawDt，启动过渡期计数器
       dtSeconds = rawDtSeconds;
       _smoothedDtSeconds = rawDtSeconds;
-    } else {
+      _resumeFrameCount = 1; // [V4] 标记已进入过渡期
+    } else if (_resumeFrameCount > 0 && _resumeFrameCount < _resumeEmaFrames) {
+      // [V4] 暂停恢复过渡期（前5帧）：用EMA掩盖playbackTimeMs低频更新导致的drift
       _smoothedDtSeconds =
           _dtEmaAlpha * rawDtSeconds + (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
       dtSeconds = _smoothedDtSeconds;
+      _resumeFrameCount++;
+    } else {
+      // [V4] 稳态：无条件使用rawDt → 位置精确 → 丝滑
+      // 过渡期已过（_resumeFrameCount >= _resumeEmaFrames）或从未进入
+      // 始终更新EMA（仅供诊断日志参考，不参与dt决策）
+      _smoothedDtSeconds =
+          _dtEmaAlpha * rawDtSeconds + (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
+      dtSeconds = rawDtSeconds;
+      _resumeFrameCount = 0; // 确保不再触发过渡期
+    }
+    if (!kReleaseMode) _diagDtEmaLast = _smoothedDtSeconds; // [DT-JITTER-DIAG] 记录EMA值
+
+    // ── [EMA-VS-RAW] V3假设验证：逐帧对比EMA vs rawDt的displayX推进偏差 ──
+    // 如果EMA导致弹幕"不丝滑"，应有大量帧 emaDt≠rawDt → displayX少推/多推
+    if (!kReleaseMode && isPlaying && rawDtSeconds > 0.0 && dtSeconds > 0.0) {
+      final dtDiffSeconds = dtSeconds - rawDtSeconds; // 正=多推, 负=少推
+      // 用200px/s作为参考速度计算偏差量（实际速度各弹幕不同，但比例相同）
+      final diffPx = dtDiffSeconds * 200.0 * playbackRate;
+      _diagEmaTotalDiffPx += diffPx.abs();
+      if (dtDiffSeconds < 0.0) {
+        // EMA少推（长帧上EMA < rawDt → 弹幕减速）
+        _diagEmaUnderpushFrames++;
+        if (diffPx.abs() > _diagEmaMaxUnderpushPx) {
+          _diagEmaMaxUnderpushPx = diffPx.abs();
+        }
+      } else {
+        // EMA多推（短帧上EMA > rawDt → 弹幕加速）
+        _diagEmaOverpushFrames++;
+        if (diffPx.abs() > _diagEmaMaxOverpushPx) {
+          _diagEmaMaxOverpushPx = diffPx.abs();
+        }
+      }
+      // 逐帧限流输出（200ms间隔），捕捉单帧大偏差
+      if (diffPx.abs() > 1.0) { // 只输出偏差>1px的帧
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if (now - _lastDiagEmaVsRawTimeMs >= 200) {
+          _lastDiagEmaVsRawTimeMs = now;
+          debugPrint('[EMA-VS-RAW] '
+              'rawDt=${(rawDtSeconds * 1000).toStringAsFixed(1)}ms '
+              'emaDt=${(dtSeconds * 1000).toStringAsFixed(1)}ms '
+              'diff=${diffPx.toStringAsFixed(2)}px '
+              '${dtDiffSeconds < 0 ? "← UNDERPUSH: displayX少推→弹幕减速" : "→ OVERPUSH: displayX多推→弹幕加速"}');
+        }
+      }
     }
 
     // ── [TIME-ALIGN] 问题1诊断: 追踪 playbackTimeMs 更新频率 ──
@@ -433,6 +613,7 @@ class DanmakuAtlasPainter extends CustomPainter {
         // 重置 _lastWallUs 防止恢复首帧 dt 包含暂停间隔
         _lastWallUs = _wallClock.elapsedMicroseconds;
         _smoothedDtSeconds = 0.0; // EMA 从零开始收敛
+        _resumeFrameCount = 0; // [V4] 重置过渡期计数器，首帧将启动过渡期
 
         // 诊断：恢复首帧强制同步前的 drift 分布
         _diagResumeMaxDriftBeforePx = 0;
@@ -489,6 +670,19 @@ class DanmakuAtlasPainter extends CustomPainter {
     _diagHardSnapCount = 0;
     _diagMaxDrift = 0.0;
 
+    // ── [SPEED-JITTER-DIAG] 弹幕滚动速度抖动诊断计数器重置 ──
+    _diagSpeedJitterCorrectionCount = 0;
+    _diagSpeedJitterMaxRatio = 0.0;
+    _diagSpeedJitterMaxCorrectionPx = 0.0;
+    _diagSpeedJitterSumRatio = 0.0;
+    _diagSpeedJitterOver5Count = 0;
+    _diagSpeedJitterOver10Count = 0;
+    _diagSpeedJitterOver50Count = 0;
+
+    // ── [DT-JITTER-DIAG] ✅ 修复V3: 计数器重置已移至输出后（见L~1020）
+    // 旧Bug: 重置在递增之后、输出之前 → totalFrames永远为0
+    // 新方案: 重置在输出之后 → 2秒窗口内数据完整
+
     // ── [DIAG-V6] V6.0 四大问题诊断计数器重置 ──
     _diagDrift50to200Count = 0;
     _diagDriftOver200Count = 0;
@@ -527,6 +721,18 @@ class DanmakuAtlasPainter extends CustomPainter {
           // [DRIFT-BUG] 漂移诊断：追踪最大漂移和校正频率
           // [TIME-ALIGN] 问题1诊断: 追踪drift分布
           if (absDrift > _diagMaxDrift) _diagMaxDrift = absDrift;
+          // [DRIFT-SPIKE] 验证日志#3: 逐帧记录 >0.5px 的漂移
+          // 目的：2秒窗口MAX_DRIFT可能掩盖单帧spike，逐帧日志捕捉瞬时大漂移
+          if (absDrift > 0.5 && !kReleaseMode) {
+            final now = DateTime.now().millisecondsSinceEpoch;
+            if (now - _lastDiagDriftSpikeTimeMs >= 200) { // 限流200ms
+              _lastDiagDriftSpikeTimeMs = now;
+              debugPrint('[DRIFT-SPIKE] drift=${drift.toStringAsFixed(2)}px '
+                  'displayX=${item.displayX.toStringAsFixed(1)} x=${item.x.toStringAsFixed(1)} '
+                  'dt=${dtSeconds.toStringAsFixed(4)}s rawDt=${rawDtSeconds.toStringAsFixed(4)}s '
+                  'speed=${item.scrollSpeed.toStringAsFixed(1)}px/s');
+            }
+          }
           // ✅ 修复问题2：漂移校正阈值从 50px 降至 15px + 连续渐进校正
           // 根因：playbackTimeMs 低频更新（最长444ms）+ 墙钟高频推进 →
           // playbackTimeMs 冻结期 displayX 推进但 item.x 不变 → drift 累积负方向
@@ -555,10 +761,34 @@ class DanmakuAtlasPainter extends CustomPainter {
             // 公式：correction = 0.05 + 0.25 * (absDrift - 15) / 185
             // 15px → 5%, 50px → 9.7%, 100px → 16.4%, 200px → 30%
             final correctionRate = 0.05 + 0.25 * (absDrift - 15.0) / 185.0;
+            final correctionPx = absDrift * correctionRate;
             item.displayX = item.displayX + (item.x - item.displayX) * correctionRate;
             _diagDriftCorrectionCount++; // [DRIFT-BUG]
             if (absDrift > 50.0) {
               _diagDrift50to200Count++; // [TIME-ALIGN]
+            }
+            // ── [SPEED-JITTER-DIAG] 弹幕滚动速度抖动诊断 ──
+            // 验证假设：漂移修正的修正量占正常帧移动量的比例过高，
+            // 导致弹幕滚动速度单帧突变远超人眼5-10%感知阈值。
+            // normalMovePerFrame = scrollSpeed * dtSeconds * playbackRate（每帧正常移动量）
+            // speedJitterRatio = correctionPx / normalMovePerFrame（归一化速度变化比）
+            // 如果 maxRatio 持续 >10% 且 correctionCount > 0，则"不丝滑"根因确认。
+            {
+              final normalMovePerFrame = item.scrollSpeed * dtSeconds * playbackRate;
+              if (normalMovePerFrame > 0.01) { // 避免除以零
+                final speedJitterRatio = correctionPx / normalMovePerFrame;
+                _diagSpeedJitterCorrectionCount++;
+                if (speedJitterRatio > _diagSpeedJitterMaxRatio) {
+                  _diagSpeedJitterMaxRatio = speedJitterRatio;
+                }
+                if (correctionPx > _diagSpeedJitterMaxCorrectionPx) {
+                  _diagSpeedJitterMaxCorrectionPx = correctionPx;
+                }
+                _diagSpeedJitterSumRatio += speedJitterRatio;
+                if (speedJitterRatio > 0.05) _diagSpeedJitterOver5Count++;
+                if (speedJitterRatio > 0.10) _diagSpeedJitterOver10Count++;
+                if (speedJitterRatio > 0.50) _diagSpeedJitterOver50Count++;
+              }
             }
           } else if (absDrift > _diagDriftUnder50Max) {
             _diagDriftUnder50Max = absDrift; // [TIME-ALIGN] 追踪轻微漂移峰值
@@ -822,6 +1052,14 @@ class DanmakuAtlasPainter extends CustomPainter {
         if (_frameBuildBudget > 0 && _frameBuildBudget < 5000) {
           _frameBuildBudget += 150; // 每帧递增预算，加速补全
         }
+        // [PAINT-CAUSAL-CHAIN] 验证根因A辅助：budget=0时cache miss不受限制
+        // 如果budget=0且有大量miss，说明同步构建尖峰可能是paint耗时的来源
+        if (_frameBuildBudget == 0 && missCount > 10) {
+          _diagBudgetZeroMissSpikeCount++;
+          if (missCount > _diagBudgetZeroMaxMiss) {
+            _diagBudgetZeroMaxMiss = missCount;
+          }
+        }
       }
     }
 
@@ -849,6 +1087,87 @@ class DanmakuAtlasPainter extends CustomPainter {
             'lastHardSnapDt=${_diagHardSnapDtSeconds.toStringAsFixed(4)}s '
             'dtAnomaly=$_diagHardSnapDtAnomalyCount');
         _diagHardSnapDtAnomalyCount = 0; // 重置dt异常计数
+
+        // [SPEED-JITTER-DIAG] 弹幕滚动速度抖动诊断输出
+        // 关键指标：maxRatio > 10% = 假设成立（修正导致速度突变 > 感知阈值）
+        // avgRatio = 平均速度变化比，over5/10/50 = 超过5%/10%/50%阈值的修正次数
+        final avgRatio = _diagSpeedJitterCorrectionCount > 0
+            ? _diagSpeedJitterSumRatio / _diagSpeedJitterCorrectionCount
+            : 0.0;
+        debugPrint('[SPEED-JITTER-DIAG] '
+            'corrections=$_diagSpeedJitterCorrectionCount '
+            'maxRatio=${(_diagSpeedJitterMaxRatio * 100).toStringAsFixed(1)}% '
+            'avgRatio=${(avgRatio * 100).toStringAsFixed(1)}% '
+            'maxCorrection=${_diagSpeedJitterMaxCorrectionPx.toStringAsFixed(2)}px '
+            'over5%=$_diagSpeedJitterOver5Count '
+            'over10%=$_diagSpeedJitterOver10Count '
+            'over50%=$_diagSpeedJitterOver50Count '
+            'dt=${dtSeconds.toStringAsFixed(4)}s '
+            'rate=$playbackRate '
+            '← ROOT_CAUSE=${_diagSpeedJitterMaxRatio > 0.10 ? "CONFIRMED: drift correction causes speed jitter >10%" : "unconfirmed"}');
+
+        // [DT-JITTER-DIAG] rawDt 抖动诊断输出
+        // 关键指标：dtZero > 0 = 有帧被丢弃（弹幕停顿），over100ms = deltaUs>=100ms 被丢弃次数
+        final totalDtFrames = _diagDtZeroCount + _diagDtNormalCount;
+        final dtZeroPct = totalDtFrames > 0 ? (_diagDtZeroCount * 100.0 / totalDtFrames) : 0.0;
+        debugPrint('[DT-JITTER-DIAG] '
+            'totalFrames=$totalDtFrames '
+            'dtZero=$_diagDtZeroCount(${dtZeroPct.toStringAsFixed(1)}%) '
+            'dtNormal=$_diagDtNormalCount '
+            'over100ms=$_diagDtOver100msCount '
+            'over50ms=$_diagDtOver50msCount '
+            'deltaUs=${_diagDtMinDeltaUs == 0x7FFFFFFF ? "N/A" : "${_diagDtMinDeltaUs}~${_diagDtMaxDeltaUs}"} '
+            'rawDt=${_diagDtRawMin == 1.0 ? "N/A" : "${(_diagDtRawMin * 1000).toStringAsFixed(2)}~${(_diagDtRawMax * 1000).toStringAsFixed(2)}ms"} '
+            'emaDt=${(_diagDtEmaLast * 1000).toStringAsFixed(2)}ms '
+            'zeroReason=init:$_diagDtZeroReasonInit backward:$_diagDtZeroReasonBackward over100ms:$_diagDtZeroReasonOver100ms '
+            '← STUTTER=${_diagDtZeroCount > 0 ? "CONFIRMED: $_diagDtZeroCount frames with dt=0 (displayX frozen → stutter)" : "none"}');
+
+        // [DT-JITTER-DIAG] ✅ 修复V3: 重置移至输出后，确保2秒窗口数据完整
+        _diagDtZeroCount = 0;
+        _diagDtNormalCount = 0;
+        _diagDtMaxDeltaUs = 0;
+        _diagDtMinDeltaUs = 0x7FFFFFFF;
+        _diagDtOver100msCount = 0;
+        _diagDtOver50msCount = 0;
+        _diagDtRawMax = 0.0;
+        _diagDtRawMin = 1.0;
+        _diagDtEmaLast = 0.0;
+        _diagDtZeroReasonInit = 0;
+        _diagDtZeroReasonBackward = 0;
+        _diagDtZeroReasonOver100ms = 0;
+
+        // [PAINT-CAUSAL-CHAIN] 根因A因果链验证：2秒汇总输出
+        // 关键指标：causalChainCount > 0 = 确认paint耗时→rawDt=0因果链
+        //           budgetZeroSpike > 0 = budget失效后出现cache miss尖峰
+        debugPrint('[PAINT-CAUSAL-CHAIN] '
+            'causalChainConfirmed=$_diagPaintCausalChainCount/2s '
+            'budgetZeroMissSpike=$_diagBudgetZeroMissSpikeCount/2s '
+            'budgetZeroMaxMiss=$_diagBudgetZeroMaxMiss/帧 '
+            'lastPaintUs=$_lastPaintDurationUs '
+            '← ${_diagPaintCausalChainCount > 0 ? "CONFIRMED: paint耗时→rawDt=0→卡顿" : "unconfirmed"} '
+            '${_diagBudgetZeroMissSpikeCount > 0 ? "BUDGET_LEAK: budget=0时有miss尖峰→同步构建→paint耗时" : ""}');
+        _diagPaintCausalChainCount = 0;
+        _diagBudgetZeroMissSpikeCount = 0;
+        _diagBudgetZeroMaxMiss = 0;
+
+        // [EMA-VS-RAW] V3假设验证：2秒汇总输出
+        // 关键指标：underpushFrames > 0 = 有帧EMA少推 → 弹幕减速
+        //          overpushFrames > 0 = 有帧EMA多推 → 弹幕加速
+        //          maxUnderpushPx/OverpushPx = 单帧最大偏差量（>2px人眼可感知）
+        final emaTotalFrames = _diagEmaUnderpushFrames + _diagEmaOverpushFrames;
+        if (emaTotalFrames > 0) {
+          debugPrint('[EMA-VS-RAW] '
+              'underpush=$_diagEmaUnderpushFrames overpush=$_diagEmaOverpushFrames '
+              'maxUnder=${_diagEmaMaxUnderpushPx.toStringAsFixed(2)}px maxOver=${_diagEmaMaxOverpushPx.toStringAsFixed(2)}px '
+              'totalDiff=${_diagEmaTotalDiffPx.toStringAsFixed(1)}px '
+              '← ${_diagEmaMaxUnderpushPx > 2.0 || _diagEmaMaxOverpushPx > 2.0 ? "EMA HARMFUL: 单帧偏差>2px→不丝滑" : "EMA OK: 偏差<2px"}');
+        }
+        // 重置EMA-VS-RAW计数器
+        _diagEmaUnderpushFrames = 0;
+        _diagEmaOverpushFrames = 0;
+        _diagEmaMaxUnderpushPx = 0.0;
+        _diagEmaMaxOverpushPx = 0.0;
+        _diagEmaTotalDiffPx = 0.0;
 
         // ══════════════════════════════════════════════════════════
         //  [DIAG-V6] V6.0 四大问题诊断输出
@@ -1019,6 +1338,11 @@ class DanmakuAtlasPainter extends CustomPainter {
             'atlasSlots=${_spriteAtlas!.slotCount}');
       }
     }
+
+    // [PAINT-CAUSAL-CHAIN] 记录本帧paint耗时，供下一帧rawDt=0时检查因果链
+    if (diagPaintSw != null) {
+      _lastPaintDurationUs = diagPaintSw.elapsedMicroseconds;
+    }
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -1098,17 +1422,22 @@ class DanmakuAtlasPainter extends CustomPainter {
     final rRecorder = ui.PictureRecorder();
     final rCanvas = Canvas(rRecorder);
 
-    // ── 透明背景清除（Impeller toImageSync 纹理未初始化修复） ──
-    // ⚠️ [ATLAS-DIAG-BUG1] 根因诊断：
-    // 之前的修复使用 BlendMode.src + Color(0x00000000)，但 Impeller 可能将
-    // "写入 alpha=0 的像素"优化为 no-op（对最终画面无贡献），导致 toImageSync
-    // 生成的纹理中未被 drawParagraph 覆盖的区域仍包含未初始化的白色 GPU 内存。
-    // 现改用 BlendMode.clear — 其语义是"丢弃目标颜色，写入全透明"，
-    // 在 GPU 上对应 glClear/vkClearAttachment，不会被 no-op 优化掉。
+    // ── [DPR-SHRINK-BUG] 关键修复：Canvas.scale(DPR) ──
+    // PictureRecorder 的 Canvas 是虚拟画布，toImageSync(width, height) 以 1:1
+    // 像素映射渲染 Picture 内容（不自动缩放）。如果不 scale(DPR)，Paragraph 在
+    // 逻辑坐标空间排版（如 200×20），toImageSync(pixelW, pixelH) 中 Paragraph
+    // 只占图像左上角 200×20 像素（而非 500×50 = 200*2.5×20*2.5），导致
+    // drawImageRect 将整个图像（含大面积空白）映射到 dstRect 时弹幕缩小为 1/DPR。
+    // scale(DPR) 后，Paragraph 绘制在 (0,0)-(pixelW,pixelH) 像素区域，占满图像。
     final pixelW = (logicalW * devicePixelRatio).ceil().clamp(1, 4096);
     final pixelH = (logicalH * devicePixelRatio).ceil().clamp(1, 4096);
+    rCanvas.scale(devicePixelRatio, devicePixelRatio);
+
+    // ── 透明背景清除（Impeller toImageSync 纹理未初始化修复） ──
+    // clearRect 使用逻辑坐标（scale(DPR) 后自动覆盖 pixelW×pixelH 像素区域）。
+    // BlendMode.clear 语义为"丢弃目标颜色，写入全透明"，不会被 Impeller no-op 优化。
     rCanvas.drawRect(
-      ui.Rect.fromLTWH(0, 0, pixelW.toDouble(), pixelH.toDouble()),
+      ui.Rect.fromLTWH(0, 0, logicalW, logicalH),
       ui.Paint()..blendMode = ui.BlendMode.clear,
     );
 
@@ -1120,6 +1449,23 @@ class DanmakuAtlasPainter extends CustomPainter {
     final picture = rRecorder.endRecording();
 
     final image = picture.toImageSync(pixelW, pixelH);
+
+    // [DPR-SHRINK-DIAG] 诊断：验证 toImageSync 是否自动缩放 Picture 内容
+    // 关键指标：image.width/height 应该 = pixelW/pixelH
+    // 如果 toImageSync 不自动缩放，则 Paragraph 只占图像左上角 logicalW×logicalH 像素
+    // drawImageRect 将整个 image 映射到 dstRect(logicalW×logicalH 逻辑) → 弹幕缩小
+    if (!kReleaseMode) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastDiagDprShrinkTimeMs >= 2000) {
+        _lastDiagDprShrinkTimeMs = now;
+        debugPrint('[DPR-SHRINK-DIAG] DPR=$devicePixelRatio '
+            'logicalW=${logicalW.toStringAsFixed(1)} logicalH=${logicalH.toStringAsFixed(1)} '
+            'pixelW=$pixelW pixelH=$pixelH '
+            'imageW=${image.width} imageH=${image.height} '
+            'ratio=${(pixelW / math.max(logicalW, 0.01)).toStringAsFixed(2)} '
+            'fillP.maxIntrW=${fillP.maxIntrinsicWidth.toStringAsFixed(1)} fillP.h=${fillP.height.toStringAsFixed(1)}');
+      }
+    }
 
     // [FIRST-FRAME] 问题3诊断: 累计toImageSync耗时
     diagRasterSw?.stop();

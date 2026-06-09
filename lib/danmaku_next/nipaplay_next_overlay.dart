@@ -123,6 +123,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
 
   @override
   void dispose() {
+    _engine.dispose();
     _vsyncController.dispose();
     super.dispose();
   }

@@ -495,6 +495,23 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
     // 保存当前播放速度，以便长按结束时恢复
     _normalPlaybackRate = _playbackRate;
+
+    // ✅ P6修复：速率变化前重设锚点，防止 playbackTimeMs 跳变
+    // 根因：smoothMs = anchorMs + elapsedDelta * newRate，elapsedDelta是旧速率期间积累的，
+    // 乘以新速率会导致 playbackTimeMs 瞬间跳变 elapsedDelta*(newRate-oldRate)。
+    // 修复：将锚点重设到当前 playbackTimeMs 和 elapsed，使新速率从当前位置平滑推进。
+    if (!kReleaseMode) {
+      final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
+      final predictedJumpMs = elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
+      debugPrint('[RATE-CHANGE-DIAG] START BOOST: ${_normalPlaybackRate}x → ${_speedBoostRate}x '
+          'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+          'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
+          'PREDICTED_JUMP=${predictedJumpMs.toStringAsFixed(1)}ms '
+          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)} ← ANCHOR RESET to ptm');
+    }
+    _smoothAnchorMs = _playbackTimeMs.value;
+    _smoothAnchorElapsedUs = _lastElapsedUs;
+
     _isSpeedBoostActive = true;
 
     // 使用配置的倍速
@@ -507,6 +524,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   // 结束倍速播放（长按结束）
   void stopSpeedBoost() {
     if (!hasVideo || !_isSpeedBoostActive) return;
+
+    // ✅ P6修复：速率变化前重设锚点，防止 smoothMs 增速骤降导致 drift
+    // 根因：2x→1x时 smoothMs = anchorMs + elapsedDelta*1.0（之前*2.0），
+    // playbackTimeMs几乎不推进 → playerMs以1x继续推进 → 大drift → FORWARD SNAP
+    if (!kReleaseMode) {
+      final elapsedDeltaMs = (_lastElapsedUs - _smoothAnchorElapsedUs) / 1000.0;
+      final predictedDriftMs = elapsedDeltaMs * (_speedBoostRate - _normalPlaybackRate);
+      debugPrint('[RATE-CHANGE-DIAG] STOP BOOST: ${_speedBoostRate}x → ${_normalPlaybackRate}x '
+          'anchorMs=${_smoothAnchorMs.toStringAsFixed(1)} '
+          'elapsedDelta=${elapsedDeltaMs.toStringAsFixed(1)}ms '
+          'PREDICTED_DRIFT=${predictedDriftMs.toStringAsFixed(1)}ms '
+          'ptm=${_playbackTimeMs.value.toStringAsFixed(1)} ← ANCHOR RESET to ptm');
+    }
+    _smoothAnchorMs = _playbackTimeMs.value;
+    _smoothAnchorElapsedUs = _lastElapsedUs;
 
     _isSpeedBoostActive = false;
     // 恢复到长按前的播放速度

@@ -123,6 +123,26 @@ class NipaPlayNextEngine {
     _nativeEngineAvailable = false;
   }
 
+  /// Release native (C++ FFI) engine handle and output buffers.
+  /// Must be called when the overlay/widget owning this engine is disposed,
+  /// otherwise native handles and FFI-allocated buffers remain alive until
+  /// Dart GC finalizers run — which can accumulate noticeably for large
+  /// comment lists when opening/closing videos or toggling kernels.
+  void dispose() {
+    if (_nativeEngine != null) {
+      try {
+        _nativeEngine!.dispose();
+      } catch (_) {}
+      _nativeEngine = null;
+    }
+    _nativeEngineTried = false;
+    _nativeEngineAvailable = false;
+    _textWidthCache.clear();
+    _items.clear();
+    _itemTimes.clear();
+    _positionedBuffer.clear();
+  }
+
   void configure({
     required List<Map<String, dynamic>> danmakuList,
     required Size size,
