@@ -540,9 +540,7 @@ class _PluginSettingsPageState extends State<PluginSettingsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Expanded(
-                child: SingleChildScrollView(
-                  child: listView,
-                ),
+                child: listView,
               ),
               Padding(
                 padding:
