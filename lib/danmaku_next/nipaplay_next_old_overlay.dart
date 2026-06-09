@@ -109,6 +109,7 @@ class _NipaPlayNextOldOverlayState extends State<NipaPlayNextOldOverlay> {
 
   @override
   void dispose() {
+    _engine.dispose();
     super.dispose();
   }
 
