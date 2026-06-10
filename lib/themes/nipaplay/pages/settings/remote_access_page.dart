@@ -29,6 +29,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
   bool _webServerEnabled = false;
   bool _receiverEnabled = true;
   bool _autoStartEnabled = false;
+  bool _ipv6Enabled = false;
   List<String> _accessUrls = [];
   String? _publicIpUrl;
   bool _isLoadingPublicIp = false;
@@ -58,6 +59,7 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         _webServerEnabled = server.isRunning;
         _receiverEnabled = receiverEnabled;
         _autoStartEnabled = server.autoStart;
+        _ipv6Enabled = server.ipv6Enabled;
         _currentPort = server.port;
       });
       if (shouldUpdateUrls) {
@@ -213,6 +215,40 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
         BlurSnackBar.show(context, '已关闭自动开启');
       }
     }
+  }
+
+  Future<void> _toggleIpv6(bool enabled) async {
+    final previousValue = _ipv6Enabled;
+    setState(() {
+      _ipv6Enabled = enabled;
+    });
+
+    final server = ServiceProvider.webServer;
+    final success = await server.setIpv6Enabled(enabled);
+    if (!mounted) return;
+
+    if (success) {
+      setState(() {
+        _webServerEnabled = server.isRunning;
+      });
+      if (server.isRunning) {
+        await _updateAccessUrls();
+      }
+      if (!mounted) return;
+      BlurSnackBar.show(
+        context,
+        enabled ? '已开启 IPv6 访问地址' : '已关闭 IPv6 访问地址',
+      );
+      return;
+    }
+
+    setState(() {
+      _ipv6Enabled = previousValue;
+      _webServerEnabled = server.isRunning;
+      _accessUrls = [];
+      _publicIpUrl = null;
+    });
+    _showStartServerErrorDialog(server.lastStartErrorMessage ?? '未知原因');
   }
 
   Future<void> _toggleReceiver(bool enabled) async {
@@ -456,6 +492,16 @@ class _RemoteAccessPageState extends State<RemoteAccessPage> {
             trailing: FluentSettingsSwitch(
               value: _autoStartEnabled,
               onChanged: _toggleAutoStart,
+            ),
+          ),
+
+          _buildSettingItem(
+            icon: Icons.router,
+            title: '启用 IPv6 访问地址',
+            subtitle: '默认关闭。开启后地址列表和扫码二维码会包含 IPv6 地址（服务运行中切换会自动重启）',
+            trailing: FluentSettingsSwitch(
+              value: _ipv6Enabled,
+              onChanged: _toggleIpv6,
             ),
           ),
 

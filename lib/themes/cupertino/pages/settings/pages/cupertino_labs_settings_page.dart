@@ -1,5 +1,6 @@
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_group_card.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_settings_tile.dart';
@@ -102,6 +103,28 @@ class CupertinoLabsSettingsPage extends StatelessWidget {
                         },
                         backgroundColor: resolveSettingsTileBackground(context),
                       ),
+                      if (PlayerFactory.isErikaKernelSupported)
+                        CupertinoSettingsTile(
+                          leading: Icon(
+                            CupertinoIcons.lab_flask,
+                            color: resolveSettingsIconColor(context),
+                          ),
+                          title: const Text('显示 Erika 播放内核'),
+                          subtitle: const Text('开启后，播放器内核菜单显示 Erika'),
+                          trailing: AdaptiveSwitch(
+                            value: labsSettings.enableErikaPlayerKernel,
+                            onChanged: (value) {
+                              labsSettings.setEnableErikaPlayerKernel(value);
+                            },
+                          ),
+                          onTap: () {
+                            labsSettings.setEnableErikaPlayerKernel(
+                              !labsSettings.enableErikaPlayerKernel,
+                            );
+                          },
+                          backgroundColor:
+                              resolveSettingsTileBackground(context),
+                        ),
                       CupertinoSettingsTile(
                         leading: Icon(
                           CupertinoIcons.bolt,

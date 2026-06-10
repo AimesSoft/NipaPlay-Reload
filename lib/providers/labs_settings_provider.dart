@@ -11,12 +11,14 @@ class LabsSettingsProvider extends ChangeNotifier {
   bool _enableLargeScreenMode = false;
   bool _showRemoteAccessQrCode = false;
   bool _enableNext2DanmakuKernel = false;
+  bool _enableErikaPlayerKernel = false;
   bool _enableNextPlusPlusEngine = true; // 默认打开：Next++ 激进优化引擎
   bool _isLoaded = false;
 
   bool get enableLargeScreenMode => _enableLargeScreenMode;
   bool get showRemoteAccessQrCode => _showRemoteAccessQrCode;
   bool get enableNext2DanmakuKernel => _enableNext2DanmakuKernel;
+  bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get enableNextPlusPlusEngine => _enableNextPlusPlusEngine;
   bool get isLoaded => _isLoaded;
 
@@ -31,6 +33,10 @@ class LabsSettingsProvider extends ChangeNotifier {
     );
     _enableNext2DanmakuKernel = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableNext2DanmakuKernel,
+      defaultValue: false,
+    );
+    _enableErikaPlayerKernel = await SettingsStorage.loadBool(
+      SettingsKeys.labsEnableErikaPlayerKernel,
       defaultValue: false,
     );
     _enableNextPlusPlusEngine = await SettingsStorage.loadBool(
@@ -68,6 +74,16 @@ class LabsSettingsProvider extends ChangeNotifier {
     notifyListeners();
     await SettingsStorage.saveBool(
       SettingsKeys.labsEnableNext2DanmakuKernel,
+      enabled,
+    );
+  }
+
+  Future<void> setEnableErikaPlayerKernel(bool enabled) async {
+    if (_enableErikaPlayerKernel == enabled) return;
+    _enableErikaPlayerKernel = enabled;
+    notifyListeners();
+    await SettingsStorage.saveBool(
+      SettingsKeys.labsEnableErikaPlayerKernel,
       enabled,
     );
   }
