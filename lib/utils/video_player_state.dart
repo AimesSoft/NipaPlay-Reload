@@ -60,6 +60,7 @@ import 'package:provider/provider.dart';
 import '../providers/watch_history_provider.dart';
 import 'danmaku_parser.dart';
 import 'danmaku_xml_utils.dart';
+import 'package:nipaplay/cpp_native/bindings/danmaku_parser.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:screen_brightness/screen_brightness.dart'; // Added screen_brightness
 import 'package:nipaplay/themes/nipaplay/widgets/brightness_indicator.dart'; // Added import for BrightnessIndicator widget

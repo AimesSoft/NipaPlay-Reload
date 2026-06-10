@@ -96,6 +96,29 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_sim_check_batch(
 NIPAPLAY_NATIVE_EXPORT double np_sim_pair_similarity(
     const char* text_a, const char* text_b, int32_t use_pinyin);
 
+// ──── 弹幕解析模块：DanmakuParser ────
+
+// 解析 Bilibili 弹幕 XML，返回预序列化 JSON
+// 输出格式: {"count":N,"comments":[{"t":...,"c":...,"y":...,"r":...,"fontSize":...,"originalType":...},...]}
+// xml_content: UTF-8 XML 字符串指针
+// content_len: 字符串字节长度（不含 null terminator）
+// output_json: 输出参数，调用者预分配 NpString 结构
+// 返回: NpResult，成功时 output_json 包含 JSON 字符串
+NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_xml(
+    const char* xml_content, int32_t content_len,
+    NpString* output_json);
+
+// 解析弹幕 JSON 数组，返回标准化 JSON
+// 输出格式: {"count":N,"comments":[{"time":...,"content":...,"type":...,"color":...,...},...]}
+// 支持双源字段映射: t/time, c/content, y/type, r/color
+// 保留所有非标准额外字段
+// json_content: UTF-8 JSON 字符串指针（顶层为数组）
+// content_len: 字符串字节长度
+// output_json: 输出参数
+NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_json(
+    const char* json_content, int32_t content_len,
+    NpString* output_json);
+
 #ifdef __cplusplus
 }
 #endif

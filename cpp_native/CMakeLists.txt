@@ -15,11 +15,15 @@ set(NATIVE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/danmaku_layout.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/similarity_engine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pinyin_dict.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/danmaku_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml/pugixml.cpp
 )
 
 set(NATIVE_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/modules
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rapidjson/include
 )
 
 # ──── 库类型 ────

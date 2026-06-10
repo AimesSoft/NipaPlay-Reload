@@ -10,6 +10,7 @@
 #include "example_calculator.h"
 #include "danmaku_layout.h"
 #include "similarity_engine.h"
+#include "danmaku_parser.h"
 
 // ──── 辅助：NpString 内部分配（C++ 内部函数，非 extern "C"） ────
 NpString np_string_alloc(std::string_view s);
@@ -322,5 +323,65 @@ NIPAPLAY_NATIVE_EXPORT double np_sim_pair_similarity(
             text_a, text_b, use_pinyin != 0);
     } catch (...) {
         return 0.0;
+    }
+}
+
+// ──── 弹幕解析模块：DanmakuParser ────
+
+NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_xml(
+    const char* xml_content, int32_t content_len,
+    NpString* output_json)
+{
+    try {
+        if (!xml_content || !output_json) [[unlikely]] {
+            return {NP_ERR_NULL_PTR, "null pointer argument"};
+        }
+        if (content_len < 0) [[unlikely]] {
+            return {NP_ERR_INVALID_ARG, "content_len must be >= 0"};
+        }
+
+        std::string_view xml_view(xml_content, static_cast<size_t>(content_len));
+        std::string json_result = nipaplay::DanmakuParser::parseXmlToJson(xml_view);
+
+        *output_json = np_string_alloc(json_result);
+        if (!output_json->data) [[unlikely]] {
+            return {NP_ERR_OOM, "failed to allocate NpString"};
+        }
+        return {NP_OK, nullptr};
+    } catch (const std::bad_alloc&) {
+        return {NP_ERR_OOM, "out of memory"};
+    } catch (const std::exception& e) {
+        return {NP_ERR_INTERNAL, saveErrorMessage(e.what())};
+    } catch (...) {
+        return {NP_ERR_INTERNAL, "unknown C++ exception"};
+    }
+}
+
+NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_json(
+    const char* json_content, int32_t content_len,
+    NpString* output_json)
+{
+    try {
+        if (!json_content || !output_json) [[unlikely]] {
+            return {NP_ERR_NULL_PTR, "null pointer argument"};
+        }
+        if (content_len < 0) [[unlikely]] {
+            return {NP_ERR_INVALID_ARG, "content_len must be >= 0"};
+        }
+
+        std::string_view json_view(json_content, static_cast<size_t>(content_len));
+        std::string json_result = nipaplay::DanmakuParser::parseJsonToStandardized(json_view);
+
+        *output_json = np_string_alloc(json_result);
+        if (!output_json->data) [[unlikely]] {
+            return {NP_ERR_OOM, "failed to allocate NpString"};
+        }
+        return {NP_OK, nullptr};
+    } catch (const std::bad_alloc&) {
+        return {NP_ERR_OOM, "out of memory"};
+    } catch (const std::exception& e) {
+        return {NP_ERR_INTERNAL, saveErrorMessage(e.what())};
+    } catch (...) {
+        return {NP_ERR_INTERNAL, "unknown C++ exception"};
     }
 }

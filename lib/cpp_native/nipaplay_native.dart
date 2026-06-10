@@ -16,5 +16,6 @@ library;
 
 export 'bindings/example_calculator.dart';
 export 'bindings/similarity_engine.dart';
+export 'bindings/danmaku_parser.dart';
 export 'types/native_result.dart';
 export 'types/native_types.dart';

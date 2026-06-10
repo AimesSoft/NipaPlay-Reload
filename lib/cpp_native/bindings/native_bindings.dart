@@ -73,4 +73,15 @@ class NativeBindings {
       Double Function(Pointer<Utf8>, Pointer<Utf8>, Int32),
       double Function(Pointer<Utf8>, Pointer<Utf8>, int)>(
       'np_sim_pair_similarity');
+
+  // ──── DanmakuParser ────
+  static final npDanmakuParseXml = _dylib.lookupFunction<
+      NpResult Function(Pointer<Utf8>, Int32, Pointer<NpString>),
+      NpResult Function(Pointer<Utf8>, int, Pointer<NpString>)>(
+      'np_danmaku_parse_xml');
+
+  static final npDanmakuParseJson = _dylib.lookupFunction<
+      NpResult Function(Pointer<Utf8>, Int32, Pointer<NpString>),
+      NpResult Function(Pointer<Utf8>, int, Pointer<NpString>)>(
+      'np_danmaku_parse_json');
 }
