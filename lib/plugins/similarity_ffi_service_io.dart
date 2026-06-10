@@ -7,6 +7,8 @@ import 'package:nipaplay/cpp_native/bindings/similarity_engine.dart';
 ///
 /// 绕过 flutter_rust_bridge 和 Rust 链路，直接调用原生 C++ 实现。
 /// 如果 C++ DLL 未加载或符号不存在，所有方法安全降级返回默认值。
+///
+/// 引擎实例持有 ~4 MB scratch buffer，跨调用复用避免重复分配。
 class SimilarityFfiService {
   static SimilarityFfiService? _instance;
   static SimilarityFfiService get instance =>
@@ -17,6 +19,7 @@ class SimilarityFfiService {
   }
 
   bool _available = false;
+  SimilarityEngine? _engine;
 
   /// 引擎是否可用
   bool get available => _available;
@@ -25,11 +28,11 @@ class SimilarityFfiService {
     if (kIsWeb) return; // Web 不支持 FFI
 
     // 使用 probeNativeBinding() 探测 DLL + 符号是否可用。
-    // 不使用 pairSimilarity() 因为它会吞掉 FFI 异象并返回 0.0，
-    // 导致此处始终认为可用。
     try {
       SimilarityEngine.probeNativeBinding();
       _available = true;
+      // 创建持久引擎实例，复用 ~4 MB scratch buffer
+      _engine = SimilarityEngine();
       debugPrint('[SimilarityFFI] ✅ nipaplay_native DLL 加载成功，引擎可用');
     } catch (e) {
       _available = false;
@@ -40,7 +43,7 @@ class SimilarityFfiService {
   /// 批量查重：输入弹幕列表和配置，返回相似结果 JSON 字符串。
   /// 如果引擎不可用，返回 '{}'。
   String checkSimilarity(List<Map<String, dynamic>> items, Map<String, dynamic> config) {
-    if (!_available) {
+    if (!_available || _engine == null) {
       debugPrint('[SimilarityFFI] checkSimilarity: 引擎不可用，返回空结果');
       return '{}';
     }
@@ -64,7 +67,7 @@ class SimilarityFfiService {
 
       debugPrint('[SimilarityFFI] checkSimilarity: 输入 ${items.length} 条弹幕, config=$config');
 
-      final result = SimilarityEngine.checkSimilarity(simItems, simConfig);
+      final result = _engine!.checkSimilarity(simItems, simConfig);
 
       // 转换结果为 JSON 字符串（保持与旧 Rust FFI 兼容的输出格式）
       final jsonMap = <String, dynamic>{
@@ -105,5 +108,11 @@ class SimilarityFfiService {
       debugPrint('[SimilarityFFI] pairSimilarity 异常: $e');
       return 0.0;
     }
+  }
+
+  /// 释放引擎实例
+  void dispose() {
+    _engine?.dispose();
+    _engine = null;
   }
 }

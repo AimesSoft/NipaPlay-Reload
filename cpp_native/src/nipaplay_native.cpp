@@ -44,6 +44,10 @@ NIPAPLAY_NATIVE_EXPORT void np_string_free(NpString* str) {
     }
 }
 
+NIPAPLAY_NATIVE_EXPORT void np_free_ptr(void* ptr) {
+    std::free(ptr);
+}
+
 // ──── 示例模块：ExampleCalculator ────
 
 NIPAPLAY_NATIVE_EXPORT NpHandle np_example_create(void) {
@@ -289,17 +293,39 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame_raw(
     }
 }
 
-// ──── 弹幕相似度引擎：SimilarityEngine ────
+// ──── 弹幕相似度引擎：SimilarityEngine（有状态对象）───
+
+NIPAPLAY_NATIVE_EXPORT NpHandle np_sim_create(void) {
+    try {
+        auto* obj = new nipaplay::native::SimilarityEngine();
+        return static_cast<NpHandle>(obj);
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+NIPAPLAY_NATIVE_EXPORT void np_sim_destroy(NpHandle handle) {
+    if (handle) [[likely]] {
+        auto* obj = static_cast<nipaplay::native::SimilarityEngine*>(handle);
+        delete obj;
+    }
+}
 
 NIPAPLAY_NATIVE_EXPORT NpResult np_sim_check_batch(
-    const char* items_json, const char* config_json, NpString* output)
+    NpHandle handle, const char* items_json, const char* config_json, NpString* output)
 {
     try {
+        if (!handle) [[unlikely]] {
+            return {NP_ERR_NULL_PTR, "null handle"};
+        }
         if (!items_json || !config_json || !output) [[unlikely]] {
             return {NP_ERR_NULL_PTR, "null pointer argument"};
         }
+        auto* engine = static_cast<nipaplay::native::SimilarityEngine*>(handle);
         std::string result = nipaplay::native::similarity_check_batch_json(
-            items_json, config_json);
+            *engine, items_json, config_json);
         *output = np_string_alloc(result);
         if (!output->data) [[unlikely]] {
             return {NP_ERR_OOM, "failed to allocate NpString"};
@@ -329,7 +355,7 @@ NIPAPLAY_NATIVE_EXPORT double np_sim_pair_similarity(
 // ──── 弹幕解析模块：DanmakuParser ────
 
 NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_xml(
-    const char* xml_content, int32_t content_len,
+    const char* xml_content, int64_t content_len,
     NpString* output_json)
 {
     try {
@@ -358,7 +384,7 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_xml(
 }
 
 NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_json(
-    const char* json_content, int32_t content_len,
+    const char* json_content, int64_t content_len,
     NpString* output_json)
 {
     try {

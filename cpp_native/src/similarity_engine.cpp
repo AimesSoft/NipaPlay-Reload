@@ -132,6 +132,7 @@ static void update_groups(
 // ══════════════════════════════════════════════
 
 SimResult danmaku_similarity_check(
+    SimilarityEngine& engine,
     const std::vector<DanmakuSimItem>& items,
     const SimConfig& config)
 {
@@ -142,13 +143,8 @@ SimResult danmaku_similarity_check(
     // very large batches are ever passed, consider adding a cap or
     // switching to a streaming approach to avoid pathological performance.
 
-    auto engine = std::make_unique<SimilarityEngine>();
-    if (!engine) [[unlikely]] return result;
-
-    constexpr size_t MAX_STRING_LEN = 16005;
-    auto str_buf = std::vector<sim_ushort>(MAX_STRING_LEN + 4, 0);
-
-    engine->begin_chunk(str_buf.data(),
+    // 复用引擎内嵌的 str_buf_，避免每次调用分配 ~32 KB
+    engine.begin_chunk(engine.str_buf_.data(),
                         config.max_dist, config.max_cosine,
                         config.use_pinyin, config.cross_mode);
 
@@ -160,14 +156,15 @@ SimResult danmaku_similarity_check(
     sim_uint c_nearby_count = 0;
     std::vector<int> engine_to_orig;
 
+    constexpr size_t MAX_STRING_LEN = SimilarityEngine::kMaxStringLen;
     for (size_t i = 0; i < items.size(); i++) {
         const auto& item = items[i];
 
         // UTF-8 → UTF-16
         auto utf16 = utf8_to_utf16(item.text);
         size_t copy_len = std::min(utf16.size(), MAX_STRING_LEN - 1);
-        std::copy(utf16.begin(), utf16.begin() + static_cast<std::ptrdiff_t>(copy_len), str_buf.begin());
-        str_buf[copy_len] = 0; // null terminator
+        std::copy(utf16.begin(), utf16.begin() + static_cast<std::ptrdiff_t>(copy_len), engine.str_buf_.begin());
+        engine.str_buf_[copy_len] = 0; // null terminator
 
         // 计算 index_l
         sim_uint index_l = c_nearby_count;
@@ -183,7 +180,7 @@ SimResult danmaku_similarity_check(
             }
         }
 
-        sim_uint ret = engine->check_similar(static_cast<sim_uint>(item.mode), index_l);
+        sim_uint ret = engine.check_similar(static_cast<sim_uint>(item.mode), index_l);
 
         if (ret != 0) {
             sim_uint reason_code = ret >> 30;
@@ -204,7 +201,7 @@ SimResult danmaku_similarity_check(
                     && item.time_seconds - items[static_cast<size_t>(target_index)].time_seconds > time_window))
             {
                 // 窗口外匹配拒绝 → force_insert
-                engine->force_insert(static_cast<sim_uint>(item.mode));
+                engine.force_insert(static_cast<sim_uint>(item.mode));
                 c_nearby_count++;
                 engine_to_orig.push_back(static_cast<int>(i));
                 continue;
@@ -237,7 +234,7 @@ SimResult danmaku_similarity_check(
         }
     }
 
-    engine->reset();
+    engine.reset();
     return result;
 }
 
@@ -318,7 +315,10 @@ static std::string parse_string(const char*& p) {
                 // Handles \uD83D\uDE00 style emoji escapes produced by some
                 // JSON serializers. Dart's json.encode uses proper UTF-8,
                 // so this path is rarely hit but included for correctness.
+                // 安全的 hex4 解析：检查 s[0]..s[3] 非 null，防止越界读取
                 auto parse_hex4 = [](const char* s) -> unsigned int {
+                    // 边界检查：4 个字符均必须非 null（null 表示字符串意外终止）
+                    if (!s || !s[0] || !s[1] || !s[2] || !s[3]) return 0xFFFFFFFFu;
                     unsigned int cp = 0;
                     for (int i = 0; i < 4; i++) {
                         char c = s[i];
@@ -326,11 +326,13 @@ static std::string parse_string(const char*& p) {
                         if (c >= '0' && c <= '9') cp |= static_cast<unsigned int>(c - '0');
                         else if (c >= 'a' && c <= 'f') cp |= static_cast<unsigned int>(c - 'a' + 10);
                         else if (c >= 'A' && c <= 'F') cp |= static_cast<unsigned int>(c - 'A' + 10);
+                        else return 0xFFFFFFFFu; // 非法 hex 字符
                     }
                     return cp;
                 };
                 if (p[1] && p[2] && p[3] && p[4]) {
                     unsigned int cp = parse_hex4(p + 1);
+                    if (cp == 0xFFFFFFFFu) { p += 4; break; } // 无效 hex 转义，跳过
                     p += 4;
                     // UTF-16 surrogate pair handling
                     if (cp >= 0xD800 && cp <= 0xDBFF) {
@@ -338,7 +340,7 @@ static std::string parse_string(const char*& p) {
                         if (p[1] == '\\' && p[2] == 'u' &&
                             p[3] && p[4] && p[5] && p[6]) {
                             unsigned int low = parse_hex4(p + 3);
-                            if (low >= 0xDC00 && low <= 0xDFFF) {
+                            if (low != 0xFFFFFFFFu && low >= 0xDC00 && low <= 0xDFFF) {
                                 cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
                                 p += 6; // consume \uXXXX of low surrogate
                             }
@@ -571,6 +573,7 @@ static std::string result_to_json(const SimResult& result) {
 }
 
 std::string similarity_check_batch_json(
+    SimilarityEngine& engine,
     std::string_view items_json,
     std::string_view config_json)
 {
@@ -593,7 +596,7 @@ std::string similarity_check_batch_json(
                 config.max_dist, config.max_cosine, config.use_pinyin, config.cross_mode, config.time_window);
 #endif
 
-        auto result = danmaku_similarity_check(items, config);
+        auto result = danmaku_similarity_check(engine, items, config);
 
 #ifndef NDEBUG
         fprintf(stderr, "[SIM-CPP] result: pairs=%zu groups=%zu\n",

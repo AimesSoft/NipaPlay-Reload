@@ -58,9 +58,12 @@ class SimilarityConfig {
   });
 }
 
-/// Web stub — all methods return default values
+/// Web stub — instance-based API matching similarity_engine_io.dart
+/// All methods return default values; no FFI on Web.
 class SimilarityEngine {
-  static SimilarityResult checkSimilarity(
+  SimilarityEngine();
+
+  SimilarityResult checkSimilarity(
           List<DanmakuSimItem> items, SimilarityConfig config) =>
       SimilarityResult.empty();
 
@@ -69,4 +72,6 @@ class SimilarityEngine {
       0.0;
 
   static bool probeNativeBinding() => false;
+
+  void dispose() {}
 }

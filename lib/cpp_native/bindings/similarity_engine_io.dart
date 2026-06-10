@@ -111,23 +111,44 @@ class SimilarityConfig {
       };
 }
 
-/// C++ 弹幕相似度引擎的 Dart FFI 封装
+/// C++ 弹幕相似度引擎的 Dart FFI 封装（有状态对象）
 ///
-/// 通过 cpp_native (nipaplay_native DLL) 直接调用 C++ 相似度引擎，
-/// 绕过 Rust 链路，避免 Rust-C++ FFI 开销。
-class SimilarityEngine {
+/// 引擎实例持有 ~4 MB scratch buffer，跨调用复用避免重复分配。
+/// 使用 NativeFinalizer 保证 C++ 对象在 GC 时被释放。
+class SimilarityEngine implements Finalizable {
+  NpHandle _handle;
+  bool _isReleased = false;
+
+  static final _finalizer = NativeFinalizer(
+    NativeLibrary.instance.lookup<
+        NativeFunction<Void Function(Pointer<Void>)>>('np_sim_destroy'),
+  );
+
+  SimilarityEngine._(this._handle) {
+    // externalSize: ~4 MB scratch buffer (ed_a_ + ed_b_ + str_buf_)
+    _finalizer.attach(this, _handle, detach: this, externalSize: 4194304);
+  }
+
+  /// 工厂构造：创建 C++ 相似度引擎实例（~4 MB 内存）
+  factory SimilarityEngine() {
+    final handle = NativeBindings.npSimCreate();
+    if (handle == nullptr) {
+      throw const NativeException(
+          NpResultCode.errNullPtr, 'failed to create SimilarityEngine');
+    }
+    return SimilarityEngine._(handle);
+  }
+
   /// 批量查重：输入弹幕列表和配置，返回相似结果。
-  /// 如果引擎不可用，返回空结果。
-  static SimilarityResult checkSimilarity(
+  /// 复用引擎实例的 scratch buffer，避免每次 ~4 MB 分配。
+  SimilarityResult checkSimilarity(
       List<DanmakuSimItem> items, SimilarityConfig config) {
+    _checkReleased();
+
     if (items.isEmpty) return SimilarityResult.empty();
 
     final itemsJson = json.encode(items.map((i) => i.toJson()).toList());
     final configJson = json.encode(config.toJson());
-
-    // 诊断：输出 JSON 前 200 字符
-    debugPrint('[SimEngine] itemsJson[:200]=${itemsJson.substring(0, itemsJson.length > 200 ? 200 : itemsJson.length)}');
-    debugPrint('[SimEngine] configJson=$configJson');
 
     final itemsPtr = itemsJson.toNativeUtf8();
     final configPtr = configJson.toNativeUtf8();
@@ -135,33 +156,27 @@ class SimilarityEngine {
 
     try {
       final result = NativeBindings.npSimCheckBatch(
-          itemsPtr, configPtr, outputPtr);
+          _handle, itemsPtr, configPtr, outputPtr);
 
       final code = npResultCodeFromInt(result.code);
-      // 诊断：输出 C++ 返回的错误码
-      debugPrint('[SimEngine] npSimCheckBatch result: code=$code (${result.code}), msg=${result.message != nullptr ? result.message.cast<Utf8>().toDartString() : "null"}');
       if (code != NpResultCode.ok) {
-        debugPrint('[SimEngine] ❌ C++ returned non-OK, returning empty');
+        debugPrint('[SimEngine] npSimCheckBatch error: code=$code');
         return SimilarityResult.empty();
       }
 
       final output = outputPtr.ref;
       if (output.data == nullptr) {
-        debugPrint('[SimEngine] ❌ output.data is nullptr, returning empty');
         return SimilarityResult.empty();
       }
 
       final resultStr = output.data.cast<Utf8>().toDartString();
-      // 诊断：输出 C++ 返回的 JSON 前 300 字符
-      debugPrint('[SimEngine] resultJson[:300]=${resultStr.substring(0, resultStr.length > 300 ? 300 : resultStr.length)}');
       final decoded = json.decode(resultStr);
       if (decoded is Map<String, dynamic>) {
         return SimilarityResult.fromJson(decoded);
       }
-      debugPrint('[SimEngine] ❌ decoded is not Map<String, dynamic>: ${decoded.runtimeType}');
       return SimilarityResult.empty();
     } catch (e, st) {
-      debugPrint('[SimEngine] ❌ Exception: $e\n$st');
+      debugPrint('[SimEngine] Exception: $e\n$st');
       return SimilarityResult.empty();
     } finally {
       NativeBindings.npStringFree(outputPtr);
@@ -172,6 +187,7 @@ class SimilarityEngine {
   }
 
   /// 单对相似度：输入两段文本，返回 0.0-1.0 分数。
+  /// 使用独立临时引擎，不依赖此实例。
   static double pairSimilarity(String textA, String textB,
       {bool usePinyin = true}) {
     final aPtr = textA.toNativeUtf8();
@@ -194,12 +210,23 @@ class SimilarityEngine {
     final aPtr = ''.toNativeUtf8();
     final bPtr = ''.toNativeUtf8();
     try {
-      // 只需触发 NativeBindings 的 lookupFunction + 一次 FFI 调用
       NativeBindings.npSimPairSimilarity(aPtr, bPtr, 0);
       return true;
     } finally {
       malloc.free(aPtr);
       malloc.free(bPtr);
     }
+  }
+
+  void dispose() {
+    if (!_isReleased) {
+      _finalizer.detach(this);
+      NativeBindings.npSimDestroy(_handle);
+      _isReleased = true;
+    }
+  }
+
+  void _checkReleased() {
+    if (_isReleased) throw StateError('SimilarityEngine used after dispose');
   }
 }

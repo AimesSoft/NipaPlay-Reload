@@ -19,7 +19,10 @@ typedef enum NpResultCode : int32_t {
 // 带错误信息的结果
 typedef struct NpResult {
     NpResultCode code;
-    const char* message;  // 仅在 code != NP_OK 时有效，UTF-8，指向静态字符串
+    // ⚠️ 生命周期约束：message 指针仅在当前 FFI 调用返回后、同一线程的
+    // 下一次 FFI 调用前有效。指向 thread-local 缓冲区，下次调用会覆盖。
+    // Dart 侧必须在 FFI 返回后立即读取，不得缓存跨调用使用。
+    const char* message;  // 仅在 code != NP_OK 时有效，UTF-8
 } NpResult;
 
 // C → Dart 字符串（Dart 侧负责调用 np_string_free 释放）

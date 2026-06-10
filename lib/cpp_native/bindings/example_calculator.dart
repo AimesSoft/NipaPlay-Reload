@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
+import '../native_arena.dart';
 import '../native_library.dart';
 import '../types/native_types.dart';
 import '../types/native_result.dart';
@@ -13,8 +14,8 @@ class ExampleCalculator implements Finalizable {
   // 必须使用 lookup 获取原生函数指针，不能使用 lookupFunction 返回的 Dart 函数对象
   static final _finalizer = NativeFinalizer(
     NativeLibrary.instance.lookup<
-        NativeFunction<Void Function(Pointer<Void>)>
-      >('np_example_destroy'),
+        NativeFunction<Void Function(Pointer<Void>)
+      >>('np_example_destroy'),
   );
 
   ExampleCalculator._(this._handle) {
@@ -38,9 +39,10 @@ class ExampleCalculator implements Finalizable {
 
   NativeResult<String> processText(String input) {
     _checkReleased();
-    final cInput = input.toNativeUtf8();
-    final outString = calloc<NpString>();
+    final arena = NativeArena();
     try {
+      final cInput = arena.allocUtf8(input);
+      final outString = arena.allocNpString();
       final result = NativeBindings.npExampleProcessText(
         _handle,
         cInput,
@@ -58,9 +60,7 @@ class ExampleCalculator implements Finalizable {
           );
       return NativeResult.ok(text);
     } finally {
-      NativeBindings.npStringFree(outString);
-      calloc.free(cInput);
-      calloc.free(outString);
+      arena.freeAll();
     }
   }
 

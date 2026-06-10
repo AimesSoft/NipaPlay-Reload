@@ -1,12 +1,33 @@
 #include "danmaku_parser.h"
 
 #include <pugixml.hpp>
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4996 5054)  // rapidjson: STL4015 std::iterator, C5054 enum |
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"  // rapidjson: std::iterator base class
+#elif defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wtemplate-body"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"  // rapidjson: std::iterator base class
+#pragma GCC diagnostic ignored "-Wclass-memaccess"          // rapidjson: memcpy on non-trivial type
+#endif
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
 #pragma GCC diagnostic pop
+#endif
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+#include <charconv>       // std::from_chars (C++17, 不依赖 null 终止)
+#include <system_error>   // std::errc
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -71,11 +92,49 @@ std::string DanmakuParser::colorToRgb(int32_t color_code) {
     return std::format("rgb({},{},{})", r, g, b);
 }
 
+// ──── from_chars 辅助：从 string_view 解析数值（不依赖 null 终止，C++17） ────
+
+// 解析 double，失败返回 default_val
+// 注意：Android NDK (libc++) 尚未实现浮点 std::from_chars，
+// 因此回退到 strtod（需要 null 终止，创建临时 std::string）。
+static double from_chars_double(std::string_view sv, double default_val) {
+    if (sv.empty()) return default_val;
+#if defined(__clang__) && defined(__ANDROID__)
+    // NDK libc++ 缺少浮点 from_chars，回退到 strtod
+    const std::string tmp(sv);
+    char* end = nullptr;
+    const double val = std::strtod(tmp.c_str(), &end);
+    return (end != tmp.c_str()) ? val : default_val;
+#else
+    double val = default_val;
+    const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
+    return (ec == std::errc()) ? val : default_val;
+#endif
+}
+
+// 解析 int32_t，失败返回 default_val
+static int32_t from_chars_int32(std::string_view sv, int32_t default_val) {
+    if (sv.empty()) return default_val;
+    int32_t val = default_val;
+    const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
+    return (ec == std::errc()) ? val : default_val;
+}
+
+// 解析 int64_t，失败返回 default_val
+static int64_t from_chars_int64(std::string_view sv, int64_t default_val) {
+    if (sv.empty()) return default_val;
+    int64_t val = default_val;
+    const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
+    return (ec == std::errc()) ? val : default_val;
+}
+
 bool DanmakuParser::parsePAttribute(std::string_view p_attr, DanmakuItem& item) {
     // p 属性格式: time,mode,fontsize,color,sendtime,pool,sender_hash,id[,weight]
     if (p_attr.empty()) return false;
 
     // 手动分割逗号分隔字段，避免 stringstream 分配开销
+    // 使用 std::from_chars (C++17) 替代 strtod/atoi/atoll，
+    // 直接从 string_view 解析，不依赖 null 终止，消除越界读取风险。
     int32_t field_index = 0;
     size_t start = 0;
     size_t end = 0;
@@ -85,41 +144,22 @@ bool DanmakuParser::parsePAttribute(std::string_view p_attr, DanmakuItem& item) 
             std::string_view field(p_attr.data() + start, end - start);
             switch (field_index) {
                 case 0: // time
-                    item.time_seconds = 0.0;
-                    if (!field.empty()) {
-                        char* endp = nullptr;
-                        item.time_seconds = std::strtod(field.data(), &endp);
-                    }
+                    item.time_seconds = from_chars_double(field, 0.0);
                     break;
                 case 1: // mode
-                    item.mode = 1;
-                    if (!field.empty()) {
-                        item.mode = std::atoi(field.data());
-                    }
+                    item.mode = from_chars_int32(field, 1);
                     break;
                 case 2: // fontsize
-                    item.font_size = 25;
-                    if (!field.empty()) {
-                        item.font_size = std::atoi(field.data());
-                    }
+                    item.font_size = from_chars_int32(field, 25);
                     break;
                 case 3: // color
-                    item.color_code = 16777215;
-                    if (!field.empty()) {
-                        item.color_code = std::atoi(field.data());
-                    }
+                    item.color_code = from_chars_int32(field, 16777215);
                     break;
                 case 4: // sendtime
-                    item.send_timestamp = 0;
-                    if (!field.empty()) {
-                        item.send_timestamp = std::atoll(field.data());
-                    }
+                    item.send_timestamp = from_chars_int64(field, 0);
                     break;
                 case 5: // pool
-                    item.pool = 0;
-                    if (!field.empty()) {
-                        item.pool = std::atoi(field.data());
-                    }
+                    item.pool = from_chars_int32(field, 0);
                     break;
                 case 6: // sender_hash
                     if (!field.empty()) {
@@ -132,10 +172,7 @@ bool DanmakuParser::parsePAttribute(std::string_view p_attr, DanmakuItem& item) 
                     }
                     break;
                 case 8: // weight (optional)
-                    item.weight = 0;
-                    if (!field.empty()) {
-                        item.weight = std::atoi(field.data());
-                    }
+                    item.weight = from_chars_int32(field, 0);
                     break;
                 default:
                     break;

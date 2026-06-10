@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:ffi';
-import 'package:flutter/foundation.dart';
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 
+import '../native_arena.dart';
 import '../native_library.dart';
 import '../types/native_types.dart';
 import '../types/native_result.dart';
@@ -26,9 +27,11 @@ class DanmakuParser {
   ///
   /// 成功返回 JSON 字符串，失败返回 null（调用方应 fallback 到 Dart 原实现）
   static String? parseXml(String xml) {
-    final cInput = xml.toNativeUtf8();
-    final outString = calloc<NpString>();
+    final arena = NativeArena();
     try {
+      final cInput = arena.allocUtf8(xml);
+      final outString = arena.allocNpString();
+
       // ⚠️ 必须使用 UTF-8 字节长度而非 Dart String.length（UTF-16 码元数）。
       // 对于含中文的弹幕 XML，UTF-8 字节数远大于 UTF-16 码元数，
       // 例如 dartStringLength=3937371 vs utf8ByteLength=5856986 (diff=1919615)。
@@ -57,9 +60,7 @@ class DanmakuParser {
       _logCpp('ERR', 'parseXml: C++ exception, falling back to Dart');
       return null;
     } finally {
-      NativeBindings.npStringFree(outString);
-      calloc.free(cInput);
-      calloc.free(outString);
+      arena.freeAll();
     }
   }
 
@@ -70,9 +71,11 @@ class DanmakuParser {
   ///
   /// 成功返回 JSON 字符串，失败返回 null（调用方应 fallback 到 Dart 原实现）
   static String? parseJson(String jsonStr) {
-    final cInput = jsonStr.toNativeUtf8();
-    final outString = calloc<NpString>();
+    final arena = NativeArena();
     try {
+      final cInput = arena.allocUtf8(jsonStr);
+      final outString = arena.allocNpString();
+
       // ⚠️ 必须使用 UTF-8 字节长度而非 Dart String.length（UTF-16 码元数）。
       // 对于含中文的弹幕 JSON，UTF-8 字节数远大于 UTF-16 码元数，
       // 例如 dartStringLength=3005603 vs utf8ByteLength=3591806 (diff=586203)。
@@ -101,25 +104,22 @@ class DanmakuParser {
       _logCpp('ERR', 'parseJson: C++ exception, falling back to Dart');
       return null;
     } finally {
-      NativeBindings.npStringFree(outString);
-      calloc.free(cInput);
-      calloc.free(outString);
+      arena.freeAll();
     }
   }
 
   /// 探测原生绑定是否可用——不吞异常，让调用方正确判断 DLL/符号是否存在。
   /// 成功返回 true；如果 DLL 加载或符号查找失败，抛出异常。
   static bool probeNativeBinding() {
-    final testPtr = ''.toNativeUtf8();
-    final outPtr = calloc<NpString>();
+    final arena = NativeArena();
     try {
+      final testPtr = arena.allocUtf8('');
+      final outPtr = arena.allocNpString();
       // 触发 NativeBindings 的 lookupFunction + 一次 FFI 调用
       NativeBindings.npDanmakuParseXml(testPtr, 0, outPtr);
       return true;
     } finally {
-      NativeBindings.npStringFree(outPtr);
-      calloc.free(testPtr);
-      calloc.free(outPtr);
+      arena.freeAll();
     }
   }
 
