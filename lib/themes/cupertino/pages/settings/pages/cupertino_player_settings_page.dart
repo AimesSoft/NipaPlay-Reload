@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/decoder_manager.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -292,6 +293,8 @@ class _CupertinoPlayerSettingsPageState
         return 'Video Player';
       case PlayerKernelType.mediaKit:
         return 'Libmpv';
+      case PlayerKernelType.erika:
+        return 'Erika';
     }
   }
 
@@ -303,6 +306,8 @@ class _CupertinoPlayerSettingsPageState
         return context.l10n.playerKernelDescriptionVideoPlayer;
       case PlayerKernelType.mediaKit:
         return context.l10n.playerKernelDescriptionLibmpv;
+      case PlayerKernelType.erika:
+        return 'Erika Rust 播放器（实验性）：iOS/macOS 原生 Metal 输出，播放、渲染和音频由 Rust 内核负责。';
     }
   }
 
@@ -392,8 +397,14 @@ class _CupertinoPlayerSettingsPageState
     }
   }
 
-  List<AdaptivePopupMenuEntry> _kernelMenuItems() {
+  List<AdaptivePopupMenuEntry> _kernelMenuItems({
+    required bool showErikaKernel,
+  }) {
     return PlayerKernelType.values
+        .where(
+          (kernel) =>
+              kernel != PlayerKernelType.erika || showErikaKernel,
+        )
         .map(
           (kernel) => AdaptivePopupMenuItem<PlayerKernelType>(
             label: _kernelDisplayName(kernel),
@@ -642,6 +653,12 @@ class _CupertinoPlayerSettingsPageState
 
     final Color tileBackground = resolveSettingsTileBackground(context);
     final bool externalSupported = globals.isDesktop;
+    final bool showErikaKernel = PlayerFactory.isErikaKernelSupported &&
+        context.watch<LabsSettingsProvider>().enableErikaPlayerKernel;
+    final PlayerKernelType visibleKernelType =
+        _selectedKernelType == PlayerKernelType.erika && !showErikaKernel
+            ? PlayerKernelType.mdk
+            : _selectedKernelType;
 
     final List<Widget> sections = [
       CupertinoSettingsGroupCard(
@@ -656,12 +673,12 @@ class _CupertinoPlayerSettingsPageState
               color: resolveSettingsIconColor(context),
             ),
             title: Text(context.l10n.playerKernel),
-            subtitle: Text(_getPlayerKernelDescription(_selectedKernelType)),
+            subtitle: Text(_getPlayerKernelDescription(visibleKernelType)),
             trailing: AdaptivePopupMenuButton.widget<PlayerKernelType>(
-              items: _kernelMenuItems(),
+              items: _kernelMenuItems(showErikaKernel: showErikaKernel),
               buttonStyle: PopupButtonStyle.gray,
               child: _buildMenuChip(
-                  context, _kernelDisplayName(_selectedKernelType)),
+                  context, _kernelDisplayName(visibleKernelType)),
               onSelected: (index, entry) {
                 final kernel = entry.value ?? PlayerKernelType.values[index];
                 if (kernel != _selectedKernelType) {
@@ -778,8 +795,8 @@ class _CupertinoPlayerSettingsPageState
             ),
           ],
         ),
-      if (_selectedKernelType == PlayerKernelType.mdk ||
-          _selectedKernelType == PlayerKernelType.mediaKit) ...[
+      if (visibleKernelType == PlayerKernelType.mdk ||
+          visibleKernelType == PlayerKernelType.mediaKit) ...[
         const SizedBox(height: 16),
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -831,7 +848,7 @@ class _CupertinoPlayerSettingsPageState
       ],
       if (!kIsWeb &&
           Platform.isAndroid &&
-          _selectedKernelType == PlayerKernelType.mediaKit) ...[
+          visibleKernelType == PlayerKernelType.mediaKit) ...[
         const SizedBox(height: 16),
         CupertinoSettingsGroupCard(
           margin: EdgeInsets.zero,
@@ -859,8 +876,11 @@ class _CupertinoPlayerSettingsPageState
                   ),
                 ],
                 buttonStyle: PopupButtonStyle.gray,
-                child: _buildMenuChip(context,
-                    _androidAudioOutput == 'audiotrack' ? 'AudioTrack' : 'OpenSL ES'),
+                child: _buildMenuChip(
+                    context,
+                    _androidAudioOutput == 'audiotrack'
+                        ? 'AudioTrack'
+                        : 'OpenSL ES'),
                 onSelected: (index, entry) {
                   final output = entry.value!;
                   if (output != _androidAudioOutput) {
@@ -1001,7 +1021,7 @@ class _CupertinoPlayerSettingsPageState
           );
         },
       ),
-      if (_selectedKernelType == PlayerKernelType.mdk) ...[
+      if (visibleKernelType == PlayerKernelType.mdk) ...[
         const SizedBox(height: 16),
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
@@ -1067,9 +1087,9 @@ class _CupertinoPlayerSettingsPageState
       const SizedBox(height: 16),
       Consumer<VideoPlayerState>(
         builder: (context, videoState, child) {
-          final bool isMdk = _selectedKernelType == PlayerKernelType.mdk;
+          final bool isMdk = visibleKernelType == PlayerKernelType.mdk;
           final bool enableSetting =
-              isMdk || _selectedKernelType == PlayerKernelType.mediaKit;
+              isMdk || visibleKernelType == PlayerKernelType.mediaKit;
           return CupertinoSettingsGroupCard(
             margin: EdgeInsets.zero,
             backgroundColor: sectionBackground,
@@ -1126,7 +1146,7 @@ class _CupertinoPlayerSettingsPageState
           );
         },
       ),
-      if (_selectedKernelType == PlayerKernelType.mediaKit)
+      if (visibleKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             final bool supportsUpscale = videoState.isDoubleResolutionSupported;
@@ -1197,7 +1217,7 @@ class _CupertinoPlayerSettingsPageState
             );
           },
         ),
-      if (_selectedKernelType == PlayerKernelType.mediaKit)
+      if (visibleKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             final bool supportsAnime4K = videoState.isAnime4KSupported;
@@ -1273,7 +1293,7 @@ class _CupertinoPlayerSettingsPageState
             );
           },
         ),
-      if (_selectedKernelType == PlayerKernelType.mediaKit)
+      if (visibleKernelType == PlayerKernelType.mediaKit)
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
             final bool supportsCrt = videoState.isCrtSupported;

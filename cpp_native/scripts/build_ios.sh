@@ -43,8 +43,10 @@ else
 fi
 
 # Copy to both BUILT_PRODUCTS_DIR and DERIVED_SOURCES_DIR (Xcode can find it)
-cp "${BUILD_DIR}/libnipaplay_native.a" "${BUILT_PRODUCTS_DIR}/"
+SOURCE_LIB="${BUILD_DIR}/libnipaplay_native.a"
+cp "${SOURCE_LIB}" "${BUILT_PRODUCTS_DIR}/"
 mkdir -p "${DERIVED_SOURCES_DIR}"
-if [ "${BUILD_DIR}" != "${DERIVED_SOURCES_DIR}" ]; then
-    cp "${BUILD_DIR}/libnipaplay_native.a" "${DERIVED_SOURCES_DIR}/"
+DERIVED_LIB="${DERIVED_SOURCES_DIR}/libnipaplay_native.a"
+if [ "${SOURCE_LIB}" != "${DERIVED_LIB}" ]; then
+    cp "${SOURCE_LIB}" "${DERIVED_LIB}"
 fi

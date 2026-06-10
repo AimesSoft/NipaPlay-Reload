@@ -47,6 +47,12 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
     }
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        // The player kernel (Erika) composites danmaku into the video frame
+        // natively. Never draw the Flutter danmaku layer on top of it, whatever
+        // the front-end theme or danmaku render engine.
+        if (videoState.isNativeDanmakuActive) {
+          return const SizedBox.shrink();
+        }
         final kernelType = DanmakuKernelFactory.getKernelType();
         final combinedTimeOffset =
             videoState.manualDanmakuOffset + videoState.autoDanmakuOffset;

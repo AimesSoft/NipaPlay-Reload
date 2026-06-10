@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/pages/settings/webdav_quick_settings_page.dart';
@@ -55,6 +56,21 @@ class LabsPage extends StatelessWidget {
               color: colorScheme.onSurface.withValues(alpha: 0.12),
               height: 1,
             ),
+            if (PlayerFactory.isErikaKernelSupported) ...[
+              SettingsItem.toggle(
+                title: '显示 Erika 播放内核',
+                subtitle: '开启后，播放器内核下拉菜单显示 Erika',
+                icon: Ionicons.flask_outline,
+                value: labsSettings.enableErikaPlayerKernel,
+                onChanged: (bool value) {
+                  labsSettings.setEnableErikaPlayerKernel(value);
+                },
+              ),
+              Divider(
+                color: colorScheme.onSurface.withValues(alpha: 0.12),
+                height: 1,
+              ),
+            ],
             SettingsItem.toggle(
               title: 'Next++ 激进优化引擎',
               subtitle: '激进优化，推荐。关闭则回退至 Next 原始引擎路径',

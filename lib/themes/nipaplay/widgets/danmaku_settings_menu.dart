@@ -662,6 +662,10 @@ class _DanmakuSettingsMenuState extends State<DanmakuSettingsMenu> {
                           ? videoState.actualDanmakuFontSize
                           : videoState.danmakuFontSize,
                       onChanged: (v) => videoState.setDanmakuFontSize(v),
+                      onChangeEnd: (v) => videoState.setDanmakuFontSize(
+                        v,
+                        commit: true,
+                      ),
                       label: '弹幕字体大小',
                       displayTextBuilder: (v) => '${v.toStringAsFixed(1)}px',
                       min: 12.0,

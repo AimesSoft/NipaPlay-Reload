@@ -548,10 +548,13 @@ class _CupertinoPlayVideoPageState extends State<CupertinoPlayVideoPage> {
     final textureId = videoState.player.textureId.value;
     final controller = kIsWeb ? videoState.player.videoPlayerController : null;
     final nativeVideoView = videoState.player.prefersPlatformVideoSurface
-        ? MacOSNativeVideoView(
-            player: videoState.player,
-            debugLabel: videoState.currentVideoPath?.split('/').last,
-          )
+        ? (videoState.player.buildPlatformVideoSurface(
+              debugLabel: videoState.currentVideoPath?.split('/').last,
+            ) ??
+            MacOSNativeVideoView(
+              player: videoState.player,
+              debugLabel: videoState.currentVideoPath?.split('/').last,
+            ))
         : null;
     final hasVideo = videoState.hasVideo &&
         (kIsWeb ||

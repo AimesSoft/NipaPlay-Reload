@@ -305,6 +305,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _lastDiagDriftSnapMs = 0; // [DRIFT-SNAP-DIAG] 大漂移对齐日志节流
   double? _seekTargetMs; // seek 目标位置，player.position 追上后清除
   bool _anchorSetBySeek = false; // ✅ 标记 _smoothAnchorMs 是否由 seek/loop 操作设置（区分首帧加载 vs seek 后旧 playerMs）
+  double? _pausedPlaybackTimeMs; // 暂停时保存的 playbackTimeMs，用于恢复时平滑衔接
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
   Timer? _autoHideTimer;
@@ -473,6 +474,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 弹幕字体大小设置
   final String _danmakuFontSizeKey = 'danmaku_font_size';
   double _danmakuFontSize = 0.0; // 默认为0表示使用系统默认值
+  Timer? _danmakuFontSizePersistenceTimer;
   final String _danmakuFontFilePathKey = 'danmaku_font_file_path';
   String _danmakuFontFilePath = '';
   final String _danmakuFontFamilyKey = 'danmaku_font_family';
@@ -596,6 +598,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   String? _currentThumbnailPath; // 添加当前缩略图路径
   String? _currentVideoHash; // 缓存当前视频的哈希值，避免重复计算
   bool _isCapturingFrame = false; // 是否正在截图，避免并发截图
+  Completer<void>? _screenshotCompleter; // 截图完成信号，用于 resetPlayer 等待截图结束
+  bool _mutedForExit = false; // 退出流程中是否静音了播放器
   final List<VoidCallback> _thumbnailUpdateListeners = []; // 缩略图更新监听器列表
   String? _animeTitle; // 添加动画标题属性
   String? _episodeTitle; // 添加集数标题属性
@@ -743,6 +747,31 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       _volumePersistenceTimer = null;
       unawaited(_savePlayerVolumePreference(_currentVolume));
     });
+  }
+
+  void _scheduleDanmakuFontSizePersistence({bool immediate = false}) {
+    _danmakuFontSizePersistenceTimer?.cancel();
+    if (immediate) {
+      _danmakuFontSizePersistenceTimer = null;
+      unawaited(_saveDanmakuFontSizePreference(_danmakuFontSize));
+      return;
+    }
+    _danmakuFontSizePersistenceTimer = Timer(
+      const Duration(milliseconds: 250),
+      () {
+        _danmakuFontSizePersistenceTimer = null;
+        unawaited(_saveDanmakuFontSizePreference(_danmakuFontSize));
+      },
+    );
+  }
+
+  Future<void> _saveDanmakuFontSizePreference(double fontSize) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_danmakuFontSizeKey, fontSize);
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 保存弹幕字号失败: $e');
+    }
   }
 
   Future<void> _savePlayerVolumePreference(double volume) async {
@@ -1290,11 +1319,28 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // Volume Getters
   double get currentSystemVolume => _currentVolume;
 
+  void _syncNativeDanmakuGlobalOffset() {
+    try {
+      if (!player.supportsNativeDanmaku) {
+        return;
+      }
+      final offsetMicros = ((_manualDanmakuOffset + _autoDanmakuOffset) *
+              Duration.microsecondsPerSecond)
+          .round();
+      unawaited(player.setNativeDanmakuGlobalOffset(
+        Duration(microseconds: offsetMicros),
+      ));
+    } catch (_) {
+      // The player is late-initialized; ignore calls made before it exists.
+    }
+  }
+
   void setManualDanmakuOffset(double offset) {
     if ((_manualDanmakuOffset - offset).abs() < 0.0001) {
       return;
     }
     _manualDanmakuOffset = offset;
+    _syncNativeDanmakuGlobalOffset();
     notifyListeners();
   }
 
@@ -1303,6 +1349,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
       return;
     }
     _autoDanmakuOffset = offset;
+    _syncNativeDanmakuGlobalOffset();
     notifyListeners();
   }
 
@@ -1394,6 +1441,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
     _scheduleVolumePersistence(immediate: true);
     _volumePersistenceTimer?.cancel();
+    _scheduleDanmakuFontSizePersistence(immediate: true);
+    _danmakuFontSizePersistenceTimer?.cancel();
     _systemVolumeSubscription?.cancel();
     _systemVolumeSubscription = null;
     _systemVolumeController?.removeListener();

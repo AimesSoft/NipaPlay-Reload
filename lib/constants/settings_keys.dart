@@ -30,6 +30,9 @@ class SettingsKeys {
   static const String labsEnableNext2DanmakuKernel =
       'labs_enable_next2_danmaku_kernel';
 
+  static const String labsEnableErikaPlayerKernel =
+      'labs_enable_erika_player_kernel';
+
   static const String labsEnableNextPlusPlusEngine =
       'labs_enable_next_plus_plus_engine';
 

@@ -19,6 +19,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/utils/player_kernel_manager.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
@@ -141,6 +142,9 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         break;
       case PlayerKernelType.mediaKit:
         _playerCoreName = "Libmpv";
+        break;
+      case PlayerKernelType.erika:
+        _playerCoreName = "Erika";
         break;
       default:
         _playerCoreName = "MDK";
@@ -419,6 +423,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         return 'Video Player 官方播放器\n适用于简单视频播放，兼容性良好';
       case PlayerKernelType.mediaKit:
         return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
+      case PlayerKernelType.erika:
+        return 'Erika Rust 播放器（实验性）\niOS/macOS 原生 Metal 输出，播放、渲染和音频由 Rust 内核负责';
     }
   }
 
@@ -494,6 +500,12 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final showErikaKernel = PlayerFactory.isErikaKernelSupported &&
+        context.watch<LabsSettingsProvider>().enableErikaPlayerKernel;
+    final visibleKernelType =
+        _selectedKernelType == PlayerKernelType.erika && !showErikaKernel
+            ? PlayerKernelType.mdk
+            : _selectedKernelType;
     // Web 平台现在允许访问此页面，但部分功能受限
     return ListView(
       children: [
@@ -506,23 +518,31 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               DropdownMenuItemData(
                 title: "MDK",
                 value: PlayerKernelType.mdk,
-                isSelected: _selectedKernelType == PlayerKernelType.mdk,
+                isSelected: visibleKernelType == PlayerKernelType.mdk,
                 description: _getPlayerKernelDescription(PlayerKernelType.mdk),
               ),
               DropdownMenuItemData(
                 title: "Video Player",
                 value: PlayerKernelType.videoPlayer,
-                isSelected: _selectedKernelType == PlayerKernelType.videoPlayer,
+                isSelected: visibleKernelType == PlayerKernelType.videoPlayer,
                 description:
                     _getPlayerKernelDescription(PlayerKernelType.videoPlayer),
               ),
               DropdownMenuItemData(
                 title: "Libmpv",
                 value: PlayerKernelType.mediaKit,
-                isSelected: _selectedKernelType == PlayerKernelType.mediaKit,
+                isSelected: visibleKernelType == PlayerKernelType.mediaKit,
                 description:
                     _getPlayerKernelDescription(PlayerKernelType.mediaKit),
               ),
+              if (showErikaKernel)
+                DropdownMenuItemData(
+                  title: "Erika",
+                  value: PlayerKernelType.erika,
+                  isSelected: visibleKernelType == PlayerKernelType.erika,
+                  description:
+                      _getPlayerKernelDescription(PlayerKernelType.erika),
+                ),
             ],
             onChanged: (kernelType) {
               _savePlayerKernelSettings(kernelType);
@@ -531,8 +551,8 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ],
-        if (_selectedKernelType == PlayerKernelType.mdk ||
-            _selectedKernelType == PlayerKernelType.mediaKit) ...[
+        if (visibleKernelType == PlayerKernelType.mdk ||
+            visibleKernelType == PlayerKernelType.mediaKit) ...[
           Consumer<VideoPlayerState>(
             builder: (context, videoState, child) {
               return SettingsItem.toggle(
@@ -555,10 +575,11 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         ],
         if (!kIsWeb &&
             Platform.isAndroid &&
-            _selectedKernelType == PlayerKernelType.mediaKit) ...[
+            visibleKernelType == PlayerKernelType.mediaKit) ...[
           SettingsItem.dropdown(
             title: 'Android 音频后端',
-            subtitle: '音频后端切换为 AudioTrack 可支持某些Android机型杜比全景声等系统音效（实验性，需重启APP生效）',
+            subtitle:
+                '音频后端切换为 AudioTrack 可支持某些Android机型杜比全景声等系统音效（实验性，需重启APP生效）',
             icon: Ionicons.musical_notes_outline,
             items: [
               DropdownMenuItemData(
@@ -585,7 +606,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         ],
         if (!kIsWeb &&
             Platform.isMacOS &&
-            _selectedKernelType == PlayerKernelType.mediaKit) ...[
+            visibleKernelType == PlayerKernelType.mediaKit) ...[
           SettingsItem.toggle(
             title: '实验性 HDR 原生视频输出',
             subtitle: '开启后使用 macOS 原生视频层；关闭后回退到 Flutter 纹理路径',
@@ -695,7 +716,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             );
           },
         ),
-        if (_selectedKernelType == PlayerKernelType.mdk) ...[
+        if (visibleKernelType == PlayerKernelType.mdk) ...[
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
           Consumer<VideoPlayerState>(
             builder: (context, videoState, child) {
@@ -740,7 +761,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            if (_selectedKernelType == PlayerKernelType.mdk) {
+            if (visibleKernelType == PlayerKernelType.mdk) {
               const int minSeconds = 1;
               const int maxSeconds = 120;
               return SettingsItem.slider(
@@ -759,7 +780,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               );
             }
             final bool enableSetting =
-                _selectedKernelType == PlayerKernelType.mediaKit;
+                visibleKernelType == PlayerKernelType.mediaKit;
             const int stepSize = 4;
             final int minValue = PlayerFactory.minPrecacheBufferSizeMb;
             final int maxValue = PlayerFactory.maxPrecacheBufferSizeMb;
@@ -845,7 +866,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         ],
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
-            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+            if (visibleKernelType != PlayerKernelType.mediaKit) {
               return const SizedBox.shrink();
             }
             final bool supportsUpscale = videoState.isDoubleResolutionSupported;
@@ -889,7 +910,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
                 )
                 .toList();
 
-            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+            if (visibleKernelType != PlayerKernelType.mediaKit) {
               return const SizedBox.shrink();
             }
 
@@ -924,7 +945,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             final CrtProfile currentProfile = videoState.crtProfile;
             final bool supportsCrt = videoState.isCrtSupported;
 
-            if (_selectedKernelType != PlayerKernelType.mediaKit) {
+            if (visibleKernelType != PlayerKernelType.mediaKit) {
               return const SizedBox.shrink();
             }
 
@@ -960,7 +981,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
             );
           },
         ),
-        if (_selectedKernelType == PlayerKernelType.mdk) ...[
+        if (visibleKernelType == PlayerKernelType.mdk) ...[
           // 这里可以添加解码器相关设置
         ],
       ],

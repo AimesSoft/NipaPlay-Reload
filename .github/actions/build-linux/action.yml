@@ -240,6 +240,20 @@ runs:
         # Copy app files
         echo "Copying application files to ${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
         cp -r "${BUILD_OUTPUT_DIR}/"* "${DEB_ROOT}/opt/${APP_NAME_LOWER}/"
+
+        # Ensure the Rust FRB runtime library is present in the DEB even if the
+        # Flutter bundle omits native assets for this target.
+        RUST_LIB_DEST="${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib/librust_lib_nipaplay.so"
+        if [ ! -f "${RUST_LIB_DEST}" ]; then
+          echo "Bundled Rust library missing; searching build outputs."
+          RUST_LIB_SOURCE=$(find build/linux rust/target -name "librust_lib_nipaplay.so" -type f -print -quit 2>/dev/null || true)
+          if [ -z "${RUST_LIB_SOURCE}" ]; then
+            echo "Error: librust_lib_nipaplay.so not found in build outputs."
+            exit 1
+          fi
+          mkdir -p "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"
+          cp "${RUST_LIB_SOURCE}" "${RUST_LIB_DEST}"
+        fi
         
         # Copy system libmpv libraries only when not already bundled (avoid overwriting media_kit_libs_* shipped libs)
         mkdir -p "${DEB_ROOT}/opt/${APP_NAME_LOWER}/lib"

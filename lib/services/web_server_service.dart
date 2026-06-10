@@ -13,6 +13,7 @@ class WebServerService {
   // 兼容旧版本：历史上使用 web_server_enabled 来表示“自动启动”
   static const String _legacyAutoStartKey = 'web_server_enabled';
   static const String _autoStartKey = 'web_server_auto_start';
+  static const String _ipv6EnabledKey = 'web_server_ipv6_enabled';
   static const String _portKey = 'web_server_port';
   static const String _webAssetsRelativePath = 'assets/web';
 
@@ -20,6 +21,8 @@ class WebServerService {
   int _port = 1180;
   bool _isRunning = false;
   bool _autoStart = false;
+  bool _ipv6Enabled = false;
+  bool _isIpv6Listening = false;
   String? _lastStartErrorMessage;
   final WebApiService _webApiService = WebApiService();
   final NipaPlayLanDiscoveryResponder _lanDiscoveryResponder =
@@ -30,6 +33,7 @@ class WebServerService {
   bool get isRunning => _isRunning;
   int get port => _port;
   bool get autoStart => _autoStart;
+  bool get ipv6Enabled => _ipv6Enabled;
   String? get lastStartErrorMessage => _lastStartErrorMessage;
 
   String _buildHttpUrlForHost(String host, int port) {
@@ -297,6 +301,7 @@ class WebServerService {
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _port = prefs.getInt(_portKey) ?? 1180;
+    _ipv6Enabled = prefs.getBool(_ipv6EnabledKey) ?? false;
     if (prefs.containsKey(_autoStartKey)) {
       _autoStart = prefs.getBool(_autoStartKey) ?? false;
     } else {
@@ -396,15 +401,24 @@ class WebServerService {
           .addMiddleware(logRequests())
           .addHandler(rootHandler);
 
-      try {
-        final v6Server = await HttpServer.bind(
-          InternetAddress.anyIPv6,
-          _port,
-          v6Only: false,
-        );
-        shelf_io.serveRequests(v6Server, handler);
-        _server = v6Server;
-      } on SocketException {
+      _isIpv6Listening = false;
+      if (_ipv6Enabled) {
+        try {
+          final v6Server = await HttpServer.bind(
+            InternetAddress.anyIPv6,
+            _port,
+            v6Only: false,
+          );
+          shelf_io.serveRequests(v6Server, handler);
+          _server = v6Server;
+          _isIpv6Listening = true;
+        } on SocketException {
+          final v4Server =
+              await HttpServer.bind(InternetAddress.anyIPv4, _port);
+          shelf_io.serveRequests(v4Server, handler);
+          _server = v4Server;
+        }
+      } else {
         final v4Server = await HttpServer.bind(InternetAddress.anyIPv4, _port);
         shelf_io.serveRequests(v4Server, handler);
         _server = v4Server;
@@ -418,6 +432,7 @@ class WebServerService {
     } catch (e) {
       _isRunning = false;
       _server = null;
+      _isIpv6Listening = false;
       _lastStartErrorMessage = _formatStartError(e);
       await _lanDiscoveryResponder.stop();
       return false;
@@ -429,6 +444,7 @@ class WebServerService {
       await _server!.close(force: true);
       _server = null;
       _isRunning = false;
+      _isIpv6Listening = false;
       await _lanDiscoveryResponder.stop();
       print('Remote access server stopped.');
       await saveSettings();
@@ -485,6 +501,7 @@ class WebServerService {
     if (!_isRunning || _server == null) return [];
 
     final urls = <String>{};
+    final includeIpv6 = _ipv6Enabled && _isIpv6Listening;
 
     void addUrl(String host) {
       if (host.trim().isEmpty) return;
@@ -495,7 +512,7 @@ class WebServerService {
       for (var interface in await NetworkInterface.list(
         includeLoopback: true,
         includeLinkLocal: true,
-        type: InternetAddressType.any,
+        type: includeIpv6 ? InternetAddressType.any : InternetAddressType.IPv4,
       )) {
         for (var addr in interface.addresses) {
           if (addr.type == InternetAddressType.IPv4) {
@@ -504,6 +521,10 @@ class WebServerService {
           }
 
           if (addr.type != InternetAddressType.IPv6) {
+            continue;
+          }
+
+          if (!includeIpv6) {
             continue;
           }
 
@@ -524,7 +545,9 @@ class WebServerService {
     }
     addUrl('localhost');
     addUrl('127.0.0.1');
-    addUrl('::1');
+    if (includeIpv6) {
+      addUrl('::1');
+    }
     final urlList = urls.toList();
     urlList.sort((a, b) {
       final weightCompare =
@@ -552,5 +575,21 @@ class WebServerService {
     await prefs.setBool(_autoStartKey, enabled);
     // 写回旧Key，便于降级/旧版本读取
     await prefs.setBool(_legacyAutoStartKey, enabled);
+  }
+
+  Future<bool> setIpv6Enabled(bool enabled) async {
+    if (_ipv6Enabled == enabled) return true;
+
+    _ipv6Enabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_ipv6EnabledKey, enabled);
+
+    if (_isRunning) {
+      final currentPort = _port;
+      await stopServer();
+      return startServer(port: currentPort);
+    }
+
+    return true;
   }
 }
