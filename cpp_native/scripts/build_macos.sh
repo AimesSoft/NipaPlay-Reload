@@ -3,7 +3,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CPP_NATIVE_DIR="$(dirname "$SCRIPT_DIR")"
 NIPAPLAY_ROOT="$(cd "${CPP_NATIVE_DIR}/.." && pwd)"
-ERIKA_ROOT="${ERIKA_ROOT:-${NIPAPLAY_ROOT}/third_party/erika}"
 ERIKA_NATIVE_PROFILE="${ERIKA_NATIVE_PROFILE:-lgpl}"
 HOST_JOBS="$(sysctl -n hw.ncpu)"
 ERIKA_RUST_TARGETS=("aarch64-apple-darwin" "x86_64-apple-darwin")
@@ -11,6 +10,70 @@ ERIKA_RUST_TARGETS=("aarch64-apple-darwin" "x86_64-apple-darwin")
 # Xcode Run Script 阶段的 PATH 不会继承 shell 配置，显式补上 Homebrew 路径
 # 让 Apple Silicon (/opt/homebrew) 和 Intel (/usr/local) 都能找到 cmake 等工具
 export PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}"
+
+resolve_erika_root() {
+    if [ -n "${ERIKA_ROOT:-}" ]; then
+        if [ -f "${ERIKA_ROOT}/Cargo.toml" ]; then
+            (cd "${ERIKA_ROOT}" && pwd -P)
+            return
+        fi
+        echo "error: ERIKA_ROOT does not point to Erika source: ${ERIKA_ROOT}" >&2
+        return 1
+    fi
+
+    local vendored_root="${NIPAPLAY_ROOT}/third_party/erika"
+    if [ -f "${vendored_root}/Cargo.toml" ]; then
+        (cd "${vendored_root}" && pwd -P)
+        return
+    fi
+
+    local package_config="${NIPAPLAY_ROOT}/.dart_tool/package_config.json"
+    if [ ! -f "${package_config}" ]; then
+        echo "error: ${package_config} not found. Run flutter pub get first." >&2
+        return 1
+    fi
+
+    local erika_flutter_root
+    erika_flutter_root="$(python3 - "${package_config}" <<'PY'
+import json
+import pathlib
+import sys
+import urllib.parse
+
+package_config = pathlib.Path(sys.argv[1]).resolve()
+with package_config.open("r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+for package in data.get("packages", []):
+    if package.get("name") != "erika_flutter":
+        continue
+    root_uri = package.get("rootUri", "")
+    parsed = urllib.parse.urlparse(root_uri)
+    if parsed.scheme == "file":
+        root = pathlib.Path(urllib.parse.unquote(parsed.path))
+    elif parsed.scheme:
+        raise SystemExit(f"unsupported erika_flutter rootUri: {root_uri}")
+    else:
+        root = (package_config.parent / urllib.parse.unquote(root_uri)).resolve()
+    print(root)
+    break
+else:
+    raise SystemExit("erika_flutter not found in package_config.json")
+PY
+)"
+
+    local resolved_root
+    resolved_root="$(cd "${erika_flutter_root}/../.." && pwd -P)"
+    if [ -f "${resolved_root}/Cargo.toml" ]; then
+        echo "${resolved_root}"
+        return
+    fi
+
+    echo "error: Could not resolve Erika source root from erika_flutter package at ${erika_flutter_root}" >&2
+    return 1
+}
+
+ERIKA_ROOT="$(resolve_erika_root)"
 
 # Map Xcode configuration to CMake build type
 if [ "${CONFIGURATION}" = "Debug" ]; then
@@ -53,11 +116,6 @@ lipo -create \
     "${BUILD_DIR}/arm64/libnipaplay_native.dylib" \
     "${BUILD_DIR}/x86_64/libnipaplay_native.dylib" \
     -output "${BUILD_DIR}/libnipaplay_native.dylib"
-
-if [ ! -f "${ERIKA_ROOT}/Cargo.toml" ]; then
-    echo "error: Erika source not found at ${ERIKA_ROOT}. Run git submodule update --init third_party/erika." >&2
-    exit 1
-fi
 
 if [ "${CONFIGURATION}" = "Debug" ]; then
     ERIKA_CARGO_PROFILE="debug"

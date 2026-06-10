@@ -282,9 +282,11 @@ packages:
   erika_flutter:
     dependency: "direct main"
     description:
-      path: "third_party/erika/packages/erika_flutter"
-      relative: true
-    source: path
+      path: "packages/erika_flutter"
+      ref: "403049af63cd104d7a99855d48069abc1169529b"
+      resolved-ref: "403049af63cd104d7a99855d48069abc1169529b"
+      url: "https://github.com/AimesSoft/Erika.git"
+    source: git
     version: "0.0.1"
   fake_async:
     dependency: transitive
