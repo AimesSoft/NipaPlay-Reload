@@ -53,36 +53,33 @@ class GlassBottomSheet extends StatelessWidget {
       maxWidth: dialogWidth,
       maxHeightFactor: (sheetHeight / screenSize.height).clamp(0.5, 0.9),
       onClose: () => Navigator.of(context).maybePop(),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: keyboardHeight),
-        child: SizedBox(
-          height: sheetHeight,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    title,
-                    locale: const Locale('zh', 'CN'),
-                    style: textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
-                        ) ??
-                        TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
-                        ),
-                    textAlign: TextAlign.left,
-                  ),
+      child: SizedBox(
+        height: sheetHeight,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + keyboardHeight),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  title,
+                  locale: const Locale('zh', 'CN'),
+                  style: textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ) ??
+                      TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                  textAlign: TextAlign.left,
                 ),
-                const SizedBox(height: 16),
-                Expanded(child: child),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(child: child),
+            ],
           ),
         ),
       ),
