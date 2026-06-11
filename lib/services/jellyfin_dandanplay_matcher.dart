@@ -301,9 +301,7 @@ class JellyfinDandanplayMatcher {
         }
         hashMatchFailed = true;
       } else {
-        final reason = hasVideoInfo && hasBasicInfo
-            ? '缺少有效哈希值'
-            : '没有可用的精确信息';
+        final reason = hasVideoInfo && hasBasicInfo ? '缺少有效哈希值' : '没有可用的精确信息';
         debugPrint('$reason，使用标题搜索匹配');
       }
 
@@ -749,8 +747,7 @@ class JellyfinDandanplayMatcher {
       final episodeTitle = bestMatch['episodeTitle'] ?? raw['episodeTitle'];
 
       if (animeId == null || episodeId == null) {
-        debugPrint(
-            '警告: 精确匹配返回的首条记录缺少animeId或episodeId，可能导致弹幕无法加载');
+        debugPrint('警告: 精确匹配返回的首条记录缺少animeId或episodeId，可能导致弹幕无法加载');
       }
 
       return {
@@ -782,85 +779,15 @@ class JellyfinDandanplayMatcher {
 
     try {
       debugPrint('开始搜索动画: "$title"');
-
-      // 获取DandanPlay的appSecret
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/search/anime';
-
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url =
-          '$baseUrl/api/v2/search/anime?keyword=${Uri.encodeComponent(title)}';
-      debugPrint('请求URL: $url');
-
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(url)),
-        headers: {
-          'Accept': 'application/json',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-              DandanplayService.appId, timestamp, apiPath, appSecret),
-          'X-Timestamp': '$timestamp',
-        },
-      );
-
-      debugPrint('搜索结果状态码: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        // 打印前100个字符，避免日志过长
-        final previewText = response.body.length > 100
-            ? '${response.body.substring(0, 100)}...(总长度: ${response.body.length})'
-            : response.body;
-        debugPrint('搜索结果预览: $previewText');
-
-        // 检查是否有'animes'字段且不为空
-        if (data['animes'] != null &&
-            data['animes'] is List &&
-            data['animes'].isNotEmpty) {
-          final results = List<Map<String, dynamic>>.from(data['animes']);
-          debugPrint('找到 ${results.length} 个匹配动画');
-
-          // 检查返回的结果是否包含所需字段
-          bool hasValidResults = false;
-          for (var anime in results) {
-            if (anime['animeId'] != null && anime['animeTitle'] != null) {
-              hasValidResults = true;
-              break;
-            }
-          }
-
-          if (!hasValidResults) {
-            debugPrint('警告: 所有结果都不包含必要的animeId或animeTitle字段');
-          } else {
-            // 打印第一个结果的基本信息
-            if (results.isNotEmpty) {
-              final first = results.first;
-              debugPrint(
-                  '第一个结果: ID=${first['animeId']}, 标题=${first['animeTitle']}, 类型=${first['typeDescription']}');
-            }
-          }
-
-          return results;
-        } else {
-          debugPrint('没有匹配的动画: animes=${data['animes'] ?? "null"}');
-
-          // 检查是否有错误信息
-          if (data.containsKey('errorMessage') &&
-              data['errorMessage'] != null) {
-            debugPrint('API返回错误: ${data['errorMessage']}');
-          }
-
-          if (data.containsKey('success') && data['success'] == false) {
-            debugPrint('API调用失败: success=false');
-          }
-        }
-      } else {
+      final results = await DandanplayService.searchAnime(title);
+      if (results.isNotEmpty) {
+        debugPrint('找到 ${results.length} 个匹配动画');
+        final first = results.first;
         debugPrint(
-            'API调用失败，状态码: ${response.statusCode}, 响应内容: ${response.body}');
+            '第一个结果: ID=${first['animeId']}, 标题=${first['animeTitle']}, 类型=${first['typeDescription']}');
+        return results;
       }
+      debugPrint('没有匹配的动画');
     } catch (e, stackTrace) {
       debugPrint('搜索动画时出错: $e');
       debugPrint('错误堆栈: $stackTrace');
@@ -879,6 +806,55 @@ class JellyfinDandanplayMatcher {
     if (animeTitle.isEmpty) {
       debugPrint('动画标题为空 (ID: $animeId)，无法继续搜索剧集。');
       return [];
+    }
+
+    List<Map<String, dynamic>> normalizeEpisodes(List<dynamic> rawEpisodes) {
+      final episodes = rawEpisodes
+          .whereType<Map>()
+          .map((episode) => Map<String, dynamic>.from(episode))
+          .toList();
+
+      for (var i = 0; i < episodes.length; i++) {
+        final ep = episodes[i];
+        final episodeNumber = ep['episodeNumber'];
+        if (episodeNumber is int && episodeNumber > 0) {
+          ep['episodeIndex'] = episodeNumber;
+          continue;
+        }
+        final episodeTitle = ep['episodeTitle'] as String? ?? '';
+        final indexMatch = RegExp(
+                r'第\s*(\d+)\s*[集话期]|\s(\d+)(?:\s|$)|EP\s*(\d+)|\((\d+)\)|\【(\d+)\】|\s(\d+)$')
+            .firstMatch(episodeTitle);
+        if (indexMatch != null) {
+          String? numStr;
+          for (int j = 1; j <= indexMatch.groupCount; j++) {
+            if (indexMatch.group(j) != null) {
+              numStr = indexMatch.group(j);
+              break;
+            }
+          }
+          ep['episodeIndex'] = int.tryParse(numStr ?? '') ?? i + 1;
+        } else {
+          ep['episodeIndex'] = i + 1;
+        }
+      }
+
+      return episodes;
+    }
+
+    try {
+      final bangumiData = await DandanplayService.getBangumiDetails(animeId);
+      final bangumi = bangumiData['bangumi'];
+      final rawEpisodes = bangumi is Map<String, dynamic>
+          ? bangumi['episodes']
+          : bangumiData['episodes'];
+      if (rawEpisodes is List && rawEpisodes.isNotEmpty) {
+        final episodes = normalizeEpisodes(rawEpisodes);
+        debugPrint('通过番剧详情获取 ${episodes.length} 个剧集，跳过标题搜索剧集');
+        return episodes;
+      }
+    } catch (e) {
+      debugPrint('通过番剧详情获取剧集失败，回退标题搜索剧集: $e');
     }
 
     try {
@@ -1133,8 +1109,7 @@ class JellyfinDandanplayMatcher {
   ///
   /// 优先通过直连流+WebDAV首段策略自动计算哈希，失败时回退到手动匹配
   /// 内部复用同一任务，确保不会重复下载前16MB数据
-  Future<Map<String, dynamic>> calculateVideoHash(
-      JellyfinEpisodeInfo episode) {
+  Future<Map<String, dynamic>> calculateVideoHash(JellyfinEpisodeInfo episode) {
     final cached = _videoInfoCache[episode.id];
     if (cached != null) {
       debugPrint('命中Jellyfin视频哈希缓存: ${episode.id}');
@@ -1221,7 +1196,8 @@ class JellyfinDandanplayMatcher {
       return trimmedRemote;
     }
 
-    final metadataName = (mediaInfo['fileName'] ?? mediaInfo['Name'])?.toString();
+    final metadataName =
+        (mediaInfo['fileName'] ?? mediaInfo['Name'])?.toString();
     if (metadataName != null && metadataName.trim().isNotEmpty) {
       return metadataName.trim();
     }
@@ -1780,8 +1756,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                     child: ListTile(
                                       title: Text(
                                         match['animeTitle'] ?? '未知动画',
-                                        style:
-                                            const TextStyle(color: Colors.white),
+                                        style: const TextStyle(
+                                            color: Colors.white),
                                       ),
                                       subtitle: match['typeDescription'] != null
                                           ? Text(
@@ -1851,8 +1827,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                     child: ListTile(
                                       title: Text(
                                         '第${episode['episodeIndex'] ?? '?'}集: ${episode['episodeTitle'] ?? '未知剧集'}',
-                                        style:
-                                            const TextStyle(color: Colors.white),
+                                        style: const TextStyle(
+                                            color: Colors.white),
                                       ),
                                       trailing: isSelected
                                           ? const Icon(Icons.check_circle,

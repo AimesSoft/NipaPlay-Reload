@@ -189,33 +189,7 @@ class _ManualDanmakuMatchDialogState extends State<ManualDanmakuMatchDialog>
     }
 
     try {
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/search/anime';
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url = '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword)}';
-
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(url)),
-        headers: {
-          'Accept': 'application/json',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-              DandanplayService.appId, timestamp, apiPath, appSecret),
-          'X-Timestamp': '$timestamp',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data['animes'] != null && data['animes'] is List) {
-          return List<Map<String, dynamic>>.from(data['animes']);
-        }
-      }
-
-      return [];
+      return DandanplayService.searchAnime(keyword);
     } catch (e) {
       debugPrint('搜索动画时出错: $e');
       rethrow;

@@ -756,68 +756,13 @@ class EmbyDandanplayMatcher {
       }
 
       debugPrint('搜索动画关键词: "$cleanedKeyword"');
-
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/search/anime';
-
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url =
-          '$baseUrl/api/v2/search/anime?keyword=${Uri.encodeComponent(cleanedKeyword)}';
-      debugPrint('请求URL: $url');
-
-      final uri = WebRemoteAccessService.proxyUri(Uri.parse(url));
-
-      final headers = {
-        'Accept': 'application/json',
-        'X-AppId': DandanplayService.appId,
-        'X-Signature': DandanplayService.generateSignature(
-            DandanplayService.appId, timestamp, apiPath, appSecret),
-        'X-Timestamp': '$timestamp',
-      };
-
-      debugPrint('发送搜索请求: ${uri.toString()}');
-      final response = await http.get(uri, headers: headers);
-
-      debugPrint('搜索结果状态码: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        // 打印前100个字符，避免日志过长
-        final previewText = response.body.length > 100
-            ? '${response.body.substring(0, 100)}...(总长度: ${response.body.length})'
-            : response.body;
-        debugPrint('搜索结果预览: $previewText');
-
-        // 检查是否有'animes'字段且不为空
-        if (data['animes'] != null &&
-            data['animes'] is List &&
-            data['animes'].isNotEmpty) {
-          final results = List<Map<String, dynamic>>.from(data['animes']);
-          debugPrint('找到 ${results.length} 个匹配动画');
-
-          // 检查返回的结果是否包含所需字段
-          bool hasValidResults = false;
-          for (var anime in results) {
-            if (anime.containsKey('animeId') &&
-                anime.containsKey('animeTitle')) {
-              hasValidResults = true;
-              break;
-            }
-          }
-
-          if (hasValidResults) {
-            return results;
-          } else {
-            debugPrint('警告: 搜索结果不包含必要字段 (animeId, animeTitle)');
-          }
-        } else {
-          debugPrint('搜索结果为空或格式不正确');
-        }
+      final results = await DandanplayService.searchAnime(cleanedKeyword);
+      if (results.any((anime) =>
+          anime.containsKey('animeId') && anime.containsKey('animeTitle'))) {
+        debugPrint('找到 ${results.length} 个匹配动画');
+        return results;
       } else {
-        debugPrint('搜索请求失败: HTTP ${response.statusCode}');
+        debugPrint('搜索结果为空或格式不正确');
       }
     } catch (e) {
       debugPrint('搜索动画时出错: $e');
@@ -942,8 +887,7 @@ class EmbyDandanplayMatcher {
   /// 返回包含哈希值、原始文件名和文件大小的Map
   ///
   /// 优先通过直连流+WebDAV首段策略自动计算哈希，失败时回退到手动匹配
-  Future<Map<String, dynamic>> calculateVideoHash(
-      EmbyEpisodeInfo episode) {
+  Future<Map<String, dynamic>> calculateVideoHash(EmbyEpisodeInfo episode) {
     final cached = _videoInfoCache[episode.id];
     if (cached != null) {
       debugPrint('命中Emby视频哈希缓存: ${episode.id}');
@@ -1620,8 +1564,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                     child: ListTile(
                                       title: Text(
                                         match['animeTitle'] ?? '未知动画',
-                                        style:
-                                            const TextStyle(color: Colors.white),
+                                        style: const TextStyle(
+                                            color: Colors.white),
                                       ),
                                       subtitle: match['typeDescription'] != null
                                           ? Text(
@@ -1691,8 +1635,8 @@ class _AnimeMatchDialogState extends State<AnimeMatchDialog> {
                                     child: ListTile(
                                       title: Text(
                                         '第${episode['episodeIndex'] ?? '?'}集: ${episode['episodeTitle'] ?? '未知剧集'}',
-                                        style:
-                                            const TextStyle(color: Colors.white),
+                                        style: const TextStyle(
+                                            color: Colors.white),
                                       ),
                                       trailing: isSelected
                                           ? const Icon(Icons.check_circle,

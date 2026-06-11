@@ -85,7 +85,8 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
         final smbPath = uri.queryParameters['path'];
         if (smbPath != null && smbPath.isNotEmpty) {
           final lastSlash = smbPath.lastIndexOf('/');
-          final tail = lastSlash >= 0 ? smbPath.substring(lastSlash + 1) : smbPath;
+          final tail =
+              lastSlash >= 0 ? smbPath.substring(lastSlash + 1) : smbPath;
           if (tail.isNotEmpty) return tail;
         }
         // 一般 HTTP URL：取 pathSegments 最后一段
@@ -209,43 +210,10 @@ class _BatchDanmakuMatchDialogState extends State<BatchDanmakuMatchDialog>
     });
 
     try {
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/search/anime';
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url = '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword)}';
-
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(url)),
-        headers: {
-          'Accept': 'application/json',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-            DandanplayService.appId,
-            timestamp,
-            apiPath,
-            appSecret,
-          ),
-          'X-Timestamp': '$timestamp',
-        },
-      );
-
       if (!mounted) return;
 
-      if (response.statusCode != 200) {
-        setState(() {
-          _isSearching = false;
-          _searchMessage = '搜索失败: HTTP ${response.statusCode}';
-          _searchResults = [];
-        });
-        return;
-      }
-
-      final data = json.decode(response.body);
-      final results = (data is Map<String, dynamic> && data['animes'] is List)
-          ? List<Map<String, dynamic>>.from(data['animes'] as List)
-          : <Map<String, dynamic>>[];
+      final results = await DandanplayService.searchAnime(keyword);
+      if (!mounted) return;
 
       // 对搜索结果进行简繁转换
       final isTraditional =

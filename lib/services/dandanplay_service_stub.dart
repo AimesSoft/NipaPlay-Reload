@@ -28,6 +28,24 @@ class DandanplayService {
   static String? _appSecret;
   static Map<String, dynamic>? _linkedBangumiAccount;
   static int? _loginTimestamp;
+  static const String _animeSearchCacheKey = 'dandanplay_anime_search_cache';
+  static const Duration _animeSearchCacheDuration = Duration(days: 7);
+  static const Duration _emptyAnimeSearchCacheDuration = Duration(hours: 12);
+  static const Duration _unmatchedVideoCacheDuration = Duration(days: 3);
+  static const int _animeSearchCacheMaxEntries = 300;
+  static const Duration _bangumiDetailsCacheDuration = Duration(hours: 6);
+  static const Duration _authorizedBangumiDetailsCacheDuration =
+      Duration(minutes: 15);
+  static final Map<String, List<Map<String, dynamic>>> _animeSearchMemoryCache =
+      {};
+  static final Map<String, DateTime> _animeSearchMemoryCacheTime = {};
+  static final Map<String, Future<List<Map<String, dynamic>>?>>
+      _animeSearchInFlight = {};
+  static final Map<int, Map<String, dynamic>> _bangumiDetailsMemoryCache = {};
+  static final Map<int, DateTime> _bangumiDetailsMemoryCacheTime = {};
+  static final Map<int, Future<Map<String, dynamic>>> _bangumiDetailsInFlight =
+      {};
+  static int _bangumiDetailsCacheEpoch = 0;
 
   static bool get isLoggedIn => _isLoggedIn;
   static String? get userName => _userName;
@@ -238,6 +256,7 @@ class DandanplayService {
 
   static Future<void> saveLoginInfo(
       String token, String username, String screenName) async {
+    _clearBangumiDetailsCache();
     _token = token;
     await _updateLoginStatus(
       isLoggedIn: true,
@@ -248,6 +267,7 @@ class DandanplayService {
   }
 
   static Future<void> clearLoginInfo() async {
+    _clearBangumiDetailsCache();
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       // 调用API登出，然后清除本地状态
@@ -265,11 +285,15 @@ class DandanplayService {
 
   static Future<void> saveToken(String token) async {
     if (token.isEmpty) return;
+    if (_token != token) {
+      _clearBangumiDetailsCache();
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('dandanplay_token', token);
   }
 
   static Future<void> clearToken() async {
+    _clearBangumiDetailsCache();
     _token = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dandanplay_token');
@@ -285,6 +309,19 @@ class DandanplayService {
       if (!cacheMap.containsKey(fileHash)) return null;
       final videoInfo = cacheMap[fileHash];
       if (videoInfo is Map<String, dynamic>) {
+        if (videoInfo['isMatched'] == false) {
+          final cachedAt = _tryParsePositiveInt(videoInfo['cachedAt']);
+          if (cachedAt != null) {
+            final age = DateTime.now().difference(
+              DateTime.fromMillisecondsSinceEpoch(cachedAt),
+            );
+            if (age > _unmatchedVideoCacheDuration) {
+              cacheMap.remove(fileHash);
+              await prefs.setString(_videoCacheKey, json.encode(cacheMap));
+              return null;
+            }
+          }
+        }
         return Map<String, dynamic>.from(videoInfo);
       }
       return null;
@@ -305,6 +342,151 @@ class DandanplayService {
       cacheMap[fileHash] = videoInfo;
       await prefs.setString(_videoCacheKey, json.encode(cacheMap));
     } catch (_) {}
+  }
+
+  static String _normalizeAnimeSearchKeyword(String keyword) {
+    return keyword.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  static String _animeSearchCacheKeyFor(String baseUrl, String keyword) {
+    return '${baseUrl.trim()}|${_normalizeAnimeSearchKeyword(keyword).toLowerCase()}';
+  }
+
+  static bool _isAnimeSearchCacheFresh(DateTime cachedAt, int resultCount) {
+    final duration = resultCount == 0
+        ? _emptyAnimeSearchCacheDuration
+        : _animeSearchCacheDuration;
+    return DateTime.now().difference(cachedAt) < duration;
+  }
+
+  static Future<List<Map<String, dynamic>>?> _getCachedAnimeSearch(
+    String cacheKey,
+  ) async {
+    final memoryTime = _animeSearchMemoryCacheTime[cacheKey];
+    final memoryResults = _animeSearchMemoryCache[cacheKey];
+    if (memoryTime != null &&
+        memoryResults != null &&
+        _isAnimeSearchCacheFresh(memoryTime, memoryResults.length)) {
+      return memoryResults
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final rawCache = prefs.getString(_animeSearchCacheKey);
+    if (rawCache == null || rawCache.isEmpty) return null;
+
+    try {
+      final decoded = json.decode(rawCache);
+      if (decoded is! Map<String, dynamic>) return null;
+      final rawEntry = decoded[cacheKey];
+      if (rawEntry is! Map<String, dynamic>) return null;
+      final timestamp = _tryParsePositiveInt(rawEntry['timestamp']);
+      final rawResults = rawEntry['results'];
+      if (timestamp == null || rawResults is! List) return null;
+
+      final results = rawResults
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      final cachedAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      if (!_isAnimeSearchCacheFresh(cachedAt, results.length)) {
+        return null;
+      }
+
+      _animeSearchMemoryCache[cacheKey] = results;
+      _animeSearchMemoryCacheTime[cacheKey] = cachedAt;
+      return results.map((item) => Map<String, dynamic>.from(item)).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _saveAnimeSearchCache(
+    String cacheKey,
+    List<Map<String, dynamic>> results,
+  ) async {
+    final now = DateTime.now();
+    _animeSearchMemoryCache[cacheKey] =
+        results.map((item) => Map<String, dynamic>.from(item)).toList();
+    _animeSearchMemoryCacheTime[cacheKey] = now;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rawCache = prefs.getString(_animeSearchCacheKey);
+      Map<String, dynamic> cacheMap = {};
+      if (rawCache != null && rawCache.isNotEmpty) {
+        final decoded = json.decode(rawCache);
+        if (decoded is Map<String, dynamic>) {
+          cacheMap = Map<String, dynamic>.from(decoded);
+        }
+      }
+
+      cacheMap[cacheKey] = {
+        'timestamp': now.millisecondsSinceEpoch,
+        'results': results,
+      };
+
+      if (cacheMap.length > _animeSearchCacheMaxEntries) {
+        final entries = cacheMap.entries.toList()
+          ..sort((a, b) {
+            final aValue = a.value;
+            final bValue = b.value;
+            final aTimestamp = aValue is Map<String, dynamic>
+                ? (_tryParsePositiveInt(aValue['timestamp']) ?? 0)
+                : 0;
+            final bTimestamp = bValue is Map<String, dynamic>
+                ? (_tryParsePositiveInt(bValue['timestamp']) ?? 0)
+                : 0;
+            return bTimestamp.compareTo(aTimestamp);
+          });
+        cacheMap = Map<String, dynamic>.fromEntries(
+          entries.take(_animeSearchCacheMaxEntries),
+        );
+      }
+
+      await prefs.setString(_animeSearchCacheKey, json.encode(cacheMap));
+    } catch (_) {}
+  }
+
+  static Future<List<Map<String, dynamic>>> searchAnime(
+    String keyword, {
+    bool useCache = true,
+  }) async {
+    final normalizedKeyword = _normalizeAnimeSearchKeyword(keyword);
+    if (normalizedKeyword.isEmpty) return [];
+
+    final baseUrl = await getApiBaseUrl();
+    final cacheKey = _animeSearchCacheKeyFor(baseUrl, normalizedKeyword);
+
+    if (useCache) {
+      final cached = await _getCachedAnimeSearch(cacheKey);
+      if (cached != null) {
+        return cached;
+      }
+    }
+
+    final inFlight = _animeSearchInFlight[cacheKey];
+    if (inFlight != null) {
+      return await inFlight ?? [];
+    }
+
+    final future = _fetchAnimeSearchResults(
+      normalizedKeyword,
+      baseUrl: baseUrl,
+    );
+    _animeSearchInFlight[cacheKey] = future;
+
+    try {
+      final results = await future;
+      if (results != null && useCache) {
+        await _saveAnimeSearchCache(cacheKey, results);
+      }
+      return results?.map((item) => Map<String, dynamic>.from(item)).toList() ??
+          [];
+    } finally {
+      _animeSearchInFlight.remove(cacheKey);
+    }
   }
 
   static Future<String> getAppSecret() async {
@@ -864,7 +1046,9 @@ class DandanplayService {
           }),
         );
 
-        if (response.statusCode != 200) {
+        if (response.statusCode == 200) {
+          _clearBangumiDetailsCache();
+        } else {
           debugPrint('[弹弹play服务-Web] 更新观看状态失败: HTTP ${response.statusCode}');
         }
       } catch (e) {
@@ -904,7 +1088,9 @@ class DandanplayService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success'] != true) {
+        if (data['success'] == true) {
+          _clearBangumiDetailsCache();
+        } else {
           throw Exception(data['errorMessage'] ?? '更新观看状态失败');
         }
       } else {
@@ -1172,7 +1358,11 @@ class DandanplayService {
         );
 
         if (response.statusCode == 200) {
-          return json.decode(response.body);
+          final data = json.decode(response.body);
+          if (data is Map<String, dynamic> && data['success'] == true) {
+            _clearBangumiDetailsCache();
+          }
+          return data;
         } else {
           throw Exception('提交播放历史失败: HTTP ${response.statusCode}');
         }
@@ -1224,6 +1414,7 @@ class DandanplayService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          _clearBangumiDetailsCache();
           return data;
         } else {
           throw Exception(data['errorMessage'] ?? '提交播放历史失败');
@@ -1238,7 +1429,71 @@ class DandanplayService {
     }
   }
 
-  static Future<Map<String, dynamic>> getBangumiDetails(int bangumiId) async {
+  static Duration get _currentBangumiDetailsCacheDuration {
+    return _isLoggedIn && _token != null
+        ? _authorizedBangumiDetailsCacheDuration
+        : _bangumiDetailsCacheDuration;
+  }
+
+  static void _clearBangumiDetailsCache([int? animeId]) {
+    _bangumiDetailsCacheEpoch++;
+    if (animeId == null) {
+      _bangumiDetailsMemoryCache.clear();
+      _bangumiDetailsMemoryCacheTime.clear();
+      _bangumiDetailsInFlight.clear();
+      return;
+    }
+
+    _bangumiDetailsMemoryCache.remove(animeId);
+    _bangumiDetailsMemoryCacheTime.remove(animeId);
+    _bangumiDetailsInFlight.remove(animeId);
+  }
+
+  static Future<Map<String, dynamic>> getBangumiDetails(
+    int bangumiId, {
+    bool useCache = true,
+  }) async {
+    if (useCache) {
+      final cachedAt = _bangumiDetailsMemoryCacheTime[bangumiId];
+      final cached = _bangumiDetailsMemoryCache[bangumiId];
+      if (cachedAt != null &&
+          cached != null &&
+          DateTime.now().difference(cachedAt) <
+              _currentBangumiDetailsCacheDuration) {
+        return Map<String, dynamic>.from(cached);
+      }
+
+      final inFlight = _bangumiDetailsInFlight[bangumiId];
+      if (inFlight != null) {
+        return Map<String, dynamic>.from(await inFlight);
+      }
+    }
+
+    final requestEpoch = _bangumiDetailsCacheEpoch;
+    final request = _fetchBangumiDetailsFromApi(bangumiId);
+    if (useCache) {
+      _bangumiDetailsInFlight[bangumiId] = request;
+    }
+
+    try {
+      final data = await request;
+      if (useCache &&
+          data['success'] == true &&
+          requestEpoch == _bangumiDetailsCacheEpoch) {
+        _bangumiDetailsMemoryCache[bangumiId] = Map<String, dynamic>.from(data);
+        _bangumiDetailsMemoryCacheTime[bangumiId] = DateTime.now();
+      }
+      return data;
+    } finally {
+      if (useCache && identical(_bangumiDetailsInFlight[bangumiId], request)) {
+        _bangumiDetailsInFlight.remove(bangumiId);
+      }
+    }
+  }
+
+  static Future<Map<String, dynamic>> _fetchBangumiDetailsFromApi(
+    int bangumiId,
+  ) async {
     final webApiBaseUrl = await _getWebApiBaseUrl();
     if (webApiBaseUrl != null) {
       try {
@@ -1302,13 +1557,15 @@ class DandanplayService {
   }
 
   /// 通过 Bangumi.tv subjectId 获取番剧详情（Web stub — 不支持）
-  static Future<Map<String, dynamic>?> getBangumiByBgmId(int bgmtvSubjectId) async {
+  static Future<Map<String, dynamic>?> getBangumiByBgmId(
+      int bgmtvSubjectId) async {
     debugPrint('[弹弹play服务-Web] getBangumiByBgmId not supported on web');
     return null;
   }
 
   /// 通过 TMDB ID 获取番剧详情（Web stub — 不支持）
-  static Future<Map<String, dynamic>?> getBangumiByTmdbId(int tmdbId, {int? seasonNumber}) async {
+  static Future<Map<String, dynamic>?> getBangumiByTmdbId(int tmdbId,
+      {int? seasonNumber}) async {
     debugPrint('[弹弹play服务-Web] getBangumiByTmdbId not supported on web');
     return null;
   }
@@ -1471,7 +1728,11 @@ class DandanplayService {
         );
 
         if (response.statusCode == 200) {
-          return json.decode(response.body);
+          final data = json.decode(response.body);
+          if (data is Map<String, dynamic> && data['success'] == true) {
+            _clearBangumiDetailsCache(animeId);
+          }
+          return data;
         } else {
           throw Exception('添加收藏失败: HTTP ${response.statusCode}');
         }
@@ -1516,6 +1777,7 @@ class DandanplayService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          _clearBangumiDetailsCache(animeId);
           return data;
         } else {
           throw Exception(data['errorMessage'] ?? '添加收藏失败');
@@ -1539,7 +1801,11 @@ class DandanplayService {
         );
 
         if (response.statusCode == 200) {
-          return json.decode(response.body);
+          final data = json.decode(response.body);
+          if (data is Map<String, dynamic> && data['success'] == true) {
+            _clearBangumiDetailsCache(animeId);
+          }
+          return data;
         } else {
           throw Exception('取消收藏失败: HTTP ${response.statusCode}');
         }
@@ -1575,6 +1841,7 @@ class DandanplayService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          _clearBangumiDetailsCache(animeId);
           return data;
         } else {
           throw Exception(data['errorMessage'] ?? '取消收藏失败');
@@ -1874,13 +2141,18 @@ class DandanplayService {
       }
     }
 
-    return {
+    final unmatchedResult = {
       'isMatched': false,
       'fileName': fileName,
       'fileHash': fileHash,
       'fileSize': fileSize,
+      'cachedAt': DateTime.now().millisecondsSinceEpoch,
       'matches': [],
     };
+    if (fileHash.isNotEmpty) {
+      await saveVideoInfoToCache(fileHash, unmatchedResult);
+    }
+    return unmatchedResult;
   }
 
   static void _ensureVideoInfoTitles(Map<String, dynamic> videoInfo) {
@@ -1986,20 +2258,19 @@ class DandanplayService {
     return candidate;
   }
 
-  static Future<List<Map<String, dynamic>>> _searchAnimeByKeyword(
-      String keyword) async {
-    if (keyword.trim().isEmpty) return [];
-
+  static Future<List<Map<String, dynamic>>?> _fetchAnimeSearchResults(
+    String keyword, {
+    required String baseUrl,
+  }) async {
     final appSecret = await getAppSecret();
     final timestamp =
         (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
     const apiPath = '/api/v2/search/anime';
-    final baseUrl = await getApiBaseUrl();
     final url =
         '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword.trim())}';
 
     final response = await http.get(
-      Uri.parse(url),
+      WebRemoteAccessService.proxyUri(Uri.parse(url)),
       headers: {
         'Accept': 'application/json',
         'User-Agent': userAgent,
@@ -2011,13 +2282,13 @@ class DandanplayService {
     );
 
     if (response.statusCode != 200) {
-      return [];
+      return null;
     }
 
     final data = json.decode(response.body);
-    if (data is! Map<String, dynamic>) return [];
+    if (data is! Map<String, dynamic>) return null;
     final animes = data['animes'];
-    if (animes is! List) return [];
+    if (animes is! List) return null;
 
     return animes
         .whereType<Map>()
@@ -2025,33 +2296,14 @@ class DandanplayService {
         .toList();
   }
 
+  static Future<List<Map<String, dynamic>>> _searchAnimeByKeyword(
+      String keyword) {
+    return searchAnime(keyword);
+  }
+
   static Future<List<Map<String, dynamic>>> _getBangumiEpisodes(
       int animeId) async {
-    final appSecret = await getAppSecret();
-    final timestamp =
-        (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-    final apiPath = '/api/v2/bangumi/$animeId';
-    final baseUrl = await getApiBaseUrl();
-    final url = '$baseUrl$apiPath';
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': userAgent,
-        'X-AppId': appId,
-        'X-Signature': generateSignature(appId, timestamp, apiPath, appSecret),
-        'X-Timestamp': '$timestamp',
-        if (_token != null) 'Authorization': 'Bearer $_token',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      return [];
-    }
-
-    final data = json.decode(response.body);
-    if (data is! Map<String, dynamic>) return [];
+    final data = await getBangumiDetails(animeId);
 
     final dynamic rawEpisodes = (data['bangumi'] is Map<String, dynamic>)
         ? (data['bangumi'] as Map<String, dynamic>)['episodes']

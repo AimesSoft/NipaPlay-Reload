@@ -92,33 +92,7 @@ class _CupertinoManualDanmakuSheetState
     }
 
     try {
-      final appSecret = await DandanplayService.getAppSecret();
-      final timestamp =
-          (DateTime.now().toUtc().millisecondsSinceEpoch / 1000).round();
-      const apiPath = '/api/v2/search/anime';
-      final baseUrl = await DandanplayService.getApiBaseUrl();
-      final url = '$baseUrl$apiPath?keyword=${Uri.encodeComponent(keyword)}';
-
-      final response = await http.get(
-        WebRemoteAccessService.proxyUri(Uri.parse(url)),
-        headers: {
-          'Accept': 'application/json',
-          'X-AppId': DandanplayService.appId,
-          'X-Signature': DandanplayService.generateSignature(
-              DandanplayService.appId, timestamp, apiPath, appSecret),
-          'X-Timestamp': '$timestamp',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-
-        if (data['animes'] != null && data['animes'] is List) {
-          return List<Map<String, dynamic>>.from(data['animes']);
-        }
-      }
-
-      return [];
+      return DandanplayService.searchAnime(keyword);
     } catch (e) {
       debugPrint('搜索动画时出错: $e');
       rethrow;
@@ -209,8 +183,7 @@ class _CupertinoManualDanmakuSheetState
           }
         } else {
           setState(() {
-            _episodesMessage =
-                '获取动画信息失败: ${data['errorMessage'] ?? '未知错误'}';
+            _episodesMessage = '获取动画信息失败: ${data['errorMessage'] ?? '未知错误'}';
           });
         }
       } else {
@@ -268,8 +241,7 @@ class _CupertinoManualDanmakuSheetState
       context,
     );
     final title = _showEpisodesView ? '选择剧集' : '搜索动画';
-    final subtitle =
-        _showEpisodesView ? '选择对应剧集以匹配弹幕' : '输入动画名称搜索弹幕';
+    final subtitle = _showEpisodesView ? '选择对应剧集以匹配弹幕' : '输入动画名称搜索弹幕';
 
     final List<Widget> children = [];
     if (_showEpisodesView) {
@@ -432,8 +404,7 @@ class _CupertinoManualDanmakuSheetState
     return CupertinoListSection.insetGrouped(
       children: _currentMatches.map((match) {
         final title = match['animeTitle']?.toString() ?? '未知动画';
-        final typeDescription =
-            match['typeDescription']?.toString() ?? '未知类型';
+        final typeDescription = match['typeDescription']?.toString() ?? '未知类型';
         final episodeCount = match['episodeCount'] ?? 0;
 
         return CupertinoListTile(
@@ -497,9 +468,8 @@ class _CupertinoManualDanmakuSheetState
       CupertinoColors.secondaryLabel,
       context,
     );
-    final String text = _selectedEpisode == null
-        ? '请选择一个剧集来匹配弹幕'
-        : '已选择剧集，可确认匹配';
+    final String text =
+        _selectedEpisode == null ? '请选择一个剧集来匹配弹幕' : '已选择剧集，可确认匹配';
     final Color textColor =
         _selectedEpisode == null ? secondaryColor : accentColor;
 
