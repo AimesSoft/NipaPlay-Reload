@@ -11,8 +11,8 @@ class LabsSettingsProvider extends ChangeNotifier {
   bool _enableLargeScreenMode = false;
   bool _showRemoteAccessQrCode = false;
   bool _enableNext2DanmakuKernel = false;
-  bool _enableNextPlusPlusEngine = false; // 默认关闭：Next++ 激进优化引擎
   bool _enableErikaPlayerKernel = false;
+  bool _enableNextPlusPlusEngine = false; // 默认关闭：Next++ 激进优化引擎
   bool _isLoaded = false;
 
   bool get enableLargeScreenMode => _enableLargeScreenMode;
