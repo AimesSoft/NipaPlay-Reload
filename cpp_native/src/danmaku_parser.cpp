@@ -26,12 +26,9 @@
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-#include <charconv>       // std::from_chars (C++17, 不依赖 null 终止)
-#include <system_error>   // std::errc
+#include <cstdlib>        // std::strtod, std::strtol, std::strtoll
 #include <cstring>
-#include <cstdlib>
 #include <cstdio>
-#include <format>
 #include <array>
 #include <algorithm>
 
@@ -89,43 +86,40 @@ std::string DanmakuParser::colorToRgb(int32_t color_code) {
     const int32_t r = (color_code >> 16) & 0xFF;
     const int32_t g = (color_code >> 8) & 0xFF;
     const int32_t b = color_code & 0xFF;
-    return std::format("rgb({},{},{})", r, g, b);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "rgb(%d,%d,%d)", r, g, b);
+    return buf;
 }
 
-// ──── from_chars 辅助：从 string_view 解析数值（不依赖 null 终止，C++17） ────
+// ──── 数值解析辅助：从 string_view 解析数值 ────
+// 使用 strtod/strtol/strtoll 替代 std::from_chars，
+// 以兼容 macOS 部署目标低于 from_chars 可用版本的情况。
 
 // 解析 double，失败返回 default_val
-// 注意：Android NDK (libc++) 尚未实现浮点 std::from_chars，
-// 因此回退到 strtod（需要 null 终止，创建临时 std::string）。
 static double from_chars_double(std::string_view sv, double default_val) {
     if (sv.empty()) return default_val;
-#if defined(__clang__) && defined(__ANDROID__)
-    // NDK libc++ 缺少浮点 from_chars，回退到 strtod
     const std::string tmp(sv);
     char* end = nullptr;
     const double val = std::strtod(tmp.c_str(), &end);
     return (end != tmp.c_str()) ? val : default_val;
-#else
-    double val = default_val;
-    const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
-    return (ec == std::errc()) ? val : default_val;
-#endif
 }
 
 // 解析 int32_t，失败返回 default_val
 static int32_t from_chars_int32(std::string_view sv, int32_t default_val) {
     if (sv.empty()) return default_val;
-    int32_t val = default_val;
-    const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
-    return (ec == std::errc()) ? val : default_val;
+    const std::string tmp(sv);
+    char* end = nullptr;
+    const long val = std::strtol(tmp.c_str(), &end, 10);
+    return (end != tmp.c_str() && val >= INT32_MIN && val <= INT32_MAX) ? static_cast<int32_t>(val) : default_val;
 }
 
 // 解析 int64_t，失败返回 default_val
 static int64_t from_chars_int64(std::string_view sv, int64_t default_val) {
     if (sv.empty()) return default_val;
-    int64_t val = default_val;
-    const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), val);
-    return (ec == std::errc()) ? val : default_val;
+    const std::string tmp(sv);
+    char* end = nullptr;
+    const long long val = std::strtoll(tmp.c_str(), &end, 10);
+    return (end != tmp.c_str()) ? static_cast<int64_t>(val) : default_val;
 }
 
 bool DanmakuParser::parsePAttribute(std::string_view p_attr, DanmakuItem& item) {
@@ -133,8 +127,7 @@ bool DanmakuParser::parsePAttribute(std::string_view p_attr, DanmakuItem& item) 
     if (p_attr.empty()) return false;
 
     // 手动分割逗号分隔字段，避免 stringstream 分配开销
-    // 使用 std::from_chars (C++17) 替代 strtod/atoi/atoll，
-    // 直接从 string_view 解析，不依赖 null 终止，消除越界读取风险。
+    // 使用 strtod/strtol/strtoll 从 string_view 解析数值。
     int32_t field_index = 0;
     size_t start = 0;
     size_t end = 0;
