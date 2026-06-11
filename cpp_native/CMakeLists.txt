@@ -15,11 +15,15 @@ set(NATIVE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/danmaku_layout.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/similarity_engine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pinyin_dict.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/danmaku_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml/pugixml.cpp
 )
 
 set(NATIVE_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/modules
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/rapidjson/include
 )
 
 # ──── 库类型 ────
@@ -43,6 +47,14 @@ target_include_directories(nipaplay_native PUBLIC ${NATIVE_INCLUDES})
 
 # ──── 公共编译宏（target 作用域）────
 target_compile_definitions(nipaplay_native PRIVATE NIPAPLAY_NATIVE_BUILDING)
+
+# ──── 抑制第三方库（rapidjson）的 MSVC 弃用警告 ────
+if(MSVC)
+    target_compile_definitions(nipaplay_native PRIVATE
+        _SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING
+        _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS
+    )
+endif()
 
 # ──── MSVC CRT 链接：必须使用动态 CRT (/MD) 以匹配 Flutter 宿主 ────
 # Flutter Windows 使用 /MD（动态链接 vcruntime），如果 cpp_native 使用 /MT（静态），

@@ -163,9 +163,9 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                   _isInFinalLoadingPhase = true;
                   _notifyListeners();
 
-                  _danmakuList = await compute(
-                    parseDanmakuListInBackground,
+                  _danmakuList = await DanmakuParser.parseDanmakuListOptimized(
                     cachedDanmakuRaw as List<dynamic>?,
+                    (data) => compute(parseDanmakuListInBackground, data),
                   );
                   _danmakuListVersion++;
 
@@ -211,9 +211,9 @@ extension VideoPlayerStateMetadata on VideoPlayerState {
                 if (danmakuData['comments'] != null &&
                     danmakuData['comments'] is List) {
                   // Use compute for parsing network danmaku, using the imported function
-                  _danmakuList = await compute(
-                    parseDanmakuListInBackground,
+                  _danmakuList = await DanmakuParser.parseDanmakuListOptimized(
                     danmakuData['comments'] as List<dynamic>?,
+                    (data) => compute(parseDanmakuListInBackground, data),
                   );
                   _danmakuListVersion++;
 

@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 
+import '../native_arena.dart';
 import '../native_library.dart';
 import '../types/native_types.dart';
 import '../types/native_result.dart';
@@ -57,6 +58,10 @@ class DanmakuLayoutEngine implements Finalizable {
   Pointer<Int32>? _outputCountPtr;
   int _outputCapacity = 0;
 
+  // ──── H2 修复：Finalizer 仅管理 C++ 对象生命周期 ────
+  // calloc 缓冲区由 dispose() 手动释放，不注册 Finalizer，
+  // 避免双重释放（configure 重新分配时 calloc.free + GC Finalizer np_free_ptr）
+  // 和分配器不匹配（Dart calloc vs C std::free）。
   static final _finalizer = NativeFinalizer(
     NativeLibrary.instance.lookup<
         NativeFunction<Void Function(Pointer<Void>)>>('np_layout_destroy'),
@@ -107,18 +112,24 @@ class DanmakuLayoutEngine implements Finalizable {
 
     // 若弹幕数量增大导致现有输出缓冲区不足，则重新分配
     if (count > _outputCapacity) {
+      // 旧缓冲区由 _freePtrFinalizer 管理，GC 时自动释放；
+      // 此处立即释放以回收内存
       if (_outputItemsPtr != null) calloc.free(_outputItemsPtr!);
       if (_rawOutputPtr != null) calloc.free(_rawOutputPtr!);
       if (_outputCountPtr != null) calloc.free(_outputCountPtr!);
+
       _outputItemsPtr = calloc<NpLayoutResult>(count);
       _rawOutputPtr = calloc<NpFrameRawOutput>(count);
       _outputCountPtr = calloc<Int32>();
       _outputCapacity = count;
+      // 缓冲区由 dispose() 中 calloc.free 释放，不注册 Finalizer
     }
 
-    // 分配 C 结构体数组
-    final cItems = calloc<NpDanmakuItem>(count);
+    // 使用 Arena 管理临时 cItems 分配
+    final arena = NativeArena();
     try {
+      final cItems = calloc<NpDanmakuItem>(count);
+      arena.registerCalloc(cItems.cast());
       // 填充 C 结构体数组
       for (int i = 0; i < count; i++) {
         final input = inputs[i];
@@ -158,7 +169,7 @@ class DanmakuLayoutEngine implements Finalizable {
       _itemCount = count;
       return const NativeResult.ok(null);
     } finally {
-      calloc.free(cItems);
+      arena.freeAll();
     }
   }
 
@@ -219,11 +230,6 @@ class DanmakuLayoutEngine implements Finalizable {
       return const NativeResult.ok(0);
     }
 
-    // ⚠️ Bug fix: was calling npLayoutFrame (V1 path outputting NpLayoutResult),
-    // but this method's index accessors (rawItemIndex/rawTrackIndex/rawYPosition/rawScrollSpeed)
-    // read from _outputItemsPtr (NpLayoutResult buffer), so npLayoutFrame is correct here.
-    // For V2 zero-copy path with pre-computed x/offstageX/textWidth/type,
-    // use frameRawData() which calls npLayoutFrameRaw into _rawOutputPtr.
     final result = NativeBindings.npLayoutFrame(
       _handle,
       currentTime,

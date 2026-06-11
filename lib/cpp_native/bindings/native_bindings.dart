@@ -16,6 +16,11 @@ class NativeBindings {
       Void Function(Pointer<NpString>),
       void Function(Pointer<NpString>)>('np_string_free');
 
+  // 通用指针释放 — 用于释放 FFI 分配的缓冲区（与 C 侧 malloc/free 对齐）
+  static final npFreePtr = _dylib.lookupFunction<
+      Void Function(Pointer<Void>),
+      void Function(Pointer<Void>)>('np_free_ptr');
+
   // ──── ExampleCalculator ────
   static final npExampleCreate = _dylib.lookupFunction<
       Pointer<Void> Function(),
@@ -63,14 +68,34 @@ class NativeBindings {
       NpResult Function(NpHandle, double,
           Pointer<NpFrameRawOutput>, int, Pointer<Int32>)>('np_layout_frame_raw');
 
-  // ──── SimilarityEngine ────
+  // ──── SimilarityEngine（有状态对象，复用 ~4 MB scratch buffer）───
+  static final npSimCreate = _dylib.lookupFunction<
+      Pointer<Void> Function(),
+      NpHandle Function()>('np_sim_create');
+
+  static final npSimDestroy = _dylib.lookupFunction<
+      Void Function(Pointer<Void>),
+      void Function(NpHandle)>('np_sim_destroy');
+
   static final npSimCheckBatch = _dylib.lookupFunction<
-      NpResult Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<NpString>),
-      NpResult Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<NpString>)>(
+      NpResult Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<NpString>),
+      NpResult Function(NpHandle, Pointer<Utf8>, Pointer<Utf8>, Pointer<NpString>)>(
       'np_sim_check_batch');
 
   static final npSimPairSimilarity = _dylib.lookupFunction<
       Double Function(Pointer<Utf8>, Pointer<Utf8>, Int32),
       double Function(Pointer<Utf8>, Pointer<Utf8>, int)>(
       'np_sim_pair_similarity');
+
+  // ──── DanmakuParser ────
+  // content_len 使用 Int64 避免大文件（>2GB UTF-8）溢出
+  static final npDanmakuParseXml = _dylib.lookupFunction<
+      NpResult Function(Pointer<Utf8>, Int64, Pointer<NpString>),
+      NpResult Function(Pointer<Utf8>, int, Pointer<NpString>)>(
+      'np_danmaku_parse_xml');
+
+  static final npDanmakuParseJson = _dylib.lookupFunction<
+      NpResult Function(Pointer<Utf8>, Int64, Pointer<NpString>),
+      NpResult Function(Pointer<Utf8>, int, Pointer<NpString>)>(
+      'np_danmaku_parse_json');
 }

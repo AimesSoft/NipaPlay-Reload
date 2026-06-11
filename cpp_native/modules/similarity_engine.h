@@ -1,4 +1,5 @@
 #pragma once
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -50,6 +51,8 @@ public:
         UnorderedContainer(short* ea): length(0), ed_a(ea) {}
 
         void push(T x) {
+            // 防御性断言：检测 scratch buffer 残留脏数据（cleanup 遗漏时触发）
+            assert(ed_a[x] == 0 && "scratch buffer dirty: cleanup() not called?");
             length++;
             if(ed_a[x] == 0) {
                 data.emplace_back(x, static_cast<sim_ushort>(1));
@@ -258,6 +261,10 @@ public:
     }
 
     // ──── 公开接口 ────
+    // 复用的 scratch buffer — 每次 begin_chunk 重置，避免跨调用重复分配 ~32 KB
+    static constexpr size_t kMaxStringLen = 16005;
+    std::vector<sim_ushort> str_buf_{std::vector<sim_ushort>(kMaxStringLen + 4, 0)};
+
     void begin_chunk(sim_ushort* str_buf, int max_dist, int max_cosine,
                      bool use_pinyin, bool cross_mode) {
         config_.str_buf = str_buf;
@@ -374,18 +381,22 @@ struct SimResult {
 // ══════════════════════════════════════════════
 
 /// 批量查重：对 N 条弹幕做全对比较，返回相似对和分组
+/// 接受外部 SimilarityEngine 引用，复用其 scratch buffer (~4 MB)
 [[nodiscard]] SimResult danmaku_similarity_check(
+    SimilarityEngine& engine,
     const std::vector<DanmakuSimItem>& items,
     const SimConfig& config);
 
 /// 单对相似度：输入两段文本，返回 0.0-1.0 分数
+/// 创建临时引擎，适用于低频调用
 [[nodiscard]] double danmaku_pair_similarity(
     std::string_view text_a,
     std::string_view text_b,
     bool use_pinyin);
 
-/// JSON 便捷接口：输入弹幕 JSON + 配置 JSON，返回结果 JSON
+/// JSON 便捷接口：输入引擎 handle + 弹幕 JSON + 配置 JSON，返回结果 JSON
 [[nodiscard]] std::string similarity_check_batch_json(
+    SimilarityEngine& engine,
     std::string_view items_json,
     std::string_view config_json);
 

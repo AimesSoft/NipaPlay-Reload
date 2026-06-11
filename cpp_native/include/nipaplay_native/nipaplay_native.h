@@ -11,6 +11,8 @@ NIPAPLAY_NATIVE_EXPORT int32_t np_get_version(void);
 
 // ──── 内存管理 ────
 NIPAPLAY_NATIVE_EXPORT void np_string_free(NpString* str);
+// 通用指针释放 — 用于 Dart NativeFinalizer 释放 FFI 分配的缓冲区
+NIPAPLAY_NATIVE_EXPORT void np_free_ptr(void* ptr);
 
 // ──── 示例模块：ExampleCalculator ────
 NIPAPLAY_NATIVE_EXPORT NpHandle np_example_create(void);
@@ -86,15 +88,47 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_layout_frame_raw(
     NpFrameRawOutput* output_items, int32_t output_capacity,
     int32_t* output_count);
 
-// ──── 弹幕相似度引擎：SimilarityEngine ────
+// ──── 弹幕相似度引擎：SimilarityEngine（有状态对象，复用 ~4 MB scratch buffer）──
 
-// 批量查重：输入弹幕 JSON + 配置 JSON，返回结果 JSON（NpString，用 np_string_free 释放）
+// 创建相似度引擎实例（~4 MB 内存，含 ed_a_/ed_b_ scratch buffer）
+// 返回不透明句柄，Dart 侧通过 NativeFinalizer 自动释放
+NIPAPLAY_NATIVE_EXPORT NpHandle np_sim_create(void);
+
+// 销毁相似度引擎实例，释放 ~4 MB scratch buffer
+NIPAPLAY_NATIVE_EXPORT void np_sim_destroy(NpHandle handle);
+
+// 批量查重：使用已有引擎实例，输入弹幕 JSON + 配置 JSON，返回结果 JSON
+// 引擎实例复用 scratch buffer，避免每次调用分配 ~4 MB
 NIPAPLAY_NATIVE_EXPORT NpResult np_sim_check_batch(
-    const char* items_json, const char* config_json, NpString* output);
+    NpHandle handle, const char* items_json, const char* config_json, NpString* output);
 
 // 单对相似度：输入两段文本 + 拼音开关，返回 0.0-1.0 分数
+// 内部创建临时引擎，适用于低频调用
 NIPAPLAY_NATIVE_EXPORT double np_sim_pair_similarity(
     const char* text_a, const char* text_b, int32_t use_pinyin);
+
+// ──── 弹幕解析模块：DanmakuParser ────
+
+// 解析 Bilibili 弹幕 XML，返回预序列化 JSON
+// 输出格式: {"count":N,"comments":[{"t":...,"c":...,"y":...,"r":...,"fontSize":...,"originalType":...},...]}
+// xml_content: UTF-8 XML 字符串指针
+// content_len: 字符串字节长度（不含 null terminator），int64_t 避免大文件溢出
+// output_json: 输出参数，调用者预分配 NpString 结构
+// 返回: NpResult，成功时 output_json 包含 JSON 字符串
+NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_xml(
+    const char* xml_content, int64_t content_len,
+    NpString* output_json);
+
+// 解析弹幕 JSON 数组，返回标准化 JSON
+// 输出格式: {"count":N,"comments":[{"time":...,"content":...,"type":...,"color":...,...},...]}
+// 支持双源字段映射: t/time, c/content, y/type, r/color
+// 保留所有非标准额外字段
+// json_content: UTF-8 JSON 字符串指针（顶层为数组）
+// content_len: 字符串字节长度，int64_t 避免大文件溢出
+// output_json: 输出参数
+NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_json(
+    const char* json_content, int64_t content_len,
+    NpString* output_json);
 
 #ifdef __cplusplus
 }

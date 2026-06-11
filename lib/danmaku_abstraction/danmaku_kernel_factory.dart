@@ -31,7 +31,7 @@ class DanmakuKernelFactory {
   static bool _initialized = false;
 
   /// Next++ 激进优化引擎开关（由 LabsSettingsProvider 同步）
-  static bool _enableNextPlusPlus = true;
+  static bool _enableNextPlusPlus = false;
 
   /// 同步 Next++ 开关状态（由 LabsSettingsProvider 调用）
   static void setEnableNextPlusPlus(bool enabled) {

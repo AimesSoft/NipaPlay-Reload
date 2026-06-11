@@ -312,9 +312,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         _setStatus(PlayerStatus.playing,
             message: '从缓存加载弹幕完成 (${cachedDanmaku.length}条)');
 
-        // 解析弹幕数据并添加到弹弹play轨道
-        final parsedDanmaku = await compute(
-            parseDanmakuListInBackground, cachedDanmaku as List<dynamic>?);
+        // 解析弹幕数据并添加到弹弹play轨道（优先 C++ 解析器）
+        final parsedDanmaku = await DanmakuParser.parseDanmakuListOptimized(
+            cachedDanmaku as List<dynamic>?,
+            (data) => compute(parseDanmakuListInBackground, data));
         if (!canContinue()) return;
 
         _danmakuTracks['dandanplay'] = {
@@ -379,9 +380,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
           danmakuController?.loadDanmaku(filteredDanmaku);
         }
 
-        // 解析弹幕数据并添加到弹弹play轨道
-        final parsedDanmaku = await compute(parseDanmakuListInBackground,
-            danmakuData['comments'] as List<dynamic>?);
+        // 解析弹幕数据并添加到弹弹play轨道（优先 C++ 解析器）
+        final parsedDanmaku = await DanmakuParser.parseDanmakuListOptimized(
+            danmakuData['comments'] as List<dynamic>?,
+            (data) => compute(parseDanmakuListInBackground, data));
         if (!canContinue()) return;
 
         _danmakuTracks['dandanplay'] = {
@@ -484,9 +486,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         throw Exception('弹幕文件中没有弹幕数据');
       }
 
-      // 解析弹幕数据
+      // 解析弹幕数据（优先 C++ 解析器）
       final parsedDanmaku =
-          await compute(parseDanmakuListInBackground, comments);
+          await DanmakuParser.parseDanmakuListOptimized(
+            comments,
+            (data) => compute(parseDanmakuListInBackground, data));
       if (!canContinue()) return;
 
       // 生成轨道名称
