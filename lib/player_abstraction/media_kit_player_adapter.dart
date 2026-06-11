@@ -2046,6 +2046,34 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
   }
 
+  @override
+  void stepForward() {
+    try {
+      final dynamic platform = _player.platform;
+      if (platform != null) {
+        // frame-step 是 mpv 命令而非属性，必须用 command() 而非 setProperty()
+        platform.command?.call(['frame-step']);
+      }
+    } catch (e) {
+      debugPrint('MediaKit: 逐帧前进失败: $e');
+    }
+  }
+
+  @override
+  void stepBackward() {
+    try {
+      // frame-back-step 会跳回上一个关键帧导致循环问题，
+      // 改用 seek 相对后退一帧（约 42ms @24fps）
+      final currentPosition = _player.state.position;
+      final targetMs = currentPosition.inMilliseconds - 42;
+      if (targetMs > 0) {
+        _player.seek(Duration(milliseconds: targetMs));
+      }
+    } catch (e) {
+      debugPrint('MediaKit: 逐帧后退失败: $e');
+    }
+  }
+
   bool get prefersPlatformVideoSurface => _prefersPlatformVideoSurface;
 
   Future<void> attachPlatformVideoSurface({

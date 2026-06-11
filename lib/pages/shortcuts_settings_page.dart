@@ -39,6 +39,9 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'next_episode': '下一集',
     'send_danmaku': '发送弹幕',
     'skip': '跳过',
+    'step_forward': '逐帧前进',
+    'step_backward': '逐帧后退',
+    'resize_to_video': '窗口适配视频',
   };
 
   // 动作描述
@@ -54,6 +57,9 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'next_episode': '播放下一集',
     'send_danmaku': '打开弹幕发送对话框',
     'skip': '快进指定时间（跳过）',
+    'step_forward': '暂停后前进一帧',
+    'step_backward': '暂停后后退一帧',
+    'resize_to_video': '将窗口大小调整为视频原始分辨率',
   };
 
   // 动作图标映射
@@ -69,6 +75,9 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
     'next_episode': Ionicons.play_skip_forward_outline,
     'send_danmaku': Ionicons.send_outline,
     'skip': Ionicons.play_skip_forward_outline,
+    'step_forward': Ionicons.chevron_forward_circle_outline,
+    'step_backward': Ionicons.chevron_back_circle_outline,
+    'resize_to_video': Ionicons.resize_outline,
   };
 
   // 修饰键文本映射
@@ -131,6 +140,9 @@ class _ShortcutsSettingsPageState extends State<ShortcutsSettingsPage> {
       'next_episode': 'Shift+→',
       'send_danmaku': 'C',
       'skip': 'S',
+      'step_forward': 'E',
+      'step_backward': 'Q',
+      'resize_to_video': 'R',
     };
 
     for (final entry in defaultShortcuts.entries) {

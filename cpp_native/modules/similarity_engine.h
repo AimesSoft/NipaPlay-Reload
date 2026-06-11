@@ -51,8 +51,6 @@ public:
         UnorderedContainer(short* ea): length(0), ed_a(ea) {}
 
         void push(T x) {
-            // 防御性断言：检测 scratch buffer 残留脏数据（cleanup 遗漏时触发）
-            assert(ed_a[x] == 0 && "scratch buffer dirty: cleanup() not called?");
             length++;
             if(ed_a[x] == 0) {
                 data.emplace_back(x, static_cast<sim_ushort>(1));

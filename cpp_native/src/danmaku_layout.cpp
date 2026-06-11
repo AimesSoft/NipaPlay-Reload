@@ -456,14 +456,6 @@ int32_t DanmakuLayoutEngine::frameRaw(
         outCount++;
     }
 
-#ifndef NDEBUG
-    // [C++] 唯一修饰符 debug 输出 — 每 120 帧输出一次（约 2 秒 @60fps）
-    if (dbgFrameCount % 120 == 0) {
-        std::printf("[C++] frameRaw: t=%.2f visible=%d window=[%d,%d) total=%d\n",
-                    current_time, outCount, left, right,
-                    static_cast<int32_t>(items_.size()));
-    }
-#endif
 
     return outCount;
 }

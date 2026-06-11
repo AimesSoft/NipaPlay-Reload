@@ -136,6 +136,9 @@ class HotkeyService extends ChangeNotifier {
       'next_episode': 'Shift+→',
       'send_danmaku': 'C', // 添加发送弹幕快捷键
       'skip': 'S', // 添加跳过快捷键
+      'step_forward': 'E', // 逐帧前进
+      'step_backward': 'Q', // 逐帧后退
+      'resize_to_video': 'R', // 窗口适配视频
     });
 
     if (savedShortcutsString != null) {
@@ -212,6 +215,15 @@ class HotkeyService extends ChangeNotifier {
 
     // 注册跳过热键
     await _registerHotkey('skip', '跳过', _handleSkip);
+
+    // 注册逐帧前进热键
+    await _registerHotkey('step_forward', '逐帧前进', _handleStepForward);
+
+    // 注册逐帧后退热键
+    await _registerHotkey('step_backward', '逐帧后退', _handleStepBackward);
+
+    // 注册窗口适配视频热键
+    await _registerHotkey('resize_to_video', '窗口适配视频', _handleResizeToVideo);
 
     // 注册ESC键退出全屏
     await _registerEscapeKey();
@@ -751,6 +763,27 @@ class HotkeyService extends ChangeNotifier {
     }
   }
 
+  void _handleStepForward() {
+    final videoState = _getVideoPlayerState();
+    if (videoState != null) {
+      videoState.stepForward();
+    }
+  }
+
+  void _handleStepBackward() {
+    final videoState = _getVideoPlayerState();
+    if (videoState != null) {
+      videoState.stepBackward();
+    }
+  }
+
+  void _handleResizeToVideo() {
+    final videoState = _getVideoPlayerState();
+    if (videoState != null) {
+      videoState.resizeWindowToVideoSize();
+    }
+  }
+
   // 注册快进热键，支持长按倍速
   Future<void> _registerForwardHotkeyWithLongPress() async {
     final keyString = _shortcuts['forward'];
@@ -804,9 +837,8 @@ class HotkeyService extends ChangeNotifier {
   }
 
   void _handleForwardKeyUp() {
-    if (_shouldBlockHotkeyInTextInput()) {
-      return;
-    }
+    // ✅ 修复：无论是否 block，倍速和按键状态必须先重置，
+    // 否则 keyUp 被 block 吞掉时会导致倍速卡住不恢复。
     _isForwardKeyPressed = false;
 
     // 取消长按计时器
@@ -815,10 +847,16 @@ class HotkeyService extends ChangeNotifier {
     if (_isSpeedBoostActive) {
       // 如果正在倍速播放，停止倍速
       _stopSpeedBoost();
-    } else {
-      // 如果没有触发倍速（短按），执行快进
-      _handleForward();
+      // 倍速已停止，不再执行快进
+      return;
     }
+
+    // block 检查仅影响"短按快进"逻辑（倍速已在上面的分支中处理）
+    if (_shouldBlockHotkeyInTextInput()) {
+      return;
+    }
+    // 如果没有触发倍速（短按），执行快进
+    _handleForward();
   }
 
   void _startSpeedBoost() {

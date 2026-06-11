@@ -584,31 +584,18 @@ std::string similarity_check_batch_json(
         auto items = parse_items_json(items_str);
         auto config = parse_config_json(config_str);
 
-#ifndef NDEBUG
-        // 诊断：输出解析后的 items 数量和配置
-        fprintf(stderr, "[SIM-CPP] parse_items_json: json_len=%zu items=%zu\n",
-                items_str.size(), items.size());
-        if (!items.empty()) {
-            fprintf(stderr, "[SIM-CPP] first_item: text='%s' mode=%d time=%.1f\n",
-                    items[0].text.substr(0, 30).c_str(), items[0].mode, items[0].time_seconds);
-        }
-        fprintf(stderr, "[SIM-CPP] config: max_dist=%d max_cosine=%d use_pinyin=%d cross_mode=%d time_window=%.1f\n",
-                config.max_dist, config.max_cosine, config.use_pinyin, config.cross_mode, config.time_window);
-#endif
-
         auto result = danmaku_similarity_check(engine, items, config);
-
-#ifndef NDEBUG
-        fprintf(stderr, "[SIM-CPP] result: pairs=%zu groups=%zu\n",
-                result.pairs.size(), result.groups.size());
-#endif
 
         return result_to_json(result);
     } catch (const std::exception& e) {
+#ifndef NDEBUG
         fprintf(stderr, "[SIM-CPP] EXCEPTION in similarity_check_batch_json: %s\n", e.what());
+#endif
         return "{}";
     } catch (...) {
+#ifndef NDEBUG
         fprintf(stderr, "[SIM-CPP] UNKNOWN EXCEPTION in similarity_check_batch_json\n");
+#endif
         return "{}";
     }
 }

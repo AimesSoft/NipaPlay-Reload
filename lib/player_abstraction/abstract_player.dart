@@ -62,4 +62,10 @@ abstract class AbstractPlayer {
 
   /// 设置播放速度
   void setPlaybackRate(double rate);
-} 
+
+  /// 逐帧前进（暂停后前进一帧）
+  void stepForward();
+
+  /// 逐帧后退（暂停后后退一帧）
+  void stepBackward();
+}

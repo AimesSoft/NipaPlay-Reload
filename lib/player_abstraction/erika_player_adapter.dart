@@ -463,6 +463,22 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     }
   }
 
+  @override
+  void stepForward() {
+    if (!_isSupported) return;
+    final frameDuration = 42; // ~24fps
+    final currentPos = position;
+    seek(position: currentPos + frameDuration);
+  }
+
+  @override
+  void stepBackward() {
+    if (!_isSupported) return;
+    final frameDuration = 42; // ~24fps
+    final currentPos = position;
+    seek(position: (currentPos - frameDuration).clamp(0, currentPos));
+  }
+
   Widget buildPlatformVideoSurface({
     String? debugLabel,
     ValueChanged<int?>? onPlatformViewIdChanged,
