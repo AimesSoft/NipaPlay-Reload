@@ -8,11 +8,15 @@ import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:crypto/crypto.dart';
 
 /// 备份数据类别枚举，支持按需选择导出/导入
 enum BackupCategory {
-  preferences, // 偏好设置（含软件设置和媒体库配置）
+  preferences, // 偏好设置（仅软件设置）
+  mediaLibraries, // 添加的媒体库（本地、在线、WebDAV、SMB、DDP远程、共享服务）
   watchHistory, // 观看历史记录
   episodeMatches, // 已匹配的所有剧集
   accounts, // 个人中心已绑定的账户
@@ -26,6 +30,7 @@ enum BackupCategory {
 ///   "timestamp": "2026-06-11T...",   // 备份创建时间
 ///   "appVersion": "1.4.9",           // 应用版本号
 ///   "preferences": { ... },          // 偏好设置（可选）
+///   "mediaLibraries": { ... },       // 媒体库配置（可选）
 ///   "watchHistory": [ ... ],         // 观看历史（可选）
 ///   "episodeMatches": [ ... ],       // 剧集匹配数据（可选）
 ///   "accounts": { ... },             // 账户绑定数据（可选）
@@ -55,6 +60,10 @@ class FullBackupService {
 
       if (categories.contains(BackupCategory.preferences)) {
         backupData['preferences'] = await _collectPreferences();
+      }
+
+      if (categories.contains(BackupCategory.mediaLibraries)) {
+        backupData['mediaLibraries'] = await _collectMediaLibraries();
       }
 
       if (categories.contains(BackupCategory.watchHistory)) {
@@ -108,6 +117,9 @@ class FullBackupService {
     if (categories.contains(BackupCategory.preferences)) {
       backupData['preferences'] = await _collectPreferences();
     }
+    if (categories.contains(BackupCategory.mediaLibraries)) {
+      backupData['mediaLibraries'] = await _collectMediaLibraries();
+    }
     if (categories.contains(BackupCategory.watchHistory)) {
       backupData['watchHistory'] = await _collectWatchHistory(includeThumbnails: true);
     }
@@ -123,26 +135,33 @@ class FullBackupService {
 
   // ---------- 偏好设置收集 ----------
 
-  /// 收集偏好设置数据
+  /// 收集偏好设置数据（仅软件设置，不含媒体库配置）
   ///
   /// 包含：
   /// - 软件设置（语言、弹幕、播放器、下载等）
-  /// - 本地媒体库路径
-  /// - 在线媒体库（Emby/Jellyfin）服务器配置和选中的媒体库
   Future<Map<String, dynamic>> _collectPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     final result = <String, dynamic>{};
 
-    // 1. 收集所有 SharedPreferences 中的设置项
+    // 收集所有 SharedPreferences 中的设置项（排除媒体库和账户相关）
     final allKeys = prefs.getKeys();
     final settingsKeys = allKeys.where((key) =>
         !key.startsWith('dandanplay_') && // 账户相关单独处理
-        !key.startsWith('server_profiles') && // 服务器配置单独处理
+        !key.startsWith('server_profiles') && // 服务器配置属于媒体库
         key != 'video_positions' && // 播放位置属于观看历史
         key != 'watch_history_web_store' && // Web观看历史单独处理
         !key.startsWith('nipaplay_subfolder_hash_cache') && // 扫描缓存不需要备份
-        !key.endsWith('_library_sort_settings') && // 排序设置跟随服务器配置
-        key != 'custom_storage_path'); // 存储路径是设备相关的
+        !key.endsWith('_library_sort_settings') && // 排序设置属于媒体库
+        key != 'custom_storage_path' && // 存储路径是设备相关的
+        key != 'nipaplay_scanned_folders' && // 本地媒体库属于媒体库
+        !key.startsWith('emby_selected_library_ids') && // 选中媒体库属于媒体库
+        !key.startsWith('jellyfin_selected_library_ids') && // 选中媒体库属于媒体库
+        key != 'webdav_connections' && // WebDAV连接属于媒体库
+        key != 'smb_connections' && // SMB连接属于媒体库
+        !key.startsWith('web_server_') && // Web服务器配置属于媒体库
+        key != 'bangumi_access_token' && // Bangumi账户属于账户
+        key != 'bangumi_user_info' && // Bangumi账户属于账户
+        key != 'bangumi_logged_in'); // Bangumi账户属于账户
 
     final settingsMap = <String, dynamic>{};
     for (final key in settingsKeys) {
@@ -153,28 +172,46 @@ class FullBackupService {
     }
     result['settings'] = settingsMap;
 
-    // 2. 收集本地媒体库路径
+    return result;
+  }
+
+  // ---------- 媒体库配置收集 ----------
+
+  /// 收集媒体库配置数据
+  ///
+  /// 包含：
+  /// - 本地媒体库路径
+  /// - 在线媒体库（Emby/Jellyfin）服务器配置和选中的媒体库
+  /// - WebDAV 连接配置
+  /// - SMB 连接配置
+  /// - 弹弹play远程服务配置
+  /// - Nipaplay 媒体库共享配置
+  Future<Map<String, dynamic>> _collectMediaLibraries() async {
+    final prefs = await SharedPreferences.getInstance();
+    final result = <String, dynamic>{};
+
+    // 1. 收集本地媒体库路径
     final scannedFolders = prefs.getStringList('nipaplay_scanned_folders');
     result['localMediaLibraries'] = scannedFolders ?? [];
 
-    // 3. 收集在线媒体库服务器配置
+    // 2. 收集在线媒体库服务器配置
     final serverProfiles = await _collectServerProfiles();
     result['serverProfiles'] = serverProfiles;
 
-    // 4. 收集 Emby 选中的媒体库
+    // 3. 收集 Emby 选中的媒体库
     final embySelectedLibs = prefs.getStringList('emby_selected_library_ids');
     if (embySelectedLibs != null) {
       result['embySelectedLibraryIds'] = embySelectedLibs;
     }
 
-    // 5. 收集 Jellyfin 选中的媒体库
+    // 4. 收集 Jellyfin 选中的媒体库
     final jellyfinSelectedLibs =
         prefs.getStringList('jellyfin_selected_library_ids');
     if (jellyfinSelectedLibs != null) {
       result['jellyfinSelectedLibraryIds'] = jellyfinSelectedLibs;
     }
 
-    // 6. 收集排序设置
+    // 5. 收集排序设置
     final embySortSettings = prefs.getString('emby_library_sort_settings');
     if (embySortSettings != null) {
       result['embyLibrarySortSettings'] = embySortSettings;
@@ -184,6 +221,62 @@ class FullBackupService {
     if (jellyfinSortSettings != null) {
       result['jellyfinLibrarySortSettings'] = jellyfinSortSettings;
     }
+
+    // 6. 收集 WebDAV 连接配置
+    try {
+      final webdavService = WebDAVService.instance;
+      await webdavService.initialize();
+      final webdavConnections = webdavService.connections;
+      if (webdavConnections.isNotEmpty) {
+        result['webdavConnections'] =
+            webdavConnections.map((c) => c.toJson()).toList();
+      }
+    } catch (e) {
+      debugPrint('收集WebDAV连接配置失败: $e');
+    }
+
+    // 7. 收集 SMB 连接配置
+    try {
+      final smbService = SMBService.instance;
+      await smbService.initialize();
+      final smbConnections = smbService.connections;
+      if (smbConnections.isNotEmpty) {
+        result['smbConnections'] =
+            smbConnections.map((c) => c.toJson()).toList();
+      }
+    } catch (e) {
+      debugPrint('收集SMB连接配置失败: $e');
+    }
+
+    // 8. 收集弹弹play远程服务配置
+    try {
+      final remoteService = DandanplayRemoteService.instance;
+      await remoteService.loadSavedSettings(backgroundRefresh: true);
+      if (remoteService.serverUrl != null &&
+          remoteService.serverUrl!.isNotEmpty) {
+        result['dandanplayRemote'] = {
+          'baseUrl': prefs.getString('dandanplay_remote_base_url'),
+          'apiToken': prefs.getString('dandanplay_remote_api_token'),
+          'tokenRequired':
+              prefs.getBool('dandanplay_remote_token_required') ?? false,
+        };
+      }
+    } catch (e) {
+      debugPrint('收集弹弹play远程服务配置失败: $e');
+    }
+
+    // 9. 收集 Nipaplay 媒体库共享（Web服务器）配置
+    final webServerAutoStart = prefs.getBool('web_server_auto_start') ??
+        prefs.getBool('web_server_enabled') ??
+        false;
+    final webServerPort = prefs.getInt('web_server_port');
+    final webServerIpv6Enabled =
+        prefs.getBool('web_server_ipv6_enabled') ?? false;
+    result['nipaplayShare'] = {
+      'autoStart': webServerAutoStart,
+      'port': webServerPort ?? 1180,
+      'ipv6Enabled': webServerIpv6Enabled,
+    };
 
     return result;
   }
@@ -393,6 +486,12 @@ class FullBackupService {
             await _restorePreferences(backupData['preferences'] as Map<String, dynamic>);
       }
 
+      if (categories.contains(BackupCategory.mediaLibraries) &&
+          backupData.containsKey('mediaLibraries')) {
+        result.mediaLibrariesResult =
+            await _restoreMediaLibraries(backupData['mediaLibraries'] as Map<String, dynamic>);
+      }
+
       if (categories.contains(BackupCategory.watchHistory) &&
           backupData.containsKey('watchHistory')) {
         result.watchHistoryResult =
@@ -441,6 +540,11 @@ class FullBackupService {
         result.preferencesResult =
             await _restorePreferences(backupData['preferences'] as Map<String, dynamic>);
       }
+      if (categories.contains(BackupCategory.mediaLibraries) &&
+          backupData.containsKey('mediaLibraries')) {
+        result.mediaLibrariesResult =
+            await _restoreMediaLibraries(backupData['mediaLibraries'] as Map<String, dynamic>);
+      }
       if (categories.contains(BackupCategory.watchHistory) &&
           backupData.containsKey('watchHistory')) {
         result.watchHistoryResult =
@@ -476,7 +580,7 @@ class FullBackupService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // 1. 恢复软件设置
+      // 恢复软件设置
       final settings = preferencesData['settings'] as Map<String, dynamic>?;
       if (settings != null) {
         int restoredCount = 0;
@@ -505,8 +609,27 @@ class FullBackupService {
         debugPrint('恢复了 $restoredCount 项偏好设置');
       }
 
-      // 2. 恢复本地媒体库路径
-      final localLibs = preferencesData['localMediaLibraries'] as List<dynamic>?;
+      result.success = true;
+    } catch (e) {
+      debugPrint('恢复偏好设置失败: $e');
+      result.success = false;
+      result.errorMessage = e.toString();
+    }
+
+    return result;
+  }
+
+  // ---------- 媒体库配置恢复 ----------
+
+  Future<CategoryRestoreResult> _restoreMediaLibraries(
+      Map<String, dynamic> mediaLibrariesData) async {
+    final result = CategoryRestoreResult();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // 1. 恢复本地媒体库路径
+      final localLibs = mediaLibrariesData['localMediaLibraries'] as List<dynamic>?;
       if (localLibs != null) {
         final folderList = localLibs.cast<String>().toList();
         await prefs.setStringList('nipaplay_scanned_folders', folderList);
@@ -514,9 +637,9 @@ class FullBackupService {
         debugPrint('恢复了 ${folderList.length} 个本地媒体库路径');
       }
 
-      // 3. 恢复在线媒体库服务器配置
+      // 2. 恢复在线媒体库服务器配置
       final serverProfilesData =
-          preferencesData['serverProfiles'] as List<dynamic>?;
+          mediaLibrariesData['serverProfiles'] as List<dynamic>?;
       if (serverProfilesData != null) {
         final profiles = serverProfilesData
             .map((p) => ServerProfile.fromJson(p as Map<String, dynamic>))
@@ -525,15 +648,6 @@ class FullBackupService {
         // 合并而非替换：保留本地已有的、添加备份中新增的
         await MultiAddressServerService.instance.loadProfiles();
         final existingProfiles = MultiAddressServerService.instance.profiles;
-        final existingIds = existingProfiles.map((p) => p.id).toSet();
-
-        for (final profile in profiles) {
-          if (!existingIds.contains(profile.id)) {
-            // 新增配置
-            MultiAddressServerService.instance.profiles;
-            // 直接通过保存方式添加
-          }
-        }
 
         // 保存合并后的配置
         final mergedProfiles = <ServerProfile>[...existingProfiles];
@@ -548,8 +662,6 @@ class FullBackupService {
           }
         }
 
-        // 使用 MultiAddressServerService 保存
-        // 直接保存合并后的列表
         final prefsInstance = await SharedPreferences.getInstance();
         final profilesJson =
             json.encode(mergedProfiles.map((p) => p.toJson()).toList());
@@ -559,38 +671,147 @@ class FullBackupService {
         debugPrint('恢复了 ${profiles.length} 个服务器配置');
       }
 
-      // 4. 恢复选中的媒体库
+      // 3. 恢复选中的媒体库
       final embySelectedLibs =
-          preferencesData['embySelectedLibraryIds'] as List<dynamic>?;
+          mediaLibrariesData['embySelectedLibraryIds'] as List<dynamic>?;
       if (embySelectedLibs != null) {
         await prefs.setStringList(
             'emby_selected_library_ids', embySelectedLibs.cast<String>().toList());
       }
 
       final jellyfinSelectedLibs =
-          preferencesData['jellyfinSelectedLibraryIds'] as List<dynamic>?;
+          mediaLibrariesData['jellyfinSelectedLibraryIds'] as List<dynamic>?;
       if (jellyfinSelectedLibs != null) {
         await prefs.setStringList('jellyfin_selected_library_ids',
             jellyfinSelectedLibs.cast<String>().toList());
       }
 
-      // 5. 恢复排序设置
+      // 4. 恢复排序设置
       final embySortSettings =
-          preferencesData['embyLibrarySortSettings'] as String?;
+          mediaLibrariesData['embyLibrarySortSettings'] as String?;
       if (embySortSettings != null) {
         await prefs.setString('emby_library_sort_settings', embySortSettings);
       }
 
       final jellyfinSortSettings =
-          preferencesData['jellyfinLibrarySortSettings'] as String?;
+          mediaLibrariesData['jellyfinLibrarySortSettings'] as String?;
       if (jellyfinSortSettings != null) {
         await prefs.setString(
             'jellyfin_library_sort_settings', jellyfinSortSettings);
       }
 
+      // 5. 恢复 WebDAV 连接配置（合并：按 name 匹配，已存在则更新，不存在则新增）
+      final webdavConnectionsData =
+          mediaLibrariesData['webdavConnections'] as List<dynamic>?;
+      if (webdavConnectionsData != null && webdavConnectionsData.isNotEmpty) {
+        try {
+          final webdavService = WebDAVService.instance;
+          await webdavService.initialize();
+          final existingConnections = webdavService.connections;
+          final existingNames =
+              existingConnections.map((c) => c.name).toSet();
+
+          for (final connData in webdavConnectionsData) {
+            try {
+              final connection =
+                  WebDAVConnection.fromJson(connData as Map<String, dynamic>);
+              if (existingNames.contains(connection.name)) {
+                await webdavService
+                    .removeConnection(connection.name);
+              }
+              await webdavService.addConnection(connection);
+            } catch (e) {
+              debugPrint('恢复单条WebDAV连接失败: $e');
+            }
+          }
+          debugPrint('恢复了 ${webdavConnectionsData.length} 个WebDAV连接');
+        } catch (e) {
+          debugPrint('恢复WebDAV连接配置失败: $e');
+        }
+      }
+
+      // 6. 恢复 SMB 连接配置（合并：按 name 匹配）
+      final smbConnectionsData =
+          mediaLibrariesData['smbConnections'] as List<dynamic>?;
+      if (smbConnectionsData != null && smbConnectionsData.isNotEmpty) {
+        try {
+          final smbService = SMBService.instance;
+          await smbService.initialize();
+          final existingConnections = smbService.connections;
+          final existingNames =
+              existingConnections.map((c) => c.name).toSet();
+
+          for (final connData in smbConnectionsData) {
+            try {
+              final connection =
+                  SMBConnection.fromJson(connData as Map<String, dynamic>);
+              if (existingNames.contains(connection.name)) {
+                await smbService
+                    .updateConnection(connection.name, connection);
+              } else {
+                await smbService.addConnection(connection);
+              }
+            } catch (e) {
+              debugPrint('恢复单条SMB连接失败: $e');
+            }
+          }
+          debugPrint('恢复了 ${smbConnectionsData.length} 个SMB连接');
+        } catch (e) {
+          debugPrint('恢复SMB连接配置失败: $e');
+        }
+      }
+
+      // 7. 恢复弹弹play远程服务配置
+      final dandanplayRemoteData =
+          mediaLibrariesData['dandanplayRemote'] as Map<String, dynamic>?;
+      if (dandanplayRemoteData != null) {
+        try {
+          final baseUrl = dandanplayRemoteData['baseUrl'] as String?;
+          if (baseUrl != null && baseUrl.isNotEmpty) {
+            final apiToken = dandanplayRemoteData['apiToken'] as String?;
+            // 使用 connect 方法恢复连接（会验证并持久化）
+            await DandanplayRemoteService.instance
+                .connect(baseUrl, token: apiToken);
+            debugPrint('恢复了弹弹play远程服务配置');
+          }
+        } catch (e) {
+          // 如果连接验证失败，仍然保存配置到 SharedPreferences
+          debugPrint('弹弹play远程服务连接验证失败，仍保存配置: $e');
+          try {
+            final baseUrl = dandanplayRemoteData['baseUrl'] as String?;
+            if (baseUrl != null) {
+              await prefs.setString('dandanplay_remote_base_url', baseUrl);
+            }
+            final apiToken = dandanplayRemoteData['apiToken'] as String?;
+            if (apiToken != null) {
+              await prefs.setString('dandanplay_remote_api_token', apiToken);
+            }
+            final tokenRequired =
+                dandanplayRemoteData['tokenRequired'] as bool? ?? false;
+            await prefs.setBool(
+                'dandanplay_remote_token_required', tokenRequired);
+          } catch (_) {}
+        }
+      }
+
+      // 8. 恢复 Nipaplay 媒体库共享（Web服务器）配置
+      final nipaplayShareData =
+          mediaLibrariesData['nipaplayShare'] as Map<String, dynamic>?;
+      if (nipaplayShareData != null) {
+        final autoStart = nipaplayShareData['autoStart'] as bool? ?? false;
+        final port = nipaplayShareData['port'] as int? ?? 1180;
+        final ipv6Enabled =
+            nipaplayShareData['ipv6Enabled'] as bool? ?? false;
+
+        await prefs.setBool('web_server_auto_start', autoStart);
+        await prefs.setInt('web_server_port', port);
+        await prefs.setBool('web_server_ipv6_enabled', ipv6Enabled);
+        debugPrint('恢复了Nipaplay媒体库共享配置');
+      }
+
       result.success = true;
     } catch (e) {
-      debugPrint('恢复偏好设置失败: $e');
+      debugPrint('恢复媒体库配置失败: $e');
       result.success = false;
       result.errorMessage = e.toString();
     }
@@ -972,6 +1193,7 @@ class FullBackupService {
     }
     final parts = <String>[];
     if (categories.contains(BackupCategory.preferences)) parts.add('pref');
+    if (categories.contains(BackupCategory.mediaLibraries)) parts.add('lib');
     if (categories.contains(BackupCategory.watchHistory)) parts.add('hist');
     if (categories.contains(BackupCategory.episodeMatches)) parts.add('match');
     if (categories.contains(BackupCategory.accounts)) parts.add('acct');
@@ -992,6 +1214,7 @@ class FullBackupService {
         timestamp: backupData['timestamp'] as String? ?? '',
         appVersion: backupData['appVersion'] as String? ?? '',
         hasPreferences: backupData.containsKey('preferences'),
+        hasMediaLibraries: backupData.containsKey('mediaLibraries'),
         hasWatchHistory: backupData.containsKey('watchHistory'),
         hasEpisodeMatches: backupData.containsKey('episodeMatches'),
         hasAccounts: backupData.containsKey('accounts'),
@@ -1002,13 +1225,25 @@ class FullBackupService {
                 ?.length ??
             0,
         serverProfileCount:
-            (backupData['preferences']?['serverProfiles'] as List<dynamic>?)
+            (backupData['mediaLibraries']?['serverProfiles'] as List<dynamic>?)
                     ?.length ??
                 0,
         localLibraryCount:
-            (backupData['preferences']?['localMediaLibraries'] as List<dynamic>?)
+            (backupData['mediaLibraries']?['localMediaLibraries'] as List<dynamic>?)
                     ?.length ??
                 0,
+        webdavConnectionCount:
+            (backupData['mediaLibraries']?['webdavConnections'] as List<dynamic>?)
+                    ?.length ??
+                0,
+        smbConnectionCount:
+            (backupData['mediaLibraries']?['smbConnections'] as List<dynamic>?)
+                    ?.length ??
+                0,
+        hasDandanplayRemote:
+            backupData['mediaLibraries']?['dandanplayRemote'] != null,
+        hasNipaplayShare:
+            backupData['mediaLibraries']?['nipaplayShare'] != null,
       );
     } catch (e) {
       debugPrint('预览备份文件失败: $e');
@@ -1023,6 +1258,7 @@ class BackupRestoreResult {
   String? errorMessage;
 
   CategoryRestoreResult? preferencesResult;
+  CategoryRestoreResult? mediaLibrariesResult;
   CategoryRestoreResult? watchHistoryResult;
   CategoryRestoreResult? episodeMatchesResult;
   CategoryRestoreResult? accountsResult;
@@ -1065,6 +1301,7 @@ class BackupPreviewInfo {
   final String timestamp;
   final String appVersion;
   final bool hasPreferences;
+  final bool hasMediaLibraries;
   final bool hasWatchHistory;
   final bool hasEpisodeMatches;
   final bool hasAccounts;
@@ -1072,12 +1309,17 @@ class BackupPreviewInfo {
   final int episodeMatchCount;
   final int serverProfileCount;
   final int localLibraryCount;
+  final int webdavConnectionCount;
+  final int smbConnectionCount;
+  final bool hasDandanplayRemote;
+  final bool hasNipaplayShare;
 
   BackupPreviewInfo({
     required this.version,
     required this.timestamp,
     required this.appVersion,
     required this.hasPreferences,
+    required this.hasMediaLibraries,
     required this.hasWatchHistory,
     required this.hasEpisodeMatches,
     required this.hasAccounts,
@@ -1085,5 +1327,9 @@ class BackupPreviewInfo {
     required this.episodeMatchCount,
     required this.serverProfileCount,
     required this.localLibraryCount,
+    this.webdavConnectionCount = 0,
+    this.smbConnectionCount = 0,
+    this.hasDandanplayRemote = false,
+    this.hasNipaplayShare = false,
   });
 }

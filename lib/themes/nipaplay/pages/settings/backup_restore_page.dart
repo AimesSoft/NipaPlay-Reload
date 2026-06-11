@@ -9,6 +9,9 @@ import 'package:nipaplay/services/backup_service.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
 import 'package:nipaplay/services/auto_sync_service.dart';
 import 'package:nipaplay/services/multi_address_server_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/smb_service.dart';
+import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
@@ -129,27 +132,56 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
     // 先收集计数信息
     final historyItems = await WatchHistoryManager.getAllHistory();
     final watchHistoryCount = historyItems.length;
-    final episodeMatchCount =
-        historyItems.where((i) => i.animeId != null && i.episodeId != null).length;
+    final episodeMatchCount = historyItems
+        .where((i) => i.animeId != null && i.episodeId != null)
+        .length;
+
+    // 获取媒体库计数
+    final prefs = await SharedPreferences.getInstance();
+    int localLibraryCount =
+        prefs.getStringList('nipaplay_scanned_folders')?.length ?? 0;
+    int serverProfileCount = 0;
+    try {
+      await MultiAddressServerService.instance.loadProfiles();
+      serverProfileCount = MultiAddressServerService.instance.profiles.length;
+    } catch (_) {}
+    int webdavCount = 0;
+    try {
+      await WebDAVService.instance.initialize();
+      webdavCount = WebDAVService.instance.connections.length;
+    } catch (_) {}
+    int smbCount = 0;
+    try {
+      await SMBService.instance.initialize();
+      smbCount = SMBService.instance.connections.length;
+    } catch (_) {}
+    bool hasDandanplayRemote = false;
+    try {
+      await DandanplayRemoteService.instance
+          .loadSavedSettings(backgroundRefresh: true);
+      hasDandanplayRemote =
+          DandanplayRemoteService.instance.serverUrl != null &&
+              DandanplayRemoteService.instance.serverUrl!.isNotEmpty;
+    } catch (_) {}
 
     // 获取账户计数
-    final prefs = await SharedPreferences.getInstance();
     int accountCount = 0;
     final dandanplayLoggedIn = prefs.getBool('dandanplay_logged_in') ?? false;
     if (dandanplayLoggedIn) accountCount++;
     final bangumiLoggedIn = prefs.getBool('bangumi_logged_in') ?? false;
     if (bangumiLoggedIn) accountCount++;
-    // 服务器账户数
-    try {
-      await MultiAddressServerService.instance.loadProfiles();
-      accountCount += MultiAddressServerService.instance.profiles.length;
-    } catch (_) {}
+    accountCount += serverProfileCount;
 
     if (!mounted) return;
 
     final result = await NipaplayWindow.show<Set<BackupCategory>>(
       context: context,
       child: _BackupSelectionDialog(
+        localLibraryCount: localLibraryCount,
+        serverProfileCount: serverProfileCount,
+        webdavCount: webdavCount,
+        smbCount: smbCount,
+        hasDandanplayRemote: hasDandanplayRemote,
         watchHistoryCount: watchHistoryCount,
         episodeMatchCount: episodeMatchCount,
         accountCount: accountCount,
@@ -242,8 +274,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       actions: [
         HoverScaleTextButton(
           onPressed: () => Navigator.pop(context, false),
-          child:
-              const Text('取消', style: TextStyle(color: Colors.white70)),
+          child: const Text('取消', style: TextStyle(color: Colors.white70)),
         ),
         HoverScaleTextButton(
           onPressed: () => Navigator.pop(context, true),
@@ -277,6 +308,10 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         if (restoreResult.preferencesResult != null) {
           final r = restoreResult.preferencesResult!;
           parts.add('设置${r.success ? "✓" : "✗"}');
+        }
+        if (restoreResult.mediaLibrariesResult != null) {
+          final r = restoreResult.mediaLibrariesResult!;
+          parts.add('媒体库${r.success ? "✓" : "✗"}');
         }
         if (restoreResult.watchHistoryResult != null) {
           final r = restoreResult.watchHistoryResult!;
@@ -359,13 +394,11 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       final confirmed = await BlurDialog.show<bool>(
         context: context,
         title: '确认恢复',
-        content:
-            '恢复操作将会合并备份文件中的观看进度（包括截图）到当前记录中，且只会恢复本地存在的媒体文件的进度。是否继续？',
+        content: '恢复操作将会合并备份文件中的观看进度（包括截图）到当前记录中，且只会恢复本地存在的媒体文件的进度。是否继续？',
         actions: [
           HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, false),
-            child:
-                const Text('取消', style: TextStyle(color: Colors.white70)),
+            child: const Text('取消', style: TextStyle(color: Colors.white70)),
           ),
           HoverScaleTextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -423,7 +456,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               const SizedBox(height: 16),
               SettingsItem.button(
                 title: '全量备份',
-                subtitle: '选择性导出设置、观看历史、剧集匹配和账户信息',
+                subtitle: '选择性导出设置、媒体库、观看历史、剧集匹配和账户信息',
                 enabled: !_isProcessing,
                 onTap: _showFullBackupDialog,
                 icon: Icons.cloud_upload,
@@ -454,9 +487,8 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               const SizedBox(height: 16),
               SettingsItem.toggle(
                 title: '启用自动同步',
-                subtitle: _autoSyncEnabled
-                    ? '观看进度会自动同步到本地路径或云端'
-                    : '启用后可实现多设备同步',
+                subtitle:
+                    _autoSyncEnabled ? '观看进度会自动同步到本地路径或云端' : '启用后可实现多设备同步',
                 enabled: !_isProcessing,
                 value: _autoSyncEnabled,
                 onChanged: _toggleAutoSync,
@@ -529,7 +561,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
               ),
               const SizedBox(height: 16),
               Text(
-                '• 全量备份：可选择导出偏好设置、观看历史、剧集匹配和账户信息',
+                '• 全量备份：可选择导出偏好设置、媒体库、观看历史、剧集匹配和账户信息',
                 style: TextStyle(
                     fontSize: 14,
                     color: colorScheme.onSurface.withOpacity(0.7)),
@@ -598,11 +630,21 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
 // ==================== 备份选择弹窗 ====================
 
 class _BackupSelectionDialog extends StatefulWidget {
+  final int localLibraryCount;
+  final int serverProfileCount;
+  final int webdavCount;
+  final int smbCount;
+  final bool hasDandanplayRemote;
   final int watchHistoryCount;
   final int episodeMatchCount;
   final int accountCount;
 
   const _BackupSelectionDialog({
+    required this.localLibraryCount,
+    required this.serverProfileCount,
+    required this.webdavCount,
+    required this.smbCount,
+    required this.hasDandanplayRemote,
     required this.watchHistoryCount,
     required this.episodeMatchCount,
     required this.accountCount,
@@ -620,6 +662,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
     super.initState();
     _selections = {
       BackupCategory.preferences: true,
+      BackupCategory.mediaLibraries: true,
       BackupCategory.watchHistory: true,
       BackupCategory.episodeMatches: true,
       BackupCategory.accounts: true,
@@ -679,9 +722,20 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
             // 偏好设置
             _buildCheckboxTile(
               title: '偏好设置',
-              subtitle: '软件设置、本地和在线媒体库配置',
+              subtitle: '软件设置（语言、弹幕、播放器等）',
               value: _selections[BackupCategory.preferences]!,
               onChanged: (v) => _toggle(BackupCategory.preferences, v),
+              accentColor: accentColor,
+              isDark: isDark,
+              colorScheme: colorScheme,
+            ),
+            const SizedBox(height: 4),
+            // 媒体库
+            _buildCheckboxTile(
+              title: '添加的媒体库',
+              subtitle: _buildMediaLibrariesSubtitle(),
+              value: _selections[BackupCategory.mediaLibraries]!,
+              onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
               accentColor: accentColor,
               isDark: isDark,
               colorScheme: colorScheme,
@@ -726,8 +780,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
               children: [
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text('取消',
-                      style: TextStyle(color: Colors.white70)),
+                  child: Text('取消', style: TextStyle(color: Colors.white70)),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -740,8 +793,7 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                           Navigator.of(context).pop(selected);
                         }
                       : null,
-                  child: Text('确定',
-                      style: TextStyle(color: Colors.white)),
+                  child: Text('确定', style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -810,6 +862,27 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
       ),
     );
   }
+
+  String _buildMediaLibrariesSubtitle() {
+    final parts = <String>[];
+    if (widget.localLibraryCount > 0) {
+      parts.add('${widget.localLibraryCount} 本地库');
+    }
+    if (widget.serverProfileCount > 0) {
+      parts.add('${widget.serverProfileCount} 服务器');
+    }
+    if (widget.webdavCount > 0) {
+      parts.add('${widget.webdavCount} WebDAV');
+    }
+    if (widget.smbCount > 0) {
+      parts.add('${widget.smbCount} SMB');
+    }
+    if (widget.hasDandanplayRemote) {
+      parts.add('DDP远程');
+    }
+    parts.add('共享服务');
+    return parts.join(', ');
+  }
 }
 
 // ==================== 恢复选择弹窗 ====================
@@ -832,6 +905,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
     super.initState();
     _selections = {
       BackupCategory.preferences: widget.preview.hasPreferences,
+      BackupCategory.mediaLibraries: widget.preview.hasMediaLibraries,
       BackupCategory.watchHistory: widget.preview.hasWatchHistory,
       BackupCategory.episodeMatches: widget.preview.hasEpisodeMatches,
       BackupCategory.accounts: widget.preview.hasAccounts,
@@ -897,8 +971,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
               child: Row(
                 children: [
                   Icon(Icons.info_outline,
-                      size: 18,
-                      color: colorScheme.onSurface.withOpacity(0.6)),
+                      size: 18, color: colorScheme.onSurface.withOpacity(0.6)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -927,23 +1000,31 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
             if (preview.hasPreferences)
               _buildCheckboxTile(
                 title: '偏好设置',
-                subtitle:
-                    '${preview.localLibraryCount} 个本地媒体库, ${preview.serverProfileCount} 个服务器',
+                subtitle: '软件设置（语言、弹幕、播放器等）',
                 value: _selections[BackupCategory.preferences]!,
-                onChanged: (v) =>
-                    _toggle(BackupCategory.preferences, v),
+                onChanged: (v) => _toggle(BackupCategory.preferences, v),
                 accentColor: accentColor,
                 colorScheme: colorScheme,
               ),
             if (preview.hasPreferences) const SizedBox(height: 4),
+            // 媒体库
+            if (preview.hasMediaLibraries)
+              _buildCheckboxTile(
+                title: '添加的媒体库',
+                subtitle: _buildMediaLibrariesSubtitle(preview),
+                value: _selections[BackupCategory.mediaLibraries]!,
+                onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
+                accentColor: accentColor,
+                colorScheme: colorScheme,
+              ),
+            if (preview.hasMediaLibraries) const SizedBox(height: 4),
             // 观看历史
             if (preview.hasWatchHistory)
               _buildCheckboxTile(
                 title: '观看历史',
                 subtitle: '${preview.watchHistoryCount} 条记录',
                 value: _selections[BackupCategory.watchHistory]!,
-                onChanged: (v) =>
-                    _toggle(BackupCategory.watchHistory, v),
+                onChanged: (v) => _toggle(BackupCategory.watchHistory, v),
                 accentColor: accentColor,
                 colorScheme: colorScheme,
               ),
@@ -954,8 +1035,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                 title: '剧集匹配',
                 subtitle: '${preview.episodeMatchCount} 条匹配',
                 value: _selections[BackupCategory.episodeMatches]!,
-                onChanged: (v) =>
-                    _toggle(BackupCategory.episodeMatches, v),
+                onChanged: (v) => _toggle(BackupCategory.episodeMatches, v),
                 accentColor: accentColor,
                 colorScheme: colorScheme,
               ),
@@ -966,8 +1046,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                 title: '账户绑定',
                 subtitle: '已绑定的账户信息',
                 value: _selections[BackupCategory.accounts]!,
-                onChanged: (v) =>
-                    _toggle(BackupCategory.accounts, v),
+                onChanged: (v) => _toggle(BackupCategory.accounts, v),
                 accentColor: accentColor,
                 colorScheme: colorScheme,
               ),
@@ -978,8 +1057,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
               children: [
                 HoverScaleTextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text('取消',
-                      style: TextStyle(color: Colors.white70)),
+                  child: Text('取消', style: TextStyle(color: Colors.white70)),
                 ),
                 const SizedBox(width: 16),
                 HoverScaleTextButton(
@@ -992,8 +1070,7 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                           Navigator.of(context).pop(selected);
                         }
                       : null,
-                  child: Text('确定',
-                      style: TextStyle(color: Colors.white)),
+                  child: Text('确定', style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -1060,5 +1137,29 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
         ),
       ),
     );
+  }
+
+  String _buildMediaLibrariesSubtitle(BackupPreviewInfo preview) {
+    final parts = <String>[];
+    if (preview.localLibraryCount > 0) {
+      parts.add('${preview.localLibraryCount} 本地库');
+    }
+    if (preview.serverProfileCount > 0) {
+      parts.add('${preview.serverProfileCount} 服务器');
+    }
+    if (preview.webdavConnectionCount > 0) {
+      parts.add('${preview.webdavConnectionCount} WebDAV');
+    }
+    if (preview.smbConnectionCount > 0) {
+      parts.add('${preview.smbConnectionCount} SMB');
+    }
+    if (preview.hasDandanplayRemote) {
+      parts.add('DDP远程');
+    }
+    if (preview.hasNipaplayShare) {
+      parts.add('共享服务');
+    }
+    if (parts.isEmpty) parts.add('无连接');
+    return parts.join(', ');
   }
 }
