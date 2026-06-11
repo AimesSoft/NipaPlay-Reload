@@ -326,7 +326,7 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
           parts.add('账户${r.success ? "✓" : "✗"}');
         }
 
-        _showMessage('恢复完成: ${parts.join(" ")}');
+        _showMessage('恢复完成: ${parts.join(" ")}，部分数据需要重启应用生效');
       } else {
         _showMessage('恢复失败: ${restoreResult.errorMessage ?? "未知错误"}',
             isError: true);
@@ -742,7 +742,8 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                       title: '添加的媒体库',
                       subtitle: _buildMediaLibrariesSubtitle(),
                       value: _selections[BackupCategory.mediaLibraries]!,
-                      onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
+                      onChanged: (v) =>
+                          _toggle(BackupCategory.mediaLibraries, v),
                       accentColor: accentColor,
                       isDark: isDark,
                       colorScheme: colorScheme,
@@ -764,7 +765,8 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
                       title: '剧集匹配',
                       subtitle: '${widget.episodeMatchCount} 条匹配',
                       value: _selections[BackupCategory.episodeMatches]!,
-                      onChanged: (v) => _toggle(BackupCategory.episodeMatches, v),
+                      onChanged: (v) =>
+                          _toggle(BackupCategory.episodeMatches, v),
                       accentColor: accentColor,
                       isDark: isDark,
                       colorScheme: colorScheme,
@@ -1020,7 +1022,8 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                         title: '偏好设置',
                         subtitle: '软件设置（语言、弹幕、播放器等）',
                         value: _selections[BackupCategory.preferences]!,
-                        onChanged: (v) => _toggle(BackupCategory.preferences, v),
+                        onChanged: (v) =>
+                            _toggle(BackupCategory.preferences, v),
                         accentColor: accentColor,
                         colorScheme: colorScheme,
                       ),
@@ -1031,7 +1034,8 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                         title: '添加的媒体库',
                         subtitle: _buildMediaLibrariesSubtitle(preview),
                         value: _selections[BackupCategory.mediaLibraries]!,
-                        onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
+                        onChanged: (v) =>
+                            _toggle(BackupCategory.mediaLibraries, v),
                         accentColor: accentColor,
                         colorScheme: colorScheme,
                       ),
@@ -1042,7 +1046,8 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                         title: '观看历史',
                         subtitle: '${preview.watchHistoryCount} 条记录',
                         value: _selections[BackupCategory.watchHistory]!,
-                        onChanged: (v) => _toggle(BackupCategory.watchHistory, v),
+                        onChanged: (v) =>
+                            _toggle(BackupCategory.watchHistory, v),
                         accentColor: accentColor,
                         colorScheme: colorScheme,
                       ),
@@ -1053,7 +1058,8 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
                         title: '剧集匹配',
                         subtitle: '${preview.episodeMatchCount} 条匹配',
                         value: _selections[BackupCategory.episodeMatches]!,
-                        onChanged: (v) => _toggle(BackupCategory.episodeMatches, v),
+                        onChanged: (v) =>
+                            _toggle(BackupCategory.episodeMatches, v),
                         accentColor: accentColor,
                         colorScheme: colorScheme,
                       ),
