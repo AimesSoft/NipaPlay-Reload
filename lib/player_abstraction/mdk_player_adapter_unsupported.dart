@@ -97,6 +97,12 @@ class MdkPlayerAdapter implements AbstractPlayer {
   @override
   void setPlaybackRate(double rate) {}
 
+  @override
+  void stepForward() {}
+
+  @override
+  void stepBackward() {}
+
   // 详细播放技术信息（不支持MDK的平台返回空）
   Map<String, dynamic> getDetailedMediaInfo() => const <String, dynamic>{};
 }

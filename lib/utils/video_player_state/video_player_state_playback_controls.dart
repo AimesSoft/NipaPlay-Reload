@@ -1087,8 +1087,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void increaseVolume({double? step}) {
     try {
       final double baseStep = step ?? _volumeStep;
-      final double currentVolume = _currentVolume;
-      final double newVolume = (currentVolume + baseStep).clamp(0.0, 1.0);
+      // 使用整数百分比运算避免浮点精度问题（100%→95%→90% 而非 100%→94.9%→89.9%）
+      final int currentPercent = (_currentVolume * 100).round();
+      final int stepPercent = (baseStep * 100).round();
+      final int newPercent = (currentPercent + stepPercent).clamp(0, 100);
+      final double newVolume = newPercent / 100.0;
 
       _currentVolume = newVolume;
       _initialDragVolume = newVolume;
@@ -1117,8 +1120,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   void decreaseVolume({double? step}) {
     try {
       final double baseStep = step ?? _volumeStep;
-      final double currentVolume = _currentVolume;
-      final double newVolume = (currentVolume - baseStep).clamp(0.0, 1.0);
+      // 使用整数百分比运算避免浮点精度问题（100%→95%→90% 而非 100%→94.9%→89.9%）
+      final int currentPercent = (_currentVolume * 100).round();
+      final int stepPercent = (baseStep * 100).round();
+      final int newPercent = (currentPercent - stepPercent).clamp(0, 100);
+      final double newVolume = newPercent / 100.0;
 
       _currentVolume = newVolume;
       _initialDragVolume = newVolume;
@@ -1262,6 +1268,97 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _seekOverlayEntry!.remove();
         _seekOverlayEntry = null;
       }
+    }
+  }
+
+  // ── 逐帧跳转 ──
+
+  /// 逐帧前进：暂停后前进一帧
+  void stepForward() {
+    if (!hasVideo) return;
+    // 先暂停
+    if (_status == PlayerStatus.playing) {
+      togglePlayPause();
+    }
+    player.stepForward();
+  }
+
+  /// 逐帧后退：暂停后后退一帧
+  void stepBackward() {
+    if (!hasVideo) return;
+    // 先暂停
+    if (_status == PlayerStatus.playing) {
+      togglePlayPause();
+    }
+    player.stepBackward();
+  }
+
+  // ── 窗口适配视频分辨率 ──
+
+  /// 将桌面窗口大小调整为视频原始分辨率（窗口 >= 视频大小，视频不拉伸）
+  Future<void> resizeWindowToVideoSize() async {
+    if (!globals.isDesktop || !hasVideo) return;
+    try {
+      final info = player.mediaInfo;
+      final videoStreams = info.video;
+      if (videoStreams == null || videoStreams.isEmpty) return;
+      final videoWidth = videoStreams.first.codec.width;
+      final videoHeight = videoStreams.first.codec.height;
+      if (videoWidth <= 0 || videoHeight <= 0) return;
+
+      final windowManager = WindowManager.instance;
+
+      // 如果窗口处于全屏或最大化状态，先退出才能设置大小
+      if (await windowManager.isFullScreen()) {
+        await windowManager.setFullScreen(false);
+      }
+      if (await windowManager.isMaximized()) {
+        await windowManager.unmaximize();
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      // 解除之前的宽高比锁定，以便自由设置窗口大小
+      await windowManager.setAspectRatio(0);
+
+      final devicePixelRatio =
+          WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+
+      // 动态测量窗口偏移量：窗口尺寸(WINDOW RECT) - 内容区(CLIENT AREA)
+      // 偏移量包含透明调整边框、标题栏、窗口chrome等，无需硬编码
+      final currentWindowSize = await windowManager.getSize();
+      final currentViewSize = WidgetsBinding.instance.platformDispatcher.views.first.physicalSize;
+      final offsetW = currentWindowSize.width - currentViewSize.width / devicePixelRatio;
+      final offsetH = currentWindowSize.height - currentViewSize.height / devicePixelRatio;
+
+      // 测量内容区中非视频UI元素（如AppBar/TabBar）的高度
+      // 需要遍历所有祖先Scaffold，因为_context在VideoPlayerWidget内，
+      // 最近的是PlayVideoPage的Scaffold(无appBar)，外层才是CustomScaffold的Scaffold(有appBar)
+      double inContentUIHeight = 0;
+      final context = _context;
+      if (context != null && context.mounted) {
+        context.visitAncestorElements((element) {
+          if (element is StatefulElement && element.state is ScaffoldState) {
+            final scaffoldState = element.state as ScaffoldState;
+            final appBarHeight = scaffoldState.appBarMaxHeight ?? 0;
+            if (appBarHeight > 0) {
+              inContentUIHeight += appBarHeight;
+            }
+          }
+          return true; // 继续遍历所有祖先
+        });
+      }
+
+      // 目标窗口尺寸 = 视频逻辑尺寸 + 窗口边框偏移 + 内容区UI高度
+      double logicalWidth = videoWidth / devicePixelRatio + offsetW;
+      double logicalHeight = videoHeight / devicePixelRatio + offsetH + inContentUIHeight;
+
+      // 最小尺寸保护
+      logicalWidth = logicalWidth.clamp(320.0, 7680.0);
+      logicalHeight = logicalHeight.clamp(240.0, 4320.0);
+
+      await windowManager.setSize(Size(logicalWidth, logicalHeight));
+    } catch (e) {
+      debugPrint('调整窗口大小失败: $e');
     }
   }
 }

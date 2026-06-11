@@ -7,6 +7,7 @@ class ShadowActionButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback onPressed;
   final double iconSize;
+  final EdgeInsetsGeometry padding;
 
   const ShadowActionButton({
     super.key,
@@ -14,6 +15,7 @@ class ShadowActionButton extends StatefulWidget {
     required this.icon,
     required this.onPressed,
     this.iconSize = 26,
+    this.padding = const EdgeInsets.all(8.0),
   });
 
   @override
@@ -42,7 +44,7 @@ class _ShadowActionButtonState extends State<ShadowActionButton> {
             widget.onPressed();
           },
           child: Padding(
-            padding: const EdgeInsets.all(8.0), // 增加一些点击区域
+            padding: widget.padding,
             child: AnimatedScale(
               duration: const Duration(milliseconds: 100),
               scale: _isPressed ? 0.9 : (_isHovered ? 1.1 : 1.0),

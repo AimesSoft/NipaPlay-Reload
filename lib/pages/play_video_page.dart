@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/vertical_indicator.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/utils/shortcut_tooltip_manager.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/video_controls_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/back_button_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_info_widget.dart';
@@ -16,6 +17,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/shadow_action_button.dart';
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:flutter/gestures.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/send_danmaku_button.dart';
+import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/lock_controls_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/skip_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -478,6 +480,49 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       SkipButton(
                         onPressed: () => videoState.skip(),
                       ),
+                      const SizedBox(width: 8.0),
+                      if (globals.isDesktop) ...[
+                        ShadowActionButton(
+                          tooltip: ShortcutTooltipManager().formatActionWithShortcut('resize_to_video', '窗口适配视频'),
+                          icon: Ionicons.resize_outline,
+                          iconSize: 28,
+                          padding: EdgeInsets.zero,
+                          onPressed: () => videoState.resizeWindowToVideoSize(),
+                        ),
+                        const SizedBox(width: 8.0),
+                        ShadowActionButton(
+                          tooltip: ShortcutTooltipManager().formatActionWithShortcut('step_backward', '逐帧后退'),
+                          icon: Ionicons.chevron_back_circle_outline,
+                          iconSize: 28,
+                          padding: EdgeInsets.zero,
+                          onPressed: () => videoState.stepBackward(),
+                        ),
+                        const SizedBox(width: 8.0),
+                        ShadowActionButton(
+                          tooltip: ShortcutTooltipManager().formatActionWithShortcut('step_forward', '逐帧前进'),
+                          icon: Ionicons.chevron_forward_circle_outline,
+                          iconSize: 28,
+                          padding: EdgeInsets.zero,
+                          onPressed: () => videoState.stepForward(),
+                        ),
+                      ],
+                      if (!globals.isDesktop) ...[
+                        ShadowActionButton(
+                          tooltip: '逐帧后退',
+                          icon: Ionicons.chevron_back_circle_outline,
+                          iconSize: 28,
+                          padding: EdgeInsets.zero,
+                          onPressed: () => videoState.stepBackward(),
+                        ),
+                        const SizedBox(width: 8.0),
+                        ShadowActionButton(
+                          tooltip: '逐帧前进',
+                          icon: Ionicons.chevron_forward_circle_outline,
+                          iconSize: 28,
+                          padding: EdgeInsets.zero,
+                          onPressed: () => videoState.stepForward(),
+                        ),
+                      ],
                       const SizedBox(width: 12.0),
                       MouseRegion(
                         cursor: _isHoveringAnimeInfo

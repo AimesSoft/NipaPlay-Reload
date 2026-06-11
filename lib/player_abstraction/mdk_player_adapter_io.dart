@@ -516,6 +516,27 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
+  void stepForward() {
+    // MDK: 使用 seek 模拟逐帧前进（约 1/24 秒 = ~42ms）
+    final fps = mediaInfo.video?.isNotEmpty == true
+        ? (mediaInfo.video!.first.codec.width > 0 ? 24 : 24) // 默认24fps
+        : 24;
+    final frameDuration = 1000 ~/ fps;
+    final currentPos = position;
+    seek(position: currentPos + frameDuration);
+    state = PlayerPlaybackState.paused;
+  }
+
+  @override
+  void stepBackward() {
+    final fps = 24; // 默认24fps
+    final frameDuration = 1000 ~/ fps;
+    final currentPos = position;
+    seek(position: (currentPos - frameDuration).clamp(0, currentPos));
+    state = PlayerPlaybackState.paused;
+  }
+
+  @override
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {
     // MDK 内核由自身窗口管理渲染尺寸，这里保持空实现。
   }

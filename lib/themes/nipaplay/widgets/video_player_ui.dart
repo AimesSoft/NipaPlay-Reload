@@ -1107,3 +1107,4 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     );
   }
 }
+

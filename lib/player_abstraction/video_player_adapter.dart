@@ -1143,6 +1143,21 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     playbackRate = rate; // 这将调用setter
   }
 
+  @override
+  void stepForward() {
+    // video_player 不支持逐帧，使用 seek 模拟
+    final frameDuration = 42; // ~24fps
+    final currentPos = position;
+    seek(position: currentPos + frameDuration);
+  }
+
+  @override
+  void stepBackward() {
+    final frameDuration = 42; // ~24fps
+    final currentPos = position;
+    seek(position: (currentPos - frameDuration).clamp(0, currentPos));
+  }
+
   // 提供详细播放技术信息（video_player能力有限，返回基础信息）
   Map<String, dynamic> getDetailedMediaInfo() {
     final Map<String, dynamic> result = {

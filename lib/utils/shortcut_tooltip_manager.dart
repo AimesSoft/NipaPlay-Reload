@@ -74,6 +74,9 @@ class ShortcutTooltipManager extends ChangeNotifier {
       'next_episode': '下一话',
       'send_danmaku': '发送弹幕',
       'skip': '跳过',
+      'step_forward': '逐帧前进',
+      'step_backward': '逐帧后退',
+      'resize_to_video': '窗口适配视频',
     };
     
     return actionLabels[action];

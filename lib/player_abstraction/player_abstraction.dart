@@ -186,6 +186,11 @@ class Player {
   Future<void> playDirectly() => _delegate.playDirectly();
   Future<void> pauseDirectly() => _delegate.pauseDirectly();
 
+  // 逐帧控制方法
+  void stepForward() => _delegate.stepForward();
+
+  void stepBackward() => _delegate.stepBackward();
+
   bool get prefersPlatformVideoSurface {
     try {
       final dyn = _delegate as dynamic;
