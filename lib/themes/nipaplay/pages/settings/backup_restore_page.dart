@@ -708,73 +708,84 @@ class _BackupSelectionDialogState extends State<_BackupSelectionDialog> {
               ),
             ),
             const SizedBox(height: 20),
-            // 全选
-            _buildCheckboxTile(
-              title: '全选',
-              subtitle: '导出所有数据',
-              value: _isAllSelected,
-              onChanged: _toggleAll,
-              accentColor: accentColor,
-              isDark: isDark,
-              colorScheme: colorScheme,
-            ),
-            const Divider(height: 24),
-            // 偏好设置
-            _buildCheckboxTile(
-              title: '偏好设置',
-              subtitle: '软件设置（语言、弹幕、播放器等）',
-              value: _selections[BackupCategory.preferences]!,
-              onChanged: (v) => _toggle(BackupCategory.preferences, v),
-              accentColor: accentColor,
-              isDark: isDark,
-              colorScheme: colorScheme,
-            ),
-            const SizedBox(height: 4),
-            // 媒体库
-            _buildCheckboxTile(
-              title: '添加的媒体库',
-              subtitle: _buildMediaLibrariesSubtitle(),
-              value: _selections[BackupCategory.mediaLibraries]!,
-              onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
-              accentColor: accentColor,
-              isDark: isDark,
-              colorScheme: colorScheme,
-            ),
-            const SizedBox(height: 4),
-            // 观看历史
-            _buildCheckboxTile(
-              title: '观看历史',
-              subtitle: '${widget.watchHistoryCount} 条记录',
-              value: _selections[BackupCategory.watchHistory]!,
-              onChanged: (v) => _toggle(BackupCategory.watchHistory, v),
-              accentColor: accentColor,
-              isDark: isDark,
-              colorScheme: colorScheme,
-            ),
-            const SizedBox(height: 4),
-            // 剧集匹配
-            _buildCheckboxTile(
-              title: '剧集匹配',
-              subtitle: '${widget.episodeMatchCount} 条匹配',
-              value: _selections[BackupCategory.episodeMatches]!,
-              onChanged: (v) => _toggle(BackupCategory.episodeMatches, v),
-              accentColor: accentColor,
-              isDark: isDark,
-              colorScheme: colorScheme,
-            ),
-            const SizedBox(height: 4),
-            // 账户绑定
-            _buildCheckboxTile(
-              title: '账户绑定',
-              subtitle: '${widget.accountCount} 个账户',
-              value: _selections[BackupCategory.accounts]!,
-              onChanged: (v) => _toggle(BackupCategory.accounts, v),
-              accentColor: accentColor,
-              isDark: isDark,
-              colorScheme: colorScheme,
+            // 可滚动的选择区域
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 全选
+                    _buildCheckboxTile(
+                      title: '全选',
+                      subtitle: '导出所有数据',
+                      value: _isAllSelected,
+                      onChanged: _toggleAll,
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                    const Divider(height: 24),
+                    // 偏好设置
+                    _buildCheckboxTile(
+                      title: '偏好设置',
+                      subtitle: '软件设置（语言、弹幕、播放器等）',
+                      value: _selections[BackupCategory.preferences]!,
+                      onChanged: (v) => _toggle(BackupCategory.preferences, v),
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                    const SizedBox(height: 4),
+                    // 媒体库
+                    _buildCheckboxTile(
+                      title: '添加的媒体库',
+                      subtitle: _buildMediaLibrariesSubtitle(),
+                      value: _selections[BackupCategory.mediaLibraries]!,
+                      onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                    const SizedBox(height: 4),
+                    // 观看历史
+                    _buildCheckboxTile(
+                      title: '观看历史',
+                      subtitle: '${widget.watchHistoryCount} 条记录',
+                      value: _selections[BackupCategory.watchHistory]!,
+                      onChanged: (v) => _toggle(BackupCategory.watchHistory, v),
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                    const SizedBox(height: 4),
+                    // 剧集匹配
+                    _buildCheckboxTile(
+                      title: '剧集匹配',
+                      subtitle: '${widget.episodeMatchCount} 条匹配',
+                      value: _selections[BackupCategory.episodeMatches]!,
+                      onChanged: (v) => _toggle(BackupCategory.episodeMatches, v),
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                    const SizedBox(height: 4),
+                    // 账户绑定
+                    _buildCheckboxTile(
+                      title: '账户绑定',
+                      subtitle: '${widget.accountCount} 个账户',
+                      value: _selections[BackupCategory.accounts]!,
+                      onChanged: (v) => _toggle(BackupCategory.accounts, v),
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      colorScheme: colorScheme,
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 24),
-            // 底部按钮
+            // 底部按钮（固定在底部）
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -986,72 +997,83 @@ class _RestoreSelectionDialogState extends State<_RestoreSelectionDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            // 全选
-            _buildCheckboxTile(
-              title: '全选',
-              subtitle: '恢复所有数据',
-              value: _isAllSelected,
-              onChanged: _toggleAll,
-              accentColor: accentColor,
-              colorScheme: colorScheme,
+            // 可滚动的选择区域
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 全选
+                    _buildCheckboxTile(
+                      title: '全选',
+                      subtitle: '恢复所有数据',
+                      value: _isAllSelected,
+                      onChanged: _toggleAll,
+                      accentColor: accentColor,
+                      colorScheme: colorScheme,
+                    ),
+                    const Divider(height: 24),
+                    // 偏好设置
+                    if (preview.hasPreferences)
+                      _buildCheckboxTile(
+                        title: '偏好设置',
+                        subtitle: '软件设置（语言、弹幕、播放器等）',
+                        value: _selections[BackupCategory.preferences]!,
+                        onChanged: (v) => _toggle(BackupCategory.preferences, v),
+                        accentColor: accentColor,
+                        colorScheme: colorScheme,
+                      ),
+                    if (preview.hasPreferences) const SizedBox(height: 4),
+                    // 媒体库
+                    if (preview.hasMediaLibraries)
+                      _buildCheckboxTile(
+                        title: '添加的媒体库',
+                        subtitle: _buildMediaLibrariesSubtitle(preview),
+                        value: _selections[BackupCategory.mediaLibraries]!,
+                        onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
+                        accentColor: accentColor,
+                        colorScheme: colorScheme,
+                      ),
+                    if (preview.hasMediaLibraries) const SizedBox(height: 4),
+                    // 观看历史
+                    if (preview.hasWatchHistory)
+                      _buildCheckboxTile(
+                        title: '观看历史',
+                        subtitle: '${preview.watchHistoryCount} 条记录',
+                        value: _selections[BackupCategory.watchHistory]!,
+                        onChanged: (v) => _toggle(BackupCategory.watchHistory, v),
+                        accentColor: accentColor,
+                        colorScheme: colorScheme,
+                      ),
+                    if (preview.hasWatchHistory) const SizedBox(height: 4),
+                    // 剧集匹配
+                    if (preview.hasEpisodeMatches)
+                      _buildCheckboxTile(
+                        title: '剧集匹配',
+                        subtitle: '${preview.episodeMatchCount} 条匹配',
+                        value: _selections[BackupCategory.episodeMatches]!,
+                        onChanged: (v) => _toggle(BackupCategory.episodeMatches, v),
+                        accentColor: accentColor,
+                        colorScheme: colorScheme,
+                      ),
+                    if (preview.hasEpisodeMatches) const SizedBox(height: 4),
+                    // 账户绑定
+                    if (preview.hasAccounts)
+                      _buildCheckboxTile(
+                        title: '账户绑定',
+                        subtitle: '已绑定的账户信息',
+                        value: _selections[BackupCategory.accounts]!,
+                        onChanged: (v) => _toggle(BackupCategory.accounts, v),
+                        accentColor: accentColor,
+                        colorScheme: colorScheme,
+                      ),
+                  ],
+                ),
+              ),
             ),
-            const Divider(height: 24),
-            // 偏好设置
-            if (preview.hasPreferences)
-              _buildCheckboxTile(
-                title: '偏好设置',
-                subtitle: '软件设置（语言、弹幕、播放器等）',
-                value: _selections[BackupCategory.preferences]!,
-                onChanged: (v) => _toggle(BackupCategory.preferences, v),
-                accentColor: accentColor,
-                colorScheme: colorScheme,
-              ),
-            if (preview.hasPreferences) const SizedBox(height: 4),
-            // 媒体库
-            if (preview.hasMediaLibraries)
-              _buildCheckboxTile(
-                title: '添加的媒体库',
-                subtitle: _buildMediaLibrariesSubtitle(preview),
-                value: _selections[BackupCategory.mediaLibraries]!,
-                onChanged: (v) => _toggle(BackupCategory.mediaLibraries, v),
-                accentColor: accentColor,
-                colorScheme: colorScheme,
-              ),
-            if (preview.hasMediaLibraries) const SizedBox(height: 4),
-            // 观看历史
-            if (preview.hasWatchHistory)
-              _buildCheckboxTile(
-                title: '观看历史',
-                subtitle: '${preview.watchHistoryCount} 条记录',
-                value: _selections[BackupCategory.watchHistory]!,
-                onChanged: (v) => _toggle(BackupCategory.watchHistory, v),
-                accentColor: accentColor,
-                colorScheme: colorScheme,
-              ),
-            if (preview.hasWatchHistory) const SizedBox(height: 4),
-            // 剧集匹配
-            if (preview.hasEpisodeMatches)
-              _buildCheckboxTile(
-                title: '剧集匹配',
-                subtitle: '${preview.episodeMatchCount} 条匹配',
-                value: _selections[BackupCategory.episodeMatches]!,
-                onChanged: (v) => _toggle(BackupCategory.episodeMatches, v),
-                accentColor: accentColor,
-                colorScheme: colorScheme,
-              ),
-            if (preview.hasEpisodeMatches) const SizedBox(height: 4),
-            // 账户绑定
-            if (preview.hasAccounts)
-              _buildCheckboxTile(
-                title: '账户绑定',
-                subtitle: '已绑定的账户信息',
-                value: _selections[BackupCategory.accounts]!,
-                onChanged: (v) => _toggle(BackupCategory.accounts, v),
-                accentColor: accentColor,
-                colorScheme: colorScheme,
-              ),
             const SizedBox(height: 24),
-            // 底部按钮
+            // 底部按钮（固定在底部）
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
