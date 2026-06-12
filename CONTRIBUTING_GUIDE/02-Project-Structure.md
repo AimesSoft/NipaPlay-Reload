@@ -19,6 +19,38 @@
 *   `VideoPlayerState` 是“控制播放的一层总调度”
 *   `player_abstraction/` 和 `danmaku_abstraction/` 是“真正对接底层内核的一层适配器”
 
+## 顶层目录速览
+
+仓库根目录里同时放了 Flutter 平台工程、应用源码、本地 packages、原生扩展、第三方 fork、打包脚本和文档。第一次浏览时，可以先按下面的分组建立地图：
+
+*   **Flutter 平台工程**
+    *   `android/`、`ios/`、`linux/`、`macos/`、`windows/`、`web/`: Flutter 为各平台生成并维护的宿主工程。
+    *   `ohos/`、`harmonyos_test/`: OpenHarmony/HarmonyOS 相关工程与验证内容。
+
+*   **应用核心代码**
+    *   `lib/`: 主应用的 Dart 代码，包含页面、主题、播放器状态、弹幕、服务、Provider、模型和共享组件。
+    *   `assets/`: 应用运行时资源，例如图片、图标、shader、插件资源和 Web 资源。
+    *   `test/`: Dart/Flutter 测试入口。
+
+*   **本地 packages 与原生扩展**
+    *   `packages/`: 仓库内维护或定制的 Dart/Flutter package，例如 `media_kit`、`media_kit_video`、`nipaplay_smb2` 等。
+    *   `cpp_native/`: C/C++ 原生模块、头文件、脚本和测试。
+    *   `rust/`、`rust_builder/`: Rust 代码与跨平台构建辅助工程。
+
+*   **第三方代码与上游快照**
+    *   `third_party/`: 第三方库、上游 fork 或 vendored 代码，例如 mpv、libplacebo、media-kit upstream、volume_controller 等。
+    *   这里的改动通常需要格外谨慎，优先确认是在同步上游、打补丁，还是只在本项目内做适配。
+
+*   **脚本、打包和辅助工具**
+    *   `scripts/`、`tools/`: 开发、构建、打包或维护脚本。
+    *   `server/`、`web-remote/`: 远程播放、Web 端或配套服务相关代码。
+    *   `AppIcons/`、`icons/`: 应用图标源文件和平台图标资源。
+
+*   **文档与贡献指南**
+    *   `CONTRIBUTING_GUIDE/`: 面向贡献者的分章节指南。
+    *   `Documentation/`、`docs/`: 项目说明、开发记录和补充文档。
+    *   `.github/`: GitHub Issue 模板、工作流和仓库协作配置。
+
 ## `lib` 文件夹：项目核心分层
 
 下面是最值得优先认识的目录：
