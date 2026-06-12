@@ -16,6 +16,7 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_button.dart';
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_card.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_item.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -57,6 +58,7 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
   final GlobalKey _danmakuRenderEngineDropdownKey = GlobalKey();
   final GlobalKey _spoilerAiApiFormatDropdownKey = GlobalKey();
   final GlobalKey _androidAudioOutputDropdownKey = GlobalKey();
+  final GlobalKey _erikaUpscalerDropdownKey = GlobalKey();
 
   final TextEditingController _spoilerAiUrlController = TextEditingController();
   final TextEditingController _spoilerAiModelController =
@@ -497,6 +499,28 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
     }
   }
 
+  String _getErikaUpscalerTitle(PlayerUpscalerMode mode) {
+    switch (mode) {
+      case PlayerUpscalerMode.off:
+        return '关闭';
+      case PlayerUpscalerMode.erikaArtCnnC4F16:
+        return 'ART-CNN C4F16';
+      case PlayerUpscalerMode.erikaArtCnnC4F32:
+        return 'ART-CNN C4F32';
+    }
+  }
+
+  String _getErikaUpscalerDescription(PlayerUpscalerMode mode) {
+    switch (mode) {
+      case PlayerUpscalerMode.off:
+        return '不启用 Erika 内核超分辨率';
+      case PlayerUpscalerMode.erikaArtCnnC4F16:
+        return '半精度 ART-CNN，速度优先，推荐日常播放';
+      case PlayerUpscalerMode.erikaArtCnnC4F32:
+        return '单精度 ART-CNN，画质优先，对 GPU 压力更高';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -548,6 +572,43 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
               _savePlayerKernelSettings(kernelType);
             },
             dropdownKey: _playerKernelDropdownKey,
+          ),
+          Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        ],
+        if (visibleKernelType == PlayerKernelType.erika) ...[
+          Consumer<VideoPlayerState>(
+            builder: (context, videoState, child) {
+              final currentMode = videoState.erikaUpscalerMode;
+              final items = PlayerUpscalerMode.values
+                  .map(
+                    (mode) => DropdownMenuItemData(
+                      title: _getErikaUpscalerTitle(mode),
+                      value: mode,
+                      isSelected: mode == currentMode,
+                      description: _getErikaUpscalerDescription(mode),
+                    ),
+                  )
+                  .toList();
+              return SettingsItem.dropdown(
+                title: 'Erika 超分辨率',
+                subtitle: '使用 Erika Metal ART-CNN 对视频帧做实时超分',
+                icon: Ionicons.sparkles_outline,
+                items: items,
+                onChanged: (dynamic value) async {
+                  if (value is! PlayerUpscalerMode) return;
+                  await videoState.setErikaUpscalerMode(value);
+                  if (!context.mounted) return;
+                  final option = _getErikaUpscalerTitle(value);
+                  BlurSnackBar.show(
+                    context,
+                    value == PlayerUpscalerMode.off
+                        ? '已关闭 Erika 超分辨率'
+                        : 'Erika 超分辨率已切换为$option',
+                  );
+                },
+                dropdownKey: _erikaUpscalerDropdownKey,
+              );
+            },
           ),
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ],

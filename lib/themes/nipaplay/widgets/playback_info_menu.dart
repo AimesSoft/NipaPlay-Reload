@@ -77,6 +77,7 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final erikaUpscalerInfo = _getErikaUpscalerInfo(videoState);
         return BaseSettingsMenu(
           title: '播放信息',
           onClose: widget.onClose,
@@ -92,6 +93,10 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
                 _buildInfoCard('播放状态', _getPlaybackStatusInfo(videoState)),
                 const SizedBox(height: 12),
                 _buildInfoCard('视频信息', _getVideoInfo(videoState)),
+                if (erikaUpscalerInfo.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _buildInfoCard('Erika 超分', erikaUpscalerInfo),
+                ],
                 const SizedBox(height: 12),
                 _buildInfoCard('音频信息', _getAudioInfo(videoState)),
                 const SizedBox(height: 12),
@@ -352,6 +357,81 @@ style: TextStyle(
         if (colorSpace != '未知') InfoItem('色彩空间', colorSpace),
       ];
     }
+  }
+
+  List<InfoItem> _getErikaUpscalerInfo(VideoPlayerState videoState) {
+    final detailedInfo =
+        _asyncDetailedInfo ?? videoState.player.getDetailedMediaInfo();
+    final rawUpscaler = detailedInfo['upscaler'];
+    if (rawUpscaler is! Map) {
+      return const <InfoItem>[];
+    }
+
+    final requestedMode = _normalizeText(rawUpscaler['requestedMode']) ?? 'off';
+    final activeBackend =
+        _normalizeText(rawUpscaler['activeBackend']) ?? 'unknown';
+    final fallbackCount = _toNum(rawUpscaler['fallbackCount'])?.toInt() ?? 0;
+    final upscaledFrames = _toNum(rawUpscaler['upscaledFrames'])?.toInt() ?? 0;
+    final encodeMicros =
+        _toNum(rawUpscaler['lastEncodeMicros'])?.toInt() ?? 0;
+    final gpuMicros = _toNum(rawUpscaler['lastGpuMicros'])?.toInt() ?? 0;
+    final activeFastPath = activeBackend == 'simdgroupMatrix';
+
+    return [
+      InfoItem('请求模式', _formatErikaUpscalerMode(requestedMode)),
+      InfoItem(
+        '实际后端',
+        _formatErikaUpscalerBackend(activeBackend),
+        activeFastPath,
+      ),
+      InfoItem('回退次数', '$fallbackCount', fallbackCount == 0),
+      InfoItem('已处理帧', '$upscaledFrames'),
+      InfoItem(
+        '最近耗时',
+        'encode ${_formatMicrosAsMs(encodeMicros)} / gpu ${_formatMicrosAsMs(gpuMicros)}',
+      ),
+    ];
+  }
+
+  String _formatErikaUpscalerMode(String mode) {
+    switch (mode) {
+      case 'erikaArtCnnC4F16':
+      case 'artCnnC4F16':
+        return 'ART-CNN C4F16';
+      case 'erikaArtCnnC4F32':
+      case 'artCnnC4F32':
+        return 'ART-CNN C4F32';
+      case 'off':
+        return '关闭';
+      default:
+        return mode;
+    }
+  }
+
+  String _formatErikaUpscalerBackend(String backend) {
+    switch (backend) {
+      case 'simdgroupMatrix':
+        return 'SIMD-group Matrix';
+      case 'scalar':
+        return 'Scalar fallback';
+      case 'building':
+        return '构建中';
+      case 'inactive':
+        return '未激活';
+      case 'off':
+        return '关闭';
+      case 'unknown':
+        return '未知';
+      default:
+        return backend;
+    }
+  }
+
+  String _formatMicrosAsMs(int micros) {
+    if (micros <= 0) {
+      return '0 ms';
+    }
+    return '${(micros / 1000.0).toStringAsFixed(2)} ms';
   }
 
   List<InfoItem> _getAudioInfo(VideoPlayerState videoState) {

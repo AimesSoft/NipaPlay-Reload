@@ -323,6 +323,35 @@ class Player {
     return getDetailedMediaInfo();
   }
 
+  bool get supportsUpscaler {
+    try {
+      final value = (_delegate as dynamic).supportsUpscaler;
+      return value is bool ? value : false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setUpscaler(PlayerUpscalerMode mode) async {
+    try {
+      final result = (_delegate as dynamic).setUpscaler(mode);
+      if (result is Future) {
+        await result;
+      }
+    } catch (_) {}
+  }
+
+  Future<PlayerUpscalerStatus?> getUpscalerStatus() async {
+    try {
+      final result = (_delegate as dynamic).getUpscalerStatus();
+      final status = result is Future ? await result : result;
+      if (status is PlayerUpscalerStatus) {
+        return status;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // ---- Native danmaku passthrough ----
   // Some kernels (Erika) composite danmaku into the video frame natively.
   // These forward to the delegate via dynamic dispatch so the abstraction

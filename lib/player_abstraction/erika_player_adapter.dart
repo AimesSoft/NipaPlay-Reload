@@ -191,6 +191,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   String _media = '';
   double _volume = 1.0;
   double _playbackRate = 1.0;
+  PlayerUpscalerStatus _lastUpscalerStatus = const PlayerUpscalerStatus.off();
   int _lastPositionMs = 0;
   DateTime _lastPositionUpdate = DateTime.now();
   int? _pendingSeekTargetMs;
@@ -463,10 +464,45 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     }
   }
 
+  bool get supportsUpscaler => _isSupported;
+
+  Future<void> setUpscaler(PlayerUpscalerMode mode) async {
+    _lastUpscalerStatus = PlayerUpscalerStatus(
+      requestedMode: mode,
+      activeBackend: mode == PlayerUpscalerMode.off
+          ? PlayerUpscalerBackendStatus.off
+          : PlayerUpscalerBackendStatus.inactive,
+      fallbackCount: _lastUpscalerStatus.fallbackCount,
+      upscaledFrames: _lastUpscalerStatus.upscaledFrames,
+      lastEncodeDuration: _lastUpscalerStatus.lastEncodeDuration,
+      lastGpuDuration: _lastUpscalerStatus.lastGpuDuration,
+    );
+    if (!_isSupported) return;
+    try {
+      await _player.setUpscaler(_toNativeUpscalerMode(mode));
+      _lastUpscalerStatus = await getUpscalerStatus();
+    } catch (error) {
+      debugPrint('Erika: set upscaler failed: $error');
+    }
+  }
+
+  Future<PlayerUpscalerStatus> getUpscalerStatus() async {
+    if (!_isSupported) {
+      return _lastUpscalerStatus;
+    }
+    try {
+      final status = await _player.getUpscalerStatus();
+      _lastUpscalerStatus = _convertUpscalerStatus(status);
+    } catch (error) {
+      debugPrint('Erika: get upscaler status failed: $error');
+    }
+    return _lastUpscalerStatus;
+  }
+
   @override
   void stepForward() {
     if (!_isSupported) return;
-    final frameDuration = 42; // ~24fps
+    const frameDuration = 42; // ~24fps
     final currentPos = position;
     seek(position: currentPos + frameDuration);
   }
@@ -474,7 +510,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   @override
   void stepBackward() {
     if (!_isSupported) return;
-    final frameDuration = 42; // ~24fps
+    const frameDuration = 42; // ~24fps
     final currentPos = position;
     seek(position: (currentPos - frameDuration).clamp(0, currentPos));
   }
@@ -686,6 +722,7 @@ class ErikaPlayerAdapter implements AbstractPlayer {
       'state': _state.name,
       'position': position,
       'duration': _mediaInfo.duration,
+      'upscaler': _lastUpscalerStatus.toMap(),
       'videoWidth': _mediaInfo.video?.isNotEmpty == true
           ? _mediaInfo.video!.first.codec.width
           : null,
@@ -695,8 +732,60 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     };
   }
 
-  Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async =>
-      getDetailedMediaInfo();
+  Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
+    await getUpscalerStatus();
+    return getDetailedMediaInfo();
+  }
+
+  ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) {
+    switch (mode) {
+      case PlayerUpscalerMode.erikaArtCnnC4F16:
+        return ErikaUpscalerMode.artCnnC4F16;
+      case PlayerUpscalerMode.erikaArtCnnC4F32:
+        return ErikaUpscalerMode.artCnnC4F32;
+      case PlayerUpscalerMode.off:
+        return ErikaUpscalerMode.off;
+    }
+  }
+
+  PlayerUpscalerMode _fromNativeUpscalerMode(ErikaUpscalerMode mode) {
+    switch (mode) {
+      case ErikaUpscalerMode.artCnnC4F16:
+        return PlayerUpscalerMode.erikaArtCnnC4F16;
+      case ErikaUpscalerMode.artCnnC4F32:
+        return PlayerUpscalerMode.erikaArtCnnC4F32;
+      case ErikaUpscalerMode.off:
+        return PlayerUpscalerMode.off;
+    }
+  }
+
+  PlayerUpscalerBackendStatus _fromNativeUpscalerBackend(
+    ErikaUpscalerBackendStatus status,
+  ) {
+    switch (status) {
+      case ErikaUpscalerBackendStatus.off:
+        return PlayerUpscalerBackendStatus.off;
+      case ErikaUpscalerBackendStatus.inactive:
+        return PlayerUpscalerBackendStatus.inactive;
+      case ErikaUpscalerBackendStatus.building:
+        return PlayerUpscalerBackendStatus.building;
+      case ErikaUpscalerBackendStatus.scalar:
+        return PlayerUpscalerBackendStatus.scalar;
+      case ErikaUpscalerBackendStatus.simdgroupMatrix:
+        return PlayerUpscalerBackendStatus.simdgroupMatrix;
+    }
+  }
+
+  PlayerUpscalerStatus _convertUpscalerStatus(ErikaUpscalerStatus status) {
+    return PlayerUpscalerStatus(
+      requestedMode: _fromNativeUpscalerMode(status.requestedMode),
+      activeBackend: _fromNativeUpscalerBackend(status.activeBackend),
+      fallbackCount: status.fallbackCount,
+      upscaledFrames: status.upscaledFrames,
+      lastEncodeDuration: status.lastEncodeDuration,
+      lastGpuDuration: status.lastGpuDuration,
+    );
+  }
 
   void _handleEvent(ErikaPlayerEvent event) {
     if (event.kind == ErikaEventKind.stateChanged ||

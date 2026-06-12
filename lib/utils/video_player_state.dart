@@ -417,6 +417,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   };
   final String _doubleResolutionPlaybackKey = 'double_resolution_playback';
   bool _doubleResolutionPlaybackEnabled = false;
+  final String _erikaUpscalerModeKey = 'erika_upscaler_mode';
+  PlayerUpscalerMode _erikaUpscalerMode = PlayerUpscalerMode.off;
   final String _crtProfileKey = 'crt_profile';
   CrtProfile _crtProfile = CrtProfile.off;
   List<String> _crtShaderPaths = const <String>[];
@@ -1246,6 +1248,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get isAnime4KSupported => _supportsAnime4KForCurrentPlayer();
   bool get doubleResolutionPlaybackEnabled => _doubleResolutionPlaybackEnabled;
   bool get isDoubleResolutionSupported => _supportsAnime4KForCurrentPlayer();
+  PlayerUpscalerMode get erikaUpscalerMode => _erikaUpscalerMode;
+  bool get isErikaUpscalerSupported => _supportsErikaUpscalerForCurrentPlayer();
   List<String> get anime4kShaderPaths => List.unmodifiable(_anime4kShaderPaths);
   CrtProfile get crtProfile => _crtProfile;
   bool get isCrtEnabled => _crtProfile != CrtProfile.off;

@@ -345,6 +345,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
 
       player.media = playUrl;
+      await applyErikaUpscalerModeToCurrentPlayer();
 
       //debugPrint('4. 准备播放器...');
       // 准备播放器
@@ -749,6 +750,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // 新视频加载后应用超分辨率/CRT 等设置（避免播放中切换导致卡顿）
       await applyAnime4KProfileToCurrentPlayer();
+      await applyErikaUpscalerModeToCurrentPlayer();
 
       // 使用屏幕方向管理器设置播放时的屏幕方向
       if (globals.isMobilePlatform) {

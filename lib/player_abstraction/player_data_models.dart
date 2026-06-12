@@ -1,5 +1,57 @@
 import 'dart:typed_data';
 
+enum PlayerUpscalerMode {
+  off,
+  erikaArtCnnC4F16,
+  erikaArtCnnC4F32,
+}
+
+enum PlayerUpscalerBackendStatus {
+  off,
+  inactive,
+  building,
+  scalar,
+  simdgroupMatrix,
+  unknown,
+}
+
+class PlayerUpscalerStatus {
+  final PlayerUpscalerMode requestedMode;
+  final PlayerUpscalerBackendStatus activeBackend;
+  final int fallbackCount;
+  final int upscaledFrames;
+  final Duration lastEncodeDuration;
+  final Duration lastGpuDuration;
+
+  const PlayerUpscalerStatus({
+    required this.requestedMode,
+    required this.activeBackend,
+    required this.fallbackCount,
+    required this.upscaledFrames,
+    required this.lastEncodeDuration,
+    required this.lastGpuDuration,
+  });
+
+  const PlayerUpscalerStatus.off()
+      : requestedMode = PlayerUpscalerMode.off,
+        activeBackend = PlayerUpscalerBackendStatus.off,
+        fallbackCount = 0,
+        upscaledFrames = 0,
+        lastEncodeDuration = Duration.zero,
+        lastGpuDuration = Duration.zero;
+
+  Map<String, dynamic> toMap() {
+    return <String, dynamic>{
+      'requestedMode': requestedMode.name,
+      'activeBackend': activeBackend.name,
+      'fallbackCount': fallbackCount,
+      'upscaledFrames': upscaledFrames,
+      'lastEncodeMicros': lastEncodeDuration.inMicroseconds,
+      'lastGpuMicros': lastGpuDuration.inMicroseconds,
+    };
+  }
+}
+
 class PlayerFrame {
   final int width;
   final int height;
@@ -94,7 +146,7 @@ class PlayerMediaInfo {
     this.subtitle,
     this.specificErrorMessage,
   });
-  
+
   // 添加copyWith方法以便更新个别字段
   PlayerMediaInfo copyWith({
     int? duration,
@@ -111,4 +163,4 @@ class PlayerMediaInfo {
       specificErrorMessage: specificErrorMessage ?? this.specificErrorMessage,
     );
   }
-} 
+}

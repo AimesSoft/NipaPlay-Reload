@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -311,6 +312,28 @@ class _CupertinoPlayerSettingsPageState
     }
   }
 
+  String _getErikaUpscalerTitle(PlayerUpscalerMode mode) {
+    switch (mode) {
+      case PlayerUpscalerMode.off:
+        return '关闭';
+      case PlayerUpscalerMode.erikaArtCnnC4F16:
+        return 'ART-CNN C4F16';
+      case PlayerUpscalerMode.erikaArtCnnC4F32:
+        return 'ART-CNN C4F32';
+    }
+  }
+
+  String _getErikaUpscalerDescription(PlayerUpscalerMode mode) {
+    switch (mode) {
+      case PlayerUpscalerMode.off:
+        return '不启用 Erika 内核超分辨率';
+      case PlayerUpscalerMode.erikaArtCnnC4F16:
+        return '半精度 ART-CNN，速度优先，推荐日常播放';
+      case PlayerUpscalerMode.erikaArtCnnC4F32:
+        return '单精度 ART-CNN，画质优先，对 GPU 压力更高';
+    }
+  }
+
   String _getDanmakuRenderEngineDescription(DanmakuRenderEngine engine) {
     switch (engine) {
       case DanmakuRenderEngine.cpu:
@@ -402,13 +425,23 @@ class _CupertinoPlayerSettingsPageState
   }) {
     return PlayerKernelType.values
         .where(
-          (kernel) =>
-              kernel != PlayerKernelType.erika || showErikaKernel,
+          (kernel) => kernel != PlayerKernelType.erika || showErikaKernel,
         )
         .map(
           (kernel) => AdaptivePopupMenuItem<PlayerKernelType>(
             label: _kernelDisplayName(kernel),
             value: kernel,
+          ),
+        )
+        .toList();
+  }
+
+  List<AdaptivePopupMenuEntry> _erikaUpscalerMenuItems() {
+    return PlayerUpscalerMode.values
+        .map(
+          (mode) => AdaptivePopupMenuItem<PlayerUpscalerMode>(
+            label: _getErikaUpscalerTitle(mode),
+            value: mode,
           ),
         )
         .toList();
@@ -795,6 +828,54 @@ class _CupertinoPlayerSettingsPageState
             ),
           ],
         ),
+      if (visibleKernelType == PlayerKernelType.erika) ...[
+        const SizedBox(height: 16),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
+            final currentMode = videoState.erikaUpscalerMode;
+            return CupertinoSettingsGroupCard(
+              margin: EdgeInsets.zero,
+              backgroundColor: sectionBackground,
+              addDividers: true,
+              dividerIndent: 16,
+              children: [
+                CupertinoSettingsTile(
+                  leading: Icon(
+                    CupertinoIcons.sparkles,
+                    color: resolveSettingsIconColor(context),
+                  ),
+                  title: const Text('Erika 超分辨率'),
+                  subtitle: Text(_getErikaUpscalerDescription(currentMode)),
+                  trailing: AdaptivePopupMenuButton.widget<PlayerUpscalerMode>(
+                    items: _erikaUpscalerMenuItems(),
+                    buttonStyle: PopupButtonStyle.gray,
+                    child: _buildMenuChip(
+                      context,
+                      _getErikaUpscalerTitle(currentMode),
+                    ),
+                    onSelected: (index, entry) async {
+                      final mode =
+                          entry.value ?? PlayerUpscalerMode.values[index];
+                      if (mode == currentMode) return;
+                      await videoState.setErikaUpscalerMode(mode);
+                      if (!context.mounted) return;
+                      final message = mode == PlayerUpscalerMode.off
+                          ? '已关闭 Erika 超分辨率'
+                          : 'Erika 超分辨率已切换为${_getErikaUpscalerTitle(mode)}';
+                      AdaptiveSnackBar.show(
+                        context,
+                        message: message,
+                        type: AdaptiveSnackBarType.success,
+                      );
+                    },
+                  ),
+                  backgroundColor: tileBackground,
+                ),
+              ],
+            );
+          },
+        ),
+      ],
       if (visibleKernelType == PlayerKernelType.mdk ||
           visibleKernelType == PlayerKernelType.mediaKit) ...[
         const SizedBox(height: 16),

@@ -738,6 +738,58 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  Future<void> _loadErikaUpscalerMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getInt(_erikaUpscalerModeKey);
+    final resolved = stored != null &&
+            stored >= 0 &&
+            stored < PlayerUpscalerMode.values.length
+        ? PlayerUpscalerMode.values[stored]
+        : PlayerUpscalerMode.off;
+    if (_erikaUpscalerMode != resolved) {
+      _erikaUpscalerMode = resolved;
+      _notifyListeners();
+    } else {
+      _erikaUpscalerMode = resolved;
+    }
+    await applyErikaUpscalerModeToCurrentPlayer();
+  }
+
+  Future<void> setErikaUpscalerMode(PlayerUpscalerMode mode) async {
+    if (_erikaUpscalerMode == mode) {
+      await applyErikaUpscalerModeToCurrentPlayer();
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await _persistIntWithRetry(
+      prefs,
+      _erikaUpscalerModeKey,
+      mode.index,
+      settingName: 'Erika 超分辨率',
+    );
+    _erikaUpscalerMode = mode;
+    await applyErikaUpscalerModeToCurrentPlayer();
+    _notifyListeners();
+  }
+
+  Future<void> applyErikaUpscalerModeToCurrentPlayer() async {
+    if (_isDisposed || !player.supportsUpscaler) {
+      return;
+    }
+    await player.setUpscaler(_erikaUpscalerMode);
+  }
+
+  bool _supportsErikaUpscalerForCurrentPlayer() {
+    if (kIsWeb) {
+      return false;
+    }
+    try {
+      return player.supportsUpscaler;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _loadAnime4KProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();

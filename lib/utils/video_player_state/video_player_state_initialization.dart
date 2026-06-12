@@ -8,6 +8,11 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
       debugPrint('[VideoPlayerState] 提前加载双倍分辨率设置失败: $e');
     }
     try {
+      await _loadErikaUpscalerMode();
+    } catch (e) {
+      debugPrint('[VideoPlayerState] 提前加载 Erika 超分设置失败: $e');
+    }
+    try {
       await _loadAnime4KProfile();
     } catch (e) {
       debugPrint('[VideoPlayerState] 提前加载 Anime4K 设置失败: $e');
