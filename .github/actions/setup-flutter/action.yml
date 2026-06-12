@@ -118,6 +118,83 @@ runs:
           # Use grep/cut for Linux/macOS
           echo "version=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2)" >> $GITHUB_OUTPUT
         fi
+
+    - name: Refresh Erika dependency
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -f "pubspec.lock" ]; then
+          echo "❌ pubspec.lock 不存在，无法刷新 Erika 依赖。"
+          echo "当前目录: $(pwd)"
+          ls -la
+          exit 1
+        fi
+
+        ERIKA_SHA="$(git ls-remote https://github.com/AimesSoft/Erika.git refs/heads/main | awk '{print $1}')"
+        if [ -z "${ERIKA_SHA}" ]; then
+          echo "❌ 无法解析 Erika main 最新提交。"
+          exit 1
+        fi
+
+        PYTHON_BIN="python3"
+        if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+          PYTHON_BIN="python"
+        fi
+
+        ERIKA_SHA="${ERIKA_SHA}" "${PYTHON_BIN}" - <<'PY'
+        import os
+        from pathlib import Path
+
+        erika_sha = os.environ["ERIKA_SHA"]
+
+        def update_erika_block(path, replacements):
+            lines = Path(path).read_text().splitlines(keepends=True)
+            output = []
+            in_block = False
+            seen = set()
+
+            for line in lines:
+                if line == "  erika_flutter:\n":
+                    in_block = True
+                    output.append(line)
+                    continue
+
+                if in_block and line.startswith("  ") and not line.startswith("    "):
+                    missing = set(replacements) - seen
+                    if missing:
+                        raise SystemExit(f"{path}: missing Erika fields: {sorted(missing)}")
+                    in_block = False
+
+                if in_block:
+                    stripped = line.strip()
+                    key = stripped.split(":", 1)[0] if ":" in stripped else ""
+                    if key in replacements:
+                        indent = line[: len(line) - len(line.lstrip())]
+                        newline = "\n" if line.endswith("\n") else ""
+                        output.append(f"{indent}{key}: {replacements[key]}{newline}")
+                        seen.add(key)
+                        continue
+
+                output.append(line)
+
+            if in_block:
+                missing = set(replacements) - seen
+                if missing:
+                    raise SystemExit(f"{path}: missing Erika fields: {sorted(missing)}")
+
+            Path(path).write_text("".join(output))
+
+        update_erika_block("pubspec.yaml", {"ref": "main"})
+        update_erika_block(
+            "pubspec.lock",
+            {
+                "ref": "main",
+                "resolved-ref": f'"{erika_sha}"',
+            },
+        )
+        PY
+
+        echo "Erika main resolved to ${ERIKA_SHA}."
     
     - name: Flutter Pub Get
       shell: bash
