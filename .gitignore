@@ -2,6 +2,7 @@
 
 # Files and directories created by pub
 .dart_tool/
+.dart-tool/
 .packages
 build/
 # If you're building an application, you may want to check-in your pubspec.lock
@@ -41,14 +42,20 @@ docs/error.txt
 
 # 忽略 VSCode 的设置文件
 .vscode/settings.json
+.idea/
+.claude/settings.local.json
 *.xcscheme
 /.tmp_home
+/.tmp_test_io.dart
 /packages/nipaplay_smb2/android/.cxx
 /packages/nipaplay_smb2/android/.cxx
 /packages/nipaplay_smb2/android/.cxx/Debug/6r64695b
 /rust/target
 /node_modules/
 /data/
+/web-remote/.vite/deps/
+/image_response.json
+/image_response.png
 
 # 忽略 errors 和 log
 android/.kotlin/errors
