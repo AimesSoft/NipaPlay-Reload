@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import 'bindings/native_bindings.dart';
@@ -60,6 +61,17 @@ class NativeArena {
     final ptr = calloc<NpString>();
     _npStrings.add(ptr);
     _callocPtrs.add(ptr.cast());
+    return ptr;
+  }
+
+  /// 分配 Uint8List 到 native 内存（使用 calloc）
+  /// 用于传递原始字节（字幕文件等可能是任意编码，不能用 toNativeUtf8）
+  /// 返回 Pointer<Uint8>，生命周期由 NativeArena 管理
+  Pointer<Uint8> allocUint8List(Uint8List bytes) {
+    final ptr = calloc<Uint8>(bytes.length);
+    registerCalloc(ptr.cast());
+    // 使用 asTypedList 避免逐字节拷贝的开销
+    ptr.asTypedList(bytes.length).setAll(0, bytes);
     return ptr;
   }
 

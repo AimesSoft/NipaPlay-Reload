@@ -130,6 +130,40 @@ NIPAPLAY_NATIVE_EXPORT NpResult np_danmaku_parse_json(
     const char* json_content, int64_t content_len,
     NpString* output_json);
 
+// ──── 字幕解析模块：SubtitleParser ────
+
+// 字幕条目 — 与 Dart SubtitleEntry 对应
+// content/style/name 为 NpString，由 np_subtitle_free_result 统一释放
+typedef struct NpSubtitleEntry {
+    int32_t start_time_ms;
+    int32_t end_time_ms;
+    NpString content;      // UTF-8 字幕文本
+    NpString style;        // ASS 样式名，默认 "Default"
+    NpString name;         // ASS 角色名，默认 ""
+} NpSubtitleEntry;
+
+// 解析结果 — 堆分配，由 np_subtitle_free_result 统一释放
+// format_code: 0=ass, 1=srt, 2=subviewer, 3=microdvd, -1=unknown
+typedef struct NpSubtitleParseResult {
+    NpResultCode code;
+    const char* error_message;    // 仅 code != NP_OK 时有效，独立堆分配（由 np_subtitle_free_result 释放）
+    NpSubtitleEntry* entries;     // 条目数组（堆分配）
+    int32_t entry_count;          // 条目数
+    int32_t format_code;          // 字幕格式编码
+    NpString detected_encoding;   // 检测到的编码名（UTF-8）
+} NpSubtitleParseResult;
+
+// 解析字节数据（Dart 侧提供已读取的字节 + 可选格式/路径提示）
+// hint_path: 可选文件路径，用于编码/格式检测提示（如含 "big5" 优先 Big5），
+//            可传 NULL
+// 返回: 堆分配的 NpSubtitleParseResult*，需由 np_subtitle_free_result 释放
+NIPAPLAY_NATIVE_EXPORT NpSubtitleParseResult* np_subtitle_parse_bytes(
+    const uint8_t* data, int32_t len, const char* hint_path);
+
+// 释放解析结果（释放 entries 数组中所有 NpString + entries + result 本身）
+NIPAPLAY_NATIVE_EXPORT void np_subtitle_free_result(
+    NpSubtitleParseResult* result);
+
 #ifdef __cplusplus
 }
 #endif
