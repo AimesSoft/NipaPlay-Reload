@@ -16,6 +16,7 @@ set(NATIVE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/similarity_engine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pinyin_dict.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/danmaku_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/subtitle_parser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml/pugixml.cpp
 )
 
@@ -223,5 +224,27 @@ if(ANDROID)
     find_library(CXX_SHARED c++_shared)
     if(CXX_SHARED)
         target_link_libraries(nipaplay_native PUBLIC ${CXX_SHARED})
+    endif()
+endif()
+
+# ──── POSIX iconv（字幕编码转换）────
+# Windows 使用 MultiByteToWideChar/WideCharToMultiByte，无需 iconv
+# Linux/macOS 使用系统 iconv；macOS libiconv 需显式链接
+if(NOT MSVC AND NOT ANDROID)
+    # macOS: /usr/lib/libiconv.tbd (系统自带)
+    # Linux glibc: iconv 内置于 libc，无需额外链接
+    # Linux musl: 可能需要 -liconv
+    if(APPLE)
+        find_library(ICONV_LIB iconv)
+        if(ICONV_LIB)
+            target_link_libraries(nipaplay_native PRIVATE ${ICONV_LIB})
+        endif()
+    elseif(UNIX)
+        # Linux: 检测是否需要 libiconv
+        include(CheckLibraryExists)
+        check_library_exists(iconv iconv_open "" HAS_LIBICONV)
+        if(HAS_LIBICONV)
+            target_link_libraries(nipaplay_native PRIVATE iconv)
+        endif()
     endif()
 endif()

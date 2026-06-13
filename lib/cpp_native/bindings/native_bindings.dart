@@ -3,6 +3,7 @@ import 'package:ffi/ffi.dart' show Utf8;
 import '../native_library.dart';
 import '../types/native_types.dart';
 import '../types/native_layout_types.dart';
+import '../types/native_subtitle_types.dart';
 
 class NativeBindings {
   static final _dylib = NativeLibrary.instance;
@@ -98,4 +99,21 @@ class NativeBindings {
       NpResult Function(Pointer<Utf8>, Int64, Pointer<NpString>),
       NpResult Function(Pointer<Utf8>, int, Pointer<NpString>)>(
       'np_danmaku_parse_json');
+
+  // ──── SubtitleParser ────
+  // np_subtitle_parse_bytes: 解析字节数据，返回堆分配的 NpSubtitleParseResult*
+  // data: 原始字节指针（可能为任意编码，不假设 UTF-8）
+  // len: 字节长度（Int32，字幕文件通常 < 2GB）
+  // hint_path: 可选文件路径提示（可传 nullptr）
+  static final npSubtitleParseBytes = _dylib.lookupFunction<
+      Pointer<NpSubtitleParseResult> Function(
+          Pointer<Uint8>, Int32, Pointer<Utf8>),
+      Pointer<NpSubtitleParseResult> Function(
+          Pointer<Uint8>, int, Pointer<Utf8>)>('np_subtitle_parse_bytes');
+
+  // np_subtitle_free_result: 释放解析结果（entries 中所有 NpString + entries + result 本身）
+  static final npSubtitleFreeResult = _dylib.lookupFunction<
+      Void Function(Pointer<NpSubtitleParseResult>),
+      void Function(Pointer<NpSubtitleParseResult>)>(
+      'np_subtitle_free_result');
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:charset_converter/charset_converter.dart';
+import 'package:nipaplay/cpp_native/nipaplay_native.dart';
 
 class SubtitleDecodeResult {
   final String text;
@@ -70,6 +71,13 @@ class SubtitleEntry {
 }
 
 class SubtitleParser {
+  /// 应用内日志 — debugPrint 输出到控制台 + DebugLogService 自动拦截收集
+  /// 注意: 不显式调用 DebugLogService().addLog()，因为 DebugLogService.initialize()
+  /// 已替换 debugPrint 为拦截器，会自动收集，显式调用会导致双重收集。
+  static void _log(String message) {
+    debugPrint(message);
+  }
+
   static final RegExp _assEventHeaderPattern =
       RegExp(r'^\s*\[Events\]\s*$', multiLine: true);
   static final RegExp _assDialoguePattern =
@@ -698,14 +706,94 @@ class SubtitleParser {
     }
   }
 
+  /// C++ FFI 路径是否可用的缓存标志
+  /// null = 未探测, true = 可用, false = 不可用
+  static bool? _nativeAvailable;
+
+  /// 探测 C++ 原生绑定是否可用（仅探测一次，结果缓存）
+  static bool _isNativeAvailable() {
+    if (_nativeAvailable != null) return _nativeAvailable!;
+    try {
+      _nativeAvailable = NativeSubtitleParser.probeNativeBinding();
+    } catch (_) {
+      _nativeAvailable = false;
+    }
+    return _nativeAvailable!;
+  }
+
+  /// 将 C++ FFI 返回的 Map 转换为 SubtitleParseResult
+  static SubtitleParseResult _fromNativeResult(Map<String, dynamic> native) {
+    final formatStr = native['format'] as String? ?? 'unknown';
+    final format = SubtitleFormat.values.firstWhere(
+      (f) => f.name == formatStr,
+      orElse: () => SubtitleFormat.unknown,
+    );
+    final encoding = native['encoding'] as String? ?? 'utf-8';
+    final nativeEntries = native['entries'] as List<dynamic>? ?? [];
+    final entries = nativeEntries.map((e) {
+      final m = e as Map<String, dynamic>;
+      return SubtitleEntry(
+        startTimeMs: m['startTimeMs'] as int? ?? 0,
+        endTimeMs: m['endTimeMs'] as int? ?? 0,
+        content: m['content'] as String? ?? '',
+        style: m['style'] as String? ?? 'Default',
+        layer: m['layer'] as String? ?? '0',
+        name: m['name'] as String? ?? '',
+        effect: m['effect'] as String? ?? '',
+      );
+    }).toList();
+    return SubtitleParseResult(
+      entries: entries,
+      format: format,
+      encoding: encoding,
+    );
+  }
+
   static Future<SubtitleParseResult> parseSubtitleFile(String filePath,
       {bool allowUnknownFormat = false}) async {
     try {
+      // ── 优先尝试 C++ FFI 路径 ──
+      // C++ 一次完成编码检测 + 转换 + 格式识别 + 解析，
+      // 避免 Dart 侧 charset_converter + 正则匹配的多步开销
+      if (_isNativeAvailable()) {
+        try {
+          final file = File(filePath);
+          final bytes = await file.readAsBytes();
+          if (bytes.isNotEmpty) {
+            final nativeResult = NativeSubtitleParser.parseBytes(
+              bytes,
+              hintPath: filePath,
+            );
+            if (nativeResult != null) {
+              final result = _fromNativeResult(nativeResult);
+              // 防御性检查: C++ 返回 0 条目但文件非空 → 可能编码转换失败
+              if (result.entries.isNotEmpty || result.format != SubtitleFormat.unknown) {
+                _log('[SubtitleParser] C++ 路径成功: '
+                    '${result.entries.length} 条目, '
+                    '格式=${result.format.name}, '
+                    '编码=${result.encoding}, '
+                    '文件=$filePath');
+                return result;
+              }
+              _log('[SubtitleParser] C++ 返回空结果, fallback 到 Dart: 文件=$filePath');
+            } else {
+              _log('[SubtitleParser] C++ parseBytes 返回 null, fallback 到 Dart: 文件=$filePath');
+            }
+          }
+        } catch (e) {
+          _log('[SubtitleParser] C++ FFI 异常, fallback 到 Dart: $e');
+        }
+      } else {
+        _log('[SubtitleParser] C++ 原生绑定不可用, 使用 Dart 路径: 文件=$filePath');
+      }
+
+      // ── Fallback: Dart 原实现 ──
       final decoded = await decodeSubtitleFile(
         filePath,
         allowUnknownFormat: allowUnknownFormat,
       );
       if (decoded == null) {
+        _log('[SubtitleParser] Dart 路径: 解码失败, 文件=$filePath');
         return const SubtitleParseResult(
           entries: [],
           format: SubtitleFormat.unknown,
@@ -733,13 +821,18 @@ class SubtitleParser {
           break;
       }
 
+      _log('[SubtitleParser] Dart 路径成功: '
+          '${entries.length} 条目, '
+          '格式=${format.name}, '
+          '编码=${decoded.encoding}, '
+          '文件=$filePath');
       return SubtitleParseResult(
         entries: entries,
         format: format,
         encoding: decoded.encoding,
       );
     } catch (e) {
-      debugPrint('解析字幕文件出错: $e');
+      _log('[SubtitleParser] 解析字幕文件出错: $e');
       return const SubtitleParseResult(
         entries: [],
         format: SubtitleFormat.unknown,
