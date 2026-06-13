@@ -82,7 +82,17 @@ SubtitleParseOutput SubtitleParser::parseBytes(
     }
 
     // 1d) 最终回退：latin1 总能解码（每个字节 < 256）
+    // 但在 Android 上，如果编码转换失败（convertToUtf8 返回 nullopt），
+    // 原始 GBK/Big5/Shift-JIS 字节不是有效 latin1，强制解码会导致
+    // 格式检测匹配但文本乱码，且 Dart 不会 fallback 到 charset_converter。
+    // 因此 Android 上应返回空结果，让 Dart 侧处理。
     if (utf8_text.empty()) {
+#if defined(__ANDROID__)
+        // Android: 无 iconv，非 UTF-8 文件应交由 Dart charset_converter 处理
+        output.entries = {};
+        output.detected_encoding = used_encoding.empty() ? "unknown" : used_encoding;
+        return output;
+#else
         utf8_text.assign(reinterpret_cast<const char*>(data),
                          static_cast<size_t>(len));
         // 替换可疑的控制字符
@@ -92,6 +102,7 @@ SubtitleParseOutput SubtitleParser::parseBytes(
                                  static_cast<uint8_t>(c) < 0x20); },
             '?');
         used_encoding = "latin1";
+#endif
     }
 
     output.detected_encoding = used_encoding;
@@ -437,7 +448,10 @@ std::vector<SubtitleEntry> SubtitleParser::parseSrt(std::string_view content) {
 
             if (!block.empty()) block += '\n';
             block += std::string(line);
-            if (eol == std::string_view::npos) break;
+            if (eol == std::string_view::npos) {
+                pos = content.size();  // 消费到末尾，防止外层 while 无限循环
+                break;
+            }
             pos = eol + 1;
         }
 
@@ -580,13 +594,19 @@ std::vector<SubtitleEntry> SubtitleParser::parseSubViewer(std::string_view conte
                             trimmed.remove_suffix(1);
 
                         if (trimmed.empty()) {
-                            if (neol == std::string_view::npos) break;
+                            if (neol == std::string_view::npos) {
+                                pos = content.size();
+                                break;
+                            }
                             pos = neol + 1;
                             break;
                         }
                         if (!text.empty()) text += '\n';
                         text += std::string(nline);
-                        if (neol == std::string_view::npos) break;
+                        if (neol == std::string_view::npos) {
+                            pos = content.size();
+                            break;
+                        }
                         pos = neol + 1;
                     }
 
