@@ -116,13 +116,9 @@ brew tap AimesSoft/nipaplay-reload
 brew install --cask nipaplay-reload
 ```
 
-#### Arch Linux (AUR)
 
-```bash
-paru -S nipaplay-reload-bin
-# 或
-yay -S nipaplay-reload-bin
-```
+> **⚠️ 安全警告**
+> Arch Linux AUR 中的 `nipaplay-reload-bin` 和 `misuzu-music-bin` 包已被恶意用户接管，**请勿安装**。如需在 Arch Linux 上使用，请从 GitHub Releases 下载。
 
 #### Gentoo Linux
 
