@@ -130,7 +130,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 ### 播放体验
 
-* **内核支持**：基于 fvp (libmdk) / media_kit / video_player / libmpv，性能强劲。
+* **内核支持**：自研 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust/Metal，macOS/iOS）、fvp (libmdk)、media_kit、video_player、libmpv，多内核可切换。
 * **视频支持**：本地播放、Emby/Jellyfin/SMB 流媒体、WebDAV 挂载。
 * **画质增强**：支持 Anime4K 超分、CRT 着色器效果。
 * **音频控制**：多音轨切换、倍速播放。
@@ -172,7 +172,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 | 类别 | 技术/库 |
 | :--- | :--- |
 | **核心框架** | Flutter, Dart |
-| **播放引擎** | FVP, Media Kit, libmpv |
+| **播放引擎** | Erika (自研, Rust/Metal), FVP, Media Kit, libmpv |
 | **UI/UX** | Material Design, Glassmorphism, Hugeicons |
 | **状态管理** | Provider |
 | **数据存储** | SQLite, SharedPreferences |
@@ -189,7 +189,8 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 - [x] 在线 URL 播放优化
 - [ ] Webview 弹幕刮削
 - [ ] 补帧功能 (SVP/Other)
-- [ ] HDR 和杜比视界支持
+- [x] macOS HDR 支持（Erika 内核 EDR 原生 + media-kit）
+- [ ] 跨平台 HDR 和杜比视界支持（Windows/Linux/Android）
 - [ ] 鸿蒙 OS / Vision Pro / Apple TV 移植
 
 ## 赞助与鸣谢
