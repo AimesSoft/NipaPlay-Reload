@@ -107,12 +107,23 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   // anchor point jumps but the interpolation is smooth between updates.
   final Stopwatch _wallClock = Stopwatch()..start();
   int _lastWallUs = 0;
+  /// Wall time captured at the vsync callback entry point (not inside
+  /// _runUpdateLoop which includes _tryUpdateTexture latency). Using the
+  /// vsync-stamped time for dt computation prevents the async GPU submission
+  /// latency from distorting the frame interval measurement.
+  int _vsyncWallUs = 0;
   double _accumulatedWallDt = 0.0;
   double _lastAnchorPlaybackTime = -1.0;
   double _smoothedDtSeconds = 0.0;
   static const double _dtEmaAlpha = 0.3;
   int _resumeFrameCount = 0;
   static const int _resumeEmaFrames = 5;
+
+  /// No GPU submission throttle needed — the Rust engine's 16ms tick loop
+  /// naturally drains the mpsc queue (try_recv after first recv_timeout),
+  /// always rendering the latest submitted frame. Submitting every vsync
+  /// frame ensures the engine always has fresh data; throttling introduces
+  /// phase-drift between the Dart vsync and engine tick, causing stutter.
 
   /// vsync-driven animation controller — fires _queueUpdate at display refresh
   /// rate (60/120Hz) so wall-clock dt is computed every vsync frame.
@@ -286,6 +297,10 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   }
 
   void _queueUpdate() {
+    // Capture wall time at vsync callback entry BEFORE any bail-out checks.
+    // If a new vsync fires while _tryUpdateTexture is in-flight, we still
+    // need the latest timestamp for the next loop iteration's dt computation.
+    _vsyncWallUs = _wallClock.elapsedMicroseconds;
     _updateQueued = true;
     if (_updateScheduled || _updateInFlight) {
       return;
@@ -317,8 +332,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           continue;
         }
 
-        // ── Compute wall-clock dt (same as Next engine V4 logic) ──
-        final currentWallUs = _wallClock.elapsedMicroseconds;
+        // ── Compute wall-clock dt from vsync-stamped time ──
+        // _vsyncWallUs is captured in _queueUpdate() (vsync callback entry),
+        // NOT at the top of _runUpdateLoop — otherwise the async
+        // _tryUpdateTexture latency from the previous iteration would
+        // inflate the measured interval and cause interpolatedTime jumps.
+        final currentWallUs = _vsyncWallUs;
         final double rawDtSeconds;
         if (_lastWallUs == 0 || currentWallUs < _lastWallUs) {
           rawDtSeconds = 0.0;
@@ -414,9 +433,11 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         }
 
         // ── Layout with interpolated time ──
-        // No need to cache frames or swap x — the absolute-position
-        // formula naturally produces smooth movement because
-        // interpolatedTime advances smoothly every vsync frame.
+        // The interpolatedTime advances smoothly every vsync frame.
+        // layout() computes absolute positions from it naturally:
+        //   x = width - speed * (interpolatedTime - item.time)
+        // We submit every vsync frame — the Rust engine's 16ms tick loop
+        // drains its mpsc queue and always renders the latest submission.
         final frame = _bridge.layout(interpolatedTime);
         _lastTimeSeconds = interpolatedTime;
 
