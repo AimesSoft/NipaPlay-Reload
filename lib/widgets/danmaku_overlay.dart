@@ -217,6 +217,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay> {
             shadowStyle: videoState.danmakuShadowStyle,
             trackGapRatio: videoState.danmakuDfmPlusTrackGap,
             blockWords: videoState.danmakuBlockWords,
+            isPlaying: widget.isPlaying,
+            playbackRate: videoState.effectivePlaybackRate,
           );
         }
 

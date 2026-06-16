@@ -30,6 +30,11 @@ class DfmPlusLayoutBridge {
   /// DanmakuContentItem (with Color object) every frame for the same item.
   final Map<int, DanmakuContentItem> _contentCache = {};
 
+  /// Positioned item cache keyed by prepared item index — avoids recreating
+  /// PositionedDanmakuItem objects every frame, preserving displayX across frames
+  /// for wall-clock incremental positioning.
+  final Map<int, PositionedDanmakuItem> _positionedCache = {};
+
   Future<void> configure({
     required List<Map<String, dynamic>> danmakuList,
     required int danmakuListVersion,
@@ -125,8 +130,9 @@ class DfmPlusLayoutBridge {
     _lastCustomFontFamily = customFontFamily;
     _lastCustomFontFilePath = customFontFilePath;
     _lastBlockWords = List.unmodifiable(blockWords);
-    // Layout changed — content cache is stale, clear it
+    // Layout changed — content and position caches are stale, clear them
     _contentCache.clear();
+    _positionedCache.clear();
   }
 
   /// Synchronous layout: computes frame positions in Dart using the
@@ -198,13 +204,28 @@ class DfmPlusLayoutBridge {
         countText: pi.countText,
       ));
 
-      result.add(PositionedDanmakuItem(
+      // Reuse PositionedDanmakuItem from cache (preserves displayX across frames
+      // for wall-clock incremental positioning).
+      final positioned = _positionedCache.putIfAbsent(i, () => PositionedDanmakuItem(
         content: content,
         x: x,
         y: pi.yPosition,
         offstageX: offstageX,
         time: pi.timeSeconds,
+        scrollSpeed: pi.isScroll ? pi.scrollSpeed : 0.0,
+        width: pi.width,
       ));
+
+      // Update mutable fields from fresh absolute-position computation.
+      // displayX is intentionally NOT overwritten — it is managed by the
+      // wall-clock incremental positioning logic in DfmPlusOverlay.
+      positioned.x = x;
+      positioned.y = pi.yPosition;
+      positioned.offstageX = offstageX;
+      positioned.scrollSpeed = pi.isScroll ? pi.scrollSpeed : 0.0;
+      positioned.width = pi.width;
+
+      result.add(positioned);
     }
 
     return result;
@@ -246,6 +267,8 @@ class DfmPlusLayoutBridge {
       rust_dfm.dfmPlusDropLayout(handle: handle);
     }
     _prepared = null;
+    _contentCache.clear();
+    _positionedCache.clear();
   }
 
   bool _sameLayoutConfig(
