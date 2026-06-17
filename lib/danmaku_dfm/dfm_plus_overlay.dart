@@ -104,6 +104,33 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// Low-DPR screens render at 2x then downscale to fix aliasing.
   static const double _supersampleMultiplier = 2.0;
 
+  /// Reference layout width (px) for scroll-duration normalization (P2-12).
+  /// Danmaku scroll duration scales with layout width relative to this, so
+  /// the on-screen pixel velocity (px/s) stays roughly constant across
+  /// device sizes instead of making danmaku fly faster on wider screens.
+  /// 1280px = typical 16:9 landscape player — so common desktop/landscape
+  /// windows land near scale 1.0 (no perceptible change from the old fixed
+  /// 10s), while ultra-wide screens slow modestly and narrow windows speed
+  /// up modestly. Clamp bounds keep the correction gentle.
+  static const double _refLayoutWidth = 1280.0;
+  static const double _scrollDurationScaleMin = 0.9;
+  static const double _scrollDurationScaleMax = 1.3;
+
+  /// Effective scroll duration = base × (layoutWidth / refWidth), clamped.
+  /// A 1280px landscape window → 1.0 (unchanged); 1920px → 1.3 (mildly
+  /// slower, vs the old un-scaled ~1.5× px/s fly-by); 900px → 0.9 (mildly
+  /// faster). Keeps the familiar speed on common screens while taming the
+  /// wide-screen fly-by.
+  double _scaledScrollDuration() {
+    if (_layoutSize.width <= 0) {
+      return widget.scrollDurationSeconds;
+    }
+    final scale = (_layoutSize.width / _refLayoutWidth)
+        .clamp(_scrollDurationScaleMin, _scrollDurationScaleMax)
+        .toDouble();
+    return widget.scrollDurationSeconds * scale;
+  }
+
   // ── Wall-clock time interpolation ──
   // Instead of advancing each item's displayX per frame (which requires
   // fragile drift correction), we accumulate wall-clock dt since the last
@@ -125,7 +152,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   double _smoothedDtSeconds = 0.0;
   static const double _dtEmaAlpha = 0.3;
   int _resumeFrameCount = 0;
-  static const int _resumeEmaFrames = 5;
+  static const int _resumeEmaFrames = 3;
 
   // ── Submit-rate throttle (P1-4) ──
   // On high-refresh panels (>60Hz) the Dart layout+setFrame pipeline is
@@ -474,7 +501,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
             size: _layoutSize,
             fontSize: widget.fontSize,
             displayArea: widget.displayArea,
-            scrollDurationSeconds: widget.scrollDurationSeconds,
+            scrollDurationSeconds: _scaledScrollDuration(),
             allowStacking: widget.allowStacking,
             mergeDanmaku: widget.mergeDanmaku,
             maxQuantity: widget.maxQuantity,
