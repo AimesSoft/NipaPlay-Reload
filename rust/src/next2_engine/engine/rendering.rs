@@ -1013,6 +1013,14 @@ struct Next2Renderer {
     /// top of `build_vertices` from `submit_instant`. 0 when paused/stalled
     /// (>50ms since last submit) so motion freezes on the last submission.
     interp_dt: f32,
+    /// Previous submission instant, used to measure the Dart submit interval.
+    last_submit_instant: Option<std::time::Instant>,
+    /// Exponential moving average of the Dart submit interval (seconds).
+    /// Gates idle-tick interpolation: when Dart sustains ~1 submit/tick
+    /// (ema < 20ms, i.e. healthy 60fps), idle interp is disabled to avoid
+    /// double-rendering phase jitter (visible as 时快时慢 speed variation).
+    /// Enabled only when Dart feeds slower than the tick (~30fps submit).
+    submit_interval_ema: f32,
     width: u32,
     height: u32,
     shadow_mask_texture: wgpu::Texture,

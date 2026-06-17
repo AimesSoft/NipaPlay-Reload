@@ -423,6 +423,21 @@ impl Next2Renderer {
     /// build_vertices, guaranteeing we stop re-rendering exactly when motion
     /// would freeze anyway.
     fn needs_interpolation_render(&self) -> bool {
+        // Submit-rate adaptive gate. Only fill between submissions when Dart
+        // feeds slower than our 16ms tick (~30fps submit). When Dart sustains
+        // ~1 submit/tick (ema <= 20ms, healthy 60fps), idle interp is
+        // disabled: it would double-render alongside submit-draws, and the two
+        // streams (drawn at the same ~60Hz but unlocked phase) get sampled
+        // irregularly by the display link, producing non-uniform per-frame
+        // displacement — visible as 时快时慢 (variable speed). Dart's 60fps
+        // absolute positions are already smooth on their own. ema == 0
+        // (startup, not yet converged) skips this gate and falls through to
+        // the conservative 50ms + scroll-item checks below.
+        if self.submit_interval_ema > 0.0
+            && self.submit_interval_ema <= 0.020
+        {
+            return false;
+        }
         if self.submit_instant.elapsed().as_secs_f32() >= 0.050 {
             return false;
         }

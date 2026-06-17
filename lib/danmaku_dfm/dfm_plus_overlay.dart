@@ -205,7 +205,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   void didUpdateWidget(covariant DfmPlusOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.danmakuListVersion != widget.danmakuListVersion ||
-        oldWidget.danmakuList != widget.danmakuList ||
         oldWidget.allowStacking != widget.allowStacking ||
         oldWidget.mergeDanmaku != widget.mergeDanmaku ||
         oldWidget.fontSize != widget.fontSize ||
@@ -491,10 +490,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         }
 
         // If config changed, run async configure first.
-        final bool mustSubmit = _forceLayout || _configurePending;
+        final bool mustSubmit = _forceLayout;
         if (mustSubmit) {
           _forceLayout = false;
-          _configurePending = false;
           await _bridge.configure(
             danmakuList: widget.danmakuList,
             danmakuListVersion: widget.danmakuListVersion,
@@ -549,6 +547,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       }
     } catch (_) {
       // Keep overlay alive and retry on next frame.
+      _queueUpdate();
     } finally {
       _updateInFlight = false;
     }

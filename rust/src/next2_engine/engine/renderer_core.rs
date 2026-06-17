@@ -387,6 +387,8 @@ impl Next2Renderer {
             surface_screen_pipeline: None,
             submit_instant: std::time::Instant::now(),
             interp_dt: 0.0,
+            last_submit_instant: None,
+            submit_interval_ema: 0.0,
         })
     }
 
@@ -484,7 +486,16 @@ impl Next2Renderer {
         // instant until the next setFrame arrives (~16-33ms later at 60/30fps
         // Dart submission). The 50ms cap in build_vertices freezes motion if
         // no new frame arrives (pause / upstream stall).
-        self.submit_instant = std::time::Instant::now();
+        let now = std::time::Instant::now();
+        if let Some(prev) = self.last_submit_instant {
+            let interval = now.duration_since(prev).as_secs_f32();
+            // Clamp outlier intervals (seek / pause-resume) so they don't
+            // poison the EMA — only steady-state cadence drives the gate.
+            let clamped = interval.min(0.200);
+            self.submit_interval_ema = 0.2 * clamped + 0.8 * self.submit_interval_ema;
+        }
+        self.last_submit_instant = Some(now);
+        self.submit_instant = now;
 
         true
     }
