@@ -189,7 +189,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 - [x] 在线 URL 播放优化
 - [ ] Webview 弹幕刮削
 - [ ] 补帧功能 (SVP/Other)
-- [x] macOS HDR 支持（Erika 内核 EDR 原生 + media-kit）
+- [x] macOS HDR 支持（Erika 内核 EDR 原生 + Media Kit）
 - [ ] 跨平台 HDR 和杜比视界支持（Windows/Linux/Android）
 - [ ] 鸿蒙 OS / Vision Pro / Apple TV 移植
 
