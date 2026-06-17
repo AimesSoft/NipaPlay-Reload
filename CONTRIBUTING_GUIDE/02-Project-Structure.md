@@ -105,7 +105,7 @@
         *   `media_kit_player_adapter.dart`
         *   `video_player_adapter.dart`
     *   这层的意义是：UI 和 `VideoPlayerState` 不直接依赖某个具体播放器 SDK，而是通过统一接口工作。这样我们才能支持自研的 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust/Metal）、FVP(MDK)、Media Kit(libmpv)、Video Player 等不同内核。
-    *   **Erika 是当前重点发展的自研内核**，它的代码在独立仓库 [AimesSoft/Erika](https://github.com/AimesSoft/Erika)，通过 `packages/erika_flutter/` 以 Flutter 插件形式接入 NipaPlay。
+    *   **Erika 是当前重点发展的自研内核**，它的代码在独立仓库 [AimesSoft/Erika](https://github.com/AimesSoft/Erika)，并以 git dependency 的形式引入其中的 `packages/erika_flutter/` Flutter 插件接入 NipaPlay。
 
 *   `lib/danmaku_abstraction/`、`lib/danmaku_gpu/`、`lib/danmaku_next/`、`lib/danmaku_dfm/`
     *   这是弹幕系统的核心区域。项目支持多种弹幕引擎：
