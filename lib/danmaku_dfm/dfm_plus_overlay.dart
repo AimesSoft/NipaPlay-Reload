@@ -668,6 +668,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       scaleY: heightScale,
       fontScale: fontScale,
       locale: locale,
+      playbackRate: widget.playbackRate,
     );
 
     final pushed = await _textureBridge.setFrame(
@@ -681,6 +682,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       scaleX: widthScale,
       scaleY: heightScale,
       fontScale: fontScale,
+      playbackRate: widget.playbackRate,
       framePayload: prepared.toJson(),
     );
 
