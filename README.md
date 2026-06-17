@@ -130,7 +130,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 
 ### 播放体验
 
-* **内核支持**：自研 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust/Metal，macOS/iOS）、fvp (libmdk)、media_kit、video_player、libmpv，多内核可切换。
+* **内核支持**：自研 [Erika](https://github.com/AimesSoft/Erika) 内核（Rust/Metal，macOS/iOS）、FVP (libmdk)、Media Kit、Video Player、libmpv，多内核可切换。
 * **视频支持**：本地播放、Emby/Jellyfin/SMB 流媒体、WebDAV 挂载。
 * **画质增强**：支持 Anime4K 超分、CRT 着色器效果。
 * **音频控制**：多音轨切换、倍速播放。
