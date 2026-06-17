@@ -9,6 +9,12 @@
 - 提交 Pull Request 时请在描述中引用相关的悬赏问题
 - 成功解决问题的贡献者将在项目中获得特别致谢
 
+## 当前核心方向：Erika 自研内核
+
+**[Erika](https://github.com/AimesSoft/Erika)** 是 NipaPlay 的自研播放内核，Rust 实现，目标是从解码到渲染完全自主可控。虽然目前还不完整，但已经在 macOS/iOS 上跑通了硬件解码、Metal 渲染、HDR/EDR、AI 超分、弹幕等完整链路。
+
+**我们需要大家团结一致，把 Erika 做到全平台可用。** 这是当前最有价值的贡献方向——不管你擅长 Rust、Metal/wgpu、音视频还是跨平台构建，Erika 都有你能发力的地方。具体参见下方问题列表。
+
 ## 最近已经完成的里程碑
 
 先说明一下，下面这些方向已经不再属于当前悬赏重点：
@@ -16,6 +22,7 @@
 *   **弹幕系统基础能力已经比较完善**: 基础使用、渲染和整体体验已经不是主要堵点。
 *   **MDK 硬件解码支持问题已基本解决**: 不再作为当前开放悬赏。
 *   **Windows 完整版 LibMPV 支持已落地**: 官方构建已经集成完整版能力，不再作为当前开放悬赏。
+*   **macOS HDR 支持已落地**: Erika 内核已实现 Apple EDR 原生 HDR/PQ (BT.2020) 输出与 tone mapping；macOS 平台的 media-kit 也已支持 HDR。不再作为 macOS 平台的开放悬赏。
 
 因此，下面的列表只保留仍然值得投入的新挑战。
 
@@ -23,28 +30,46 @@
 
 ### 🔥 高优先级问题
 
-#### 1. HDR / 杜比视界支持研究与落地 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
+#### 1. Erika 内核完善与跨平台推进 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
 
-**问题描述**: 这是当前最典型的“越研究越发现很难”的问题。HDR 不只是“能解码”这么简单，它还涉及播放器内核、OS 色彩管理、显示链路、渲染路径、色调映射、窗口合成，以及不同平台对 HDR 元数据的支持差异。
+**问题描述**: [Erika](https://github.com/AimesSoft/Erika) 是 NipaPlay 的自研播放内核（Rust），目前已在 macOS/iOS 上实现硬件解码 (VideoToolbox)、零拷贝 Metal 渲染、HDR/EDR、AI 超分 (ArtCNN)、弹幕 GPU 渲染等能力。但离全平台可用还有距离，以下是最需要帮助的方向：
+
+*   **wgpu 渲染后端**：让 Erika 的渲染管线跑在 Windows/Linux/Android 上（基础架构已就绪，需要补全平台适配）
+*   **跨平台硬件解码**：接入 DXVA2/D3D11VA (Windows)、VAAPI/VDPAU (Linux)、MediaCodec (Android)
+*   **跨平台音频输出**：接入 WASAPI (Windows)、PulseAudio/PipeWire (Linux)、AAudio/OpenSL ES (Android)
+*   **Flutter 插件跨平台扩展**：目前 Flutter 插件仅支持 macOS + iOS，需要扩展到其他平台
+*   **C ABI 与宿主集成**：完善 C ABI 导出，确保各平台 FFI 调用稳定
+
+**技术领域**: Rust、wgpu/Metal、音视频解码、跨平台构建、Flutter 原生插件
+**相关仓库**: [AimesSoft/Erika](https://github.com/AimesSoft/Erika)
+**期望结果**: Erika 能在 Windows/Linux/Android 上运行基本的解码-渲染-音频链路
+**备注**: 这是当前项目最核心的长期方向。即使只完成其中一个平台的一个模块，也是极有价值的贡献。
+
+---
+
+#### 2. HDR / 杜比视界跨平台推进 ![难度: 高](https://img.shields.io/badge/难度-高-red)
+
+**问题描述**: macOS 上的 HDR 已经通过 Erika 内核（Apple EDR 原生 PQ/BT.2020 tone mapping）和 media-kit 两条路径落地。但 Windows/Linux/Android 上的 HDR 仍是开放问题，涉及不同平台的色彩管理、显示链路和渲染路径差异。
 
 **技术领域**: 视频解码、色彩科学、HDR 元数据、平台渲染管线
-**相关文件**: `lib/player_abstraction/`, `lib/utils/video_player_state/`, `windows/`, `macos/`, `linux/`
-**期望结果**: 明确 HDR 能力边界，并逐步实现 HDR10 / HDR10+ / Dolby Vision 的检测、透传或可接受的 tone mapping 策略
-**备注**: 这是研究型议题，先提交调研、实验性 PR、验证报告也非常有价值
+**相关文件**: Erika 仓库的渲染模块、`lib/player_abstraction/`、各平台目录
+**期望结果**: 在 Windows/Linux 上实现 HDR10 的检测、透传或可接受的 tone mapping 策略
+**备注**: 研究型议题，先提交调研报告或实验性 PR 也非常有价值
 
 ---
 
-#### 2. 新播放器内核集成 ![难度: 高](https://img.shields.io/badge/难度-高-red)
+#### 3. Erika macOS/iOS 稳定性与 Bug 修复 ![难度: 高](https://img.shields.io/badge/难度-高-red)
 
-**问题描述**: 希望继续扩展更多播放器内核选择，例如 VLC、GPU-Next 或其他适合特定平台的实现。
+**问题描述**: Erika 内核已经接入 NipaPlay 并可在 macOS/iOS 上使用，但作为尚在快速迭代的自研内核，仍存在各类稳定性问题和边界情况 Bug。需要社区帮助发现、复现和修复这些问题。
 
-**技术领域**: 播放器集成、原生平台开发、抽象层设计
-**相关文件**: `lib/player_abstraction/`, `lib/utils/player_kernel_manager.dart`, 设置页相关文件
-**期望结果**: 在尽量不破坏现有抽象层的前提下，增加新的可选内核
+**技术领域**: Rust、Metal、VideoToolbox、CoreAudio/AudioQueue、Flutter 原生插件
+**相关仓库**: [AimesSoft/Erika](https://github.com/AimesSoft/Erika)
+**期望结果**: 在 macOS/iOS 上达到日常可用的稳定性
+**备注**: 测试 + 提 Issue 也是极有价值的贡献。如果能附上复现步骤和日志，对修复速度帮助很大。
 
 ---
 
-#### 3. Steam Deck GPU 弹幕性能优化 ![难度: 高](https://img.shields.io/badge/难度-高-red)
+#### 4. Steam Deck GPU 弹幕性能优化 ![难度: 高](https://img.shields.io/badge/难度-高-red)
 
 **问题描述**: 在 Steam Deck 上使用 GPU 弹幕渲染时，视频帧数仍可能明显下降，说明渲染与播放链路之间还有优化空间。
 
@@ -55,7 +80,7 @@
 
 ### 💻 桌面端优化
 
-#### 4. Linux AppImage 体积优化 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 5. Linux AppImage 体积优化 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 
 **问题描述**: 目前 Linux 的 AppImage 格式文件体积过大，需要优化打包策略。
 
@@ -65,7 +90,7 @@
 
 ---
 
-#### 5. Flathub 上架支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 6. Flathub 上架支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 
 **问题描述**: 希望将应用上架到 Flathub，需要创建相应的 Flatpak 配置。
 
@@ -77,7 +102,7 @@
 
 ### 🎨 用户体验优化
 
-#### 6. Windows 安装程序美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
+#### 7. Windows 安装程序美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
 
 **问题描述**:
 
@@ -90,7 +115,7 @@
 
 ---
 
-#### 7. macOS DMG 布局美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
+#### 8. macOS DMG 布局美化 ![难度: 低](https://img.shields.io/badge/难度-低-green)
 
 **问题描述**: macOS 的 DMG 文件打开后的布局需要美化。
 
@@ -102,7 +127,7 @@
 
 ### 🎬 平台与内核拓展
 
-#### 8. 新平台移植 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
+#### 9. 新平台移植 ![难度: 极高](https://img.shields.io/badge/难度-极高-darkred)
 
 **问题描述**: 希望将应用移植到更多平台：
 
@@ -118,7 +143,7 @@
 
 ### 🎮 交互体验
 
-#### 9. 手柄支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 10. 手柄支持 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 
 **问题描述**: 添加游戏手柄支持，特别是为 Steam Deck 等设备优化交互体验。
 
@@ -130,7 +155,7 @@
 
 ### 🔧 底层优化
 
-#### 10. LibMPV 参数扩展 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
+#### 11. LibMPV 参数扩展 ![难度: 中](https://img.shields.io/badge/难度-中-orange)
 
 **问题描述**: 需要让 libmpv 内核支持更多传入参数，提供更多的播放选项。
 
