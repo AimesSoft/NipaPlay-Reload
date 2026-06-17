@@ -16,10 +16,10 @@
 
 你可以把它理解成：
 
-*   `themes/` 是”你看到的界面”
-*   `VideoPlayerState` 是”控制播放的一层总调度”
-*   `player_abstraction/` 和 `danmaku_abstraction/` 是”真正对接底层内核的一层适配器”
-*   `plugins/` 是”用户和社区可以自由扩展功能的入口”
+*   `themes/` 是“你看到的界面”
+*   `VideoPlayerState` 是“控制播放的一层总调度”
+*   `player_abstraction/` 和 `danmaku_abstraction/` 是“真正对接底层内核的一层适配器”
+*   `plugins/` 是“用户和社区可以自由扩展功能的入口”
 
 ## 顶层目录速览
 
