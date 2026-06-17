@@ -93,6 +93,14 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   String _surfaceId = 'dfm-default';
   double _lastDevicePixelRatio = 1.0;
 
+  /// Tracks whether the native scene is currently empty. Lets us skip the
+  /// per-vsync JSON-encode + MethodChannel hop when there are no visible
+  /// danmaku: we push ONE empty setFrame to clear the previous frame, then
+  /// short-circuit subsequent empty frames until content returns. Big
+  /// battery/CPU win on quiet scenes and low-end devices. Reset to false
+  /// on any non-empty frame or a non-fresh texture re-acquire.
+  bool _sceneCleared = false;
+
   /// Low-DPR screens render at 2x then downscale to fix aliasing.
   static const double _supersampleMultiplier = 2.0;
 
@@ -343,7 +351,18 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           rawDtSeconds = 0.0;
         } else {
           final deltaUs = currentWallUs - _lastWallUs;
-          rawDtSeconds = deltaUs < 100000 ? deltaUs / 1000000.0 : 0.0;
+          // Clamp (don't hard-zero) the per-frame delta at 100ms.
+          // Hard-zeroing any frame whose inter-vsync gap reaches >=100ms
+          // cascades on low-FPS devices (<=10fps): every frame zeroes,
+          // _accumulatedWallDt never grows, and motion stalls until the
+          // media clock itself jumps — producing discrete stepping instead
+          // of vsync-rate scroll. Clamping lets a slow/jittery frame still
+          // advance time by a capped amount, preserving smooth motion. The
+          // 100ms cap below (_accumulatedWallDt > 0.1) keeps total drift
+          // bounded until the media-clock anchor next updates.
+          final double clampedUs =
+              deltaUs > 100000 ? 100000.0 : deltaUs.toDouble();
+          rawDtSeconds = clampedUs / 1000000.0;
         }
         _lastWallUs = currentWallUs;
 
@@ -528,7 +547,29 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       // call naturally render new content on top of the fresh engine.
       if (info.isNewEngine) {
         _emojiPipeline.markAtlasDirty();
+        // A fresh engine starts with an empty scene, so we can skip the
+        // clearing setFrame below if the frame is also empty.
+        _sceneCleared = true;
+      } else {
+        // Same engine, texture re-acquired (surface/size change) — it may
+        // still hold the last pushed scene, so force a re-evaluation.
+        _sceneCleared = false;
       }
+    }
+
+    // ── Empty-frame short-circuit ──
+    // With no visible danmaku, skip the per-vsync buildPayload (allocation)
+    // + jsonEncode + MethodChannel hop. We push exactly ONE empty setFrame
+    // to clear the previous frame's content, then short-circuit until
+    // content returns. The scene-cleared state is tracked so we never leave
+    // stale danmaku on screen and never re-clear an already-empty scene.
+    if (frame.isEmpty) {
+      if (_sceneCleared) {
+        return true; // already clear — nothing to submit this vsync
+      }
+      // Fall through: send one empty setFrame to clear the scene.
+    } else {
+      _sceneCleared = false;
     }
 
     final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
@@ -561,6 +602,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
     if (pushed) {
       _emojiPipeline.markAtlasSynced();
+      if (frame.isEmpty) {
+        _sceneCleared = true; // scene now confirmed empty
+      }
     } else {
       _emojiPipeline.markAtlasDirty();
     }
