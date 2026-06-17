@@ -1004,6 +1004,15 @@ struct Next2Renderer {
     shadow_vertices: Vec<GlyphVertex>,
     frame_items: Vec<FrameItem>,
     clear_color: [f64; 4],
+    /// Monotonic instant captured when the most recent frame was submitted
+    /// (in `update_frame`). Used by `build_vertices` to interpolate scroll
+    /// item x between Dart submissions: `x_render = x + scroll_speed * dt`,
+    /// where `dt = submit_instant.elapsed()` capped at 50ms.
+    submit_instant: std::time::Instant,
+    /// Interpolation delta (seconds) for the current draw. Recomputed at the
+    /// top of `build_vertices` from `submit_instant`. 0 when paused/stalled
+    /// (>50ms since last submit) so motion freezes on the last submission.
+    interp_dt: f32,
     width: u32,
     height: u32,
     shadow_mask_texture: wgpu::Texture,

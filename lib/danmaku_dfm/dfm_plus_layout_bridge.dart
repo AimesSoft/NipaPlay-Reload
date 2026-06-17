@@ -214,6 +214,7 @@ class DfmPlusLayoutBridge {
         time: pi.timeSeconds,
         scrollSpeed: pi.isScroll ? pi.scrollSpeed : 0.0,
         width: pi.width,
+        typeCode: pi.typeCode,
       ));
 
       // Update mutable fields from fresh absolute-position computation.
@@ -224,6 +225,7 @@ class DfmPlusLayoutBridge {
       positioned.offstageX = offstageX;
       positioned.scrollSpeed = pi.isScroll ? pi.scrollSpeed : 0.0;
       positioned.width = pi.width;
+      positioned.typeCode = pi.typeCode;
 
       result.add(positioned);
     }

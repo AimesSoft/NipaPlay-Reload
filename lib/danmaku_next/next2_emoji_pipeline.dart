@@ -81,6 +81,12 @@ class Next2EmojiPipeline {
         'y': item.y * scaleY,
         'color_argb': item.content.color.toARGB32().toSigned(32),
         'font_size_multiplier': item.content.fontSizeMultiplier,
+        // Signed scroll velocity in TEXTURE px/s (RL<0, LR>0, static=0).
+        // Lets the native renderer interpolate `x_render = x + scroll_speed*dt`
+        // between Dart submissions, so 30fps submits yield smooth 60/120fps
+        // motion. scaleX maps layout px/s → texture px/s, matching how `x`
+        // is scaled above. Non-DFM sources leave typeCode=0 → 0 (no interp).
+        'scroll_speed': _signedScrollSpeed(item, scaleX),
         if (tokens.isNotEmpty) 'tokens': tokens,
       });
     }
@@ -125,6 +131,21 @@ class Next2EmojiPipeline {
       items: encodedItems,
       emojiGlyphs: visibleGlyphs,
     );
+  }
+
+  /// Signed scroll velocity in texture px/s for native interpolation.
+  /// typeCode 6 = ScrollLR (moves right, +), 1 = ScrollRL (moves left, -).
+  /// Static items or unknown typeCode → 0 (no interpolation, safe fallback).
+  static double _signedScrollSpeed(PositionedDanmakuItem item, double scaleX) {
+    if (item.scrollSpeed == 0.0) return 0.0;
+    switch (item.typeCode) {
+      case 6:
+        return item.scrollSpeed * scaleX;
+      case 1:
+        return -item.scrollSpeed * scaleX;
+      default:
+        return 0.0;
+    }
   }
 
   List<Map<String, dynamic>> _tokenize(

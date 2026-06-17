@@ -185,6 +185,15 @@ class Next2TextureBridge {
       'y': item.y * scaleY,
       'color_argb': item.content.color.toARGB32().toSigned(32),
       'font_size_multiplier': item.content.fontSizeMultiplier,
+      // Mirror Next2EmojiPipeline._signedScrollSpeed so the fallback path
+      // (framePayload == null) stays consistent with the production path.
+      'scroll_speed': item.scrollSpeed == 0.0
+          ? 0.0
+          : item.typeCode == 6
+              ? item.scrollSpeed * scaleX
+              : item.typeCode == 1
+                  ? -item.scrollSpeed * scaleX
+                  : 0.0,
     };
   }
 

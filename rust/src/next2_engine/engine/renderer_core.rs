@@ -385,6 +385,8 @@ impl Next2Renderer {
             surface_format: None,
             #[cfg(target_os = "android")]
             surface_screen_pipeline: None,
+            submit_instant: std::time::Instant::now(),
+            interp_dt: 0.0,
         })
     }
 
@@ -473,8 +475,16 @@ impl Next2Renderer {
                 outline_width,
                 shadow_style,
                 opacity,
+                scroll_speed: item.scroll_speed as f32,
             });
         }
+
+        // Re-baseline the interpolation clock to this submission. The render
+        // thread's idle-tick re-renders will advance scroll items from this
+        // instant until the next setFrame arrives (~16-33ms later at 60/30fps
+        // Dart submission). The 50ms cap in build_vertices freezes motion if
+        // no new frame arrives (pause / upstream stall).
+        self.submit_instant = std::time::Instant::now();
 
         true
     }

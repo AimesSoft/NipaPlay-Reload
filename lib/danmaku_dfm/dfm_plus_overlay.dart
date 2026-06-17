@@ -127,6 +127,17 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   int _resumeFrameCount = 0;
   static const int _resumeEmaFrames = 5;
 
+  // ── Submit-rate throttle (P1-4) ──
+  // On high-refresh panels (>60Hz) the Dart layout+setFrame pipeline is
+  // capped at 60Hz; the native renderer interpolates scroll motion between
+  // submissions, so motion stays smooth at the display rate while Dart CPU
+  // work is halved on 120Hz screens. dt/anchor still advance every vsync
+  // (cheap), so skipped frames lose no time precision. 0 = no throttle
+  // (≤60Hz panels or refresh-rate detection unavailable).
+  int _lastSubmitWallUs = 0;
+  int _minSubmitIntervalUs = 0;
+  double _cachedRefreshRate = 0.0;
+
   /// No GPU submission throttle needed — the Rust engine's 16ms tick loop
   /// naturally drains the mpsc queue (try_recv after first recv_timeout),
   /// always rendering the latest submitted frame. Submitting every vsync
@@ -260,6 +271,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
         final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
+
+        // ── Detect display refresh rate for submit-rate throttling (P1-4) ──
+        // On >60Hz panels we cap Dart layout+setFrame at 60Hz (native renderer
+        // interpolates the rest). refreshRate may be unavailable/0 on some
+        // platforms or older Flutter; in that case stay at 0 = no throttle.
+        _maybeUpdateSubmitInterval();
         // DPR can micro-jitter on Windows when the window loses focus or the
         // user clicks the taskbar (didChangeMetrics fires with a slightly
         // different value). DPR only affects the texture's pixel size, not the
@@ -302,6 +319,30 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         );
       },
     );
+  }
+
+  /// Detect the display refresh rate and set the submit interval accordingly.
+  /// On panels faster than 60Hz, Dart layout+setFrame is capped at 60Hz
+  /// (16ms) — the native renderer interpolates scroll motion between
+  /// submissions, so motion stays smooth at the display rate while halving
+  /// Dart CPU work on 120Hz screens. ≤60Hz or undetectable → no throttle.
+  void _maybeUpdateSubmitInterval() {
+    double refreshRate = 0.0;
+    try {
+      final views = WidgetsBinding.instance.platformDispatcher.views;
+      if (views.isNotEmpty) {
+        refreshRate = views.first.display.refreshRate;
+      }
+    } catch (_) {
+      refreshRate = 0.0;
+    }
+    if (refreshRate == _cachedRefreshRate) {
+      return;
+    }
+    _cachedRefreshRate = refreshRate;
+    _minSubmitIntervalUs = refreshRate > 60.0 ? 16000 : 0;
+    // Reset so the next frame after a rate change submits immediately.
+    _lastSubmitWallUs = 0;
   }
 
   void _queueUpdate() {
@@ -423,7 +464,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         }
 
         // If config changed, run async configure first.
-        if (_forceLayout || _configurePending) {
+        final bool mustSubmit = _forceLayout || _configurePending;
+        if (mustSubmit) {
           _forceLayout = false;
           _configurePending = false;
           await _bridge.configure(
@@ -450,6 +492,21 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           _lastAnchorPlaybackTime =
               widget.playbackTimeMs.value / 1000.0;
         }
+
+        // ── Submit-rate throttle (P1-4) ──
+        // On >60Hz panels, skip the layout+setFrame work on vsync frames
+        // that fall within 16ms of the last submission. dt and anchor still
+        // advanced above, so time precision is preserved; the native renderer
+        // interpolates scroll motion between submissions. Force-configure
+        // frames always submit. The first frame after (re)start has a huge
+        // gap → submits immediately.
+        if (!mustSubmit &&
+            _minSubmitIntervalUs > 0 &&
+            _lastSubmitWallUs != 0 &&
+            currentWallUs - _lastSubmitWallUs < _minSubmitIntervalUs) {
+          continue;
+        }
+        _lastSubmitWallUs = currentWallUs;
 
         // ── Layout with interpolated time ──
         // The interpolatedTime advances smoothly every vsync frame.
