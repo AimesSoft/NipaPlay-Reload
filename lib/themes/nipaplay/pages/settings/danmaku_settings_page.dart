@@ -273,17 +273,40 @@ class _DanmakuSettingsPageState extends State<DanmakuSettingsPage> {
             _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus)
           Consumer<SettingsProvider>(
             builder: (context, settingsProvider, child) {
-              return SettingsItem.toggle(
+              final currentValue = settingsProvider.danmakuSupersample;
+              final items = <DropdownMenuItemData<double>>[
+                DropdownMenuItemData(
+                  title: '关闭',
+                  value: 0.0,
+                  isSelected: currentValue == 0.0,
+                  description: '原始分辨率渲染，GPU 负担最低',
+                ),
+                DropdownMenuItemData(
+                  title: '1.5x',
+                  value: 1.5,
+                  isSelected: currentValue == 1.5,
+                  description: '1.5 倍像素密度，平衡清晰度与性能',
+                ),
+                DropdownMenuItemData(
+                  title: '2x',
+                  value: 2.0,
+                  isSelected: currentValue == 2.0,
+                  description: '2 倍像素密度，文字最清晰，GPU 负担较高',
+                ),
+              ];
+              return SettingsItem.dropdown(
                 title: '弹幕超采样渲染',
-                subtitle: '在部分设备上以更高像素密度渲染弹幕，使文字更清晰，但会增加 GPU 负担',
+                subtitle: '以更高像素密度渲染弹幕，使文字更清晰',
                 icon: Ionicons.expand_outline,
-                value: settingsProvider.danmakuSupersample,
-                onChanged: (bool value) {
+                items: items,
+                onChanged: (dynamic value) {
+                  if (value is! double) return;
                   settingsProvider.setDanmakuSupersample(value);
                   if (context.mounted) {
+                    final label = value == 0.0 ? '关闭' : '${value}x';
                     BlurSnackBar.show(
                       context,
-                      value ? '已开启弹幕超采样渲染' : '已关闭弹幕超采样渲染',
+                      '弹幕超采样已设为 $label',
                     );
                   }
                 },

@@ -100,9 +100,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   /// on any non-empty frame or a non-fresh texture re-acquire.
   bool _sceneCleared = false;
 
-  /// Low-DPR screens render at 2x then downscale to fix aliasing.
-  static const double _supersampleMultiplier = 2.0;
-
   /// Reference layout width (px) for scroll-duration normalization (P2-12).
   /// Danmaku scroll duration scales with layout width relative to this, so
   /// the on-screen pixel velocity (px/s) stays roughly constant across
@@ -339,7 +336,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         final needsSupersample = context
             .watch<SettingsProvider>()
             .danmakuSupersample;
-        final filterQuality = needsSupersample
+        final filterQuality = needsSupersample > 0.0
             ? FilterQuality.low
             : FilterQuality.none;
         final Widget content = hasTexture
@@ -578,12 +575,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     // needsNewTexture → ensureTexture → isNewEngine → resetScene → flicker.
     final dpr = _lastDevicePixelRatio;
 
-    final needsSupersample = context
+    final supersample = context
         .read<SettingsProvider>()
         .danmakuSupersample;
-    final supersample = needsSupersample ? _supersampleMultiplier : 1.0;
     final double pixelRatio =
-        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
+        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) *
+        (supersample > 0.0 ? supersample : 1.0);
 
     final int pixelWidth = (_layoutSize.width * pixelRatio)
         .round()
