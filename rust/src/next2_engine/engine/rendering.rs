@@ -1004,6 +1004,23 @@ struct Next2Renderer {
     shadow_vertices: Vec<GlyphVertex>,
     frame_items: Vec<FrameItem>,
     clear_color: [f64; 4],
+    /// Monotonic instant captured when the most recent frame was submitted
+    /// (in `update_frame`). Used by `build_vertices` to interpolate scroll
+    /// item x between Dart submissions: `x_render = x + scroll_speed * dt`,
+    /// where `dt = submit_instant.elapsed()` capped at 50ms.
+    submit_instant: std::time::Instant,
+    /// Interpolation delta (seconds) for the current draw. Recomputed at the
+    /// top of `build_vertices` from `submit_instant`. 0 when paused/stalled
+    /// (>50ms since last submit) so motion freezes on the last submission.
+    interp_dt: f32,
+    /// Previous submission instant, used to measure the Dart submit interval.
+    last_submit_instant: Option<std::time::Instant>,
+    /// Exponential moving average of the Dart submit interval (seconds).
+    /// Gates idle-tick interpolation: when Dart sustains ~1 submit/tick
+    /// (ema < 20ms, i.e. healthy 60fps), idle interp is disabled to avoid
+    /// double-rendering phase jitter (visible as 时快时慢 speed variation).
+    /// Enabled only when Dart feeds slower than the tick (~30fps submit).
+    submit_interval_ema: f32,
     width: u32,
     height: u32,
     shadow_mask_texture: wgpu::Texture,

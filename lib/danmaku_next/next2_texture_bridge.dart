@@ -93,6 +93,7 @@ class Next2TextureBridge {
     double scaleX = 1.0,
     double scaleY = 1.0,
     double fontScale = 1.0,
+    double playbackRate = 1.0,
     Map<String, dynamic>? framePayload,
   }) async {
     if (!isSupported) {
@@ -112,6 +113,7 @@ class Next2TextureBridge {
                   item,
                   scaleX: scaleX,
                   scaleY: scaleY,
+                  playbackRate: playbackRate,
                 ),
               )
               .toList(growable: false),
@@ -177,6 +179,7 @@ class Next2TextureBridge {
     PositionedDanmakuItem item, {
     required double scaleX,
     required double scaleY,
+    double playbackRate = 1.0,
   }) {
     return <String, dynamic>{
       'text': item.content.text,
@@ -185,6 +188,17 @@ class Next2TextureBridge {
       'y': item.y * scaleY,
       'color_argb': item.content.color.toARGB32().toSigned(32),
       'font_size_multiplier': item.content.fontSizeMultiplier,
+      // Mirror Next2EmojiPipeline._signedScrollSpeed so the fallback path
+      // (framePayload == null) stays consistent with the production path.
+      // playbackRate folds video speed into the velocity so native
+      // interpolation matches Dart's rate-scaled position advancement.
+      'scroll_speed': item.scrollSpeed == 0.0
+          ? 0.0
+          : item.typeCode == 6
+              ? item.scrollSpeed * scaleX * playbackRate
+              : item.typeCode == 1
+                  ? -item.scrollSpeed * scaleX * playbackRate
+                  : 0.0,
     };
   }
 

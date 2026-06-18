@@ -29,8 +29,8 @@ class SettingsProvider with ChangeNotifier {
   // GitHub 代理设置
   String _githubProxyUrl = '';
 
-  // 弹幕超采样设置
-  bool _danmakuSupersample = true; // 默认值在 _loadSettings 中根据设备类型决定
+  // 弹幕超采样设置：0.0=关闭, 1.5=1.5x, 2.0=2x
+  double _danmakuSupersample = 2.0; // 默认值在 _loadSettings 中根据设备类型决定
 
   // --- Getters ---
   double get blurPower => _blurPower;
@@ -42,7 +42,7 @@ class SettingsProvider with ChangeNotifier {
   bool get useExternalPlayer => _useExternalPlayer;
   String get externalPlayerPath => _externalPlayerPath;
   String get githubProxyUrl => _githubProxyUrl;
-  bool get danmakuSupersample => _danmakuSupersample;
+  double get danmakuSupersample => _danmakuSupersample;
 
   SettingsProvider() {
     _loadSettings();
@@ -77,11 +77,11 @@ class SettingsProvider with ChangeNotifier {
         _prefs.getString(SettingsKeys.externalPlayerPath) ?? '';
     _githubProxyUrl =
         _prefs.getString(SettingsKeys.githubProxyUrl) ?? '';
-    // 弹幕超采样：默认对平板和低 DPR 桌面设备开启
+    // 弹幕超采样：默认对平板和低 DPR 桌面设备开启 2x
     final defaultSupersample =
-        globals.isTablet || (globals.isDesktop && _defaultDprBelow2());
+        globals.isTablet || (globals.isDesktop && _defaultDprBelow2()) ? 2.0 : 0.0;
     _danmakuSupersample =
-        _prefs.getBool(SettingsKeys.danmakuSupersample) ?? defaultSupersample;
+        _prefs.getDouble(SettingsKeys.danmakuSupersample) ?? defaultSupersample;
     notifyListeners();
   }
 
@@ -168,9 +168,9 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setDanmakuSupersample(bool enable) async {
-    _danmakuSupersample = enable;
-    await _prefs.setBool(SettingsKeys.danmakuSupersample, enable);
+  Future<void> setDanmakuSupersample(double value) async {
+    _danmakuSupersample = value;
+    await _prefs.setDouble(SettingsKeys.danmakuSupersample, value);
     notifyListeners();
   }
 

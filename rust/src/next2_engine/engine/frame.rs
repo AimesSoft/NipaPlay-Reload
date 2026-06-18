@@ -17,6 +17,12 @@ struct FrameItemPayload {
     font_size_multiplier: f64,
     #[serde(default)]
     tokens: Option<Vec<FrameTokenPayload>>,
+    /// Signed scroll velocity in texture px/s (RL<0, LR>0, static=0).
+    /// Lets the renderer interpolate `x_render = x + scroll_speed * dt`
+    /// between Dart submissions. Default 0 = no interpolation (legacy
+    /// behavior; also the path taken by Next2 which doesn't send it).
+    #[serde(default)]
+    scroll_speed: f64,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +59,8 @@ struct FrameItem {
     outline_width: f32,
     shadow_style: u8,
     opacity: f32,
+    /// Signed scroll velocity (texture px/s). 0 = static, no interpolation.
+    scroll_speed: f32,
 }
 
 #[derive(Clone)]

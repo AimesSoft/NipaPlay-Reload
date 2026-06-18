@@ -415,9 +415,49 @@ impl Next2Renderer {
         self.shadow_vertex_capacity_bytes = next_capacity;
     }
 
+    /// Whether the engine loop should re-render on an idle tick to advance
+    /// scroll interpolation. True only when the scene has at least one scroll
+    /// item AND a frame was submitted within the last 50ms — so empty/static
+    /// scenes and paused/stalled playback (no recent submission) incur no
+    /// continuous GPU work. The 50ms window matches the interp_dt cap in
+    /// build_vertices, guaranteeing we stop re-rendering exactly when motion
+    /// would freeze anyway.
+    fn needs_interpolation_render(&self) -> bool {
+        // Submit-rate adaptive gate. Only fill between submissions when Dart
+        // feeds slower than our 16ms tick (~30fps submit). When Dart sustains
+        // ~1 submit/tick (ema <= 20ms, healthy 60fps), idle interp is
+        // disabled: it would double-render alongside submit-draws, and the two
+        // streams (drawn at the same ~60Hz but unlocked phase) get sampled
+        // irregularly by the display link, producing non-uniform per-frame
+        // displacement — visible as 时快时慢 (variable speed). Dart's 60fps
+        // absolute positions are already smooth on their own. ema == 0
+        // (startup, not yet converged) skips this gate and falls through to
+        // the conservative 50ms + scroll-item checks below.
+        if self.submit_interval_ema > 0.0
+            && self.submit_interval_ema <= 0.020
+        {
+            return false;
+        }
+        if self.submit_instant.elapsed().as_secs_f32() >= 0.050 {
+            return false;
+        }
+        self.frame_items
+            .iter()
+            .any(|item| item.scroll_speed != 0.0)
+    }
+
     fn build_vertices(&mut self) {
         self.vertices.clear();
         self.shadow_vertices.clear();
+
+        // Interpolation delta since the last frame submission. Capped at 50ms:
+        // normal 60fps(16ms)/30fps(33ms) Dart submissions keep this <50ms so
+        // scroll items advance smoothly between submits; if no new frame
+        // arrives for >50ms (pause / upstream stall) dt clamps to 0, freezing
+        // motion on the last submission without needing a pause command.
+        let elapsed = self.submit_instant.elapsed().as_secs_f32();
+        self.interp_dt = if elapsed < 0.050 { elapsed } else { 0.0 };
+        let interp_dt = self.interp_dt as f64;
 
         for item in self.frame_items.clone().iter() {
             let outline_px = resolve_outline_px(item.font_size, item.outline_width);
@@ -431,7 +471,7 @@ impl Next2Renderer {
                 shadow.opacity * item.opacity * SHADOW_ALPHA_SCALE,
             ];
 
-            let mut cursor_x = item.x as f32;
+            let mut cursor_x = (item.x + item.scroll_speed as f64 * interp_dt) as f32;
             let quantized_size = item.font_size.round().clamp(8.0, 256.0) as u32;
             let baseline_y = item.y as f32 + self.atlas.line_ascent(quantized_size);
             let tokens = item.tokens.clone();

@@ -73,9 +73,6 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
   int _lastTextureHeight = 0;
   String _lastTextureSurfaceId = '';
 
-  /// Low-DPR screens render at 2x then downscale to fix aliasing.
-  static const double _supersampleMultiplier = 2.0;
-
   @override
   void initState() {
     super.initState();
@@ -161,7 +158,7 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
             final needsSupersample =
                 context.watch<SettingsProvider>().danmakuSupersample;
             final filterQuality =
-                needsSupersample ? FilterQuality.low : FilterQuality.none;
+                needsSupersample > 0.0 ? FilterQuality.low : FilterQuality.none;
             final Widget content = hasTexture
                 ? Texture(
                     textureId: _textureId!,
@@ -247,11 +244,12 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     // ensureTexture → isNewEngine → resetScene → flicker.
     final dpr = _lastDevicePixelRatio;
 
-    final needsSupersample =
-        context.read<SettingsProvider>().danmakuSupersample;
-    final supersample = needsSupersample ? _supersampleMultiplier : 1.0;
+    final supersample = context
+        .read<SettingsProvider>()
+        .danmakuSupersample;
     final double pixelRatio =
-        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
+        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) *
+        (supersample > 0.0 ? supersample : 1.0);
 
     final int pixelWidth =
         (_layoutSize.width * pixelRatio).round().clamp(1, 16384).toInt();

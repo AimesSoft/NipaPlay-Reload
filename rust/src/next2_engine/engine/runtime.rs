@@ -832,7 +832,14 @@ fn run_engine_loop(
             break;
         }
 
-        if has_pending_frame {
+        // Re-render not only on a freshly submitted frame, but also on idle
+        // 16ms ticks while scroll interpolation is active. needs_interpolation_render
+        // is true only when there are scroll items AND a frame was submitted
+        // within the last 50ms — so paused/empty scenes add no continuous GPU
+        // load. draw_to_present recomputes interp_dt internally, advancing
+        // scroll items between Dart submissions (30fps submit → ~60fps motion).
+        let needs_interp = renderer.needs_interpolation_render();
+        if has_pending_frame || needs_interp {
             if let Some(target) = present_target.as_mut() {
                 renderer.draw_to_present(target);
                 signal_frame_ready(ctx.queue.as_ref(), Arc::clone(&frame_ready));

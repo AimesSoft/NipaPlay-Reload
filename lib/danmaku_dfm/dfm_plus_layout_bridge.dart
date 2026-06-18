@@ -30,6 +30,21 @@ class DfmPlusLayoutBridge {
   /// DanmakuContentItem (with Color object) every frame for the same item.
   final Map<int, DanmakuContentItem> _contentCache = {};
 
+  /// Positioned item cache keyed by prepared item index — avoids recreating
+  /// PositionedDanmakuItem objects every frame, preserving displayX across frames
+  /// for wall-clock incremental positioning.
+  final Map<int, PositionedDanmakuItem> _positionedCache = {};
+
+  /// Soft-prune bookkeeping (P2-8). On long videos where the danmaku list /
+  /// font size never change, configure() (which clears the caches) is never
+  /// re-invoked, so _contentCache/_positionedCache grow unbounded as the
+  /// visible window scrolls through ever-increasing item indices. Every
+  /// ~30s, if the caches hold far more entries than the current visible
+  /// window, clear them — putIfAbsent rebuilds only the currently-visible
+  /// items on the next frame (one cheap Color/object allocation each).
+  int _lastPruneTimestampMs = 0;
+  static const int _pruneIntervalMs = 30000;
+
   Future<void> configure({
     required List<Map<String, dynamic>> danmakuList,
     required int danmakuListVersion,
@@ -125,8 +140,9 @@ class DfmPlusLayoutBridge {
     _lastCustomFontFamily = customFontFamily;
     _lastCustomFontFilePath = customFontFilePath;
     _lastBlockWords = List.unmodifiable(blockWords);
-    // Layout changed — content cache is stale, clear it
+    // Layout changed — content and position caches are stale, clear them
     _contentCache.clear();
+    _positionedCache.clear();
   }
 
   /// Synchronous layout: computes frame positions in Dart using the
@@ -155,6 +171,21 @@ class DfmPlusLayoutBridge {
     final windowStart = currentTimeSeconds - maxDur;
     final startIdx = _lowerBound(itemTimes, windowStart);
     final endIdx = _upperBound(itemTimes, currentTimeSeconds);
+
+    // Soft-prune caches that drifted beyond the visible window on long
+    // videos (P2-8). Clears only when caches hold far more than the current
+    // window AND at least 30s since the last prune — putIfAbsent rebuilds
+    // visible items next frame, so this is invisible to the user.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastPruneTimestampMs >= _pruneIntervalMs) {
+      _lastPruneTimestampMs = nowMs;
+      final windowSize = endIdx - startIdx;
+      if (_positionedCache.length > windowSize * 2 &&
+          _positionedCache.length > 64) {
+        _contentCache.clear();
+        _positionedCache.clear();
+      }
+    }
 
     // Reuse buffer — clear without deallocating
     final result = _layoutBuffer..clear();
@@ -198,13 +229,30 @@ class DfmPlusLayoutBridge {
         countText: pi.countText,
       ));
 
-      result.add(PositionedDanmakuItem(
+      // Reuse PositionedDanmakuItem from cache (preserves displayX across frames
+      // for wall-clock incremental positioning).
+      final positioned = _positionedCache.putIfAbsent(i, () => PositionedDanmakuItem(
         content: content,
         x: x,
         y: pi.yPosition,
         offstageX: offstageX,
         time: pi.timeSeconds,
+        scrollSpeed: pi.isScroll ? pi.scrollSpeed : 0.0,
+        width: pi.width,
+        typeCode: pi.typeCode,
       ));
+
+      // Update mutable fields from fresh absolute-position computation.
+      // displayX is intentionally NOT overwritten — it is managed by the
+      // wall-clock incremental positioning logic in DfmPlusOverlay.
+      positioned.x = x;
+      positioned.y = pi.yPosition;
+      positioned.offstageX = offstageX;
+      positioned.scrollSpeed = pi.isScroll ? pi.scrollSpeed : 0.0;
+      positioned.width = pi.width;
+      positioned.typeCode = pi.typeCode;
+
+      result.add(positioned);
     }
 
     return result;
@@ -246,6 +294,8 @@ class DfmPlusLayoutBridge {
       rust_dfm.dfmPlusDropLayout(handle: handle);
     }
     _prepared = null;
+    _contentCache.clear();
+    _positionedCache.clear();
   }
 
   bool _sameLayoutConfig(

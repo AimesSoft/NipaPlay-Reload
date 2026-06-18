@@ -32,6 +32,46 @@ class Next2EmojiPipeline {
 
   bool _forceGlyphResend = true;
 
+  /// Cache of tokenize results for plain (emoji-free) text. _tokenize is a
+  /// pure function of (text, fontSize) when the text contains no emoji
+  /// clusters — the result is a single {'k':'t','t':text} token and no
+  /// pending emoji registration. The vast majority of danmaku are plain
+  /// text, so this skips re-splitting + re-allocating the token list every
+  /// frame for repeated/long-lived items. Emoji-bearing text bypasses the
+  /// cache (it must re-register pending emoji each frame). LRU-bounded.
+  static const int _tokenCacheLimit = 2000;
+  final LinkedHashMap<String, List<Map<String, dynamic>>> _plainTokenCache =
+      LinkedHashMap<String, List<Map<String, dynamic>>>();
+
+  /// Returns cached tokenize result for emoji-free text, or null if the text
+  /// contains emoji clusters (caller falls back to full _tokenize which
+  /// registers pending emoji builds). Key folds in quantized fontSize.
+  List<Map<String, dynamic>>? _cachedPlainTokens(String text, double fontSize) {
+    if (text.isEmpty) return const <Map<String, dynamic>>[];
+    // Quick emoji presence check without iterating unless likely.
+    for (final cluster in text.characters) {
+      if (_looksLikeEmojiCluster(cluster)) {
+        return null; // has emoji → not cacheable here
+      }
+    }
+    final key = '${fontSize.round().clamp(8, 256)}\u0000$text';
+    final cached = _plainTokenCache[key];
+    if (cached != null) {
+      // LRU touch
+      _plainTokenCache.remove(key);
+      _plainTokenCache[key] = cached;
+      return cached;
+    }
+    final tokens = <Map<String, dynamic>>[
+      <String, dynamic>{'k': 't', 't': text},
+    ];
+    _plainTokenCache[key] = tokens;
+    if (_plainTokenCache.length > _tokenCacheLimit) {
+      _plainTokenCache.remove(_plainTokenCache.keys.first);
+    }
+    return tokens;
+  }
+
   void markAtlasDirty() {
     _forceGlyphResend = true;
   }
@@ -47,6 +87,7 @@ class Next2EmojiPipeline {
     required double scaleY,
     required double fontScale,
     required Locale? locale,
+    double playbackRate = 1.0,
   }) async {
     final List<Map<String, dynamic>> encodedItems = <Map<String, dynamic>>[];
     final Map<String, _EmojiBuildRequest> pending =
@@ -58,19 +99,22 @@ class Next2EmojiPipeline {
               .clamp(8.0, 256.0)
               .toDouble();
 
-      final tokens = _tokenize(
-        item.content.text,
-        renderedFontSize,
-        pending,
-      );
+      // Plain-text (emoji-free) tokenize results are cached: _tokenize is
+      // pure for emoji-free text and the result doesn't depend on x/y. Most
+      // danmaku hit this path, avoiding per-frame re-split + token list
+      // allocation. Emoji-bearing text falls back to full _tokenize (which
+      // registers pending emoji builds).
+      var tokens = _cachedPlainTokens(item.content.text, renderedFontSize);
+      tokens ??= _tokenize(item.content.text, renderedFontSize, pending);
       if (item.content.countText case final countText?) {
-        final countTokens = _tokenize(
-          ' $countText',
-          renderedFontSize,
-          pending,
-        );
-        if (countTokens.isNotEmpty) {
-          tokens.addAll(countTokens);
+        final countTokens = _cachedPlainTokens(' $countText', renderedFontSize);
+        if (countTokens != null) {
+          tokens = List<Map<String, dynamic>>.from(tokens)..addAll(countTokens);
+        } else {
+          final fresh = _tokenize(' $countText', renderedFontSize, pending);
+          if (fresh.isNotEmpty) {
+            tokens = List<Map<String, dynamic>>.from(tokens)..addAll(fresh);
+          }
         }
       }
 
@@ -81,6 +125,12 @@ class Next2EmojiPipeline {
         'y': item.y * scaleY,
         'color_argb': item.content.color.toARGB32().toSigned(32),
         'font_size_multiplier': item.content.fontSizeMultiplier,
+        // Signed scroll velocity in TEXTURE px/s (RL<0, LR>0, static=0).
+        // Lets the native renderer interpolate `x_render = x + scroll_speed*dt`
+        // between Dart submissions, so 30fps submits yield smooth 60/120fps
+        // motion. scaleX maps layout px/s → texture px/s, matching how `x`
+        // is scaled above. Non-DFM sources leave typeCode=0 → 0 (no interp).
+        'scroll_speed': _signedScrollSpeed(item, scaleX, playbackRate),
         if (tokens.isNotEmpty) 'tokens': tokens,
       });
     }
@@ -127,6 +177,33 @@ class Next2EmojiPipeline {
     );
   }
 
+  /// Signed scroll velocity in texture px/s for native interpolation.
+  /// typeCode 6 = ScrollLR (moves right, +), 1 = ScrollRL (moves left, -).
+  /// Static items or unknown typeCode → 0 (no interpolation, safe fallback).
+  ///
+  /// `playbackRate` folds the video playback speed into the velocity so the
+  /// native renderer (which advances interpolation by pure wall-clock dt)
+  /// matches the Dart side's rate-scaled position advancement. Without this,
+  /// at 2× speed the native inter-submission interpolation lags behind the
+  /// Dart-submitted x, causing a snap-back each frame. Default 1.0 = no
+  /// change (Next2 path, which doesn't interpolate anyway).
+  static double _signedScrollSpeed(
+    PositionedDanmakuItem item,
+    double scaleX,
+    double playbackRate,
+  ) {
+    if (item.scrollSpeed == 0.0) return 0.0;
+    final magnitude = item.scrollSpeed * scaleX * playbackRate;
+    switch (item.typeCode) {
+      case 6:
+        return magnitude;
+      case 1:
+        return -magnitude;
+      default:
+        return 0.0;
+    }
+  }
+
   List<Map<String, dynamic>> _tokenize(
     String text,
     double fontSize,
@@ -142,10 +219,7 @@ class Next2EmojiPipeline {
     for (final cluster in text.characters) {
       if (_looksLikeEmojiCluster(cluster)) {
         if (plainBuffer.isNotEmpty) {
-          out.add(<String, dynamic>{
-            'k': 't',
-            't': plainBuffer.toString(),
-          });
+          out.add(<String, dynamic>{'k': 't', 't': plainBuffer.toString()});
           plainBuffer.clear();
         }
 
@@ -161,20 +235,14 @@ class Next2EmojiPipeline {
           ),
         );
 
-        out.add(<String, dynamic>{
-          'k': 'e',
-          'id': key,
-        });
+        out.add(<String, dynamic>{'k': 'e', 'id': key});
       } else {
         plainBuffer.write(cluster);
       }
     }
 
     if (plainBuffer.isNotEmpty) {
-      out.add(<String, dynamic>{
-        'k': 't',
-        't': plainBuffer.toString(),
-      });
+      out.add(<String, dynamic>{'k': 't', 't': plainBuffer.toString()});
     }
 
     return out;
@@ -234,8 +302,9 @@ class Next2EmojiPipeline {
     }
 
     final rgba = byteData.buffer.asUint8List();
-    final baseline =
-        painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    final baseline = painter.computeDistanceToActualBaseline(
+      TextBaseline.alphabetic,
+    );
 
     return _EmojiGlyphRaster(
       key: request.key,

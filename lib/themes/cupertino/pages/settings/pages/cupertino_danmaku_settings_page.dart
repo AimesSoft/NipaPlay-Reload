@@ -340,37 +340,49 @@ class _CupertinoDanmakuSettingsPageState
               _selectedDanmakuRenderEngine == DanmakuRenderEngine.dfmPlus)
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, _) {
+                final supersampleValue = settingsProvider.danmakuSupersample;
+                final label = supersampleValue == 0.0
+                    ? '关闭'
+                    : '${supersampleValue}x';
                 return CupertinoSettingsTile(
                   leading: Icon(
                     CupertinoIcons.fullscreen,
                     color: resolveSettingsIconColor(context),
                   ),
                   title: const Text('弹幕超采样渲染'),
-                  subtitle: const Text('在部分设备上以更高像素密度渲染弹幕，使文字更清晰，但会增加 GPU 负担'),
-                  trailing: AdaptiveSwitch(
-                    value: settingsProvider.danmakuSupersample,
-                    onChanged: (value) {
-                      settingsProvider.setDanmakuSupersample(value);
-                      if (mounted) {
-                        AdaptiveSnackBar.show(
-                          context,
-                          message: value ? '已开启弹幕超采样渲染' : '已关闭弹幕超采样渲染',
-                          type: AdaptiveSnackBarType.success,
-                        );
+                  subtitle: const Text('以更高像素密度渲染弹幕，使文字更清晰'),
+                  trailing: AdaptivePopupMenuButton.widget<double>(
+                    items: [
+                      AdaptivePopupMenuItem<double>(
+                        value: 0.0,
+                        label: '关闭',
+                      ),
+                      AdaptivePopupMenuItem<double>(
+                        value: 1.5,
+                        label: '1.5x',
+                      ),
+                      AdaptivePopupMenuItem<double>(
+                        value: 2.0,
+                        label: '2x',
+                      ),
+                    ],
+                    buttonStyle: PopupButtonStyle.gray,
+                    child: _buildMenuChip(context, label),
+                    onSelected: (index, entry) {
+                      final value = entry.value!;
+                      if (value != supersampleValue) {
+                        settingsProvider.setDanmakuSupersample(value);
+                        if (mounted) {
+                          final newLabel = value == 0.0 ? '关闭' : '${value}x';
+                          AdaptiveSnackBar.show(
+                            context,
+                            message: '弹幕超采样已设为 $newLabel',
+                            type: AdaptiveSnackBarType.success,
+                          );
+                        }
                       }
                     },
                   ),
-                  onTap: () {
-                    final bool newValue = !settingsProvider.danmakuSupersample;
-                    settingsProvider.setDanmakuSupersample(newValue);
-                    if (mounted) {
-                      AdaptiveSnackBar.show(
-                        context,
-                        message: newValue ? '已开启弹幕超采样渲染' : '已关闭弹幕超采样渲染',
-                        type: AdaptiveSnackBarType.success,
-                      );
-                    }
-                  },
                   backgroundColor: tileBackground,
                 );
               },

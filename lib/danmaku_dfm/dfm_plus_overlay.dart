@@ -34,6 +34,8 @@ class DfmPlusOverlay extends StatefulWidget {
     this.maxLinesPerType,
     this.blockWords = const [],
     this.onLayoutCalculated,
+    required this.isPlaying,
+    required this.playbackRate,
   });
 
   final List<Map<String, dynamic>> danmakuList;
@@ -57,12 +59,15 @@ class DfmPlusOverlay extends StatefulWidget {
   final int? maxLinesPerType;
   final List<String> blockWords;
   final ValueChanged<List<PositionedDanmakuItem>>? onLayoutCalculated;
+  final bool isPlaying;
+  final double playbackRate;
 
   @override
   State<DfmPlusOverlay> createState() => _DfmPlusOverlayState();
 }
 
-class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
+class _DfmPlusOverlayState extends State<DfmPlusOverlay>
+    with SingleTickerProviderStateMixin {
   final DfmPlusLayoutBridge _bridge = DfmPlusLayoutBridge();
   final Next2TextureBridge _textureBridge = Next2TextureBridge();
   final Next2EmojiPipeline _emojiPipeline = Next2EmojiPipeline();
@@ -75,7 +80,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
 
   double _lastTimeSeconds = -1.0;
   bool _forceLayout = false;
-  bool _configurePending = false;
 
   // Optimized texture update state: avoid redundant per-frame async calls
   // when texture ID is already stable. Only re-acquire when size changes.
@@ -88,18 +92,109 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   String _surfaceId = 'dfm-default';
   double _lastDevicePixelRatio = 1.0;
 
-  /// Low-DPR screens render at 2x then downscale to fix aliasing.
-  static const double _supersampleMultiplier = 2.0;
+  /// Tracks whether the native scene is currently empty. Lets us skip the
+  /// per-vsync JSON-encode + MethodChannel hop when there are no visible
+  /// danmaku: we push ONE empty setFrame to clear the previous frame, then
+  /// short-circuit subsequent empty frames until content returns. Big
+  /// battery/CPU win on quiet scenes and low-end devices. Reset to false
+  /// on any non-empty frame or a non-fresh texture re-acquire.
+  bool _sceneCleared = false;
+
+  /// Reference layout width (px) for scroll-duration normalization (P2-12).
+  /// Danmaku scroll duration scales with layout width relative to this, so
+  /// the on-screen pixel velocity (px/s) stays roughly constant across
+  /// device sizes instead of making danmaku fly faster on wider screens.
+  /// 1280px = typical 16:9 landscape player — so common desktop/landscape
+  /// windows land near scale 1.0 (no perceptible change from the old fixed
+  /// 10s), while ultra-wide screens slow modestly and narrow windows speed
+  /// up modestly. Clamp bounds keep the correction gentle.
+  static const double _refLayoutWidth = 1280.0;
+  static const double _scrollDurationScaleMin = 0.9;
+  static const double _scrollDurationScaleMax = 1.3;
+
+  /// Effective scroll duration = base × (layoutWidth / refWidth), clamped.
+  /// A 1280px landscape window → 1.0 (unchanged); 1920px → 1.3 (mildly
+  /// slower, vs the old un-scaled ~1.5× px/s fly-by); 900px → 0.9 (mildly
+  /// faster). Keeps the familiar speed on common screens while taming the
+  /// wide-screen fly-by.
+  double _scaledScrollDuration() {
+    if (_layoutSize.width <= 0) {
+      return widget.scrollDurationSeconds;
+    }
+    final scale = (_layoutSize.width / _refLayoutWidth)
+        .clamp(_scrollDurationScaleMin, _scrollDurationScaleMax)
+        .toDouble();
+    return widget.scrollDurationSeconds * scale;
+  }
+
+  // ── Wall-clock time interpolation ──
+  // Instead of advancing each item's displayX per frame (which requires
+  // fragile drift correction), we accumulate wall-clock dt since the last
+  // playbackTimeMs update and add it to create a vsync-rate smooth time:
+  //   interpolatedTime = playbackTime + accumulatedDt * playbackRate
+  // The existing absolute-position layout() handles this naturally:
+  //   x = width - speed * (interpolatedTime - item.time)
+  // When playbackTimeMs changes, we reset accumulatedDt to zero — the
+  // anchor point jumps but the interpolation is smooth between updates.
+  final Stopwatch _wallClock = Stopwatch()..start();
+  int _lastWallUs = 0;
+
+  /// Wall time captured at the vsync callback entry point (not inside
+  /// _runUpdateLoop which includes _tryUpdateTexture latency). Using the
+  /// vsync-stamped time for dt computation prevents the async GPU submission
+  /// latency from distorting the frame interval measurement.
+  int _vsyncWallUs = 0;
+  double _accumulatedWallDt = 0.0;
+  double _lastAnchorPlaybackTime = -1.0;
+  double _smoothedDtSeconds = 0.0;
+  static const double _dtEmaAlpha = 0.3;
+  int _resumeFrameCount = 0;
+  static const int _resumeEmaFrames = 3;
+
+  // ── Submit-rate throttle (P1-4) ──
+  // On high-refresh panels (>60Hz) the Dart layout+setFrame pipeline is
+  // capped at 60Hz; the native renderer interpolates scroll motion between
+  // submissions, so motion stays smooth at the display rate while Dart CPU
+  // work is halved on 120Hz screens. dt/anchor still advance every vsync
+  // (cheap), so skipped frames lose no time precision. 0 = no throttle
+  // (≤60Hz panels or refresh-rate detection unavailable).
+  int _lastSubmitWallUs = 0;
+  int _minSubmitIntervalUs = 0;
+  double _cachedRefreshRate = 0.0;
+
+  /// No GPU submission throttle needed — the Rust engine's 16ms tick loop
+  /// naturally drains the mpsc queue (try_recv after first recv_timeout),
+  /// always rendering the latest submitted frame. Submitting every vsync
+  /// frame ensures the engine always has fresh data; throttling introduces
+  /// phase-drift between the Dart vsync and engine tick, causing stutter.
+
+  /// vsync-driven animation controller — fires _queueUpdate at display refresh
+  /// rate (60/120Hz) so wall-clock dt is computed every vsync frame.
+  late final AnimationController _vsyncController;
 
   @override
   void initState() {
     super.initState();
     _surfaceId = 'dfm-${identityHashCode(this)}';
     _lastTextureSurfaceId = _surfaceId;
+
+    _vsyncController = AnimationController(
+      vsync: this,
+      duration: const Duration(days: 365),
+    );
+    _vsyncController.addListener(_queueUpdate);
+    widget.playbackTimeMs.addListener(_queueUpdate);
+
+    if (widget.isVisible && widget.isPlaying) {
+      _vsyncController.repeat();
+    }
   }
 
   @override
   void dispose() {
+    widget.playbackTimeMs.removeListener(_queueUpdate);
+    _vsyncController.removeListener(_queueUpdate);
+    _vsyncController.dispose();
     _bridge.dispose();
     _textureBridge.disposeSurface(_surfaceId);
     super.dispose();
@@ -109,7 +204,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
   void didUpdateWidget(covariant DfmPlusOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.danmakuListVersion != widget.danmakuListVersion ||
-        oldWidget.danmakuList != widget.danmakuList ||
         oldWidget.allowStacking != widget.allowStacking ||
         oldWidget.mergeDanmaku != widget.mergeDanmaku ||
         oldWidget.fontSize != widget.fontSize ||
@@ -130,6 +224,43 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
       _queueUpdate();
     }
     // opacity changes are handled in build() via Opacity widget, no update needed
+
+    if (oldWidget.playbackTimeMs != widget.playbackTimeMs) {
+      oldWidget.playbackTimeMs.removeListener(_queueUpdate);
+      widget.playbackTimeMs.addListener(_queueUpdate);
+      _accumulatedWallDt = 0.0;
+      _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
+      _queueUpdate();
+    }
+
+    // ── AnimationController lifecycle ──
+    final shouldAnimate = widget.isVisible && widget.isPlaying;
+    if (shouldAnimate && !_vsyncController.isAnimating) {
+      _vsyncController.repeat();
+      // Reset wall-clock on resume to avoid a huge delta spanning the pause
+      _lastWallUs = _wallClock.elapsedMicroseconds;
+      _accumulatedWallDt = 0.0;
+      _smoothedDtSeconds = 0.0;
+      _resumeFrameCount = 0;
+    } else if (!shouldAnimate && _vsyncController.isAnimating) {
+      _vsyncController.stop();
+    }
+
+    // ── Playback rate change: reset interpolation ──
+    if (oldWidget.playbackRate != widget.playbackRate) {
+      _accumulatedWallDt = 0.0;
+      _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
+    }
+
+    // ── isPlaying transition: reset wall-clock ──
+    if (oldWidget.isPlaying != widget.isPlaying) {
+      if (widget.isPlaying) {
+        _lastWallUs = _wallClock.elapsedMicroseconds;
+        _accumulatedWallDt = 0.0;
+        _smoothedDtSeconds = 0.0;
+        _resumeFrameCount = 0;
+      }
+    }
   }
 
   @override
@@ -171,8 +302,15 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           }
         }
 
-        final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
+        final dpr =
+            MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
+
+        // ── Detect display refresh rate for submit-rate throttling (P1-4) ──
+        // On >60Hz panels we cap Dart layout+setFrame at 60Hz (native renderer
+        // interpolates the rest). refreshRate may be unavailable/0 on some
+        // platforms or older Flutter; in that case stay at 0 = no throttle.
+        _maybeUpdateSubmitInterval();
         // DPR can micro-jitter on Windows when the window loses focus or the
         // user clicks the taskbar (didChangeMetrics fires with a slightly
         // different value). DPR only affects the texture's pixel size, not the
@@ -190,41 +328,62 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           _queueUpdate();
         }
 
-        return ValueListenableBuilder<double>(
-          valueListenable: widget.playbackTimeMs,
-          builder: (context, _, __) {
-            _queueUpdate();
+        final hasTexture =
+            _textureReady &&
+            _textureId != null &&
+            Next2TextureBridge.isSupported;
 
-            final hasTexture = _textureReady &&
-                _textureId != null &&
-                Next2TextureBridge.isSupported;
+        final needsSupersample = context
+            .watch<SettingsProvider>()
+            .danmakuSupersample;
+        final filterQuality = needsSupersample > 0.0
+            ? FilterQuality.low
+            : FilterQuality.none;
+        final Widget content = hasTexture
+            ? Texture(textureId: _textureId!, filterQuality: filterQuality)
+            : const SizedBox.expand();
 
-            final needsSupersample =
-                context.watch<SettingsProvider>().danmakuSupersample;
-            final filterQuality =
-                needsSupersample ? FilterQuality.low : FilterQuality.none;
-            final Widget content = hasTexture
-                ? Texture(
-                    textureId: _textureId!,
-                    filterQuality: filterQuality,
-                  )
-                : const SizedBox.expand();
-
-            return Next2OverlayViewport.buildLayer(
-              layoutSize: layoutSize,
-              constrainedSize: constrainedSize,
-              child: Opacity(
-                opacity: widget.opacity.clamp(0.0, 1.0).toDouble(),
-                child: content,
-              ),
-            );
-          },
+        return Next2OverlayViewport.buildLayer(
+          layoutSize: layoutSize,
+          constrainedSize: constrainedSize,
+          child: Opacity(
+            opacity: widget.opacity.clamp(0.0, 1.0).toDouble(),
+            child: content,
+          ),
         );
       },
     );
   }
 
+  /// Detect the display refresh rate and set the submit interval accordingly.
+  /// On panels faster than 60Hz, Dart layout+setFrame is capped at 60Hz
+  /// (16ms) — the native renderer interpolates scroll motion between
+  /// submissions, so motion stays smooth at the display rate while halving
+  /// Dart CPU work on 120Hz screens. ≤60Hz or undetectable → no throttle.
+  void _maybeUpdateSubmitInterval() {
+    double refreshRate = 0.0;
+    try {
+      final views = WidgetsBinding.instance.platformDispatcher.views;
+      if (views.isNotEmpty) {
+        refreshRate = views.first.display.refreshRate;
+      }
+    } catch (_) {
+      refreshRate = 0.0;
+    }
+    if (refreshRate == _cachedRefreshRate) {
+      return;
+    }
+    _cachedRefreshRate = refreshRate;
+    _minSubmitIntervalUs = refreshRate > 60.0 ? 16000 : 0;
+    // Reset so the next frame after a rate change submits immediately.
+    _lastSubmitWallUs = 0;
+  }
+
   void _queueUpdate() {
+    // Capture wall time at vsync callback entry BEFORE any bail-out checks.
+    // If a new vsync fires while _tryUpdateTexture is in-flight, we still
+    // need the latest timestamp for the next loop iteration's dt computation.
+    _vsyncWallUs = _wallClock.elapsedMicroseconds;
     _updateQueued = true;
     if (_updateScheduled || _updateInFlight) {
       return;
@@ -233,9 +392,14 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     Future.microtask(_runUpdateLoop);
   }
 
-  /// Update loop: layout is now synchronous (Dart-side), so the per-frame
+  /// Update loop: layout is synchronous (Dart-side), so the per-frame
   /// position computation has zero async overhead. Only configure() and
   /// texture upload remain async.
+  ///
+  /// Uses wall-clock time interpolation: accumulates dt since last
+  /// playbackTimeMs update to create a vsync-rate smooth time value.
+  /// The existing absolute-position layout() handles the rest naturally
+  /// — no per-item drift correction needed.
   Future<void> _runUpdateLoop() async {
     _updateScheduled = false;
     if (_updateInFlight) {
@@ -251,29 +415,101 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           continue;
         }
 
-        double currentTime =
-            widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
+        // ── Compute wall-clock dt from vsync-stamped time ──
+        // _vsyncWallUs is captured in _queueUpdate() (vsync callback entry),
+        // NOT at the top of _runUpdateLoop — otherwise the async
+        // _tryUpdateTexture latency from the previous iteration would
+        // inflate the measured interval and cause interpolatedTime jumps.
+        final currentWallUs = _vsyncWallUs;
+        final double rawDtSeconds;
+        if (_lastWallUs == 0 || currentWallUs < _lastWallUs) {
+          rawDtSeconds = 0.0;
+        } else {
+          final deltaUs = currentWallUs - _lastWallUs;
+          // Clamp (don't hard-zero) the per-frame delta at 100ms.
+          // Hard-zeroing any frame whose inter-vsync gap reaches >=100ms
+          // cascades on low-FPS devices (<=10fps): every frame zeroes,
+          // _accumulatedWallDt never grows, and motion stalls until the
+          // media clock itself jumps — producing discrete stepping instead
+          // of vsync-rate scroll. Clamping lets a slow/jittery frame still
+          // advance time by a capped amount, preserving smooth motion. The
+          // 100ms cap below (_accumulatedWallDt > 0.1) keeps total drift
+          // bounded until the media-clock anchor next updates.
+          final double clampedUs = deltaUs > 100000
+              ? 100000.0
+              : deltaUs.toDouble();
+          rawDtSeconds = clampedUs / 1000000.0;
+        }
+        _lastWallUs = currentWallUs;
 
-        if (!_forceLayout && (currentTime - _lastTimeSeconds).abs() < 0.0001) {
-          continue;
+        // V4 dt decision: paused=0, first frame=rawDt, resume first 5=EMA, steady=rawDt
+        final double dtSeconds;
+        if (!widget.isPlaying) {
+          dtSeconds = 0.0;
+        } else if (rawDtSeconds == 0.0) {
+          dtSeconds = 0.0;
+        } else if (_smoothedDtSeconds == 0.0) {
+          dtSeconds = rawDtSeconds;
+          _smoothedDtSeconds = rawDtSeconds;
+          _resumeFrameCount = 1;
+        } else if (_resumeFrameCount > 0 &&
+            _resumeFrameCount < _resumeEmaFrames) {
+          _smoothedDtSeconds =
+              _dtEmaAlpha * rawDtSeconds +
+              (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
+          dtSeconds = _smoothedDtSeconds;
+          _resumeFrameCount++;
+        } else {
+          _smoothedDtSeconds =
+              _dtEmaAlpha * rawDtSeconds +
+              (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
+          dtSeconds = rawDtSeconds;
+          _resumeFrameCount = 0;
         }
 
-        // If config changed, run async configure first. configure() takes
-        // tens to hundreds of milliseconds (Rust prepare + font load), and
-        // the player position may advance significantly during that time.
-        // The worst case: a resumed video where playbackTimeMs is briefly 0
-        // while the player is loading, then jumps to the saved position.
-        // Using the pre-configure currentTime would paint t=0 danmaku.
-        if (_forceLayout || _configurePending) {
+        // ── Read current playback time anchor ──
+        final double anchorTime = widget.playbackTimeMs.value / 1000.0;
+
+        // ── Detect playbackTimeMs update: reset accumulated dt ──
+        // When playbackTimeMs changes, the anchor point jumps. We reset
+        // accumulatedWallDt to zero so the interpolation starts fresh from
+        // the new anchor. Between updates, dt accumulates smoothly.
+        if ((anchorTime - _lastAnchorPlaybackTime).abs() >= 0.0001) {
+          _accumulatedWallDt = 0.0;
+          _lastAnchorPlaybackTime = anchorTime;
+        } else if (dtSeconds > 0.0) {
+          _accumulatedWallDt += dtSeconds * widget.playbackRate;
+        }
+
+        // ── Clamp accumulated dt to avoid runaway on frame drops ──
+        // Cap at 100ms of interpolated time. Beyond that, the playback
+        // time anchor should have updated.
+        if (_accumulatedWallDt > 0.1) {
+          _accumulatedWallDt = 0.1;
+        }
+
+        // ── Interpolated time = anchor + accumulated dt + offset ──
+        final double interpolatedTime =
+            anchorTime + _accumulatedWallDt + widget.timeOffset;
+
+        // ── Seek/loop detection ──
+        if (interpolatedTime < _lastTimeSeconds ||
+            (interpolatedTime - _lastTimeSeconds).abs() > 1.0) {
+          _accumulatedWallDt = 0.0;
+          _lastAnchorPlaybackTime = anchorTime;
+        }
+
+        // If config changed, run async configure first.
+        final bool mustSubmit = _forceLayout;
+        if (mustSubmit) {
           _forceLayout = false;
-          _configurePending = false;
           await _bridge.configure(
             danmakuList: widget.danmakuList,
             danmakuListVersion: widget.danmakuListVersion,
             size: _layoutSize,
             fontSize: widget.fontSize,
             displayArea: widget.displayArea,
-            scrollDurationSeconds: widget.scrollDurationSeconds,
+            scrollDurationSeconds: _scaledScrollDuration(),
             allowStacking: widget.allowStacking,
             mergeDanmaku: widget.mergeDanmaku,
             maxQuantity: widget.maxQuantity,
@@ -287,23 +523,40 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
           if (!mounted) {
             return;
           }
-          // Re-read playback position — it may have jumped from 0 to the
-          // saved resume point while configure was running.
-          currentTime =
-              widget.playbackTimeMs.value / 1000.0 + widget.timeOffset;
-          _lastTimeSeconds = currentTime;
-        } else {
-          _lastTimeSeconds = currentTime;
+          _accumulatedWallDt = 0.0;
+          _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
         }
 
-        // Synchronous layout — no await, no microtask delay
-        final frame = _bridge.layout(currentTime);
+        // ── Submit-rate throttle (P1-4) ──
+        // On >60Hz panels, skip the layout+setFrame work on vsync frames
+        // that fall within 16ms of the last submission. dt and anchor still
+        // advanced above, so time precision is preserved; the native renderer
+        // interpolates scroll motion between submissions. Force-configure
+        // frames always submit. The first frame after (re)start has a huge
+        // gap → submits immediately.
+        if (!mustSubmit &&
+            _minSubmitIntervalUs > 0 &&
+            _lastSubmitWallUs != 0 &&
+            currentWallUs - _lastSubmitWallUs < _minSubmitIntervalUs) {
+          continue;
+        }
+        _lastSubmitWallUs = currentWallUs;
+
+        // ── Layout with interpolated time ──
+        // The interpolatedTime advances smoothly every vsync frame.
+        // layout() computes absolute positions from it naturally:
+        //   x = width - speed * (interpolatedTime - item.time)
+        // We submit every vsync frame — the Rust engine's 16ms tick loop
+        // drains its mpsc queue and always renders the latest submission.
+        final frame = _bridge.layout(interpolatedTime);
+        _lastTimeSeconds = interpolatedTime;
 
         await _tryUpdateTexture(frame);
         widget.onLayoutCalculated?.call(frame);
       }
     } catch (_) {
       // Keep overlay alive and retry on next frame.
+      _queueUpdate();
     } finally {
       _updateInFlight = false;
     }
@@ -322,16 +575,21 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     // needsNewTexture → ensureTexture → isNewEngine → resetScene → flicker.
     final dpr = _lastDevicePixelRatio;
 
-    final needsSupersample =
-        context.read<SettingsProvider>().danmakuSupersample;
-    final supersample = needsSupersample ? _supersampleMultiplier : 1.0;
+    final supersample = context
+        .read<SettingsProvider>()
+        .danmakuSupersample;
     final double pixelRatio =
-        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
+        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) *
+        (supersample > 0.0 ? supersample : 1.0);
 
-    final int pixelWidth =
-        (_layoutSize.width * pixelRatio).round().clamp(1, 16384).toInt();
-    final int pixelHeight =
-        (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
+    final int pixelWidth = (_layoutSize.width * pixelRatio)
+        .round()
+        .clamp(1, 16384)
+        .toInt();
+    final int pixelHeight = (_layoutSize.height * pixelRatio)
+        .round()
+        .clamp(1, 16384)
+        .toInt();
 
     // Optimized: only re-acquire texture if size changed (avoids redundant
     // ensureTexture await on every frame when texture ID is already stable).
@@ -341,7 +599,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
     // Only rebuild when the pixel size change is significant (>=2 pixels).
     final int pwDelta = (pixelWidth - _lastTextureWidth).abs();
     final int phDelta = (pixelHeight - _lastTextureHeight).abs();
-    bool needsNewTexture = _textureId == null ||
+    bool needsNewTexture =
+        _textureId == null ||
         (pwDelta >= 2) ||
         (phDelta >= 2) ||
         _surfaceId != _lastTextureSurfaceId;
@@ -386,13 +645,38 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
       // call naturally render new content on top of the fresh engine.
       if (info.isNewEngine) {
         _emojiPipeline.markAtlasDirty();
+        // A fresh engine starts with an empty scene, so we can skip the
+        // clearing setFrame below if the frame is also empty.
+        _sceneCleared = true;
+      } else {
+        // Same engine, texture re-acquired (surface/size change) — it may
+        // still hold the last pushed scene, so force a re-evaluation.
+        _sceneCleared = false;
       }
     }
 
+    // ── Empty-frame short-circuit ──
+    // With no visible danmaku, skip the per-vsync buildPayload (allocation)
+    // + jsonEncode + MethodChannel hop. We push exactly ONE empty setFrame
+    // to clear the previous frame's content, then short-circuit until
+    // content returns. The scene-cleared state is tracked so we never leave
+    // stale danmaku on screen and never re-clear an already-empty scene.
+    if (frame.isEmpty) {
+      if (_sceneCleared) {
+        return true; // already clear — nothing to submit this vsync
+      }
+      // Fall through: send one empty setFrame to clear the scene.
+    } else {
+      _sceneCleared = false;
+    }
+
     final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
-    final heightScale = pixelHeight > 0 ? pixelHeight / _layoutSize.height : 1.0;
-    final fontScale =
-        ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
+    final heightScale = pixelHeight > 0
+        ? pixelHeight / _layoutSize.height
+        : 1.0;
+    final fontScale = ((widthScale + heightScale) * 0.5)
+        .clamp(0.25, 8.0)
+        .toDouble();
 
     final prepared = await _emojiPipeline.buildPayload(
       items: frame,
@@ -401,6 +685,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
       scaleY: heightScale,
       fontScale: fontScale,
       locale: locale,
+      playbackRate: widget.playbackRate,
     );
 
     final pushed = await _textureBridge.setFrame(
@@ -414,11 +699,15 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay> {
       scaleX: widthScale,
       scaleY: heightScale,
       fontScale: fontScale,
+      playbackRate: widget.playbackRate,
       framePayload: prepared.toJson(),
     );
 
     if (pushed) {
       _emojiPipeline.markAtlasSynced();
+      if (frame.isEmpty) {
+        _sceneCleared = true; // scene now confirmed empty
+      }
     } else {
       _emojiPipeline.markAtlasDirty();
     }
