@@ -80,7 +80,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
   double _lastTimeSeconds = -1.0;
   bool _forceLayout = false;
-  bool _configurePending = false;
 
   // Optimized texture update state: avoid redundant per-frame async calls
   // when texture ID is already stable. Only re-acquire when size changes.
@@ -142,6 +141,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   // anchor point jumps but the interpolation is smooth between updates.
   final Stopwatch _wallClock = Stopwatch()..start();
   int _lastWallUs = 0;
+
   /// Wall time captured at the vsync callback entry point (not inside
   /// _runUpdateLoop which includes _tryUpdateTexture latency). Using the
   /// vsync-stamped time for dt computation prevents the async GPU submission
@@ -186,6 +186,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       duration: const Duration(days: 365),
     );
     _vsyncController.addListener(_queueUpdate);
+    widget.playbackTimeMs.addListener(_queueUpdate);
 
     if (widget.isVisible && widget.isPlaying) {
       _vsyncController.repeat();
@@ -194,6 +195,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
 
   @override
   void dispose() {
+    widget.playbackTimeMs.removeListener(_queueUpdate);
     _vsyncController.removeListener(_queueUpdate);
     _vsyncController.dispose();
     _bridge.dispose();
@@ -225,6 +227,14 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
       _queueUpdate();
     }
     // opacity changes are handled in build() via Opacity widget, no update needed
+
+    if (oldWidget.playbackTimeMs != widget.playbackTimeMs) {
+      oldWidget.playbackTimeMs.removeListener(_queueUpdate);
+      widget.playbackTimeMs.addListener(_queueUpdate);
+      _accumulatedWallDt = 0.0;
+      _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
+      _queueUpdate();
+    }
 
     // ── AnimationController lifecycle ──
     final shouldAnimate = widget.isVisible && widget.isPlaying;
@@ -295,7 +305,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           }
         }
 
-        final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ??
+        final dpr =
+            MediaQuery.maybeOf(context)?.devicePixelRatio ??
             View.of(context).devicePixelRatio;
 
         // ── Detect display refresh rate for submit-rate throttling (P1-4) ──
@@ -320,19 +331,19 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           _queueUpdate();
         }
 
-        final hasTexture = _textureReady &&
+        final hasTexture =
+            _textureReady &&
             _textureId != null &&
             Next2TextureBridge.isSupported;
 
-        final needsSupersample =
-            context.watch<SettingsProvider>().danmakuSupersample;
-        final filterQuality =
-            needsSupersample ? FilterQuality.low : FilterQuality.none;
+        final needsSupersample = context
+            .watch<SettingsProvider>()
+            .danmakuSupersample;
+        final filterQuality = needsSupersample
+            ? FilterQuality.low
+            : FilterQuality.none;
         final Widget content = hasTexture
-            ? Texture(
-                textureId: _textureId!,
-                filterQuality: filterQuality,
-              )
+            ? Texture(textureId: _textureId!, filterQuality: filterQuality)
             : const SizedBox.expand();
 
         return Next2OverlayViewport.buildLayer(
@@ -427,8 +438,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           // advance time by a capped amount, preserving smooth motion. The
           // 100ms cap below (_accumulatedWallDt > 0.1) keeps total drift
           // bounded until the media-clock anchor next updates.
-          final double clampedUs =
-              deltaUs > 100000 ? 100000.0 : deltaUs.toDouble();
+          final double clampedUs = deltaUs > 100000
+              ? 100000.0
+              : deltaUs.toDouble();
           rawDtSeconds = clampedUs / 1000000.0;
         }
         _lastWallUs = currentWallUs;
@@ -445,20 +457,21 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           _resumeFrameCount = 1;
         } else if (_resumeFrameCount > 0 &&
             _resumeFrameCount < _resumeEmaFrames) {
-          _smoothedDtSeconds = _dtEmaAlpha * rawDtSeconds +
+          _smoothedDtSeconds =
+              _dtEmaAlpha * rawDtSeconds +
               (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
           dtSeconds = _smoothedDtSeconds;
           _resumeFrameCount++;
         } else {
-          _smoothedDtSeconds = _dtEmaAlpha * rawDtSeconds +
+          _smoothedDtSeconds =
+              _dtEmaAlpha * rawDtSeconds +
               (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
           dtSeconds = rawDtSeconds;
           _resumeFrameCount = 0;
         }
 
         // ── Read current playback time anchor ──
-        final double anchorTime =
-            widget.playbackTimeMs.value / 1000.0;
+        final double anchorTime = widget.playbackTimeMs.value / 1000.0;
 
         // ── Detect playbackTimeMs update: reset accumulated dt ──
         // When playbackTimeMs changes, the anchor point jumps. We reset
@@ -514,8 +527,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
             return;
           }
           _accumulatedWallDt = 0.0;
-          _lastAnchorPlaybackTime =
-              widget.playbackTimeMs.value / 1000.0;
+          _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
         }
 
         // ── Submit-rate throttle (P1-4) ──
@@ -566,16 +578,21 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     // needsNewTexture → ensureTexture → isNewEngine → resetScene → flicker.
     final dpr = _lastDevicePixelRatio;
 
-    final needsSupersample =
-        context.read<SettingsProvider>().danmakuSupersample;
+    final needsSupersample = context
+        .read<SettingsProvider>()
+        .danmakuSupersample;
     final supersample = needsSupersample ? _supersampleMultiplier : 1.0;
     final double pixelRatio =
         (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) * supersample;
 
-    final int pixelWidth =
-        (_layoutSize.width * pixelRatio).round().clamp(1, 16384).toInt();
-    final int pixelHeight =
-        (_layoutSize.height * pixelRatio).round().clamp(1, 16384).toInt();
+    final int pixelWidth = (_layoutSize.width * pixelRatio)
+        .round()
+        .clamp(1, 16384)
+        .toInt();
+    final int pixelHeight = (_layoutSize.height * pixelRatio)
+        .round()
+        .clamp(1, 16384)
+        .toInt();
 
     // Optimized: only re-acquire texture if size changed (avoids redundant
     // ensureTexture await on every frame when texture ID is already stable).
@@ -585,7 +602,8 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     // Only rebuild when the pixel size change is significant (>=2 pixels).
     final int pwDelta = (pixelWidth - _lastTextureWidth).abs();
     final int phDelta = (pixelHeight - _lastTextureHeight).abs();
-    bool needsNewTexture = _textureId == null ||
+    bool needsNewTexture =
+        _textureId == null ||
         (pwDelta >= 2) ||
         (phDelta >= 2) ||
         _surfaceId != _lastTextureSurfaceId;
@@ -656,9 +674,12 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     }
 
     final widthScale = pixelWidth > 0 ? pixelWidth / _layoutSize.width : 1.0;
-    final heightScale = pixelHeight > 0 ? pixelHeight / _layoutSize.height : 1.0;
-    final fontScale =
-        ((widthScale + heightScale) * 0.5).clamp(0.25, 8.0).toDouble();
+    final heightScale = pixelHeight > 0
+        ? pixelHeight / _layoutSize.height
+        : 1.0;
+    final fontScale = ((widthScale + heightScale) * 0.5)
+        .clamp(0.25, 8.0)
+        .toDouble();
 
     final prepared = await _emojiPipeline.buildPayload(
       items: frame,
