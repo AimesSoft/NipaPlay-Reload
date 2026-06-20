@@ -827,13 +827,17 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                     // [FIX-L2] 前进场景：playerMs >= playbackTimeMs，改渐进追赶替代立即 snap。
                     // 根因：原实现立即 _smoothAnchorMs=playerMs → playbackTimeMs 阶跃到 playerMs
                     // → engine item.x 阶跃 → painter displayX 漂移 → drift 修正 → 回弹。
-                    // 修复：与 backward 分支对称，用 0.35 渐进修正锚点，让 playbackTimeMs
-                    // 平滑追赶 playerMs，避免阶跃。锚点时间同步调整保持当前帧连续性。
+                    // 修复：用 0.35 渐进追赶。注意 big-fwd 时 drift<0（smoothMs 落后 playerMs），
+                    // correctionMs=drift*0.35<0，需让当前帧 newPtm = smoothMs + |correctionMs| 立即追赶，
+                    // 而非像 backward 那样保持当前帧连续（backward 靠下一帧 anchor 减小来收敛）。
+                    // big-fwd 是持续追赶场景，当前帧就应前进 |correctionMs|，否则在 drift 稳态时
+                    // 永不收敛（回归实证：drift=-278ms 持续，0.35 修正被 anchorElapsedUs 抵消）。
+                    // 实现：_smoothAnchorMs = smoothMs - correctionMs（= smoothMs + |correctionMs|），
+                    //       _smoothAnchorElapsedUs = currentElapsedUs（不调整，newDeltaUs=0），
+                    // → newPtm = anchorMs + 0 = smoothMs + |correctionMs|，当前帧立即追赶。
                     final correctionMs = drift * 0.35;
                     _smoothAnchorMs = smoothMs - correctionMs;
-                    final correctionUsExact = correctionMs * 1000.0 / effectivePlaybackRate;
-                    _smoothAnchorElapsedUs =
-                        currentElapsedUs - correctionUsExact.round();
+                    _smoothAnchorElapsedUs = currentElapsedUs;
                     if (!kReleaseMode) {
                       final snapDeltaMs = playerMs - prevPtm;
                       if (snapDeltaMs.abs() > 10.0) {
