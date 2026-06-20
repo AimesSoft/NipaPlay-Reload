@@ -1,9 +1,9 @@
 import 'dart:ffi';
 import 'package:ffi/ffi.dart' show Utf8;
 import '../native_library.dart';
-import '../types/native_types.dart';
+import '../types/native_types_io.dart';
 import '../types/native_layout_types.dart';
-import '../types/native_subtitle_types.dart';
+import '../types/native_subtitle_types_io.dart';
 
 class NativeBindings {
   static final _dylib = NativeLibrary.instance;

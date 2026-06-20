@@ -54,6 +54,29 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
 
+      - name: Pre-fetch uchardet source (fallback mirror)
+        shell: bash
+        run: |
+          set -euo pipefail
+          FETCH_CACHE="$(mktemp -d)"
+          echo "LIBMPV_DARWIN_FETCH_CACHE_DIR=${FETCH_CACHE}" >> "$GITHUB_ENV"
+          # The Nix fetch-file helper looks for <cache-dir>/<url-basename>.
+          # packages.lock.nix URL ends in uchardet-0.0.8.tar.xz, so the
+          # cached file MUST be named exactly that (same format & content).
+          TARGET="${FETCH_CACHE}/uchardet-0.0.8.tar.xz"
+          PRIMARY="https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz"
+          # Try primary URL with retries (HTTP 418 is usually transient)
+          for attempt in 1 2 3; do
+            echo "Attempt ${attempt}: ${PRIMARY}"
+            if curl -fSL --retry 3 --retry-delay 5 -o "$TARGET" "$PRIMARY" 2>/dev/null; then
+              echo "Downloaded uchardet from primary URL"
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed, waiting before retry..."
+            sleep 10
+          done
+          echo "WARNING: Could not pre-fetch uchardet; Nix build will attempt direct download."
+
       - name: Patch libmpv-darwin-build for target-arch HDR deps
         shell: bash
         run: |

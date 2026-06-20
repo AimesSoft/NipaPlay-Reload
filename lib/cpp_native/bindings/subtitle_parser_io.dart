@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../danmaku_next/danmaku_next_log.dart';
 import '../native_arena.dart';
-import '../types/native_types.dart';
-import '../types/native_subtitle_types.dart';
+import '../types/native_types_io.dart';
+import '../types/native_subtitle_types_io.dart';
 import 'native_bindings.dart';
 
 /// C++ 字幕解析器的 Dart FFI 封装

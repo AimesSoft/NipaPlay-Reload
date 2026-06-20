@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:fvp/mdk.dart'
-    if (dart.library.html) 'package:nipaplay/utils/mock_mdk.dart';
+import 'package:nipaplay/utils/mock_mdk.dart'
+    if (dart.library.io) 'package:fvp/mdk.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/src/rust/api/performance.dart' as rust_perf;

@@ -148,7 +148,7 @@ runs:
         erika_sha = os.environ["ERIKA_SHA"]
 
         def update_erika_block(path, replacements):
-            lines = Path(path).read_text().splitlines(keepends=True)
+            lines = Path(path).read_text(encoding='utf-8').splitlines(keepends=True)
             output = []
             in_block = False
             seen = set()
@@ -182,7 +182,7 @@ runs:
                 if missing:
                     raise SystemExit(f"{path}: missing Erika fields: {sorted(missing)}")
 
-            Path(path).write_text("".join(output))
+            Path(path).write_text("".join(output), encoding='utf-8')
 
         update_erika_block("pubspec.yaml", {"ref": "main"})
         update_erika_block(

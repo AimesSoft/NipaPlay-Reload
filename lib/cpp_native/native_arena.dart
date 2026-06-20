@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import 'bindings/native_bindings.dart';
-import 'types/native_types.dart';
+import 'types/native_types_io.dart';
 
 /// FFI 内存 Arena — 统一管理一次 FFI 调用中的所有 native 分配。
 ///
