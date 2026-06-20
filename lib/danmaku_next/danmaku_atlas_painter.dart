@@ -348,6 +348,8 @@ class DanmakuAtlasPainter extends CustomPainter {
   static int _lastWallUs = 0;
   static double _smoothedDtSeconds = 0.0;
   static const double _dtEmaAlpha = 0.3;
+  // [FIX-L3] 上一帧有效 deltaUs，用于主线程阻塞后 rawDt=0 时兜底，避免 displayX 完全冻结。
+  static int _lastValidDeltaUs = 0;
 
   /// [V4] 暂停恢复过渡期帧计数器 — 仅在前N帧使用EMA，之后无条件切回rawDt
   /// V3的emaDeviation>30%判定被日志证明过于激进：
@@ -397,8 +399,19 @@ class DanmakuAtlasPainter extends CustomPainter {
       deltaUs = currentWallUs - _lastWallUs;
       if (deltaUs < 100000) {
         rawDtSeconds = deltaUs / 1000000.0;
+        // [FIX-L3] 记录有效 deltaUs 供阻塞帧兜底
+        _lastValidDeltaUs = deltaUs;
       } else {
-        rawDtSeconds = 0.0; // 大跳变帧不推进
+        // [FIX-L3] 大跳变帧（主线程阻塞 >100ms）改用上一帧有效 dt 兜底，
+        // 替代原来的 rawDt=0 直接冻结。根因：字幕解析/截图/网络弹幕加载阻塞主线程
+        // → Ticker 间隔 >100ms → rawDt=0 → displayX 不推进一帧 → 卡顿感。
+        // 用上一帧有效 dt（已验证 <100ms）让 displayX 继续推进，避免冻结。
+        // _lastValidDeltaUs 为 0（首帧/重置）时仍 fallback 到 0 保证安全。
+        if (_lastValidDeltaUs > 0) {
+          rawDtSeconds = _lastValidDeltaUs / 1000000.0;
+        } else {
+          rawDtSeconds = 0.0;
+        }
         if (!kReleaseMode) _diagDtZeroReasonOver100ms++; // [DT-JITTER-DIAG]
       }
     }
@@ -525,6 +538,9 @@ class DanmakuAtlasPainter extends CustomPainter {
       }
     }
 
+    // [CHAIN-B] 记录上一帧 playbackTimeMs（在下方 _lastDiagPlaybackTimeMsValue 被更新前快照），
+    // 供帧末 [CHAIN-B] 判断 ptmBackward 使用。
+    final prevFramePtm = _lastDiagPlaybackTimeMsValue;
     // ── [TIME-ALIGN] 问题1诊断: 追踪 playbackTimeMs 更新频率 ──
     // vsync以60-240Hz调用paint()，但playbackTimeMs可能仅8-30Hz更新。
     // 记录更新间隔，验证双时间源drift假设。
@@ -1037,6 +1053,33 @@ class DanmakuAtlasPainter extends CustomPainter {
       _diagSpriteAllocCount++; // [MEM-GC] 问题2诊断: 追踪_SpriteDrawInfo分配数
 
       _spriteCount++;
+    }
+
+    // [CHAIN-B] 全链路回弹诊断 — painter 层单帧聚合
+    // 仅在本帧发生 rawDt=0(ptm冻结卡顿)/ptm回退 时输出，避免刷屏。
+    // driftCorr/hardSnap 为 2 秒窗口累计值，仅作上下文参考（非单帧精确）。
+    // 与平滑时钟侧 [CHAIN-A] 共享墙钟时间戳，按时间排序可看到完整因果链：
+    //   position更新 → 平滑时钟修正/hold(CHAIN-A) → 下一帧 painter drift修正(CHAIN-B) → 回弹
+    // 关键指标：
+    //   rawDt=0 = 墙钟帧间隔>100ms 被丢弃 → displayX 不推进一帧（卡顿源 R4）
+    //   ptmBackward = playbackTimeMs 本帧回退（来自平滑时钟 hold/修正 R2）
+    //   driftCorr/hardSnap 累计>0 = 第二层 drift 修正曾触发（回弹直接来源 R3）
+    if (!kReleaseMode && isPlaying) {
+      final ptmBackward = currentPlaybackTimeMs < prevFramePtm - 0.5 &&
+          prevFramePtm > 100.0;
+      // 触发条件限为单帧精确事件，driftCorr/hardSnap 仅作附带上下文
+      if (rawDtSeconds == 0.0 || ptmBackward) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        debugPrint('[CHAIN-B] t=$now '
+            'ptm=${currentPlaybackTimeMs.toStringAsFixed(1)}ms '
+            'rawDt=${(rawDtSeconds * 1000).toStringAsFixed(2)}ms '
+            'dt=${(dtSeconds * 1000).toStringAsFixed(2)}ms '
+            'driftCorrAcc=${_diagDriftCorrectionCount} '
+            'hardSnapAcc=${_diagHardSnapCount} '
+            'maxDrift=${_diagMaxDrift.toStringAsFixed(1)}px '
+            'ptmBackward=${ptmBackward ? "YES" : "no"} '
+            'rate=$playbackRate');
+      }
     }
 
     // ── [P0] 首帧分帧构建: 预算更新 ──

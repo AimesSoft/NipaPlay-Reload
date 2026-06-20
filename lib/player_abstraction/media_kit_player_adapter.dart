@@ -191,6 +191,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
 
   String? _lastKnownActiveSubtitleId;
   StreamSubscription<Track>? _trackSubscription;
+  // [FIX-L1] 订阅 mpv 真实 position 流，校正 _lastActualPosition，消除纯墙钟插值漂移。
+  // 根因：原实现未订阅 stream.position，_lastActualPosition 仅 playing/seek 时设一次，
+  // 正常播放纯墙钟插值，永不被 mpv 真实 position 校正 → 与 mpv 漂移 → 下游 big-fwd snap → 回弹。
+  StreamSubscription<Duration>? _positionSubscription;
   bool _isDisposed = false;
 
   // Jellyfin流媒体重试
@@ -562,6 +566,26 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
             );
           }
         });
+      }
+    });
+
+    // [FIX-L1] 订阅 mpv 真实 position 流，将 _lastActualPosition 锚定到 mpv 真实位置。
+    // 每当 mpv 推送 time-pos 时刷新锚点 + 重置墙钟时间戳，使后续 _onTick 插值
+    // 始终从最新的 mpv 真实位置出发，消除纯墙钟插值的累积漂移。
+    // 单调保护：仅当 mpv position 前进（或恢复后首帧）才更新锚点，避免 mpv 偶发
+    // 回退把插值位置往回拉（回退由下游平滑时钟的 drift 修正处理）。
+    _positionSubscription = _player.stream.position.listen((position) {
+      if (_isDisposed || !_player.state.playing) return;
+      final newMs = position.inMilliseconds;
+      final actualMs = _lastActualPosition.inMilliseconds;
+      // 仅前进场景更新锚点；回退/相等则保留锚点（下游 drift 修正处理）
+      if (newMs > actualMs) {
+        _lastActualPosition = position;
+        _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
+        // 同步插值位置到真实锚点，避免插值超前 mpv
+        if (_interpolatedPosition.inMilliseconds < newMs) {
+          _interpolatedPosition = position;
+        }
       }
     });
 
@@ -1854,6 +1878,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _isDisposed = true;
     _ticker?.dispose();
     _trackSubscription?.cancel();
+    _positionSubscription?.cancel();
     _jellyfinRetryTimer?.cancel();
     if (_textureIdListenerAttached && _controller != null) {
       _controller!.id.removeListener(_handleTextureIdChange);
@@ -2404,13 +2429,51 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (_lastPositionTimestampUs == 0) {
         _lastPositionTimestampUs = nowUs;
       }
-      final deltaUs = nowUs - _lastPositionTimestampUs;
+      final rawDeltaUs = nowUs - _lastPositionTimestampUs;
+      final prevInterpMs = _interpolatedPosition.inMilliseconds;
+      // [FIX-L1] 阻塞后追赶限幅：主线程阻塞恢复后 rawDeltaUs 会很大（>100ms），
+      // 原实现一次性墙钟追赶 → _interpolatedPosition 暴跳 → 下游 big-fwd snap → 回弹。
+      // 修复：deltaUs 超过 50ms（约3帧@60fps）时 clamp 到 50ms，并把锚点重设到
+      // 当前 _interpolatedPosition，使后续帧从限幅后的位置继续推进，避免暴跳传递。
+      // 与 L2 的 Ticker.elapsed（阻塞不累积）行为对齐，消除层间时钟源不一致。
+      final deltaUs = rawDeltaUs > 50000 ? 50000 : rawDeltaUs;
+      if (rawDeltaUs > 50000) {
+        // 阻塞恢复：重锚到当前插值位置，防止旧锚点 + 大 delta 产生暴跳
+        _lastActualPosition = _interpolatedPosition;
+        _lastPositionTimestampUs = nowUs;
+      }
       _interpolatedPosition = _lastActualPosition +
           Duration(microseconds: (deltaUs * _player.state.rate).toInt());
 
       if (_player.state.duration > Duration.zero &&
           _interpolatedPosition > _player.state.duration) {
         _interpolatedPosition = _player.state.duration;
+      }
+      // [CHAIN-A0] L1 media_kit 适配器插值层诊断
+      // 捕获 _interpolatedPosition 的跳变（墙钟 deltaUs 暴涨 = 主线程阻塞恢复追赶）。
+      // 与 L2 [CHAIN-A] / L3 [CHAIN-B] 共享墙钟时间戳，验证三层时钟源不一致假设：
+      //   L1 用 DateTime.now()（绝对墙钟，阻塞后一次性追赶）
+      //   L2 用 Ticker.elapsed（vsync 累积，阻塞不累积）
+      //   主线程阻塞恢复后 L1 暴跳 → L2 看到 playerMs 暴跳 → big-fwd snap → 回弹
+      // 关键指标：
+      //   deltaUs > 100000(100ms) = 主线程阻塞，L1 一次性追赶 → L2 将看到暴跳
+      //   interpJump > 50ms = _interpolatedPosition 单帧跳变（回弹的直接上游）
+      //   actualMs = _lastActualPosition（mpv 真实 position 锚点，正常播放不更新）
+      if (!kReleaseMode) {
+        final interpMs = _interpolatedPosition.inMilliseconds;
+        final interpJump = (interpMs - prevInterpMs).abs();
+        if (deltaUs > 100000 || interpJump > 50) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          debugPrint('[CHAIN-A0] t=$now '
+              'interpMs=$interpMs prevInterpMs=$prevInterpMs '
+              'interpJump=${interpJump.toStringAsFixed(1)}ms '
+              'deltaUs=$deltaUs '
+              'actualMs=${_lastActualPosition.inMilliseconds} '
+              'mpvStatePosMs=${_player.state.position.inMilliseconds} '
+              'rate=${_player.state.rate} '
+              '← ${deltaUs > 100000 ? "BLOCKED-RECOVER: 主线程阻塞后L1墙钟追赶" : ""} '
+              '${interpJump > 50 ? "L1-JUMP: 适配器插值暴跳" : ""}');
+        }
       }
     }
   }

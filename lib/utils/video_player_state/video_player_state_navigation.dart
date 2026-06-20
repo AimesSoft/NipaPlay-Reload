@@ -774,6 +774,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 // player.position 更新了：检查平滑时钟与实际位置的漂移
                 final smoothMs = _smoothAnchorMs + elapsedDeltaUs / 1000.0 * effectivePlaybackRate;
                 final drift = smoothMs - playerMs;
+                // [CHAIN-A] 记录 drift 修正前的 playbackTimeMs，供末尾聚合输出使用
+                final chainAPrevPtm = _playbackTimeMs.value;
                 if (drift.abs() > 30.0) {
                   // 大跳变（seek/暂停恢复后）
                   // ✅ 修复：如果 playerMs < 当前 playbackTimeMs（回退场景），
@@ -822,17 +824,24 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                       }
                     }
                   } else {
-                    // 前进场景：playerMs >= playbackTimeMs，立即对齐正确
-                    _smoothAnchorMs = playerMs;
-                    _smoothAnchorElapsedUs = currentElapsedUs;
+                    // [FIX-L2] 前进场景：playerMs >= playbackTimeMs，改渐进追赶替代立即 snap。
+                    // 根因：原实现立即 _smoothAnchorMs=playerMs → playbackTimeMs 阶跃到 playerMs
+                    // → engine item.x 阶跃 → painter displayX 漂移 → drift 修正 → 回弹。
+                    // 修复：与 backward 分支对称，用 0.35 渐进修正锚点，让 playbackTimeMs
+                    // 平滑追赶 playerMs，避免阶跃。锚点时间同步调整保持当前帧连续性。
+                    final correctionMs = drift * 0.35;
+                    _smoothAnchorMs = smoothMs - correctionMs;
+                    final correctionUsExact = correctionMs * 1000.0 / effectivePlaybackRate;
+                    _smoothAnchorElapsedUs =
+                        currentElapsedUs - correctionUsExact.round();
                     if (!kReleaseMode) {
                       final snapDeltaMs = playerMs - prevPtm;
                       if (snapDeltaMs.abs() > 10.0) {
                         final now = DateTime.now().millisecondsSinceEpoch;
                         if (now - _lastDiagDriftSnapMs >= 500) {
                           _lastDiagDriftSnapMs = now;
-                          debugPrint('[DRIFT-SNAP-DIAG] FORWARD SNAP: '
-                              'drift=${drift.toStringAsFixed(1)}ms → snap to playerMs: '
+                          debugPrint('[DRIFT-SNAP-DIAG] FORWARD PROGRESSIVE: '
+                              'drift=${drift.toStringAsFixed(1)}ms → 0.35 progressive (was snap): '
                               'prevPtm=${prevPtm.toStringAsFixed(1)} → playerMs=${playerMs.toStringAsFixed(1)} '
                               'delta=${snapDeltaMs.toStringAsFixed(1)}ms '
                               'smoothMs=${smoothMs.toStringAsFixed(1)} rate=$effectivePlaybackRate');
@@ -842,10 +851,12 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   }
                 } else {
                   // 小漂移：渐进修正锚点
-                  // P3 优化：提高修正速率到 15%，让正常播放中的微小偏差更快收敛。
-                  // 旧值 5% 收敛太慢，导致弹幕时间持续领先/落后视频几十毫秒。
-                  // 15% 可在 ~15 帧内收敛 30ms 偏差，同时保持帧间连续性。
-                  final correctionMs = drift * 0.15;
+                  // [FIX-L2] 收敛速率 0.15 → 0.25，减少正常播放的系统性落后。
+                  // 根因：flutter.log 实证 small 分支持续 drift -15~-29ms，0.15 收敛太慢，
+                  // 平滑时钟系统性落后 player.position，item.x 微左移 vs displayX 墙钟走，
+                  // 14px 边缘周期性漂移 → 不丝滑。0.25 可在 ~9 帧内收敛 30ms 偏差，
+                  // 同时保持帧间连续性（单帧修正占比 <25% 正常移动）。
+                  final correctionMs = drift * 0.25;
                   _smoothAnchorMs = smoothMs - correctionMs;
                   // 锚点时间调整：锚点位置被修正了 correctionMs，
                   // 锚点时间需设置为 currentElapsedUs - correctionMs*1000/rate，
@@ -918,6 +929,30 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                   }
                 } else {
                   _playbackTimeMs.value = newPtm;
+                }
+                // [CHAIN-A] 全链路回弹诊断 — 平滑时钟层单帧聚合
+                // 捕获正常播放时 player.position 更新导致的 drift 修正最终结果。
+                // 与 painter 侧 [CHAIN-B] 共享墙钟时间戳，按时间排序可看到完整因果链：
+                //   position更新 → 平滑时钟修正/hold → 下一帧 painter drift修正 → 回弹
+                // branch: small=|drift|<=30ms渐进0.15; big-back=drift>30且playerMs回退0.35渐进;
+                //         big-fwd=drift>30且前进snap; hold=P1单调保护卡住一帧
+                if (!kReleaseMode) {
+                  final finalPtm = _playbackTimeMs.value;
+                  final held = (newPtm < chainAPrevPtm && chainAPrevPtm > 100.0);
+                  final branch = drift.abs() > 30.0
+                      ? (playerMs < chainAPrevPtm - 5.0 ? 'big-back' : 'big-fwd')
+                      : 'small';
+                  // 仅在发生 hold/回退/大drift时输出，避免正常帧刷屏
+                  if (held || drift.abs() > 15.0 || newPtm < chainAPrevPtm - 0.5) {
+                    final now = DateTime.now().millisecondsSinceEpoch;
+                    debugPrint('[CHAIN-A] t=$now '
+                        'ptm ${chainAPrevPtm.toStringAsFixed(1)}→${finalPtm.toStringAsFixed(1)} '
+                        'drift=${drift.toStringAsFixed(1)}ms '
+                        'playerMs=${playerMs.toStringAsFixed(1)} '
+                        'branch=$branch held=${held ? "YES" : "no"} '
+                        'rate=$effectivePlaybackRate '
+                        'newPtmRaw=${newPtm.toStringAsFixed(1)}');
+                  }
                 }
               } else {
                 // player.position 未变，正常插值推进
