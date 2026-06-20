@@ -3,8 +3,8 @@ import 'package:ffi/ffi.dart';
 
 import '../native_arena.dart';
 import '../native_library.dart';
-import '../types/native_types.dart';
-import '../types/native_result.dart';
+import '../types/native_types_io.dart';
+import '../types/native_result_io.dart';
 import '../types/native_layout_types.dart';
 import 'native_bindings.dart';
 
