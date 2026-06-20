@@ -58,16 +58,65 @@ runs:
         }
 
         $mdkSdkPkg = "mdk-sdk-windows-desktop-vs2022-x64.7z"
-        $depsUrl = $env:FVP_DEPS_URL
-        if ($depsUrl -match "^http") {
-          $downloadUrl = "$depsUrl/$mdkSdkPkg"
-        } else {
-          $downloadUrl = "https://sourceforge.net/projects/mdk-sdk/files/nightly/$mdkSdkPkg"
+        $archivePath = Join-Path $fvpDir "windows\$mdkSdkPkg"
+
+        # SourceForge intermittently serves an HTML interstitial/anti-bot page
+        # to CI runners instead of the 7z archive, which makes 7-Zip fail with
+        # "Is not archive". Download from several mirrors and validate the 7z
+        # magic bytes (37 7A BC AF 27 1C) before extracting; fall back to the
+        # GitHub release asset (which fvp's deps.cmake cannot use directly
+        # because it hardcodes the vs2022-x64 filename that only SourceForge has).
+        $sig = [byte[]](0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c)
+        $ua = @{ "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+
+        function Test-SevenZip {
+          param([string]$Path)
+          if (-not (Test-Path $Path)) { return $false }
+          $bytes = [System.IO.File]::ReadAllBytes($Path)
+          if ($bytes.Length -lt 6) { return $false }
+          for ($i = 0; $i -lt 6; $i++) { if ($bytes[$i] -ne $sig[$i]) { return $false } }
+          return $true
         }
 
-        $archivePath = Join-Path $fvpDir "windows\$mdkSdkPkg"
-        Write-Host "Downloading mdk-sdk from $downloadUrl ..."
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
+        $candidates = @(
+          "https://sourceforge.net/projects/mdk-sdk/files/nightly/$mdkSdkPkg/download",
+          "https://downloads.sourceforge.net/project/mdk-sdk/nightly/$mdkSdkPkg",
+          "https://master.dl.sourceforge.net/project/mdk-sdk/nightly/$mdkSdkPkg"
+        )
+
+        $downloaded = $false
+        foreach ($url in $candidates) {
+          foreach ($attempt in 1..3) {
+            Write-Host "Downloading mdk-sdk from $url (attempt $attempt) ..."
+            try {
+              Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing -TimeoutSec 180 -Headers $ua
+            } catch {
+              Write-Warning "Download error from $url : $($_.Exception.Message)"
+              continue
+            }
+            if (Test-SevenZip $archivePath) {
+              Write-Host "Got valid 7z archive from $url"
+              $downloaded = $true
+              break
+            }
+            $len = (Get-Item $archivePath).Length
+            Write-Warning "Response from $url was not a 7z archive (size=$len bytes, likely HTML interstitial); retrying."
+            Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
+          }
+          if ($downloaded) { break }
+        }
+
+        if (-not $downloaded) {
+          $ghPkg = "mdk-sdk-windows-x64.7z"
+          $ghUrl = "https://github.com/wang-bin/mdk-sdk/releases/latest/download/$ghPkg"
+          $archivePath = Join-Path $fvpDir "windows\$ghPkg"
+          Write-Host "SourceForge mirrors unavailable; falling back to GitHub release $ghUrl ..."
+          Invoke-WebRequest -Uri $ghUrl -OutFile $archivePath -UseBasicParsing -TimeoutSec 180 -Headers $ua
+          if (-not (Test-SevenZip $archivePath)) {
+            throw "GitHub fallback download was not a valid 7z archive: $archivePath"
+          }
+        }
 
         # Extract using 7-Zip (CMake's tar can't handle 7z on Windows reliably)
         $sevenZip = Join-Path ${env:ProgramFiles} "7-Zip\7z.exe"
@@ -81,7 +130,7 @@ runs:
         if (Test-Path $findMdk) {
           Write-Host "mdk-sdk pre-downloaded and extracted successfully."
         } else {
-          Write-Error "mdk-sdk extraction failed; FindMDK.cmake not found at $findMdk"
+          throw "mdk-sdk extraction failed; FindMDK.cmake not found at $findMdk"
         }
 
     - name: Build Web and copy assets
