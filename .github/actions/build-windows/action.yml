@@ -32,6 +32,58 @@ runs:
         }
         cd ..
     
+    - name: Pre-download FVP mdk-sdk (workaround symlink extraction issue)
+      shell: pwsh
+      run: |
+        # FVP's deps.cmake extracts mdk-sdk into CMAKE_CURRENT_SOURCE_DIR, which
+        # resolves through Flutter's .plugin_symlinks to a UNC path (\\?\D:\...).
+        # CMake's "cmake -E tar" cannot extract 7z archives through such paths.
+        # Workaround: pre-download and extract mdk-sdk into the real FVP package
+        # directory so that deps.cmake detects it and skips extraction.
+        $fvpDirs = Get-ChildItem -Path "$env:LOCALAPPDATA\Pub\Cache\hosted\pub.dev\fvp-*" -Directory -ErrorAction SilentlyContinue
+        if (-not $fvpDirs) {
+          # Fallback: try .pub-cache (older Flutter)
+          $fvpDirs = Get-ChildItem -Path "$env:USERPROFILE\.pub-cache\hosted\pub.dev\fvp-*" -Directory -ErrorAction SilentlyContinue
+        }
+        if (-not $fvpDirs) {
+          Write-Host "FVP package not found in pub cache; will rely on CMake extraction."
+          return
+        }
+        $fvpDir = $fvpDirs[0].FullName
+        $mdkSdkDir = Join-Path $fvpDir "windows\mdk-sdk"
+        $findMdk = Join-Path $mdkSdkDir "lib\cmake\FindMDK.cmake"
+        if (Test-Path $findMdk) {
+          Write-Host "mdk-sdk already exists at $mdkSdkDir; skipping pre-download."
+          return
+        }
+
+        $mdkSdkPkg = "mdk-sdk-windows-desktop-vs2022-x64.7z"
+        $depsUrl = $env:FVP_DEPS_URL
+        if ($depsUrl -match "^http") {
+          $downloadUrl = "$depsUrl/$mdkSdkPkg"
+        } else {
+          $downloadUrl = "https://sourceforge.net/projects/mdk-sdk/files/nightly/$mdkSdkPkg"
+        }
+
+        $archivePath = Join-Path $fvpDir "windows\$mdkSdkPkg"
+        Write-Host "Downloading mdk-sdk from $downloadUrl ..."
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
+
+        # Extract using 7-Zip (CMake's tar can't handle 7z on Windows reliably)
+        $sevenZip = Join-Path ${env:ProgramFiles} "7-Zip\7z.exe"
+        if (-not (Test-Path $sevenZip)) {
+          choco install 7zip -y --no-progress
+        }
+        $windowsDir = Join-Path $fvpDir "windows"
+        Write-Host "Extracting mdk-sdk to $windowsDir ..."
+        & $sevenZip x $archivePath "-o$windowsDir" -y | Out-Null
+
+        if (Test-Path $findMdk) {
+          Write-Host "mdk-sdk pre-downloaded and extracted successfully."
+        } else {
+          Write-Error "mdk-sdk extraction failed; FindMDK.cmake not found at $findMdk"
+        }
+
     - name: Build Web and copy assets
       shell: bash
       run: |

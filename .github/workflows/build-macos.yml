@@ -60,20 +60,30 @@ jobs:
           set -euo pipefail
           FETCH_CACHE="$(mktemp -d)"
           echo "LIBMPV_DARWIN_FETCH_CACHE_DIR=${FETCH_CACHE}" >> "$GITHUB_ENV"
-          # The Nix fetch-file helper looks for <cache-dir>/<url-basename>.
-          # packages.lock.nix URL ends in uchardet-0.0.8.tar.xz, so the
-          # cached file MUST be named exactly that (same format & content).
-          TARGET="${FETCH_CACHE}/uchardet-0.0.8.tar.xz"
-          PRIMARY="https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz"
-          # Try primary URL with retries (HTTP 418 is usually transient)
-          for attempt in 1 2 3; do
-            echo "Attempt ${attempt}: ${PRIMARY}"
-            if curl -fSL --retry 3 --retry-delay 5 -o "$TARGET" "$PRIMARY" 2>/dev/null; then
-              echo "Downloaded uchardet from primary URL"
-              exit 0
+          # The Nix fetch-file helper resolves the URL basename for the cache.
+          # packages.lock.nix now points to the Debian mirror, so the expected
+          # cache filename is uchardet_0.0.8.orig.tar.xz
+          TARGET="${FETCH_CACHE}/uchardet_0.0.8.orig.tar.xz"
+          MIRRORS=(
+            "https://deb.debian.org/debian/pool/main/u/uchardet/uchardet_0.0.8.orig.tar.xz"
+            "https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz"
+          )
+          for url in "${MIRRORS[@]}"; do
+            echo "Trying ${url} ..."
+            if curl -fSL --retry 3 --retry-delay 5 -o "$TARGET" "$url" 2>/dev/null; then
+              echo "Downloaded uchardet from ${url}"
+              # Verify sha256 matches packages.lock.nix
+              EXPECTED="e97a60cfc00a1c147a674b097bb1422abd9fa78a2d9ce3f3fdcc2e78a34ac5f0"
+              ACTUAL="$(shasum -a 256 "$TARGET" | cut -d' ' -f1)"
+              if [ "$ACTUAL" = "$EXPECTED" ]; then
+                echo "SHA256 verified OK"
+                exit 0
+              else
+                echo "SHA256 mismatch! Expected $EXPECTED, got $ACTUAL"
+                rm -f "$TARGET"
+              fi
             fi
-            echo "Attempt ${attempt} failed, waiting before retry..."
-            sleep 10
+            echo "Failed to download from ${url}, trying next mirror..."
           done
           echo "WARNING: Could not pre-fetch uchardet; Nix build will attempt direct download."
 
@@ -89,6 +99,22 @@ jobs:
             echo "libmpv-darwin-build patch already present; skipping."
           else
             git -C third_party/libmpv-darwin-build apply "$PATCH_FILE"
+          fi
+
+      - name: Patch uchardet download URL (Debian mirror)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # freedesktop.org returns HTTP 418 (Anubis anti-bot) from CI.
+          # Replace with Debian mirror that hosts the same tarball (identical sha256).
+          LOCK_FILE="third_party/libmpv-darwin-build/packages.lock.nix"
+          OLD_URL='https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz'
+          NEW_URL='https://deb.debian.org/debian/pool/main/u/uchardet/uchardet_0.0.8.orig.tar.xz'
+          if grep -qF "$OLD_URL" "$LOCK_FILE"; then
+            sed -i "s|${OLD_URL}|${NEW_URL}|" "$LOCK_FILE"
+            echo "Patched uchardet URL to Debian mirror."
+          else
+            echo "uchardet URL already patched or different; skipping."
           fi
 
       - name: Build macOS libmpv xcframeworks from source
