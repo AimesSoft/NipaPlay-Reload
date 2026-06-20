@@ -111,7 +111,10 @@ jobs:
           OLD_URL='https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz'
           NEW_URL='https://deb.debian.org/debian/pool/main/u/uchardet/uchardet_0.0.8.orig.tar.xz'
           if grep -qF "$OLD_URL" "$LOCK_FILE"; then
-            sed -i "s|${OLD_URL}|${NEW_URL}|" "$LOCK_FILE"
+            # BSD sed (macOS) requires an argument for -i; `sed -i.bak` is
+            # portable across BSD and GNU sed. Remove the backup afterwards.
+            sed -i.bak "s|${OLD_URL}|${NEW_URL}|" "$LOCK_FILE"
+            rm -f "$LOCK_FILE.bak"
             echo "Patched uchardet URL to Debian mirror."
           else
             echo "uchardet URL already patched or different; skipping."
