@@ -101,6 +101,22 @@ jobs:
             git -C third_party/libmpv-darwin-build apply "$PATCH_FILE"
           fi
 
+      - name: Patch uchardet download URL (Debian mirror)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # freedesktop.org returns HTTP 418 (Anubis anti-bot) from CI.
+          # Replace with Debian mirror that hosts the same tarball (identical sha256).
+          LOCK_FILE="third_party/libmpv-darwin-build/packages.lock.nix"
+          OLD_URL='https://www.freedesktop.org/software/uchardet/releases/uchardet-0.0.8.tar.xz'
+          NEW_URL='https://deb.debian.org/debian/pool/main/u/uchardet/uchardet_0.0.8.orig.tar.xz'
+          if grep -qF "$OLD_URL" "$LOCK_FILE"; then
+            sed -i "s|${OLD_URL}|${NEW_URL}|" "$LOCK_FILE"
+            echo "Patched uchardet URL to Debian mirror."
+          else
+            echo "uchardet URL already patched or different; skipping."
+          fi
+
       - name: Build macOS libmpv xcframeworks from source
         id: build-libmpv
         shell: bash
