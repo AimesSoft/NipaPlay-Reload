@@ -822,6 +822,25 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
         Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         Consumer<VideoPlayerState>(
           builder: (context, videoState, child) {
+            return SettingsItem.toggle(
+              title: 'MKV 章节标记',
+              subtitle: '在进度条上显示 MKV 自带章节分割线，悬停高亮后点击可跳转章节（仅 libmpv 内核）',
+              icon: Ionicons.bookmark_outline,
+              value: videoState.chapterMarkersEnabled,
+              onChanged: (bool value) async {
+                await videoState.setChapterMarkersEnabled(value);
+                if (!context.mounted) return;
+                BlurSnackBar.show(
+                  context,
+                  value ? '已开启 MKV 章节标记' : '已关闭 MKV 章节标记',
+                );
+              },
+            );
+          },
+        ),
+        Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
+        Consumer<VideoPlayerState>(
+          builder: (context, videoState, child) {
             if (visibleKernelType == PlayerKernelType.mdk) {
               const int minSeconds = 1;
               const int maxSeconds = 120;

@@ -132,11 +132,39 @@ class PlayerAudioStreamInfo {
   String toString() => rawRepresentation; // Or a more structured string
 }
 
+/// MKV/媒体容器自带的章节标识（来自 libmpv `chapter-list` 属性）。
+///
+/// 参考：
+/// - REFERENCE/mpv/demux/demux_mkv.c:1130 demux_mkv_read_chapters — MKV EBML 章节解析
+/// - REFERENCE/mpv/player/command.c:4674 mp_property_list_chapters — chapter-list 属性
+/// - REFERENCE/mpv/player/playloop.c:607 get_current_chapter — 当前章节计算
+class PlayerChapter {
+  /// 章节在 chapter-list 中的索引（0-based）。
+  final int index;
+
+  /// 章节起始时间（毫秒，相对媒体起点）。
+  final int startMs;
+
+  /// 章节标题（可能为空字符串，对应 mpv "(unnamed)"）。
+  final String title;
+
+  const PlayerChapter({
+    required this.index,
+    required this.startMs,
+    required this.title,
+  });
+
+  @override
+  String toString() => 'PlayerChapter(#$index $startMs ms "$title")';
+}
+
 class PlayerMediaInfo {
   final int duration; // in milliseconds
   final List<PlayerVideoStreamInfo>? video;
   final List<PlayerAudioStreamInfo>? audio;
   final List<PlayerSubtitleStreamInfo>? subtitle;
+  /// MKV/容器自带章节列表（按 startMs 升序），无章节时为 null。
+  final List<PlayerChapter>? chapters;
   final String? specificErrorMessage;
 
   PlayerMediaInfo({
@@ -144,6 +172,7 @@ class PlayerMediaInfo {
     this.video,
     this.audio,
     this.subtitle,
+    this.chapters,
     this.specificErrorMessage,
   });
 
@@ -153,6 +182,7 @@ class PlayerMediaInfo {
     List<PlayerVideoStreamInfo>? video,
     List<PlayerAudioStreamInfo>? audio,
     List<PlayerSubtitleStreamInfo>? subtitle,
+    List<PlayerChapter>? chapters,
     String? specificErrorMessage,
   }) {
     return PlayerMediaInfo(
@@ -160,6 +190,7 @@ class PlayerMediaInfo {
       video: video ?? this.video,
       audio: audio ?? this.audio,
       subtitle: subtitle ?? this.subtitle,
+      chapters: chapters ?? this.chapters,
       specificErrorMessage: specificErrorMessage ?? this.specificErrorMessage,
     );
   }

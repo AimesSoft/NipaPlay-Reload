@@ -542,6 +542,11 @@ class MdkPlayerAdapter implements AbstractPlayer {
   }
 
   @override
+  Future<void> setChapter(int index) async {
+    // MDK 内核暂未暴露章节跳转（MediaInfo.ChapterInfo 存在但适配器未接入）。
+  }
+
+  @override
   Future<void> playDirectly() async {
     try {
       _mdkPlayer.state = mdk.PlaybackState.playing;

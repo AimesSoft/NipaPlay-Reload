@@ -52,6 +52,11 @@ abstract class AbstractPlayer {
   String? getProperty(String key);
   void setProperty(String key, String value);
   Future<void> setVideoSurfaceSize({int? width, int? height});
+
+  /// 跳转到指定索引的章节（使用 mpv 原生 `chapter` 属性，keyframe 对齐）。
+  /// 参考 REFERENCE/mpv/player/command.c:996 (queue_seek MPSEEK_CHAPTER)。
+  /// 不支持章节的内核（mdk/erika）为空实现。
+  Future<void> setChapter(int index);
   
   // NEW DIRECT PLAYBACK METHODS
   /// 直接开始播放，绕过状态设置

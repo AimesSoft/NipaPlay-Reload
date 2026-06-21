@@ -614,6 +614,11 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
           _mediaInfo.duration != duration.inMilliseconds) {
         _mediaInfo = _mediaInfo.copyWith(duration: duration.inMilliseconds);
       }
+      // 时长确定后尝试获取 MKV 章节列表（chapter-list 在 file-loaded 后可用，
+      // 且常随 duration 一起就绪）。参考 REFERENCE/mpv/player/lua/osc.lua:3201
+      // observe_cached("chapter-list")。此处用一次性 getProperty 兜底，避免
+      // observeProperty 对 MPV_FORMAT_NODE_ARRAY 的兼容性问题。
+      _refreshChapters();
     });
 
     _player.stream.log.listen((log) {
@@ -865,6 +870,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       video: videoStreams,
       audio: audioStreams,
       subtitle: resolvedSubtitleStreams, // Use the resolved list
+      chapters: _mediaInfo.chapters, // 保留已解析的章节列表（由 _refreshChapters 维护）
     );
 
     _ensureDefaultTracksSelected();
@@ -1992,6 +1998,98 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       platform?.setProperty?.call(name, resolvedValue);
     } catch (e) {
       debugPrint('MediaKit: 设置属性$name 失败: $e');
+    }
+  }
+
+  /// 解析 mpv `chapter-list` 属性返回的 JSON 字符串为 [PlayerChapter] 列表。
+  ///
+  /// mpv `chapter-list` 是一个 node array，每个元素含 `time`（秒，double）
+  /// 和 `title`（字符串）。通过 NativePlayer.getProperty 获取时，media_kit 会
+  /// 将其序列化为 JSON 字符串。参考 REFERENCE/mpv/player/command.c:1086
+  /// mp_property_list_chapters（M_PROPERTY_PRINT / m_property_read_list）。
+  List<PlayerChapter> _parseChapterList(String raw) {
+    if (raw.isEmpty) {
+      debugPrint('[CHAPTER-DIAG] _parseChapterList: raw 为空');
+      return const [];
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        debugPrint('[CHAPTER-DIAG] _parseChapterList: 解码结果非 List，实际类型=${decoded.runtimeType}');
+        return const [];
+      }
+      final result = <PlayerChapter>[];
+      for (int i = 0; i < decoded.length; i++) {
+        final item = decoded[i];
+        if (item is! Map) continue;
+        final time = item['time'];
+        double timeSec;
+        if (time is num) {
+          timeSec = time.toDouble();
+        } else if (time is String) {
+          timeSec = double.tryParse(time) ?? 0.0;
+        } else {
+          continue;
+        }
+        final title = (item['title'] ?? '')?.toString() ?? '';
+        result.add(PlayerChapter(
+          index: i,
+          startMs: (timeSec * 1000).round(),
+          title: title,
+        ));
+      }
+      // 按 startMs 升序排序（mpv 已排序，这里防御性确保）
+      result.sort((a, b) => a.startMs.compareTo(b.startMs));
+      // 重建 index（排序后）
+      final sorted = List.generate(result.length,
+          (i) => PlayerChapter(index: i, startMs: result[i].startMs, title: result[i].title));
+      debugPrint('[CHAPTER-DIAG] _parseChapterList: 解析成功 ${sorted.length} 个章节，'
+          '首章=${sorted.isEmpty ? "无" : "${sorted.first.startMs}ms \"${sorted.first.title}\""}, '
+          '末章=${sorted.isEmpty ? "无" : "${sorted.last.startMs}ms \"${sorted.last.title}\""}');
+      return sorted;
+    } catch (e) {
+      debugPrint('[CHAPTER-DIAG] _parseChapterList: 解析失败: $e (raw 长度=${raw.length}, raw前80字符=${raw.length > 80 ? raw.substring(0, 80) : raw})');
+      return const [];
+    }
+  }
+
+  /// 从 mpv 获取 `chapter-list` 并更新 [_mediaInfo.chapters]。
+  /// 在 duration 就绪后调用。无章节文件会得到空列表。
+  Future<void> _refreshChapters() async {
+    if (_isDisposed) return;
+    try {
+      final raw = await _getMpvPropertyForDiagnostics('chapter-list');
+      if (raw == null || raw.isEmpty) {
+        debugPrint('[CHAPTER-DIAG] _refreshChapters: chapter-list 返回空 (raw=$raw)');
+        return;
+      }
+      final chapters = _parseChapterList(raw);
+      // 仅在变化时更新，避免无谓重建
+      final prev = _mediaInfo.chapters;
+      final changed = prev == null ||
+          prev.length != chapters.length ||
+          (chapters.isNotEmpty &&
+              (prev[0].startMs != chapters[0].startMs ||
+                  prev.last.startMs != chapters.last.startMs));
+      if (changed) {
+        _mediaInfo = _mediaInfo.copyWith(chapters: chapters);
+        debugPrint('[CHAPTER-DIAG] _refreshChapters: 章节列表已更新，共 ${chapters.length} 个章节');
+      }
+    } catch (e) {
+      debugPrint('[CHAPTER-DIAG] _refreshChapters: 获取 chapter-list 失败: $e');
+    }
+  }
+
+  @override
+  Future<void> setChapter(int index) async {
+    // 使用 mpv 原生 `chapter` 属性跳转，走 MPSEEK_CHAPTER（keyframe 对齐）。
+    // 参考 REFERENCE/mpv/player/command.c:996 (queue_seek MPSEEK_CHAPTER)。
+    if (index < 0) return;
+    try {
+      final dynamic platform = _player.platform;
+      await platform?.setProperty?.call('chapter', index.toString());
+    } catch (e) {
+      debugPrint('MediaKit: setChapter($index) 失败: $e');
     }
   }
 
