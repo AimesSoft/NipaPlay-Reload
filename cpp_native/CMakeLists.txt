@@ -76,6 +76,9 @@ if(MSVC)
         /W4
         /Zc:__cplusplus
         /GR-
+        # /Ob3：覆盖 CMake 默认 /O2 内含的 /Ob2，更激进内联（弹幕布局热点）
+        # /fp:fast：放松 IEEE 精度换取速度（/O2 默认 /fp:precise，此处覆盖）
+        # 注：/O2 已内含 /Oi 内建函数 / /Gy 函数级链接 / /GF 字符串池化，不重复列举
         $<$<CONFIG:Release>:/Ob3>
         $<$<CONFIG:Release>:/fp:fast>
     )
@@ -88,8 +91,17 @@ if(MSVC)
             $<$<CONFIG:Release>:/arch:AVX2>
         )
     endif()
+    # MSVC 链接器死代码消除（Release only）：
+    # /OPT:REF 消除未引用段（配合 /O2 内含的 /Gy 函数级链接）
+    # /OPT:ICF COMDAT 折叠（消除重复函数/数据，配合 /Gy）
+    # MSVC Release 链接器默认含此两项，显式声明确保不被覆盖（与 windows/runner 对齐）
+    # 兼容性：visibility=hidden + export.h visibility=default 导出符号不受影响（动态符号表算被引用）
+    target_link_options(nipaplay_native PRIVATE
+        $<$<CONFIG:Release>:/OPT:REF>
+        $<$<CONFIG:Release>:/OPT:ICF>
+    )
 else()
-    # Common flags for Apple & Linux
+    # Common flags for Apple & Linux & Android (GCC/Clang)
     target_compile_options(nipaplay_native PRIVATE
         -fno-rtti
         -fexceptions
@@ -97,9 +109,30 @@ else()
         -Wextra
         -Wpedantic
         $<$<CONFIG:Debug>:-Og>
+        # -O3：最高优化（已内含自动向量化/部分循环优化/inline-functions 等，不重复加 -funroll-loops
+        #   避免强制循环展开的代码膨胀 + 指令缓存压力对分支密集型弹幕布局的负优化风险）
+        # -ffast-math：放松 IEEE 精度换取速度（-O3 不含，独立）
+        # -ffunction-sections -fdata-sections：每个函数/变量独立段，配合链接器
+        #   --gc-sections(Linux/Android) / -dead_strip(macOS) 消除未引用代码/数据
+        # 兼容性：visibility=hidden + export.h visibility=default 的导出符号不受影响
+        #   （动态符号表算被引用，gc-sections/dead_strip 只删 hidden 且未引用的）
         $<$<CONFIG:Release>:-O3>
         $<$<CONFIG:Release>:-ffast-math>
+        $<$<CONFIG:Release>:-ffunction-sections>
+        $<$<CONFIG:Release>:-fdata-sections>
     )
+    # 链接器死代码消除（Release only）
+    # Linux/Android: -Wl,--gc-sections；macOS: -Wl,-dead_strip
+    # iOS staticlib 不在此处理（静态库不链接，由 app 链接时 Xcode DEAD_CODE_STRIPPING 处理）
+    if(APPLE)
+        target_link_options(nipaplay_native PRIVATE
+            $<$<CONFIG:Release>:-Wl,-dead_strip>
+        )
+    elseif(UNIX OR ANDROID)
+        target_link_options(nipaplay_native PRIVATE
+            $<$<CONFIG:Release>:-Wl,--gc-sections>
+        )
+    endif()
 endif()
 
 # ──── 架构优化选项（Release only）────

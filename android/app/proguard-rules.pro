@@ -70,4 +70,32 @@
 -keep interface com.google.android.play.core.** { *; } 
 
 # 忽略 Google Play Core 相关缺失类的警告（适用于不分发到 Google Play 的应用）
--dontwarn com.google.android.play.core.** 
+-dontwarn com.google.android.play.core.**
+
+# ──── flutter_rust_bridge (FRB) 生成代码保留 ────
+# FRB Android 胶水代码包名：com.flutter_rust_bridge.rust_lib_nipaplay
+# RustLibNipaplayPlugin 通过反射/Flutter plugin 机制注册，混淆会导致 FFI 初始化失败
+-keep class com.flutter_rust_bridge.** { *; }
+-keep class com.flutter_rust_bridge.rust_lib_nipaplay.** { *; }
+
+# ──── R8 FullMode 必备：保留 JNI native 方法 ────
+# R8 fullMode 更激进的优化会混淆/移除未被 Java 直接引用的 native 方法符号，
+# 但 media_kit / mdk-sdk / cpp_native / rust_lib_nipaplay 通过 JNI 按符号名
+# 动态查找 native 方法，符号名必须保持不变，否则 UnsatisfiedLinkError。
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+-keepclassmembers class * {
+    native <methods>;
+}
+
+# ──── R8 FullMode：保留枚举 values/valueOf（反射常用）────
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# ──── R8 FullMode：保留 Parcelable CREATOR（跨进程/AIDL）────
+-keepclassmembers class * implements android.os.Parcelable {
+    public static final android.os.Parcelable$Creator CREATOR;
+}

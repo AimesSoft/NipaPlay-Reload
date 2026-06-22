@@ -57,3 +57,22 @@ raw-window-handle = "0.6.2"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+# ──── Release 编译优化（全平台 FFI 库）────
+# 注意兼容性：
+# - panic = "unwind"（保持默认）：next2_engine/ffi.rs + engine/runtime.rs 使用
+#   std::panic::catch_unwind 做 FFI 边界 panic 防护，panic=abort 会让 catch_unwind
+#   失效（行为未定义/直接 abort），破坏 FFI 安全性。必须保持 unwind。
+# - lto = "thin"：薄 LTO，跨 crate 内联 + CI 编译时间友好（fat LTO 在 wgpu/nalgebra
+#   等大依赖上编译时间过长，CI 可能超时）。thin 仍能跨 crate 内联 fdsm/nalgebra/image。
+# - codegen-units = 1：单编译单元，最大优化深度（牺牲编译时间换运行时性能）。
+# - strip = "symbols"：剥离符号减体积（cdylib/staticlib 全平台安全，dSYM 在编译时
+#   独立生成不受影响；iOS staticlib 的符号在 app 链接时由 Xcode 统一处理）。
+# - debug = false：不生成调试信息（release 默认已 false，显式声明减体积）。
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+strip = "symbols"
+debug = false

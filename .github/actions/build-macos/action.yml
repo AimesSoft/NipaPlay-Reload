@@ -117,13 +117,18 @@ runs:
     - name: Build macOS App
       shell: bash
       run: |
+        # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
+        # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
+        # 兼容性：与 macOS dSYM 不冲突（dSYM 是原生层，obfuscate 是 Dart 层，独立）
         if [ "$ENABLE_CODE_SIGNING" = "true" ]; then
           echo "🔨 构建已签名的macOS应用..."
           flutter build macos --release \
-            --dart-define=APPLE_TEAM_ID=$APPLE_TEAM_ID
+            --dart-define=APPLE_TEAM_ID=$APPLE_TEAM_ID \
+            --obfuscate --split-debug-info=build/symbols-macos
         else
           echo "🔨 构建未签名的macOS应用..."
-          flutter build macos --release
+          flutter build macos --release \
+            --obfuscate --split-debug-info=build/symbols-macos
         fi
 
     - name: Sign macOS App
