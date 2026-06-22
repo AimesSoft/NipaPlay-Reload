@@ -200,6 +200,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   // stream 每次触发都重复 getProperty chapter-list）。切集时在 _openMainMedia
   // 重置为 false。
   bool _chaptersFetched = false;
+  // 章节列表获取重试计数（P3 修复：网络流媒体 duration 可能先于 chapter-list
+  // 就绪，首次探测 chapter-list/count 返回空表示未就绪时延迟重试，避免
+  // _chaptersFetched 被无条件置 true 导致章节永久为空无重试机会）。
+  // 切集时在 _openMainMedia 重置为 0。
+  int _chapterRetryCount = 0;
+  static const int _maxChapterRetries = 3;
+  Timer? _chapterRetryTimer;
 
   // Jellyfin流媒体重试
   int _jellyfinRetryCount = 0;
@@ -629,6 +636,9 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       // observe_cached("chapter-list")。此处用一次性 getProperty 兜底，避免
       // observeProperty 对 MPV_FORMAT_NODE_ARRAY 的兼容性问题。
       // _chaptersFetched 去重：同一媒体只获取一次，切集时 _openMainMedia 重置。
+      // P3 修复：网络流媒体 duration 可能先于 chapter-list 就绪，_refreshChapters
+      // 内部会先探测 chapter-list/count，未就绪则延迟重试（最多 3 次），不再
+      // 无条件置 _chaptersFetched=true 导致章节永久为空。
       _refreshChapters();
     });
 
@@ -1719,8 +1729,12 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
 
-    // 切集时重置章节获取标志 + 清空旧章节列表，新集 duration 就绪后重新获取。
+    // 切集时重置章节获取标志 + 重试计数 + 取消待重试 timer + 清空旧章节列表，
+    // 新集 duration 就绪后重新获取（P3 修复：重试状态也需随切集重置）。
     _chaptersFetched = false;
+    _chapterRetryCount = 0;
+    _chapterRetryTimer?.cancel();
+    _chapterRetryTimer = null;
     _mediaInfo = _mediaInfo.copyWith(chapters: const []);
 
     unawaited(_player.open(media, play: false));
@@ -1901,6 +1915,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     _trackSubscription?.cancel();
     _positionSubscription?.cancel();
     _jellyfinRetryTimer?.cancel();
+    _chapterRetryTimer?.cancel();
     if (_textureIdListenerAttached && _controller != null) {
       _controller!.id.removeListener(_handleTextureIdChange);
     }
@@ -2069,6 +2084,13 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   /// 使用子属性逐项读取（chapter-list/count + chapter-list/N/time|title），
   /// 避免 getProperty 对 NODE array 返回 OSD 文本无法解析的问题。
   /// `_chaptersFetched` 去重：同一媒体只获取一次，切集时 _openMainMedia 重置。
+  ///
+  /// P3 修复：先探测 `chapter-list/count` 区分"未就绪"与"确实无章节"。
+  /// 网络流媒体场景下 duration（mpv 估计值）可能先于 chapter-list 就绪，
+  /// 此时 count 返回 null/空表示 chapter-list 尚未加载 → 延迟重试（最多
+  /// [_maxChapterRetries] 次，间隔递增 300/600/900ms），避免 _chaptersFetched
+  /// 被无条件置 true 导致后续 duration stream 去重跳过、章节永久为空。
+  /// count 返回有效数字 <=0 表示确实无章节 → 置 _chaptersFetched=true 终止。
   Future<void> _refreshChapters() async {
     if (_isDisposed) return;
     if (_chaptersFetched) {
@@ -2076,8 +2098,31 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
     try {
+      // 先探测 chapter-list/count 判断就绪状态
+      final countRaw = await _getMpvPropertyForDiagnostics('chapter-list/count');
+      if (_isDisposed) return;
+      if (countRaw == null || countRaw.trim().isEmpty) {
+        // count 返回空：chapter-list 尚未就绪（网络流媒体 duration 先行场景）
+        _scheduleChapterRetry();
+        return;
+      }
+      final count = int.tryParse(countRaw.trim());
+      if (count == null) {
+        // count 无法解析：按未就绪处理，延迟重试
+        _scheduleChapterRetry();
+        return;
+      }
+      if (count <= 0) {
+        // count<=0：确实无章节（mpv 明确返回 0），标记已获取避免重复探测
+        _chaptersFetched = true;
+        _chapterRetryCount = 0;
+        debugPrint('[CHAPTER-DIAG] _refreshChapters: chapter-list/count=$count，无章节，标记已获取');
+        return;
+      }
+      // count>0：chapter-list 已就绪，逐项读取子属性
       final chapters = await _fetchChaptersViaSubProperties();
       _chaptersFetched = true;
+      _chapterRetryCount = 0;
       // 仅在变化时更新，避免无谓重建
       final prev = _mediaInfo.chapters;
       final changed = prev == null ||
@@ -2093,7 +2138,33 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       }
     } catch (e) {
       debugPrint('[CHAPTER-DIAG] _refreshChapters: 获取 chapter-list 失败: $e');
+      // 异常也尝试重试（可能是临时 IPC 抖动）
+      _scheduleChapterRetry();
     }
+  }
+
+  /// 调度章节列表重试（P3 修复）。递增间隔 300/600/900ms，最多
+  /// [_maxChapterRetries] 次。超过上限则放弃并标记 _chaptersFetched=true
+  /// 避免无限重试（此时确属无章节或 chapter-list 不可用）。
+  void _scheduleChapterRetry() {
+    if (_isDisposed) return;
+    if (_chapterRetryCount >= _maxChapterRetries) {
+      _chaptersFetched = true;
+      _chapterRetryCount = 0;
+      debugPrint('[CHAPTER-DIAG] _scheduleChapterRetry: 已达最大重试次数 $_maxChapterRetries，放弃重试');
+      return;
+    }
+    _chapterRetryCount++;
+    final delayMs = _chapterRetryCount * 300;
+    debugPrint('[CHAPTER-DIAG] _scheduleChapterRetry: chapter-list 未就绪，'
+        '${delayMs}ms 后第 $_chapterRetryCount/$_maxChapterRetries 次重试');
+    _chapterRetryTimer?.cancel();
+    _chapterRetryTimer = Timer(Duration(milliseconds: delayMs), () {
+      _chapterRetryTimer = null;
+      if (!_isDisposed && !_chaptersFetched) {
+        _refreshChapters();
+      }
+    });
   }
 
   @override
