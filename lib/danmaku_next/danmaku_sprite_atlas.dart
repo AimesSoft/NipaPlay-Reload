@@ -102,7 +102,10 @@ class DanmakuSpriteAtlas {
   /// [P1] 最小重建间隔（毫秒）— 限制 atlas 重建频率，防止帧跳帧
   /// 压测数据: 12秒80次重建(每次1.1-2ms)导致帧跳帧2-3.3× + HARD_SNAP drift
   /// 节流至100ms后预期: 80次/12s → ~12次/12s，消除帧跳帧+drift
-  static const int _rebuildThrottleMs = 100;
+  /// 2026-06-22: 实测 flutter.log ATLAS_REBUILD=135/2s（67.5/秒）仍过频，
+  /// 节流 100ms 不足以覆盖弹幕密集场景，放宽到 200ms（≤5次/秒）。
+  /// 未提交 slot 走 fallback 渲染，视觉上无差异（fallback 直接 drawImageRect）。
+  static const int _rebuildThrottleMs = 200;
 
   /// 设备像素比 — 用于逻辑→像素坐标转换
   final double devicePixelRatio;
@@ -178,7 +181,15 @@ class DanmakuSpriteAtlas {
     // Shelf-pack 分配
     var slotRect = _allocateSlot(pixelW, pixelH);
     if (slotRect == null) {
-      // 图集空间不足 — 尝试紧凑化重建
+      // 图集空间不足 — 尝试紧凑化重建（带节流保护，避免绕过 ensureAtlas 节流）
+      // 2026-06-22: 原实现直接 _compactAndRebuild 绕过 ensureAtlas 节流，
+      // 导致弹幕密集时每帧 rebuild（135/2s）。加节流判定，距上次重建<200ms 时
+      // 跳过紧凑化，让新 slot 走 fallback 渲染（未提交 slot 由 painter fallback 处理）。
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (_lastRebuildMs > 0 && nowMs - _lastRebuildMs < _rebuildThrottleMs) {
+        // 节流期间不紧凑化，返回 null 让调用方走 fallback
+        return null;
+      }
       _compactAndRebuild();
       slotRect = _allocateSlot(pixelW, pixelH);
       if (slotRect == null) {
@@ -232,7 +243,21 @@ class DanmakuSpriteAtlas {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (_lastRebuildMs > 0 && nowMs - _lastRebuildMs < _rebuildThrottleMs) {
       // 跳过重建 — 返回当前 atlas 纹理（可能部分 slot 未提交）
+      // [ATLAS-THROTTLE-DIAG] 确认节流是否生效
+      if (!kReleaseMode) {
+        final sinceLast = nowMs - _lastRebuildMs;
+        debugPrint('[ATLAS-THROTTLE-DIAG] ensureAtlas THROTTLED: '
+            'sinceLast=${sinceLast}ms < $_rebuildThrottleMs ms, '
+            'dirty=$_dirty slots=${_slots.length} skip rebuild');
+      }
       return _atlasTexture;
+    }
+    // [ATLAS-THROTTLE-DIAG] 节流未触发，执行 rebuild
+    if (!kReleaseMode) {
+      debugPrint('[ATLAS-THROTTLE-DIAG] ensureAtlas REBUILD: '
+          '_lastRebuildMs=$_lastRebuildMs nowMs=$nowMs '
+          'dirty=$_dirty slots=${_slots.length} '
+          '${_lastRebuildMs == 0 ? "← _lastRebuildMs=0 (first/disposed)" : "← sinceLast=${nowMs - _lastRebuildMs}ms >= $_rebuildThrottleMs"}');
     }
     _rebuildAtlas();
     return _atlasTexture;

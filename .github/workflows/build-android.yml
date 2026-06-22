@@ -94,4 +94,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-Android
-          path: build/app/outputs/apk/release/NipaPlay-*.apk
+          path: |
+            build/app/outputs/apk/release/NipaPlay-*.apk
+            build/symbols-android-*/
+
+      - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dart-symbols-Android
+          path: build/symbols-android-*/
+          if-no-files-found: warn

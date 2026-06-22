@@ -106,6 +106,7 @@ part 'video_player_state/video_player_state_timeline_preview.dart';
 part 'video_player_state/video_player_state_streaming.dart';
 part 'video_player_state/video_player_state_navigation.dart';
 part 'video_player_state/video_player_state_lifecycle.dart';
+part 'video_player_state/video_player_state_chapters.dart';
 
 enum SubtitleStyleOverrideMode { auto, none, scale, force }
 
@@ -254,12 +255,17 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   final String _instantHidePlayerUiEnabledKey =
       'instant_hide_player_ui_enabled';
   bool _instantHidePlayerUiEnabled = false; // 默认关闭（桌面端）
+  // MKV 章节标记开关：显示 MKV 自带章节在进度条上的分割线标记/当前章节高亮/点击跳转
+  final String _chapterMarkersEnabledKey = 'chapter_markers_enabled';
+  bool _chapterMarkersEnabled = true; // 默认开启
   bool _isFullscreen = false;
   Rect? _macOSWindowHostedVideoRect;
   double _progress = 0.0;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   int _bufferedPositionMs = 0;
+  // MKV 章节当前索引（-1=无章节/首章前；由 VideoPlayerStateChapters 维护）
+  int _currentChapterIndex = -1;
   String? _error;
   final bool _isErrorStopping = false; // <<< ADDED THIS FIELD
   double _aspectRatio = 16 / 9; // 默认16:9，但会根据视频实际比例更新
@@ -874,6 +880,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get showRightMenu => _showRightMenu;
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
   bool get instantHidePlayerUiEnabled => _instantHidePlayerUiEnabled;
+  /// MKV 章节标记是否启用（进度条分割线标记 + 当前章节高亮 + 点击分割线跳转）。
+  bool get chapterMarkersEnabled => _chapterMarkersEnabled;
   bool get isFullscreen => _isFullscreen;
   double get progress => _progress;
   int get bufferedPosition => _bufferedPositionMs;

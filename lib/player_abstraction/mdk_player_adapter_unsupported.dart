@@ -89,6 +89,9 @@ class MdkPlayerAdapter implements AbstractPlayer {
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {}
 
   @override
+  Future<void> setChapter(int index) async {}
+
+  @override
   Future<void> playDirectly() async {}
   
   @override

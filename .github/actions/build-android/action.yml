@@ -169,11 +169,15 @@ runs:
         # 构建分架构APK
         echo "=== 构建Android APK (32位 + 64位) ==="
         # 构建32位和64位ARM架构的分离APK
-        flutter build apk --release --split-per-abi
+        # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
+        # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
+        flutter build apk --release --split-per-abi \
+          --obfuscate --split-debug-info=build/symbols-android-split
 
         # 构建通用APK (包含所有架构)
         echo "=== 构建通用APK (包含所有架构) ==="
-        flutter build apk --release
+        flutter build apk --release \
+          --obfuscate --split-debug-info=build/symbols-android-universal
 
         # 检查生成的APK文件
         echo "检查构建输出目录："

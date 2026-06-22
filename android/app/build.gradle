@@ -77,14 +77,16 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             
-            // 启用代码收缩（如果持续失败，可以考虑设置为 false）
-            minifyEnabled = false
-            shrinkResources = false
+            // R8 代码收缩 + 资源压缩（release 构建优化：体积↓20-50% + 死代码消除 + 反逆向）
+            // proguard-rules.pro 已健全（保留 Flutter/media_kit/FRB/Kotlin/JNI native/自定义类）
+            // 配合 gradle.properties 的 android.enableR8.fullMode=true
+            minifyEnabled = true
+            shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         
         debug {
-            // 调试模式也启用代码收缩，减少内存占用
+            // 调试模式不启用代码收缩，保持快速构建与可调试性
             minifyEnabled = false
             shrinkResources = false
             // 调试模式启用MultiDex

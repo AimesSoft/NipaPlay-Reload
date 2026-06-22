@@ -579,10 +579,38 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         // 直接锚定到 playerMs 会导致弹幕跳变到错误时间点。
         // 使用暂停时的精确值确保弹幕从暂停位置无缝继续。
         if (_pausedPlaybackTimeMs != null) {
-          _smoothAnchorMs = _pausedPlaybackTimeMs!;
-          _smoothAnchorElapsedUs = 0; // Ticker 重启后 elapsed 从 0 开始
-          _lastRawPlayerMs = -1; // 保持 -1，让漂移修正自然校准
-          _pausedPlaybackTimeMs = null;
+          // ════════════════════════════════════════════════════════════════════
+          //  切集污染判定（2026-06-21）：丢弃可疑的 _pausedPlaybackTimeMs
+          // ════════════════════════════════════════════════════════════════════
+          // 正常暂停恢复：_pausedPlaybackTimeMs 是本集暂停位置，用作锚点无缝继续
+          // 切集污染：_pausedPlaybackTimeMs 是旧集末尾（_clearPreviousVideoState 漏清理时），
+          //   误用会导致 playbackTimeMs 卡在旧集末尾 → 弹幕查不到 → 后续突跌回弹
+          //   判定：_pausedPlaybackTimeMs > 新集 duration+1s（旧集末尾超过新集时长）
+          //         或 _pausedPlaybackTimeMs>1s 且 _position<100ms（旧集末尾值 + 新集开头位置）
+          final isSuspectEpisodeSwitch = _pausedPlaybackTimeMs! >
+                  _duration.inMilliseconds.toDouble() + 1000.0 ||
+              (_pausedPlaybackTimeMs! > 1000.0 &&
+                  _position.inMilliseconds < 100);
+          if (!kReleaseMode) {
+            debugPrint('[EP-SWITCH-DIAG] play() RESUME-FROM-PAUSE: '
+                'pausedPlaybackTimeMs=${_pausedPlaybackTimeMs!.toStringAsFixed(1)}ms '
+                'newDuration=${_duration.inMilliseconds}ms '
+                'newPosition=${_position.inMilliseconds}ms '
+                '← SUSPECT_EPISODE_SWITCH=$isSuspectEpisodeSwitch '
+                '${isSuspectEpisodeSwitch ? "丢弃旧集末尾污染值，走正常首帧锚定" : "正常暂停恢复，用作锚点"}');
+          }
+          if (isSuspectEpisodeSwitch) {
+            // 丢弃污染值，走正常首帧锚定（ticker 首帧锚定到 player.position=0）
+            _smoothAnchorMs = 0.0;
+            _smoothAnchorElapsedUs = 0;
+            _lastRawPlayerMs = -1;
+            _pausedPlaybackTimeMs = null;
+          } else {
+            _smoothAnchorMs = _pausedPlaybackTimeMs!;
+            _smoothAnchorElapsedUs = 0; // Ticker 重启后 elapsed 从 0 开始
+            _lastRawPlayerMs = -1; // 保持 -1，让漂移修正自然校准
+            _pausedPlaybackTimeMs = null;
+          }
         } else {
           _lastRawPlayerMs = -1;
         }
@@ -608,6 +636,30 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void _clearPreviousVideoState() {
+    // ════════════════════════════════════════════════════════════════════
+    //  切集时清理平滑时钟锚点 + _pausedPlaybackTimeMs（2026-06-21）
+    // ════════════════════════════════════════════════════════════════════
+    // 原缺陷：_clearPreviousVideoState 不重置平滑时钟字段，旧集末尾位置残留。
+    // 切集时序：playNextEpisode→togglePlayPause→pause 保存 _pausedPlaybackTimeMs=旧集末尾
+    // → initializePlayer→_clearPreviousVideoState（此处）不清理
+    // → 新集 play() 暂停恢复路径误把 _pausedPlaybackTimeMs(旧集末尾) 当新集锚点
+    // → playbackTimeMs 卡在旧集末尾（clamp 到新集 duration）→ 弹幕查不到 → 后续突跌回弹
+    //
+    // 切集首个清理点同步重置所有平滑时钟字段 + _pausedPlaybackTimeMs
+    // 让新集 play() 走正常首帧锚定（锚定到 player.position=0），而非误用旧集末尾。
+    _playbackTimeMs.value = 0.0;
+    _smoothAnchorMs = 0.0;
+    _smoothAnchorElapsedUs = _lastElapsedUs; // 用当前 elapsed，非 0（0 是暂停恢复专用）
+    _seekTargetMs = null; // 切集非 seek 场景，无需 seek 保护
+    _lastRawPlayerMs = -1; // 重置，让下次 ticker 走首帧锚定
+    _anchorSetBySeek = false;
+    _pausedPlaybackTimeMs = null; // 清理旧集暂停保存值，避免新集 play() 误用
+    if (!kReleaseMode) {
+      debugPrint('[EP-SWITCH-DIAG] _clearPreviousVideoState ANCHOR RESET: '
+          'ptm=0.0 smoothAnchorMs=0.0 smoothAnchorElapsedUs=$_smoothAnchorElapsedUs '
+          'seekTargetMs=null lastRawPlayerMs=-1 pausedPlaybackTimeMs=null '
+          '← 切集锚点已清理，新集将走正常首帧锚定');
+    }
     _subtitleManager.clearExternalSubtitle(notifyListenersToo: false);
     _currentVideoPath = null;
     _currentActualPlayUrl = null; // 清除实际播放URL

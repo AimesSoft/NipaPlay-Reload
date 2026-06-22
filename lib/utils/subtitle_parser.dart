@@ -1,9 +1,22 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:charset_converter/charset_converter.dart';
 import 'package:nipaplay/cpp_native/nipaplay_native.dart';
+
+// [FIX-SUBTITLE-ISO] 顶层函数供 compute() 在 worker isolate 执行 C++ 字幕解析，
+// 避免在主线程同步解析大字幕文件（如 412KB/2431 条目 ASS）阻塞 53ms 导致掉帧。
+// 根因：NativeSubtitleParser.parseBytes 是同步 C++ FFI，原 parseSubtitleFile 虽 async
+// 但 FFI 解析仍阻塞主线程（flutter.log 实证 DT-ABNORMAL 53688μs + FRAME SKIP 58332μs）。
+// worker isolate 会独立 DynamicLibrary.open 同一 dylib 并 lookup FFI 符号，进程级 dylib
+// 共享，FFI 调用安全；返回的 Map 只含 Dart 基础类型，可跨 isolate 传递。
+typedef _SubtitleIsolateInput = ({Uint8List bytes, String? hintPath});
+
+Map<String, dynamic>? _parseSubtitleBytesInIsolate(_SubtitleIsolateInput input) {
+  return NativeSubtitleParser.parseBytes(input.bytes, hintPath: input.hintPath);
+}
 
 class SubtitleDecodeResult {
   final String text;
@@ -760,10 +773,23 @@ class SubtitleParser {
           final file = File(filePath);
           final bytes = await file.readAsBytes();
           if (bytes.isNotEmpty) {
-            final nativeResult = NativeSubtitleParser.parseBytes(
-              bytes,
-              hintPath: filePath,
-            );
+            // [FIX-SUBTITLE-ISO] 在 worker isolate 执行 C++ 字幕解析，
+            // 避免大字幕文件同步 FFI 阻塞主线程（412KB/2431 条目曾阻塞 53ms）。
+            // 阈值优化：小字幕（<50KB）isolate 启动开销（~1-2ms）大于主线程 FFI 解析
+            // 开销，直接在主线程执行；大字幕走 isolate 避免 53ms 阻塞。
+            // 50KB 阈值参考：实测 412KB 阻塞 53ms，线性推算 50KB≈6ms，isolate 启动
+            // 约 1-2ms + 数据拷贝，主线程 6ms 可接受且无 isolate 冷启动延迟。
+            const int isolateThresholdBytes = 50 * 1024;
+            Map<String, dynamic>? nativeResult;
+            if (bytes.length < isolateThresholdBytes) {
+              nativeResult = NativeSubtitleParser.parseBytes(bytes,
+                  hintPath: filePath);
+            } else {
+              nativeResult = await compute(
+                _parseSubtitleBytesInIsolate,
+                (bytes: bytes, hintPath: filePath) as _SubtitleIsolateInput,
+              );
+            }
             if (nativeResult != null) {
               final result = _fromNativeResult(nativeResult);
               // 防御性检查: C++ 返回 0 条目但文件非空 → 可能编码转换失败

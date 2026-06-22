@@ -315,9 +315,19 @@ class DanmakuAtlasPainter extends CustomPainter {
   static int _spriteCount = 0;
 
   /// [P0] 首帧分帧构建 — 每帧允许的缓存miss上限（Paragraph新构建 + rasterize miss）
-  /// 首帧150，后续帧递增150，连续3帧无miss后取消限制(=0)
-  /// 统一描边(uniform)下150≈75条弹幕/帧，递增后约10帧(@80Hz≈125ms)补全全部弹幕
-  static int _frameBuildBudget = 150;
+  /// 首帧400，后续帧递增300，连续3帧无miss后取消限制(=0)
+  /// 2026-06-22: 初始150→400，递增150→300，让初期2-3帧快速填满缓存，
+  /// 减少运行时 addSprite:new 触发的 atlas rebuild（方案A 预构建加速）。
+  /// 统一描边(uniform)下400≈200条弹幕/帧，递增后约3-4帧(@80Hz≈50ms)补全全部弹幕
+  static int _frameBuildBudget = 400;
+
+  /// [P0] 预构建请求 — overlay 检测 danmakuList 变化时调用，重置 budget 加速预构建
+  /// 2026-06-22 方案A：让新视频/切集后初期几帧快速预构建所有弹幕文本，
+  /// 填满 rasterCache + atlas slots，之后运行时弹幕入屏直接命中，无 addSprite:new
+  static void requestPrebuild() {
+    _frameBuildBudget = 400;
+    _consecutiveNoMissFrames = 0;
+  }
 
   /// [P0] 连续无缓存miss帧计数 — 连续3帧无miss后取消预算限制
   static int _consecutiveNoMissFrames = 0;
@@ -348,6 +358,12 @@ class DanmakuAtlasPainter extends CustomPainter {
   static int _lastWallUs = 0;
   static double _smoothedDtSeconds = 0.0;
   static const double _dtEmaAlpha = 0.3;
+  // [FIX-L3] 上一帧有效 deltaUs，用于主线程阻塞后 rawDt=0 时兜底，避免 displayX 完全冻结。
+  // 设计约束：DanmakuAtlasPainter 为单实例（Next++ overlay 唯一 painter，repaint 绑定
+  // vsyncController 不重建），故 static 状态无多实例污染。若改为实例字段，Flutter 每次
+  // paint 可能 new 新 painter 实例 → _lastValidDeltaUs 每帧重置为 0 → 阻塞帧兜底失效。
+  // 因此保持 static，单实例约束由 NipaPlayNextOverlay 保证。
+  static int _lastValidDeltaUs = 0;
 
   /// [V4] 暂停恢复过渡期帧计数器 — 仅在前N帧使用EMA，之后无条件切回rawDt
   /// V3的emaDeviation>30%判定被日志证明过于激进：
@@ -397,8 +413,19 @@ class DanmakuAtlasPainter extends CustomPainter {
       deltaUs = currentWallUs - _lastWallUs;
       if (deltaUs < 100000) {
         rawDtSeconds = deltaUs / 1000000.0;
+        // [FIX-L3] 记录有效 deltaUs 供阻塞帧兜底
+        _lastValidDeltaUs = deltaUs;
       } else {
-        rawDtSeconds = 0.0; // 大跳变帧不推进
+        // [FIX-L3] 大跳变帧（主线程阻塞 >100ms）改用上一帧有效 dt 兜底，
+        // 替代原来的 rawDt=0 直接冻结。根因：字幕解析/截图/网络弹幕加载阻塞主线程
+        // → Ticker 间隔 >100ms → rawDt=0 → displayX 不推进一帧 → 卡顿感。
+        // 用上一帧有效 dt（已验证 <100ms）让 displayX 继续推进，避免冻结。
+        // _lastValidDeltaUs 为 0（首帧/重置）时仍 fallback 到 0 保证安全。
+        if (_lastValidDeltaUs > 0) {
+          rawDtSeconds = _lastValidDeltaUs / 1000000.0;
+        } else {
+          rawDtSeconds = 0.0;
+        }
         if (!kReleaseMode) _diagDtZeroReasonOver100ms++; // [DT-JITTER-DIAG]
       }
     }
@@ -525,9 +552,13 @@ class DanmakuAtlasPainter extends CustomPainter {
       }
     }
 
+    // [CHAIN-B] 记录上一帧 playbackTimeMs（在下方 _lastDiagPlaybackTimeMsValue 被更新前快照），
+    // 供帧末 [CHAIN-B] 判断 ptmBackward 使用。
+    final prevFramePtm = _lastDiagPlaybackTimeMsValue;
     // ── [TIME-ALIGN] 问题1诊断: 追踪 playbackTimeMs 更新频率 ──
-    // vsync以60-240Hz调用paint()，但playbackTimeMs可能仅8-30Hz更新。
-    // 记录更新间隔，验证双时间源drift假设。
+    // vsync 以显示刷新率（60-240Hz，设备相关）调用 paint()，
+    // playbackTimeMs 由 _uiUpdateTicker（vsync 同步）每帧插值更新（同显示刷新率），
+    // player.position（8-30Hz）仅低频校准锚点。记录更新间隔，验证双时间源 drift 假设。
     final currentPlaybackTimeMs = playbackTimeMs.value;
     if (!kReleaseMode && currentPlaybackTimeMs != _lastDiagPlaybackTimeMsValue) {
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -709,104 +740,29 @@ class DanmakuAtlasPainter extends CustomPainter {
     for (final item in items) {
       final content = item.content;
 
-      // ── 增量定位（与旧版完全一致） ──
-      final double drawX;
+      // ════════════════════════════════════════════════════════════════════
+      //  绝对定位重构（2026-06-21）：消除 displayX 增量 + drift 修正回弹源
+      // ════════════════════════════════════════════════════════════════════
+      // 原设计（已移除）：displayX 增量推进 + drift 修正（HARD_SNAP/渐进校正）
+      //   回弹根因：三时间源分裂（player.position 低频 / Ticker 墙钟 / painter 独立墙钟 Stopwatch）
+      //   → displayX（墙钟增量）与 item.x（playbackTimeMs 绝对）必然 drift
+      //   → drift>15px 渐进修正 / >200px HARD_SNAP 把 displayX 拉向 item.x → 弹幕"瞬间跳位"= 回弹
+      //   实证（flutter.log）：DRIFT-SPIKE 14-65px 持续，atlas rebuild 过频→paint 7-16ms→vsync miss→rawDt 兜底不同步→drift 爆炸
+      //
+      // 架构（统一单时间源 + 绝对定位，与 NipaPlayNextOldCanvasPainter 架构对齐）：
+      //   - playbackTimeMs 是唯一时间源（平滑时钟 vsync 插值，频率=显示刷新率，设备相关 60/120/144/240Hz）
+      //     由 _uiUpdateTicker（Ticker vsync 同步）每帧插值更新，player.position 低频校准锚点
+      //     掉帧时频率降低，但 Ticker.elapsed 准确反映实际时间，playbackTimeMs 值仍准确
+      //   - drawX = item.x = engine.layout(playbackTimeMs/1000) 绝对定位，无增量无 drift
+      //   - vsync AnimationController.repeat() 高频重绘保证丝滑（playbackTimeMs 每帧插值→item.x 每帧重算）
+      //   - player.position 只校准平滑时钟锚点（navigation.dart 0.25/0.35 渐进），不直接驱动位置
+      //   - 消除回弹源：无 displayX 增量 → 无 drift → 无 HARD_SNAP/渐进修正 → 无回弹
+      //   - 保留 atlas + drawRawAtlas 性能优势
+      //   - player.position drift=-23ms → item.x 偏右 4.6px 恒定偏移（人眼难辨），锚点校准渐进修正，无回弹
+      final double drawX = item.x;
+      // 保持 displayX 字段与 item.x 一致（PAUSE-RESUME/playbackRate 分支可能引用，且 engine 时序回退检测会重置）
       if (item.scrollSpeed > 0.0) {
-        if (item.displayX.isNaN) {
-          item.displayX = item.x;
-        } else {
-          item.displayX -= item.scrollSpeed * dtSeconds * playbackRate;
-          final drift = item.displayX - item.x;
-          final absDrift = drift.abs();
-          // [DRIFT-BUG] 漂移诊断：追踪最大漂移和校正频率
-          // [TIME-ALIGN] 问题1诊断: 追踪drift分布
-          if (absDrift > _diagMaxDrift) _diagMaxDrift = absDrift;
-          // [DRIFT-SPIKE] 验证日志#3: 逐帧记录 >0.5px 的漂移
-          // 目的：2秒窗口MAX_DRIFT可能掩盖单帧spike，逐帧日志捕捉瞬时大漂移
-          if (absDrift > 0.5 && !kReleaseMode) {
-            final now = DateTime.now().millisecondsSinceEpoch;
-            if (now - _lastDiagDriftSpikeTimeMs >= 200) { // 限流200ms
-              _lastDiagDriftSpikeTimeMs = now;
-              debugPrint('[DRIFT-SPIKE] drift=${drift.toStringAsFixed(2)}px '
-                  'displayX=${item.displayX.toStringAsFixed(1)} x=${item.x.toStringAsFixed(1)} '
-                  'dt=${dtSeconds.toStringAsFixed(4)}s rawDt=${rawDtSeconds.toStringAsFixed(4)}s '
-                  'speed=${item.scrollSpeed.toStringAsFixed(1)}px/s');
-            }
-          }
-          // ✅ 修复问题2：漂移校正阈值从 50px 降至 15px + 连续渐进校正
-          // 根因：playbackTimeMs 低频更新（最长444ms）+ 墙钟高频推进 →
-          // playbackTimeMs 冻结期 displayX 推进但 item.x 不变 → drift 累积负方向
-          // playbackTimeMs 更新时 item.x 跳变 → drift 瞬间反转正方向 → 弹幕左右微颤
-          // 旧阈值 50px 太高，47px 的振荡不被修正 → 视觉可见的回跳
-          if (absDrift > 200.0) {
-            // 硬snap：drift > 200px（极端异常，seek/循环）
-            item.displayX = item.x;
-            _diagHardSnapCount++; // [DRIFT-BUG]
-            _diagDriftOver200Count++; // [TIME-ALIGN]
-            // [DRIFT-DETAIL] 记录 HARD_SNAP 瞬间的 dt 值
-            _diagHardSnapDtSeconds = dtSeconds;
-            if (rawDtSeconds > 0.020) _diagHardSnapDtAnomalyCount++;
-            if (!kReleaseMode) {
-              final now = DateTime.now().millisecondsSinceEpoch;
-              if (now - _lastDiagSnapTimeMs >= 1000) {
-                debugPrint('[ATLAS-DIAG] HARD SNAP: drift=${drift.toStringAsFixed(1)}px '
-                    'dt=${dtSeconds.toStringAsFixed(4)}s rawDt=${rawDtSeconds.toStringAsFixed(4)}s '
-                    'dtAnomaly=$_diagHardSnapDtAnomalyCount');
-                _lastDiagSnapTimeMs = now;
-              }
-            }
-          } else if (absDrift > 15.0) {
-            // ✅ 渐进校正：drift > 15px（原阈值 50px → 15px）
-            // 修正系数随 drift 大小自适应：15px 时 ≈8%，100px 时 ≈30%
-            // 公式：correction = 0.05 + 0.25 * (absDrift - 15) / 185
-            // 15px → 5%, 50px → 9.7%, 100px → 16.4%, 200px → 30%
-            final correctionRate = 0.05 + 0.25 * (absDrift - 15.0) / 185.0;
-            final correctionPx = absDrift * correctionRate;
-            item.displayX = item.displayX + (item.x - item.displayX) * correctionRate;
-            _diagDriftCorrectionCount++; // [DRIFT-BUG]
-            if (absDrift > 50.0) {
-              _diagDrift50to200Count++; // [TIME-ALIGN]
-            }
-            // ── [SPEED-JITTER-DIAG] 弹幕滚动速度抖动诊断 ──
-            // 验证假设：漂移修正的修正量占正常帧移动量的比例过高，
-            // 导致弹幕滚动速度单帧突变远超人眼5-10%感知阈值。
-            // normalMovePerFrame = scrollSpeed * dtSeconds * playbackRate（每帧正常移动量）
-            // speedJitterRatio = correctionPx / normalMovePerFrame（归一化速度变化比）
-            // 如果 maxRatio 持续 >10% 且 correctionCount > 0，则"不丝滑"根因确认。
-            {
-              final normalMovePerFrame = item.scrollSpeed * dtSeconds * playbackRate;
-              if (normalMovePerFrame > 0.01) { // 避免除以零
-                final speedJitterRatio = correctionPx / normalMovePerFrame;
-                _diagSpeedJitterCorrectionCount++;
-                if (speedJitterRatio > _diagSpeedJitterMaxRatio) {
-                  _diagSpeedJitterMaxRatio = speedJitterRatio;
-                }
-                if (correctionPx > _diagSpeedJitterMaxCorrectionPx) {
-                  _diagSpeedJitterMaxCorrectionPx = correctionPx;
-                }
-                _diagSpeedJitterSumRatio += speedJitterRatio;
-                if (speedJitterRatio > 0.05) _diagSpeedJitterOver5Count++;
-                if (speedJitterRatio > 0.10) _diagSpeedJitterOver10Count++;
-                if (speedJitterRatio > 0.50) _diagSpeedJitterOver50Count++;
-              }
-            }
-          } else if (absDrift > _diagDriftUnder50Max) {
-            _diagDriftUnder50Max = absDrift; // [TIME-ALIGN] 追踪轻微漂移峰值
-            if (!kReleaseMode) {
-              diagScrollItemCount++;
-              if (diagScrollItemCount % 200 == 0) {
-                final now = DateTime.now().millisecondsSinceEpoch;
-                if (now - _lastDiagDriftTimeMs >= 2000) {
-                  debugPrint('[ATLAS-DIAG] SOFT CORRECT: drift=${drift.toStringAsFixed(1)}px');
-                  _lastDiagDriftTimeMs = now;
-                }
-              }
-            }
-          }
-        }
-        drawX = item.displayX;
-      } else {
-        drawX = item.x;
+        item.displayX = item.x;
       }
       final drawY = item.y;
 
@@ -1039,6 +995,33 @@ class DanmakuAtlasPainter extends CustomPainter {
       _spriteCount++;
     }
 
+    // [CHAIN-B] 全链路回弹诊断 — painter 层单帧聚合
+    // 仅在本帧发生 rawDt=0(ptm冻结卡顿)/ptm回退 时输出，避免刷屏。
+    // driftCorr/hardSnap 为 2 秒窗口累计值，仅作上下文参考（非单帧精确）。
+    // 与平滑时钟侧 [CHAIN-A] 共享墙钟时间戳，按时间排序可看到完整因果链：
+    //   position更新 → 平滑时钟修正/hold(CHAIN-A) → 下一帧 painter drift修正(CHAIN-B) → 回弹
+    // 关键指标：
+    //   rawDt=0 = 墙钟帧间隔>100ms 被丢弃 → displayX 不推进一帧（卡顿源 R4）
+    //   ptmBackward = playbackTimeMs 本帧回退（来自平滑时钟 hold/修正 R2）
+    //   driftCorr/hardSnap 累计>0 = 第二层 drift 修正曾触发（回弹直接来源 R3）
+    if (!kReleaseMode && isPlaying) {
+      final ptmBackward = currentPlaybackTimeMs < prevFramePtm - 0.5 &&
+          prevFramePtm > 100.0;
+      // 触发条件限为单帧精确事件，driftCorr/hardSnap 仅作附带上下文
+      if (rawDtSeconds == 0.0 || ptmBackward) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        debugPrint('[CHAIN-B] t=$now '
+            'ptm=${currentPlaybackTimeMs.toStringAsFixed(1)}ms '
+            'rawDt=${(rawDtSeconds * 1000).toStringAsFixed(2)}ms '
+            'dt=${(dtSeconds * 1000).toStringAsFixed(2)}ms '
+            'driftCorrAcc=${_diagDriftCorrectionCount} '
+            'hardSnapAcc=${_diagHardSnapCount} '
+            'maxDrift=${_diagMaxDrift.toStringAsFixed(1)}px '
+            'ptmBackward=${ptmBackward ? "YES" : "no"} '
+            'rate=$playbackRate');
+      }
+    }
+
     // ── [P0] 首帧分帧构建: 预算更新 ──
     {
       final missCount = _diagParagraphNewCount + _diagRasterCacheMissCount;
@@ -1050,7 +1033,7 @@ class DanmakuAtlasPainter extends CustomPainter {
       } else {
         _consecutiveNoMissFrames = 0;
         if (_frameBuildBudget > 0 && _frameBuildBudget < 5000) {
-          _frameBuildBudget += 150; // 每帧递增预算，加速补全
+          _frameBuildBudget += 300; // 每帧递增预算，加速补全（2026-06-22: 150→300）
         }
         // [PAINT-CAUSAL-CHAIN] 验证根因A辅助：budget=0时cache miss不受限制
         // 如果budget=0且有大量miss，说明同步构建尖峰可能是paint耗时的来源

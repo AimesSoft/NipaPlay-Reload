@@ -163,7 +163,9 @@ runs:
         fi
         echo "pkg-config(mpv) path check:"
         pkg-config --modversion mpv
-        flutter build linux --release
+        # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
+        # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
+        flutter build linux --release --obfuscate --split-debug-info=build/symbols-linux
     
     - name: Linux packaging and cleanup
       id: package

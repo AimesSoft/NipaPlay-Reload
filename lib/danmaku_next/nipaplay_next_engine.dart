@@ -58,8 +58,9 @@ class NipaPlayNextEngine {
   bool _layoutDirty = true;
   int _layoutVersion = 0;
 
-  /// layout 结果缓存：vsync 帧以 60-240Hz 调 layout()，
-  /// 但 playbackTimeMs 通常仅以 8-30Hz 更新，
+  /// layout 结果缓存：vsync 帧以显示刷新率（60-240Hz，设备相关）调 layout()，
+  /// playbackTimeMs 由 _uiUpdateTicker（vsync 同步）每帧插值更新（同显示刷新率），
+  /// player.position（8-30Hz）仅低频校准锚点，非 playbackTimeMs 的更新频率。
   /// 相同时间（±1ms）直接返回缓存，避免冗余 FFI/Dart 计算。
   double _lastLayoutTime = -1e9;
 

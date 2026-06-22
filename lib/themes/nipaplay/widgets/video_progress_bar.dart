@@ -4,9 +4,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:provider/provider.dart';
 import 'control_shadow.dart';
 
@@ -17,6 +19,13 @@ class VideoProgressBar extends StatefulWidget {
   final Function(Offset) onPositionUpdate;
   final Function(bool) onDraggingStateChange;
   final String Function(Duration) formatDuration;
+  /// MKV 章节列表（用于在轨道上画章节起点竖线标记 + 当前章节高亮段）。
+  /// 参考 REFERENCE/mpv/player/lua/osc.lua:2512 markers。
+  final List<PlayerChapter> chapters;
+  /// 媒体总时长（毫秒），用于计算章节标记位置。
+  final int durationMs;
+  /// 当前章节索引（用于在轨道上高亮当前章节段）。-1 表示无/首章前。
+  final int currentChapter;
 
   const VideoProgressBar({
     super.key,
@@ -26,6 +35,9 @@ class VideoProgressBar extends StatefulWidget {
     required this.onPositionUpdate,
     required this.onDraggingStateChange,
     required this.formatDuration,
+    this.chapters = const [],
+    this.durationMs = 0,
+    this.currentChapter = -1,
   });
 
   @override
@@ -40,6 +52,11 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
   OverlayEntry? _overlayEntry;
   DateTime? _lastSeekTime;
   Timer? _previewDebounceTimer;
+  /// 当前 hover/tap 命中的章节分割线索引（-1=未命中任何分割线）。
+  /// 用于 _ChapterTickMarks 高亮放大该分割线。
+  int _hitChapterTickIndex = -1;
+  /// 章节分割线命中容差（像素）。点击/悬停在该像素范围内才触发章节跳转。
+  static const double _chapterTickHitTolerance = 8.0;
   String? _hoverThumbnailPath;
   int? _hoverBucket;
 
@@ -262,8 +279,11 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
               currentThumbSize,
               currentThumbSize);
 
+          // 章节分割线 hover 命中检测：命中则高亮放大该分割线，鼠标变 pointer
+          final hitTick = _hitTestChapterTick(localPosition.dx, width);
           setState(() {
             _isThumbHovered = thumbRect.contains(localPosition);
+            _hitChapterTickIndex = hitTick;
           });
 
           if (localPosition.dx >= progressRect.left &&
@@ -294,6 +314,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
           _isHovering = false;
           _isThumbHovered = false;
           _localHoverTime = null;
+          _hitChapterTickIndex = -1;
         });
         _previewDebounceTimer?.cancel();
         _hoverBucket = null;
@@ -329,7 +350,10 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         },
         onTapDown: (details) {
           widget.onDraggingStateChange(true);
-          _updateProgressFromPosition(details.localPosition);
+          // isTapGesture: true → 命中章节分割线走 seekToChapter（keyframe 对齐）。
+          // drag 手势（onHorizontalDrag*）默认 false，始终走精确 seekTo，避免
+          // 在章节边界 ±8px 内拖拽被章节跳转劫持。
+          _updateProgressFromPosition(details.localPosition, isTapGesture: true);
           _showOverlay(
             context,
             widget.videoState.progress,
@@ -338,7 +362,10 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         },
         onTapUp: (details) {
           widget.onDraggingStateChange(false);
-          _updateProgressFromPosition(details.localPosition);
+          // 不重复 seek：onTapDown 已完成定位（章节分割线命中跳转或普通 seek）。
+          // 若此处再次 _updateProgressFromPosition，tap down→up 间鼠标微动会
+          // 导致 up 时未命中分割线，普通 seekTo 覆盖 onTapDown 的章节跳转。
+          // drag 场景由 onHorizontalDragEnd 处理，不受影响。
           widget.onPositionUpdate(Offset.zero);
           _removeOverlay();
         },
@@ -404,6 +431,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                           ),
                         ),
                       ),
+                      // 章节标记 overlay（竖线标记 + 当前章节高亮段）
+                      // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
+                      ..._buildChapterOverlayWidgets(verticalMargin, trackHeight),
                       // 缓存轨道
                       Positioned(
                         left: 0,
@@ -503,6 +533,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                           ),
                         ),
                       ),
+                      // 章节标记 overlay（竖线标记 + 当前章节高亮段）
+                      // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
+                      ..._buildChapterOverlayWidgets(verticalMargin, trackHeight),
                       // 缓存轨道
                       Positioned(
                         left: 0,
@@ -586,16 +619,91 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     );
   }
 
-  void _updateProgressFromPosition(Offset localPosition) {
+  /// 构建章节标记 overlay widgets（竖线标记 + 当前章节高亮段）。
+  /// PR review 注意点3：进度条有 isDragging/非 isDragging 两种布局分支，
+  /// 章节标记在两分支中重复。提取此公共方法消除重复，两分支复用同一构建逻辑。
+  /// 返回 List<Widget>，由调用方 spread 进各自 Stack 的 children。
+  List<Widget> _buildChapterOverlayWidgets(double verticalMargin, double trackHeight) {
+    if (widget.chapters.isEmpty || widget.durationMs <= 0) {
+      return const [];
+    }
+    return [
+      // 章节起点竖线标记（MKV 自带章节，参考 mpv osc.lua markers）
+      // hitIndex 命中的分割线高亮放大
+      Positioned(
+        left: 0,
+        right: 0,
+        top: verticalMargin,
+        child: _ChapterTickMarks(
+          chapters: widget.chapters,
+          durationMs: widget.durationMs,
+          trackHeight: trackHeight,
+          hitIndex: _hitChapterTickIndex,
+        ),
+      ),
+      // 当前章节高亮段（覆盖在轨道上，标识当前所在章节）
+      if (widget.currentChapter >= 0)
+        Positioned(
+          left: 0,
+          right: 0,
+          top: verticalMargin,
+          child: _ChapterActiveSegment(
+            chapters: widget.chapters,
+            durationMs: widget.durationMs,
+            currentChapter: widget.currentChapter,
+            trackHeight: trackHeight,
+          ),
+        ),
+    ];
+  }
+
+  /// 检测 localPosition 是否命中某个章节分割线（章节起点竖线）± 容差像素内。
+  /// 返回命中的章节索引，未命中返回 -1。
+  /// 分割线位置 = startMs / durationMs * trackWidth（像素）。
+  int _hitTestChapterTick(double localDx, double trackWidth) {
+    final chapters = widget.chapters;
+    final durationMs = widget.durationMs;
+    if (chapters.isEmpty || durationMs <= 0 || trackWidth <= 0) return -1;
+    double bestDist = _chapterTickHitTolerance;
+    int bestIdx = -1;
+    for (int i = 0; i < chapters.length; i++) {
+      final ratio = chapters[i].startMs / durationMs;
+      if (ratio <= 0 || ratio >= 1) continue;
+      final tickX = ratio * trackWidth;
+      final dist = (localDx - tickX).abs();
+      if (dist <= bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
+  void _updateProgressFromPosition(Offset localPosition, {bool isTapGesture = false}) {
     final RenderBox? sliderBox =
         _sliderKey.currentContext?.findRenderObject() as RenderBox?;
     if (sliderBox != null) {
       final width = sliderBox.size.width;
       final progress = (localPosition.dx / width).clamp(0.0, 1.0);
-      final time = Duration(
-        milliseconds:
-            (progress * widget.videoState.duration.inMilliseconds).toInt(),
-      );
+      final durationMs = widget.videoState.duration.inMilliseconds;
+      final targetMs = (progress * durationMs).toInt();
+      final time = Duration(milliseconds: targetMs);
+
+      // MKV 章节分割线点击跳转：仅 tap 手势命中章节分割线（章节起点竖线）
+      // ±8px 内才触发章节跳转（mpv set chapter，keyframe 对齐），此时该分割线
+      // 高亮放大。drag（拖拽 scrubbing）手势不走此分支，避免在章节边界 ±8px
+      // 内拖拽时被 seekToChapter 劫持而无法精确 scrub。
+      // 其他位置（或 drag）走普通精确 seekTo。
+      if (isTapGesture) {
+        final hitIdx = _hitTestChapterTick(localPosition.dx, width);
+        if (hitIdx >= 0 && hitIdx != widget.currentChapter) {
+          debugPrint('[CHAPTER-DIAG] 点击命中分割线 #$hitIdx '
+              '"${widget.chapters[hitIdx].title}" @ ${widget.chapters[hitIdx].startMs}ms '
+              '(x=${localPosition.dx.toStringAsFixed(1)}, 容差=${_chapterTickHitTolerance}px) → seekToChapter');
+          widget.videoState.seekToChapter(hitIdx);
+          return;
+        }
+      }
 
       widget.videoState.seekTo(time);
 
@@ -710,5 +818,251 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
   bool _isPreviewReady(String path) {
     final file = File(path);
     return file.existsSync();
+  }
+}
+
+/// 章节起点竖线标记层：在进度条轨道上按 chapter.startMs/durationMs 比例
+/// 画细竖线，标记每个章节起点。
+/// 参考 REFERENCE/mpv/player/lua/osc.lua:2512 markers[n] = chapter.time/duration*100。
+class _ChapterTickMarks extends LeafRenderObjectWidget {
+  final List<PlayerChapter> chapters;
+  final int durationMs;
+  final double trackHeight;
+  /// 当前 hover/tap 命中的章节分割线索引（-1=未命中）。
+  /// 命中的分割线会高亮放大，提示可点击跳转。
+  final int hitIndex;
+
+  const _ChapterTickMarks({
+    required this.chapters,
+    required this.durationMs,
+    required this.trackHeight,
+    this.hitIndex = -1,
+  });
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderChapterTickMarks(
+      chapters: chapters,
+      durationMs: durationMs,
+      trackHeight: trackHeight,
+      hitIndex: hitIndex,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+      BuildContext context, covariant _RenderChapterTickMarks renderObject) {
+    renderObject
+      ..chapters = chapters
+      ..durationMs = durationMs
+      ..trackHeight = trackHeight
+      ..hitIndex = hitIndex;
+  }
+}
+
+class _RenderChapterTickMarks extends RenderBox {
+  _RenderChapterTickMarks({
+    required List<PlayerChapter> chapters,
+    required int durationMs,
+    required double trackHeight,
+    int hitIndex = -1,
+  })  : _chapters = chapters,
+        _durationMs = durationMs,
+        _trackHeight = trackHeight,
+        _hitIndex = hitIndex;
+
+  List<PlayerChapter> _chapters;
+  set chapters(List<PlayerChapter> value) {
+    if (_chapters == value) return;
+    _chapters = value;
+    markNeedsPaint();
+  }
+
+  int _durationMs;
+  set durationMs(int value) {
+    if (_durationMs == value) return;
+    _durationMs = value;
+    markNeedsPaint();
+  }
+
+  double _trackHeight;
+  set trackHeight(double value) {
+    if (_trackHeight == value) return;
+    _trackHeight = value;
+    markNeedsPaint();
+  }
+
+  int _hitIndex;
+  set hitIndex(int value) {
+    if (_hitIndex == value) return;
+    _hitIndex = value;
+    markNeedsPaint();
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final w = constraints.maxWidth.isFinite ? constraints.maxWidth : 0.0;
+    return Size(w, _trackHeight);
+  }
+
+  @override
+  void performLayout() {
+    final w = constraints.maxWidth.isFinite ? constraints.maxWidth : 0.0;
+    size = Size(w, _trackHeight);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final canvas = context.canvas;
+    final list = _chapters;
+    if (list.isEmpty || _durationMs <= 0 || size.width <= 0) return;
+
+    // 普通竖线标记：半透明白色细竖线，略高于轨道上下各 1px
+    final paint = Paint()
+      ..color = const Color(0xCCFFFFFF)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+    // 命中竖线：强调色 + 更宽 + 更高（上下各延伸 4px），提示可点击跳转
+    final hitPaint = Paint()
+      ..color = const Color(0xFFFFD54F) // Material amber 300
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    for (int i = 0; i < list.length; i++) {
+      final ratio = list[i].startMs / _durationMs;
+      if (ratio <= 0 || ratio >= 1) continue;
+      final x = offset.dx + ratio * size.width;
+      if (i == _hitIndex) {
+        // 命中分割线：高亮放大
+        canvas.drawLine(
+          Offset(x, offset.dy - 4),
+          Offset(x, offset.dy + _trackHeight + 4),
+          hitPaint,
+        );
+      } else {
+        canvas.drawLine(
+          Offset(x, offset.dy - 1),
+          Offset(x, offset.dy + _trackHeight + 1),
+          paint,
+        );
+      }
+    }
+  }
+}
+
+/// 当前章节高亮段：在进度条轨道上覆盖当前所在章节的区间，
+/// 用半透明强调色标识当前章节范围。参考 mpv osc.lua 当前章节高亮。
+class _ChapterActiveSegment extends LeafRenderObjectWidget {
+  final List<PlayerChapter> chapters;
+  final int durationMs;
+  final int currentChapter;
+  final double trackHeight;
+
+  const _ChapterActiveSegment({
+    required this.chapters,
+    required this.durationMs,
+    required this.currentChapter,
+    required this.trackHeight,
+  });
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderChapterActiveSegment(
+      chapters: chapters,
+      durationMs: durationMs,
+      currentChapter: currentChapter,
+      trackHeight: trackHeight,
+    );
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _RenderChapterActiveSegment)
+      ..chapters = chapters
+      ..durationMs = durationMs
+      ..currentChapter = currentChapter
+      ..trackHeight = trackHeight;
+  }
+}
+
+class _RenderChapterActiveSegment extends RenderBox {
+  _RenderChapterActiveSegment({
+    required List<PlayerChapter> chapters,
+    required int durationMs,
+    required int currentChapter,
+    required double trackHeight,
+  })  : _chapters = chapters,
+        _durationMs = durationMs,
+        _currentChapter = currentChapter,
+        _trackHeight = trackHeight;
+
+  List<PlayerChapter> _chapters;
+  set chapters(List<PlayerChapter> value) {
+    if (_chapters == value) return;
+    _chapters = value;
+    markNeedsPaint();
+  }
+
+  int _durationMs;
+  set durationMs(int value) {
+    if (_durationMs == value) return;
+    _durationMs = value;
+    markNeedsPaint();
+  }
+
+  int _currentChapter;
+  set currentChapter(int value) {
+    if (_currentChapter == value) return;
+    _currentChapter = value;
+    markNeedsPaint();
+  }
+
+  double _trackHeight;
+  set trackHeight(double value) {
+    if (_trackHeight == value) return;
+    _trackHeight = value;
+    markNeedsPaint();
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final w = constraints.maxWidth.isFinite ? constraints.maxWidth : 0.0;
+    return Size(w, _trackHeight);
+  }
+
+  @override
+  void performLayout() {
+    final w = constraints.maxWidth.isFinite ? constraints.maxWidth : 0.0;
+    size = Size(w, _trackHeight);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final canvas = context.canvas;
+    final list = _chapters;
+    if (list.isEmpty || _durationMs <= 0 || size.width <= 0) return;
+    final idx = _currentChapter;
+    if (idx < 0 || idx >= list.length) return;
+
+    final startMs = list[idx].startMs;
+    final endMs = idx + 1 < list.length ? list[idx + 1].startMs : _durationMs;
+    if (endMs <= startMs) return;
+
+    final startX = offset.dx + (startMs / _durationMs) * size.width;
+    final endX = offset.dx + (endMs / _durationMs) * size.width;
+    final segWidth = (endX - startX).clamp(1.0, size.width);
+
+    // 半透明强调色覆盖当前章节段，圆角与轨道一致
+    final paint = Paint()
+      ..color = const Color(0x554FC3F7) // Material light blue 100, 33% alpha
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(startX, offset.dy, segWidth, _trackHeight),
+        Radius.circular(_trackHeight / 2),
+      ),
+      paint,
+    );
   }
 }

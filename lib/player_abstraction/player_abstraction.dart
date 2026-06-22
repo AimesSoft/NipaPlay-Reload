@@ -182,6 +182,8 @@ class Player {
   Future<void> setVideoSurfaceSize({int? width, int? height}) =>
       _delegate.setVideoSurfaceSize(width: width, height: height);
 
+  Future<void> setChapter(int index) => _delegate.setChapter(index);
+
   // 直接播放控制方法
   Future<void> playDirectly() => _delegate.playDirectly();
   Future<void> pauseDirectly() => _delegate.pauseDirectly();

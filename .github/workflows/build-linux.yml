@@ -51,6 +51,14 @@ jobs:
           name: release-Linux-amd64
           path: build/linux/
 
+      - name: Upload Dart debug symbols amd64 (for de-obfuscating crash stacks)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dart-symbols-Linux-amd64
+          path: build/symbols-linux/
+          if-no-files-found: warn
+
   build-arm64:
     name: Build Linux Packages (arm64)
     runs-on: ubuntu-22.04-arm
@@ -87,3 +95,11 @@ jobs:
         with:
           name: release-Linux-arm64
           path: build/linux/
+
+      - name: Upload Dart debug symbols arm64 (for de-obfuscating crash stacks)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dart-symbols-Linux-arm64
+          path: build/symbols-linux/
+          if-no-files-found: warn

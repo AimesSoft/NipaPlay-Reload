@@ -41,7 +41,7 @@ class LabsSettingsProvider extends ChangeNotifier {
     );
     _enableNextPlusPlusEngine = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableNextPlusPlusEngine,
-      defaultValue: true,
+      defaultValue: false, // 默认关闭：Next++ 激进优化引擎（回退至 Next 原始引擎路径）
     );
     DanmakuKernelFactory.setEnableNextPlusPlus(_enableNextPlusPlusEngine);
     _isLoaded = true;

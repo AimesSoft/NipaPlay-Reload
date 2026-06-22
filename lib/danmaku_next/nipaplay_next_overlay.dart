@@ -105,6 +105,9 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
     if (listIdentity != _listIdentity) {
       _listIdentity = listIdentity;
       _layoutSnapshotPending = true;
+      // 2026-06-22 方案A：danmakuList 变化时触发预构建，
+      // 让初期几帧快速填满 rasterCache + atlas slots，减少运行时 addSprite:new
+      DanmakuAtlasPainter.requestPrebuild();
       DanmakuNextLog.d(
         'Overlay',
         'danmaku list changed size=${widget.danmakuList.length}',

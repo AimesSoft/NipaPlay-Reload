@@ -53,4 +53,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-Windows-x64
-          path: build/windows/*
+          path: |
+            build/windows/*
+            !build/windows/symbols-windows
+
+      - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dart-symbols-Windows
+          path: build/symbols-windows/
+          if-no-files-found: warn

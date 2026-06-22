@@ -825,6 +825,11 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
     // video_player 插件使用 Flutter 纹理，由外层控制，保持空实现。
   }
 
+  @override
+  Future<void> setChapter(int index) async {
+    // video_player 适配器不支持 MKV 章节。
+  }
+
   /// 尝试创建或重建控制器
   /// 
   /// 如果媒体路径为空，返回false

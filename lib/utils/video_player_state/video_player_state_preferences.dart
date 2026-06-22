@@ -193,6 +193,29 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     _notifyListeners();
   }
 
+  /// 加载 MKV 章节标记开关（进度条分割线标记 + 当前章节高亮 + 点击跳转）。
+  Future<void> _loadChapterMarkersEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resolved = prefs.getBool(_chapterMarkersEnabledKey) ?? true;
+    if (_chapterMarkersEnabled != resolved) {
+      _chapterMarkersEnabled = resolved;
+      _notifyListeners();
+    } else {
+      _chapterMarkersEnabled = resolved;
+    }
+  }
+
+  /// 设置 MKV 章节标记开关。
+  Future<void> setChapterMarkersEnabled(bool enabled) async {
+    if (_chapterMarkersEnabled == enabled) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_chapterMarkersEnabledKey, enabled);
+    _chapterMarkersEnabled = enabled;
+    _notifyListeners();
+  }
+
   // 保存最小化进度条启用状态
   Future<void> setMinimalProgressBarEnabled(bool enabled) async {
     _minimalProgressBarEnabled = enabled;

@@ -438,6 +438,11 @@ class ErikaPlayerAdapter implements AbstractPlayer {
   Future<void> setVideoSurfaceSize({int? width, int? height}) async {}
 
   @override
+  Future<void> setChapter(int index) async {
+    // Erika 内核不支持 MKV 章节标识。
+  }
+
+  @override
   Future<void> playDirectly() async {
     _ensureSupported();
     await _player.ensureCreated();

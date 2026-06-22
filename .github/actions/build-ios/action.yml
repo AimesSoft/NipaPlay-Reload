@@ -80,21 +80,28 @@ runs:
         AVAILABLE_SDK=$(xcodebuild -showsdks | grep iphoneos | tail -1 | awk '{print $NF}')
         echo "系统可用的iOS SDK: $AVAILABLE_SDK"
         
+        # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
+        # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆
+        # 兼容性：与 iOS dSYM 不冲突（dSYM 是原生层，obfuscate 是 Dart 层，独立）
         # 如果检测到SDK，显式设置使用该SDK
         if [ ! -z "$AVAILABLE_SDK" ]; then
           echo "使用SDK: $AVAILABLE_SDK"
           export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
           # 强制Flutter使用检测到的SDK版本
           echo "开始第一次构建尝试..."
-          if ! flutter build ios --release --no-codesign --verbose --dart-define=FLUTTER_XCODE_SDK=$AVAILABLE_SDK; then
+          if ! flutter build ios --release --no-codesign --verbose \
+            --dart-define=FLUTTER_XCODE_SDK=$AVAILABLE_SDK \
+            --obfuscate --split-debug-info=build/symbols-ios; then
             echo "⚠️ 第一次构建失败，等待30秒后重试..."
             sleep 30
             echo "开始第二次构建尝试..."
-            flutter build ios --release --no-codesign --verbose
+            flutter build ios --release --no-codesign --verbose \
+              --obfuscate --split-debug-info=build/symbols-ios
           fi
         else
           echo "未检测到iOS SDK，使用默认构建..."
-          flutter build ios --release --no-codesign --verbose
+          flutter build ios --release --no-codesign --verbose \
+            --obfuscate --split-debug-info=build/symbols-ios
         fi
         sh thin-payload.sh build/ios/iphoneos/*.app
         cd build

@@ -58,3 +58,11 @@ jobs:
         with:
           name: release-iOS
           path: build/**/*.ipa
+
+      - name: Upload Dart debug symbols (for de-obfuscating crash stacks)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dart-symbols-iOS
+          path: build/symbols-ios/
+          if-no-files-found: warn

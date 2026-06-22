@@ -335,6 +335,14 @@ class _ModernVideoControlsState extends State<ModernVideoControls> {
                                   videoState: videoState,
                                   hoverTime: null,
                                   isDragging: _isDragging,
+                                  // 章节标记受设置开关控制：关闭时传空列表，
+                                  // VideoProgressBar 不渲染分割线/高亮段，点击不触发章节跳转
+                                  chapters: videoState.chapterMarkersEnabled
+                                      ? videoState.chapters
+                                      : const [],
+                                  durationMs:
+                                      videoState.duration.inMilliseconds,
+                                  currentChapter: videoState.currentChapter,
                                   onPositionUpdate: (position) {},
                                   onDraggingStateChange: (isDragging) {
                                     if (isDragging) {
