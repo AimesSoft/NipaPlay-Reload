@@ -670,7 +670,13 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final prevPtm = _playbackTimeMs.value;
               final ptmDelta = (playerMs - prevPtm).abs();
               // 过期检测：playbackTimeMs 接近 0 且 playerMs 远离 0 → playerMs 是旧值
-              final isStalePlayerMs = prevPtm < 100.0 && playerMs > 1000.0;
+              // 扩展（2026-06-21）：覆盖切集反向场景
+              // 原判定 prevPtm<100 && playerMs>1000 只覆盖"playbackTimeMs 归零 + playerMs 旧末尾"
+              // 切集反向场景：prevPtm=旧集末尾(大) + playerMs=新集开头(小) → 原判定不触发
+              // → 走 FIRST-ANCHOR 把新集 playerMs 当有效值 → playbackTimeMs 突跌 → 回弹
+              // 扩展：prevPtm>1000 且 playerMs<prevPtm-1000 也视为污染，启用 seek 保护
+              final isStalePlayerMs = (prevPtm < 100.0 && playerMs > 1000.0) ||
+                  (prevPtm > 1000.0 && playerMs < prevPtm - 1000.0);
               if (!kReleaseMode) {
                 debugPrint('[LOOP-RESTART-DIAG] TICKER LAST_RAW<0: '
                     'playerMs=${playerMs.toStringAsFixed(1)} '
