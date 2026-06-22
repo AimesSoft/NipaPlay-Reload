@@ -775,10 +775,21 @@ class SubtitleParser {
           if (bytes.isNotEmpty) {
             // [FIX-SUBTITLE-ISO] 在 worker isolate 执行 C++ 字幕解析，
             // 避免大字幕文件同步 FFI 阻塞主线程（412KB/2431 条目曾阻塞 53ms）。
-            final nativeResult = await compute(
-              _parseSubtitleBytesInIsolate,
-              (bytes: bytes, hintPath: filePath) as _SubtitleIsolateInput,
-            );
+            // 阈值优化：小字幕（<50KB）isolate 启动开销（~1-2ms）大于主线程 FFI 解析
+            // 开销，直接在主线程执行；大字幕走 isolate 避免 53ms 阻塞。
+            // 50KB 阈值参考：实测 412KB 阻塞 53ms，线性推算 50KB≈6ms，isolate 启动
+            // 约 1-2ms + 数据拷贝，主线程 6ms 可接受且无 isolate 冷启动延迟。
+            const int isolateThresholdBytes = 50 * 1024;
+            Map<String, dynamic>? nativeResult;
+            if (bytes.length < isolateThresholdBytes) {
+              nativeResult = NativeSubtitleParser.parseBytes(bytes,
+                  hintPath: filePath);
+            } else {
+              nativeResult = await compute(
+                _parseSubtitleBytesInIsolate,
+                (bytes: bytes, hintPath: filePath) as _SubtitleIsolateInput,
+              );
+            }
             if (nativeResult != null) {
               final result = _fromNativeResult(nativeResult);
               // 防御性检查: C++ 返回 0 条目但文件非空 → 可能编码转换失败

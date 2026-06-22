@@ -25,14 +25,22 @@ extension VideoPlayerStateChapters on VideoPlayerState {
     }
     final chapter = list[index];
     debugPrint('[CHAPTER-DIAG] seekToChapter: 跳转到章节 #$index "${chapter.title}" @ ${chapter.startMs}ms');
-    // 复用 seekTo 的 UI 状态同步：立即更新 _position/_progress/_playbackTimeMs/
-    // _isSeeking/平滑时钟锚点，避免"画面跳了但进度条没动"。
-    // seekTo 走 player.seek（精确 seek），这里再叠加 mpv 原生 set chapter
-    // （keyframe 对齐，参考 command.c:996 MPSEEK_CHAPTER）。
+    // 两段式 seek 设计（PR review 注意点2 优化）：
+    // 1. seekTo(章节起点) 同步走 player.seek（精确 seek，毫秒级）+ 立即更新 UI 状态
+    //    （_position/_progress/_playbackTimeMs/_isSeeking/平滑时钟锚点），保证"进度条立即动"。
+    // 2. setChapter(index) 走 mpv setProperty("chapter") → MPSEEK_CHAPTER（keyframe 对齐，
+    //    参考 command.c:996）。mpv chapter seek 会定位到最近 keyframe（可能与精确 seek
+    //    位置差 <1 个 keyframe 间隔，通常 <500ms）。
+    // 顺序：seekTo 先同步 UI（同步执行），setChapter 用 scheduleMicrotask 延后到下一微任务，
+    // 确保 UI 状态先于 mpv chapter seek 生效，避免两段式 seek 视觉闪烁（进度条先到精确位置，
+    // mpv keyframe 校正差异在视觉不可察觉范围内）。
     seekTo(Duration(milliseconds: chapter.startMs));
-    await player.setChapter(index);
     // 立即更新本地索引，UI 即时反馈（实际 position 由导航循环校正）
     _currentChapterIndex = index;
+    // 延后 setChapter：让 seekTo 的 UI 同步先渲染，再触发 mpv keyframe 对齐 seek
+    scheduleMicrotask(() async {
+      await player.setChapter(index);
+    });
   }
 
   /// 根据 position（毫秒）计算并更新当前章节索引。

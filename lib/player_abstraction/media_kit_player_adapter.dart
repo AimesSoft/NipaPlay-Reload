@@ -196,6 +196,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   // 正常播放纯墙钟插值，永不被 mpv 真实 position 校正 → 与 mpv 漂移 → 下游 big-fwd snap → 回弹。
   StreamSubscription<Duration>? _positionSubscription;
   bool _isDisposed = false;
+  // MKV 章节列表是否已成功获取过（用于 _refreshChapters 去重，避免 duration
+  // stream 每次触发都重复 getProperty chapter-list）。切集时在 _openMainMedia
+  // 重置为 false。
+  bool _chaptersFetched = false;
 
   // Jellyfin流媒体重试
   int _jellyfinRetryCount = 0;
@@ -575,10 +579,16 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     // 单调保护：仅当 mpv position 前进（或恢复后首帧）才更新锚点，避免 mpv 偶发
     // 回退把插值位置往回拉（回退由下游平滑时钟的 drift 修正处理）。
     _positionSubscription = _player.stream.position.listen((position) {
-      if (_isDisposed || !_player.state.playing) return;
+      // [FIX-L1] 移除 !_player.state.playing 检查：暂停恢复后首帧 position 推送
+      // 可能在 playing state 翻转前到达，原检查会跳过该帧导致 _lastActualPosition
+      // 锚点未重建。暂停时 mpv 不推送 time-pos（无变化），seek 触发的 position
+      // 更新锚点是合理的（恢复时用）。仅保留 _isDisposed 丢弃。
+      if (_isDisposed) return;
       final newMs = position.inMilliseconds;
       final actualMs = _lastActualPosition.inMilliseconds;
-      // 仅前进场景更新锚点；回退/相等则保留锚点（下游 drift 修正处理）
+      // 仅前进场景更新锚点；回退/相等则保留锚点（下游 drift 修正处理）。
+      // 恢复首帧：newMs 可能略小于 actualMs（mpv 回退几十 ms），此时保留旧锚点
+      // 让插值从暂停位置继续（play() 已用 _pausedPlaybackTimeMs 重建平滑时钟锚点）。
       if (newMs > actualMs) {
         _lastActualPosition = position;
         _lastPositionTimestampUs = DateTime.now().microsecondsSinceEpoch;
@@ -618,6 +628,7 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       // 且常随 duration 一起就绪）。参考 REFERENCE/mpv/player/lua/osc.lua:3201
       // observe_cached("chapter-list")。此处用一次性 getProperty 兜底，避免
       // observeProperty 对 MPV_FORMAT_NODE_ARRAY 的兼容性问题。
+      // _chaptersFetched 去重：同一媒体只获取一次，切集时 _openMainMedia 重置。
       _refreshChapters();
     });
 
@@ -1708,6 +1719,10 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       return;
     }
 
+    // 切集时重置章节获取标志 + 清空旧章节列表，新集 duration 就绪后重新获取。
+    _chaptersFetched = false;
+    _mediaInfo = _mediaInfo.copyWith(chapters: const []);
+
     unawaited(_player.open(media, play: false));
     _scheduleMacOSHdrDiagnostics();
 
@@ -2001,69 +2016,68 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
     }
   }
 
-  /// 解析 mpv `chapter-list` 属性返回的 JSON 字符串为 [PlayerChapter] 列表。
+  /// 通过 mpv 子属性逐项读取 chapter-list，组装为 [PlayerChapter] 列表。
   ///
-  /// mpv `chapter-list` 是一个 node array，每个元素含 `time`（秒，double）
-  /// 和 `title`（字符串）。通过 NativePlayer.getProperty 获取时，media_kit 会
-  /// 将其序列化为 JSON 字符串。参考 REFERENCE/mpv/player/command.c:1086
-  /// mp_property_list_chapters（M_PROPERTY_PRINT / m_property_read_list）。
-  List<PlayerChapter> _parseChapterList(String raw) {
-    if (raw.isEmpty) {
-      debugPrint('[CHAPTER-DIAG] _parseChapterList: raw 为空');
+  /// mpv `chapter-list` 是 NODE array，media_kit 的 `getProperty` 走
+  /// `mpv_get_property_string`（MPV_FORMAT_STRING），对 list 属性触发
+  /// `M_PROPERTY_PRINT` 返回 OSD 人可读文本（"HH:MM:SS  ChapterName\n..."），
+  /// 无法 jsonDecode。改为通过 `chapter-list/count` + `chapter-list/N/time` +
+  /// `chapter-list/N/title` 子属性读取（m_property.c:604 m_property_read_list
+  /// 支持 count 子键与 N 子索引，command.c:1086 mp_property_list_chapters
+  /// 转发到 get_chapter_entry 返回 node map）。
+  Future<List<PlayerChapter>> _fetchChaptersViaSubProperties() async {
+    final countRaw = await _getMpvPropertyForDiagnostics('chapter-list/count');
+    if (countRaw == null || countRaw.isEmpty) {
+      debugPrint('[CHAPTER-DIAG] _fetchChaptersViaSubProperties: chapter-list/count 返回空');
       return const [];
     }
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) {
-        debugPrint('[CHAPTER-DIAG] _parseChapterList: 解码结果非 List，实际类型=${decoded.runtimeType}');
-        return const [];
-      }
-      final result = <PlayerChapter>[];
-      for (int i = 0; i < decoded.length; i++) {
-        final item = decoded[i];
-        if (item is! Map) continue;
-        final time = item['time'];
-        double timeSec;
-        if (time is num) {
-          timeSec = time.toDouble();
-        } else if (time is String) {
-          timeSec = double.tryParse(time) ?? 0.0;
-        } else {
-          continue;
-        }
-        final title = (item['title'] ?? '')?.toString() ?? '';
-        result.add(PlayerChapter(
-          index: i,
-          startMs: (timeSec * 1000).round(),
-          title: title,
-        ));
-      }
-      // 按 startMs 升序排序（mpv 已排序，这里防御性确保）
-      result.sort((a, b) => a.startMs.compareTo(b.startMs));
-      // 重建 index（排序后）
-      final sorted = List.generate(result.length,
-          (i) => PlayerChapter(index: i, startMs: result[i].startMs, title: result[i].title));
-      debugPrint('[CHAPTER-DIAG] _parseChapterList: 解析成功 ${sorted.length} 个章节，'
-          '首章=${sorted.isEmpty ? "无" : "${sorted.first.startMs}ms \"${sorted.first.title}\""}, '
-          '末章=${sorted.isEmpty ? "无" : "${sorted.last.startMs}ms \"${sorted.last.title}\""}');
-      return sorted;
-    } catch (e) {
-      debugPrint('[CHAPTER-DIAG] _parseChapterList: 解析失败: $e (raw 长度=${raw.length}, raw前80字符=${raw.length > 80 ? raw.substring(0, 80) : raw})');
+    final count = int.tryParse(countRaw.trim());
+    if (count == null || count <= 0) {
+      debugPrint('[CHAPTER-DIAG] _fetchChaptersViaSubProperties: count 无效 (raw="$countRaw")');
       return const [];
     }
+    final result = <PlayerChapter>[];
+    for (int i = 0; i < count; i++) {
+      if (_isDisposed) return const [];
+      final timeRaw = await _getMpvPropertyForDiagnostics('chapter-list/$i/time');
+      final titleRaw = await _getMpvPropertyForDiagnostics('chapter-list/$i/title');
+      // time 为秒（double），mpv get_property_string 返回 "1.234" 形式
+      double timeSec = 0.0;
+      if (timeRaw != null && timeRaw.isNotEmpty) {
+        timeSec = double.tryParse(timeRaw.trim()) ?? 0.0;
+      }
+      final title = (titleRaw ?? '').trim();
+      result.add(PlayerChapter(
+        index: i,
+        startMs: (timeSec * 1000).round(),
+        title: title,
+      ));
+    }
+    // 按 startMs 升序排序（mpv 已排序，防御性确保）
+    result.sort((a, b) => a.startMs.compareTo(b.startMs));
+    // 重建 index（排序后）
+    final sorted = List.generate(result.length,
+        (i) => PlayerChapter(index: i, startMs: result[i].startMs, title: result[i].title));
+    debugPrint('[CHAPTER-DIAG] _fetchChaptersViaSubProperties: 解析成功 ${sorted.length} 个章节，'
+        '首章=${sorted.isEmpty ? "无" : "${sorted.first.startMs}ms \"${sorted.first.title}\""}, '
+        '末章=${sorted.isEmpty ? "无" : "${sorted.last.startMs}ms \"${sorted.last.title}\""}');
+    return sorted;
   }
 
   /// 从 mpv 获取 `chapter-list` 并更新 [_mediaInfo.chapters]。
   /// 在 duration 就绪后调用。无章节文件会得到空列表。
+  /// 使用子属性逐项读取（chapter-list/count + chapter-list/N/time|title），
+  /// 避免 getProperty 对 NODE array 返回 OSD 文本无法解析的问题。
+  /// `_chaptersFetched` 去重：同一媒体只获取一次，切集时 _openMainMedia 重置。
   Future<void> _refreshChapters() async {
     if (_isDisposed) return;
+    if (_chaptersFetched) {
+      // 同一媒体已获取过，避免 duration stream 重复触发 getProperty
+      return;
+    }
     try {
-      final raw = await _getMpvPropertyForDiagnostics('chapter-list');
-      if (raw == null || raw.isEmpty) {
-        debugPrint('[CHAPTER-DIAG] _refreshChapters: chapter-list 返回空 (raw=$raw)');
-        return;
-      }
-      final chapters = _parseChapterList(raw);
+      final chapters = await _fetchChaptersViaSubProperties();
+      _chaptersFetched = true;
       // 仅在变化时更新，避免无谓重建
       final prev = _mediaInfo.chapters;
       final changed = prev == null ||
@@ -2074,6 +2088,8 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
       if (changed) {
         _mediaInfo = _mediaInfo.copyWith(chapters: chapters);
         debugPrint('[CHAPTER-DIAG] _refreshChapters: 章节列表已更新，共 ${chapters.length} 个章节');
+      } else {
+        debugPrint('[CHAPTER-DIAG] _refreshChapters: 章节列表未变化，跳过更新');
       }
     } catch (e) {
       debugPrint('[CHAPTER-DIAG] _refreshChapters: 获取 chapter-list 失败: $e');
@@ -2084,12 +2100,23 @@ class MediaKitPlayerAdapter implements AbstractPlayer, TickerProvider {
   Future<void> setChapter(int index) async {
     // 使用 mpv 原生 `chapter` 属性跳转，走 MPSEEK_CHAPTER（keyframe 对齐）。
     // 参考 REFERENCE/mpv/player/command.c:996 (queue_seek MPSEEK_CHAPTER)。
+    //
+    // PR review 注意点5 说明：media_kit 无正式 chapter seek API（context7 确认仅有
+    // seek(Duration) + setProperty），故必须通过 NativePlayer.setProperty("chapter", idx)
+    // 走 mpv set_property_string。此处用 dynamic dispatch 访问 _player.platform.setProperty
+    // 是因为 platform 是 NativePlayer 内部实现对象（media_kit API 未公开稳定类型）。
+    // 若 media_kit 升级导致 platform 结构变化，try-catch 兜底安静失败（章节跳转降级为
+    // 仅 seekTo 精确 seek，不影响播放）。升级 media_kit 时需回归验证此处。
     if (index < 0) return;
     try {
       final dynamic platform = _player.platform;
-      await platform?.setProperty?.call('chapter', index.toString());
+      if (platform == null) {
+        debugPrint('[CHAPTER-DIAG] setChapter($index): platform 为 null，跳过 mpv chapter seek');
+        return;
+      }
+      await platform.setProperty('chapter', index.toString());
     } catch (e) {
-      debugPrint('MediaKit: setChapter($index) 失败: $e');
+      debugPrint('[CHAPTER-DIAG] setChapter($index) 失败（mpv chapter seek 降级，仅精确 seek 生效）: $e');
     }
   }
 

@@ -349,6 +349,10 @@ class DanmakuAtlasPainter extends CustomPainter {
   static double _smoothedDtSeconds = 0.0;
   static const double _dtEmaAlpha = 0.3;
   // [FIX-L3] 上一帧有效 deltaUs，用于主线程阻塞后 rawDt=0 时兜底，避免 displayX 完全冻结。
+  // 设计约束：DanmakuAtlasPainter 为单实例（Next++ overlay 唯一 painter，repaint 绑定
+  // vsyncController 不重建），故 static 状态无多实例污染。若改为实例字段，Flutter 每次
+  // paint 可能 new 新 painter 实例 → _lastValidDeltaUs 每帧重置为 0 → 阻塞帧兜底失效。
+  // 因此保持 static，单实例约束由 NipaPlayNextOverlay 保证。
   static int _lastValidDeltaUs = 0;
 
   /// [V4] 暂停恢复过渡期帧计数器 — 仅在前N帧使用EMA，之后无条件切回rawDt

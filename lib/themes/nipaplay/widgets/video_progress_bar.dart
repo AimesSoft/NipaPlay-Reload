@@ -350,7 +350,10 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
         },
         onTapDown: (details) {
           widget.onDraggingStateChange(true);
-          _updateProgressFromPosition(details.localPosition);
+          // isTapGesture: true → 命中章节分割线走 seekToChapter（keyframe 对齐）。
+          // drag 手势（onHorizontalDrag*）默认 false，始终走精确 seekTo，避免
+          // 在章节边界 ±8px 内拖拽被章节跳转劫持。
+          _updateProgressFromPosition(details.localPosition, isTapGesture: true);
           _showOverlay(
             context,
             widget.videoState.progress,
@@ -428,35 +431,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                           ),
                         ),
                       ),
-                      // 章节起点竖线标记（MKV 自带章节，参考 mpv osc.lua markers）
-                      // hitIndex 命中的分割线高亮放大
-                      if (widget.chapters.isNotEmpty && widget.durationMs > 0)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: verticalMargin,
-                          child: _ChapterTickMarks(
-                            chapters: widget.chapters,
-                            durationMs: widget.durationMs,
-                            trackHeight: trackHeight,
-                            hitIndex: _hitChapterTickIndex,
-                          ),
-                        ),
-                      // 当前章节高亮段（覆盖在轨道上，标识当前所在章节）
-                      if (widget.chapters.isNotEmpty &&
-                          widget.durationMs > 0 &&
-                          widget.currentChapter >= 0)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: verticalMargin,
-                          child: _ChapterActiveSegment(
-                            chapters: widget.chapters,
-                            durationMs: widget.durationMs,
-                            currentChapter: widget.currentChapter,
-                            trackHeight: trackHeight,
-                          ),
-                        ),
+                      // 章节标记 overlay（竖线标记 + 当前章节高亮段）
+                      // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
+                      ..._buildChapterOverlayWidgets(verticalMargin, trackHeight),
                       // 缓存轨道
                       Positioned(
                         left: 0,
@@ -556,35 +533,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
                           ),
                         ),
                       ),
-                      // 章节起点竖线标记（MKV 自带章节，参考 mpv osc.lua markers）
-                      // hitIndex 命中的分割线高亮放大
-                      if (widget.chapters.isNotEmpty && widget.durationMs > 0)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: verticalMargin,
-                          child: _ChapterTickMarks(
-                            chapters: widget.chapters,
-                            durationMs: widget.durationMs,
-                            trackHeight: trackHeight,
-                            hitIndex: _hitChapterTickIndex,
-                          ),
-                        ),
-                      // 当前章节高亮段（覆盖在轨道上，标识当前所在章节）
-                      if (widget.chapters.isNotEmpty &&
-                          widget.durationMs > 0 &&
-                          widget.currentChapter >= 0)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: verticalMargin,
-                          child: _ChapterActiveSegment(
-                            chapters: widget.chapters,
-                            durationMs: widget.durationMs,
-                            currentChapter: widget.currentChapter,
-                            trackHeight: trackHeight,
-                          ),
-                        ),
+                      // 章节标记 overlay（竖线标记 + 当前章节高亮段）
+                      // 公共方法 _buildChapterOverlayWidgets 消除两布局分支重复
+                      ..._buildChapterOverlayWidgets(verticalMargin, trackHeight),
                       // 缓存轨道
                       Positioned(
                         left: 0,
@@ -668,6 +619,44 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     );
   }
 
+  /// 构建章节标记 overlay widgets（竖线标记 + 当前章节高亮段）。
+  /// PR review 注意点3：进度条有 isDragging/非 isDragging 两种布局分支，
+  /// 章节标记在两分支中重复。提取此公共方法消除重复，两分支复用同一构建逻辑。
+  /// 返回 List<Widget>，由调用方 spread 进各自 Stack 的 children。
+  List<Widget> _buildChapterOverlayWidgets(double verticalMargin, double trackHeight) {
+    if (widget.chapters.isEmpty || widget.durationMs <= 0) {
+      return const [];
+    }
+    return [
+      // 章节起点竖线标记（MKV 自带章节，参考 mpv osc.lua markers）
+      // hitIndex 命中的分割线高亮放大
+      Positioned(
+        left: 0,
+        right: 0,
+        top: verticalMargin,
+        child: _ChapterTickMarks(
+          chapters: widget.chapters,
+          durationMs: widget.durationMs,
+          trackHeight: trackHeight,
+          hitIndex: _hitChapterTickIndex,
+        ),
+      ),
+      // 当前章节高亮段（覆盖在轨道上，标识当前所在章节）
+      if (widget.currentChapter >= 0)
+        Positioned(
+          left: 0,
+          right: 0,
+          top: verticalMargin,
+          child: _ChapterActiveSegment(
+            chapters: widget.chapters,
+            durationMs: widget.durationMs,
+            currentChapter: widget.currentChapter,
+            trackHeight: trackHeight,
+          ),
+        ),
+    ];
+  }
+
   /// 检测 localPosition 是否命中某个章节分割线（章节起点竖线）± 容差像素内。
   /// 返回命中的章节索引，未命中返回 -1。
   /// 分割线位置 = startMs / durationMs * trackWidth（像素）。
@@ -690,7 +679,7 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
     return bestIdx;
   }
 
-  void _updateProgressFromPosition(Offset localPosition) {
+  void _updateProgressFromPosition(Offset localPosition, {bool isTapGesture = false}) {
     final RenderBox? sliderBox =
         _sliderKey.currentContext?.findRenderObject() as RenderBox?;
     if (sliderBox != null) {
@@ -700,16 +689,20 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
       final targetMs = (progress * durationMs).toInt();
       final time = Duration(milliseconds: targetMs);
 
-      // MKV 章节分割线点击跳转：只有点击命中章节分割线（章节起点竖线）
-      // ±8px 内才触发章节跳转（mpv set chapter，keyframe 对齐），
-      // 此时该分割线高亮放大。其他位置走普通精确 seekTo。
-      final hitIdx = _hitTestChapterTick(localPosition.dx, width);
-      if (hitIdx >= 0 && hitIdx != widget.currentChapter) {
-        debugPrint('[CHAPTER-DIAG] 点击命中分割线 #$hitIdx '
-            '"${widget.chapters[hitIdx].title}" @ ${widget.chapters[hitIdx].startMs}ms '
-            '(x=${localPosition.dx.toStringAsFixed(1)}, 容差=${_chapterTickHitTolerance}px) → seekToChapter');
-        widget.videoState.seekToChapter(hitIdx);
-        return;
+      // MKV 章节分割线点击跳转：仅 tap 手势命中章节分割线（章节起点竖线）
+      // ±8px 内才触发章节跳转（mpv set chapter，keyframe 对齐），此时该分割线
+      // 高亮放大。drag（拖拽 scrubbing）手势不走此分支，避免在章节边界 ±8px
+      // 内拖拽时被 seekToChapter 劫持而无法精确 scrub。
+      // 其他位置（或 drag）走普通精确 seekTo。
+      if (isTapGesture) {
+        final hitIdx = _hitTestChapterTick(localPosition.dx, width);
+        if (hitIdx >= 0 && hitIdx != widget.currentChapter) {
+          debugPrint('[CHAPTER-DIAG] 点击命中分割线 #$hitIdx '
+              '"${widget.chapters[hitIdx].title}" @ ${widget.chapters[hitIdx].startMs}ms '
+              '(x=${localPosition.dx.toStringAsFixed(1)}, 容差=${_chapterTickHitTolerance}px) → seekToChapter');
+          widget.videoState.seekToChapter(hitIdx);
+          return;
+        }
       }
 
       widget.videoState.seekTo(time);
