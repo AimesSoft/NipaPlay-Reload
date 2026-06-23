@@ -78,7 +78,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
   bool _updateInFlight = false;
   bool _updateQueued = false;
 
-  double _lastTimeSeconds = -1.0;
   bool _forceLayout = false;
 
   // Optimized texture update state: avoid redundant per-frame async calls
@@ -127,29 +126,42 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     return widget.scrollDurationSeconds * scale;
   }
 
-  // ── Wall-clock time interpolation ──
-  // Instead of advancing each item's displayX per frame (which requires
-  // fragile drift correction), we accumulate wall-clock dt since the last
-  // playbackTimeMs update and add it to create a vsync-rate smooth time:
-  //   interpolatedTime = playbackTime + accumulatedDt * playbackRate
-  // The existing absolute-position layout() handles this naturally:
-  //   x = width - speed * (interpolatedTime - item.time)
-  // When playbackTimeMs changes, we reset accumulatedDt to zero — the
-  // anchor point jumps but the interpolation is smooth between updates.
+  // ── Wall-clock time interpolation (constant-speed model) ──
+  // The video player's playbackTimeMs updates at a coarse rate (~30Hz),
+  // but the display refreshes at vsync rate (60/120/240Hz). To get smooth,
+  // CONSTANT-speed motion, we interpolate between media-clock ticks using
+  // wall-clock time:
+  //   interpolatedTime = anchorMediaTime + wallElapsed * playbackRate
+  // where wallElapsed = (wallClock.now - wallClockAtAnchor).
+  //
+  // KEY: when the media clock advances, we move BOTH anchorMediaTime AND
+  // wallClockAtAnchor together → wallElapsed = 0 → no time jump. There is
+  // no accumulated-dt / EMA, so there is no convergence period after seek or
+  // resume: the very first frame after a jump already advances at the true
+  // wall-clock rate (constant speed), and the media clock keeps the result
+  // aligned to the correct playback time over the long run.
   final Stopwatch _wallClock = Stopwatch()..start();
-  int _lastWallUs = 0;
 
   /// Wall time captured at the vsync callback entry point (not inside
   /// _runUpdateLoop which includes _tryUpdateTexture latency). Using the
   /// vsync-stamped time for dt computation prevents the async GPU submission
   /// latency from distorting the frame interval measurement.
   int _vsyncWallUs = 0;
-  double _accumulatedWallDt = 0.0;
-  double _lastAnchorPlaybackTime = -1.0;
-  double _smoothedDtSeconds = 0.0;
-  static const double _dtEmaAlpha = 0.3;
-  int _resumeFrameCount = 0;
-  static const int _resumeEmaFrames = 3;
+
+  /// Last sampled media time (seconds), captured from playbackTimeMs.
+  double _anchorMediaTime = 0.0;
+
+  /// Wall-clock microseconds at the moment _anchorMediaTime was sampled.
+  /// interpolatedTime = _anchorMediaTime + (wallNow - _wallUsAtAnchor) * rate.
+  int _wallUsAtAnchor = 0;
+
+  /// Whether the anchor has been initialized (first frame / after dispose).
+  bool _anchorInitialized = false;
+
+  /// Cap wall-elapsed to avoid a runaway jump if vsyncs stall for a long time
+  /// (e.g. tab backgrounded). Beyond this, the media clock should have updated
+  /// and re-anchored us.
+  static const double _maxWallElapsedSec = 0.2;
 
   // ── Submit-rate throttle (P1-4) ──
   // On high-refresh panels (>60Hz) the Dart layout+setFrame pipeline is
@@ -228,8 +240,7 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     if (oldWidget.playbackTimeMs != widget.playbackTimeMs) {
       oldWidget.playbackTimeMs.removeListener(_queueUpdate);
       widget.playbackTimeMs.addListener(_queueUpdate);
-      _accumulatedWallDt = 0.0;
-      _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
+      _reanchorToMediaTime();
       _queueUpdate();
     }
 
@@ -237,30 +248,36 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     final shouldAnimate = widget.isVisible && widget.isPlaying;
     if (shouldAnimate && !_vsyncController.isAnimating) {
       _vsyncController.repeat();
-      // Reset wall-clock on resume to avoid a huge delta spanning the pause
-      _lastWallUs = _wallClock.elapsedMicroseconds;
-      _accumulatedWallDt = 0.0;
-      _smoothedDtSeconds = 0.0;
-      _resumeFrameCount = 0;
+      // Re-anchor on resume so wall-clock elapsed starts from zero — no huge
+      // delta spanning the pause, and the first frame already moves at the
+      // true wall-clock rate (constant speed, no slow convergence).
+      _reanchorToMediaTime();
     } else if (!shouldAnimate && _vsyncController.isAnimating) {
       _vsyncController.stop();
     }
 
-    // ── Playback rate change: reset interpolation ──
+    // ── Playback rate change: re-anchor ──
+    // Re-anchoring keeps wallElapsed = 0 at the instant of the rate change,
+    // so the new rate applies going forward without a speed blip.
     if (oldWidget.playbackRate != widget.playbackRate) {
-      _accumulatedWallDt = 0.0;
-      _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
+      _reanchorToMediaTime();
     }
 
-    // ── isPlaying transition: reset wall-clock ──
+    // ── isPlaying transition: re-anchor ──
     if (oldWidget.isPlaying != widget.isPlaying) {
       if (widget.isPlaying) {
-        _lastWallUs = _wallClock.elapsedMicroseconds;
-        _accumulatedWallDt = 0.0;
-        _smoothedDtSeconds = 0.0;
-        _resumeFrameCount = 0;
+        _reanchorToMediaTime();
       }
     }
+  }
+
+  /// Re-anchor the wall-clock interpolation to the current media time.
+  /// Sets _anchorMediaTime and _wallUsAtAnchor together so that wallElapsed
+  /// becomes 0 at this instant — no time jump, no convergence period.
+  void _reanchorToMediaTime() {
+    _anchorMediaTime = widget.playbackTimeMs.value / 1000.0;
+    _wallUsAtAnchor = _wallClock.elapsedMicroseconds;
+    _anchorInitialized = true;
   }
 
   @override
@@ -415,89 +432,66 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           continue;
         }
 
-        // ── Compute wall-clock dt from vsync-stamped time ──
+        // ── Constant-speed wall-clock interpolation ──
         // _vsyncWallUs is captured in _queueUpdate() (vsync callback entry),
         // NOT at the top of _runUpdateLoop — otherwise the async
         // _tryUpdateTexture latency from the previous iteration would
         // inflate the measured interval and cause interpolatedTime jumps.
         final currentWallUs = _vsyncWallUs;
-        final double rawDtSeconds;
-        if (_lastWallUs == 0 || currentWallUs < _lastWallUs) {
-          rawDtSeconds = 0.0;
-        } else {
-          final deltaUs = currentWallUs - _lastWallUs;
-          // Clamp (don't hard-zero) the per-frame delta at 100ms.
-          // Hard-zeroing any frame whose inter-vsync gap reaches >=100ms
-          // cascades on low-FPS devices (<=10fps): every frame zeroes,
-          // _accumulatedWallDt never grows, and motion stalls until the
-          // media clock itself jumps — producing discrete stepping instead
-          // of vsync-rate scroll. Clamping lets a slow/jittery frame still
-          // advance time by a capped amount, preserving smooth motion. The
-          // 100ms cap below (_accumulatedWallDt > 0.1) keeps total drift
-          // bounded until the media-clock anchor next updates.
-          final double clampedUs = deltaUs > 100000
-              ? 100000.0
-              : deltaUs.toDouble();
-          rawDtSeconds = clampedUs / 1000000.0;
-        }
-        _lastWallUs = currentWallUs;
 
-        // V4 dt decision: paused=0, first frame=rawDt, resume first 5=EMA, steady=rawDt
-        final double dtSeconds;
-        if (!widget.isPlaying) {
-          dtSeconds = 0.0;
-        } else if (rawDtSeconds == 0.0) {
-          dtSeconds = 0.0;
-        } else if (_smoothedDtSeconds == 0.0) {
-          dtSeconds = rawDtSeconds;
-          _smoothedDtSeconds = rawDtSeconds;
-          _resumeFrameCount = 1;
-        } else if (_resumeFrameCount > 0 &&
-            _resumeFrameCount < _resumeEmaFrames) {
-          _smoothedDtSeconds =
-              _dtEmaAlpha * rawDtSeconds +
-              (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
-          dtSeconds = _smoothedDtSeconds;
-          _resumeFrameCount++;
-        } else {
-          _smoothedDtSeconds =
-              _dtEmaAlpha * rawDtSeconds +
-              (1.0 - _dtEmaAlpha) * _smoothedDtSeconds;
-          dtSeconds = rawDtSeconds;
-          _resumeFrameCount = 0;
+        // ── Sample the media clock ──
+        final double mediaTime = widget.playbackTimeMs.value / 1000.0;
+
+        // Initialize the anchor on the very first frame.
+        if (!_anchorInitialized) {
+          _anchorMediaTime = mediaTime;
+          _wallUsAtAnchor = currentWallUs;
+          _anchorInitialized = true;
         }
 
-        // ── Read current playback time anchor ──
-        final double anchorTime = widget.playbackTimeMs.value / 1000.0;
-
-        // ── Detect playbackTimeMs update: reset accumulated dt ──
-        // When playbackTimeMs changes, the anchor point jumps. We reset
-        // accumulatedWallDt to zero so the interpolation starts fresh from
-        // the new anchor. Between updates, dt accumulates smoothly.
-        if ((anchorTime - _lastAnchorPlaybackTime).abs() >= 0.0001) {
-          _accumulatedWallDt = 0.0;
-          _lastAnchorPlaybackTime = anchorTime;
-        } else if (dtSeconds > 0.0) {
-          _accumulatedWallDt += dtSeconds * widget.playbackRate;
+        // ── Detect a media-clock advance and re-anchor atomically ──
+        // When playbackTimeMs moves forward, we update BOTH _anchorMediaTime
+        // and _wallUsAtAnchor together. wallElapsed = 0 at this instant, so
+        // interpolatedTime snaps to the true media time (keeping danmaku
+        // aligned with the video). Between media-clock ticks wallElapsed grows
+        // smoothly at the true vsync rate → constant speed, no EMA, no
+        // convergence period.
+        //
+        // Seek/backward detection: if the media clock moved backward or jumped
+        // by more than 1s, treat it as a seek and snap to the new time.
+        //
+        // The 1ms threshold ignores sub-millisecond jitter in playbackTimeMs
+        // (which would otherwise re-anchor every frame and defeat smoothness).
+        final double mediaDelta = mediaTime - _anchorMediaTime;
+        if (mediaDelta > 0.001 || mediaDelta < -0.001) {
+          if (mediaDelta < 0.0 || mediaDelta > 1.0) {
+            // Seek / loop: snap anchor to the new media time.
+            _anchorMediaTime = mediaTime;
+            _wallUsAtAnchor = currentWallUs;
+          } else {
+            // Normal media-clock tick: advance the anchor to the new media
+            // time and move the wall reference to now. wallElapsed resets to
+            // 0 — no double-counting of the time the media clock covered.
+            _anchorMediaTime = mediaTime;
+            _wallUsAtAnchor = currentWallUs;
+          }
         }
 
-        // ── Clamp accumulated dt to avoid runaway on frame drops ──
-        // Cap at 100ms of interpolated time. Beyond that, the playback
-        // time anchor should have updated.
-        if (_accumulatedWallDt > 0.1) {
-          _accumulatedWallDt = 0.1;
+        // ── wallElapsed = wall-clock seconds since the last anchor ──
+        // This is the true display-frame time (constant speed), capped to
+        // bound drift if vsyncs stall.
+        double wallElapsed = 0.0;
+        if (widget.isPlaying && currentWallUs > _wallUsAtAnchor) {
+          final deltaUs = currentWallUs - _wallUsAtAnchor;
+          wallElapsed = (deltaUs / 1000000.0).clamp(0.0, _maxWallElapsedSec);
         }
 
-        // ── Interpolated time = anchor + accumulated dt + offset ──
+        // ── Interpolated time = anchor + wall_elapsed * rate + offset ──
+        // Fold playbackRate in: at 2× speed each wall second is worth 2 media
+        // seconds, matching the media clock's own advancement rate.
         final double interpolatedTime =
-            anchorTime + _accumulatedWallDt + widget.timeOffset;
-
-        // ── Seek/loop detection ──
-        if (interpolatedTime < _lastTimeSeconds ||
-            (interpolatedTime - _lastTimeSeconds).abs() > 1.0) {
-          _accumulatedWallDt = 0.0;
-          _lastAnchorPlaybackTime = anchorTime;
-        }
+            _anchorMediaTime + wallElapsed * widget.playbackRate +
+                widget.timeOffset;
 
         // If config changed, run async configure first.
         final bool mustSubmit = _forceLayout;
@@ -523,8 +517,9 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
           if (!mounted) {
             return;
           }
-          _accumulatedWallDt = 0.0;
-          _lastAnchorPlaybackTime = widget.playbackTimeMs.value / 1000.0;
+          // Re-anchor after configure so motion resumes from the current media
+          // time at constant wall-clock rate (no slow convergence).
+          _reanchorToMediaTime();
         }
 
         // ── Submit-rate throttle (P1-4) ──
@@ -549,7 +544,6 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
         // We submit every vsync frame — the Rust engine's 16ms tick loop
         // drains its mpsc queue and always renders the latest submission.
         final frame = _bridge.layout(interpolatedTime);
-        _lastTimeSeconds = interpolatedTime;
 
         await _tryUpdateTexture(frame);
         widget.onLayoutCalculated?.call(frame);
@@ -578,9 +572,20 @@ class _DfmPlusOverlayState extends State<DfmPlusOverlay>
     final supersample = context
         .read<SettingsProvider>()
         .danmakuSupersample;
-    final double pixelRatio =
-        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) *
-        (supersample > 0.0 ? supersample : 1.0);
+    // True supersampling: texture pixels = backing × supersample, where
+    // backing = layout × dpr. Flutter downsamples the texture to the backing
+    // store on display, which is what produces the anti-aliased edges (the
+    // whole point of supersampling). So the ratio MUST be dpr × supersample.
+    //
+    // This means on a DPR=2 panel, 2x supersample renders at 4× backing
+    // (16× texture area) — a real cost. That cost is the price of real
+    // supersampling; the 1.5x setting exists as a lighter alternative. We do
+    // NOT collapse it to max(dpr, ss) — that would make 1.5x/2x silently no-op
+    // on DPR≥2 devices (rendering == backing, zero AA benefit), defeating the
+    // setting. The clamp only guards extreme cases (e.g. DPR=4 + 2x = 8×).
+    final baseDpr = dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0;
+    final ss = supersample > 0.0 ? supersample : 1.0;
+    final double pixelRatio = (baseDpr * ss).clamp(1.0, 6.0);
 
     final int pixelWidth = (_layoutSize.width * pixelRatio)
         .round()
