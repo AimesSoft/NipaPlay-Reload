@@ -599,6 +599,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _watchHistoryDebounceTimer?.cancel();
     _watchHistoryDebounceTimer = Timer(const Duration(milliseconds: 800), () {
       if (!mounted) return;
+      if (_isVideoPlayerActive()) {
+        debugPrint(
+            'DashboardHomePage: player active, cancel delayed WatchHistory refresh');
+        return;
+      }
       debugPrint('DashboardHomePage: 触发最近观看刷新 - $reason');
       unawaited(_loadRecentContent(includeRemote: false));
     });
@@ -805,6 +810,11 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         Provider.of<WatchHistoryProvider>(context, listen: false);
     debugPrint(
         'DashboardHomePage: WatchHistory加载状态变化 - isLoaded: ${watchHistoryProvider.isLoaded}, mounted: $mounted');
+
+    if (_isVideoPlayerActive()) {
+      debugPrint('DashboardHomePage: player active, skip WatchHistory refresh');
+      return;
+    }
 
     if (watchHistoryProvider.isLoaded && mounted) {
       _scheduleWatchHistoryRefresh('WatchHistory变化');

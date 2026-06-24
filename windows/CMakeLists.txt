@@ -82,6 +82,9 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+if(TARGET media_kit_libs_windows_video_LIBMPV_EXTRACT)
+  add_dependencies(${BINARY_NAME} media_kit_libs_windows_video_LIBMPV_EXTRACT)
+endif()
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

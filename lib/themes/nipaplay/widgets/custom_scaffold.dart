@@ -43,13 +43,23 @@ class CustomScaffold extends StatefulWidget {
 class _CustomScaffoldState extends State<CustomScaffold> {
   int? _lastTabIndex;
   String? _lastAppBarOverlayLogSignature;
+  String? _lastVideoUnderlayLogSignature;
 
-  bool get _macOSHdrTransparentUnderlayEnabled {
-    return !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.macOS &&
-        Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] != '0' &&
-        Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
-        Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+  bool get _windowHostedVideoUnderlayEnabled {
+    if (kIsWeb) {
+      return false;
+    }
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] !=
+              '0' &&
+          Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
+          Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return Platform.environment['NIPAPLAY_DISABLE_WINDOWS_WINDOW_OVERLAY'] !=
+          '1';
+    }
+    return false;
   }
 
   void _handlePageChangedBySwitchableView(int index) {
@@ -141,11 +151,18 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     final Rect? videoUnderlayRect = context.select<VideoPlayerState, Rect?>(
       (videoState) => videoState.macOSWindowHostedVideoRect,
     );
-    final bool useVideoUnderlay = _macOSHdrTransparentUnderlayEnabled &&
+    final bool useVideoUnderlay = _windowHostedVideoUnderlayEnabled &&
         hasNativeVideoSurface &&
         widget.pageIsHome &&
         currentIndex == 1 &&
         hasVideo;
+    _logVideoUnderlayState(
+      enabled: useVideoUnderlay,
+      rect: videoUnderlayRect,
+      hasNativeVideoSurface: hasNativeVideoSurface,
+      hasVideo: hasVideo,
+      currentIndex: currentIndex,
+    );
     final bool showTabDivider =
         widget.pageIsHome && widget.tabController?.index == 1 && hasVideo;
     final Color tabDividerColor = isDarkMode ? Colors.white24 : Colors.black12;
@@ -258,6 +275,35 @@ class _CustomScaffoldState extends State<CustomScaffold> {
       'isDark=$isDarkMode, '
       'icon=${overlayStyle.statusBarIconBrightness?.name}, '
       'ios=${overlayStyle.statusBarBrightness?.name}',
+    );
+  }
+
+  void _logVideoUnderlayState({
+    required bool enabled,
+    required Rect? rect,
+    required bool hasNativeVideoSurface,
+    required bool hasVideo,
+    required int currentIndex,
+  }) {
+    final signature = [
+      defaultTargetPlatform.name,
+      enabled.toString(),
+      hasNativeVideoSurface.toString(),
+      hasVideo.toString(),
+      currentIndex.toString(),
+      rect?.left.toStringAsFixed(1) ?? 'null',
+      rect?.top.toStringAsFixed(1) ?? 'null',
+      rect?.width.toStringAsFixed(1) ?? 'null',
+      rect?.height.toStringAsFixed(1) ?? 'null',
+    ].join('|');
+    if (signature == _lastVideoUnderlayLogSignature) {
+      return;
+    }
+    _lastVideoUnderlayLogSignature = signature;
+    debugPrint(
+      '[NativeVideoUnderlay] platform=${defaultTargetPlatform.name} '
+      'enabled=$enabled hasNativeVideoSurface=$hasNativeVideoSurface '
+      'hasVideo=$hasVideo currentIndex=$currentIndex rect=$rect',
     );
   }
 }

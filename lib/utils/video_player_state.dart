@@ -310,7 +310,8 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   int _lastDiagPtmBackwardMs = 0; // [PTM-BACKWARD-DIAG] playbackTimeMs回退日志节流
   int _lastDiagDriftSnapMs = 0; // [DRIFT-SNAP-DIAG] 大漂移对齐日志节流
   double? _seekTargetMs; // seek 目标位置，player.position 追上后清除
-  bool _anchorSetBySeek = false; // ✅ 标记 _smoothAnchorMs 是否由 seek/loop 操作设置（区分首帧加载 vs seek 后旧 playerMs）
+  bool _anchorSetBySeek =
+      false; // ✅ 标记 _smoothAnchorMs 是否由 seek/loop 操作设置（区分首帧加载 vs seek 后旧 playerMs）
   double? _pausedPlaybackTimeMs; // 暂停时保存的 playbackTimeMs，用于恢复时平滑衔接
   Timer? _hideControlsTimer;
   Timer? _hideMouseTimer;
@@ -732,6 +733,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   // 检查是否为平板设备（使用globals中的判定逻辑）
   bool get isTablet => globals.isTablet;
 
+  bool get _usesWindowsPlatformVideoSurface =>
+      !kIsWeb && Platform.isWindows && player.prefersPlatformVideoSurface;
+
   VideoPlayerState() {
     // 创建临时播放器实例，后续会被 _initialize 中的异步创建替换
     player = Player();
@@ -880,6 +884,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   bool get showRightMenu => _showRightMenu;
   bool get desktopHoverSettingsMenuEnabled => _desktopHoverSettingsMenuEnabled;
   bool get instantHidePlayerUiEnabled => _instantHidePlayerUiEnabled;
+
   /// MKV 章节标记是否启用（进度条分割线标记 + 当前章节高亮 + 点击分割线跳转）。
   bool get chapterMarkersEnabled => _chapterMarkersEnabled;
   bool get isFullscreen => _isFullscreen;

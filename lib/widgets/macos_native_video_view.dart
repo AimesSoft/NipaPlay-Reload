@@ -9,13 +9,28 @@ import 'package:nipaplay/utils/platform_utils.dart';
 const int _windowHostedPlatformSurfaceId = -1;
 const MethodChannel _macOSNativeVideoChannel =
     MethodChannel('nipaplay/macos_native_video');
-final bool _macOSHdrExitTraceEnabled = !kIsWeb &&
-    defaultTargetPlatform == TargetPlatform.macOS &&
-    Platform.environment['NIPAPLAY_MACOS_HDR_EXIT_TRACE'] == '1';
+const MethodChannel _windowsNativeVideoChannel =
+    MethodChannel('nipaplay/windows_native_video');
+final bool _nativeVideoSurfaceDebugLogsEnabled = !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows) &&
+    (defaultTargetPlatform == TargetPlatform.windows ||
+        Platform.environment['NIPAPLAY_MACOS_HDR_EXIT_TRACE'] == '1' ||
+        Platform.environment['NIPAPLAY_WINDOWS_HDR_EXIT_TRACE'] == '1');
+
+bool get _isWindowHostedNativeVideoPlatform =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows);
+
+MethodChannel get _platformNativeVideoChannel =>
+    defaultTargetPlatform == TargetPlatform.windows
+        ? _windowsNativeVideoChannel
+        : _macOSNativeVideoChannel;
 
 void _logMacOSHdrExitTrace(String message) {
-  if (_macOSHdrExitTraceEnabled) {
-    debugPrint('[HDRExit][OverlaySurface] $message');
+  if (_nativeVideoSurfaceDebugLogsEnabled) {
+    debugPrint('[NativeVideoSurface][Overlay] $message');
   }
 }
 
@@ -178,12 +193,14 @@ class MacOSWindowNativeVideoOverlaySurface extends StatefulWidget {
     this.debugLabel,
     this.onPlatformViewIdChanged,
     this.onFrameRectChanged,
+    this.onPointerActivity,
   });
 
   final Player player;
   final String? debugLabel;
   final ValueChanged<int?>? onPlatformViewIdChanged;
   final ValueChanged<Rect?>? onFrameRectChanged;
+  final ValueChanged<PointerEvent>? onPointerActivity;
 
   @override
   State<MacOSWindowNativeVideoOverlaySurface> createState() =>
@@ -193,6 +210,8 @@ class MacOSWindowNativeVideoOverlaySurface extends StatefulWidget {
 class _MacOSWindowNativeVideoOverlaySurfaceState
     extends State<MacOSWindowNativeVideoOverlaySurface>
     with WidgetsBindingObserver {
+  static int _windowsPointerLogCount = 0;
+
   Timer? _retryTimer;
   Timer? _frameTimer;
   int _bindAttempts = 0;
@@ -269,7 +288,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     if (!mounted ||
         _isBound ||
         !widget.player.prefersPlatformVideoSurface ||
-        defaultTargetPlatform != TargetPlatform.macOS) {
+        !_isWindowHostedNativeVideoPlatform) {
       return;
     }
 
@@ -317,8 +336,8 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     bool force = false,
   }) async {
     if (kIsWeb ||
-        defaultTargetPlatform != TargetPlatform.macOS ||
-        !Platform.isMacOS) {
+        !_isWindowHostedNativeVideoPlatform ||
+        (!Platform.isMacOS && !Platform.isWindows)) {
       return;
     }
 
@@ -360,7 +379,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
     }
 
     try {
-      await _macOSNativeVideoChannel.invokeMethod<void>(
+      await _platformNativeVideoChannel.invokeMethod<void>(
         'setOverlayFrame',
         <String, dynamic>{
           'viewId': _windowHostedPlatformSurfaceId,
@@ -385,7 +404,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       'hideOverlayFrame state=${identityHashCode(this)} label=${widget.debugLabel}',
     );
     try {
-      await _macOSNativeVideoChannel.invokeMethod<void>(
+      await _platformNativeVideoChannel.invokeMethod<void>(
         'setOverlayFrame',
         <String, dynamic>{
           'viewId': _windowHostedPlatformSurfaceId,
@@ -408,12 +427,40 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
   @override
   Widget build(BuildContext context) {
     if (kIsWeb ||
-        defaultTargetPlatform != TargetPlatform.macOS ||
+        !_isWindowHostedNativeVideoPlatform ||
         !widget.player.prefersPlatformVideoSurface) {
       return const SizedBox.shrink();
     }
 
     _scheduleFrameUpdate();
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _handleWindowsPointerEvent,
+        onPointerMove: _handleWindowsPointerEvent,
+        onPointerHover: _handleWindowsPointerEvent,
+        onPointerUp: _handleWindowsPointerEvent,
+        onPointerCancel: _handleWindowsPointerEvent,
+        onPointerSignal: _handleWindowsPointerEvent,
+        child: const ColoredBox(
+          color: Color(0x00000000),
+          child: SizedBox.expand(),
+        ),
+      );
+    }
     return const SizedBox.expand();
+  }
+
+  void _handleWindowsPointerEvent(PointerEvent event) {
+    if (!kReleaseMode && _windowsPointerLogCount < 16) {
+      _windowsPointerLogCount += 1;
+      debugPrint(
+        '[NativeVideoSurface][Overlay] FLUTTER_TRANSPARENT_VIDEO_REGION_POINTER '
+        'type=${event.runtimeType} position=${event.position} '
+        'local=${event.localPosition} buttons=${event.buttons} '
+        'label=${widget.debugLabel}',
+      );
+    }
+    widget.onPointerActivity?.call(event);
   }
 }
