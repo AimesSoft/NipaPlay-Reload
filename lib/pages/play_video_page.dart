@@ -392,13 +392,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final usesWindowHostedVideoSurface =
+            videoState.player.usesWindowOverlayVideoSurface;
         return WillPopScope(
           onWillPop: _handleWillPop,
           child: AnimatedContainer(
             duration:
                 _isExiting ? Duration.zero : const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            color: videoState.hasVideo && !_isMacOSHdrTransparentFlutterEnabled
+            color: videoState.hasVideo &&
+                    !_isMacOSHdrTransparentFlutterEnabled &&
+                    !usesWindowHostedVideoSurface
                 ? Colors.black
                 : Colors.transparent,
             child: Scaffold(

@@ -148,11 +148,15 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     final bool hasNativeVideoSurface = context.select<VideoPlayerState, bool>(
       (videoState) => videoState.player.prefersPlatformVideoSurface,
     );
-    final Rect? videoUnderlayRect = context.select<VideoPlayerState, Rect?>(
-      (videoState) => videoState.macOSWindowHostedVideoRect,
+    final bool hasWindowHostedVideoSurface =
+        context.select<VideoPlayerState, bool>(
+      (videoState) => videoState.player.usesWindowOverlayVideoSurface,
     );
-    final bool useVideoUnderlay = _windowHostedVideoUnderlayEnabled &&
-        hasNativeVideoSurface &&
+    final Rect? videoUnderlayRect = context.select<VideoPlayerState, Rect?>(
+      (videoState) => videoState.windowHostedVideoRect,
+    );
+    final bool useVideoUnderlay = (hasWindowHostedVideoSurface ||
+            (_windowHostedVideoUnderlayEnabled && hasNativeVideoSurface)) &&
         widget.pageIsHome &&
         currentIndex == 1 &&
         hasVideo;

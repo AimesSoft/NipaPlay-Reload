@@ -843,14 +843,19 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
 
   // Getters
   Rect? get macOSWindowHostedVideoRect => _macOSWindowHostedVideoRect;
+  Rect? get windowHostedVideoRect => _macOSWindowHostedVideoRect;
   PlayerStatus get status => _status;
   List<String> get statusMessages => _statusMessages;
   bool get showControls => _showControls;
+  bool get usesAppleNativePlatformVideoSurface =>
+      !kIsWeb &&
+      (Platform.isMacOS || Platform.isIOS) &&
+      player.prefersPlatformVideoSurface;
   bool get usesMacOSNativePlatformVideoSurface =>
       !kIsWeb && Platform.isMacOS && player.prefersPlatformVideoSurface;
 
   int get effectiveUiUpdateIntervalMs {
-    if (!usesMacOSNativePlatformVideoSurface) {
+    if (!usesAppleNativePlatformVideoSurface) {
       return _uiUpdateIntervalMs;
     }
     if (!_showControls && !_isSeeking) {
@@ -859,7 +864,7 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     return 250;
   }
 
-  void setMacOSWindowHostedVideoRect(Rect? rect) {
+  void setWindowHostedVideoRect(Rect? rect) {
     final normalizedRect = rect == null || rect.isEmpty
         ? null
         : Rect.fromLTWH(rect.left, rect.top, rect.width, rect.height);
@@ -868,6 +873,10 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
     }
     _macOSWindowHostedVideoRect = normalizedRect;
     notifyListeners();
+  }
+
+  void setMacOSWindowHostedVideoRect(Rect? rect) {
+    setWindowHostedVideoRect(rect);
   }
 
   bool _rectsMatch(Rect? a, Rect? b) {
