@@ -14,8 +14,7 @@ const MethodChannel _windowsNativeVideoChannel =
 final bool _nativeVideoSurfaceDebugLogsEnabled = !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.windows) &&
-    (defaultTargetPlatform == TargetPlatform.windows ||
-        Platform.environment['NIPAPLAY_MACOS_HDR_EXIT_TRACE'] == '1' ||
+    (Platform.environment['NIPAPLAY_MACOS_HDR_EXIT_TRACE'] == '1' ||
         Platform.environment['NIPAPLAY_WINDOWS_HDR_EXIT_TRACE'] == '1');
 
 bool get _isWindowHostedNativeVideoPlatform =>
@@ -216,6 +215,11 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
   Timer? _frameTimer;
   int _bindAttempts = 0;
   bool _isBound = false;
+  bool _frameUpdateScheduled = false;
+  bool _pendingFrameUpdateForce = false;
+  bool _frameUpdateInFlight = false;
+  bool _resendFrameAfterInFlight = false;
+  bool _resendFrameAfterInFlightForce = false;
   late final int _surfaceGeneration;
   String? _lastFrameSignature;
 
@@ -268,8 +272,11 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
 
   void _startFrameTimer() {
     _frameTimer?.cancel();
+    final interval = defaultTargetPlatform == TargetPlatform.windows
+        ? const Duration(milliseconds: 16)
+        : const Duration(milliseconds: 250);
     _frameTimer = Timer.periodic(
-      const Duration(milliseconds: 250),
+      interval,
       (_) => _scheduleFrameUpdate(),
     );
   }
@@ -323,11 +330,19 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
   }
 
   void _scheduleFrameUpdate({bool force = false}) {
+    _pendingFrameUpdateForce = _pendingFrameUpdateForce || force;
+    if (_frameUpdateScheduled) {
+      return;
+    }
+    _frameUpdateScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _frameUpdateScheduled = false;
+      final sendForce = _pendingFrameUpdateForce;
+      _pendingFrameUpdateForce = false;
       if (!mounted) {
         return;
       }
-      unawaited(_sendOverlayFrame(visible: true, force: force));
+      unawaited(_sendOverlayFrame(visible: true, force: sendForce));
     });
   }
 
@@ -367,7 +382,12 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       rect.width.toStringAsFixed(2),
       rect.height.toStringAsFixed(2),
     ].join('|');
-    if (!force && signature == _lastFrameSignature) {
+    if (signature == _lastFrameSignature) {
+      return;
+    }
+    if (visible && _frameUpdateInFlight) {
+      _resendFrameAfterInFlight = true;
+      _resendFrameAfterInFlightForce = _resendFrameAfterInFlightForce || force;
       return;
     }
     _lastFrameSignature = signature;
@@ -378,6 +398,7 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       );
     }
 
+    _frameUpdateInFlight = visible;
     try {
       await _platformNativeVideoChannel.invokeMethod<void>(
         'setOverlayFrame',
@@ -396,6 +417,16 @@ class _MacOSWindowNativeVideoOverlaySurfaceState
       debugPrint(
         'MacOSWindowNativeVideoOverlaySurface: frame update failed: $error',
       );
+    } finally {
+      if (visible) {
+        _frameUpdateInFlight = false;
+        if (_resendFrameAfterInFlight && mounted) {
+          final resendForce = _resendFrameAfterInFlightForce;
+          _resendFrameAfterInFlight = false;
+          _resendFrameAfterInFlightForce = false;
+          _scheduleFrameUpdate(force: resendForce);
+        }
+      }
     }
   }
 

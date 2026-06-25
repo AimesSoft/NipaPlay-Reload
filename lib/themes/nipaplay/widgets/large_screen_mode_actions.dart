@@ -5,7 +5,7 @@ import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
-const double kNipaplayWindowCaptionHeight = 28;
+const double kNipaplayWindowCaptionHeight = WindowControlButtons.buttonHeight;
 
 class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
   const NipaplayLargeScreenModeActionsOverlay({
@@ -48,35 +48,53 @@ class NipaplayLargeScreenModeActionsOverlay extends StatelessWidget {
           )
         : null;
 
-    if (isLargeScreenLayoutActive) {
-      if (windowButtons == null) {
+    if (windowButtons == null) {
+      if (isLargeScreenLayoutActive) {
         return const SizedBox.shrink();
       }
       return Positioned(
         top: topPadding,
         right: rightPadding,
+        child: _NormalModeActionButtons(
+          isDarkMode: isDarkMode,
+          isLargeScreenLayoutActive: isLargeScreenLayoutActive,
+          onToggleLargeScreen: onToggleLargeScreen,
+          onToggleThemeFromOrigin: onToggleThemeFromOrigin,
+          onOpenSettings: onOpenSettings,
+        ),
+      );
+    }
+
+    if (isLargeScreenLayoutActive) {
+      return Positioned(
+        top: 0,
+        right: 0,
         child: windowButtons,
       );
     }
 
-    return Positioned(
-      top: topPadding,
-      right: rightPadding,
+    return Positioned.fill(
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _NormalModeActionButtons(
-            isDarkMode: isDarkMode,
-            isLargeScreenLayoutActive: isLargeScreenLayoutActive,
-            onToggleLargeScreen: onToggleLargeScreen,
-            onToggleThemeFromOrigin: onToggleThemeFromOrigin,
-            onOpenSettings: onOpenSettings,
+          Padding(
+            padding: EdgeInsets.only(
+              top: topPadding,
+              right: rightPadding + 8,
+            ),
+            child: _NormalModeActionButtons(
+              isDarkMode: isDarkMode,
+              isLargeScreenLayoutActive: isLargeScreenLayoutActive,
+              onToggleLargeScreen: onToggleLargeScreen,
+              onToggleThemeFromOrigin: onToggleThemeFromOrigin,
+              onOpenSettings: onOpenSettings,
+            ),
           ),
-          if (windowButtons != null) ...[
-            SizedBox(width: 8),
-            windowButtons,
-          ],
+          Align(
+            alignment: Alignment.topRight,
+            child: windowButtons,
+          ),
         ],
       ),
     );
@@ -389,14 +407,13 @@ Widget buildWindowsWindowControlButtons({
   required VoidCallback onClose,
 }) {
   return SizedBox(
-    height: kNipaplayWindowCaptionHeight,
-    child: Center(
-      child: WindowControlButtons(
-        isMaximized: isMaximized,
-        onMinimize: onMinimize,
-        onMaximizeRestore: onMaximizeRestore,
-        onClose: onClose,
-      ),
+    width: WindowControlButtons.totalWidth,
+    height: WindowControlButtons.buttonHeight,
+    child: WindowControlButtons(
+      isMaximized: isMaximized,
+      onMinimize: onMinimize,
+      onMaximizeRestore: onMaximizeRestore,
+      onClose: onClose,
     ),
   );
 }
