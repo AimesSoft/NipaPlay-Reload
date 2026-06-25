@@ -306,23 +306,33 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
-    // Size the surface to the real video aspect ratio and center it, matching
-    // the media-kit path. The window-hosted native plane mirrors this widget's
-    // rect, so this is what gives 21:9 content correct letterboxing instead of
-    // stretching/filling the whole screen.
+    if (_shouldUseWindowHostedVideoOverlay(videoState)) {
+      // iOS only: the native plane must not extend under the notch, so we
+      // letterbox the video into a centered safe-area sub-rect here and keep
+      // the surroundings transparent; Erika owns the black window background,
+      // which shows through as the bars.
+      //
+      // macOS keeps the full-bleed surface: there is no notch and Erika
+      // letterboxes natively into a full-screen plane. Flutter must NOT shrink
+      // the plane or paint around it, or the app UI behind shows through the
+      // (now transparent) bars.
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        return Center(
+          child: AspectRatio(
+            aspectRatio: videoState.aspectRatio,
+            child: _buildVideoSurface(videoState, textureId),
+          ),
+        );
+      }
+      return _buildVideoSurface(videoState, textureId);
+    }
+
     final surface = Center(
       child: AspectRatio(
         aspectRatio: videoState.aspectRatio,
         child: _buildVideoSurface(videoState, textureId),
       ),
     );
-    if (_shouldUseWindowHostedVideoOverlay(videoState)) {
-      // The native surface sits below Flutter, so the area around the video
-      // must stay transparent; the black window background shows through as
-      // the letterbox bars. Painting a black ColoredBox here would cover the
-      // native video plane.
-      return surface;
-    }
     return ColoredBox(color: Colors.black, child: surface);
   }
 
