@@ -247,9 +247,13 @@ class _NipaPlayNext2OverlayState extends State<NipaPlayNext2Overlay> {
     final supersample = context
         .read<SettingsProvider>()
         .danmakuSupersample;
-    final double pixelRatio =
-        (dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0) *
-        (supersample > 0.0 ? supersample : 1.0);
+    // True supersampling: texture = backing × supersample (backing = layout ×
+    // dpr). Flutter downsamples on display → anti-aliased edges. Must be
+    // dpr × supersample (NOT max) or 1.5x/2x silently no-op on DPR≥2 devices.
+    // The 1.5x setting is the lighter alternative. Clamp only guards extremes.
+    final baseDpr = dpr.isFinite ? dpr.clamp(1.0, 4.0).toDouble() : 1.0;
+    final ss = supersample > 0.0 ? supersample : 1.0;
+    final double pixelRatio = (baseDpr * ss).clamp(1.0, 6.0);
 
     final int pixelWidth =
         (_layoutSize.width * pixelRatio).round().clamp(1, 16384).toInt();
