@@ -33,7 +33,7 @@ permissions:
 jobs:
   build:
     name: Build macOS DMG
-    runs-on: macos-latest
+    runs-on: macos-26
     outputs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-macOS
