@@ -72,6 +72,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   bool _hasStartedSeekDrag = false;
   final OverlayContextMenuController _contextMenuController =
       OverlayContextMenuController();
+  int _windowsNativeOverlayPointerLogCount = 0;
+  int _lastPointerActivityMs = 0;
 
   // <<< ADDED: Hold a reference to VideoPlayerState for managing the callback
   VideoPlayerState? _videoPlayerStateInstance;
@@ -207,15 +209,34 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   bool get _isMacOSHdrVideoOnlyEnabled {
-    return _macosHdrVideoOnly ||
-        Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1';
+    return !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows) &&
+        (_macosHdrVideoOnly ||
+            Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1' ||
+            Platform.environment['NIPAPLAY_WINDOWS_HDR_VIDEO_ONLY'] == '1');
   }
 
   bool get _shouldUseMacOSWindowHostedVideoOverlay {
-    return !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.macOS &&
-        Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
-        Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+    if (kIsWeb) {
+      return false;
+    }
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] !=
+              '1' &&
+          Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return Platform.environment['NIPAPLAY_DISABLE_WINDOWS_WINDOW_OVERLAY'] !=
+          '1';
+    }
+    return false;
+  }
+
+  bool _shouldUseWindowHostedVideoOverlay(VideoPlayerState videoState) {
+    return videoState.player.usesWindowOverlayVideoSurface ||
+        (_shouldUseMacOSWindowHostedVideoOverlay &&
+            videoState.player.prefersPlatformVideoSurface);
   }
 
   double getFontSize(VideoPlayerState videoState) {
@@ -245,13 +266,17 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
           debugLabel: videoState.currentVideoPath?.split('/').last,
           onPlatformViewIdChanged: _updateMacOSNativeVideoViewId,
           onFrameRectChanged: _handleMacOSWindowHostedVideoRectChanged,
+          onPointerActivity: _handleWindowsNativeOverlayPointerActivity,
         );
       }
-      return MacOSNativeVideoView(
-        player: videoState.player,
-        debugLabel: videoState.currentVideoPath?.split('/').last,
-        onPlatformViewIdChanged: _updateMacOSNativeVideoViewId,
-      );
+      if (defaultTargetPlatform == TargetPlatform.macOS) {
+        return MacOSNativeVideoView(
+          player: videoState.player,
+          debugLabel: videoState.currentVideoPath?.split('/').last,
+          onPlatformViewIdChanged: _updateMacOSNativeVideoViewId,
+        );
+      }
+      return const SizedBox.shrink();
     }
     if (textureId == null || textureId < 0) {
       return const SizedBox.shrink();
@@ -277,21 +302,27 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     if (!mounted) {
       return;
     }
-    _videoPlayerStateInstance?.setMacOSWindowHostedVideoRect(rect);
+    _videoPlayerStateInstance?.setWindowHostedVideoRect(rect);
   }
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
-    if (videoState.player.prefersPlatformVideoSurface &&
-        _shouldUseMacOSWindowHostedVideoOverlay) {
-      return _buildVideoSurface(videoState, textureId);
-    }
-
+    // Size the surface to the real video aspect ratio and center it, matching
+    // the media-kit path. The window-hosted native plane mirrors this widget's
+    // rect, so this is what gives 21:9 content correct letterboxing instead of
+    // stretching/filling the whole screen.
     final surface = Center(
       child: AspectRatio(
         aspectRatio: videoState.aspectRatio,
         child: _buildVideoSurface(videoState, textureId),
       ),
     );
+    if (_shouldUseWindowHostedVideoOverlay(videoState)) {
+      // The native surface sits below Flutter, so the area around the video
+      // must stay transparent; the black window background shows through as
+      // the letterbox bars. Painting a black ColoredBox here would cover the
+      // native video plane.
+      return surface;
+    }
     return ColoredBox(color: Colors.black, child: surface);
   }
 
@@ -305,10 +336,8 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         _macosNativeVideoViewId != null;
   }
 
-  bool _shouldKeepMacOSNativeVideoSurface(VideoPlayerState videoState) {
-    return !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.macOS &&
-        videoState.player.prefersPlatformVideoSurface &&
+  bool _shouldKeepWindowHostedVideoSurface(VideoPlayerState videoState) {
+    return _shouldUseWindowHostedVideoOverlay(videoState) &&
         videoState.currentVideoPath != null &&
         videoState.status != PlayerStatus.idle &&
         videoState.status != PlayerStatus.error &&
@@ -525,16 +554,28 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     HapticFeedback.lightImpact();
   }
 
-  void _handleMouseMove(PointerEvent event) {
+  bool _handlePointerActivity() {
+    if (!mounted) {
+      return false;
+    }
     final videoState = Provider.of<VideoPlayerState>(context, listen: false);
-    if (!videoState.hasVideo) return;
+    if (!videoState.hasVideo) return false;
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final controlsAlreadyVisible = videoState.showControls && _isMouseVisible;
+    if (controlsAlreadyVisible && nowMs - _lastPointerActivityMs < 150) {
+      return false;
+    }
+    _lastPointerActivityMs = nowMs;
 
     if (!_isMouseVisible) {
       setState(() {
         _isMouseVisible = true;
       });
     }
-    videoState.setShowControls(true);
+    if (!videoState.showControls) {
+      videoState.setShowControls(true);
+    }
 
     _mouseMoveTimer?.cancel();
     final hideDelay = videoState.instantHidePlayerUiEnabled
@@ -548,6 +589,35 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         videoState.setShowControls(false);
       }
     });
+    return true;
+  }
+
+  void _handleWindowsNativeOverlayPointerActivity(PointerEvent event) {
+    if (!mounted) {
+      return;
+    }
+    final videoState = Provider.of<VideoPlayerState>(context, listen: false);
+    final showControlsBefore = videoState.showControls;
+    final mouseVisibleBefore = _isMouseVisible;
+    final processed = _handlePointerActivity();
+    if (!kReleaseMode &&
+        processed &&
+        _windowsNativeOverlayPointerLogCount < 16) {
+      _windowsNativeOverlayPointerLogCount += 1;
+      debugPrint(
+        '[VideoPlayerUI] WINDOWS_NATIVE_OVERLAY_POINTER_ACTIVITY '
+        'type=${event.runtimeType} hasVideo=${videoState.hasVideo} '
+        'processed=$processed '
+        'showControlsBefore=$showControlsBefore '
+        'showControlsAfter=${videoState.showControls} '
+        'mouseVisibleBefore=$mouseVisibleBefore '
+        'mouseVisibleAfter=$_isMouseVisible',
+      );
+    }
+  }
+
+  void _handleMouseMove(PointerEvent event) {
+    _handlePointerActivity();
   }
 
   void _handleMouseExit(PointerExitEvent event) {
@@ -840,7 +910,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                 videoState.player.prefersPlatformVideoSurface ||
                 (textureId != null && textureId >= 0);
 
-            final shouldKeepNativeSurface = _shouldKeepMacOSNativeVideoSurface(
+            final shouldKeepNativeSurface = _shouldKeepWindowHostedVideoSurface(
               videoState,
             );
 
@@ -870,7 +940,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
             }
 
             if (_isMacOSHdrVideoOnlyEnabled &&
-                defaultTargetPlatform == TargetPlatform.macOS &&
                 videoState.player.prefersPlatformVideoSurface) {
               return _buildVideoSurfaceStage(videoState, textureId);
             }
@@ -1107,4 +1176,3 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
     );
   }
 }
-

@@ -487,10 +487,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
       }
 
       // 解析弹幕数据（优先 C++ 解析器）
-      final parsedDanmaku =
-          await DanmakuParser.parseDanmakuListOptimized(
-            comments,
-            (data) => compute(parseDanmakuListInBackground, data));
+      final parsedDanmaku = await DanmakuParser.parseDanmakuListOptimized(
+          comments, (data) => compute(parseDanmakuListInBackground, data));
       if (!canContinue()) return;
 
       // 生成轨道名称
@@ -1154,7 +1152,8 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         if (thumbnailPath == null || thumbnailPath.isEmpty) {
           thumbnailPath = existingHistory.thumbnailPath;
           if ((thumbnailPath == null || thumbnailPath.isEmpty) &&
-              player.state == PlaybackState.playing) {
+              player.state == PlaybackState.playing &&
+              !_usesWindowsPlatformVideoSurface) {
             // 仅在播放时尝试捕获
             // 仅在没有缩略图时才尝试捕获
             try {
@@ -1273,7 +1272,9 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
 
         // 尝试获取缩略图
         String? thumbnailPath = _currentThumbnailPath;
-        if (thumbnailPath == null && player.state == PlaybackState.playing) {
+        if (thumbnailPath == null &&
+            player.state == PlaybackState.playing &&
+            !_usesWindowsPlatformVideoSurface) {
           // 仅在播放时尝试捕获
           try {
             thumbnailPath = await _captureVideoFrameWithoutPausing();

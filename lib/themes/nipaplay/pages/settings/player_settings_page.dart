@@ -666,11 +666,13 @@ class _PlayerSettingsPageState extends State<PlayerSettingsPage> {
           Divider(color: colorScheme.onSurface.withOpacity(0.12), height: 1),
         ],
         if (!kIsWeb &&
-            Platform.isMacOS &&
+            (Platform.isMacOS || Platform.isWindows) &&
             visibleKernelType == PlayerKernelType.mediaKit) ...[
           SettingsItem.toggle(
             title: '实验性 HDR 原生视频输出',
-            subtitle: '开启后使用 macOS 原生视频层；关闭后回退到 Flutter 纹理路径',
+            subtitle: Platform.isWindows
+                ? '开启后使用 Windows 原生视频窗口；关闭后回退到 Flutter 纹理路径'
+                : '开启后使用 macOS 原生视频层；关闭后回退到 Flutter 纹理路径',
             icon: Ionicons.color_filter_outline,
             value: _macOSNativeVideoEnabled,
             onChanged: (bool value) async {

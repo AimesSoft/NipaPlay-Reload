@@ -111,8 +111,9 @@ final GlobalKey<State<DefaultTabController>> tabControllerKey =
 
 bool get _macosHdrVideoOnlyMode {
   return !kIsWeb &&
-      Platform.isMacOS &&
-      Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1';
+      (Platform.isMacOS || Platform.isWindows) &&
+      (Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1' ||
+          Platform.environment['NIPAPLAY_WINDOWS_HDR_VIDEO_ONLY'] == '1');
 }
 
 Alignment _resolveStartupWindowAlignment(
@@ -521,12 +522,20 @@ void main(List<String> args) async {
       final startupPosition =
           await DesktopStartupWindowPreferences.loadPosition();
       final startupSize = await DesktopStartupWindowPreferences.loadSize();
-      WindowOptions windowOptions = const WindowOptions(
+      final transparentWindowBackground = Platform
+              .environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
+          '1';
+      WindowOptions windowOptions = WindowOptions(
         skipTaskbar: false,
         titleBarStyle: TitleBarStyle.hidden,
+        backgroundColor:
+            transparentWindowBackground ? Colors.transparent : null,
         title: "NipaPlay",
       );
       windowManager.waitUntilReadyToShow(windowOptions, () async {
+        if (transparentWindowBackground) {
+          await windowManager.setBackgroundColor(Colors.transparent);
+        }
         await windowManager.setMinimumSize(const Size(600, 400));
         if (startupState == DesktopStartupWindowState.maximized) {
           await windowManager.maximize();

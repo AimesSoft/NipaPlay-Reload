@@ -46,16 +46,27 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
   bool get _isMacOSHdrVideoOnlyEnabled {
     return !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.macOS &&
-        Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1';
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows) &&
+        (Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1' ||
+            Platform.environment['NIPAPLAY_WINDOWS_HDR_VIDEO_ONLY'] == '1');
   }
 
   bool get _isMacOSHdrTransparentFlutterEnabled {
-    return !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.macOS &&
-        Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] != '0' &&
-        Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
-        Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+    if (kIsWeb) {
+      return false;
+    }
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] !=
+              '0' &&
+          Platform.environment['NIPAPLAY_MACOS_HDR_USE_APPKIT_VIEW'] != '1' &&
+          Platform.environment['NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY'] != '1';
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return Platform.environment['NIPAPLAY_DISABLE_WINDOWS_WINDOW_OVERLAY'] !=
+          '1';
+    }
+    return false;
   }
 
   @override
@@ -381,14 +392,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
 
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, child) {
+        final usesWindowHostedVideoSurface =
+            videoState.player.usesWindowOverlayVideoSurface;
         return WillPopScope(
           onWillPop: _handleWillPop,
           child: AnimatedContainer(
-            duration: _isExiting
-                ? Duration.zero
-                : const Duration(milliseconds: 300),
+            duration:
+                _isExiting ? Duration.zero : const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
-            color: videoState.hasVideo && !_isMacOSHdrTransparentFlutterEnabled
+            color: videoState.hasVideo &&
+                    !_isMacOSHdrTransparentFlutterEnabled &&
+                    !usesWindowHostedVideoSurface
                 ? Colors.black
                 : Colors.transparent,
             child: Scaffold(
@@ -483,7 +497,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                       const SizedBox(width: 8.0),
                       if (globals.isDesktop) ...[
                         ShadowActionButton(
-                          tooltip: ShortcutTooltipManager().formatActionWithShortcut('resize_to_video', '窗口适配视频'),
+                          tooltip: ShortcutTooltipManager()
+                              .formatActionWithShortcut(
+                                  'resize_to_video', '窗口适配视频'),
                           icon: Ionicons.resize_outline,
                           iconSize: 28,
                           padding: EdgeInsets.zero,
@@ -491,7 +507,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                         ),
                         const SizedBox(width: 8.0),
                         ShadowActionButton(
-                          tooltip: ShortcutTooltipManager().formatActionWithShortcut('step_backward', '逐帧后退'),
+                          tooltip: ShortcutTooltipManager()
+                              .formatActionWithShortcut(
+                                  'step_backward', '逐帧后退'),
                           icon: Ionicons.chevron_back_circle_outline,
                           iconSize: 28,
                           padding: EdgeInsets.zero,
@@ -499,7 +517,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
                         ),
                         const SizedBox(width: 8.0),
                         ShadowActionButton(
-                          tooltip: ShortcutTooltipManager().formatActionWithShortcut('step_forward', '逐帧前进'),
+                          tooltip: ShortcutTooltipManager()
+                              .formatActionWithShortcut('step_forward', '逐帧前进'),
                           icon: Ionicons.chevron_forward_circle_outline,
                           iconSize: 28,
                           padding: EdgeInsets.zero,
@@ -609,7 +628,8 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
             ),
           ),
         ),
-        if (globals.isMobilePlatform && (!globals.isTablet || videoState.isFullscreen))
+        if (globals.isMobilePlatform &&
+            (!globals.isTablet || videoState.isFullscreen))
           Positioned(
             top: 0,
             right: 0,

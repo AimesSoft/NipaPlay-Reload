@@ -204,6 +204,17 @@ class Player {
     return false;
   }
 
+  bool get usesWindowOverlayVideoSurface {
+    try {
+      final dyn = _delegate as dynamic;
+      final value = dyn.usesWindowOverlayVideoSurface;
+      if (value is bool) {
+        return value;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   Future<void> attachPlatformVideoSurface({
     required int viewHandle,
     int? windowHandle,

@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "utils.cpp"
+  "windows_native_video.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
@@ -34,7 +35,14 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
-target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+target_link_libraries(${BINARY_NAME} PRIVATE
+  "${CMAKE_BINARY_DIR}/libmpv/libmpv.dll.a"
+  "opengl32.lib"
+)
+target_include_directories(${BINARY_NAME} PRIVATE
+  "${CMAKE_SOURCE_DIR}"
+  "${CMAKE_BINARY_DIR}/libmpv/include"
+)
 
 # ──── Release 编译优化：LTCG + 死代码消除 ────
 # /O2：MSVC 速度优先整体优化（组合开关，已内含 /Oi 内建函数 / /Ob2 内联 / /Gy 函数级链接

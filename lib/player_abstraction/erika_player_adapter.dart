@@ -221,6 +221,8 @@ class ErikaPlayerAdapter implements AbstractPlayer {
 
   bool get prefersPlatformVideoSurface => _isSupported;
 
+  bool get usesWindowOverlayVideoSurface => _isSupported;
+
   @override
   double get volume => _volume;
 
@@ -526,13 +528,6 @@ class ErikaPlayerAdapter implements AbstractPlayer {
     ValueChanged<Rect?>? onFrameRectChanged,
   }) {
     _ensureSupported();
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      return ErikaVideoView(
-        player: _player,
-        debugLabel: debugLabel,
-        onPlatformViewIdChanged: onPlatformViewIdChanged,
-      );
-    }
     return ErikaWindowOverlayVideoView(
       player: _player,
       debugLabel: debugLabel,
